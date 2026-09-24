@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Units;
 
 namespace Bjarnoy.Domain.Ai;
@@ -8,13 +9,18 @@ namespace Bjarnoy.Domain.Ai;
 /// data, not behaviour: <see cref="AiPlanner"/> is the only code that reads
 /// it.
 /// </summary>
-/// <param name="Economy">Weight for producer buildings (Lumberjack, Quarry, Farm, FishingHut, MagicTower, PumpkinFarm, FisherHut, Sawmill).</param>
-/// <param name="Storage">Weight for StorageHouse/GreatStorehouse.</param>
-/// <param name="Military">Weight for Barracks/ArcheryRange/Dockyard.</param>
-/// <param name="Defense">Weight added to Tower on top of <see cref="Territory"/> — Tower serves both roles.</param>
-/// <param name="Territory">Weight added to Tower on top of <see cref="Defense"/>.</param>
-/// <param name="Faith">Weight for the four shrines.</param>
-/// <param name="Longhouse">Weight for the Longhouse itself.</param>
+/// <param name="Economy">
+/// Weight for <see cref="Ai.AiBuildingRole.Producer"/> buildings — which
+/// <see cref="BuildingType"/>s that is, and which resource(s) each one
+/// produces, is derived from the catalogue by <see cref="AiBuildingRoles"/>,
+/// not listed here.
+/// </param>
+/// <param name="Storage">Weight for <see cref="Ai.AiBuildingRole.Storage"/> buildings (today StorageHouse/GreatStorehouse).</param>
+/// <param name="Military">Weight for <see cref="Ai.AiBuildingRole.Military"/> buildings — those that train at least one unit (today Barracks/ArcheryRange/Dockyard).</param>
+/// <param name="Defense">Weight for <see cref="Ai.AiBuildingRole.Defense"/> buildings — see that flag's remarks for why it coincides with <see cref="Territory"/> today.</param>
+/// <param name="Territory">Weight for <see cref="Ai.AiBuildingRole.Territory"/> buildings (today Tower).</param>
+/// <param name="Faith">Weight for <see cref="Ai.AiBuildingRole.Faith"/> buildings (the four shrines).</param>
+/// <param name="Longhouse">Weight for <see cref="Ai.AiBuildingRole.Anchor"/> — the Longhouse itself.</param>
 /// <param name="GarrisonPerLonghouseLevel">
 /// Target garrison size is this, times the current longhouse level (or
 /// higher, if an open <see cref="AiObjectiveKind.GarrisonStrength"/>
@@ -32,6 +38,16 @@ namespace Bjarnoy.Domain.Ai;
 /// step.
 /// </param>
 /// <param name="DefaultObjectives">The objective list a freshly taken-over AI of this personality starts with.</param>
+/// <param name="BuildingBias">
+/// Optional per-building-type multiplier on <see cref="AiPlanner"/>'s build
+/// score, on top of the role weights above — a per-personality escape hatch
+/// for a specific building without adding a new role. A type missing from
+/// this dictionary (including an empty/<see langword="null"/> dictionary, the
+/// default) gets 1.0 — no change. 0 means the planner never proposes that
+/// type at all, regardless of how well it would otherwise score; anything
+/// above 1 promotes it. Wired from <c>AiPlayersOptions.BuildingBias</c> — see
+/// <c>docs/design/ai-players.md</c>'s Configuration table.
+/// </param>
 public sealed record AiProfile(
     double Economy,
     double Storage,
@@ -43,7 +59,8 @@ public sealed record AiProfile(
     int GarrisonPerLonghouseLevel,
     IReadOnlyList<UnitType> PreferredUnits,
     double? AttackMargin,
-    IReadOnlyList<AiObjective> DefaultObjectives);
+    IReadOnlyList<AiObjective> DefaultObjectives,
+    IReadOnlyDictionary<BuildingType, double>? BuildingBias = null);
 
 /// <summary>The catalogue of built-in personality profiles — the numbers behind the design doc's table.</summary>
 public static class AiProfiles

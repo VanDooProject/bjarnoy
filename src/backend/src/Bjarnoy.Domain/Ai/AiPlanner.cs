@@ -53,28 +53,20 @@ public static class AiPlanner
     /// <summary>Stock at or above this fraction of capacity counts as "near the cap" for the storage bonus.</summary>
     private const double StorageNearCapRatio = 0.85;
 
-    /// <summary>A stock at ≥85% of capacity, on any of the four resources, triggers <see cref="StorageNearCapBonus"/>.</summary>
-    private static readonly IReadOnlySet<BuildingType> StorageTypes =
-        new HashSet<BuildingType> { BuildingType.StorageHouse, BuildingType.GreatStorehouse };
+    /// <summary>Every <see cref="BuildingType"/> that serves <see cref="AiBuildingRole.Military"/> — computed once, since the catalogue never changes at runtime.</summary>
+    private static readonly IReadOnlySet<BuildingType> MilitaryTypes = BuildingCatalogue.AllTypes
+        .Where(t => AiBuildingRoles.RolesOf(t).HasFlag(AiBuildingRole.Military))
+        .ToHashSet();
 
-    private static readonly IReadOnlySet<BuildingType> MilitaryTrainingTypes =
-        new HashSet<BuildingType> { BuildingType.Barracks, BuildingType.ArcheryRange, BuildingType.Dockyard };
+    /// <summary>Every <see cref="BuildingType"/> that produces a given <see cref="TradeResource"/> — computed once for <see cref="ObjectiveFavouredTypes"/>'s <see cref="AiObjectiveKind.ProductionRate"/> case.</summary>
+    private static readonly IReadOnlyDictionary<TradeResource, IReadOnlySet<BuildingType>> ProducerTypesByResource =
+        Enum.GetValues<TradeResource>().ToDictionary(
+            resource => resource,
+            resource => (IReadOnlySet<BuildingType>)BuildingCatalogue.AllTypes
+                .Where(t => AiBuildingRoles.ProducedResources(t).Contains(resource))
+                .ToHashSet());
 
-    private static readonly IReadOnlySet<BuildingType> ShrineTypes = new HashSet<BuildingType>
-    {
-        BuildingType.ShrineOfThor, BuildingType.ShrineOfFreyja, BuildingType.ShrineOfUllr, BuildingType.ShrineOfNjord,
-    };
-
-    private static readonly IReadOnlySet<BuildingType> ProducerTypes = new HashSet<BuildingType>
-    {
-        BuildingType.Lumberjack, BuildingType.Quarry, BuildingType.Farm, BuildingType.FishingHut,
-        BuildingType.MagicTower, BuildingType.PumpkinFarm, BuildingType.FisherHut, BuildingType.Sawmill,
-    };
-
-    private static readonly IReadOnlySet<BuildingType> FoodProducerTypes = new HashSet<BuildingType>
-    {
-        BuildingType.Farm, BuildingType.PumpkinFarm, BuildingType.FishingHut, BuildingType.FisherHut,
-    };
+    private static readonly IReadOnlySet<BuildingType> NoTypes = new HashSet<BuildingType>();
 
     /// <summary>Fallback training order once every <see cref="AiProfile.PreferredUnits"/> entry has been tried — cheap, widely available land units.</summary>
     private static readonly IReadOnlyList<UnitType> FallbackUnits =
@@ -144,6 +136,14 @@ public static class AiPlanner
         var nearCapacity = IsAnyStockNearCapacity(working, snapshot.Now);
         var openObjectives = snapshot.Objectives.Where(o => !o.IsMet(working)).ToList();
 
+        // Computed once per candidate-search pass (not per hex/type) since it
+        // only depends on the settlement's current standing buildings, not on
+        // which hex/type is being scored — see AiObjectivePath's remarks. A
+        // list parallel to openObjectives rather than a Dictionary keyed by
+        // AiObjective, since two open objectives could compare structurally
+        // equal (e.g. an admin-set duplicate) and collide as dictionary keys.
+        var favouredTypesByObjective = openObjectives.Select(o => ObjectiveFavouredTypes(working, o)).ToList();
+
         BuildCandidate? best = null;
         var bestScore = double.NegativeInfinity;
 
@@ -159,6 +159,15 @@ public static class AiPlanner
             {
                 if (IsSkippedForEconomic(type, snapshot.Profile, openObjectives))
                 {
+                    continue;
+                }
+
+                var bias = BuildingBiasOf(snapshot.Profile, type);
+                if (bias <= 0)
+                {
+                    // 0 means "never build this" — skip before even asking
+                    // PlanBuild, rather than scoring it 0 and risking a tie
+                    // with another legitimately-0-scoring candidate.
                     continue;
                 }
 
@@ -179,7 +188,8 @@ public static class AiPlanner
                 }
 
                 var score = ScoreBuild(
-                    type, isOccupied, decision.Order!, snapshot.Profile, openObjectives, starving, scarcest, nearCapacity);
+                    type, isOccupied, decision.Order!, snapshot.Profile, openObjectives, favouredTypesByObjective,
+                    starving, scarcest, nearCapacity, bias);
 
                 if (score > bestScore)
                 {
@@ -199,7 +209,7 @@ public static class AiPlanner
     /// </summary>
     private static bool IsSkippedForEconomic(BuildingType type, AiProfile profile, IReadOnlyList<AiObjective> openObjectives)
     {
-        if (profile.Military != 0 || !MilitaryTrainingTypes.Contains(type))
+        if (profile.Military != 0 || !AiBuildingRoles.RolesOf(type).HasFlag(AiBuildingRole.Military))
         {
             return false;
         }
@@ -207,37 +217,43 @@ public static class AiPlanner
         return !openObjectives.Any(o => o.Kind == AiObjectiveKind.GarrisonStrength);
     }
 
+    /// <summary>The <see cref="AiProfile.BuildingBias"/> multiplier for <paramref name="type"/>, defaulting to 1.0 when unset.</summary>
+    private static double BuildingBiasOf(AiProfile profile, BuildingType type) =>
+        profile.BuildingBias is { } bias && bias.TryGetValue(type, out var multiplier) ? multiplier : 1.0;
+
     private static double ScoreBuild(
         BuildingType type,
         bool isUpgrade,
         BuildOrder order,
         AiProfile profile,
         IReadOnlyList<AiObjective> openObjectives,
+        IReadOnlyList<IReadOnlySet<BuildingType>> favouredTypesByObjective,
         bool starving,
         TradeResource? scarcest,
-        bool nearCapacity)
+        bool nearCapacity,
+        double bias)
     {
         var score = RoleWeight(type, profile);
 
-        if (starving && FoodProducerTypes.Contains(type))
+        if (starving && AiBuildingRoles.ProducedResources(type).Contains(TradeResource.Food))
         {
             score += FoodSafetyBoost;
         }
 
-        foreach (var objective in openObjectives)
+        for (var i = 0; i < openObjectives.Count; i++)
         {
-            if (ObjectiveFavours(objective, type))
+            if (favouredTypesByObjective[i].Contains(type))
             {
                 score += ObjectiveBoost;
             }
         }
 
-        if (scarcest is { } resource && ProducerResource(type) == resource)
+        if (scarcest is { } resource && AiBuildingRoles.ProducedResources(type).Contains(resource))
         {
             score += ScarcityBonus;
         }
 
-        if (nearCapacity && StorageTypes.Contains(type))
+        if (nearCapacity && AiBuildingRoles.RolesOf(type).HasFlag(AiBuildingRole.Storage))
         {
             score += StorageNearCapBonus;
         }
@@ -254,46 +270,110 @@ public static class AiPlanner
         var cost = BuildingCatalogue.Get(type, order.TargetLevel).Cost;
         score -= (cost.Wood + cost.Stone + cost.Food + cost.Iron) * 0.0005;
 
-        return score;
+        return score * bias;
     }
 
-    private static bool ObjectiveFavours(AiObjective objective, BuildingType type) => objective.Kind switch
-    {
-        AiObjectiveKind.ReachLonghouseLevel => type == BuildingType.Longhouse,
-        AiObjectiveKind.ReachBuildingLevel => objective.Building == type,
-        AiObjectiveKind.ProductionRate => objective.Resource is { } resource && ProducerResource(type) == resource,
-        AiObjectiveKind.GarrisonStrength => MilitaryTrainingTypes.Contains(type) || type == BuildingType.Tower,
-        _ => false,
-    };
+    /// <summary>
+    /// Which building type(s) an open <paramref name="objective"/> currently
+    /// favours in <paramref name="working"/>'s state — see
+    /// <see cref="AiObjectivePath"/> for how a locked target's boost is
+    /// redirected to its unmet prerequisite chain instead.
+    /// </summary>
+    private static IReadOnlySet<BuildingType> ObjectiveFavouredTypes(Settlement working, AiObjective objective) =>
+        objective.Kind switch
+        {
+            AiObjectiveKind.ReachLonghouseLevel => AiObjectivePath.BoostedTypes(working, BuildingType.Longhouse),
+            AiObjectiveKind.ReachBuildingLevel => objective.Building is { } building
+                ? AiObjectivePath.BoostedTypes(working, building)
+                : NoTypes,
+            AiObjectiveKind.ProductionRate => objective.Resource is { } resource
+                ? ProducerTypesByResource[resource]
+                : NoTypes,
+            AiObjectiveKind.GarrisonStrength => GarrisonStrengthFavouredTypes(working),
+            _ => NoTypes,
+        };
 
-    private static double RoleWeight(BuildingType type, AiProfile profile) => type switch
+    /// <summary>
+    /// A <see cref="AiObjectiveKind.GarrisonStrength"/> objective favours
+    /// every standing <see cref="AiBuildingRole.Military"/> type once one
+    /// exists (so an upgrade of any of them still counts); with none standing
+    /// yet, it favours whatever building(s) — chased through their own
+    /// prerequisite chains — would actually unlock the first one.
+    /// </summary>
+    private static IReadOnlySet<BuildingType> GarrisonStrengthFavouredTypes(Settlement working)
     {
-        BuildingType.Longhouse => profile.Longhouse,
-        BuildingType.StorageHouse or BuildingType.GreatStorehouse => profile.Storage,
-        BuildingType.Tower => profile.Territory + profile.Defense,
-        BuildingType.Barracks or BuildingType.ArcheryRange or BuildingType.Dockyard => profile.Military,
-        // The iron producer straddles both roles — it is what a military
-        // build-out actually needs iron for (see the design doc's
-        // Aggressive row: "barracks, iron, axemen/berserkers"), so its score
-        // averages the two weights rather than counting as a plain producer.
-        // An Economic profile (Military 0) still values it a little for its
-        // own economy weight; an Aggressive one values it more than a plain
-        // producer, without it out-competing Barracks itself.
-        BuildingType.MagicTower => (profile.Economy + profile.Military) / 2,
-        _ when ShrineTypes.Contains(type) => profile.Faith,
-        _ when ProducerTypes.Contains(type) => profile.Economy,
-        _ => 0.0,
-    };
+        var hasTrainingBuilding = working.Buildings.Any(b => MilitaryTypes.Contains(b.Type));
+        if (hasTrainingBuilding)
+        {
+            return MilitaryTypes;
+        }
 
-    /// <summary>Which resource a producer building produces, or <see langword="null"/> for a non-producer.</summary>
-    private static TradeResource? ProducerResource(BuildingType type) => type switch
+        var boosted = new HashSet<BuildingType>();
+        foreach (var type in MilitaryTypes)
+        {
+            boosted.UnionWith(AiObjectivePath.BoostedTypes(working, type));
+        }
+
+        return boosted;
+    }
+
+    private static double RoleWeight(BuildingType type, AiProfile profile)
     {
-        BuildingType.Lumberjack or BuildingType.Sawmill => TradeResource.Wood,
-        BuildingType.Quarry => TradeResource.Stone,
-        BuildingType.Farm or BuildingType.PumpkinFarm or BuildingType.FishingHut or BuildingType.FisherHut => TradeResource.Food,
-        BuildingType.MagicTower => TradeResource.Iron,
-        _ => null,
-    };
+        var roles = AiBuildingRoles.RolesOf(type);
+        if (roles == AiBuildingRole.None)
+        {
+            return 0.0;
+        }
+
+        var score = 0.0;
+
+        if (roles.HasFlag(AiBuildingRole.Anchor))
+        {
+            score += profile.Longhouse;
+        }
+
+        if (roles.HasFlag(AiBuildingRole.Storage))
+        {
+            score += profile.Storage;
+        }
+
+        if (roles.HasFlag(AiBuildingRole.Territory))
+        {
+            score += profile.Territory;
+        }
+
+        if (roles.HasFlag(AiBuildingRole.Defense))
+        {
+            score += profile.Defense;
+        }
+
+        if (roles.HasFlag(AiBuildingRole.Military))
+        {
+            score += profile.Military;
+        }
+
+        if (roles.HasFlag(AiBuildingRole.Faith))
+        {
+            score += profile.Faith;
+        }
+
+        if (roles.HasFlag(AiBuildingRole.Producer))
+        {
+            // A producer of a resource the catalogue shows is essentially
+            // military-only (see AiBuildingRoles.MilitaryFeedingResources —
+            // today that is Iron, so this is MagicTower) straddles both
+            // roles: its score averages Economy and Military rather than
+            // counting as a plain producer, generalising the old MagicTower
+            // special case without naming it. An Economic profile (Military
+            // 0) still values it a little for its own economy weight; an
+            // Aggressive one values it more than a plain producer, without
+            // it out-competing an actual Military-role building.
+            var feedsMilitary = AiBuildingRoles.ProducedResources(type).Overlaps(AiBuildingRoles.MilitaryFeedingResources);
+            score += feedsMilitary ? (profile.Economy + profile.Military) / 2 : profile.Economy;
+        }
+
+        return score;
+    }
 
     /// <summary>The resource whose current production rate is lowest — the one a new producer should favour.</summary>
     private static TradeResource ScarcestResource(Settlement settlement, double speedFactor)

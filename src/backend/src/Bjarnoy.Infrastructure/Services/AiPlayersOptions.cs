@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Ai;
+using Bjarnoy.Domain.Buildings;
 
 namespace Bjarnoy.Infrastructure.Services;
 
@@ -43,4 +44,15 @@ public sealed class AiPlayersOptions
     /// left empty) gets weight 1 — see <c>AiTakeoverService</c>'s weighted pick.
     /// </summary>
     public Dictionary<AiPersonality, double> PersonalityWeights { get; set; } = [];
+
+    /// <summary>
+    /// Optional per-personality, per-<see cref="BuildingType"/> multiplier on
+    /// <c>AiPlanner</c>'s build score — bound from
+    /// <c>AiPlayers:BuildingBias:{personality}:{buildingType}</c> and applied
+    /// as <see cref="AiProfile.BuildingBias"/> by <see cref="AiPlayerService"/>
+    /// when it loads a personality's profile. A personality or building type
+    /// missing here keeps its role-derived weight unchanged (multiplier 1).
+    /// See <see cref="AiProfile.BuildingBias"/> for what 0 and &gt;1 do.
+    /// </summary>
+    public Dictionary<AiPersonality, Dictionary<BuildingType, double>> BuildingBias { get; set; } = [];
 }

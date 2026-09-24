@@ -166,6 +166,125 @@ public sealed class AiPlannerTests
         Assert.Equal(BuildingType.StorageHouse, firstBuild.Type);
     }
 
+    [Fact]
+    public void A_locked_ReachBuildingLevel_objective_steers_the_choice_to_its_unmet_prerequisite()
+    {
+        // Longhouse 10 satisfies GreatStorehouse's own RequiredLonghouseLevel,
+        // but no StorageHouse stands yet — GreatStorehouse also needs
+        // StorageHouse 10 (BuildingCatalogue.PrerequisiteTable). A one-step
+        // greedy planner would never propose GreatStorehouse (PlanBuild
+        // rejects it) and would fall back to whatever else scores highest;
+        // with prerequisite chaining, the objective boost redirects to
+        // StorageHouse instead.
+        var settlement = Found(longhouseLevel: 10);
+        var objectives = new[]
+        {
+            new AiObjective { Kind = AiObjectiveKind.ReachBuildingLevel, Building = BuildingType.GreatStorehouse, Target = 1 },
+        };
+        var snapshot = Snapshot(settlement, AiPersonality.Balanced, [Grass(OtherHex)], objectives);
+
+        var actions = AiPlanner.Plan(snapshot);
+
+        var firstBuild = Assert.IsType<AiBuild>(actions[0]);
+        Assert.Equal(BuildingType.StorageHouse, firstBuild.Type);
+    }
+
+    [Fact]
+    public void An_unreachable_ReachBuildingLevel_objective_does_not_crash_or_loop()
+    {
+        // Longhouse far too low for anything in GreatStorehouse's chain —
+        // exercises the depth-limited, cycle-safe walk with nothing to boost
+        // other than the Longhouse itself.
+        var settlement = Found(longhouseLevel: 1);
+        var objectives = new[]
+        {
+            new AiObjective { Kind = AiObjectiveKind.ReachBuildingLevel, Building = BuildingType.GreatStorehouse, Target = 1 },
+        };
+        var snapshot = Snapshot(settlement, AiPersonality.Balanced, [Grass(OtherHex)], objectives);
+
+        var actions = AiPlanner.Plan(snapshot);
+
+        // Should still plan *something* sensible (not GreatStorehouse, which
+        // PlanBuild would reject) rather than throwing or hanging.
+        Assert.DoesNotContain(actions, a => a is AiBuild build && build.Type == BuildingType.GreatStorehouse);
+    }
+
+    [Fact]
+    public void A_GarrisonStrength_objective_with_no_training_building_steers_toward_one()
+    {
+        // Longhouse 5 with a level-5 Tower standing satisfies Barracks'
+        // prerequisites (Tower 5), so the only thing left blocking Barracks
+        // is nothing — it should now directly win the boost.
+        var settlement = Found(longhouseLevel: 5, extraBuildings: new PlacedBuilding(OtherHex, BuildingType.Tower, 5));
+        var objectives = new[] { new AiObjective { Kind = AiObjectiveKind.GarrisonStrength, Target = 10 } };
+        var snapshot = Snapshot(settlement, AiPersonality.Economic, [Grass(ThirdHex)], objectives);
+
+        var actions = AiPlanner.Plan(snapshot);
+
+        var firstBuild = Assert.IsType<AiBuild>(actions[0]);
+        Assert.Equal(BuildingType.Barracks, firstBuild.Type);
+    }
+
+    // --- BuildingBias ----------------------------------------------------------
+
+    [Fact]
+    public void A_zero_BuildingBias_excludes_that_type_from_every_candidate()
+    {
+        var settlement = Found();
+        var profile = AiProfiles.For(AiPersonality.Balanced) with
+        {
+            BuildingBias = new Dictionary<BuildingType, double> { [BuildingType.Farm] = 0.0 },
+        };
+        var snapshot = new AiSnapshot(
+            settlement, T0, SpeedFactor: 1.0, [Grass(OtherHex)], profile, [], [], false, false, Seed: 1);
+
+        var actions = AiPlanner.Plan(snapshot);
+
+        Assert.DoesNotContain(actions, a => a is AiBuild build && build.Type == BuildingType.Farm);
+    }
+
+    [Fact]
+    public void A_high_BuildingBias_promotes_that_type_over_an_otherwise_stronger_candidate()
+    {
+        // Balanced weighs Economy and Storage equally (1.0 each), so with no
+        // bias the cheaper of Farm (cost 180) and StorageHouse (cost 270)
+        // wins on the cost tie-break — Farm. A moderate stock (rather than
+        // Found()'s default, which pins every stock at capacity and would
+        // spuriously favour StorageHouse via the near-capacity bonus — see
+        // FoundForPersonalityComparison's own comment) keeps that the honest
+        // baseline, so a large bias on StorageHouse alone can be shown to
+        // flip the outcome.
+        var settlement = Found(stock: 600);
+        // MagicTower would otherwise win this comparison on its own (Iron
+        // being the scarcest resource with none produced yet) — excluded via
+        // bias 0 so the test isolates the Farm-vs-StorageHouse tie-break this
+        // is actually about.
+        var baseline = AiProfiles.For(AiPersonality.Balanced) with
+        {
+            BuildingBias = new Dictionary<BuildingType, double> { [BuildingType.MagicTower] = 0.0 },
+        };
+        var baselineSnapshot = new AiSnapshot(
+            settlement, T0, SpeedFactor: 1.0, [Grass(OtherHex)], baseline, [], [], false, false, Seed: 1);
+        var baselineActions = AiPlanner.Plan(baselineSnapshot);
+        Assert.Equal(BuildingType.Farm, Assert.IsType<AiBuild>(baselineActions[0]).Type);
+
+        var promoted = baseline with
+        {
+            BuildingBias = new Dictionary<BuildingType, double>
+            {
+                [BuildingType.MagicTower] = 0.0,
+                [BuildingType.StorageHouse] = 5.0,
+            },
+        };
+        var promotedSnapshot = new AiSnapshot(
+            settlement, T0, SpeedFactor: 1.0, [Grass(OtherHex)], promoted, [], [], false, false, Seed: 1);
+
+        var actions = AiPlanner.Plan(promotedSnapshot);
+
+        var firstBuild = Assert.IsType<AiBuild>(actions[0]);
+        Assert.Equal(BuildingType.StorageHouse, firstBuild.Type);
+    }
+
     // --- Train ---------------------------------------------------------------
 
     [Fact]

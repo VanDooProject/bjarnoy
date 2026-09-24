@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Ai;
 using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -119,7 +120,7 @@ public sealed class AiPlayerService(
 
         var riverTiles = await LoadRiverTilesAsync(ai.WorldId, cancellationToken).ConfigureAwait(false);
         var sampler = new TerrainSampler(world.ToGenerationOptions());
-        var profile = AiProfiles.For(ai.Personality);
+        var profile = ApplyBuildingBias(AiProfiles.For(ai.Personality), ai.Personality);
 
         var acted = false;
         foreach (var settlementId in settlementIds)
@@ -220,6 +221,20 @@ public sealed class AiPlayerService(
 
         return actedOnAny;
     }
+
+    /// <summary>
+    /// Folds <see cref="AiPlayersOptions.BuildingBias"/>'s entry for
+    /// <paramref name="personality"/> (if any) onto <paramref name="profile"/>
+    /// as its <see cref="AiProfile.BuildingBias"/> — see that property's
+    /// remarks for what the planner does with it. Leaves the profile
+    /// unchanged (empty/<see langword="null"/> bias) when the personality has
+    /// no override configured, so this is a no-op for every deployment that
+    /// never sets the section.
+    /// </summary>
+    private AiProfile ApplyBuildingBias(AiProfile profile, AiPersonality personality) =>
+        _options.BuildingBias.TryGetValue(personality, out var bias) && bias.Count > 0
+            ? profile with { BuildingBias = bias }
+            : profile;
 
     private async Task<bool> ExecuteBuildAsync(Guid settlementId, AiBuild build, CancellationToken cancellationToken)
     {

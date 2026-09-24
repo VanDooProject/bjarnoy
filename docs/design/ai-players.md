@@ -59,6 +59,52 @@ reach `GarrisonStrength 40` still trains troops.
 An objective is met when the settlement satisfies it. Met objectives are
 recorded but otherwise ignored.
 
+## Building roles
+
+The planner never lists building types by hand — `AiBuildingRoles` derives
+what each `BuildingType` is *for* straight from the catalogues
+(`BuildingCatalogue`, `UnitCatalogue`), cached once per type. A building
+added to, or changed in, the tech tree is classified automatically instead of
+silently scoring 0 or picking up the wrong role.
+
+| Role | Derived from |
+| --- | --- |
+| `Producer` | Non-zero `ProductionPerHour` (checked at levels 1-3, in case an early tier produces nothing) — also exposes *which* `TradeResource`(s) |
+| `Storage` | Non-zero `StorageCapacity` at level 1 |
+| `Territory` | `ClaimRadius > 0` at level 1 |
+| `Defense` | Coincides with `Territory` today — the only combat bonus keyed off a claim-granting building's level (`BuildingCatalogue.TowerDefenseBonusPercent`) always looks up the standing Tower, not a general table. Splits into its own predicate if a future building breaks that coincidence. |
+| `Military` | At least one `UnitDefinition.RequiredBuildingType` points at it |
+| `Faith` | `BuildingCatalogue.GodOf(type)` is not null |
+| `Anchor` | The Longhouse alone — the one hardcoded exception, mirroring `Settlement.PlanBuild`'s own `LonghousePlacementNotAllowed` special-casing of it |
+
+A build's role weight is the **sum** of the profile's weight for every role
+the building serves (Tower, for instance, sums `Territory + Defense`, same as
+before). A `Producer` building whose resource is *military-feeding* — every
+building that spends it in its own cost is itself `Military`/`Defense`-role,
+and at least one unit's training cost needs it — blends `(Economy +
+Military) / 2` instead of plain `Economy`; today that set is exactly `{
+Iron }`, generalising the old "MagicTower is half-military" special case
+without naming MagicTower or Iron anywhere in the planner.
+
+Two things stay out of scope, both because the planner reasons in flat
+producer output rather than percentage multipliers: a shrine's specific
+`ShrineCatalogue.Favour` (e.g. Freyja boosting Food) is not folded into
+scarcity/`ProductionRate` matching, and a shrine only ever counts toward
+`Faith`.
+
+### Prerequisite chaining
+
+An open `ReachBuildingLevel` objective for a building whose next level is
+gated (`BuildingDefinition.RequiredLonghouseLevel` or
+`BuildingDefinition.Prerequisites` not yet met — e.g. `GreatStorehouse`
+needing `StorageHouse 10` and `Longhouse 10`) redirects its build-score boost
+to the unmet prerequisite(s) instead, recursively, via `AiObjectivePath`. A
+`GarrisonStrength` objective works the same way when no training building
+(`Barracks`/`ArcheryRange`/`Dockyard`) stands yet: the boost goes to whichever
+of them (and *their* prerequisite chains) is closest to buildable. The walk
+is cycle-safe and depth-limited, so a locked or unreachable target degrades
+to "boost nothing further" rather than looping.
+
 ## Planner (pure domain, `Bjarnoy.Domain/Ai`)
 
 `AiPlanner.Plan(AiSnapshot) → IReadOnlyList<AiAction>` is deterministic for
@@ -130,6 +176,7 @@ loop, at most once per `AiPlayers:TakeoverSweepInterval`.
 | `ActInterval` | `00:05:00` | Base time between one AI's turns, divided by world speed |
 | `ActivityWriteThrottle` | `00:05:00` | Minimum gap between `LastOwnerActivityAt` writes |
 | `PersonalityWeights` | 1 each | Relative odds of each personality at takeover |
+| `BuildingBias:{personality}:{buildingType}` | unset (1.0) | Per-personality, per-`BuildingType` multiplier on the build score, folded onto `AiProfile.BuildingBias` when `AiPlayerService` loads that personality's profile. `0` means the planner never proposes that type at all; above `1` promotes it. See "Building roles" above for what it multiplies. |
 
 ## API
 
