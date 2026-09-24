@@ -77,15 +77,23 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// <c>GET /settlements/{id}</c> is owner-only (SettlementOwnershipEndpointFilter)
-    /// — this suite reads two different settlements from the same client, so
-    /// each read swaps in the right settlement's own owner id rather than
-    /// relying on whatever header the client happens to carry.
+    /// <c>GET /settlements/{id}</c>, the trade board/mine/shipments/reports
+    /// reads below, and battle/field-report reads elsewhere in this suite
+    /// are all owner-gated (SettlementOwnershipEndpointFilter/
+    /// ReportOwnershipEndpointFilter) — this suite reads from two different
+    /// settlements on the same client, so every such read swaps in the
+    /// right settlement's own owner id first rather than relying on
+    /// whatever header the client happens to already carry.
     /// </summary>
-    private async Task<SettlementResponse?> GetSettlementAsync(HttpClient client, Guid settlementId, string ownerId)
+    private static void SetOwner(HttpClient client, string ownerId)
     {
         client.DefaultRequestHeaders.Remove("X-Owner-Id");
         client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+    }
+
+    private async Task<SettlementResponse?> GetSettlementAsync(HttpClient client, Guid settlementId, string ownerId)
+    {
+        SetOwner(client, ownerId);
         return await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
     }
@@ -214,8 +222,9 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task An_unknown_resource_name_is_a_bad_request()
     {
         using var client = Client();
-        var (_, settlement, _) = await FoundAsync(client);
+        var (_, settlement, ownerId) = await FoundAsync(client);
 
+        SetOwner(client, ownerId);
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/trade-offers",
             new PostTradeOfferRequest("gold", 100, "iron", 100, GuildOnly: false),
@@ -254,9 +263,10 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task Cancelling_someone_elses_offer_is_refused()
     {
         using var client = Client();
-        var (worldId, poster, _) = await FoundAsync(client);
+        var (worldId, poster, posterOwnerId) = await FoundAsync(client);
         var (stranger, _) = await FoundAdjacentAsync(client, worldId, poster);
 
+        SetOwner(client, posterOwnerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{poster.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
@@ -274,8 +284,9 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task The_board_excludes_the_posters_own_offer()
     {
         using var client = Client();
-        var (_, settlement, _) = await FoundAsync(client);
+        var (_, settlement, ownerId) = await FoundAsync(client);
 
+        SetOwner(client, ownerId);
         await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
@@ -309,8 +320,9 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task A_settlement_cannot_accept_its_own_offer()
     {
         using var client = Client();
-        var (_, settlement, _) = await FoundAsync(client);
+        var (_, settlement, ownerId) = await FoundAsync(client);
 
+        SetOwner(client, ownerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
@@ -332,9 +344,10 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         // remarks) — accepting a GuildOnly offer is always refused until
         // real membership resolution replaces the hardcoded false.
         using var client = Client();
-        var (worldId, poster, _) = await FoundAsync(client);
+        var (worldId, poster, posterOwnerId) = await FoundAsync(client);
         var (acceptor, _) = await FoundAdjacentAsync(client, worldId, poster);
 
+        SetOwner(client, posterOwnerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{poster.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: true),
@@ -359,11 +372,13 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         var posterBefore = await GetSettlementAsync(client, poster.Id, posterOwnerId);
         var acceptorBefore = await GetSettlementAsync(client, acceptor.Id, acceptorOwnerId);
 
+        SetOwner(client, posterOwnerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{poster.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
             Ct)).ReadStrictAsync<TradeOfferResponse>(Ct);
 
+        SetOwner(client, acceptorOwnerId);
         var board = await client.GetFromJsonAsync<List<TradeOfferResponse>>(
             $"/api/v1/settlements/{acceptor.Id}/trade-offers/board", SqliteApiFixture.StrictJson, Ct);
         Assert.Contains(board!, o => o.Id == posted.Id);
@@ -386,10 +401,12 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         // under a game-hour; two hours is a generous margin.
         _factory.Time.Advance(TimeSpan.FromHours(2));
 
+        SetOwner(client, acceptorOwnerId);
         var acceptorShipments = await client.GetFromJsonAsync<List<ShipmentResponse>>(
             $"/api/v1/settlements/{acceptor.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
         Assert.Contains(acceptorShipments!, s => s.Id == accepted.ToAcceptor.Id && s.Delivered);
 
+        SetOwner(client, posterOwnerId);
         var posterShipments = await client.GetFromJsonAsync<List<ShipmentResponse>>(
             $"/api/v1/settlements/{poster.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
         Assert.Contains(posterShipments!, s => s.Id == accepted.ToPoster.Id && s.Delivered);
@@ -411,9 +428,10 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task Completed_trade_report_is_visible_to_both_settlements()
     {
         using var client = Client();
-        var (worldId, poster, _) = await FoundAsync(client);
-        var (acceptor, _) = await FoundAdjacentAsync(client, worldId, poster);
+        var (worldId, poster, posterOwnerId) = await FoundAsync(client);
+        var (acceptor, acceptorOwnerId) = await FoundAdjacentAsync(client, worldId, poster);
 
+        SetOwner(client, posterOwnerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{poster.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
@@ -432,13 +450,16 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         // Settling deliveries is lazy, keyed off a read against the
         // arriving settlement — touch both settlements' shipments first so
         // TryCompleteOfferAsync has written the report before we ask for it.
+        SetOwner(client, acceptorOwnerId);
         await client.GetFromJsonAsync<List<ShipmentResponse>>(
             $"/api/v1/settlements/{acceptor.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
+        SetOwner(client, posterOwnerId);
         await client.GetFromJsonAsync<List<ShipmentResponse>>(
             $"/api/v1/settlements/{poster.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
 
         var posterReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
             $"/api/v1/settlements/{poster.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
+        SetOwner(client, acceptorOwnerId);
         var acceptorReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
             $"/api/v1/settlements/{acceptor.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
 

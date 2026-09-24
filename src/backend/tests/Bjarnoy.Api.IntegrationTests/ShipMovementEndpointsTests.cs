@@ -86,18 +86,6 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         return (world.Id, island.Id);
     }
 
-    private static Guid AddUser(GameDbContext db)
-    {
-        var user = new UserEntity
-        {
-            UserName = $"user-{Guid.CreateVersion7():N}",
-            NormalizedUserName = $"user-{Guid.CreateVersion7():N}",
-            PasswordHash = "hash",
-        };
-        db.Users.Add(user);
-        return user.Id;
-    }
-
     private static SettlementEntity MakeSettlement(
         Guid worldId, Guid islandId, Guid userId, string ownerId, int centreQ, int centreR, bool withDockyard = false)
     {
@@ -184,10 +172,15 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         _factory.Time.Advance(TimeSpan.FromHours(1.1));
 
+        // ArmyOwnershipEndpointFilter resolves ownership from the army's
+        // still-persisted row (folded, but not deleted) before the handler
+        // ever runs its own "Army is null" NotFound check — so proving
+        // ownership here needs the header up front too, not just for the
+        // settlement reads below.
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
         var armyResponse = await client.GetAsync($"/api/v1/armies/{armyId}", Ct);
         Assert.Equal(HttpStatusCode.NotFound, armyResponse.StatusCode);
-
-        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
 
         var destinationSettlement = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{destinationId}", SqliteApiFixture.StrictJson, Ct);
@@ -207,6 +200,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         using var client = Client();
         Guid armyId, rivalId;
 
+        var originOwnerId = $"owner-{Guid.CreateVersion7():N}";
         var rivalOwnerId = $"rival-{Guid.CreateVersion7():N}";
 
         await using (var scope = _factory.Services.CreateAsyncScope())
@@ -214,7 +208,14 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db);
 
-            var origin = MakeSettlement(worldId, islandId, AddUser(db), $"owner-{Guid.CreateVersion7():N}", 0, 0);
+            // Both unclaimed (rather than one claimed via AddUser as before)
+            // so this test can prove ownership of each settlement with the
+            // plain X-Owner-Id header below — GetArmy/GetSettlement are both
+            // owner-gated now (SettlementOwnershipEndpointFilter/
+            // ArmyOwnershipEndpointFilter), and a claimed settlement's
+            // ownership can only be proven by JWT, which this test has no
+            // reason to set up.
+            var origin = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, originOwnerId, 0, 0);
             var rival = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, rivalOwnerId, 10, 0, withDockyard: true);
             db.Settlements.AddRange(origin, rival);
             await db.SaveChangesAsync(Ct);
@@ -237,7 +238,11 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         // Redirected into an actual attack against the rival settlement (an
         // undefended one, so the fleet wins and starts its way home) rather
-        // than left standing at its destination as a plain Move would.
+        // than left standing at its destination as a plain Move would. The
+        // army's home settlement is origin, not rival, so this read needs
+        // origin's own owner id, not rival's.
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", originOwnerId);
         var army = await client.GetFromJsonAsync<ArmyResponse>(
             $"/api/v1/armies/{armyId}", SqliteApiFixture.StrictJson, Ct);
         Assert.NotNull(army);
@@ -256,10 +261,12 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db);
-            var userId = AddUser(db);
 
-            var origin = MakeSettlement(worldId, islandId, userId, ownerId, 0, 0);
-            var destination = MakeSettlement(worldId, islandId, userId, ownerId, 10, 0, withDockyard: false);
+            // Unclaimed (not AddUser) so the GetArmy read below can prove
+            // ownership with the plain X-Owner-Id header — see the sibling
+            // test's own comment on the same change.
+            var origin = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, ownerId, 0, 0);
+            var destination = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, ownerId, 10, 0, withDockyard: false);
             db.Settlements.AddRange(origin, destination);
             await db.SaveChangesAsync(Ct);
 
@@ -268,6 +275,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         _factory.Time.Advance(TimeSpan.FromHours(1.1));
 
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
         var army = await client.GetFromJsonAsync<ArmyResponse>(
             $"/api/v1/armies/{armyId}", SqliteApiFixture.StrictJson, Ct);
         Assert.NotNull(army);
@@ -288,10 +296,12 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db);
-            var userId = AddUser(db);
 
-            var origin = MakeSettlement(worldId, islandId, userId, ownerId, 0, 0);
-            var destination = MakeSettlement(worldId, islandId, userId, ownerId, 10, 0, withDockyard: true);
+            // Unclaimed (not AddUser) so the GetArmy read below can prove
+            // ownership with the plain X-Owner-Id header — same reasoning as
+            // this file's other two ArmyOwnershipEndpointFilter-affected tests.
+            var origin = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, ownerId, 0, 0);
+            var destination = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, ownerId, 10, 0, withDockyard: true);
             db.Settlements.AddRange(origin, destination);
             await db.SaveChangesAsync(Ct);
 
@@ -300,6 +310,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         _factory.Time.Advance(TimeSpan.FromHours(1.1));
 
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
         var army = await client.GetFromJsonAsync<ArmyResponse>(
             $"/api/v1/armies/{armyId}", SqliteApiFixture.StrictJson, Ct);
         Assert.NotNull(army);
