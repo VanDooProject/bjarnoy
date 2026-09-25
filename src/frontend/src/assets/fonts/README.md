@@ -16,7 +16,7 @@ redistribution, including bundled in a repo like this one.
 
 Only the `latin` and `latin-ext` Unicode-range subsets are kept (see the
 `@font-face` blocks in `../../style.css`) — `latin-ext` alone covers the
-Norse/Nordic diacritics this UI itself uses (e.g. "Fjørdhold"); the
+Norse/Nordic diacritics this UI itself uses (e.g. "Bjarnøy"); the
 cyrillic/greek/vietnamese subsets Google Fonts also serves aren't needed
 here and were dropped to keep the bundle small.
 

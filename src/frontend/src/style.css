@@ -5,7 +5,7 @@
    fetched once from Google Fonts and committed — see that directory's
    README for how to add a weight/family if the design ever needs one.
    Latin + Latin Extended subsets only (covers the Norse/Nordic diacritics
-   this UI itself uses, e.g. "Fjørdhold"); cyrillic/greek/vietnamese subsets
+   this UI itself uses, e.g. "Bjarnøy"); cyrillic/greek/vietnamese subsets
    Google also serves aren't needed here. */
 @font-face {
   font-family: 'Outfit';

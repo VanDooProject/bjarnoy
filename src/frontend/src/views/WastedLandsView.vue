@@ -7,7 +7,9 @@ import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import WastedIsland from '../components/docs/WastedIsland.vue';
+import AnimatedGiant from '../components/docs/AnimatedGiant.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import { giantFamilyHasClip } from '../lib/docs/wastedIsland';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -37,6 +39,23 @@ const volcanoCamera = ref<TileOrientation>('SE');
 const utgardFrame = computed(() => showcase(`giantutgard_${utgardCamera.value}_level000`));
 const volcanoFrame = computed(() => showcase(`giantvolcano_wasted_${volcanoCamera.value}_level000`));
 
+// A card's hover-to-animate composite only replaces the static showcase
+// frame when its wasted top-part family actually has `buildings-anim`
+// clips for the selected camera — today just the volcano
+// (`giantvolcano_wasted`); the wasted Utgard ruin (`giantutgard`) has none,
+// so its card never swaps and never becomes focusable. Derived from the
+// atlas itself rather than hardcoded per card, so a future art drop picks
+// this up automatically. Also off entirely under reduced motion, where the
+// static showcase frame is the only thing that ever shows.
+const reducedMotion =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false;
+const utgardHasAnim = computed(() => !reducedMotion && giantFamilyHasClip('giantutgard', utgardCamera.value));
+const volcanoHasAnim = computed(() => !reducedMotion && giantFamilyHasClip('giantvolcano_wasted', volcanoCamera.value));
+const utgardHovered = ref(false);
+const volcanoHovered = ref(false);
+
 // --- Living/wasted pairs -------------------------------------------------
 
 type SimplePairKind = 'grass' | 'forest' | 'sand' | 'mountain' | 'coast' | 'sea';
@@ -45,6 +64,8 @@ interface PairEntry {
   kind: SimplePairKind;
   livingFamily: string;
   wastedFamily: string;
+  /** Living-tile variant suffixes (`''` for the plain look). A pill picks `livingSuffixes[i % length]`, so the living thumbnail changes along with the wasted one even where the two families ship a different number of looks. */
+  livingSuffixes?: string[];
   /** Wasted-tile variant suffixes (`''` for the plain look), in pill display order. */
   wastedSuffixes: string[];
   /** Mountain has no `_SE` suffix — its families already carry `_level000`. */
@@ -55,12 +76,14 @@ const PAIRS: PairEntry[] = [
   {
     kind: 'grass',
     livingFamily: 'grasstile',
+    livingSuffixes: ['', '_variant000', '_variant001', '_variant002'],
     wastedFamily: 'wasteland',
     wastedSuffixes: ['', '_variant001', '_variant002', '_variant003', '_variant004', '_variant005'],
   },
   {
     kind: 'forest',
     livingFamily: 'foresttile',
+    livingSuffixes: ['', '_variant000', '_variant001'],
     wastedFamily: 'deadforest',
     wastedSuffixes: ['', '_variant001'],
   },
@@ -80,6 +103,7 @@ const PAIRS: PairEntry[] = [
   {
     kind: 'coast',
     livingFamily: 'coastalwatertile',
+    livingSuffixes: ['', '_variant000', '_variant001'],
     wastedFamily: 'blacksandcoast',
     wastedSuffixes: ['', '_variant000', '_variant001', '_variant002'],
   },
@@ -101,7 +125,9 @@ const variantIndex = reactive<Record<SimplePairKind, number>>({
 });
 
 function pairLivingFrame(pair: PairEntry): AtlasFrameRect | undefined {
-  return showcase(`${pair.livingFamily}_SE${pair.level000 ? '_level000' : ''}`);
+  const looks = pair.livingSuffixes ?? [''];
+  const suffix = looks[variantIndex[pair.kind] % looks.length] ?? '';
+  return showcase(`${pair.livingFamily}_SE${pair.level000 ? '_level000' : ''}${suffix}`);
 }
 function pairWastedFrame(pair: PairEntry): AtlasFrameRect | undefined {
   const suffix = pair.wastedSuffixes[variantIndex[pair.kind]] ?? '';
@@ -111,13 +137,15 @@ function pairWastedFrame(pair: PairEntry): AtlasFrameRect | undefined {
 // The river/lava-stream row switches shape rather than variant, and both
 // thumbnails at once (see `docs.wastedLands.lavaShapes`).
 // A lava stream rises from a lava spring on a small cone of its own, where a
-// river rises from a mountain spring.
+// river rises from a mountain spring — the same corrie cut the map draws for
+// a spring (textures.ts's RIVER_FAMILY), not the flat `rivertile_spring`
+// placeholder.
 type RiverShape = 'straight' | 'bend' | 'bend60' | 'spring';
 const RIVER_SHAPE_FRAMES: Record<RiverShape, { living: string; wasted: string }> = {
   straight: { living: 'rivertile_SE', wasted: 'lavastream_SE' },
   bend: { living: 'rivertile_bend_SE', wasted: 'lavastream_bend_SE' },
   bend60: { living: 'rivertile_bend60_SE', wasted: 'lavastream_bend60_SE' },
-  spring: { living: 'rivertile_spring_SE', wasted: 'mountaintile_volcano_lavaspring_flows_SE_level000' },
+  spring: { living: 'mountaintile_corrie_spring_SE', wasted: 'mountaintile_volcano_lavaspring_flows_SE_level000' },
 };
 const riverShape = ref<RiverShape>('straight');
 const riverLivingFrame = computed(() => showcase(RIVER_SHAPE_FRAMES[riverShape.value].living));
@@ -169,8 +197,22 @@ const wallFrame = computed(() => {
         <div class="giant-card">
           <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>
           <p>{{ $t('docs.wastedLands.utgard.body') }}</p>
-          <div class="giant-box">
-            <AtlasSprite v-if="utgardFrame" :frame="utgardFrame" :style="fit(utgardFrame, GIANT_BOX_H)" />
+          <div
+            class="giant-box"
+            :tabindex="utgardHasAnim ? 0 : undefined"
+            @mouseenter="utgardHovered = true"
+            @mouseleave="utgardHovered = false"
+            @focus="utgardHovered = true"
+            @blur="utgardHovered = false"
+          >
+            <AnimatedGiant
+              v-if="utgardHasAnim && utgardHovered"
+              family="giantutgard"
+              top-category="buildings-static"
+              plate-family="wasteland"
+              :orientation="utgardCamera"
+            />
+            <AtlasSprite v-else-if="utgardFrame" :frame="utgardFrame" :style="fit(utgardFrame, GIANT_BOX_H)" />
           </div>
           <div class="camera-pills">
             <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
@@ -190,8 +232,22 @@ const wallFrame = computed(() => {
         <div class="giant-card">
           <h2>{{ $t('docs.wastedLands.volcano.heading') }}</h2>
           <p>{{ $t('docs.wastedLands.volcano.body') }}</p>
-          <div class="giant-box">
-            <AtlasSprite v-if="volcanoFrame" :frame="volcanoFrame" :style="fit(volcanoFrame, GIANT_BOX_H)" />
+          <div
+            class="giant-box"
+            :tabindex="volcanoHasAnim ? 0 : undefined"
+            @mouseenter="volcanoHovered = true"
+            @mouseleave="volcanoHovered = false"
+            @focus="volcanoHovered = true"
+            @blur="volcanoHovered = false"
+          >
+            <AnimatedGiant
+              v-if="volcanoHasAnim && volcanoHovered"
+              family="giantvolcano_wasted"
+              top-category="terrain"
+              plate-family="wasteland"
+              :orientation="volcanoCamera"
+            />
+            <AtlasSprite v-else-if="volcanoFrame" :frame="volcanoFrame" :style="fit(volcanoFrame, GIANT_BOX_H)" />
           </div>
           <div class="camera-pills">
             <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
@@ -513,6 +569,17 @@ h2 {
   border: 1px solid var(--panel-border);
   overflow: hidden;
   margin-bottom: 10px;
+  position: relative;
+}
+/* Only a card whose giant has `buildings-anim` clips gets a tabindex at
+   all (see `utgardHasAnim`/`volcanoHasAnim`), so this only ever shows on
+   the one that can actually animate on hover/focus. */
+.giant-box[tabindex] {
+  cursor: pointer;
+}
+.giant-box[tabindex]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
 }
 .defences-section {
   margin-top: 32px;

@@ -267,6 +267,9 @@ const buildingsByTile = computed(() => {
 .tile-docs {
   width: 100%;
   height: 100vh;
+  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
+     viewport, as a progressive enhancement over the 100vh above. */
+  height: 100dvh;
   overflow: auto;
   background: var(--shell);
 }

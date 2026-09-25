@@ -165,4 +165,37 @@ function subtextFor(row: ChecklistRow): string {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Mobile-readiness audit (finding a): at 390px-wide the 3-card row put the
+   3rd card's right edge past the viewport (x 320..468) and squeezed each
+   card down to one-word-per-line text, while the whole tray sat ~250px
+   tall at `bottom: 96px`, covering the map and the ring-menu bubbles below
+   it. The header's step count + progress bar already say where the player
+   is overall, so on a narrow/short viewport only the CURRENT row needs to
+   render at all, full-width, keeping the tray to a couple of rows tall
+   instead of three side by side. `(max-height: 500px)` also catches a
+   landscape phone (844x390) even though its width is well past 768px. */
+@media (max-width: 768px), (max-height: 500px) {
+  .tray {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 12px;
+    width: calc(100vw - 24px);
+  }
+  .tray-item:not(.current) {
+    display: none;
+  }
+}
+
+/* Short-landscape phones (e.g. iPhone 13 landscape, 844x390): the preview
+   plot sits centred on screen, so a tray still centred at the bottom would
+   cover it and swallow the founding tap (finding b) — dock it to the
+   bottom-right corner instead, out of the plot's way. */
+@media (max-height: 500px) {
+  .tray {
+    left: auto;
+    right: 12px;
+    transform: none;
+    width: min(340px, calc(100vw - 24px));
+  }
+}
 </style>

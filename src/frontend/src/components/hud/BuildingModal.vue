@@ -525,4 +525,30 @@ const actionLabel = computed(() => {
   opacity: 0.5;
   cursor: default;
 }
+/* Mobile-readiness audit: the fixed 280px `.art` column left only ~87px for
+   `.body` at a 367px content width, so this stacks art above body and lets
+   the whole modal scroll vertically instead. Last in the file so it wins
+   over the desktop `.art`/`.body` rules above at equal specificity. */
+@media (max-width: 768px) {
+  .modal {
+    flex-direction: column;
+    max-height: 90vh;
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+  .art {
+    width: 100%;
+    height: 140px;
+  }
+  .art-img {
+    width: auto;
+    height: 100%;
+  }
+  .body {
+    padding: 16px 18px;
+  }
+  .primary {
+    min-height: 44px;
+  }
+}
 </style>

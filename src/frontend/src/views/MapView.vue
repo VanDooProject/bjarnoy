@@ -1152,13 +1152,13 @@ async function upgrade() {
   position: relative;
   width: 100vw;
   height: 100vh;
-  height: 100dvh; /* finding #11: keeps clear of mobile browser chrome; 100vh above is the fallback for browsers without dvh support */
-  /* Finding #3: without this, a vertical touch-drag that starts on the
-     mobile HUD bar's pill row (`.resource-bar.compact`, `touch-action:
-     pan-x`) can still fall through to the browser's own overscroll/
-     pull-to-refresh handling once the pill row's own horizontal-only pan
-     doesn't consume it, cancelling the pointer capture the drag-to-open
-     drawer gesture (TopBar.vue's useHudDrawer) relies on. */
+  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
+     viewport, as a progressive enhancement over the 100vh above. */
+  height: 100dvh;
+  /* Without this, a vertical touch-drag on the mobile HUD bar can fall
+     through to the browser's own overscroll/pull-to-refresh handling,
+     cancelling the pointer capture the drag-to-open drawer gesture
+     (TopBar.vue's useHudDrawer) relies on. */
   overscroll-behavior-y: none;
 }
 .hud-scrim {
@@ -1193,6 +1193,9 @@ async function upgrade() {
      helpers run at. `bottom` matches the `top` above so it clears the HUD at
      both ends. */
   max-height: calc(100vh - 136px);
+  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
+     viewport, as a progressive enhancement over the calc(100vh...) above. */
+  max-height: calc(100dvh - 136px);
   overflow-y: auto;
 }
 /* Scroll the column, not the panels: flex items shrink to fit a constrained
