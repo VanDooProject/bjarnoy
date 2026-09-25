@@ -8,7 +8,7 @@
 // a tall tile in front of Utgard" rule must hold for every one of the six
 // rotations the page's rotate buttons can reach.
 import { describe, expect, it } from 'vitest';
-import { buildIsland, resolvesDirectly } from './wastedIsland';
+import { buildIsland, resolvesDirectly, resolveIslandClip, giantFamilyHasClip } from './wastedIsland';
 import { coordKey, hexDistance } from '../hex/coords';
 import { GIANT_NEIGHBOR_PARTS, type GiantPart } from '../map/giantTiles';
 
@@ -186,5 +186,55 @@ describe('buildIsland', () => {
     const keys0 = new Set(buildIsland(0).map((p) => p.key));
     const keys3 = new Set(buildIsland(3).map((p) => p.key));
     expect(keys3).toEqual(keys0);
+  });
+});
+
+// The turning island's giant top parts play a `buildings-anim` clip when one
+// exists for that family/orientation/part (living Utgard, i.e. `giantshrine`,
+// and the wasted volcano, i.e. `giantvolcano_wasted`) and otherwise keep
+// their static frame (`giantutgard`, the wasted Utgard family, has none).
+describe('giant top-part clips', () => {
+  const placements0 = buildIsland(0);
+
+  it('resolves a clip with more than one frame for every part of the living Utgard flower at SE', () => {
+    const utgardTops = placements0.filter((p) => p.kind === 'utgard' && p.layer === 'top');
+    expect(utgardTops).toHaveLength(7);
+    for (const p of utgardTops) {
+      const clip = resolveIslandClip(p.livingFrame);
+      expect(clip, `${p.livingFrame}`).toBeDefined();
+      expect(clip!.frameRects.length).toBeGreaterThan(1);
+    }
+  });
+
+  it('resolves a clip with more than one frame for every part of the wasted volcano at SE', () => {
+    const volcanoTops = placements0.filter((p) => p.kind === 'volcano' && p.layer === 'top');
+    expect(volcanoTops).toHaveLength(7);
+    for (const p of volcanoTops) {
+      const clip = resolveIslandClip(p.wastedFrame);
+      expect(clip, `${p.wastedFrame}`).toBeDefined();
+      expect(clip!.frameRects.length).toBeGreaterThan(1);
+    }
+  });
+
+  it('falls back to the static frame for a family with no clip (wasted Utgard, living volcano)', () => {
+    const utgardTops = placements0.filter((p) => p.kind === 'utgard' && p.layer === 'top');
+    for (const p of utgardTops) {
+      expect(resolveIslandClip(p.wastedFrame)).toBeUndefined();
+      // The static fallback still resolves — the whole point of degrading
+      // gracefully rather than leaving a blank tile.
+      expect(resolvesDirectly(p.wastedFrame, p.category)).toBe(true);
+    }
+    const volcanoTops = placements0.filter((p) => p.kind === 'volcano' && p.layer === 'top');
+    for (const p of volcanoTops) {
+      expect(resolveIslandClip(p.livingFrame)).toBeUndefined();
+      expect(resolvesDirectly(p.livingFrame, p.category)).toBe(true);
+    }
+  });
+
+  it('giantFamilyHasClip agrees: true for the animated families, false for the static ones', () => {
+    expect(giantFamilyHasClip('giantshrine', 'SE')).toBe(true);
+    expect(giantFamilyHasClip('giantvolcano_wasted', 'SE')).toBe(true);
+    expect(giantFamilyHasClip('giantutgard', 'SE')).toBe(false);
+    expect(giantFamilyHasClip('giantmountain', 'SE')).toBe(false);
   });
 });

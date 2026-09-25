@@ -12,6 +12,7 @@ import { computed, onBeforeUnmount, watch } from 'vue';
 import { ref } from 'vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 import type { BuildingLayers } from '../lib/map/buildingArt';
+import { clipFrameIndex, clipTimingOf } from '../lib/map/clipPlayback';
 
 const props = defineProps<{ layers: BuildingLayers }>();
 
@@ -37,41 +38,17 @@ function layerStyle(rect: AtlasFrameRect) {
 
 const baseStyle = computed(() => (props.layers.base ? layerStyle(props.layers.base) : null));
 
-// The playback position, in units of "clip frames" — an integer index into
-// `frameRects` for `loop`, but left unclamped and folded into a bounce for
-// `pingpong` so a single incrementing counter drives both. `pause` (seconds
-// of extra dwell at the loop's end/turnaround, per the atlas manifest) is
-// spent holding the position rather than advancing it.
-const position = ref(0);
+// Elapsed playback time, in ms since this clip (re)started — fed to
+// `clipFrameIndex` (clipPlayback.ts), which owns the loop/pingpong/pause
+// math itself so it isn't duplicated per clip player (see that module and
+// `useAnimationClock.ts`, its multi-sprite sibling).
+const elapsed = ref(0);
 let timer: ReturnType<typeof setInterval> | undefined;
-
-function clipFrameCount(): number {
-  return props.layers.clip?.frameRects.length ?? 0;
-}
-
-function stepsPerCycle(): number {
-  const n = clipFrameCount();
-  const clip = props.layers.clip;
-  const pauseSteps = clip ? Math.round(clip.pause * clip.fps) : 0;
-  return clip?.playback === 'pingpong' ? Math.max(1, n * 2 - 2) + pauseSteps : n + pauseSteps;
-}
-
-function frameIndexAt(step: number): number {
-  const n = clipFrameCount();
-  const clip = props.layers.clip;
-  if (n === 0 || !clip) return 0;
-  if (clip.playback === 'pingpong') {
-    const cycle = Math.max(1, n * 2 - 2);
-    const s = step % cycle;
-    return s < n ? s : cycle - s;
-  }
-  return Math.min(step, n - 1);
-}
 
 const currentTopFrame = computed<AtlasFrameRect | undefined>(() => {
   const clip = props.layers.clip;
   if (!clip || clip.frameRects.length === 0) return props.layers.top;
-  return clip.frameRects[frameIndexAt(position.value)];
+  return clip.frameRects[clipFrameIndex(clipTimingOf(clip), elapsed.value)];
 });
 
 const topStyle = computed(() => (currentTopFrame.value ? layerStyle(currentTopFrame.value) : null));
@@ -85,13 +62,13 @@ function stopAnimation() {
 
 function startAnimation() {
   stopAnimation();
-  position.value = 0;
+  elapsed.value = 0;
   const clip = props.layers.clip;
   if (!clip || clip.frameRects.length <= 1) return;
-  const total = stepsPerCycle();
+  const period = 1000 / clip.fps;
   timer = setInterval(() => {
-    position.value = (position.value + 1) % total;
-  }, 1000 / clip.fps);
+    elapsed.value += period;
+  }, period);
 }
 
 watch(() => props.layers.clip, startAnimation, { immediate: true });
