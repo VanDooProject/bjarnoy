@@ -16,6 +16,7 @@ import {
   hash2,
   terrainAt,
   wastedTerrainAt,
+  wastedVariantAt,
   type WorldGenerationConstants,
 } from './worldGenerator';
 import {
@@ -610,6 +611,7 @@ export class WorldModel {
       if (this.wastedRevealed) {
         if (this.isWastedLandAt(q, r)) {
           tile.wasted = true;
+          tile.variant = wastedVariantAt(q, r, { seed: this.seed, generation: this.generation }, tile.terrain);
         } else if (tile.terrain === 'sea' && tile.isCoastalWater) {
           // Coastal water bordering wasted land also renders as wasted
           // (blacksandcoast) — see textures.ts's wasted family mapping.

@@ -461,6 +461,27 @@ const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
  */
 const COASTAL_WATER_VARIANT_WEIGHTS = [0.8, 0.1, 0.1];
 
+/**
+ * Top-variant weights for a wasted island's land, per green terrain it stands
+ * in for — its own art set, so it can't borrow `VARIANT_COUNTS` (grass's 4
+ * would never reach wasteland's two lava variants). Wasteland is plain,
+ * rocks, spikes, rune crack, lava cracks, lava pool: the rune crack is the
+ * rare accent and lava shows up regularly. Dead forest and black sand have
+ * a plain frame and one variant each.
+ */
+const WASTED_VARIANT_WEIGHTS: Partial<Record<Terrain, number[]>> = {
+  grass: [0.3, 0.2, 0.2, 0.06, 0.14, 0.1],
+  forest: [0.5, 0.5],
+  sand: [0.6, 0.4],
+};
+
+/** The top-variant index a revealed wasted-island tile of `terrain` shows at `(q, r)` — see `WASTED_VARIANT_WEIGHTS`. */
+export function wastedVariantAt(q: number, r: number, world: WorldSeed, terrain: Terrain): number {
+  const weights = WASTED_VARIANT_WEIGHTS[terrain];
+  if (!weights) return 0;
+  return weightedIndex(hash2(q, r, world.seed + 31), weights);
+}
+
 /** Picks an index from `weights` (assumed to sum to ~1) using a `[0, 1)` roll `h`. */
 function weightedIndex(h: number, weights: number[]): number {
   let acc = 0;
