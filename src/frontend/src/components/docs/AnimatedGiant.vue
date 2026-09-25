@@ -13,7 +13,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { isoGridPosition } from '../../lib/hex/geometry';
 import { atlasBackgroundStyle, type AtlasBackgroundStyle } from '../../lib/map/atlas';
-import { giantCoverage, GIANT_NEIGHBOR_PARTS, type GiantPart } from '../../lib/map/giantTiles';
+import { giantCoverage, type GiantPart } from '../../lib/map/giantTiles';
 import type { TileOrientation } from '../../lib/map/types';
 import {
   resolveIslandFrame,
@@ -39,7 +39,6 @@ const props = defineProps<{
 const TILE_W = 400;
 const TOP_FACE_H = 184;
 const ANCHOR = { q: 0, r: 0 };
-const ALL_PARTS: GiantPart[] = ['C', ...GIANT_NEIGHBOR_PARTS];
 
 interface PartLayout {
   part: GiantPart;
