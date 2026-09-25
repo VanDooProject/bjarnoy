@@ -94,6 +94,21 @@ public enum BuildRejection
     LonghousePlacementNotAllowed,
     RequiredBuildingTooLow,
 
+    /// <summary>
+    /// A shrine to this god already stands somewhere else on the island — a
+    /// settlement can raise all four gods' shrines, just never a second one
+    /// to the same god (see <see cref="BuildingCatalogue.GodOf"/>).
+    /// </summary>
+    ShrineGodAlreadyOnIsland,
+
+    /// <summary>
+    /// PumpkinFarm was ordered on a Wheat-soil island — it's the bonus crop
+    /// only a Pumpkin-soil island (<see cref="World.SoilType"/>) unlocks;
+    /// Farm stays buildable everywhere regardless of soil. See
+    /// <see cref="Settlement.PlanBuild"/>'s islandSoil parameter.
+    /// </summary>
+    WrongCropForIslandSoil,
+
     /// <summary>No construction slot is free, and there is no waiting-queue room either (the non-premium wall).</summary>
     NoFreeSlot,
 }

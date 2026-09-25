@@ -13,19 +13,29 @@ public class TrainingAndGarrisonTests
     /// <summary>
     /// A settlement at a given longhouse level, rich enough that affordability
     /// is never the thing under test unless the caller overrides
-    /// <paramref name="stock"/>.
+    /// <paramref name="stock"/>. Carries a standing Barracks by default —
+    /// most of this file trains <see cref="UnitType.Thrall"/>, which needs
+    /// one — so only the tests that specifically prove Barracks-gating
+    /// (<c>A_basic_melee_unit_cannot_be_trained_without_a_barracks</c> and
+    /// its positive counterpart) opt out via <paramref name="withBarracks"/>.
     /// </summary>
     private static Settlement Found(
-        int longhouseLevel = 1, double stock = 1_000_000, params IReadOnlyList<PlacedBuilding> extraBuildings)
+        int longhouseLevel = 1,
+        double stock = 1_000_000,
+        bool withBarracks = true,
+        params IReadOnlyList<PlacedBuilding> extraBuildings)
     {
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
+        var barracks = withBarracks
+            ? (IReadOnlyList<PlacedBuilding>)[new PlacedBuilding(new HexCoord(9, 9), BuildingType.Barracks, 1)]
+            : [];
 
         return new Settlement
         {
             Id = Guid.CreateVersion7(),
             Name = "Bjornstad",
             Centre = Centre,
-            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel), .. extraBuildings],
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel), .. barracks, .. extraBuildings],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(stock), production, capacity, T0),
         };
@@ -170,7 +180,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void A_basic_melee_unit_cannot_be_trained_without_a_barracks()
     {
-        var settlement = Found(longhouseLevel: 5);
+        var settlement = Found(longhouseLevel: 5, withBarracks: false);
 
         var decision = settlement.PlanTrain(UnitType.Spearman, 1, T0, Guid.CreateVersion7());
 

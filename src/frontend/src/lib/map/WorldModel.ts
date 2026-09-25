@@ -5,6 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
+import { cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
@@ -14,6 +15,8 @@ import {
   DEFAULT_GENERATION,
   generateTile,
   hash2,
+  soilAt,
+  springMountainShapeAt,
   terrainAt,
   wastedTerrainAt,
   wastedVariantAt,
@@ -654,6 +657,43 @@ export class WorldModel {
   }
 
   /**
+   * Which of the two spring-capable mountain shapes a river `Spring` tile at
+   * `coord` should render as — mirrors the backend's
+   * `TerrainSampler.SpringMountainShapeAt` exactly (same seed offset, same
+   * threshold; see `worldGenerator.ts`'s own `springMountainShapeAt`), so a
+   * live-mode spring and the demo world's own client-side generation pick
+   * the same shape for the same coordinate/seed. Pure and independent of
+   * whether `coord` actually is a spring — the caller (river rendering)
+   * already knows that from its own `RiverTile` lookup.
+   */
+  springShapeAt(coord: AxialCoord): 'corrie' | 'saddleback' {
+    const shape = springMountainShapeAt(coord.q, coord.r, { seed: this.seed, generation: this.generation });
+    return shape === 2 ? 'saddleback' : 'corrie';
+  }
+
+  /**
+   * Which crop the island centred on `centre` grows — mirrors the backend's
+   * `TerrainSampler.SoilAt` (via `soilAt`'s own doc comment). Only
+   * PumpkinFarm cares (see `Settlement.PlanBuild`'s islandSoil parameter on
+   * the backend): Farm stays buildable everywhere regardless of soil.
+   */
+  soilAtIslandCentre(centre: AxialCoord): 'wheat' | 'pumpkin' {
+    return soilAt(centre.q, centre.r, { seed: this.seed, generation: this.generation });
+  }
+
+  /**
+   * Which crop `settlementId`'s own island grows, resolved from its stored
+   * `islandId` against `listIslands()` — or `undefined` if either is
+   * unknown (a demo settlement founded with no island id; see
+   * `cropAllowedHere`'s own doc comment for how callers treat that).
+   */
+  soilForSettlement(settlementId: string): 'wheat' | 'pumpkin' | undefined {
+    const islandId = this.settlements.get(settlementId)?.islandId;
+    const island = islandId ? this.islands.find((i) => i.id === islandId) : undefined;
+    return island ? this.soilAtIslandCentre({ q: island.q, r: island.r }) : undefined;
+  }
+
+  /**
    * Which of a Sawmill's two art families a Sawmill standing on `coord`
    * should render with. A Sawmill is built directly on a river tile —
    * `WorldModel.placeBuilding` only accepts a `straight`/`bend` shaped one,
@@ -1207,6 +1247,13 @@ export class WorldModel {
       'barracks',
       'fisherhut',
       'sawmill',
+      'meadery',
+      'townsquare',
+      'cropmill',
+      'smithy',
+      'druidhut',
+      'cartworkshop',
+      'claybrickworks',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1269,13 +1316,18 @@ export class WorldModel {
     const isWaterOnlyBuilding = type === 'fishinghut' || type === 'dockyard' || type === 'fisherhut';
     if (isWaterOnlyBuilding ? !tile.isCoastalWater : tile.terrain === 'sea') return false;
     if (tile.buildingType) return false;
-    // The Sawmill is built directly on a river tile — only Straight/Bend
-    // shapes have a matching sawmill+river art composite (matches
-    // BuildingDefinition.RequiresRiverShape). sawmillArtVariantOf reads this
-    // same own-hex river tile to pick which composite to render.
-    if (type === 'sawmill') {
-      const river = this.getRiverTile(at.q, at.r);
-      if (!river || (river.shape !== 'straight' && river.shape !== 'bend')) return false;
+    // The Sawmill and Crop Mill are built directly on a river tile — only
+    // certain shapes have a matching river-composite art (matches
+    // BuildingDefinition.RequiresRiverShape, see riverBuildingAllowedHere).
+    // sawmillArtVariantOf reads this same own-hex river tile to pick which
+    // Sawmill composite to render; Crop Mill has only one (straight-only).
+    if (type && !riverBuildingAllowedHere(type, this.getRiverTile(at.q, at.r)?.shape)) {
+      return false;
+    }
+    // PumpkinFarm is only buildable on a Pumpkin-soil island (matches
+    // BuildRejection.WrongCropForIslandSoil) — Farm has no such gate.
+    if (type && !cropAllowedHere(type, this.soilForSettlement(settlementId))) {
+      return false;
     }
     tile.ownerId = settlementId;
     tile.buildingType = type;

@@ -6,7 +6,7 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
-import { coastalWaterArt, riverArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
+import { coastalWaterArt, riverArt, terrainArt, terrainArtByFamily, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 
 const catalogue = useBuildingCatalogueStore();
@@ -21,7 +21,68 @@ onMounted(() => catalogue.load());
 const RIVER_SHAPES = ['spring', 'straight', 'bend', 'bend60', 'confluence'] as const;
 type RiverShape = (typeof RIVER_SHAPES)[number];
 const riverShape = ref<RiverShape>('straight');
-const riverShapeArt = computed<ArtRef>(() => riverArt(riverShape.value));
+
+// The pack shipped alternate art for four of the five shapes above — not a
+// different connectivity, just a different picture for the same crossing
+// (VanDooProject/3d_assets' asset-inventory.md: "the number in these names
+// is the family's turn-through angle... not the shape of its own channel").
+// `Confluence` is the one exception: `ywide` is a genuinely different
+// junction (three arms 120° apart each) rather than a reskin of `y_narrow`'s
+// asymmetric one — still offered as a "look" here for a consistent picker,
+// but see routing.ts's `confluenceOrientationOf` for where that distinction
+// actually matters (which real in-game confluences each family can render).
+const RIVER_LOOKS: Partial<Record<RiverShape, { id: string; family: string; labelKey: string }[]>> = {
+  straight: [
+    { id: 'plain', family: 'rivertile', labelKey: 'docs.tiles.riverLooks.plain' },
+    { id: 'island', family: 'rivertile_bend180_island', labelKey: 'docs.tiles.riverLooks.island' },
+    { id: 'meander', family: 'rivertile_bend180_meander', labelKey: 'docs.tiles.riverLooks.meander' },
+  ],
+  bend: [
+    { id: 'plain', family: 'rivertile_bend', labelKey: 'docs.tiles.riverLooks.plain' },
+    { id: 'island', family: 'rivertile_bend120_island', labelKey: 'docs.tiles.riverLooks.island' },
+    { id: 'meander', family: 'rivertile_bend120_meander', labelKey: 'docs.tiles.riverLooks.meander' },
+  ],
+  bend60: [
+    { id: 'plain', family: 'rivertile_bend60', labelKey: 'docs.tiles.riverLooks.plain' },
+    { id: 'loop', family: 'rivertile_bend60_loop', labelKey: 'docs.tiles.riverLooks.loop' },
+  ],
+  confluence: [
+    { id: 'narrow', family: 'rivertile_y_narrow', labelKey: 'docs.tiles.riverLooks.narrow' },
+    { id: 'wide', family: 'rivertile_ywide', labelKey: 'docs.tiles.riverLooks.wide' },
+  ],
+};
+const riverLook = ref<string>('');
+
+function riverLooksFor(shape: RiverShape) {
+  return RIVER_LOOKS[shape] ?? [];
+}
+function selectedRiverLookId(shape: RiverShape): string {
+  return riverLook.value || riverLooksFor(shape)[0]?.id || '';
+}
+const riverShapeArt = computed<ArtRef>(() => {
+  const looks = riverLooksFor(riverShape.value);
+  if (looks.length > 0) {
+    const look = looks.find((l) => l.id === selectedRiverLookId(riverShape.value)) ?? looks[0]!;
+    return terrainArtByFamily(look.family);
+  }
+  return riverArt(riverShape.value);
+});
+
+// The pack carves a mountain hex into one of three landforms (plus the
+// plain, undecorated look `terrainArt('mountain')` otherwise shows) — same
+// idea as the river shape picker above, and the same landform names the
+// Quarry building's own variant picker offers (TechTreeView.vue), since a
+// Quarry's art sits on top of one of these.
+const MOUNTAIN_VARIANTS = ['plain', 'corrie', 'saddleback', 'table'] as const;
+type MountainVariant = (typeof MOUNTAIN_VARIANTS)[number];
+const MOUNTAIN_FAMILY: Record<MountainVariant, string> = {
+  plain: 'mountaintile',
+  corrie: 'mountaintile_corrie',
+  saddleback: 'mountaintile_saddleback',
+  table: 'mountaintile_table',
+};
+const mountainVariant = ref<MountainVariant>('plain');
+const mountainVariantArt = computed<ArtRef>(() => terrainArtByFamily(MOUNTAIN_FAMILY[mountainVariant.value]));
 
 // id doubles as the anchor/ToC key; terrain is the wire name a building's
 // AllowedTerrain lists (see BuildingCatalogue.cs) — null for the rows that
@@ -34,6 +95,7 @@ interface TileEntry {
   terrain: string | null;
   coastal?: boolean;
   river?: boolean;
+  mountain?: boolean;
 }
 
 // Generation rules mirror WorldGenerationOptions' documented defaults
@@ -45,13 +107,15 @@ const TILES: TileEntry[] = [
   { id: 'sand', art: terrainArt('sand'), terrain: 'sand' },
   { id: 'grass', art: terrainArt('grass'), terrain: 'grass' },
   { id: 'forest', art: terrainArt('forest'), terrain: 'forest' },
-  { id: 'mountain', art: terrainArt('mountain'), terrain: 'mountain' },
+  { id: 'mountain', art: terrainArt('mountain'), terrain: 'mountain', mountain: true },
   { id: 'river', art: riverArt('straight'), terrain: null, river: true },
 ];
 
-/** The picture a tile's card shows — the river entry swaps in whichever shape is picked, everything else is static. */
+/** The picture a tile's card shows — the river/mountain entries swap in whichever shape/landform is picked, everything else is static. */
 function thumbArt(tile: TileEntry): ArtRef {
-  return tile.river ? riverShapeArt.value : tile.art;
+  if (tile.river) return riverShapeArt.value;
+  if (tile.mountain) return mountainVariantArt.value;
+  return tile.art;
 }
 function thumbFrame(tile: TileEntry): AtlasFrameRect | null {
   const art = thumbArt(tile);
@@ -96,6 +160,7 @@ const buildingsByTile = computed(() => {
       <HudNav />
     </TopBar>
     <main class="body">
+      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.tiles.title') }}</h1>
       <p class="intro">{{ $t('docs.tiles.intro') }}</p>
 
@@ -150,9 +215,43 @@ const buildingsByTile = computed(() => {
             type="button"
             class="variant-button"
             :class="{ active: riverShape === shape }"
-            @click="riverShape = shape"
+            @click="riverShape = shape; riverLook = ''"
           >
             {{ t(`docs.tiles.riverShapes.${shape}`) }}
+          </button>
+        </div>
+
+        <!-- The pack shipped more than one look for most shapes (a plain
+             channel vs. one that divides round a gravel bar, or meanders, or
+             loops back on itself) — a second picker, only shown for shapes
+             that actually have alternates. -->
+        <div v-if="tile.river && riverLooksFor(riverShape).length > 0" class="variants">
+          <span class="variants-label">{{ $t('docs.tiles.riverLookLabel') }}</span>
+          <button
+            v-for="look in riverLooksFor(riverShape)"
+            :key="look.id"
+            type="button"
+            class="variant-button"
+            :class="{ active: selectedRiverLookId(riverShape) === look.id }"
+            @click="riverLook = look.id"
+          >
+            {{ t(look.labelKey) }}
+          </button>
+        </div>
+
+        <!-- Same idea for Mountain's landform (Plain/Corrie/Saddleback/Table) —
+             the Quarry building's own variant picker sits on one of these. -->
+        <div v-if="tile.mountain" class="variants">
+          <span class="variants-label">{{ $t('docs.tiles.mountainVariants') }}</span>
+          <button
+            v-for="variant in MOUNTAIN_VARIANTS"
+            :key="variant"
+            type="button"
+            class="variant-button"
+            :class="{ active: mountainVariant === variant }"
+            @click="mountainVariant = variant"
+          >
+            {{ t(`docs.tiles.mountainLandforms.${variant}`) }}
           </button>
         </div>
       </section>
@@ -172,6 +271,17 @@ const buildingsByTile = computed(() => {
   margin: 0 auto;
   padding: 24px 28px 60px;
   color: var(--text);
+}
+.breadcrumb {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.breadcrumb:hover {
+  color: var(--gold);
+  text-decoration: underline;
 }
 .intro {
   color: var(--muted);

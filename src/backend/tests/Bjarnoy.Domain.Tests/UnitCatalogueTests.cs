@@ -105,24 +105,34 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void A_civilian_only_needs_the_longhouse_even_with_a_building_lookup()
+    public void A_civilian_with_no_matching_building_reported_is_unavailable()
     {
-        // Thrall defaults to RequiredBuildingType = Longhouse, so a lookup
-        // that reports no Archery Range/Dockyard still allows it as long as
-        // the longhouse itself is reported standing.
-        Assert.True(UnitCatalogue.IsAvailable(
+        // Thrall trains at a Barracks (same building as the basic melee
+        // roster — see The_basic_melee_and_thrall_roster_requires_a_barracks
+        // below), so a lookup that reports the longhouse but not a Barracks
+        // still refuses it.
+        Assert.False(UnitCatalogue.IsAvailable(
             UnitType.Thrall, 1, t => t == BuildingType.Longhouse ? 1 : 0));
     }
 
     [Fact]
-    public void The_basic_melee_roster_requires_a_barracks()
+    public void A_civilian_becomes_available_once_its_barracks_is_reported()
+    {
+        Assert.True(UnitCatalogue.IsAvailable(
+            UnitType.Thrall, 1, t => t == BuildingType.Barracks ? 1 : 0));
+    }
+
+    [Fact]
+    public void The_basic_melee_and_thrall_roster_requires_a_barracks()
     {
         // Barracks (BuildingType.Barracks) trains the basic melee slice of
-        // the land roster; ArcheryRange keeps the archer/siege slice
-        // (Bowman, Catapult). Documents that split so a future roster change
-        // updates this test deliberately rather than by accident.
+        // the land roster plus Thrall; ArcheryRange keeps the archer/siege
+        // slice (Bowman, Catapult), and Cart Workshop trains the rest of the
+        // civilian roster (Provisioner, SettlerCrew). Documents that split
+        // so a future roster change updates this test deliberately rather
+        // than by accident.
         Assert.Equal(
-            [UnitType.Spearman, UnitType.Axeman, UnitType.Berserker],
+            [UnitType.Thrall, UnitType.Spearman, UnitType.Axeman, UnitType.Berserker],
             Enum.GetValues<UnitType>()
                 .Where(type => UnitCatalogue.Get(type).RequiredBuildingType == BuildingType.Barracks)
                 .ToArray());

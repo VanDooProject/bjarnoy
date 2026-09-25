@@ -42,6 +42,8 @@ import {
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import {
   bendOrientationOf,
+  confluenceOrientationOf,
+  confluenceWideOrientationOf,
   mouthOrientationOf,
   springOrientationOf,
   straightOrientationOf,
@@ -102,7 +104,9 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // the matching docs-page choice.
   shrineofullr: 'thorshrine',
   shrineofnjord: 'freyjashrine',
-  farm: 'farm_crop',
+  // Newer, on-palette scripted art — see buildingArt.ts's matching docs-page
+  // choice. Pumpkin Farm stays on the legacy `farm_pumpkin` family for now.
+  farm: 'farm',
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjackhut',
   storagehouse: 'storagebuilding',
@@ -113,7 +117,10 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // TextureKeys below, since (unlike this one) their base layer varies by
   // level too.
   sawmill: 'sawmill',
-  fishinghut: 'fishinghutbuilding',
+  // Shares FisherHut's leveled family now — the legacy 'fishinghutbuilding'
+  // composite (still in the pack, no longer referenced) had no per-level
+  // art at all. See buildingArt.ts's matching docs-page choice.
+  fishinghut: 'fisherhut',
   magictower: 'magictower',
   tower: 'towerbuilding',
   dockyard: 'dockyard',
@@ -189,35 +196,65 @@ export function giantArtFamilyFor(family: string, wasted: boolean): string {
   return (wasted && WASTED_GIANT_FAMILY[family]) || family;
 }
 
-/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
-type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
+/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. Spring is split into its two spring-capable mountain landforms (`springcorrie`/`springsaddleback`), and Confluence into its two junctions (`confluencenarrow`/`confluencewide`) rather than one fixed family each — see `riverArtFor`'s own comment. */
+type RiverArtShape =
+  | 'straight'
+  | 'bend'
+  | 'bend60'
+  | 'springcorrie'
+  | 'springsaddleback'
+  | 'confluencenarrow'
+  | 'confluencewide';
 
-const RIVER_FAMILY: Record<RiverArtShape, string> = {
+// Exported (only) so textures.test.ts can guard the family name a shape
+// resolves to, the same reason riverArtFor below is exported.
+export const RIVER_FAMILY: Record<RiverArtShape, string> = {
   straight: 'rivertile',
   bend: 'rivertile_bend',
   bend60: 'rivertile_bend60',
-  spring: 'rivertile_spring',
-  confluence: 'rivertile_y_narrow',
+  // A spring rises out of a mountain cluster (see RiverGenerator's spring
+  // placement), so its art is a spring bursting from a mountain landform —
+  // the flat, undecorated `rivertile_spring` this used to point at was a
+  // placeholder from before the pack had that art (see buildingArt.ts's
+  // matching docs-page fix). Only two of the pack's four mountain shapes
+  // shipped a `_spring` cut (`MountainShape.IsSpringCapable`) — both have
+  // their own base/top split (a rock prop standing above the plate),
+  // unlike the old family's base-only composite.
+  springcorrie: 'mountaintile_corrie_spring',
+  springsaddleback: 'mountaintile_saddleback_spring',
+  // The pack's two confluence junctions — y_narrow's asymmetric opposite-
+  // pair-plus-branch (see `confluenceOrientationOf`) and ywide's later,
+  // fully symmetric three-arms-120°-apart alternative (see
+  // `confluenceWideOrientationOf`) — cover two disjoint sets of real (in1,
+  // in2, out) triples between them, so both get used rather than only ever
+  // reaching for one.
+  confluencenarrow: 'rivertile_y_narrow',
+  confluencewide: 'rivertile_ywide',
 };
 
 /** The lava-river shapes that have a dedicated wasted-island art family — see `TileTextures.lavaRiverBase`/`lavaRiverTop`'s own doc comment for why this doesn't cover every `RiverArtShape`. */
-type LavaRiverShape = 'straight' | 'bend' | 'bend60' | 'spring';
+type LavaRiverShape = 'straight' | 'bend' | 'bend60' | 'springcorrie' | 'springsaddleback';
 
 /**
- * Lava-stream art families, one per `LavaRiverShape`. `spring`'s family
- * (`mountaintile_volcano_lavaspring_flows`) is the mountain-shape family's
- * own convention (base+top per orientation, no variants — same shape
- * `mountaintile_saddleback_spring`/`mountaintile_corrie_spring` already
- * use), not the plain river-family one; it only ever replaces a Spring
- * tile's own overlay art (`riverTexturesFor`), never the underlying
- * mountain's base texture, which stays whatever `MountainShapeAt`/
- * `SpringMountainShapeAt` already picked either way.
+ * Lava-stream art families, one per `LavaRiverShape`. Both spring shapes
+ * share the one `mountaintile_volcano_lavaspring_flows` family — the pack
+ * has no separate corrie/saddleback lava-spring cut, since a wasted spring
+ * reads as its own volcano landform regardless of which spring-capable
+ * mountain shape (`springcorrie`/`springsaddleback`) picked the tile before
+ * it went wasted. It's the mountain-shape family's own convention (base+top
+ * per orientation, no variants — same shape `mountaintile_saddleback_spring`/
+ * `mountaintile_corrie_spring` already use), not the plain river-family one;
+ * it only ever replaces a Spring tile's own overlay art
+ * (`riverTexturesFor`), never the underlying mountain's base texture, which
+ * stays whatever `MountainShapeAt`/`SpringMountainShapeAt` already picked
+ * either way.
  */
 const LAVA_RIVER_FAMILY: Record<LavaRiverShape, string> = {
   straight: 'lavastream',
   bend: 'lavastream_bend',
   bend60: 'lavastream_bend60',
-  spring: 'mountaintile_volcano_lavaspring_flows',
+  springcorrie: 'mountaintile_volcano_lavaspring_flows',
+  springsaddleback: 'mountaintile_volcano_lavaspring_flows',
 };
 
 /** The orientation token embedded in every frame name, e.g. `..._NE_...` or `..._NE`. */
@@ -821,7 +858,12 @@ export function topAnimFor(
  * 120°-off-straight turn, a separate art family from `bend` — is directional
  * the same way, reusing `bendOrientationOf` (it takes an in/out direction
  * pair, not an angle, so the same anchor logic applies); `spring` has only
- * an outflow (`springOrientationOf`); `straight` orients by whichever of
+ * an outflow (`springOrientationOf`) — which of its two art families
+ * (`springcorrie`/`springsaddleback`) to use is the caller's own per-tile
+ * lookup (`springShape`, mirroring the backend's
+ * `TerrainSampler.SpringMountainShapeAt` — see `WorldModel.springShapeAt`),
+ * since which mountain shape a spring's coordinate hashes to has nothing to
+ * do with the river tile itself; `straight` orients by whichever of
  * `inDirections[0]`/`outDirection` is available, since `straightOrientationOf`
  * gives the same file either way (`docs/design/river-generation.md` again).
  *
@@ -831,12 +873,20 @@ export function topAnimFor(
  * carries none), not the inflow's geometric opposite `straight` alone
  * would assume.
  *
- * `confluence` (`y_narrow`) is asymmetric — two fixed arms plus a third at
- * a fixed offset, not a simple rotated pair — and hasn't been pixel-verified
- * the way the other three families have, so it keeps the untransformed
- * `outDirection ?? inDirections[0]` this whole function used before this
- * fix, rather than risk applying a derived formula that wasn't measured
- * against it. Known-unfixed; see "Art pack orientation convention".
+ * `confluence` has two junction assets, each pixel-verified the same way
+ * the other families were (`docs/design/river-generation.md`'s "Art pack
+ * orientation convention"): `y_narrow` (`confluenceOrientationOf`) is
+ * asymmetric — a fixed opposite pair (the trunk) plus a third edge adjacent
+ * to one end (the branch); `ywide` (`confluenceWideOrientationOf`) is fully
+ * symmetric — three arms exactly 120° apart, no distinguished trunk or
+ * branch. Unlike an ordinary bend, nothing on the generation side
+ * constrains a confluence's (in1, in2, out) angles to one fixed relative
+ * arrangement — two independently traced paths collide wherever they
+ * happen to — so this tries `y_narrow` first, then `ywide` (the two never
+ * both match the same triple — an opposite pair and an evenly-120°-spaced
+ * triple are mutually exclusive), and only falls back to the untransformed
+ * `outDirection ?? inDirections[0]` this whole function used before either
+ * fix, for a triple neither asset can represent.
  */
 // Exported (only) so textures.test.ts can check the shape/orientation this
 // picks without going through loadTileTextures' real asset pipeline
@@ -845,7 +895,8 @@ export function topAnimFor(
 export function riverArtFor(
   river: RiverTile,
   seaDirection: TileOrientation | null,
-): { shape: 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence'; orientation: TileOrientation } {
+  springShape: 'corrie' | 'saddleback' = 'corrie',
+): { shape: RiverArtShape; orientation: TileOrientation } {
   if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
     return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
   }
@@ -853,10 +904,16 @@ export function riverArtFor(
     return { shape: 'bend60', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
   }
   if (river.shape === 'spring' && river.outDirection) {
-    return { shape: 'spring', orientation: springOrientationOf(river.outDirection) };
+    const shape = springShape === 'saddleback' ? 'springsaddleback' : 'springcorrie';
+    return { shape, orientation: springOrientationOf(river.outDirection) };
   }
   if (river.shape === 'confluence') {
-    return { shape: 'confluence', orientation: river.outDirection ?? river.inDirections[0] ?? 'SE' };
+    const narrow = confluenceOrientationOf(river.inDirections, river.outDirection);
+    if (narrow) return { shape: 'confluencenarrow', orientation: narrow };
+    const wide = confluenceWideOrientationOf(river.inDirections, river.outDirection);
+    if (wide) return { shape: 'confluencewide', orientation: wide };
+    const orientation = river.outDirection ?? river.inDirections[0] ?? 'SE';
+    return { shape: 'confluencenarrow', orientation };
   }
   if (river.shape === 'mouth' && river.inDirections[0]) {
     return mouthOrientationOf(river.inDirections[0], seaDirection);
@@ -884,22 +941,30 @@ export function lavaSpringOrientationOf(riverSpringOrientation: TileOrientation)
  * terrain would have drawn. `seaDirection` (only meaningful for a `Mouth`
  * tile — see `riverArtFor`) is the caller's own terrain lookup
  * (`WorldModel.seaFacingDirectionOf`), since a `RiverTile` carries none.
+ * `springShape` (only meaningful for a `Spring` tile) is likewise the
+ * caller's own lookup (`WorldModel.springShapeAt`) — see `riverArtFor`.
  */
 export function riverTexturesFor(
   textures: TileTextures,
   river: RiverTile,
   seaDirection: TileOrientation | null = null,
+  springShape: 'corrie' | 'saddleback' = 'corrie',
 ): { base: Texture; top: Texture } {
-  const { shape, orientation } = riverArtFor(river, seaDirection);
+  const { shape, orientation } = riverArtFor(river, seaDirection, springShape);
 
   // Lava streams (wasted islands) swap in the lavastream/lava-spring
-  // families for the shapes that have one — straight/bend/bend60/spring
-  // (LAVA_RIVER_FAMILY). Confluence cannot occur on lava (RiverGenerator's
-  // allowConfluence: false) and mouth deliberately keeps the plain river
-  // art (no dedicated lava mouth asset), so every other shape falls through
-  // to the ordinary lookup below even on a wasted island.
-  if (river.wasted && (shape === 'straight' || shape === 'bend' || shape === 'bend60' || shape === 'spring')) {
-    const lavaOrientation = shape === 'spring' ? lavaSpringOrientationOf(orientation) : orientation;
+  // families for the shapes that have one — straight/bend/bend60/
+  // springcorrie/springsaddleback (LAVA_RIVER_FAMILY). Confluence cannot
+  // occur on lava (RiverGenerator's allowConfluence: false) and mouth
+  // deliberately keeps the plain river art (no dedicated lava mouth asset),
+  // so every other shape falls through to the ordinary lookup below even on
+  // a wasted island.
+  if (
+    river.wasted &&
+    (shape === 'straight' || shape === 'bend' || shape === 'bend60' || shape === 'springcorrie' || shape === 'springsaddleback')
+  ) {
+    const lavaOrientation =
+      shape === 'springcorrie' || shape === 'springsaddleback' ? lavaSpringOrientationOf(orientation) : orientation;
     const lavaBase = textures.lavaRiverBase[shape]?.[lavaOrientation];
     const lavaTop = textures.lavaRiverTop[shape]?.[lavaOrientation];
     if (lavaBase && lavaTop) return { base: lavaBase, top: lavaTop };

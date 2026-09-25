@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -239,6 +240,8 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.ShrineOfThor, BuildingType.ArcheryRange, 10)]
     [InlineData(BuildingType.ShrineOfFreyja, BuildingType.Farm, 10)]
     [InlineData(BuildingType.ShrineOfFreyja, BuildingType.PumpkinFarm, 10)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.CropMill, 10)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.Meadery, 10)]
     [InlineData(BuildingType.ShrineOfUllr, BuildingType.Lumberjack, 10)]
     [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 10)]
     [InlineData(BuildingType.ShrineOfNjord, BuildingType.FishingHut, 10)]
@@ -443,7 +446,6 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Lumberjack, Terrain.Forest)]
     [InlineData(BuildingType.Quarry, Terrain.Mountain)]
     [InlineData(BuildingType.FishingHut, Terrain.Sea)]
-    [InlineData(BuildingType.Sawmill, Terrain.Forest)]
     public void BoostMultiplier_only_counts_each_buildings_own_matching_terrain(BuildingType type, Terrain matching)
     {
         var terrainAt = TerrainWithMatchingNeighbours(matching, 6);
@@ -470,6 +472,201 @@ public class BuildingCatalogueTests
 
         Assert.Equal(expectedWood, production.Wood, 6);
         Assert.Equal(expectedFood, production.Food, 6);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Sawmill)]
+    [InlineData(BuildingType.CropMill)]
+    public void A_radius_boost_producer_has_no_production_of_its_own(BuildingType type)
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        {
+            Assert.Equal(ResourceAmounts.Zero, BuildingCatalogue.Get(type, level).ProductionPerHour);
+        }
+    }
+
+    [Theory]
+    [InlineData(1, 5.0)]
+    [InlineData(10, 100.0)]
+    public void RadiusBoostPercent_is_linear_from_5_percent_at_level_1_to_100_percent_at_level_10(int level, double expected)
+    {
+        Assert.Equal(expected, BuildingCatalogue.RadiusBoostPercent(level), 6);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 1)]
+    [InlineData(3, 2)]
+    [InlineData(4, 2)]
+    [InlineData(9, 5)]
+    [InlineData(10, 5)]
+    public void RadiusBoostRange_grows_by_one_ring_every_two_levels(int level, int expectedRange)
+    {
+        Assert.Equal(expectedRange, BuildingCatalogue.RadiusBoostRange(level));
+    }
+
+    [Fact]
+    public void A_sawmill_boosts_a_lumberjack_within_range_but_not_beyond_it()
+    {
+        // Level 1 Sawmill: range 1 (RadiusBoostRange), +5% (RadiusBoostPercent).
+        var sawmill = new PlacedBuilding(Origin, BuildingType.Sawmill, 1);
+        var inRange = new PlacedBuilding(Origin.Neighbours()[0], BuildingType.Lumberjack, 2);
+        var beyondRange = new PlacedBuilding(new HexCoord(10, 10), BuildingType.Lumberjack, 2);
+
+        var (production, _) = BuildingCatalogue.Totals([sawmill, inRange, beyondRange], terrainAt: null);
+
+        var baseWood = BuildingCatalogue.Get(BuildingType.Lumberjack, 2).ProductionPerHour.Wood;
+        var expectedWood = baseWood * 1.05 + baseWood; // boosted + unboosted
+        Assert.Equal(expectedWood, production.Wood, 6);
+    }
+
+    [Fact]
+    public void A_cropmill_boosts_farm_but_not_pumpkinfarm_within_range()
+    {
+        // A mill grinds grain — Farm's crop, not PumpkinFarm's (see
+        // RadiusBoostTargets' own doc comment).
+        var cropMill = new PlacedBuilding(Origin, BuildingType.CropMill, 1);
+        var farm = new PlacedBuilding(Origin.Neighbours()[0], BuildingType.Farm, 2);
+        var pumpkinFarm = new PlacedBuilding(Origin.Neighbours()[1], BuildingType.PumpkinFarm, 2);
+
+        var (production, _) = BuildingCatalogue.Totals([cropMill, farm, pumpkinFarm], terrainAt: null);
+
+        var expectedFood =
+            BuildingCatalogue.Get(BuildingType.Farm, 2).ProductionPerHour.Food * 1.05
+            + BuildingCatalogue.Get(BuildingType.PumpkinFarm, 2).ProductionPerHour.Food; // unboosted
+        Assert.Equal(expectedFood, production.Food, 6);
+    }
+
+    [Fact]
+    public void Multiple_radius_boosters_in_range_of_the_same_building_stack_additively()
+    {
+        // Both sawmills stand within one ring of the same lumberjack (though
+        // not necessarily of each other) — their level-1 5% boosts stack.
+        var lumberjackCoord = Origin.Neighbours()[0];
+        var sawmillA = new PlacedBuilding(Origin, BuildingType.Sawmill, 1);
+        var sawmillB = new PlacedBuilding(lumberjackCoord.Neighbours()[1], BuildingType.Sawmill, 1);
+        var lumberjack = new PlacedBuilding(lumberjackCoord, BuildingType.Lumberjack, 1);
+
+        var (production, _) = BuildingCatalogue.Totals([sawmillA, sawmillB, lumberjack], terrainAt: null);
+
+        var baseWood = BuildingCatalogue.Get(BuildingType.Lumberjack, 1).ProductionPerHour.Wood;
+        Assert.Equal(baseWood * 1.10, production.Wood, 6); // 5% + 5%, both sawmills in range
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
+    [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
+    [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 1)]
+    [InlineData(BuildingType.Smithy, BuildingType.Barracks, 10)]
+    [InlineData(BuildingType.Smithy, BuildingType.ArcheryRange, 10)]
+    [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 1)]
+    public void A_new_building_carries_its_own_prerequisite(BuildingType type, BuildingType prerequisite, int level)
+    {
+        Assert.Contains(
+            BuildingCatalogue.Get(type, 1).Prerequisites, p => p.Type == prerequisite && p.Level == level);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.CartWorkshop, 1)]
+    [InlineData(BuildingType.Smithy, 2)]
+    [InlineData(BuildingType.DruidHut, 1)]
+    public void A_new_building_needs_exactly_its_own_prerequisites(BuildingType type, int expectedCount)
+    {
+        Assert.Equal(expectedCount, BuildingCatalogue.Get(type, 1).Prerequisites.Count);
+    }
+
+    [Fact]
+    public void Smithy_is_a_flat_level_10_capstone_like_the_shrines_and_sawmill()
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        {
+            Assert.Equal(10, BuildingCatalogue.Get(BuildingType.Smithy, level).RequiredLonghouseLevel);
+        }
+    }
+
+    [Theory]
+    [InlineData(BuildingType.TownSquare)]
+    [InlineData(BuildingType.ClayBrickworks)]
+    public void A_new_building_with_no_cross_building_prerequisite_has_none(BuildingType type)
+    {
+        Assert.Empty(BuildingCatalogue.Get(type, 1).Prerequisites);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Meadery, Terrain.Grass)]
+    [InlineData(BuildingType.TownSquare, Terrain.Grass)]
+    [InlineData(BuildingType.CropMill, Terrain.Grass)]
+    [InlineData(BuildingType.DruidHut, Terrain.Grass)]
+    [InlineData(BuildingType.CartWorkshop, Terrain.Grass)]
+    [InlineData(BuildingType.ClayBrickworks, Terrain.Grass)]
+    public void A_new_land_building_only_allows_its_own_terrain(BuildingType type, Terrain allowed)
+    {
+        Assert.True(BuildingCatalogue.Get(type, 1).AllowsTerrain(allowed));
+        foreach (var other in Enum.GetValues<Terrain>().Where(t => t != allowed && t.IsLand()))
+        {
+            Assert.False(BuildingCatalogue.Get(type, 1).AllowsTerrain(other));
+        }
+    }
+
+    [Fact]
+    public void Smithy_allows_sand_or_grass_like_the_other_border_buildings()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.Smithy, 1);
+        Assert.True(definition.AllowsTerrain(Terrain.Grass));
+        Assert.True(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Forest));
+        Assert.False(definition.AllowsTerrain(Terrain.Mountain));
+    }
+
+    [Theory]
+    [InlineData(BuildingType.ClayBrickworks)]
+    public void A_new_producer_scales_linearly_with_level(BuildingType type)
+    {
+        var one = BuildingCatalogue.Get(type, 1).ProductionPerHour;
+        var three = BuildingCatalogue.Get(type, 3).ProductionPerHour;
+
+        Assert.True(one.Wood + one.Stone + one.Food + one.Iron > 0);
+        Assert.Equal(one.Wood * 3, three.Wood, 6);
+        Assert.Equal(one.Stone * 3, three.Stone, 6);
+        Assert.Equal(one.Food * 3, three.Food, 6);
+        Assert.Equal(one.Iron * 3, three.Iron, 6);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.TownSquare)]
+    [InlineData(BuildingType.DruidHut)]
+    [InlineData(BuildingType.Meadery)]
+    [InlineData(BuildingType.Smithy)]
+    public void TownSquare_and_DruidHut_produce_and_store_nothing_yet(BuildingType type)
+    {
+        // All four are placeholder buildings whose real mechanic (a
+        // settler-cap boost, a rune/favour slot, a future morale boost, a
+        // future troop-upgrade mechanic) doesn't exist yet — they're
+        // buildable now purely ahead of that mechanic landing.
+        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        {
+            var definition = BuildingCatalogue.Get(type, level);
+            Assert.Equal(ResourceAmounts.Zero, definition.ProductionPerHour);
+            Assert.Equal(ResourceAmounts.Zero, definition.StorageCapacity);
+        }
+    }
+
+    [Fact]
+    public void CropMill_only_stands_on_a_straight_river_tile()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.CropMill, 1);
+        Assert.Equal(new HashSet<RiverTileShape> { RiverTileShape.Straight }, definition.RequiresRiverShape);
+    }
+
+    [Fact]
+    public void CartWorkshop_is_purely_a_training_gate_with_no_storage_of_its_own()
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        {
+            var definition = BuildingCatalogue.Get(BuildingType.CartWorkshop, level);
+            Assert.Equal(ResourceAmounts.Zero, definition.StorageCapacity);
+            Assert.Equal(ResourceAmounts.Zero, definition.ProductionPerHour);
+        }
     }
 }
 
@@ -1181,31 +1378,64 @@ public class SettlementTests
     [Fact]
     public void A_building_with_two_prerequisites_is_refused_while_either_is_missing()
     {
-        // Shrine of Freyja wants a maxed Farm and Pumpkin Farm.
-        var withoutPumpkin = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10));
-        var withoutFarm = FoundAtLonghouseLevel(10, (BuildingType.PumpkinFarm, 10));
+        // Shrine of Thor wants a maxed Barracks and Archery Range.
+        var withoutArchery = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10));
+        var withoutBarracks = FoundAtLonghouseLevel(10, (BuildingType.ArcheryRange, 10));
 
-        var missingPumpkin = withoutPumpkin.PlanBuild(
-            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
-        var missingFarm = withoutFarm.PlanBuild(
-            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var missingArchery = withoutArchery.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var missingBarracks = withoutBarracks.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingPumpkin.Rejection);
-        Assert.Equal(BuildingType.PumpkinFarm, missingPumpkin.MissingPrerequisite?.Type);
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingFarm.Rejection);
-        Assert.Equal(BuildingType.Farm, missingFarm.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingArchery.Rejection);
+        Assert.Equal(BuildingType.ArcheryRange, missingArchery.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingBarracks.Rejection);
+        Assert.Equal(BuildingType.Barracks, missingBarracks.MissingPrerequisite?.Type);
     }
 
     [Fact]
     public void A_building_with_two_prerequisites_is_accepted_once_both_stand()
     {
         var settlement = FoundAtLonghouseLevel(
-            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10));
+            10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Shrine_of_freyja_is_accepted_once_all_four_food_line_prerequisites_stand()
+    {
+        var settlement = FoundAtLonghouseLevel(
+            10,
+            (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10),
+            (BuildingType.CropMill, 10), (BuildingType.Meadery, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Shrine_of_freyja_is_refused_while_crop_mill_or_meadery_is_missing()
+    {
+        var withoutCropMill = FoundAtLonghouseLevel(
+            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10), (BuildingType.Meadery, 10));
+        var withoutMeadery = FoundAtLonghouseLevel(
+            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10), (BuildingType.CropMill, 10));
+
+        var missingCropMill = withoutCropMill.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var missingMeadery = withoutMeadery.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingCropMill.Rejection);
+        Assert.Equal(BuildingType.CropMill, missingCropMill.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingMeadery.Rejection);
+        Assert.Equal(BuildingType.Meadery, missingMeadery.MissingPrerequisite?.Type);
     }
 
     [Fact]
@@ -1278,6 +1508,121 @@ public class SettlementTests
         var decision = settlement.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), terrain, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_shrine_is_refused_when_its_god_already_has_a_shrine_elsewhere_on_the_island()
+    {
+        // The caller (SettlementService.QueueBuildAsync) computes this set
+        // from every settlement on the island, not just this one — see
+        // Settlement.PlanBuild's shrineGodsElsewhereOnIsland doc comment.
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            shrineGodsElsewhereOnIsland: new HashSet<GodType> { GodType.Thor });
+
+        Assert.Equal(BuildRejection.ShrineGodAlreadyOnIsland, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_shrine_to_a_different_god_is_still_buildable_while_another_gods_shrine_stands_on_the_island()
+    {
+        // A settlement (or island) can still raise all four gods' shrines —
+        // it's the same god twice that's refused, not shrines in general.
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10),
+            (BuildingType.CropMill, 10), (BuildingType.Meadery, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            shrineGodsElsewhereOnIsland: new HashSet<GodType> { GodType.Thor });
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Leveling_up_this_settlements_own_shrine_is_not_refused_by_the_island_limit()
+    {
+        // The caller excludes the target coord from the set it builds, so a
+        // settlement can always level up the shrine already standing there —
+        // the island limit only ever blocks a *new* shrine to a claimed god.
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10),
+            (BuildingType.ShrineOfThor, 1));
+        var shrineCoord = new HexCoord(-4, 0); // FoundAtLonghouseLevel's third `standing` entry
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfThor, shrineCoord, Terrain.Grass, T0, Guid.CreateVersion7(),
+            shrineGodsElsewhereOnIsland: new HashSet<GodType>());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_new_pumpkinfarm_is_refused_on_a_wheat_soil_island()
+    {
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.PumpkinFarm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            islandSoil: SoilType.Wheat);
+
+        Assert.Equal(BuildRejection.WrongCropForIslandSoil, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_new_pumpkinfarm_is_accepted_on_a_pumpkin_soil_island()
+    {
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.PumpkinFarm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            islandSoil: SoilType.Pumpkin);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_new_farm_is_never_refused_by_island_soil_either_way()
+    {
+        // Farm is the always-available staple crop — soil only ever gates
+        // PumpkinFarm, the bonus a "more fertile" island unlocks.
+        var settlement = FoundAtLonghouseLevel(1);
+
+        var onWheat = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
+        var onPumpkin = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+
+        Assert.True(onWheat.Accepted, $"expected accept, got {onWheat.Rejection}");
+        Assert.True(onPumpkin.Accepted, $"expected accept, got {onPumpkin.Rejection}");
+    }
+
+    [Fact]
+    public void Leveling_up_an_existing_pumpkinfarm_is_not_refused_even_on_wheat_soil()
+    {
+        // A settlement from before this rule existed may already have a
+        // PumpkinFarm standing on what is now Wheat soil — leveling it up
+        // must still work; the soil gate only ever blocks placing a *new* one.
+        var settlement = FoundAtLonghouseLevel(1, (BuildingType.PumpkinFarm, 1));
+        var farmCoord = new HexCoord(-2, 0); // FoundAtLonghouseLevel's first `standing` entry
+
+        var decision = settlement.PlanBuild(
+            BuildingType.PumpkinFarm, farmCoord, Terrain.Grass, T0, Guid.CreateVersion7(),
+            islandSoil: SoilType.Wheat);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_null_islandSoil_skips_the_pumpkinfarm_soil_check()
+    {
+        // A caller with no island to resolve (islandSoil: null, the
+        // default) never refuses PumpkinFarm over soil.
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+
+        var pumpkin = settlement.PlanBuild(BuildingType.PumpkinFarm, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(pumpkin.Accepted, $"expected accept, got {pumpkin.Rejection}");
     }
 
     [Fact]

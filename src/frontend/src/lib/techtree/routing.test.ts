@@ -8,13 +8,16 @@ import { buildGraph, edgeKey } from './graph';
 import { prerequisitesOf } from './nodes';
 import { routeEdges, crossesCard, pathD, type RoutedSegment } from './routing';
 import {
+  BYPASS_Y,
   CARD_H,
   CARD_W,
   COL_PITCH,
   LANE_OFFSET,
   LANE_STEP,
+  ROW_PITCH,
   TECH_TREE_LAYOUT,
   columnX,
+  rowMid,
   rowY,
 } from './layout';
 
@@ -142,19 +145,72 @@ describe('routeEdges', () => {
     // adjacent on Shrine of Thor's own row (Barracks -> Archery Range is its
     // own real edge) — the Barracks -> Shrine of Thor link should reuse that
     // exact run and the Archery Range -> Shrine of Thor leaf, rather than
-    // drawing a third line of its own.
+    // drawing a third line of its own. Archery Range also feeds Smithy one
+    // row down, so its own row-5 run splits into a shared stub (both
+    // targets) and a Shrine-of-Thor-only tail — the tail, not the stub, is
+    // the leg Barracks -> Shrine of Thor reuses.
     const barracksToShrine = edgeKey('barracks', 'shrineofthor');
+    const archeryToShrineKey = edgeKey('archeryrange', 'shrineofthor');
     const barracksToArchery = segments.find((s) => s.keys.includes(edgeKey('barracks', 'archeryrange')));
-    const archeryToShrine = segments.find((s) => s.keys.includes(edgeKey('archeryrange', 'shrineofthor')));
+    const archeryToShrineTail = segments.find(
+      (s) => s.keys.includes(archeryToShrineKey) && s.keys.includes(barracksToShrine),
+    );
 
     expect(barracksToArchery!.keys).toContain(barracksToShrine);
-    expect(archeryToShrine!.keys).toContain(barracksToShrine);
+    expect(archeryToShrineTail).toBeDefined();
     // No separate line was drawn just for it.
     expect(segments.filter((s) => s.keys.includes(barracksToShrine))).toHaveLength(2);
   });
 
   it('is stable across calls, so the picture never reshuffles', () => {
     expect(routeEdges(TECH_TREE_LAYOUT, graph)).toEqual(segments);
+  });
+
+  it("routes a same-row-blocked distant edge as a short dogleg, not a detour under the whole grid", () => {
+    // Barracks -> Smithy: same source row as Archery Range -> Shrine of
+    // Thor, but Smithy sits one row down, so the direct same-row approach
+    // lane would cross Archery Range's own card. Regression coverage for a
+    // routing bug where this fell all the way through to the BYPASS_Y
+    // fallback (down below every row, across, and back up) instead of the
+    // much shorter "drop into Barracks' own gutter immediately" path.
+    const segment = segments.find((s) => s.keys.includes(edgeKey('barracks', 'smithy')));
+    expect(segment).toBeDefined();
+    // Four points: stub right, straight down, straight right into the
+    // target — never touching BYPASS_Y.
+    expect(segment!.points).toHaveLength(4);
+    for (const [, y] of segment!.points) {
+      expect(y).not.toBe(BYPASS_Y);
+    }
+  });
+
+  it('routes a same-row edge blocked by a card in its own row as a small dip between rows, not a loop under everything', () => {
+    // A synthetic three-card row rather than a live catalogue pair, so this
+    // regression stays pinned even as the real layout moves cards around:
+    // alpha -> omega share a row with an unrelated blocker sitting directly
+    // between them — no lane choice makes the direct same-row approach
+    // work, since the row itself is the obstacle, and blocker isn't part of
+    // any chain alpha -> omega could reuse. Regression coverage for a
+    // routing bug where this fell through to the BYPASS_Y fallback: a loop
+    // from the row down past every row to the very bottom of the grid and
+    // back up, rather than a small kink confined to the gap just past it.
+    const miniLayout = { alpha: [0, 0], blocker: [1, 0], omega: [2, 0] } as const;
+    const miniGraph = buildGraph(['alpha', 'blocker', 'omega'], (type) =>
+      type === 'omega' ? [{ type: 'alpha', level: 1 }] : [],
+    );
+    const miniSegments = routeEdges(miniLayout, miniGraph);
+
+    const segment = miniSegments.find((s) => s.keys.includes(edgeKey('alpha', 'omega')));
+    expect(segment).toBeDefined();
+    // Six points: stub right, down into the row gap, across, up into the
+    // target's approach lane, right into the target.
+    expect(segment!.points).toHaveLength(6);
+    const rowMidY = rowMid(miniLayout.alpha[1]);
+    for (const [, y] of segment!.points) {
+      expect(y).not.toBe(BYPASS_Y);
+      // Never more than one row's pitch away from alpha's own row — a small
+      // local dip, not a detour spanning the rest of the grid.
+      expect(Math.abs(y - rowMidY)).toBeLessThan(ROW_PITCH);
+    }
   });
 });
 

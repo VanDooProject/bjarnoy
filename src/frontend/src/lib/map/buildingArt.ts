@@ -9,8 +9,7 @@
 // angle these surfaces render at. Families showcase doesn't have a given
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
-import { findAtlasFrame, type AtlasFrameRect } from './atlas';
-import fishinghutUrl from '../../../vendor/bg_assets_hextile/hextiles/fishinghutbuilding_SE.png';
+import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
 import magictowerUrl from '../../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
@@ -27,8 +26,19 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // Swap these for dedicated families once the art exists.
   shrineofullr: 'thorshrine',
   shrineofnjord: 'freyjashrine',
-  farm: 'farm_crop',
+  // `farm_crop` is the legacy, non-scripted family (VanDooProject/3d_assets'
+  // asset-inventory.md: "Legacy, non-scripted... its lowest level used to be
+  // the finished farmhouse"). `farm` is the newer, on-palette, scripted
+  // counterpart (a gable longhouse over a wheat yard that grows as the tile
+  // levels up) — doesn't replace Pumpkin Farm's own `farm_pumpkin` family,
+  // which stays legacy for now.
+  farm: 'farm',
   tower: 'towerbuilding',
+  // The docs preview always shows the corrie landform, one of the two the
+  // pack carves a quarry into — see the docs page's own variant picker for
+  // the saddleback alternative (`quarry_saddleback`, resolved directly by
+  // family through buildingArtByFamily, same as the Sawmill's river looks).
+  quarry: 'quarry_corrie',
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjackhut',
   storagehouse: 'storagebuilding',
@@ -37,18 +47,29 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
   fisherhut: 'fisherhut',
+  // Fishing Hut used to fall back to a legacy single-level composite
+  // (`fishinghutbuilding`, no per-level art) — the pack's real, leveled
+  // fisherman's-hut art (already used for the separate FisherHut building)
+  // is the newer, better look, so both share the same family now.
+  fishinghut: 'fisherhut',
   // The preview card always shows the flat/inland family, regardless of
   // where (or whether) the actual tile sits next to a river — see
   // textures.ts's textureKeyFor/WorldModel.sawmillArtVariantOf for the
   // adjacency-aware picker the world-map renderer uses instead.
   sawmill: 'sawmill',
+  meadery: 'meadery',
+  townsquare: 'townsquare',
+  cropmill: 'cropmill',
+  smithy: 'smithy',
+  druidhut: 'druidhut',
+  cartworkshop: 'cartworkshop',
+  claybrickworks: 'claybrickworks',
 };
 
-// fishinghut/magictower have no level suffix at all — a single composited
-// image per building, unlike the families above — and showcase doesn't
-// carry them yet, so these stay PNG-only.
+// magictower has no level suffix at all — a single composited image,
+// unlike the families above — and showcase doesn't carry it yet, so it
+// stays PNG-only.
 const SINGLE_LEVEL_ART: Record<string, string> = {
-  fishinghut: fishinghutUrl,
   magictower: magictowerUrl,
 };
 
@@ -110,7 +131,13 @@ const RIVER_SHAPE_FAMILY: Record<string, string> = {
   straight: 'rivertile',
   bend: 'rivertile_bend',
   bend60: 'rivertile_bend60',
-  spring: 'rivertile_spring',
+  // A spring rises out of a mountain cluster (see WorldGenerator's own
+  // "traced downhill from a spring on a qualifying mountain cluster"), so
+  // its art is a spring bursting from a mountain landform — the plain,
+  // flat `rivertile_spring` this used to point at was a placeholder from
+  // before the pack had that art. Corrie is the same landform the docs
+  // page's own Mountain and Quarry variant pickers default to.
+  spring: 'mountaintile_corrie_spring',
   confluence: 'rivertile_y_narrow',
 };
 
@@ -158,6 +185,59 @@ export function buildingArtByFamily(family: string, level: number): ArtRef | und
 }
 
 /**
+ * The `buildings-static` base+top layer pair a building's picture is
+ * composited from at runtime, plus its animated top-layer clip if
+ * `buildings-anim` has one for this exact family/level (a moving part —
+ * sawmill's/cropmill's waterwheel, meadery's beekeeper — see that repo's
+ * README "Animated parts"). Unlike `buildingArt`'s single flattened
+ * `showcase` picture, the two layers stay separate here so a caller (see
+ * `AnimatedBuildingSprite.vue`) can position them into a shared canvas and
+ * swap only the top layer's frame to animate, rather than needing showcase
+ * to have baked in every possible animation frame as its own picture (it
+ * doesn't — showcase is one static composite per level).
+ */
+export interface BuildingLayers {
+  base?: AtlasFrameRect;
+  top?: AtlasFrameRect;
+  clip?: AtlasClip & { frameRects: AtlasFrameRect[] };
+}
+
+/** Same wire-type-to-family resolution `buildingArt` does, for a caller that wants the layered form instead of a flattened picture. Undefined for a single-level-art or unmapped type — those have no `buildings-static` base/top split to animate. */
+export function buildingLayersForType(type: string, level: number): BuildingLayers | undefined {
+  if (SINGLE_LEVEL_ART[type]) return undefined;
+  const family = BUILDING_ART_FAMILIES[type];
+  return family ? buildingLayers(family, level) : undefined;
+}
+
+export function buildingLayers(family: string, level: number): BuildingLayers {
+  // Most families render one base picture shared across every level
+  // (`${family}_SE_base`, no level suffix) — only the ones whose base
+  // visibly changes as they build up (e.g. cropmill's second mill on the
+  // far bank) carry a level-specific base (`${name}_base`) instead.
+  //
+  // The walk-down has to key off `top` alone: a shared base is truthy at
+  // every level, so gating the break on `top || base` (as this used to)
+  // stopped the walk at the very first level tried — the one requested —
+  // even when that level has no `top` frame of its own yet. That silently
+  // dropped both the top layer and its `buildings-anim` clip for any level
+  // past a family's authored rungs (e.g. Meadery's default, max-level
+  // preview: its art tops out at level 4, so level 10 requested no top and
+  // no clip, leaving only the shared base with nothing built on it and no
+  // animation — while hovering an authored level 1-4 worked, because the
+  // requested level matched one with a real `top` directly).
+  const sharedBase = findAtlasFrame('buildings-static', `${family}_SE_base`);
+  for (let l = clampLevel(level, 20); l >= 0; l--) {
+    const name = `${family}_SE_level${String(l).padStart(3, '0')}`;
+    const top = findAtlasFrame('buildings-static', name);
+    if (top) {
+      const base = findAtlasFrame('buildings-static', `${name}_base`) ?? sharedBase;
+      return { base, top, clip: findAtlasClip('buildings-anim', name) };
+    }
+  }
+  return sharedBase ? { base: sharedBase } : {};
+}
+
+/**
  * Art for one terrain-art-pack family. Tries the "showcase" atlas first
  * (currently never populated — see `terrainPngByName` above — but kept as
  * the preferred source the way `buildingArt` does, in case a future pack
@@ -181,6 +261,17 @@ function terrainFamilyArt(family: string, decorated: boolean): ArtRef {
 export function terrainArt(terrain: string): ArtRef {
   const family = TERRAIN_SHOWCASE_FAMILY[terrain] ?? TERRAIN_SHOWCASE_FAMILY.grass!;
   return terrainFamilyArt(family, terrain === 'grass' || terrain === 'forest');
+}
+
+/**
+ * Same lookup as `terrainArt`, but keyed directly by art-pack family rather
+ * than by `Terrain` — for a caller (like the docs tiles page's variant
+ * picker) that wants a specific one of a terrain's several landform
+ * families, e.g. Mountain's plain/corrie/saddleback/table looks, the same
+ * way `buildingArtByFamily` serves the Sawmill's river-look picker.
+ */
+export function terrainArtByFamily(family: string, decorated = false): ArtRef {
+  return terrainFamilyArt(family, decorated);
 }
 
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */

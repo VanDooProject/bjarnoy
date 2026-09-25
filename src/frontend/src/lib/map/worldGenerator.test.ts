@@ -5,10 +5,32 @@
 // exercises `enumerateIslands`, demo mode's own island list, directly.
 import { describe, expect, it } from 'vitest';
 import { hexDistance } from '../hex/coords';
-import { DEFAULT_GENERATION, enumerateIslands, generateTile, wastedVariantAt, type WorldSeed } from './worldGenerator';
+import { DEFAULT_GENERATION, enumerateIslands, generateTile, soilAt, wastedVariantAt, type WorldSeed } from './worldGenerator';
 import { WorldModel } from './WorldModel';
 
 const SEED: WorldSeed = { seed: 20260824, generation: DEFAULT_GENERATION };
+
+describe('soilAt', () => {
+  it('is seed-stable for the same island centre', () => {
+    for (const centre of [
+      { q: 0, r: 0 },
+      { q: 15, r: -8 },
+      { q: -20, r: 4 },
+    ]) {
+      const a = soilAt(centre.q, centre.r, SEED);
+      const b = soilAt(centre.q, centre.r, SEED);
+      expect(a).toBe(b);
+    }
+  });
+
+  it('produces both crops over a sample of island centres, not always the same one', () => {
+    const crops = new Set<string>();
+    for (let q = 0; q < 60; q++) {
+      crops.add(soilAt(q, 0, SEED));
+    }
+    expect(crops).toEqual(new Set(['wheat', 'pumpkin']));
+  });
+});
 
 describe('enumerateIslands', () => {
   it('finds at least one island within a modest radius of the origin', () => {

@@ -940,6 +940,23 @@ public sealed record Settlement
     /// <see cref="BuildingDefinition.RequiresRiverShape"/> building (the
     /// Sawmill, built directly on a river tile) cares.
     /// </param>
+    /// <param name="shrineGodsElsewhereOnIsland">
+    /// Which gods already have a standing shrine somewhere on this
+    /// settlement's island, at a hex other than <paramref name="coord"/> —
+    /// spanning every settlement on the island, not just this one. Only a
+    /// Shrine <paramref name="type"/> (<see cref="BuildingCatalogue.GodOf"/>)
+    /// cares; the caller computes this from the island's other settlements
+    /// (<c>SettlementService.QueueBuildAsync</c>), since a lone
+    /// <see cref="Settlement"/> has no notion of its siblings.
+    /// </param>
+    /// <param name="islandSoil">
+    /// Which crop this settlement's island grows (<see cref="SoilType"/>) —
+    /// only <see cref="BuildingType.PumpkinFarm"/> cares: it's only buildable
+    /// on a Pumpkin-soil island, the bonus a "more fertile" island unlocks.
+    /// <see cref="BuildingType.Farm"/> stays buildable everywhere regardless
+    /// of soil. The caller resolves this once from the island's centre
+    /// (<c>SettlementService.QueueBuildAsync</c>, <see cref="TerrainSampler.SoilAt"/>).
+    /// </param>
     /// <param name="giants">
     /// This island's giant index (the territory rule), or
     /// <see langword="null"/> for a world with no giants on hand. A hex
@@ -958,6 +975,8 @@ public sealed record Settlement
         int maxWaitingOrders = 0,
         int maxOrdersPerHex = DefaultMaxOrdersPerHex,
         RiverTileShape? riverShapeAt = null,
+        IReadOnlySet<GodType>? shrineGodsElsewhereOnIsland = null,
+        SoilType? islandSoil = null,
         World.IGiantIndex? giants = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
@@ -1018,6 +1037,31 @@ public sealed record Settlement
             && (riverShapeAt is not { } actualShape || !requiredShapes.Contains(actualShape)))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+        }
+
+        // Each of the four gods gets at most one shrine per island — raised
+        // by whichever settlement gets there first, anywhere on it, not just
+        // this one (see shrineGodsElsewhereOnIsland's own doc comment). A
+        // level-up of this settlement's own shrine at this same coord isn't
+        // "elsewhere", so the caller excludes coord from the set it builds.
+        if (BuildingCatalogue.GodOf(type) is { } god
+            && shrineGodsElsewhereOnIsland is not null
+            && shrineGodsElsewhereOnIsland.Contains(god))
+        {
+            return BuildDecision.Rejected(BuildRejection.ShrineGodAlreadyOnIsland);
+        }
+
+        // Farm is the settlement's always-available staple — never gated.
+        // PumpkinFarm is the bonus crop a Pumpkin-soil island additionally
+        // unlocks (see SoilType), which is what makes such an island "more
+        // fertile" rather than just different. Only gates a *new*
+        // PumpkinFarm (!occupied); leveling up one already standing here is
+        // always allowed, so a settlement from before this rule existed
+        // never gets bricked by its own earlier build.
+        if (!occupied && type == BuildingType.PumpkinFarm
+            && islandSoil is { } soil && soil == SoilType.Wheat)
+        {
+            return BuildDecision.Rejected(BuildRejection.WrongCropForIslandSoil);
         }
 
         // A settlement gets its one longhouse from founding (SettlementService.FoundAsync

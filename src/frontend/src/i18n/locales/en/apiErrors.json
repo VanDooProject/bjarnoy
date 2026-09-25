@@ -12,6 +12,7 @@
     "MaxLevelReached": "This building is already at its maximum level.",
     "LonghousePlacementNotAllowed": "The longhouse can't be placed there.",
     "RequiredBuildingTooLow": "A required building isn't high enough level yet.",
+    "ShrineGodAlreadyOnIsland": "This god already has a shrine somewhere on the island.",
     "NoFreeSlot": "No free construction slot — Premium unlocks a waiting queue.",
     "WorldNotFound": "That world doesn't exist.",
     "IslandNotFound": "That island doesn't exist.",

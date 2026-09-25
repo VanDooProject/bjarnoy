@@ -21,6 +21,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     trainingSeconds: 60,
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
+    requiredBuildingType: 'longhouse',
     ...overrides,
   };
 }
@@ -69,6 +70,39 @@ describe('isUnitAvailable', () => {
 
   it('is false for an unknown unit type', () => {
     expect(isUnitAvailable('nonexistent', 99, byType)).toBe(false);
+  });
+
+  it('ignores requiredBuildingType when no buildingLevelOf lookup is given', () => {
+    // The "unknown" escape hatch (mirrors the backend's own null buildingLevelOf
+    // parameter) — callers with no settlement to check against, e.g. the
+    // docs pages, keep working unchanged.
+    const thrall = unit({ type: 'thrall', requiredBuildingType: 'barracks' });
+    expect(isUnitAvailable('thrall', 1, { thrall })).toBe(true);
+  });
+
+  it('is false when the required building has no level in the settlement', () => {
+    const thrall = unit({ type: 'thrall', requiredBuildingType: 'barracks' });
+    expect(isUnitAvailable('thrall', 1, { thrall }, () => 0)).toBe(false);
+  });
+
+  it('is true once the required building stands, even at longhouse-only level', () => {
+    const thrall = unit({ type: 'thrall', requiredBuildingType: 'barracks' });
+    expect(isUnitAvailable('thrall', 1, { thrall }, (type) => (type === 'barracks' ? 1 : 0))).toBe(true);
+  });
+
+  it('checks the required building recursively down a prerequisite chain too', () => {
+    const axeman = unit({ type: 'axeman', requiredLonghouseLevel: 3, requiredBuildingType: 'barracks' });
+    const berserker = unit({
+      type: 'berserker',
+      requiredLonghouseLevel: 6,
+      requiredUnitType: 'axeman',
+      requiredBuildingType: 'barracks',
+    });
+    const withBerserker = { axeman, berserker };
+    // Berserker's own longhouse level and building are both met, but its
+    // axeman prerequisite is unavailable without the same Barracks.
+    expect(isUnitAvailable('berserker', 6, withBerserker, () => 0)).toBe(false);
+    expect(isUnitAvailable('berserker', 6, withBerserker, (type) => (type === 'barracks' ? 1 : 0))).toBe(true);
   });
 });
 

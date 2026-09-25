@@ -10,6 +10,7 @@ import {
   lavaSpringOrientationOf,
   mergeTileTextures,
   textureKeyFor,
+  RIVER_FAMILY,
   type FamilyFrame,
   type TileTextures,
 } from './textures';
@@ -85,6 +86,57 @@ describe('riverArtFor', () => {
 
     expect(result.shape).toBe('bend');
     expect(result.orientation).toBe(bendOrientationOf('NW', 'SW'));
+  });
+
+  it('resolves a representable Confluence tile through confluenceOrientationOf (y_narrow), not the untransformed fallback', () => {
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'SE' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluencenarrow');
+    expect(result.orientation).toBe('E');
+    // The untransformed fallback this used to always return.
+    expect(result.orientation).not.toBe('SE');
+  });
+
+  it('resolves a Confluence tile matching the wide junction (ywide), not the narrow one', () => {
+    // E, NW, SW are mutually 120° apart — unrepresentable by y_narrow's
+    // opposite-pair-plus-branch shape, but exactly ywide's own pattern.
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'E' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluencewide');
+  });
+
+  it('falls back to the untransformed outDirection for a Confluence angle neither asset can represent', () => {
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['E', 'NE'], outDirection: 'SW' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluencenarrow');
+    expect(result.orientation).toBe('SW');
+  });
+
+  it('points Spring at a mountain-spring family, not the old flat rivertile_spring placeholder', () => {
+    // Regression coverage for a bug where the live map rendered every
+    // Spring river tile with a flat, undecorated pond-on-grass composite —
+    // a placeholder from before the pack had proper mountain-spring art
+    // (a spring bursting from a corrie/saddleback rock formation, matching
+    // the lore: a spring rises on a mountain cluster). See buildingArt.ts's
+    // matching docs-page fix for the same family swap.
+    expect(RIVER_FAMILY.springcorrie).toBe('mountaintile_corrie_spring');
+    expect(RIVER_FAMILY.springsaddleback).toBe('mountaintile_saddleback_spring');
+    expect(Object.values(RIVER_FAMILY)).not.toContain('rivertile_spring');
+  });
+
+  it('resolves a Spring tile to whichever of the two spring-capable mountain shapes the caller asks for', () => {
+    // Both art families actually get used, keyed on the caller's own
+    // per-coordinate lookup (WorldModel.springShapeAt) — not one hardcoded
+    // shape for every spring on the map.
+    const tile = riverTile('spring', null, 'SW');
+
+    expect(riverArtFor(tile, null, 'corrie').shape).toBe('springcorrie');
+    expect(riverArtFor(tile, null, 'saddleback').shape).toBe('springsaddleback');
+    // Defaults to corrie when the caller doesn't pass one.
+    expect(riverArtFor(tile, null).shape).toBe('springcorrie');
   });
 });
 
@@ -348,15 +400,19 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         straight: orientationMap('r' as unknown as never),
         bend: orientationMap('r' as unknown as never),
         bend60: orientationMap('r' as unknown as never),
-        spring: orientationMap('r' as unknown as never),
-        confluence: orientationMap('r' as unknown as never),
+        springcorrie: orientationMap('r' as unknown as never),
+        springsaddleback: orientationMap('r' as unknown as never),
+        confluencenarrow: orientationMap('r' as unknown as never),
+        confluencewide: orientationMap('r' as unknown as never),
       },
       riverTop: {
         straight: orientationMap('r' as unknown as never),
         bend: orientationMap('r' as unknown as never),
         bend60: orientationMap('r' as unknown as never),
-        spring: orientationMap('r' as unknown as never),
-        confluence: orientationMap('r' as unknown as never),
+        springcorrie: orientationMap('r' as unknown as never),
+        springsaddleback: orientationMap('r' as unknown as never),
+        confluencenarrow: orientationMap('r' as unknown as never),
+        confluencewide: orientationMap('r' as unknown as never),
       },
       lavaRiverBase: {},
       lavaRiverTop: {},
@@ -445,23 +501,27 @@ describe('riverTexturesFor lava-island shapes', () => {
         straight: orientationMap('plain-river-base' as unknown as never),
         bend: orientationMap('plain-river-base' as unknown as never),
         bend60: orientationMap('plain-river-base' as unknown as never),
-        spring: orientationMap('plain-spring-base' as unknown as never),
-        confluence: orientationMap('plain-river-base' as unknown as never),
+        springcorrie: orientationMap('plain-spring-base' as unknown as never),
+        springsaddleback: orientationMap('plain-spring-base' as unknown as never),
+        confluencenarrow: orientationMap('plain-river-base' as unknown as never),
+        confluencewide: orientationMap('plain-river-base' as unknown as never),
       },
       riverTop: {
         straight: orientationMap('plain-river-top' as unknown as never),
         bend: orientationMap('plain-river-top' as unknown as never),
         bend60: orientationMap('plain-river-top' as unknown as never),
-        spring: orientationMap('plain-spring-top' as unknown as never),
-        confluence: orientationMap('plain-river-top' as unknown as never),
+        springcorrie: orientationMap('plain-spring-top' as unknown as never),
+        springsaddleback: orientationMap('plain-spring-top' as unknown as never),
+        confluencenarrow: orientationMap('plain-river-top' as unknown as never),
+        confluencewide: orientationMap('plain-river-top' as unknown as never),
       },
       lavaRiverBase: {
         straight: orientationMap('lava-base' as unknown as never),
-        spring: orientationMap('lava-spring-base' as unknown as never),
+        springcorrie: orientationMap('lava-spring-base' as unknown as never),
       },
       lavaRiverTop: {
         straight: orientationMap('lava-top' as unknown as never),
-        spring: orientationMap('lava-spring-top' as unknown as never),
+        springcorrie: orientationMap('lava-spring-top' as unknown as never),
       },
       giants: {},
       giantAnims: {},

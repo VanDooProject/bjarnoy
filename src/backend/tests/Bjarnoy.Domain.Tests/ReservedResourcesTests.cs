@@ -33,7 +33,14 @@ public sealed class ReservedResourcesTests
             Id = Guid.CreateVersion7(),
             Name = "Bjornstad",
             Centre = Centre,
-            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 2)],
+            // Thrall now trains at a Barracks (see UnitCatalogue) — this
+            // fixture needs one so Training_troops_cannot_spend_the_reservation
+            // still tests the reservation, not a missing-building rejection.
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 2),
+                new PlacedBuilding(new HexCoord(9, 9), BuildingType.Barracks, 1),
+            ],
             Garrison = [new UnitStack(UnitType.Axeman, 100)],
             Resources = ResourcePool.Create(farmCost * 2, production, ResourceAmounts.Uniform(10_000), T0),
         };

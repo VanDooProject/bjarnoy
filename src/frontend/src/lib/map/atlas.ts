@@ -117,7 +117,16 @@ export interface LoadedAtlas {
   clips: Record<string, AtlasClip>;
 }
 
-/** One frame's raw pixel rect on its atlas page, for CSS-sprite rendering outside Pixi (HTML overlays: docs, tooltips, build previews). */
+/**
+ * One frame's raw pixel rect on its atlas page, for CSS-sprite rendering
+ * outside Pixi (HTML overlays: docs, tooltips, build previews).
+ * `spriteSourceSize`/`sourceSize` are the same trim-offset fields Pixi's
+ * `Spritesheet` uses to place a trimmed texture back onto its full canvas —
+ * carried here too so a caller compositing two separately-trimmed layers
+ * (e.g. a building's static base plus an animated top layer — see
+ * `AnimatedBuildingSprite.vue`) can position each within a shared
+ * `sourceSize`-sized box instead of assuming every frame fills its own box.
+ */
 export interface AtlasFrameRect {
   webpUrl: string;
   frame: { x: number; y: number; w: number; h: number };
@@ -140,10 +149,30 @@ export function findAtlasFrame(category: string, name: string): AtlasFrameRect |
         webpUrl,
         frame: frame.frame,
         pageSize: manifest.meta.size,
-        sourceSize: frame.sourceSize,
         spriteSourceSize: frame.spriteSourceSize,
+        sourceSize: frame.sourceSize,
       };
     }
+  }
+  return undefined;
+}
+
+/**
+ * A `buildings-anim` clip's metadata plus its frames already resolved to
+ * `AtlasFrameRect`s (via `findAtlasFrame` on the same category), for a
+ * caller that wants to cycle through them without re-looking-up each name.
+ * Synchronous for the same reason `findAtlasFrame` is — manifests are
+ * eagerly imported, so no `Assets.load`/`Spritesheet.parse` is needed just
+ * to read pixel geometry.
+ */
+export function findAtlasClip(category: string, name: string): (AtlasClip & { frameRects: AtlasFrameRect[] }) | undefined {
+  for (const { manifest } of pagesFor(category)) {
+    const clip = manifest.clips?.[name];
+    if (!clip) continue;
+    const frameRects = clip.frames
+      .map((frameName) => findAtlasFrame(category, frameName))
+      .filter((f): f is AtlasFrameRect => f !== undefined);
+    return { ...clip, frameRects };
   }
   return undefined;
 }

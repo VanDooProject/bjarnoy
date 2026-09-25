@@ -30,6 +30,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     trainingSeconds: 0,
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
+    requiredBuildingType: 'longhouse',
     ...overrides,
   };
 }

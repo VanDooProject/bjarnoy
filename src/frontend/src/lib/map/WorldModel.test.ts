@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
+import { DEFAULT_GENERATION, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
@@ -496,6 +497,167 @@ describe('WorldModel.seaFacingDirectionOf', () => {
     // land.
     const model = new WorldModel(783131215);
     expect(model.seaFacingDirectionOf({ q: -70, r: -36 })).toBeNull();
+  });
+});
+
+describe('WorldModel.springShapeAt', () => {
+  it('matches the standalone springMountainShapeAt for the same coordinate/seed', () => {
+    // Regression coverage for a bug where the live map hardcoded every
+    // Spring river tile to the 'corrie' shape — WorldModel now delegates to
+    // the exact same seed-hash mirror of the backend's
+    // TerrainSampler.SpringMountainShapeAt that generateTile/variantAt
+    // already use elsewhere, rather than picking one shape for everything.
+    const model = new WorldModel(783131215);
+    for (const at of [
+      { q: 0, r: 0 },
+      { q: -70, r: -31 },
+      { q: 12, r: -5 },
+      { q: -3, r: 8 },
+    ]) {
+      const expected = springMountainShapeAt(at.q, at.r, { seed: model.seed, generation: model.generation });
+      expect(model.springShapeAt(at)).toBe(expected === 2 ? 'saddleback' : 'corrie');
+    }
+  });
+
+  it('actually uses both spring-capable shapes across coordinates, not just one', () => {
+    const model = new WorldModel(783131215);
+    const shapes = new Set<string>();
+    for (let q = 0; q < 40; q++) {
+      shapes.add(model.springShapeAt({ q, r: 0 }));
+    }
+    expect(shapes).toEqual(new Set(['corrie', 'saddleback']));
+  });
+});
+
+// Scans a run of island centres for one whose soilAt (a pure hash — see
+// worldGenerator.ts's own doc comment) is the requested crop, rather than a
+// hardcoded coordinate — same "search, don't pin a magic value" reasoning
+// SoilAt_produces_both_crops_over_a_sample_of_island_centres uses on the
+// backend.
+function findIslandCentreWithSoil(seed: number, soil: 'wheat' | 'pumpkin'): AxialCoord {
+  for (let q = 0; q < 200; q++) {
+    const centre = { q, r: 0 };
+    if (soilAt(centre.q, centre.r, { seed, generation: DEFAULT_GENERATION }) === soil) return centre;
+  }
+  throw new Error(`no ${soil} island centre found in sample range for seed ${seed}`);
+}
+
+describe('WorldModel.soilForSettlement / soilAtIslandCentre', () => {
+  it('soilAtIslandCentre matches the standalone soilAt for the same coordinate/seed', () => {
+    const model = new WorldModel(11);
+    for (const centre of [
+      { q: 0, r: 0 },
+      { q: 15, r: -8 },
+      { q: -20, r: 4 },
+    ]) {
+      const expected = soilAt(centre.q, centre.r, { seed: model.seed, generation: model.generation });
+      expect(model.soilAtIslandCentre(centre)).toBe(expected);
+    }
+  });
+
+  it('soilForSettlement resolves through the settlement’s stored islandId against listIslands', () => {
+    const model = new WorldModel(11);
+    const centre = { q: 15, r: -8 };
+    model.setIslands([{ id: 'isl-1', name: 'Testisle', q: centre.q, r: centre.r }]);
+    const settlement = model.registerSettlement({
+      id: 'stl-1',
+      ownerId: 'p1',
+      ownerName: 'Tester',
+      name: 'Testerhold',
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'isl-1',
+    });
+
+    expect(model.soilForSettlement(settlement.id)).toBe(model.soilAtIslandCentre(centre));
+  });
+
+  it('is undefined for a settlement with no islandId (a bare demo founding)', () => {
+    const model = new WorldModel(11);
+    const { settlement } = foundLandedSettlement(model);
+    expect(model.soilForSettlement(settlement.id)).toBeUndefined();
+  });
+
+  it('is undefined when the islandId does not match any known island', () => {
+    const model = new WorldModel(11);
+    const settlement = model.registerSettlement({
+      id: 'stl-2',
+      ownerId: 'p1',
+      ownerName: 'Tester',
+      name: 'Testerhold',
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'does-not-exist',
+    });
+
+    expect(model.soilForSettlement(settlement.id)).toBeUndefined();
+  });
+});
+
+describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
+  it('refuses a new PumpkinFarm on a Wheat-soil island', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+    const centre = findIslandCentreWithSoil(model.seed, 'wheat');
+    settlement.islandId = 'isl-wheat';
+    model.setIslands([{ id: 'isl-wheat', name: 'Wheatisle', q: centre.q, r: centre.r }]);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'pumpkinfarm')).toBe(false);
+  });
+
+  it('accepts a new PumpkinFarm on a Pumpkin-soil island', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+    const centre = findIslandCentreWithSoil(model.seed, 'pumpkin');
+    settlement.islandId = 'isl-pumpkin';
+    model.setIslands([{ id: 'isl-pumpkin', name: 'Pumpkinisle', q: centre.q, r: centre.r }]);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'pumpkinfarm')).toBe(true);
+  });
+
+  it('never refuses Farm, on either soil', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+    const centre = findIslandCentreWithSoil(model.seed, 'wheat');
+    settlement.islandId = 'isl-wheat';
+    model.setIslands([{ id: 'isl-wheat', name: 'Wheatisle', q: centre.q, r: centre.r }]);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'farm')).toBe(true);
+  });
+
+  it('allows PumpkinFarm when the settlement has no resolvable island (permissive default)', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'pumpkinfarm')).toBe(true);
   });
 });
 

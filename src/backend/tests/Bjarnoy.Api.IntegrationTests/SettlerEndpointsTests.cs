@@ -208,6 +208,16 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             new GrantResourcesRequest(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000), Ct);
         Assert.Equal(HttpStatusCode.OK, grantResponse.StatusCode);
 
+        // SettlerCrew trains at a Cart Workshop (see
+        // UnitCatalogue.RequiredBuildingType) — grant one before
+        // TrainThreeSettlerCrewsAsync below.
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
+        var grassHex = layout!.Hexes.First(h => !h.IsCentre && h.Building is null && h.Terrain == "grass");
+        await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{settlement.Id}/buildings/{grassHex.Q}/{grassHex.R}",
+            new PlaceBuildingRequest("cartworkshop", 1), Ct);
+
         Authorize(client, player.AccessToken);
 
         return (world.Id, settlement, player, island);

@@ -145,7 +145,7 @@ Solving each for the `D` a tile's actual direction(s) need:
 - **Spring**: `D = (4 - outIndex) mod 6`. See `springOrientationOf`.
 - **Straight**: `D = (2 - index) mod 6`, using whichever of `inDirections[0]`/`outDirection` is available (either gives a valid file for the same pair). See `straightOrientationOf`.
 - **Mouth**: has no `outDirection` (it's the end of the walk) but still needs to flow visibly toward the sea, and the generator's stop condition (`RiverGenerator.TracePath` breaks as soon as *any* neighbour is sea, regardless of angle) doesn't guarantee the sea sits opposite the inflow the way `Straight` assumes. A `RiverTile` carries no terrain, so the frontend looks the sea neighbour up itself — `WorldModel.seaFacingDirectionOf`, the first sea-terrain neighbour found, in `TILE_ORIENTATIONS` order — and `mouthOrientationOf` (`types.ts`) picks the family from the resulting angle: 3 apart (opposite) uses `Straight` via the rule above; 2 apart uses `Bend` via `bendOrientationOf(inDirection, seaDirection)`, the same as an ordinary mid-river turn; 1 apart (120°) is unrepresentable by either family — nothing on the generation side prevents this angle the way the ordinary-bend 120°-turn exclusion does, since the sea isn't a tile in the walk — and falls back to the inflow-opposite `Straight` file as a documented best-effort. (This was caught after the `Bend` fix shipped: a live screenshot showed a mouth tile visibly running into forest instead of the coast — island Jarlskar, seed `783131215`, tile `(-8,4)`, inflow `NE`, actual sea neighbour `SE` — a 60°, `Bend`-representable angle that the old inflow-opposite-only logic had no way to pick.)
-- **Confluence** (`y_narrow`): **not** re-derived by this pass — its asset has three touched edges (a fixed opposite pair plus a third at a fixed offset from filename index `D`), not a simple rotated pair or pair-adjacent-to-`D`, and hasn't been pixel-verified against the corrected edge mapping. `riverArtFor` (`textures.ts`) still uses the untransformed `outDirection ?? inDirections[0]` for it — known-unrenderable in general (see "Collisions" above: confluences come from independent paths colliding, so fixing this would mean changing collision resolution, not just orientation selection), and now additionally unverified rather than pixel-checked-and-still-wrong.
+- **Confluence** (`y_narrow`): re-derived in a later pass, the same way as the other three. Pixel-sampling every `rivertile_y_narrow_*_base.png` found a consistent, rotation-stable pattern: file `D` touches a fixed opposite pair (edges `1+D` and `4+D`, a "trunk" running straight across the hex) plus a third edge (`5+D`, a "branch" joining the trunk right before it exits) — three touched edges, not a simple rotated pair or pair-adjacent-to-`D` the way Bend/Spring/Straight are. Converting through `edge(d) = (3-d) mod 6` gives `out = (5-D) mod 6` (the trunk's far, branch-adjacent end), `trunkIn = (2-D) mod 6`, `branchIn = (4-D) mod 6` — see `confluenceOrientationOf` in `types.ts`. Unlike an ordinary bend, a confluence's `(in1, in2, out)` angles aren't constrained to one fixed relative arrangement — two independently traced paths collide wherever they happen to (see "Collisions" above) — so most real confluences still don't match this one representable rotation; `confluenceOrientationOf` returns `null` for those, and `riverArtFor` falls back to the same untransformed `outDirection ?? inDirections[0]` as before, the same pattern `mouthOrientationOf` already uses for its own unrepresentable angle. Fully fixing every possible triple would still mean changing collision resolution itself, not just orientation selection.
 
 "Opposite direction" means the inflow and outflow directions are 3 apart on the 6-direction wheel (`E`↔`W`,
 `NE`↔`SW`, `NW`↔`SE`) — the geometric definition of "flows straight through this hex."
@@ -190,10 +190,14 @@ This intentionally does **not** restrict which mountain a river's spring lands o
 is unchanged): a spring always renders with a spring-capable shape, even where `MountainShapeAt` would have
 picked Cone or Table for that coordinate.
 
-As of this note, only the generation-side hooks above exist; the atlas doesn't yet vendor the new
-`mountaintile_saddleback`/`_corrie`(`_spring`)/`_table` families, and `textures.ts`'s `KEY_FAMILY`/river
-rendering hasn't been wired to consume `MountainShapeAt`/`SpringMountainShapeAt` yet. That's the remaining
-follow-up once the atlas is repacked with the new shapes.
+Update: the atlas now vendors all four `mountaintile_{cone,table,saddleback,corrie}` families (cone is just the
+plain, unqualified `mountaintile` family) plus the two spring cuts, and `textures.ts`'s river rendering points
+`RiverArtShape.spring` at `mountaintile_corrie_spring` (fixing the flat placeholder it used to render with) —
+but that's a fixed choice, not `SpringMountainShapeAt`-driven variety between Corrie and Saddleback, and
+ordinary (non-spring) mountain tiles still all render the single generic `mountaintile` family regardless of
+`MountainShapeAt`. Wiring `KEY_FAMILY`/river rendering to actually consume `MountainShapeAt`/
+`SpringMountainShapeAt` per-coordinate, so mountains read as a mix of all four shapes the way the generation
+side already supports, remains the follow-up.
 
 ## Bigger islands, more rivers
 

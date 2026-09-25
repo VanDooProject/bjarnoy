@@ -3038,7 +3038,9 @@ export class HexMapRenderer {
         // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
         // for every other shape.
         const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
-        const riverTextures = riverTexturesFor(textures, river, seaDirection);
+        // Likewise, only a Spring's art actually branches on this.
+        const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
+        const riverTextures = riverTexturesFor(textures, river, seaDirection, springShape);
         baseEntries.set(key, { texture: riverTextures.base, coord: c });
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;

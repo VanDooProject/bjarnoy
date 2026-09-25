@@ -184,6 +184,15 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
             $"/api/v1/admin/settlements/{settlement.Id}/resources",
             new GrantResourcesRequest(Wood: 100_000, Stone: 100_000, Food: 100_000, Iron: 100_000), Ct);
 
+        // Thrall trains at a Barracks (see UnitCatalogue), so grant one
+        // before training below.
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
+        var barracksHex = FirstGrassOrSandHex(layout!);
+        await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{settlement.Id}/buildings/{barracksHex.Q}/{barracksHex.R}",
+            new PlaceBuildingRequest("barracks", 1), Ct);
+
         var queued = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/units", new TrainUnitsRequest("thrall", 3), Ct);
         Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
@@ -483,6 +492,10 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Fail("No empty buildable hex inside the settlement's claim.");
         throw new InvalidOperationException("unreachable");
     }
+
+    /// <summary>A grass or sand hex to place a Barracks/Tower/-type building on — Thrall now trains at a Barracks, so tests granting it need one.</summary>
+    private static AdminSettlementHexResponse FirstGrassOrSandHex(AdminSettlementLayoutResponse layout) =>
+        layout.Hexes.First(h => !h.IsCentre && h.Building is null && (h.Terrain == "grass" || h.Terrain == "sand"));
 
     /// <summary>
     /// Puts a ten-hour outbound journey into the database directly. Dispatching
