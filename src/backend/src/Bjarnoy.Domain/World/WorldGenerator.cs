@@ -61,9 +61,10 @@ public sealed class WorldGenerator
             }
 
             var index = islands.Count;
-            var startPositions = FindStartPositions(tiles, land);
             var riverTiles = RiverGenerator.Generate(tiles, land, _sampler, _options, index);
             var riverTileSet = riverTiles.Select(t => t.Coord).ToHashSet();
+            var giants = GiantGenerator.Generate(tiles, land, _sampler, _options, index, riverTileSet);
+            var startPositions = FindStartPositions(tiles, land, giants);
             islands.Add(new GeneratedIsland
             {
                 Index = index,
@@ -72,7 +73,7 @@ public sealed class WorldGenerator
                 Centre = CentreOf(tiles),
                 StartPositions = startPositions,
                 RiverTiles = riverTiles,
-                Giants = GiantGenerator.Generate(tiles, land, _sampler, _options, index, riverTileSet, startPositions),
+                Giants = giants,
             });
         }
 
@@ -210,9 +211,19 @@ public sealed class WorldGenerator
     /// founding a settlement is a lookup rather than a scan of the whole island.
     /// Spacing between players is enforced when a plot is claimed, not here.
     /// </remarks>
+    /// <remarks>
+    /// Giant placement v2: giants are generated first (<see cref="GiantGenerator"/>),
+    /// and this drops any otherwise-qualifying candidate that sits within
+    /// <see cref="GiantGenerator.StartPositionExclusionRadius"/> + 1 hex-steps
+    /// of any placed giant's anchor — i.e. within 4 of the giant's 7-hex
+    /// footprint itself, since the footprint already reaches 1 step from the
+    /// anchor. This also rules out a start position ever landing on a
+    /// footprint hex outright, since that distance would be 0 or 1.
+    /// </remarks>
     private static List<HexCoord> FindStartPositions(
         IReadOnlyList<HexCoord> tiles,
-        Dictionary<HexCoord, Terrain> land)
+        Dictionary<HexCoord, Terrain> land,
+        IReadOnlyList<Giant> giants)
     {
         var candidates = new List<(HexCoord Coord, int Score)>();
 
@@ -260,6 +271,21 @@ public sealed class WorldGenerator
             }
 
             if (coastal)
+            {
+                continue;
+            }
+
+            var tooCloseToGiant = false;
+            foreach (var giant in giants)
+            {
+                if (tile.DistanceTo(giant.Anchor) < GiantGenerator.StartPositionExclusionRadius + 1)
+                {
+                    tooCloseToGiant = true;
+                    break;
+                }
+            }
+
+            if (tooCloseToGiant)
             {
                 continue;
             }

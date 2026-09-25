@@ -124,27 +124,22 @@ if (wantStop('settlement_tower_border')) {
 }
 
 // Giant tiles (see src/frontend/src/lib/map/giantTiles.ts): demo mode
-// already auto-places one giant mountain a few hexes from the home hex on
-// founding (WorldModel.findGiantAnchor/placeGiant, wired in
-// stores/world.ts's foundStartingSettlement) — this stop just pans to it and
-// shoots it with its surrounding tiles in frame, so occlusion against
-// neighbouring forest/building art is checkable. Falls back to placing one
-// on the spot if this seed/landfall combination didn't get one auto-placed
-// (shouldn't happen for the deterministic demo seed, but cheap insurance).
+// generates the home island's giants on founding (WorldModel.
+// placeGiantsForIsland, the TS port of the backend's GiantGenerator, wired
+// in stores/world.ts's foundStartingSettlement) — this stop just pans to the
+// nearest one and shoots it with its surrounding tiles in frame, so
+// occlusion against neighbouring forest/building art is checkable.
 let giantAnchor = null;
 if (wantStop('settlement_giant') || wantStopPrefix('settlement_giant_orientations')) {
   giantAnchor = await page.evaluate(() => {
     const store = window.__demoWorld();
     const settlement = store.model.getSettlement(store.selectedSettlementId);
-    for (const tile of store.model.getTilesInRect(settlement.q - 8, settlement.q + 8, settlement.r - 8, settlement.r + 8)) {
+    for (const tile of store.model.getTilesInRect(settlement.q - 20, settlement.q + 20, settlement.r - 20, settlement.r + 20)) {
       if (tile.giant?.part === 'C') return tile.giant.anchor;
     }
-    const anchor = store.model.findGiantAnchor({ q: settlement.q, r: settlement.r });
-    if (!anchor) return null;
-    store.model.placeGiant(anchor, 'giantmountain');
-    return anchor;
+    return null;
   });
-  if (!giantAnchor) throw new Error('no valid giant anchor found near the home settlement for this seed');
+  if (!giantAnchor) throw new Error('no giant generated on the home island for this seed');
   console.log('Giant mountain anchored at', giantAnchor);
 
   await page.evaluate((coord) => window.__settlementRenderer?.()?.panTo(coord), giantAnchor);
