@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFamilyClips, classifyFamilyFrames, riverArtFor, type FamilyFrame } from './textures';
+import { classifyFamilyClips, classifyFamilyFrames, renumberTopVariants, riverArtFor, textureKeyFor, type FamilyFrame } from './textures';
 import { bendOrientationOf } from './types';
-import type { RiverTile } from './types';
+import type { RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
 
 // classifyFamilyFrames turns one family's raw atlas frame names into the
@@ -233,5 +233,78 @@ describe('classifyFamilyClips', () => {
     for (const orientation of ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const) {
       expect(result[orientation].size).toBe(0);
     }
+  });
+});
+
+// renumberTopVariants fixes a genuine gap in the vendored art pack: wasteland/
+// deadforest/blacksand's top variants are numbered starting at _variant001
+// with no _variant000 at all, which classifyFamilyFrames would otherwise
+// reject outright (see GAPPY_VARIANT_FAMILIES' own doc comment, and the
+// "throws on a real gap" test above that this deliberately doesn't disturb).
+describe('renumberTopVariants', () => {
+  it('closes a plain+variant001 gap into contiguous 0/1 indices', () => {
+    const frames = [frame('wasteland_E', 'top'), frame('wasteland_E_variant001', 'top')];
+
+    const classified = classifyFamilyFrames(renumberTopVariants(frames));
+
+    expect(classified.top?.E).toEqual(['wasteland_E', 'wasteland_E_variant001']);
+  });
+
+  it('closes a wider gap (plain + variant001..005) into 0..5', () => {
+    const frames = [
+      frame('wasteland_E', 'top'),
+      frame('wasteland_E_variant001', 'top'),
+      frame('wasteland_E_variant002', 'top'),
+      frame('wasteland_E_variant003', 'top'),
+      frame('wasteland_E_variant004', 'top'),
+      frame('wasteland_E_variant005', 'top'),
+    ];
+
+    const classified = classifyFamilyFrames(renumberTopVariants(frames));
+
+    expect(classified.top?.E.length).toBe(6);
+  });
+
+  it('leaves base/composite frames untouched, only renumbering top', () => {
+    const frames = [frame('wasteland_E_base', 'base'), frame('wasteland_E', 'top'), frame('wasteland_E_variant001', 'top')];
+
+    const classified = classifyFamilyFrames(renumberTopVariants(frames));
+
+    expect(classified.base?.E).toBe('wasteland_E_base');
+    expect(classified.top?.E).toEqual(['wasteland_E', 'wasteland_E_variant001']);
+  });
+
+  it('is a no-op for an already-contiguous family (does not disturb the real-gap-detection test above)', () => {
+    const frames = [frame('grasstile_E', 'top'), frame('grasstile_E_variant000', 'top'), frame('grasstile_E_variant001', 'top')];
+
+    const classified = classifyFamilyFrames(renumberTopVariants(frames));
+
+    expect(classified.top?.E).toEqual(['grasstile_E', 'grasstile_E_variant000', 'grasstile_E_variant001']);
+  });
+});
+
+describe('textureKeyFor wasted-island mapping', () => {
+  function wastedTile(terrain: Tile['terrain'], wasted = true): Tile {
+    return { q: 0, r: 0, terrain, wasted };
+  }
+
+  it('maps grass/forest/sand to their wasted art families', () => {
+    expect(textureKeyFor(wastedTile('grass'))).toBe('wasteland');
+    expect(textureKeyFor(wastedTile('forest'))).toBe('deadforest');
+    expect(textureKeyFor(wastedTile('sand'))).toBe('blacksand');
+  });
+
+  it('keeps mountain and (non-coastal) sea on their plain families even when wasted', () => {
+    expect(textureKeyFor(wastedTile('mountain'))).toBe('mountain');
+    expect(textureKeyFor(wastedTile('sea'))).toBe('sea');
+  });
+
+  it('does not remap an unwasted tile', () => {
+    expect(textureKeyFor(wastedTile('grass', false))).toBe('grass');
+  });
+
+  it('a building on a tile still takes priority over the wasted mapping', () => {
+    const tile: Tile = { q: 0, r: 0, terrain: 'grass', wasted: true, buildingType: 'hut' };
+    expect(textureKeyFor(tile)).toBe('hut');
   });
 });
