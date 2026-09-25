@@ -793,7 +793,7 @@ watch(
         player.hasFoundedSettlement || !DEMO_MODE ? undefined : (previewCoord ?? undefined)
       "
       :highlight-coords="player.hasFoundedSettlement || DEMO_MODE ? undefined : nearbyStartCoords"
-      :screen-bias-x="LANDING_PREVIEW_SCREEN_BIAS_X"
+      :screen-bias-x="isMobile ? 0 : LANDING_PREVIEW_SCREEN_BIAS_X"
       :lock-camera="!player.hasFoundedSettlement"
       hide-settlement-badge
       background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
@@ -929,6 +929,13 @@ watch(
   position: relative;
   width: 100vw;
   height: 100vh;
+  /* Mobile-readiness audit (finding f): mobile Safari's `100vh` includes the
+     area the address-bar/toolbar chrome covers, which is taller than what's
+     actually visible — hiding the bottom UI (checklist/footer) below the
+     fold. `100dvh` (the *dynamic* viewport height, which tracks the chrome)
+     fixes it; kept as a fallback line right after `100vh` so browsers
+     without `dvh` support keep today's behaviour exactly. */
+  height: 100dvh;
   overflow: hidden;
 }
 .hero {
@@ -1002,5 +1009,57 @@ h1 {
 }
 .footer-reservation {
   margin-left: auto;
+}
+
+/* Mobile-readiness audit findings e/g: the hero's fixed `left: 56px` /
+   `top: 30%` / `max-width: 520px` column and the 70px-tall footer were both
+   sized for the desktop side-by-side layout (hero column next to the
+   preview island). On a narrow screen there's no side-by-side room — the
+   hero has to span full-width below the mobile header instead of a fixed
+   left offset, and the footer has to shrink so it doesn't fight the
+   checklist tray for the same strip of screen at the bottom. */
+@media (max-width: 768px) {
+  .hero {
+    left: 20px;
+    right: 20px;
+    top: calc(var(--hud-bar-h, 64px) + 16px);
+    max-width: none;
+  }
+  h1 {
+    font-size: 28px;
+    margin-top: 8px;
+  }
+  .lede {
+    font-size: 14px;
+    margin-top: 8px;
+  }
+  .signup-facts {
+    font-size: 12px;
+    margin-top: 10px;
+    gap: 6px;
+  }
+  .footer {
+    left: 16px;
+    right: 16px;
+    height: 40px;
+    font-size: 12px;
+    gap: 12px;
+  }
+  /* The checklist tray (OnboardingChecklist's root, which carries this
+     view's scope attribute) docks right above the footer rather than on
+     top of it, so the sea name / reservation countdown stays readable. */
+  .landing > .tray {
+    bottom: calc(44px + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* Short-landscape phones (finding b/g companion): the checklist tray is
+   docked bottom-right there (OnboardingChecklist.vue) and the footer would
+   still collide with it along the bottom edge — the checklist carries the
+   more important state, so the footer steps aside entirely rather than
+   fighting for the same strip. */
+@media (max-height: 500px) {
+  .footer {
+    display: none;
+  }
 }
 </style>

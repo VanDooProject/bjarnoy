@@ -115,6 +115,10 @@ async function onSubmit() {
 .register {
   width: 100vw;
   height: 100vh;
+  /* Mobile-readiness audit: 100vh is taller than mobile Safari's visible
+     viewport (browser chrome eats into it) — 100dvh tracks the real
+     visible height, as a progressive enhancement over the 100vh above. */
+  height: 100dvh;
   overflow: auto;
   background: var(--shell);
 }
@@ -195,5 +199,15 @@ async function onSubmit() {
   color: var(--muted);
   cursor: pointer;
   padding: 0;
+}
+/* Mobile-readiness audit: `.back` and `.link` were both well under a
+   comfortable touch target on a phone. */
+@media (max-width: 768px) {
+  .back,
+  .link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 </style>
