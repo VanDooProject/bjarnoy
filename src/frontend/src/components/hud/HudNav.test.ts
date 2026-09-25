@@ -301,3 +301,69 @@ describe('HudNav account menu', () => {
     Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
   });
 });
+
+// Mobile audit: below 768px the links move into a collapsible dropdown
+// behind a hamburger toggle (`.nav-links`/`.menu-toggle`) rather than
+// rendering off-screen. The toggle exists at every viewport width (CSS alone
+// hides it on desktop), so these tests don't need to fake a narrow viewport.
+describe('HudNav mobile menu toggle', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it('is closed by default and opens on toggle click', async () => {
+    const wrapper = await mountHudNav();
+    const links = wrapper.get('[data-testid="hud-nav-links"]');
+    const toggle = wrapper.get('[data-testid="hud-nav-menu-toggle"]');
+
+    expect(links.classes()).not.toContain('open');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+
+    await toggle.trigger('click');
+    expect(links.classes()).toContain('open');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+
+    await toggle.trigger('click');
+    expect(links.classes()).not.toContain('open');
+  });
+
+  it('closes after clicking a link inside the panel', async () => {
+    const wrapper = await mountHudNav('/settlement');
+    await wrapper.get('[data-testid="hud-nav-menu-toggle"]').trigger('click');
+    expect(wrapper.get('[data-testid="hud-nav-links"]').classes()).toContain('open');
+
+    // Any of the always-visible `.link` buttons closes it — reports is
+    // rendered on every route.
+    await wrapper.get('.reports-link').trigger('click');
+    expect(wrapper.get('[data-testid="hud-nav-links"]').classes()).not.toContain('open');
+  });
+
+  it('closes on Escape', async () => {
+    const wrapper = await mountHudNav();
+    await wrapper.get('[data-testid="hud-nav-menu-toggle"]').trigger('click');
+    expect(wrapper.get('[data-testid="hud-nav-links"]').classes()).toContain('open');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[data-testid="hud-nav-links"]').classes()).not.toContain('open');
+  });
+
+  it('closes on an outside pointerdown', async () => {
+    const wrapper = await mountHudNav();
+    await wrapper.get('[data-testid="hud-nav-menu-toggle"]').trigger('click');
+    expect(wrapper.get('[data-testid="hud-nav-links"]').classes()).toContain('open');
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[data-testid="hud-nav-links"]').classes()).not.toContain('open');
+  });
+
+  it('closes on route change', async () => {
+    const { wrapper, router } = await mountHudNavWithRouter('/settlement');
+    await wrapper.get('[data-testid="hud-nav-menu-toggle"]').trigger('click');
+    expect(wrapper.get('[data-testid="hud-nav-links"]').classes()).toContain('open');
+
+    await router.push('/docs');
+    expect(wrapper.get('[data-testid="hud-nav-links"]').classes()).not.toContain('open');
+  });
+});

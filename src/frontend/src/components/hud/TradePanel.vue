@@ -289,7 +289,11 @@ function fmtCountdown(arrivesAtGameTime: string): string {
 .trade-toggle {
   position: absolute;
   right: 16px;
-  top: 76px;
+  /* TopBar's mobile header wraps to a taller, variable-height bar (its own
+     ResizeObserver publishes `--hud-bar-h` on the parent — see TopBar.vue).
+     Anchor off that instead of the old fixed 76px, which assumed the
+     desktop-only 64px bar height and overlapped the mobile header. */
+  top: calc(var(--hud-bar-h, 64px) + 12px);
   z-index: 10;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
@@ -318,13 +322,23 @@ function fmtCountdown(arrivesAtGameTime: string): string {
 .trade-panel {
   position: absolute;
   right: 16px;
-  top: 118px;
+  top: calc(var(--hud-bar-h, 64px) + 54px);
   z-index: 10;
   width: 320px;
   max-height: 70vh;
   overflow-y: auto;
   padding: 14px 15px;
   border-radius: 0;
+}
+
+@media (max-width: 768px) {
+  .trade-panel {
+    width: auto;
+    left: 8px;
+    right: 8px;
+    max-height: calc(100dvh - var(--hud-bar-h, 64px) - 70px);
+    overflow-y: auto;
+  }
 }
 .trade-panel-header {
   display: flex;

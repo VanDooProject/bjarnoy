@@ -166,4 +166,41 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
   font-size: 11px;
   color: var(--muted);
 }
+
+/* Mobile audit (390px iPhone 13): ResourceBar shares TopBar's `.hud-bar-right`
+   slot with HudNav and is `flex: none`, so on a narrow bar it gets pushed
+   entirely off-screen — players can't see their resources at all. It becomes
+   the header's own second row instead (`order: 10` plus TopBar's `flex-wrap`
+   on `.hud-bar`), wide enough to hold every pill and horizontally scrollable
+   when it can't — all resources stay reachable even if not all visible at
+   once. */
+@media (max-width: 768px) {
+  .resource-bar {
+    order: 10;
+    flex: 1 1 100%;
+    min-width: 0;
+    gap: 12px;
+    overflow-x: auto;
+    pointer-events: auto;
+    touch-action: pan-x;
+    /* Hide the scrollbar (Firefox + WebKit) — a thin strip of pills reads
+       better as a swipeable row than with a visible scrollbar underneath. */
+    scrollbar-width: none;
+  }
+  .resource-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .resource {
+    flex: none;
+  }
+  .resource + .resource {
+    padding-left: 12px;
+  }
+  .value {
+    font-size: 13px;
+  }
+  .fill-track {
+    min-width: 44px;
+  }
+}
 </style>
