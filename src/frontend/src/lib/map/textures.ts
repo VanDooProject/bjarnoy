@@ -604,13 +604,42 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
   };
 }
 
+/**
+ * Terrain families (green and wasted) belong to the terrain atlas, `a` in
+ * `mergeTileTextures`. A later load may still carry a few frames under the
+ * same names (bg_assets_hextile 24f0644 left stale `wasteland`/`blacksand`
+ * variants in buildings-static), and a plain spread let that partial copy
+ * replace the whole family: every orientation collapsed to its one stale
+ * frame. Terrain keys already in `a` therefore win; everything else merges
+ * as before.
+ */
+const TERRAIN_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
+  'sea',
+  'sand',
+  'grass',
+  'forest',
+  'mountain',
+  'wasteland',
+  'deadforest',
+  'blacksand',
+  'wastedmountain',
+]);
+
+function mergeKeyed<V>(a: Partial<Record<TextureKey, V>>, b: Partial<Record<TextureKey, V>>): Partial<Record<TextureKey, V>> {
+  const merged = { ...a, ...b };
+  for (const key of TERRAIN_TEXTURE_KEYS) {
+    if (a[key] !== undefined) merged[key] = a[key];
+  }
+  return merged;
+}
+
 /** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the terrain atlas, so `a`'s copies win unconditionally. */
 export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTextures {
   return {
-    base: { ...a.base, ...b.base },
-    baseIndexed: { ...a.baseIndexed, ...b.baseIndexed },
-    top: { ...a.top, ...b.top },
-    animTop: { ...a.animTop, ...b.animTop },
+    base: mergeKeyed(a.base, b.base),
+    baseIndexed: mergeKeyed(a.baseIndexed, b.baseIndexed),
+    top: mergeKeyed(a.top, b.top),
+    animTop: mergeKeyed(a.animTop, b.animTop),
     coastalBase: a.coastalBase,
     riverBase: a.riverBase,
     riverTop: a.riverTop,

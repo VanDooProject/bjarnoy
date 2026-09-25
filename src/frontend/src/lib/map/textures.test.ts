@@ -8,6 +8,7 @@ import {
   riverArtFor,
   riverTexturesFor,
   lavaSpringOrientationOf,
+  mergeTileTextures,
   textureKeyFor,
   type FamilyFrame,
   type TileTextures,
@@ -534,5 +535,23 @@ describe('lavaSpringOrientationOf', () => {
     expect(lavaSpringOrientationOf('NE')).toBe('SE');
     expect(lavaSpringOrientationOf('NW')).toBe('E');
     expect(lavaSpringOrientationOf('SE')).toBe('W');
+  });
+});
+
+describe('mergeTileTextures terrain ownership', () => {
+  // bg_assets_hextile 24f0644 left a few stale wasteland frames in
+  // buildings-static; merged over the terrain load they used to replace the
+  // whole family, so every wasteland tile of one orientation drew the same
+  // single frame.
+  it('keeps the terrain load\'s terrain families when a later load carries a partial copy', () => {
+    const full = { E: ['plain', 'rocks', 'spikes'] } as unknown as never;
+    const stale = { E: ['rocks'] } as unknown as never;
+    const a = { base: {}, baseIndexed: {}, top: { wasteland: full }, animTop: {}, giants: {}, giantAnims: {} } as unknown as TileTextures;
+    const b = { base: {}, baseIndexed: {}, top: { wasteland: stale, hut: stale }, animTop: {}, giants: {}, giantAnims: {} } as unknown as TileTextures;
+
+    const merged = mergeTileTextures(a, b);
+
+    expect(merged.top.wasteland).toBe(full);
+    expect(merged.top.hut).toBe(stale);
   });
 });
