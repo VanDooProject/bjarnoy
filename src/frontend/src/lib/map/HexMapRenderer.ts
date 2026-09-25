@@ -610,7 +610,7 @@ export interface ArmyOverlayFrame {
  */
 export type HoverSubject =
   | { kind: 'building'; buildingType: NonNullable<Tile['buildingType']>; level: number }
-  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean }
+  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean; wasted: boolean }
   // A hex covered by a giant tile (see giantTiles.ts) — named for the giant
   // instead of the ground terrain it sits over, since the giant's opaque art
   // fully covers that terrain. Generic over `family` (not a `'giantmountain'`
@@ -645,8 +645,11 @@ export interface HoverInfo {
  * sand tile hovered as "Shore" before this, since `river` wasn't threaded
  * through to the tooltip at all.
  */
-export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { terrain: Terrain; isRiver: boolean } {
-  return { terrain: tile.terrain, isRiver: river !== undefined };
+export function terrainTitleFor(
+  tile: Tile,
+  river: RiverTile | undefined,
+): { terrain: Terrain; isRiver: boolean; wasted: boolean } {
+  return { terrain: tile.terrain, isRiver: river !== undefined, wasted: tile.wasted ?? false };
 }
 
 /**
@@ -661,8 +664,8 @@ export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { ter
 export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
   if (tile.giant) return { kind: 'giant', family: tile.giant.family };
   if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
-  const { terrain, isRiver } = terrainTitleFor(tile, river);
-  return { kind: 'terrain', terrain, isRiver };
+  const { terrain, isRiver, wasted } = terrainTitleFor(tile, river);
+  return { kind: 'terrain', terrain, isRiver, wasted };
 }
 
 export interface RippleFrame {

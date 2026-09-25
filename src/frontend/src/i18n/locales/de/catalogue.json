@@ -35,7 +35,8 @@
   "giants": {
     "giantmountain": "Riesenberg",
     "giantshrine": "Runensteinheiligtum",
-    "giantvolcano": "Vulkan"
+    "giantvolcano": "Vulkan",
+    "giantutgard": "Utgard"
   },
   "terrain": {
     "sea": "Offenes Wasser",
@@ -43,6 +44,12 @@
     "grass": "Grasland",
     "forest": "Wald",
     "mountain": "Gebirge"
+  },
+  "wastedTerrain": {
+    "wasteland": "Ödland",
+    "deadforest": "Toter Wald",
+    "blacksand": "Schwarzer Sand",
+    "blacksandcoast": "Schwarzer Sand"
   },
   "resources": {
     "wood": "Holz",

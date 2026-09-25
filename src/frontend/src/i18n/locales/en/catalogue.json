@@ -35,7 +35,8 @@
   "giants": {
     "giantmountain": "Giant mountain",
     "giantshrine": "Runestone shrine",
-    "giantvolcano": "Volcano"
+    "giantvolcano": "Volcano",
+    "giantutgard": "Utgard"
   },
   "terrain": {
     "sea": "Open water",
@@ -43,6 +44,12 @@
     "grass": "Grassland",
     "forest": "Forest",
     "mountain": "Mountain"
+  },
+  "wastedTerrain": {
+    "wasteland": "Wasteland",
+    "deadforest": "Dead forest",
+    "blacksand": "Black sand",
+    "blacksandcoast": "Black sand"
   },
   "resources": {
     "wood": "Wood",
