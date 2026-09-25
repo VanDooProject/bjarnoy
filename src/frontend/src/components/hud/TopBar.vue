@@ -23,7 +23,7 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useHudDrawer } from '../../composables/useHudDrawer';
 import { isHudDrawerOpen, setHudDrawerCloseFn } from '../../composables/hudDrawerOpenState';
-import { isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
+import { isHudBarAtBottom, isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
 import { hudBarHeightPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
@@ -121,6 +121,19 @@ watch(
   { immediate: true },
 );
 onBeforeUnmount(() => { isSettlementBubbleShown.value = false; });
+// Extra fix found while screenshotting finding #13: DemoModeBadge.vue used
+// to read the raw `hudPrefs.barPosition` preference directly to decide
+// whether to sit "just under the top bar" or "near the top itself" — wrong
+// on a bar that isn't drag/docking-aware at all (a docked docs page, or the
+// pre-founding landing bar), which always renders at the top regardless of
+// that preference, so a 'bottom' preference made the badge collide with it.
+// This mirrors the actual `.hud-bar--bottom` class condition below.
+watch(
+  () => dragEnabled.value && barPosition.value === 'bottom',
+  (atBottom) => { isHudBarAtBottom.value = atBottom; },
+  { immediate: true },
+);
+onBeforeUnmount(() => { isHudBarAtBottom.value = false; });
 
 const drawerContentRef = ref<HTMLElement | null>(null);
 const drawerHeight = ref(0);

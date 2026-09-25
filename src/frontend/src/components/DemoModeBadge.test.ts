@@ -3,8 +3,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import DemoModeBadge from './DemoModeBadge.vue';
-import { useHudPrefsStore } from '../stores/hudPrefs';
 import { isHudDrawerOpen } from '../composables/hudDrawerOpenState';
+import { isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
 import { createTestI18n } from '../test/i18n';
 import enDemoModeBadge from '../i18n/locales/en/demoModeBadge.json';
 
@@ -40,6 +40,7 @@ describe('DemoModeBadge', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     isHudDrawerOpen.value = false;
+    isHudBarAtBottom.value = false;
   });
 
   it('renders without the compact bubble class on desktop', () => {
@@ -61,8 +62,14 @@ describe('DemoModeBadge', () => {
 
   it('stays near the top when the bar is docked at the bottom instead', async () => {
     stubCompactMediaQuery(true);
-    const prefs = useHudPrefsStore();
-    prefs.setBarPosition('bottom');
+    // Extra fix found while screenshotting finding #13: this reads TopBar's
+    // own *effective* "am I actually rendered at the bottom edge" signal
+    // (written by TopBar.vue) rather than the raw hudPrefs preference — a
+    // bar that isn't drag/docking-aware at all (a docked page, or the
+    // pre-founding landing bar) always sits at the top regardless of the
+    // stored preference, so setting the preference alone here would no
+    // longer reflect what any real page actually does with it.
+    isHudBarAtBottom.value = true;
 
     const wrapper = mountBadge();
     await wrapper.vm.$nextTick();

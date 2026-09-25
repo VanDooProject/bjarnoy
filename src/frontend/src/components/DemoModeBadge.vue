@@ -15,16 +15,14 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { DEMO_MODE } from '../config';
-import { useHudPrefsStore } from '../stores/hudPrefs';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { isHudDrawerOpen } from '../composables/hudDrawerOpenState';
-import { isSettlementBubbleShown } from '../composables/hudSettlementBubbleState';
+import { isHudBarAtBottom, isSettlementBubbleShown } from '../composables/hudSettlementBubbleState';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import type { MessageSchema } from '../i18n/schema';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
-const hudPrefs = useHudPrefsStore();
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 
 // Finding #16/#13: reads TopBar.vue's own measured height (ResizeObserver,
@@ -33,13 +31,21 @@ const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 // showing in the same corner, this drops onto its own row below it —
 // `BUBBLE_ROW_PX` is that row's own real height (6px top/bottom padding +
 // its ~20px content) plus a small gap, so the two never overlap.
+//
+// Extra fix (found while screenshotting #13): reads `isHudBarAtBottom`
+// (TopBar.vue's own *effective* "am I actually rendered at the bottom edge"
+// signal) instead of the raw `hudPrefs.barPosition` preference — a bar that
+// isn't drag/docking-aware at all (docs pages, the pre-founding landing bar)
+// always sits at the top regardless of that stored preference, so reading
+// it directly could park this badge at `top: 8px` right on top of a bar
+// that was, in fact, still up there.
 const BUBBLE_ROW_PX = 40;
 const badgeStyle = computed(() => {
   if (!isCompact.value) return undefined;
   const stack = isSettlementBubbleShown.value ? BUBBLE_ROW_PX : 0;
-  return hudPrefs.barPosition === 'top'
-    ? { top: `${hudBarHeightPx.value + 8 + stack}px` }
-    : { top: `${8 + stack}px` };
+  return isHudBarAtBottom.value
+    ? { top: `${8 + stack}px` }
+    : { top: `${hudBarHeightPx.value + 8 + stack}px` };
 });
 const showBadge = computed(() => DEMO_MODE && !(isCompact.value && isHudDrawerOpen.value));
 </script>
