@@ -6,6 +6,7 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import { coastalWaterArt, riverArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 
@@ -94,6 +95,9 @@ const buildingsByTile = computed(() => {
   <div class="tile-docs">
     <TopBar docked :title="$t('docs.tiles.title')" caption="DOCS · TILES">
       <HudNav />
+      <template #drawer="{ close }">
+        <MobileHudDrawer @close="close" />
+      </template>
     </TopBar>
     <main class="body">
       <h1>{{ $t('docs.tiles.title') }}</h1>

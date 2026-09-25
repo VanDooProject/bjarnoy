@@ -9,7 +9,7 @@
   "settlements": "Settlements",
   "hudBar": {
     "title": "HUD bar",
-    "hint": "Applies on small screens only. You can also drag the bar's grip on your phone.",
+    "hint": "Applies on small screens only.",
     "position": "Bar position",
     "top": "Top",
     "bottom": "Bottom"

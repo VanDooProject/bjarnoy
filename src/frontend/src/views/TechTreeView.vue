@@ -5,6 +5,7 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import TechTreeGraph from '../components/docs/TechTreeGraph.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 import { buildingArt, buildingArtByFamily, terrainArt, type ArtRef } from '../lib/map/buildingArt';
@@ -188,6 +189,9 @@ function formatAmount(value: number): string {
   <div class="tech-tree">
     <TopBar docked title="Tech tree" caption="DOCS · DEPENDENCIES">
       <HudNav />
+      <template #drawer="{ close }">
+        <MobileHudDrawer @close="close" />
+      </template>
     </TopBar>
     <div class="page">
     <div class="graph-wrap">

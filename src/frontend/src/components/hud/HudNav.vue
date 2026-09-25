@@ -18,6 +18,16 @@ import ProfileNudge from '../onboarding/ProfileNudge.vue';
 import ReturningPlayerMenu from './ReturningPlayerMenu.vue';
 import type { MessageSchema } from '../../i18n/schema';
 
+// Finding #8: the hide-links-on-mobile rule below only makes sense where a
+// caller actually gives the player another way to reach them — the mobile
+// pull-down drawer (TopBar.vue's `#drawer` slot, MobileHudDrawer.vue).
+// Every current caller of HudNav now provides one (see those views' own
+// `<template #drawer>`), so this defaults to true; it exists as an explicit
+// opt-out rather than an unconditional media query so a future HudNav usage
+// with no drawer doesn't silently lose its links on a phone with nothing
+// left to reach them from.
+withDefaults(defineProps<{ hasDrawer?: boolean }>(), { hasDrawer: true });
+
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
@@ -111,7 +121,7 @@ watch(() => route.fullPath, closeAccountMenu);
 </script>
 
 <template>
-  <nav class="hud-nav">
+  <nav class="hud-nav" :class="{ 'hud-nav--no-drawer': !hasDrawer }">
     <button
       v-if="player.hasFoundedSettlement"
       class="link"
@@ -225,17 +235,6 @@ watch(() => route.fullPath, closeAccountMenu);
   padding-left: 22px;
   border-left: 1px solid var(--panel-border);
 }
-/* Mobile HUD bar rework: these same destinations are duplicated into the
-   pull-down drawer (components/hud/MobileHudDrawer.vue), which is the only
-   thing that fits in the compact bar's own width — the inline links here
-   would otherwise push ResourceBar's pills off-screen. Keep this in sync
-   with lib/breakpoints.ts's HUD_COMPACT_MAX_WIDTH (plain CSS media queries
-   can't read a JS constant). */
-@media (max-width: 768px) {
-  .link {
-    display: none;
-  }
-}
 .link {
   background: transparent;
   border: none;
@@ -258,10 +257,30 @@ watch(() => route.fullPath, closeAccountMenu);
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* Finding #15: this must be declared *before* the `@media` block below, not
+   after it — both this and the media query's `.link { display: none }` are
+   a single class selector (equal specificity), so whichever is later in the
+   stylesheet wins the cascade. Declared afterward (as it used to be), this
+   unconditional `inline-flex` always beat the media query's `none` even at
+   phone widths, keeping "Reports" visibly inline instead of collapsing into
+   the drawer with every other link. */
 .reports-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+/* Mobile HUD bar rework: these same destinations are duplicated into the
+   pull-down drawer (components/hud/MobileHudDrawer.vue), which is the only
+   thing that fits in the compact bar's own width — the inline links here
+   would otherwise push ResourceBar's pills off-screen. Keep this in sync
+   with lib/breakpoints.ts's HUD_COMPACT_MAX_WIDTH (plain CSS media queries
+   can't read a JS constant). Finding #8: scoped to `.hud-nav:not(.hud-nav--no-drawer)`
+   so this only ever collapses the links where a drawer actually exists to
+   reach them from — see the `hasDrawer` prop's own comment above. */
+@media (max-width: 768px) {
+  .hud-nav:not(.hud-nav--no-drawer) .link {
+    display: none;
+  }
 }
 .badge {
   display: inline-flex;

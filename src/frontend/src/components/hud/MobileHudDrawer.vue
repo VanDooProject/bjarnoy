@@ -67,6 +67,14 @@ function go(path: string) {
     <button class="link" :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }" @click="go('/docs')">
       {{ t('hud.nav.docs') }}
     </button>
+    <!-- Mirrors HudNav.vue's own landing self-link rule: hidden on the
+         landing route itself rather than offering a click to nowhere
+         (finding #8 — this drawer is now shared by every page that shows
+         HudNav, docs pages included, which previously had no way back
+         "home" at all on a phone). -->
+    <button v-if="route.name !== 'landing'" class="link" @click="go('/')">
+      {{ t('hud.nav.landing') }}
+    </button>
   </nav>
 </template>
 

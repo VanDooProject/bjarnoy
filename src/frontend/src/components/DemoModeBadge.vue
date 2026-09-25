@@ -18,6 +18,8 @@ import { DEMO_MODE } from '../config';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { isHudDrawerOpen } from '../composables/hudDrawerOpenState';
+import { isSettlementBubbleShown } from '../composables/hudSettlementBubbleState';
+import { hudBarHeightPx } from '../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import type { MessageSchema } from '../i18n/schema';
 
@@ -25,10 +27,19 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const hudPrefs = useHudPrefsStore();
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 
-const HUD_BAR_HEIGHT = 64;
+// Finding #16/#13: reads TopBar.vue's own measured height (ResizeObserver,
+// border-box) instead of a separate hardcoded 64 that could silently drift
+// from the real bar. Finding #13: when the settlement bubble is also
+// showing in the same corner, this drops onto its own row below it —
+// `BUBBLE_ROW_PX` is that row's own real height (6px top/bottom padding +
+// its ~20px content) plus a small gap, so the two never overlap.
+const BUBBLE_ROW_PX = 40;
 const badgeStyle = computed(() => {
   if (!isCompact.value) return undefined;
-  return hudPrefs.barPosition === 'top' ? { top: `${HUD_BAR_HEIGHT + 8}px` } : { top: '8px' };
+  const stack = isSettlementBubbleShown.value ? BUBBLE_ROW_PX : 0;
+  return hudPrefs.barPosition === 'top'
+    ? { top: `${hudBarHeightPx.value + 8 + stack}px` }
+    : { top: `${8 + stack}px` };
 });
 const showBadge = computed(() => DEMO_MODE && !(isCompact.value && isHudDrawerOpen.value));
 </script>

@@ -36,6 +36,7 @@ import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { useHudPrefsStore } from '../stores/hudPrefs';
+import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
@@ -447,9 +448,24 @@ const ringCardBounds = computed(() => ({
 // lock out hover/wheel there for as long as a ring is showing. The mobile
 // queue drawer floats over the canvas the same way while open, so it shares
 // the same lock.
-const canvasInteractionLocked = computed(() => !!ringScreen.value || queueDrawerOpen.value);
+const canvasInteractionLocked = computed(
+  () => !!ringScreen.value || queueDrawerOpen.value || isHudDrawerOpen.value,
+);
 watch(canvasInteractionLocked, (locked) => {
   canvasRef.value?.renderer?.setInteractionLocked(locked);
+});
+
+// Finding #12: the queue drawer and the mobile HUD pull-down drawer are two
+// separate floating sheets that can both open over the same canvas — only
+// one should ever be open at a time (opening either one is a strong enough
+// "I want to look at this now" signal that the other one being open too is
+// just visual clutter, on top of the z-index tie TopBar.vue's own comment
+// covers for the moment they'd otherwise overlap).
+watch(queueDrawerOpen, (open) => {
+  if (open) closeHudDrawer();
+});
+watch(isHudDrawerOpen, (open) => {
+  if (open) queueDrawerOpen.value = false;
 });
 
 // A mousedown on the ring's own backdrop (not a bubble) closes the ring and
@@ -1096,6 +1112,14 @@ async function upgrade() {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh; /* finding #11: keeps clear of mobile browser chrome; 100vh above is the fallback for browsers without dvh support */
+  /* Finding #3: without this, a vertical touch-drag that starts on the
+     mobile HUD bar's pill row (`.resource-bar.compact`, `touch-action:
+     pan-x`) can still fall through to the browser's own overscroll/
+     pull-to-refresh handling once the pill row's own horizontal-only pan
+     doesn't consume it, cancelling the pointer capture the drag-to-open
+     drawer gesture (TopBar.vue's useHudDrawer) relies on. */
+  overscroll-behavior-y: none;
 }
 .hud-scrim {
   position: absolute;
