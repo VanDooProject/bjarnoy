@@ -1254,6 +1254,18 @@ export class HexMapRenderer {
   // margin is three tiles.
   private waterMaskRegionBuilt: WaterMaskRegion | null = null;
   /**
+   * Whether `worldModel.isWastedRevealed()` was true for the bake that
+   * produced `waterMaskRegionBuilt` — the water mask's `isLand` (baked in
+   * `waterMask.worker.ts`, which has no live connection to `WorldModel`) has
+   * no other way to notice the reveal flipping under it, so `maybeBakeWaterMask`
+   * compares this against the model's current answer on every call and drops
+   * `waterMaskRegionBuilt` (forcing a rebake) the moment they disagree —
+   * otherwise a wasted island revealed after its region was last baked would
+   * keep drawing the plain sea's foam/squiggle surface over now-land hexes
+   * until some unrelated camera move happened to invalidate coverage anyway.
+   */
+  private waterMaskWastedRevealed = false;
+  /**
    * Set whenever a rebuild wanted a bake but deferred it (see
    * `maybeBakeWaterMask`), and cleared by the bake that services it.
    *
@@ -1285,9 +1297,9 @@ export class HexMapRenderer {
    * fetched and compiled while the map is still loading, instead of on the
    * first camera move that needs a mask.
    */
-  private maskBaker = new WaterMaskBaker((mask, region, bakeMs) => {
+  private maskBaker = new WaterMaskBaker((mask, region, bakeMs, wastedRevealed) => {
     if (this.destroyed) return;
-    this.applyWaterMask(mask, region, bakeMs, true);
+    this.applyWaterMask(mask, region, bakeMs, true, wastedRevealed);
   });
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
@@ -2711,6 +2723,13 @@ export class HexMapRenderer {
    * inside it" is asked about what is actually on screen.
    */
   private maybeBakeWaterMask() {
+    const { worldModel } = this.options;
+    // The reveal flag isn't part of the viewport, so a coverage check alone
+    // would never notice it flipped — drop the recorded region outright so
+    // the coverage check below always misses and a fresh bake goes out.
+    if (this.waterMaskRegionBuilt && this.waterMaskWastedRevealed !== worldModel.isWastedRevealed()) {
+      this.waterMaskRegionBuilt = null;
+    }
     const viewport = visibleWorldRect(this.camera, this.viewport);
     if (this.waterMaskRegionBuilt && waterMaskCovers(this.waterMaskRegionBuilt, viewport)) return;
     // A bake already out with the worker that covers what is on screen is the
@@ -2733,7 +2752,6 @@ export class HexMapRenderer {
       return;
     }
     this.waterMaskDirty = false;
-    const { worldModel } = this.options;
     const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN), TILE_W);
     // Timed rather than estimated: the bake is one isoPixelToAxial per texel
     // plus three distance transforms, and it is the only CPU work this
@@ -2751,11 +2769,12 @@ export class HexMapRenderer {
         // uPropMute nowhere else), so only it pays for the list — and the
         // list, not a lookup, is what lets that mode bake off-thread at all.
         buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
+        wastedRevealed: worldModel.isWastedRevealed(),
       },
       this.waterMaskTerrain(),
     );
     if (!mask) return; // off to the worker; applyWaterMask finishes it
-    this.applyWaterMask(mask, region, performance.now() - bakeStart, false);
+    this.applyWaterMask(mask, region, performance.now() - bakeStart, false, worldModel.isWastedRevealed());
   }
 
   /**
@@ -2766,7 +2785,13 @@ export class HexMapRenderer {
    * keeps the foam it had rather than losing it for the length of the bake,
    * and the coverage check keeps answering about a mask that actually exists.
    */
-  private applyWaterMask(mask: WaterMask, region: WaterMaskRegion, bakeMs: number, onWorker: boolean) {
+  private applyWaterMask(
+    mask: WaterMask,
+    region: WaterMaskRegion,
+    bakeMs: number,
+    onWorker: boolean,
+    wastedRevealed: boolean,
+  ) {
     waterPerfStats.bakeMs = bakeMs;
     waterPerfStats.bakedOnWorker = onWorker;
     // Only a bake this thread actually ran belongs in the rebuild breakdown.
@@ -2780,6 +2805,7 @@ export class HexMapRenderer {
     waterPerfStats.bakes += 1;
     this.waterLayer.setMask(mask);
     this.waterMaskRegionBuilt = region;
+    this.waterMaskWastedRevealed = wastedRevealed;
   }
 
   /**
