@@ -30,7 +30,7 @@
 // its own doc comment and `textures.test.ts` — no Pixi/Texture dependency,
 // so it's exercised directly rather than only through a loaded atlas).
 import { Texture } from 'pixi.js';
-import { loadAtlasCategory, type AtlasClip, type LoadedAtlas } from './atlas';
+import { loadAtlasCategory, loadAtlasPackCategory, type AtlasClip, type AtlasPack, type LoadedAtlas } from './atlas';
 import {
   classifyGiantClips,
   classifyGiantFrames,
@@ -670,7 +670,19 @@ function mergeKeyed<V>(a: Partial<Record<TextureKey, V>>, b: Partial<Record<Text
   return merged;
 }
 
-/** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the terrain atlas, so `a`'s copies win unconditionally. */
+/**
+ * Fills in a per-orientation array field from `b` wherever `a`'s own
+ * orientation is empty — used for `wastedCoastalBase` below: with atlas
+ * packs, `a` (the core terrain load) has none of it until the wasted pack
+ * (`b`, loaded later — see `loadPackAtlases`) resolves, so `a`'s copy can no
+ * longer be assumed to always already hold it the way it did before packs
+ * existed.
+ */
+function mergeOrientationArrays<T>(a: OrientationMap<T[]>, b: OrientationMap<T[]>): OrientationMap<T[]> {
+  return mapOrientations(a, (orientation, value) => (value.length > 0 ? value : b[orientation]));
+}
+
+/** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve, or the wasted pack once revealed) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the core terrain atlas, so `a`'s copies win unconditionally; the wasted-only fields (`wastedCoastalBase`, `lavaRiverBase`/`lavaRiverTop`) instead keep `a`'s entry where it has one and fall back to `b`'s, since they may not have resolved yet in `a` (the wasted pack loads separately from — and later than — the core terrain atlas). */
 export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTextures {
   return {
     base: mergeKeyed(a.base, b.base),
@@ -680,12 +692,9 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
     coastalBase: a.coastalBase,
     riverBase: a.riverBase,
     riverTop: a.riverTop,
-    // Like plain coastal water/rivers, the wasted-island terrain/lava-river
-    // art families live in the terrain atlas too, so these are pinned to
-    // `a` (the terrain-only load) the same way.
-    wastedCoastalBase: a.wastedCoastalBase,
-    lavaRiverBase: a.lavaRiverBase,
-    lavaRiverTop: a.lavaRiverTop,
+    wastedCoastalBase: mergeOrientationArrays(a.wastedCoastalBase, b.wastedCoastalBase),
+    lavaRiverBase: { ...b.lavaRiverBase, ...a.lavaRiverBase },
+    lavaRiverTop: { ...b.lavaRiverTop, ...a.lavaRiverTop },
     giants: { ...a.giants, ...b.giants },
     giantAnims: { ...a.giantAnims, ...b.giantAnims },
   };
@@ -717,6 +726,32 @@ export function loadBuildingAtlases(): Promise<TileTextures> {
     ]).then(([staticAtlas, animAtlas]) => buildTileTextures([staticAtlas], animAtlas));
   }
   return buildingLoading;
+}
+
+const packLoading = new Map<AtlasPack, Promise<TileTextures>>();
+/**
+ * One pack's own terrain/building atlases (`${pack}-terrain`,
+ * `${pack}-buildings-static`, `${pack}-buildings-anim`), built into a
+ * `TileTextures` the same shape `loadTerrainAtlas`/`loadBuildingAtlases`
+ * produce — merge it in with `mergeTileTextures` once the world reveals that
+ * pack (see `HexMapRenderer`'s wasted-reveal handling). Each category loads
+ * via `loadAtlasPackCategory`, which returns an empty, non-throwing
+ * `LoadedAtlas` for a category the pack has no pages for yet (the currently
+ * vendored atlas ships none at all) — so this never fails outright, it just
+ * contributes nothing until the pack's pages actually exist.
+ */
+export function loadPackAtlases(pack: AtlasPack): Promise<TileTextures> {
+  const cached = packLoading.get(pack);
+  if (cached) return cached;
+
+  const promise = Promise.all([
+    loadAtlasPackCategory(pack, 'terrain'),
+    loadAtlasPackCategory(pack, 'buildings-static'),
+    loadAtlasPackCategory(pack, 'buildings-anim'),
+  ]).then(([terrain, buildings, animAtlas]) => buildTileTextures([terrain, buildings], animAtlas));
+
+  packLoading.set(pack, promise);
+  return promise;
 }
 
 let combinedLoading: Promise<TileTextures> | null = null;
