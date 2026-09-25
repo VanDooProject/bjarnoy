@@ -10,6 +10,9 @@ import {
   hexMitreDistance,
   propMute,
   PROP_MUTE_FADE_TILES,
+  taintFade,
+  TAINT_INNER_TILES,
+  TAINT_REACH_TILES,
   topFaceHalfPlanes,
   waterNoiseSeed,
   type TerrainLookup,
@@ -33,6 +36,11 @@ function region(): WaterMaskRegion {
 
 function channel(mask: ReturnType<typeof bakeWaterMask>, x: number, y: number, c: 0 | 1 | 2 | 3): number {
   return mask.data[(y * mask.width + x) * 4 + c];
+}
+
+/** The taint field at a texel — see `WaterMask.taint`. */
+function taintAt(mask: ReturnType<typeof bakeWaterMask>, x: number, y: number): number {
+  return mask.taint[y * mask.width + x];
 }
 
 /**
@@ -587,5 +595,110 @@ describe("the mask's prop-tile mute (A)", () => {
     // ...and the prop column really did mute something, so the assertion above
     // isn't passing because nothing happened.
     expect(Array.from(withProp.data).some((_, i) => i % 4 === 3 && withProp.data[i] === 255)).toBe(true);
+  });
+});
+
+describe('taintFade', () => {
+  it('is fully on out to the inner plateau and fully off past the reach', () => {
+    expect(taintFade(0, 60, 150)).toBe(1);
+    expect(taintFade(60, 60, 150)).toBe(1);
+    expect(taintFade(-5, 60, 150)).toBe(1);
+    expect(taintFade(150, 60, 150)).toBe(0);
+    expect(taintFade(500, 60, 150)).toBe(0);
+  });
+
+  it('falls monotonically across the fade', () => {
+    let previous = 1;
+    for (let d = 60; d <= 150; d += 5) {
+      const value = taintFade(d, 60, 150);
+      expect(value).toBeLessThanOrEqual(previous);
+      previous = value;
+    }
+  });
+
+  it('flattens out at both ends rather than meeting the untainted water at a corner', () => {
+    // Same smoothstep shape as propMute, and for the same reason — see there.
+    const inner = 60;
+    const reach = 150;
+    const atStart = taintFade(inner, inner, reach) - taintFade(inner + (reach - inner) * 0.05, inner, reach);
+    const inMiddle =
+      taintFade(inner + (reach - inner) * 0.475, inner, reach) - taintFade(inner + (reach - inner) * 0.525, inner, reach);
+    expect(atStart).toBeLessThan(inMiddle * 0.5);
+  });
+});
+
+describe("the mask's taint field", () => {
+  /** A world where the single hex `(q, r)` is wasted land — sea everywhere else, no land at all. */
+  function oneWastedHex(q: number, r: number): TerrainLookup {
+    return { isLand: () => false, isWastedLand: (tq, tr) => tq === q && tr === r };
+  }
+
+  it('is all zero when the lookup carries no isWastedLand at all', () => {
+    // Optional, and omitted entirely, is the documented way to ask for an
+    // all-zero taint field — the same contract hasProp/getTile already have
+    // for the A channel.
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, ALL_WATER);
+    expect(mask.taint.every((v) => v === 0)).toBe(true);
+  });
+
+  it('is all zero when isWastedLand never answers true over the region', () => {
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, { isLand: () => false, isWastedLand: () => false });
+    expect(mask.taint.every((v) => v === 0)).toBe(true);
+  });
+
+  it("is byte-identical to today's mask (data) for a world with no wasted land", () => {
+    // The load-bearing regression: adding taint must not perturb the four
+    // existing channels for every world that predates wasted islands.
+    const r = region();
+    const withoutHook = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
+    const withHook = bakeWaterMask(r, TILE_W, TILE_H, { isLand: (q) => q <= 0, isWastedLand: () => false });
+    expect(withHook.data).toEqual(withoutHook.data);
+  });
+
+  it('is full strength at a wasted hex centre and beyond it', () => {
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, oneWastedHex(0, 0));
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const at = (x: number, y: number) =>
+      taintAt(mask, Math.floor((x - r.rect.minX) / r.texelWorldSize), Math.floor((y - r.rect.minY) / r.texelWorldSize));
+    expect(at(grid.x + TILE_W / 2, grid.y + TILE_H / 2)).toBe(255);
+  });
+
+  it('stays full strength out to TAINT_INNER_TILES and fades to zero by TAINT_REACH_TILES', () => {
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, oneWastedHex(0, 0));
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const centre = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+    const at = (dx: number) =>
+      taintAt(
+        mask,
+        Math.floor((centre.x + dx - r.rect.minX) / r.texelWorldSize),
+        Math.floor((centre.y - r.rect.minY) / r.texelWorldSize),
+      );
+
+    // Just inside the plateau: still full strength. Well past the reach: zero.
+    // In between: at least one texel that is neither, and the whole walk only
+    // ever falls — the same shape of claim `propMute`'s own mask test makes.
+    expect(at(TILE_W * (TAINT_INNER_TILES - 0.1))).toBe(255);
+    expect(at(TILE_W * (TAINT_REACH_TILES + 1))).toBe(0);
+
+    const ramp: number[] = [];
+    for (let t = TAINT_INNER_TILES; t <= TAINT_REACH_TILES; t += 0.05) ramp.push(at(TILE_W * t));
+    expect(ramp.some((v) => v > 0 && v < 255)).toBe(true);
+    for (let i = 1; i < ramp.length; i++) expect(ramp[i]).toBeLessThanOrEqual(ramp[i - 1]);
+  });
+
+  it('leaves the other channels alone — taint is a separate field, not a fifth channel', () => {
+    const r = region();
+    const withoutWaste = bakeWaterMask(r, TILE_W, TILE_H, ALL_WATER);
+    const withWaste = bakeWaterMask(r, TILE_W, TILE_H, oneWastedHex(0, 0));
+    for (let i = 0; i < withoutWaste.data.length; i++) {
+      expect(withWaste.data[i]).toBe(withoutWaste.data[i]);
+    }
+    // ...and the wasted hex really did taint something, so the assertion above
+    // isn't passing because nothing happened.
+    expect(withWaste.taint.some((v) => v > 0)).toBe(true);
   });
 });

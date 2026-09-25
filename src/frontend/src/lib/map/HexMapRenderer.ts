@@ -2829,10 +2829,12 @@ export class HexMapRenderer {
    */
   private waterMaskTerrain(): TerrainLookup {
     const { worldModel } = this.options;
-    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r) };
+    const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
+    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r), isWastedLand };
     return {
       isLand: (q, r) => worldModel.isLand(q, r),
       hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
+      isWastedLand,
     };
   }
 

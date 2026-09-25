@@ -64,6 +64,7 @@ in vec2 vWorld;
 out vec4 finalColor;
 
 uniform sampler2D uWaterMask;
+uniform sampler2D uWaterTaint;
 
 uniform float uTime;
 uniform float uWaveTime;
@@ -117,6 +118,9 @@ uniform vec3 uCausticBlobColor;
 uniform float uFarReach;
 uniform float uPropMute;
 uniform float uPropFoamScale;
+uniform vec3 uTaintShallowColor;
+uniform vec3 uTaintDeepColor;
+uniform vec3 uTaintFoamColor;
 
 // Same cheap 2D value noise fogShader.ts uses — hash plus smooth
 // interpolation, no dependency, and deliberately the same function so the two
@@ -456,6 +460,15 @@ vec4 sampleMask() {
   return texture(uWaterMask, vUV);
 }
 
+// The tainted-water field (docs/design/water-shader.md's "Tainted water"
+// section): 1 in water close to a revealed wasted island, fading to 0 by
+// TAINT_REACH_TILES, and 1 on the wasted land itself. Same UVs and filtering
+// as the main mask, so its own zero crossing sits at a sub-texel position too
+// — see WaterLayer.setMask's taint texture for why.
+float sampleTaint() {
+  return texture(uWaterTaint, vUV).r;
+}
+
 // The raw-channel debug view (§5's showWaterMask). Hard-stepped contour bands
 // on R, so the coastline the mask believes in reads as a crisp line you can
 // lay over the painted art and see any disagreement immediately. This is what
@@ -468,6 +481,7 @@ vec4 maskDebugColor(vec4 m) {
 
 void main() {
   vec4 m = sampleMask();
+  float taint = sampleTaint();
 
   // Ground space: world space with y un-foreshortened, so a pattern built here
   // reads as lying on the isometric ground plane rather than painted on the
@@ -526,6 +540,12 @@ void main() {
   if (water && uSeaBody > 0.5) {
     float depth = smoothstep(0.0, 1.0, m.g);
     col = mix(uShallowColor, uDeepColor, depth);
+    // Tainted water around a revealed wasted island mixes toward the same
+    // shallow/deep pair the baked coastal-water art already uses, at the same
+    // depth — so the shader's sea picks up exactly where that art's own
+    // taint left off rather than blending in a third, unrelated colour.
+    vec3 taintedCol = mix(uTaintShallowColor, uTaintDeepColor, depth);
+    col = mix(col, taintedCol, taint);
     // One octave, not three. This is a very low-frequency mottle whose whole
     // job is that a large expanse of open water isn't a flat fill; the finer
     // octaves would cost the same each and be invisible under the waves and
@@ -558,7 +578,11 @@ void main() {
       // there. Off the far channel rather than the signed near one, since the
       // keep-off sits past where R saturates.
       float offshore = m.g * uFarReach;
-      float quiet = 1.0 - mute;
+      // Caustics read as sunlight through clear water, and tainted water
+      // isn't clear — so the field is faded out by taint exactly like it
+      // already is over a muted prop tile, the two multiplied together
+      // rather than picking one.
+      float quiet = (1.0 - mute) * (1.0 - taint);
 
       // Three layers, dark to light, in that order: the shadows are depth *in*
       // the water, so both light nets draw over them, and the fine net is the
@@ -595,8 +619,13 @@ void main() {
     } else {
       float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.g);
       if (clearOfCoast > 0.004) {
-        float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha * (1.0 - mute);
-        acc = vec4(uWaveColor * crest, crest) + acc * (1.0 - crest);
+        // Tainted crests mix toward the same ash grey-green the foam does —
+        // white water breaking over a dead sea reads wrong, and a second,
+        // separate wave-taint colour would just be one more thing to keep in
+        // step with the foam's.
+        vec3 crestColor = mix(uWaveColor, uTaintFoamColor, taint);
+        float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha * mix(1.0, 0.4, taint) * (1.0 - mute);
+        acc = vec4(crestColor * crest, crest) + acc * (1.0 - crest);
       }
     }
   }
@@ -698,8 +727,13 @@ void main() {
     // Cutting the tail and carrying the rest at a higher alpha keeps it blue-white.
     float outer = smoothstep(0.12, 0.55, shore) * lace;
 
-    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y);
-    acc = vec4(uFoamColor * foam, foam) + acc * (1.0 - foam);
+    // Tainted foam mixes toward the same ash grey-green the crests do, and
+    // dims a little further than they do — foam is brighter than open water
+    // to begin with, so it needs more of a pull to stop reading as clean surf
+    // against a dead coast.
+    vec3 foamColor = mix(uFoamColor, uTaintFoamColor, taint);
+    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y) * mix(1.0, 0.55, taint);
+    acc = vec4(foamColor * foam, foam) + acc * (1.0 - foam);
   }
 
   if (acc.a < 0.004) discard;

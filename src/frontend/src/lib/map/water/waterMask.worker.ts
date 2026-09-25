@@ -56,6 +56,8 @@ export interface BakeResponse {
   data: Uint8Array;
   width: number;
   height: number;
+  /** See `WaterMask.taint`. */
+  taint: Uint8Array;
   /** What the bake itself took here, so the panel reports the real cost rather than the round trip. */
   bakeMs: number;
 }
@@ -74,6 +76,16 @@ export interface BakeResponse {
 let cacheSeed: number | null = null;
 let cacheWastedRevealed = false;
 let cache = new Map<number, boolean>();
+
+// Separate cache from `isLandFor`'s: that one answers "is this land at all",
+// folding the wasted layer into the same yes/no `isLand` every other caller
+// wants. The taint field needs the narrower question — "is this land *only*
+// because the wasted layer says so" — which `isLandFor`'s cached answer
+// can't be un-mixed back into, so this keeps its own memo table rather than
+// deriving from it.
+let wastedCacheSeed: number | null = null;
+let wastedCacheRevealed = false;
+let wastedCache = new Map<number, boolean>();
 
 /** `WorldModel`'s own packing, so the two agree about what a hex key is. */
 function hexKey(q: number, r: number): number {
@@ -107,6 +119,33 @@ export function isLandFor(seed: number, generation: WorldGenerationConstants, wa
         land = wastedTerrainAt(q, r, world) !== 'sea';
       }
       cache.set(k, land);
+    }
+    return land;
+  };
+}
+
+// Exported (only) so waterMask.worker.test.ts can exercise the taint-aware
+// wasted-land check directly, the same way it exercises `isLandFor` — see
+// that export's own comment for why (no `self` under this repo's
+// node-environment vitest config).
+export function isWastedLandFor(
+  seed: number,
+  generation: WorldGenerationConstants,
+  wastedRevealed: boolean,
+): (q: number, r: number) => boolean {
+  if (wastedCacheSeed !== seed || wastedCacheRevealed !== wastedRevealed) {
+    wastedCacheSeed = seed;
+    wastedCacheRevealed = wastedRevealed;
+    wastedCache = new Map();
+  }
+  const world = { seed, generation };
+  return (q: number, r: number): boolean => {
+    if (!wastedRevealed) return false;
+    const k = hexKey(q, r);
+    let land = wastedCache.get(k);
+    if (land === undefined) {
+      land = terrainAt(q, r, world) === 'sea' && wastedTerrainAt(q, r, world) !== 'sea';
+      wastedCache.set(k, land);
     }
     return land;
   };
@@ -175,17 +214,19 @@ if (typeof self !== 'undefined') {
     const mask = bakeWaterMask(region, tileWidth, tileHeight, {
       isLand,
       hasProp: buildingHexes ? hasPropFor(seed, generation, isLand, buildingHexes) : undefined,
+      isWastedLand: isWastedLandFor(seed, generation, wastedRevealed ?? false),
     });
     const response: BakeResponse = {
       id,
       data: mask.data,
       width: mask.width,
       height: mask.height,
+      taint: mask.taint,
       bakeMs: performance.now() - started,
     };
     // Transferred, not copied: the mask is 2.7MB at world zoom and
     // structured cloning it would put a chunk of the cost back on the main
     // thread, which is the whole thing this is here to avoid.
-    (self as unknown as Worker).postMessage(response, [response.data.buffer]);
+    (self as unknown as Worker).postMessage(response, [response.data.buffer, response.taint.buffer]);
   };
 }

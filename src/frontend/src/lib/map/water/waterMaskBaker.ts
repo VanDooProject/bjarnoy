@@ -113,7 +113,7 @@ export class WaterMaskBaker {
     this.pending = null;
     if (!this.onDone) return;
     this.onDone(
-      { data: response.data, width: response.width, height: response.height, region: pending.region },
+      { data: response.data, width: response.width, height: response.height, region: pending.region, taint: response.taint },
       pending.region,
       response.bakeMs,
       pending.wastedRevealed,

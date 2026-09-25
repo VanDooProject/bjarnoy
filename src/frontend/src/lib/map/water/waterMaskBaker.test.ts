@@ -45,7 +45,7 @@ class FakeWorker {
   /** Answers request `id` with a mask whose width is distinctive, so the test can tell them apart. */
   respond(id: number, width: number) {
     this.onmessage?.({
-      data: { id, data: new Uint8Array(width * 4), width, height: 1, bakeMs: 1 },
+      data: { id, data: new Uint8Array(width * 4), width, height: 1, taint: new Uint8Array(width), bakeMs: 1 },
     });
   }
 }

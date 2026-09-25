@@ -515,8 +515,13 @@ export class WorldModel {
    * is consulted. Only meaningful (and only ever true) once
    * `wastedRevealed` is set; before that, every hex is answered purely from
    * the green layer, matching every existing caller's assumption.
+   *
+   * Public so a terrain-only caller — the water-mask bake's
+   * `isWastedLand` (see `TerrainLookup` in `water/waterMask.ts`) — can
+   * ask this without materialising a `Tile` per water texel, the same
+   * reason `hasProp` exists there instead of `getTile`.
    */
-  private isWastedLandAt(q: number, r: number): boolean {
+  isWastedLandAt(q: number, r: number): boolean {
     if (!this.wastedRevealed) return false;
     const world = { seed: this.seed, generation: this.generation };
     if (terrainAt(q, r, world) !== 'sea') return false;
