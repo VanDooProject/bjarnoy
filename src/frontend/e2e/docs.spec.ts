@@ -56,4 +56,55 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
 
     expect(await view.noHorizontalOverflow()).toBe(true);
   });
+
+  test('wasted lands page scrolls to reveal content below the fold', async ({ page }) => {
+    await page.goto('/docs/wasted-lands');
+    // The island's sprites resolve their own atlas frames client-side —
+    // wait for the first one before measuring the page, same as the other
+    // two specs wait on their own first async-loaded content.
+    await page.locator('.island-sprite').first().waitFor();
+
+    const view = new ScrollableView(page, '.wasted-lands');
+    const { scrollHeight, clientHeight } = await view.metrics();
+    expect(scrollHeight).toBeGreaterThan(clientHeight);
+
+    const lastSection = page.locator('#pair-sea');
+    await expect(lastSection).not.toBeInViewport();
+
+    await view.wheel(100_000);
+    await expect(lastSection).toBeInViewport();
+
+    expect(await view.noHorizontalOverflow()).toBe(true);
+  });
+
+  test('wasted lands island slider shows the all-living stage', async ({ page }) => {
+    await page.goto('/docs/wasted-lands');
+    await page.locator('.island-sprite').first().waitFor();
+
+    const slider = page.getByTestId('blight-slider');
+    await slider.fill('0');
+
+    await expect(page.locator('.wasted-island .stage-label')).toHaveText('All living');
+    await expect(page.getByTestId('island-caption')).toHaveText('Point at a hex to see what it is.');
+  });
+
+  // Regression: in the fixed-height art boxes a tall frame used to keep the
+  // box's full width while max-height squeezed it, stretching it sideways.
+  test('wasted lands art keeps each frame aspect ratio', async ({ page }) => {
+    await page.goto('/docs/wasted-lands');
+    await page.locator('.island-sprite').first().waitFor();
+
+    const sprites = page.locator('.wasted-lands .atlas-sprite');
+    expect(await sprites.count()).toBeGreaterThan(0);
+    const mismatches = await sprites.evaluateAll((els) =>
+      els.flatMap((el) => {
+        const [w, h] = getComputedStyle(el).aspectRatio.split('/').map(Number);
+        const box = el.getBoundingClientRect();
+        if (!w || !h || box.height === 0) return [];
+        const drift = Math.abs(box.width / box.height - w / h) / (w / h);
+        return drift > 0.02 ? [`${box.width.toFixed(0)}x${box.height.toFixed(0)} vs ${w}/${h}`] : [];
+      }),
+    );
+    expect(mismatches).toEqual([]);
+  });
 });

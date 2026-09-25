@@ -32,7 +32,7 @@ export default [
       // translated anyway.
       '@intlify/vue-i18n/no-raw-text': [
         'error',
-        { ignorePattern: '^[-–—•·:;,.!?()\\[\\]{}0-9\\s%/×→✕🔒]*$' },
+        { ignorePattern: '^[-–—•·:;,.!?()\\[\\]{}0-9\\s%/×→✕🔒⟲⟳]*$' },
       ],
     },
   },
