@@ -1069,6 +1069,9 @@ async function upgrade() {
   position: relative;
   width: 100vw;
   height: 100vh;
+  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
+     viewport, as a progressive enhancement over the 100vh above. */
+  height: 100dvh;
 }
 .hud-scrim {
   position: absolute;
@@ -1095,6 +1098,9 @@ async function upgrade() {
      helpers run at. `bottom` matches the `top` above so it clears the HUD at
      both ends. */
   max-height: calc(100vh - 136px);
+  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
+     viewport, as a progressive enhancement over the calc(100vh...) above. */
+  max-height: calc(100dvh - 136px);
   overflow-y: auto;
 }
 /* Scroll the column, not the panels: flex items shrink to fit a constrained

@@ -222,6 +222,9 @@ async function runSimulation() {
 .simulator-view {
   width: 100vw;
   min-height: 100vh;
+  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
+     viewport, as a progressive enhancement over the 100vh above. */
+  min-height: 100dvh;
   overflow: auto;
   background: var(--shell);
 }

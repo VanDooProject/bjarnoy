@@ -163,33 +163,39 @@ watch(() => world.worldId, loadForCurrentWorld);
             <p v-else-if="leaderboard.entries.length === 0">{{ $t('leaderboard.noEntries') }}</p>
 
             <template v-else>
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>{{ $t('leaderboard.table.rank') }}</th>
-                    <th>{{ $t('leaderboard.table.name') }}</th>
-                    <th>{{ $t('leaderboard.table.value') }}</th>
-                    <th>{{ $t('leaderboard.table.change') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="entry in leaderboard.entries"
-                    :key="entry.subjectId"
-                    :class="{ 'my-row': entry.rank === leaderboard.myRank }"
-                  >
-                    <td>{{ entry.rank }}</td>
-                    <td>{{ entry.subjectName }}</td>
-                    <td>{{ Math.round(entry.value) }}</td>
-                    <td>
-                      <span v-if="entry.previousRank === null" class="badge new">{{ $t('leaderboard.badge.new') }}</span>
-                      <span v-else-if="entry.delta && entry.delta > 0" class="badge up">{{ `▲ ${entry.delta}` }}</span>
-                      <span v-else-if="entry.delta && entry.delta < 0" class="badge down">{{ `▼ ${-entry.delta}` }}</span>
-                      <span v-else class="badge flat">{{ $t('leaderboard.badge.flat') }}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <!-- Mobile-readiness audit: the table itself is left un-shrunk
+                   (its columns already read fine narrow), so a genuinely tight
+                   viewport scrolls this wrapper horizontally instead of the
+                   whole page — see .table-scroll below. -->
+              <div class="table-scroll">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>{{ $t('leaderboard.table.rank') }}</th>
+                      <th>{{ $t('leaderboard.table.name') }}</th>
+                      <th>{{ $t('leaderboard.table.value') }}</th>
+                      <th>{{ $t('leaderboard.table.change') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="entry in leaderboard.entries"
+                      :key="entry.subjectId"
+                      :class="{ 'my-row': entry.rank === leaderboard.myRank }"
+                    >
+                      <td>{{ entry.rank }}</td>
+                      <td>{{ entry.subjectName }}</td>
+                      <td>{{ Math.round(entry.value) }}</td>
+                      <td>
+                        <span v-if="entry.previousRank === null" class="badge new">{{ $t('leaderboard.badge.new') }}</span>
+                        <span v-else-if="entry.delta && entry.delta > 0" class="badge up">{{ `▲ ${entry.delta}` }}</span>
+                        <span v-else-if="entry.delta && entry.delta < 0" class="badge down">{{ `▼ ${-entry.delta}` }}</span>
+                        <span v-else class="badge flat">{{ $t('leaderboard.badge.flat') }}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
               <div class="pager">
                 <button :disabled="leaderboard.boardLoading || !leaderboard.nextAfterRank" @click="loadMore">
@@ -205,8 +211,19 @@ watch(() => world.worldId, loadForCurrentWorld);
 </template>
 
 <style scoped>
+/* Mobile-readiness audit: the root had no padding/max-width at all — on a
+   390px phone the content sat flush against both edges. Matches
+   GuildView.vue's `.guild-view` treatment. */
+.leaderboard {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
 .leaderboard h1 {
   margin: 0 0 16px;
+}
+.table-scroll {
+  overflow-x: auto;
 }
 .tab-groups {
   display: flex;

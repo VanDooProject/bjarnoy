@@ -413,6 +413,9 @@ function back() {
 .map-panel {
   position: relative;
   height: max(420px, calc(100vh - 420px));
+  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
+     viewport, as a progressive enhancement over the 100vh above. */
+  height: max(420px, calc(100dvh - 420px));
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   overflow: hidden;

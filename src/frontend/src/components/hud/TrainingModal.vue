@@ -207,8 +207,24 @@ async function train(type: string, count: number) {
   width: 560px;
   max-width: 94vw;
   max-height: 84vh;
+  max-height: 84dvh;
   overflow-y: auto;
   padding: 22px 26px;
+}
+/* Mobile-readiness audit: fit 320px without horizontal overflow — tighter
+   padding, and unit rows wrap their info/action halves instead of squeezing
+   the qty input + Train button against the row's text. */
+@media (max-width: 768px) {
+  .modal {
+    padding: 16px;
+  }
+  .unit-row {
+    flex-wrap: wrap;
+  }
+  .unit-action {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 .head {
   display: flex;

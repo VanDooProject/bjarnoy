@@ -71,4 +71,15 @@ function selectLocale(code: SupportedLocale): void {
   background: var(--gold);
   border-color: var(--gold);
 }
+/* Mobile-readiness audit: the 32x19 option buttons were well under a
+   comfortable touch target — widen/heighten them on narrow viewports and on
+   any coarse (touch) pointer, regardless of viewport width. */
+@media (max-width: 768px), (pointer: coarse) {
+  .option {
+    min-height: 32px;
+    min-width: 36px;
+    padding: 6px 9px;
+    font-size: 12px;
+  }
+}
 </style>

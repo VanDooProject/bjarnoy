@@ -587,6 +587,20 @@ async function confirmFieldOrderClick() {
   border: 1px solid var(--panel-border);
   border-radius: 0;
 }
+/* Mobile-readiness audit: a 260px status card eats a big chunk of a phone
+   map. MapView's own QueueDrawer already pins a persistent 96px-wide rail to
+   the left edge on mobile (see MapView.vue's ringBounds comment), so this
+   stays right-anchored rather than stretching edge-to-edge — that would
+   overlap the rail's full-height column and read worse than today. Instead:
+   cap it to the viewport, shrink its vertical footprint, and clear the
+   home-indicator safe area. */
+@media (max-width: 768px) {
+  .status-card.army-panel {
+    max-width: calc(100vw - 24px);
+    max-height: 40vh;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}
 .status-card-header {
   display: flex;
   justify-content: space-between;
