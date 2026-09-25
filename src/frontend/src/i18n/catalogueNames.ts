@@ -8,6 +8,7 @@ function lookup(path: string, fallback: string): string {
 export const buildingName = (type: string) => lookup(`buildings.${type}`, type);
 export const unitName = (type: string) => lookup(`units.${type}`, type);
 export const terrainName = (terrain: string) => lookup(`terrain.${terrain}`, terrain);
+export const giantName = (family: string) => lookup(`giants.${family}`, family);
 export const resourceName = (resource: string) => lookup(`resources.${resource}`, resource);
 export const missionName = (mission: string) => lookup(`missions.${mission}`, mission);
 export const runeTypeName = (type: string) => lookup(`runes.types.${type}`, type);

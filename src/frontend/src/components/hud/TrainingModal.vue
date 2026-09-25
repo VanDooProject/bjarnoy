@@ -67,7 +67,11 @@ const isCoastal = computed<boolean | null>(() => {
     .filter((b) => b.type === 'tower')
     .map((b) => ({ q: b.q, r: b.r, level: b.level }));
   const discs = claimDiscs({ q: settlement.q, r: settlement.r }, longhouseLevel.value, towers);
-  return hasShorelineInTerritory(discs, world.model);
+  // Giant-aware, same as `WorldModel`'s own territory painting: a hex that
+  // only geometrically overlaps a disc but belongs to a giant whose 7-hex
+  // footprint isn't fully covered by these discs must not count toward
+  // coastal access either (mirrors `SettlementService.PlanTrainAsync`).
+  return hasShorelineInTerritory(discs, world.model, (c) => world.model.giantAnchorAt(c));
 });
 
 const rows = computed(() =>

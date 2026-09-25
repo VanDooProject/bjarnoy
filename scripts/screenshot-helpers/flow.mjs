@@ -31,10 +31,20 @@ const requestedStops = process.argv.slice(4);
 mkdirSync(outDir, { recursive: true });
 
 const wantStop = (name) => requestedStops.length === 0 || requestedStops.includes(name);
-async function shoot(page, name) {
-  if (!wantStop(name)) return;
+// settlement_giant_orientations writes one file per orientation
+// (settlement_giant_orientations_<CAM>.png), not one literally named
+// settlement_giant_orientations — so a caller filtering stops by that base
+// name (or by one specific orientation's full name) needs a prefix match,
+// not `wantStop`'s exact one.
+const wantStopPrefix = (prefix) =>
+  requestedStops.length === 0 || requestedStops.some((s) => s === prefix || s.startsWith(`${prefix}_`));
+async function shootAlways(page, name) {
   await page.screenshot({ path: path.join(outDir, `${name}.png`) });
   console.log('Wrote', path.join(outDir, `${name}.png`));
+}
+async function shoot(page, name) {
+  if (!wantStop(name)) return;
+  await shootAlways(page, name);
 }
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -111,6 +121,69 @@ if (wantStop('settlement_tower_border')) {
   console.log('Placed test tower at', towerInfo.edge, 'border radius', towerInfo.radius);
   await forceRebuild(page);
   await shoot(page, 'settlement_tower_border');
+}
+
+// Giant tiles (see src/frontend/src/lib/map/giantTiles.ts): demo mode
+// generates the home island's giants on founding (WorldModel.
+// placeGiantsForIsland, the TS port of the backend's GiantGenerator, wired
+// in stores/world.ts's foundStartingSettlement) — this stop just pans to the
+// nearest one and shoots it with its surrounding tiles in frame, so
+// occlusion against neighbouring forest/building art is checkable.
+let giantAnchor = null;
+if (wantStop('settlement_giant') || wantStopPrefix('settlement_giant_orientations')) {
+  giantAnchor = await page.evaluate(() => {
+    const store = window.__demoWorld();
+    const settlement = store.model.getSettlement(store.selectedSettlementId);
+    for (const tile of store.model.getTilesInRect(settlement.q - 20, settlement.q + 20, settlement.r - 20, settlement.r + 20)) {
+      if (tile.giant?.part === 'C') return tile.giant.anchor;
+    }
+    return null;
+  });
+  if (!giantAnchor) throw new Error('no giant generated on the home island for this seed');
+  console.log('Giant mountain anchored at', giantAnchor);
+
+  await page.evaluate((coord) => window.__settlementRenderer?.()?.panTo(coord), giantAnchor);
+  await page.waitForTimeout(150);
+  await forceRebuild(page);
+  await shoot(page, 'settlement_giant');
+}
+
+// One screenshot per camera rotation the giant can be placed in — a real
+// tile's own orientation is baked in by the world generator, but a giant is
+// deliberately re-orientable (WorldModel.placeGiant's own `orientation`
+// param), so this exercises every `giantmountain_<CAM>_...` frame set the
+// atlas can carry, not just whichever one the deterministic demo seed
+// happened to generate at that anchor.
+if (wantStopPrefix('settlement_giant_orientations') && giantAnchor) {
+  const orientations = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
+  for (const orientation of orientations) {
+    await page.evaluate(
+      ({ anchor, orientation }) => {
+        const store = window.__demoWorld();
+        // Re-placing from scratch would be rejected by canPlaceGiant (the
+        // hexes are already tagged with this same giant) — this is purely a
+        // cosmetic re-orientation of an already-valid placement, so the 7
+        // covered tiles' own `giant.orientation` are updated directly
+        // instead of going through placeGiant again.
+        const deltas = [
+          { q: 1, r: 0 },
+          { q: 1, r: -1 },
+          { q: 0, r: -1 },
+          { q: -1, r: 0 },
+          { q: -1, r: 1 },
+          { q: 0, r: 1 },
+        ];
+        const coords = [anchor, ...deltas.map((d) => ({ q: anchor.q + d.q, r: anchor.r + d.r }))];
+        for (const c of coords) {
+          const tile = store.model.getTile(c.q, c.r);
+          if (tile.giant) tile.giant.orientation = orientation;
+        }
+      },
+      { anchor: giantAnchor, orientation },
+    );
+    await forceRebuild(page);
+    await shootAlways(page, `settlement_giant_orientations_${orientation}`);
+  }
 }
 
 // The fog debug panel (?debug=1, see FogDebugPanel.vue) toggles individual

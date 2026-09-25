@@ -1,0 +1,146 @@
+name: PR preview environment
+
+# Gives every open PR its own standalone Coolify Application, rather than
+# using Coolify's built-in "PR preview" feature. That feature deploys
+# production and every open PR's preview of one Application under the same
+# docker-compose project (`--project-name <application uuid>`), so this
+# repo's postgres service resolved to one shared name across all of them —
+# production's and every preview's database intermittently answered each
+# other's queries. A separate Application per PR means a separate compose
+# project, hence its own network/volumes/containers, with no change needed to
+# deploy/docker-compose.yaml. See scripts/coolify-preview.sh and
+# deploy/README.md's "Preview deployments" section for the full story.
+#
+# pull_request_target rather than pull_request: this workflow is read from
+# the base branch, not the PR's own head, so a PR cannot alter or delete its
+# own teardown step, and secrets are available to it. That's safe here
+# specifically because no job below checks out or executes any code from the
+# PR head — every step only ever passes the PR's number and branch *name* as
+# a string to the Coolify API.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, closed, labeled, unlabeled]
+  schedule:
+    # Backstop for a workflow run that never reached the `closed` job at all
+    # (skipped, cancelled, or failed outright) — reaps any bjarnoy-pr-<N>
+    # Coolify application whose PR is no longer open. See cmd_reap in
+    # scripts/coolify-preview.sh.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  # A squash-merge is reported as the same closed + merged:true event as any
+  # other close — there is no separate "squashed" event to react to — so
+  # tearing down unconditionally on `closed`, without branching on `merged`,
+  # is what guarantees a squash-merged PR's environment is deleted. A PR
+  # closed without merging gets exactly the same teardown.
+  teardown:
+    if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Destroy this PR's Coolify environment
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: scripts/coolify-preview.sh destroy "${{ github.event.pull_request.number }}"
+
+  # Opt-in gate: a PR gets a Coolify environment only when someone actually
+  # wants one enough to say so, not by default — most PRs (docs, small
+  # fixes, anything you're not going to click through in a browser) don't
+  # need a full cold build spent on them. Apply the `preview` label to get
+  # one; removing it later reclaims an already-provisioned environment (see
+  # the `skip` job below).
+  gate:
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
+    steps:
+      - run: echo "should_deploy=${{ contains(github.event.pull_request.labels.*.name, 'preview') }}"
+
+  ensure:
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    # pull_request_target's default GITHUB_TOKEN is read-only (unlike plain
+    # pull_request from this same repo) - the sticky PR comment step below
+    # failed live with "Resource not accessible by integration" without this.
+    permissions:
+      contents: read
+      pull-requests: write
+    # Registers under repo Settings -> Environments (and the PR's own
+    # "Environments" sidebar/deployment history) with a clickable URL —
+    # a plain curl call from a step does not do this on its own.
+    environment:
+      name: pr-${{ github.event.pull_request.number }}
+      url: https://${{ github.event.pull_request.number }}-bjarnoy.velarix.space
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision/redeploy this PR's Coolify environment
+        id: preview
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          COOLIFY_PROJECT_UUID: ${{ vars.COOLIFY_PROJECT_UUID }}
+          COOLIFY_SERVER_UUID: ${{ vars.COOLIFY_SERVER_UUID }}
+          COOLIFY_GITHUB_APP_UUID: ${{ vars.COOLIFY_GITHUB_APP_UUID }}
+        run: |
+          scripts/coolify-preview.sh ensure \
+            "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.ref }}"
+      - name: Comment the preview URL on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `https://${context.payload.pull_request.number}-bjarnoy.velarix.space`;
+            const marker = '<!-- pr-preview-comment -->';
+            const body = `${marker}\n🚀 Preview: ${url}\n\n(builds may take a few minutes after each push)`;
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.find((c) => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.pull_request.number, body });
+            }
+
+  # The other half of the gate: reclaims an environment that was already
+  # provisioned (e.g. a `no-preview` label added after the fact, or a PR that
+  # picked up more commits and became docs-only again) rather than leaving it
+  # running for nothing. destroy is a no-op when nothing was ever created, so
+  # this is exactly as safe to run unconditionally as `teardown` above.
+  skip:
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reclaim this PR's Coolify environment, if one exists
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: scripts/coolify-preview.sh destroy "${{ github.event.pull_request.number }}"
+
+  reap:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: List currently-open PR numbers
+        id: open-prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          numbers=$(gh pr list --repo "${{ github.repository }}" --state open --limit 200 --json number --jq '.[].number' | tr '\n' ' ')
+          echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
+      - name: Reap orphaned preview environments
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: scripts/coolify-preview.sh reap ${{ steps.open-prs.outputs.numbers }}

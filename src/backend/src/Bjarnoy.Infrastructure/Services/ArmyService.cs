@@ -234,6 +234,7 @@ public sealed class ArmyService(
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
         var riverTiles = await LoadRiverTilesAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var dispatchGiantIndex = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
 
         // Founding-specific, dispatch-time-only checks (issue #55 §6): renown/
@@ -269,14 +270,16 @@ public sealed class ArmyService(
             var claimedSettlements = await _settlementService
                 .GetClaimedSettlementsAsync(settlement.WorldId, cancellationToken)
                 .ConfigureAwait(false);
-            isHexFoundable = target => Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing);
+            isHexFoundable = target =>
+                Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing, dispatchGiantIndex);
         }
 
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
-            isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, riverTiles.Contains);
+            isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, riverTiles.Contains,
+            dispatchGiantIndex);
 
         if (!decision.Accepted)
         {
@@ -1016,7 +1019,9 @@ public sealed class ArmyService(
         var claimedSettlements = await _settlementService
             .GetClaimedSettlementsAsync(originSettlement.WorldId, cancellationToken)
             .ConfigureAwait(false);
-        var targetStillFoundable = Founding.IsHexFoundable(targetHex, claimedSettlements, SettlementService.MinimumSpacing);
+        var arrivalGiants = await LoadGiantIndexAsync(originSettlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var targetStillFoundable =
+            Founding.IsHexFoundable(targetHex, claimedSettlements, SettlementService.MinimumSpacing, arrivalGiants);
 
         var arrival = Army.PlanFoundingArrival(domain, now, targetStillFoundable);
 
@@ -1214,6 +1219,27 @@ public sealed class ArmyService(
             .SelectMany(tiles => tiles)
             .Select(t => new HexCoord(t.Q, t.R))
             .ToHashSet();
+    }
+
+    /// <summary>
+    /// Every giant across every island of <paramref name="worldId"/>
+    /// (the territory rule), built into one lookup — mirrors
+    /// <see cref="LoadRiverTilesAsync"/> for the same reason.
+    /// </summary>
+    private async Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.Giants)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var giants = islands
+            .SelectMany(g => g)
+            .Select(g => new Giant(new HexCoord(g.Q, g.R), g.Family, (TileOrientation)g.Orientation))
+            .ToList();
+
+        return new GiantIndex(giants);
     }
 
     private Task<ArmyEntity?> LoadArmyAsync(Guid armyId, CancellationToken cancellationToken) =>

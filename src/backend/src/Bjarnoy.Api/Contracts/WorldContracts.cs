@@ -64,11 +64,13 @@ public sealed record WorldResponse(
 /// data a player picking a world from a list needs, and handing it out would
 /// let a client precompute the whole map before ever landing on it.
 /// </summary>
+/// <param name="FreeSlots"><c>max(0, MaxPlayers - PlayerCount)</c> — what the picker actually needs to show, without making every caller re-derive it.</param>
 public sealed record JoinableWorldResponse(
     Guid Id,
     string Name,
     int PlayerCount,
     int MaxPlayers,
+    int FreeSlots,
     bool Joinable,
     string JoinableReason,
     DateTimeOffset? StartsAt,
@@ -87,12 +89,54 @@ public sealed record JoinableWorldResponse(
             world.Name,
             playerCount,
             world.MaxPlayers,
+            Math.Max(0, world.MaxPlayers - playerCount),
             joinability.Joinable,
             joinability.Reason.ToString().ToLowerInvariant(),
             world.StartsAt,
             world.SpeedFactor,
             world.CreatedAt,
             world.Status.ToString().ToLowerInvariant());
+    }
+}
+
+/// <summary>
+/// The minimal public listing for <c>GET /api/v1/worlds</c> — world creation
+/// moved to admin-only, so the old listing reusing <see cref="WorldResponse"/>
+/// (the very shape that carried seed/radius/generation to any anonymous
+/// caller) stopped making sense. Same idea as <see cref="JoinableWorldResponse"/>,
+/// one level up: a player choosing which world to look at needs its name,
+/// whether it's open, and how full it is — nothing that would let a client
+/// precompute its map. <c>GET /worlds/{worldId}</c> (<see cref="WorldResponse"/>)
+/// is still where the game client fetches the full config once a world is
+/// actually picked.
+/// </summary>
+public sealed record WorldSummaryResponse(
+    Guid Id,
+    string Name,
+    string Status,
+    bool Joinable,
+    string JoinableReason,
+    int PlayerCount,
+    int MaxPlayers,
+    int FreeSlots,
+    DateTimeOffset? StartsAt)
+{
+    public static WorldSummaryResponse From(WorldEntity world, int playerCount, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+
+        var joinability = world.DetermineJoinability(playerCount, now);
+
+        return new WorldSummaryResponse(
+            world.Id,
+            world.Name,
+            world.Status.ToString().ToLowerInvariant(),
+            joinability.Joinable,
+            joinability.Reason.ToString().ToLowerInvariant(),
+            playerCount,
+            world.MaxPlayers,
+            Math.Max(0, world.MaxPlayers - playerCount),
+            world.StartsAt);
     }
 }
 
@@ -185,7 +229,8 @@ public sealed record IslandResponse(
     int R,
     int TileCount,
     IReadOnlyList<TileCoordinate> StartPositions,
-    IReadOnlyList<RiverTileResponse> RiverTiles)
+    IReadOnlyList<RiverTileResponse> RiverTiles,
+    IReadOnlyList<GiantResponse> Giants)
 {
     public static IslandResponse From(IslandEntity island)
     {
@@ -199,8 +244,32 @@ public sealed record IslandResponse(
             island.CentreR,
             island.TileCount,
             [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
-            [.. island.RiverTiles.Select(RiverTileResponse.From)]);
+            [.. island.RiverTiles.Select(RiverTileResponse.From)],
+            [.. island.Giants.Select(GiantResponse.From)]);
     }
+}
+
+/// <summary>A 7-hex giant feature — see <see cref="Bjarnoy.Domain.World.Giant"/> and the territory rule.</summary>
+/// <param name="Family">The tile-art family it renders as, e.g. <c>"giantmountain"</c>.</param>
+/// <param name="Q">Anchor hex column.</param>
+/// <param name="R">Anchor hex row.</param>
+/// <param name="Orientation">
+/// The anchor tile's own orientation, as the wire name <see cref="TileOrientationExtensions.ToWireName"/>
+/// produces elsewhere (e.g. <c>"E"</c>, <c>"NE"</c>) — the footprint's other 6 hexes render as plain terrain.
+/// </param>
+public sealed record GiantResponse(string Family, int Q, int R, string Orientation)
+{
+    public static GiantResponse From(GiantRecord giant) => new(
+        giant.Family,
+        giant.Q,
+        giant.R,
+        ((TileOrientation)giant.Orientation).ToWireName());
+
+    public static GiantResponse FromDomain(Giant giant) => new(
+        giant.Family,
+        giant.Anchor.Q,
+        giant.Anchor.R,
+        giant.Orientation.ToWireName());
 }
 
 public sealed record TileCoordinate(int Q, int R);
@@ -217,12 +286,21 @@ public sealed record TileCoordinate(int Q, int R);
 /// visitor can always still attempt to found on <see cref="Plot"/> either
 /// way, and <c>FoundAsync</c>'s own checks are the real authority.
 /// </param>
+/// <param name="IslandSettlements">
+/// The settlements already standing on <see cref="IslandId"/> — who this
+/// visitor's would-be neighbours are. Replaces the pre-founding, world-wide
+/// settlement list <c>GET /worlds/{worldId}/settlements</c> used to hand
+/// every anonymous caller before that endpoint became fog-gated: a visitor
+/// choosing a plot still needs to see the island they're actually looking
+/// at, just not every settlement in the world.
+/// </param>
 public sealed record PlotSuggestionResponse(
     Guid IslandId,
     TileCoordinate Plot,
     IReadOnlyList<TileCoordinate> Alternatives,
     bool Reserved,
-    DateTimeOffset? ReservedUntil);
+    DateTimeOffset? ReservedUntil,
+    IReadOnlyList<SettlementSummary> IslandSettlements);
 
 /// <param name="Shape">One of <c>spring</c>, <c>straight</c>, <c>bend</c>, <c>confluence</c>, <c>mouth</c>, <c>bend60</c>.</param>
 /// <param name="InDirections">

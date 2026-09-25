@@ -115,24 +115,60 @@ a fresh world and its own bootstrap Admin.
 
 ### Preview deployments
 
-Coolify can deploy a PR as its own stack. Two things about that differ from a
-branch deployment, and both are invisible until something 404s:
+**Do not use Coolify's own built-in "PR preview" feature for this
+application** (the "Preview Deployments" toggle on the Application). It
+deploys production and every open PR's preview *of the same Application*
+under one shared docker-compose project
+(`--project-name {application uuid}`, prod and previews alike) — every
+service in this file is just renamed per deployment
+(`addPreviewDeploymentSuffix`, e.g. `postgres` becomes `postgres-pr-239`),
+not actually isolated. A network this file declares for itself, or any
+alias on it, resolves to one name shared by production and every open PR;
+several deployments defining the same alias let Docker DNS round-robin
+between them, so each stack can intermittently reach *another's* database —
+this was live and confirmed on production before being replaced by the
+scheme below (naming the database through `${SERVICE_NAME_POSTGRES}` alone
+was tried first and did not reliably fix it, since the underlying compose
+project is still shared).
 
-**Every service is renamed.** `postgres` becomes `postgres-pr-239`
-(`addPreviewDeploymentSuffix`), and a compose service's name is its DNS name —
-but nothing rewrites a hostname written inside an environment variable, so
-`Database__ConnectionString`'s `Host=postgres` would stop resolving. That is why
-the `postgres` service declares an alias on a shared `stack` network: keep both
-when editing, or the migrator exits 1, `app` never starts behind
-`service_completed_successfully`, and every path answers 404 while the dashboard
-happily reports postgres healthy.
+Instead, `.github/workflows/pr-preview.yml` + `scripts/coolify-preview.sh`
+give **every open PR its own standalone Coolify Application** — its own
+compose project, hence its own network, volumes and containers, with no
+help needed from this file:
 
-**`COOLIFY_BRANCH` is the application's branch, not the PR's** — it reads `main`
-on a preview of a PR into `main`. So `/api/v1/info` reports `branch: main`
-there, and, since the diagnostics gate treats `main` as production, a preview
-would hide the very API reference it exists to expose. Set these in the app's
-**Preview Deployments** environment variables, where they apply to previews
-only:
+- **Opt-in, not automatic:** a PR gets no environment at all unless it
+  carries the `preview` label — most PRs (docs, small fixes, anything
+  nobody needs to click through in a browser) don't need a full cold build
+  spent on them. Removing the label reclaims an already-provisioned
+  environment (destroy is a no-op when none exists, so this is exactly as
+  safe to run unconditionally as the close-triggered teardown below).
+- **Once labeled `preview` (and on every push after that):** the workflow
+  calls the Coolify API to create (if missing) an Application named
+  `bjarnoy-pr-<N>`, pointed at that PR's own branch, with its own domain —
+  the same one-label pattern the old built-in previews used
+  (`https://<N>-bjarnoy.velarix.space`, see "Behind Cloudflare" below) —
+  and triggers a deploy. The PR gets a GitHub Environment (`pr-<N>`) and a
+  sticky comment with the preview URL.
+- **On PR close (merged or not — squash included):** the workflow tears the
+  Application down unconditionally, deleting its volumes and network too. A
+  squash-merge is reported as the same `closed` + `merged: true` event as any
+  other close, so *not* branching on `merged` is what guarantees teardown
+  regardless of merge strategy.
+- **Nightly, as a backstop:** a scheduled run reaps any `bjarnoy-pr-<N>`
+  Application whose PR is no longer open, in case a `closed` event was
+  missed (a skipped, cancelled, or failed workflow run).
+
+The workflow needs a Coolify API token with `read`, `write`, and `deploy`
+abilities in the `COOLIFY_API_TOKEN` repository secret, plus repository
+variables `COOLIFY_URL`, `COOLIFY_PROJECT_UUID`, `COOLIFY_SERVER_UUID`, and
+`COOLIFY_GITHUB_APP_UUID` (the same project/server/GitHub App the production
+Application already uses).
+
+Every per-PR Application still needs the preview-only diagnostics note that
+used to live in Coolify's Preview Deployments environment variables — the
+workflow sets these itself on creation, since `COOLIFY_BRANCH` (irrelevant
+now that each PR is its own Application on its own branch) is no longer the
+mechanism:
 
 ```bash
 Diagnostics__ExposeApiReference=true

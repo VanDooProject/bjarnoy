@@ -16,6 +16,10 @@
     "triggerSub": "oder möchte einer anderen Welt beitreten",
     "logIn": "Anmelden"
   },
+  "accountMenu": {
+    "profile": "Profil",
+    "logout": "Abmelden"
+  },
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserviert)",
@@ -26,10 +30,7 @@
     "toggle": "Mehr anzeigen"
   },
   "realmPanel": {
-    "level": "Lv {level}",
-    "claims": "Reich beansprucht {count} Hexfelder",
-    "levelHexesShort": "Lv {level} · {count} Hexfelder",
-    "backToWorldMap": "← Weltkarte"
+    "levelHexesShort": "Lv {level} · {count} Hexfelder"
   },
   "hoverTooltip": {
     "level": "STUFE {level}",
@@ -84,14 +85,15 @@
       "sendSettlers": "Siedler entsenden",
       "noSettlersYet": "Du hast noch keine verfügbaren Siedler",
       "upgrade": "Ausbauen",
-      "notEnough": "Nicht genug {resources}",
+      "notEnough": "Benötigt {resources}",
       "details": "Details",
       "raze": "Abreißen",
       "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",
       "notWiredYet": "Noch nicht mit dem Backend verbunden",
       "trainUnits": "Einheiten ausbilden",
       "build": "Bauen",
-      "openWater": "Offenes Wasser"
+      "openWater": "Offenes Wasser",
+      "giantOccupied": "Von einem Riesenwahrzeichen belegt"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -128,6 +130,16 @@
     "garrisonEmpty": "Hier stehen noch keine Einheiten.",
     "guests": "Gäste",
     "unknownSettlement": "Unbekannte Siedlung"
+  },
+  "queueDrawer": {
+    "title": "Warteschlangen",
+    "close": "✕",
+    "openLabel": "Bau- und Ausbildungswarteschlangen öffnen",
+    "closeLabel": "Bau- und Ausbildungswarteschlangen schließen",
+    "buildLabel": "Bau",
+    "trainLabel": "Ausbildung",
+    "more": "+{count} weitere",
+    "chevron": "›"
   },
   "buildingModal": {
     "close": "✕",

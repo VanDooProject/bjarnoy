@@ -1,23 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { ApiError } from '../api/client';
-import { useAuthStore } from '../stores/auth';
 import { useWorldStore } from '../stores/world';
+import { useLoginForm } from '../composables/useLoginForm';
 import type { MessageSchema } from '../i18n/schema';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
-const auth = useAuthStore();
 const world = useWorldStore();
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-const userName = ref('');
-const password = ref('');
-const submitting = ref(false);
-const error = ref<string | null>(null);
+const { userName, password, submitting, error, login, restoreRealmIfAny } = useLoginForm();
 
 // Login↔world linkage (docs/plans/returning-player-world-switching.md):
 // arriving here from ReturningPlayerMenu.vue's "Log in" link, in the
@@ -30,33 +25,21 @@ const linkedWorldId = computed(() => (typeof route.query.worldId === 'string' ? 
 const linkedWorldName = computed(() => (typeof route.query.worldName === 'string' ? route.query.worldName : null));
 
 async function onSubmit() {
-  if (submitting.value) return;
-  submitting.value = true;
-  error.value = null;
+  if (!(await login(userName.value, password.value))) return;
 
-  try {
-    await auth.login(userName.value, password.value);
-    if (linkedWorldId.value) {
-      // Same mechanism WorldPickerView.vue's own `joinOrReturn` uses: joins
-      // (or returns to) the linked world, then lands in the
-      // founding/settlement flow for it.
-      await world.joinWorld(linkedWorldId.value);
-      await router.push('/');
-    } else {
-      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
-      await router.push(redirect);
-    }
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 403) {
-      error.value = t('login.errors.banned');
-    } else if (err instanceof ApiError && err.status === 401) {
-      error.value = t('login.errors.invalidCredentials');
-    } else {
-      error.value = t('login.errors.generic');
-    }
-  } finally {
-    submitting.value = false;
+  if (linkedWorldId.value) {
+    // Same mechanism WorldPickerView.vue's own `joinOrReturn` uses: joins
+    // (or returns to) the linked world, then lands in the
+    // founding/settlement flow for it.
+    await world.joinWorld(linkedWorldId.value);
+  } else {
+    // Player logout/login gate: a plain login (no linked world) still needs
+    // this account's realm in whatever world is already loaded restored
+    // before landing back in the game — see useLoginForm's own comment.
+    await restoreRealmIfAny();
   }
+  const redirect = linkedWorldId.value ? '/' : typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+  await router.push(redirect);
 }
 
 // Lets the Aspire dashboard's "Log in as admin" dev-only link carry the

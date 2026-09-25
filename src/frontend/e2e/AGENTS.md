@@ -22,7 +22,11 @@ production build via `vite preview`, no backend — specs mock the API themselve
   a spec takes a comparable frame of the map: `locator.screenshot()` waits out
   animation frames, which costs *seconds* per frame on a software-rendered
   runner (see its own comment for the measurements, and prefer the page
-  objects' `screenshot()` methods, which call it for you).
+  objects' `screenshot()` methods, which call it for you). Also `pinch(page,
+  centre, fromGap, toGap, steps?)` and `touchDrag(page, from, to, steps?)` —
+  real multi-/single-touch gestures via CDP's `Input.dispatchTouchEvent`
+  (`page.touchscreen` only exposes single-finger `tap`), used by
+  `pinch-zoom.spec.ts`.
 - `budgets.ts` — `MAP_SPEC_TIMEOUT_MS`, `HEAVY_MAP_SPEC_TIMEOUT_MS`.
 - `globals.d.ts` — the app's `window.__fogDebug` / `__waterDebug` hooks. Don't
   add a `declare global` to a spec; two specs doing that with different shapes

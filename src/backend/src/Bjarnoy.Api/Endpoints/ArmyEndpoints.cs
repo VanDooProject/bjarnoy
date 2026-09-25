@@ -28,16 +28,28 @@ public static class ArmyEndpoints
             .WithName("DispatchArmy")
             .WithSummary("Dispatches units from a settlement's garrison on a move mission.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapGet("/{settlementId:guid}/armies", ListForSettlement)
             .WithName("ListSettlementArmies")
-            .WithSummary("Lists the armies belonging to a settlement — home, in transit, or currently supporting elsewhere.");
+            .WithSummary("Lists the armies belonging to a settlement — home, in transit, or currently supporting elsewhere.")
+            // Owner-only: unit composition, mission and destination of a
+            // settlement's own dispatched armies are exactly the kind of
+            // per-player state a rival must not be able to enumerate.
+            .RequireSettlementOwner();
 
         settlements.MapGet("/{settlementId:guid}/guests", ListGuestArmies)
             .WithName("ListGuestArmies")
-            .WithSummary("Lists guest (support) armies currently stationed at a settlement — the host's view; counts only.");
+            .WithSummary("Lists guest (support) armies currently stationed at a settlement — the host's view; counts only.")
+            // Product decision: the host settlement's owner sees every guest
+            // stationed here; a guest army's own owner sees only their own
+            // guest army/armies at this settlement; anyone else is refused
+            // (403) rather than shown an empty list — see ListGuestArmies's
+            // own comment for why this can't be the plain
+            // SettlementOwnershipEndpointFilter (it would also refuse a
+            // legitimate guest-owner caller).
+            .RequireHostOrGuestOwner();
 
         var armies = app.MapGroup("/api/v1/armies")
             .WithApiVersionSet(versionSet)
@@ -45,27 +57,34 @@ public static class ArmyEndpoints
 
         armies.MapGet("/{armyId:guid}", Get)
             .WithName("GetArmy")
-            .WithSummary("Fetches an army as of now, including its current position and route.");
+            .WithSummary("Fetches an army as of now, including its current position and route.")
+            // Owner (of the army's home settlement) only — full unit
+            // composition, provisions and route. The frontend only ever
+            // calls this for armies from the caller's own
+            // ListSettlementArmies (stores/world.ts refreshArmies); nothing
+            // reads a hostile army's detail by id today, so there is no
+            // fog-gated minimal view to build here.
+            .RequireArmyOwner();
 
         armies.MapPost("/{armyId:guid}/recall", Recall)
             .WithName("RecallArmy")
             .WithSummary("Turns an army around mid-journey to head home early.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<ArmyOwnershipEndpointFilter>()
+            .RequireArmyOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         armies.MapPost("/{armyId:guid}/orders", FieldOrder)
             .WithName("FieldOrderArmy")
             .WithSummary("Sends an army already out in the field onward to a new hex (issue #156 phase 1) — 'move on' if it's standing, 'append goal' if it's still travelling.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<ArmyOwnershipEndpointFilter>()
+            .RequireArmyOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         armies.MapPost("/{armyId:guid}/retarget-founding", RetargetFounding)
             .WithName("RetargetFoundingConvoy")
             .WithSummary("Redirects an in-transit or parked founding convoy to a different target hex (issue #55).")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<ArmyOwnershipEndpointFilter>();
+            .RequireArmyOwner();
 
         var reports = app.MapGroup("/api/v1")
             .WithApiVersionSet(versionSet)
@@ -73,19 +92,24 @@ public static class ArmyEndpoints
 
         reports.MapGet("/reports/{reportId:guid}", GetReport)
             .WithName("GetBattleReport")
-            .WithSummary("Fetches one battle report by id.");
+            .WithSummary("Fetches one battle report by id.")
+            // Either party's settlement owner — see ReportOwnershipEndpointFilter.
+            .RequireReportParty();
 
         reports.MapGet("/settlements/{settlementId:guid}/reports", ListReportsForSettlement)
             .WithName("ListSettlementBattleReports")
-            .WithSummary("Lists battle reports touching a settlement, as attacker or defender, newest first.");
+            .WithSummary("Lists battle reports touching a settlement, as attacker or defender, newest first.")
+            .RequireSettlementOwner();
 
         reports.MapGet("/field-reports/{reportId:guid}", GetFieldReport)
             .WithName("GetFieldBattleReport")
-            .WithSummary("Fetches one in-flight field battle report by id (issue #206).");
+            .WithSummary("Fetches one in-flight field battle report by id (issue #206).")
+            .RequireFieldReportParty();
 
         reports.MapGet("/settlements/{settlementId:guid}/field-reports", ListFieldReportsForSettlement)
             .WithName("ListSettlementFieldBattleReports")
-            .WithSummary("Lists field battle reports touching a settlement, either side, newest first (issue #206).");
+            .WithSummary("Lists field battle reports touching a settlement, either side, newest first (issue #206).")
+            .RequireSettlementOwner();
 
         return app;
     }
@@ -197,14 +221,57 @@ public static class ArmyEndpoints
         return TypedResults.Ok(response);
     }
 
-    private static async Task<Ok<IReadOnlyList<GuestArmySummary>>> ListGuestArmies(
+    /// <summary>
+    /// Host-or-guest gated in-handler (see the mapping's own comment): the
+    /// host settlement's owner gets every guest; a guest army's own owner
+    /// gets only the subset of guest entries whose home settlement they
+    /// own; anyone else — including a caller who owns neither the host nor
+    /// any listed guest — is refused with the ordinary 403 <c>not_owner</c>
+    /// body, not an (indistinguishable-from-"no guests") empty 200.
+    /// </summary>
+    private static async Task<IResult> ListGuestArmies(
         Guid settlementId,
+        HttpContext httpContext,
         ArmyService armies,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
+        var hostOwnership = await realms.GetOwnershipAsync(settlementId, cancellationToken);
+        if (hostOwnership is null)
+        {
+            // No such settlement — nothing to prove ownership of; answer as
+            // if it simply has no guests, same as before this endpoint was
+            // gated, rather than pre-empting the (nonexistent) NotFound case
+            // with a 403.
+            return TypedResults.Ok<IReadOnlyList<GuestArmySummary>>([]);
+        }
+
+        var (hostUserId, hostOwnerId, _) = hostOwnership.Value;
         var entities = await armies.GetGuestArmiesAsync(settlementId, cancellationToken);
-        IReadOnlyList<GuestArmySummary> response = [.. entities.Select(GuestArmySummary.From)];
-        return TypedResults.Ok(response);
+
+        if (OwnershipGate.Owns(httpContext, hostUserId, hostOwnerId))
+        {
+            IReadOnlyList<GuestArmySummary> all = [.. entities.Select(GuestArmySummary.From)];
+            return TypedResults.Ok(all);
+        }
+
+        var own = new List<GuestArmySummary>();
+        foreach (var entity in entities)
+        {
+            var guestOwnership = await realms.GetOwnershipAsync(entity.SettlementId, cancellationToken);
+            if (guestOwnership is { } ownership && OwnershipGate.Owns(httpContext, ownership.UserId, ownership.OwnerId))
+            {
+                own.Add(GuestArmySummary.From(entity));
+            }
+        }
+
+        if (own.Count > 0)
+        {
+            IReadOnlyList<GuestArmySummary> response = own;
+            return TypedResults.Ok(response);
+        }
+
+        return Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
     }
 
     private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> Recall(

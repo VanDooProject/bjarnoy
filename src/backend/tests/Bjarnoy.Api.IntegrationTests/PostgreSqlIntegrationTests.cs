@@ -1,8 +1,8 @@
-using System.Net;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -49,17 +49,13 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
         using var client = factory.CreateClient();
 
         var name = $"pg-{Guid.CreateVersion7():N}"[..20];
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(name, Seed: 7, Radius: 30), Ct);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var created = await response.ReadStrictAsync<WorldResponse>(Ct);
+        var created = await factory.CreateWorldAsync(name, seed: 7, radius: 30, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{created.Id}/islands", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(islands);
-        Assert.Equal(created.IslandCount, islands.Count);
+        Assert.Equal(created.Islands.Count, islands.Count);
         Assert.Contains(islands, i => i.StartPositions.Count > 0);
     }
 
@@ -68,18 +64,13 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
     {
         await using var factory = CreateFactory();
         await factory.MigrateAsync(Ct);
-        using var client = factory.CreateClient();
 
         var name = $"dup-{Guid.CreateVersion7():N}"[..20];
 
-        Assert.Equal(
-            HttpStatusCode.Created,
-            (await client.PostJsonAsync("/api/v1/worlds", new CreateWorldRequest(name, 1, 30), Ct))
-                .StatusCode);
-        Assert.Equal(
-            HttpStatusCode.Conflict,
-            (await client.PostJsonAsync("/api/v1/worlds", new CreateWorldRequest(name, 2, 30), Ct))
-                .StatusCode);
+        await factory.CreateWorldAsync(name, seed: 1, radius: 30, cancellationToken: Ct);
+
+        await Assert.ThrowsAsync<WorldCreationException>(
+            () => factory.CreateWorldAsync(name, seed: 2, radius: 30, cancellationToken: Ct));
     }
 
     [Fact]
@@ -99,9 +90,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
             using var client = factory.CreateClient();
             var name = $"{factory.Provider}-{Guid.CreateVersion7():N}"[..24];
 
-            var created = await (await client.PostJsonAsync(
-                "/api/v1/worlds", new CreateWorldRequest(name, seed, Radius: 30), Ct))
-                .ReadStrictAsync<WorldResponse>(Ct);
+            var created = await factory.CreateWorldAsync(name, seed, radius: 30, cancellationToken: Ct);
 
             var chunk = await client.GetFromJsonAsync<TileChunkResponse>(
                 $"/api/v1/worlds/{created.Id}/tiles?qMin=-10&qMax=10&rMin=-10&rMax=10",

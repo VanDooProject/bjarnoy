@@ -75,11 +75,10 @@ public sealed class UserActivityEndpointFilterTests : IAsyncLifetime
     {
         using var client = Client();
 
-        // /api/v1/worlds POST requires no authentication at all — anonymous
-        // world creation must keep working exactly as before.
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        // GET /api/v1/worlds requires no authentication at all — anonymous
+        // browsing must keep working exactly as before.
+        var response = await client.GetAsync("/api/v1/worlds", Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();

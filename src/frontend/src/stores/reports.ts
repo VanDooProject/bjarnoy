@@ -39,6 +39,10 @@ const LAST_SEEN_KEY = 'bjarnoy.reportsLastSeenAt';
 export const useReportsStore = defineStore('reports', {
   state: () => ({
     settlementId: null as string | null,
+    // The client-local owner id these reports were last loaded under — see
+    // `load`'s own comment. Needed again by `getById`/`getFieldById`'s deep
+    // links, which don't otherwise carry it.
+    ownerId: null as string | null,
     items: [] as BattleReportResponse[],
     tradeItems: [] as TradeReportResponse[],
     fieldItems: [] as FieldBattleReportResponse[],
@@ -63,16 +67,24 @@ export const useReportsStore = defineStore('reports', {
     },
   },
   actions: {
-    /** Fetches (or re-fetches) this settlement's battle, field-battle, and trade reports, each newest first. */
-    async load(settlementId: string) {
+    /**
+     * Fetches (or re-fetches) this settlement's battle, field-battle, and
+     * trade reports, each newest first. `ownerId` is the caller's own
+     * client-local id (`stores/player.ts`'s `id`) — proves ownership of
+     * `settlementId` to the backend's ownership filters; remembered so
+     * `getById`/`getFieldById` can reuse it for a deep-linked report not in
+     * the already-loaded list.
+     */
+    async load(settlementId: string, ownerId?: string) {
       this.settlementId = settlementId;
+      this.ownerId = ownerId ?? null;
       this.loading = true;
       this.error = null;
       try {
         const [battleItems, tradeItems, fieldItems] = await Promise.all([
-          api.getSettlementReports(settlementId),
-          api.getSettlementTradeReports(settlementId),
-          api.getSettlementFieldReports(settlementId),
+          api.getSettlementReports(settlementId, ownerId),
+          api.getSettlementTradeReports(settlementId, ownerId),
+          api.getSettlementFieldReports(settlementId, ownerId),
         ]);
         this.items = [...battleItems].sort(
           (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
@@ -97,7 +109,7 @@ export const useReportsStore = defineStore('reports', {
       const cached = this.items.find((r) => r.id === reportId);
       if (cached) return cached;
       try {
-        return await api.getReport(reportId);
+        return await api.getReport(reportId, this.ownerId ?? undefined);
       } catch {
         return null;
       }
@@ -107,7 +119,7 @@ export const useReportsStore = defineStore('reports', {
       const cached = this.fieldItems.find((r) => r.id === reportId);
       if (cached) return cached;
       try {
-        return await api.getFieldReport(reportId);
+        return await api.getFieldReport(reportId, this.ownerId ?? undefined);
       } catch {
         return null;
       }
@@ -122,10 +134,10 @@ export const useReportsStore = defineStore('reports', {
       }
     },
     /** Starts (or restarts, if already polling for a different settlement) the light background poll HudNav's badge relies on. */
-    startPolling(settlementId: string) {
+    startPolling(settlementId: string, ownerId?: string) {
       this.stopPolling();
-      void this.load(settlementId);
-      this.pollHandle = setInterval(() => void this.load(settlementId), REPORT_POLL_MS);
+      void this.load(settlementId, ownerId);
+      this.pollHandle = setInterval(() => void this.load(settlementId, ownerId), REPORT_POLL_MS);
     },
     stopPolling() {
       if (this.pollHandle) clearInterval(this.pollHandle);

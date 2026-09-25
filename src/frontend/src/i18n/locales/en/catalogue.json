@@ -32,6 +32,11 @@
     "karve": "Karve",
     "longship": "Longship"
   },
+  "giants": {
+    "giantmountain": "Giant mountain",
+    "giantshrine": "Runestone shrine",
+    "giantvolcano": "Volcano"
+  },
   "terrain": {
     "sea": "Open water",
     "sand": "Shore",

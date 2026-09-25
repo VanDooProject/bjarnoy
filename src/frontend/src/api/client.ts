@@ -75,6 +75,7 @@ import type {
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
+  SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
   ShipmentResponse,
@@ -93,6 +94,7 @@ import type {
   UserResponse,
   WorldMembershipResponse,
   WorldResponse,
+  WorldSummaryResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -207,9 +209,10 @@ async function requestImageBitmap(path: string, ownerId?: string): Promise<Image
 }
 
 export const api = {
-  listWorlds: () => request<WorldResponse[]>('/worlds'),
-  createWorld: (body: CreateWorldRequest) =>
-    request<WorldResponse>('/worlds', { method: 'POST', body: JSON.stringify(body) }),
+  // World creation is admin-only (POST /api/v1/admin/worlds — see
+  // adminCreateWorld below); this listing is the minimal public info a
+  // player picks a world from, not the game-client config getWorld returns.
+  listWorlds: () => request<WorldSummaryResponse[]>('/worlds'),
   getWorld: (worldId: string) => request<WorldResponse>(`/worlds/${worldId}`),
   // "Join another world": the public world picker — no auth/owner header
   // required, unlike getWorldMembership just below.
@@ -225,16 +228,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  listSettlements: (worldId: string) =>
-    request<SettlementSummary[]>(`/worlds/${worldId}/settlements`),
-  getSettlement: (settlementId: string) =>
-    request<SettlementResponse>(`/settlements/${settlementId}`),
+  // `ownerId` becomes the `X-Owner-Id` header the backend resolves the
+  // caller's realm from (fog-gated: own settlements plus every explored
+  // rival) — see CallerRealmResolver/ExploredAreaService. Omitting it (an
+  // anonymous caller with no realm at all) just gets an empty list back.
+  listSettlements: (worldId: string, ownerId?: string) =>
+    request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
   // claimed settlement: the backend only consults it while the settlement
   // is still owned by the anonymous-play system account, and trusts the
-  // caller's JWT once it's claimed.
+  // caller's JWT once it's claimed. Owner-only (403 for anyone else) — use
+  // getSettlementView for a rival's settlement.
+  getSettlement: (settlementId: string, ownerId?: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}`, { headers: ownerHeader(ownerId) }),
+  // The fog-gated counterpart to getSettlement: works for any settlement
+  // whose ground `ownerId`'s realm has explored (their own included), but
+  // carries only identity/position/buildings — see SettlementViewResponse.
+  getSettlementView: (settlementId: string, ownerId?: string) =>
+    request<SettlementViewResponse>(`/settlements/${settlementId}/view`, { headers: ownerHeader(ownerId) }),
   queueBuild: (settlementId: string, body: QueueBuildRequest, ownerId?: string) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
       method: 'POST',
@@ -261,28 +274,50 @@ export const api = {
       method: 'POST',
       headers: ownerHeader(ownerId),
     }),
-  postTradeOffer: (settlementId: string, body: PostTradeOfferRequest) =>
+  // Owner-gated like queueBuild — same X-Owner-Id proof for an unclaimed realm.
+  postTradeOffer: (settlementId: string, body: PostTradeOfferRequest, ownerId?: string) =>
     request<TradeOfferResponse>(`/settlements/${settlementId}/trade-offers`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
-  getTradeBoard: (settlementId: string) =>
-    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/board`),
-  getMyTradeOffers: (settlementId: string) =>
-    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/mine`),
-  getShipments: (settlementId: string) =>
-    request<ShipmentResponse[]>(`/settlements/${settlementId}/shipments`),
-  getSettlementTradeReports: (settlementId: string) =>
-    request<TradeReportResponse[]>(`/settlements/${settlementId}/trade-reports`),
-  acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest) =>
+  // Owner-only (403 for anyone else) — see TradeEndpoints.Board's own
+  // comment: `ownerId` proves the caller owns the *browsing* settlement,
+  // not the offers on the board, which are meant to be visible to any
+  // in-range settlement's owner.
+  getTradeBoard: (settlementId: string, ownerId?: string) =>
+    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/board`, {
+      headers: ownerHeader(ownerId),
+    }),
+  getMyTradeOffers: (settlementId: string, ownerId?: string) =>
+    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/mine`, {
+      headers: ownerHeader(ownerId),
+    }),
+  getShipments: (settlementId: string, ownerId?: string) =>
+    request<ShipmentResponse[]>(`/settlements/${settlementId}/shipments`, {
+      headers: ownerHeader(ownerId),
+    }),
+  getSettlementTradeReports: (settlementId: string, ownerId?: string) =>
+    request<TradeReportResponse[]>(`/settlements/${settlementId}/trade-reports`, {
+      headers: ownerHeader(ownerId),
+    }),
+  // The acting settlement is in the body and is ownership-checked
+  // server-side (RequestSettlementOwnershipEndpointFilter) — an unclaimed
+  // realm proves it with X-Owner-Id, a claimed one with the JWT.
+  acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest, ownerId?: string) =>
     request<TradeAcceptResponse>(`/trade-offers/${offerId}/accept`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
-  cancelTradeOffer: (offerId: string, body: CancelTradeOfferRequest) =>
+  // The acting settlement is in the body and is ownership-checked
+  // server-side (RequestSettlementOwnershipEndpointFilter) — an unclaimed
+  // realm proves it with X-Owner-Id, a claimed one with the JWT.
+  cancelTradeOffer: (offerId: string, body: CancelTradeOfferRequest, ownerId?: string) =>
     request<TradeOfferResponse>(`/trade-offers/${offerId}/cancel`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
   trainUnits: (settlementId: string, body: TrainUnitsRequest, ownerId?: string) =>
     request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
@@ -516,9 +551,10 @@ export const api = {
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
     }),
-  getSettlementArmies: (settlementId: string) =>
-    request<ArmySummary[]>(`/settlements/${settlementId}/armies`),
-  getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
+  getSettlementArmies: (settlementId: string, ownerId?: string) =>
+    request<ArmySummary[]>(`/settlements/${settlementId}/armies`, { headers: ownerHeader(ownerId) }),
+  getArmy: (armyId: string, ownerId?: string) =>
+    request<ArmyResponse>(`/armies/${armyId}`, { headers: ownerHeader(ownerId) }),
   recallArmy: (armyId: string, ownerId?: string) =>
     request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
   // Issue #156 phase 1: sends an army already out in the field onward to a
@@ -533,22 +569,31 @@ export const api = {
   // Issue #40 phase 4: the host's read-only view of who is currently
   // supporting this settlement. Mirrors ArmyEndpoints.cs's
   // `/settlements/{id}/guests`.
-  getSettlementGuests: (settlementId: string) =>
-    request<GuestArmySummary[]>(`/settlements/${settlementId}/guests`),
+  // `ownerId` proves either the host settlement's ownership (full guest
+  // list) or a listed guest army's own home-settlement ownership (that
+  // guest only) — see ArmyEndpoints.ListGuestArmies.
+  getSettlementGuests: (settlementId: string, ownerId?: string) =>
+    request<GuestArmySummary[]>(`/settlements/${settlementId}/guests`, { headers: ownerHeader(ownerId) }),
   // Issue #40 phase 3: battle reports. Mirrors ArmyEndpoints.cs's
   // `/reports/{reportId}` and `/settlements/{settlementId}/reports` — the
   // latter is a flat newest-first list, not paged (BattleReportService has
-  // no pagination), so the reports store just holds it as-is.
-  getReport: (reportId: string) => request<BattleReportResponse>(`/reports/${reportId}`),
-  getSettlementReports: (settlementId: string) =>
-    request<BattleReportResponse[]>(`/settlements/${settlementId}/reports`),
+  // no pagination), so the reports store just holds it as-is. `ownerId`
+  // proves ownership of either the attacking or the defending settlement —
+  // ReportOwnershipEndpointFilter accepts either.
+  getReport: (reportId: string, ownerId?: string) =>
+    request<BattleReportResponse>(`/reports/${reportId}`, { headers: ownerHeader(ownerId) }),
+  getSettlementReports: (settlementId: string, ownerId?: string) =>
+    request<BattleReportResponse[]>(`/settlements/${settlementId}/reports`, { headers: ownerHeader(ownerId) }),
   // Issue #206: field battle reports (in-flight interception). Mirrors
   // ArmyEndpoints.cs's `/field-reports/{reportId}` and
   // `/settlements/{settlementId}/field-reports` — same flat, unpaged shape
-  // as the battle-report endpoints above.
-  getFieldReport: (reportId: string) => request<FieldBattleReportResponse>(`/field-reports/${reportId}`),
-  getSettlementFieldReports: (settlementId: string) =>
-    request<FieldBattleReportResponse[]>(`/settlements/${settlementId}/field-reports`),
+  // and same either-party `ownerId` rule as the battle-report endpoints above.
+  getFieldReport: (reportId: string, ownerId?: string) =>
+    request<FieldBattleReportResponse>(`/field-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
+  getSettlementFieldReports: (settlementId: string, ownerId?: string) =>
+    request<FieldBattleReportResponse[]>(`/settlements/${settlementId}/field-reports`, {
+      headers: ownerHeader(ownerId),
+    }),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,

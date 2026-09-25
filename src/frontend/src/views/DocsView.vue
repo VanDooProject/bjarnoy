@@ -19,6 +19,12 @@ interface DocPage {
 const PAGES: DocPage[] = [
   { to: '/tech-tree', titleKey: 'docs.hub.pages.techTree.title', descriptionKey: 'docs.hub.pages.techTree.description' },
   { to: '/docs/tiles', titleKey: 'docs.hub.pages.tiles.title', descriptionKey: 'docs.hub.pages.tiles.description' },
+  {
+    to: '/docs/wasted-lands',
+    titleKey: 'docs.hub.pages.wastedLands.title',
+    descriptionKey: 'docs.hub.pages.wastedLands.description',
+  },
+  { to: '/showcase', titleKey: 'docs.hub.pages.showcase.title', descriptionKey: 'docs.hub.pages.showcase.description' },
 ];
 </script>
 

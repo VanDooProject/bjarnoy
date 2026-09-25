@@ -54,7 +54,7 @@ const SINGLE_LEVEL_ART: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,dockyard,bigstoragehouse,barracks,fisherhut,sawmill}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,dockyard,bigstoragehouse,barracks,fisherhut,sawmill,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
@@ -139,6 +139,18 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
   if (SINGLE_LEVEL_ART[type]) return { kind: 'png', url: SINGLE_LEVEL_ART[type] };
   const family = BUILDING_ART_FAMILIES[type];
   if (!family) return undefined;
+  return buildingArtByFamily(family, level);
+}
+
+/**
+ * Same lookup as `buildingArt`, but keyed directly by art-pack family rather
+ * than by `Tile['buildingType']` — for callers (like the docs pages' variant
+ * pickers) that want a specific one of a building's several art families,
+ * e.g. the Sawmill's inland/river/river-bend look (`sawmill`/`sawmillriver`/
+ * `sawmillbend` — see `textures.ts`'s `TextureKey`), rather than the single
+ * family `BUILDING_ART_FAMILIES` maps its wire type to.
+ */
+export function buildingArtByFamily(family: string, level: number): ArtRef | undefined {
   const frame = showcaseBuildingFrame(family, level);
   if (frame) return { kind: 'atlas', frame };
   const pngUrl = pngBuildingArt(family, level);

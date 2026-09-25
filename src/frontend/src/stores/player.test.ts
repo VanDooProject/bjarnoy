@@ -114,3 +114,63 @@ describe('usePlayerStore settlementsByWorld / enterWorld', () => {
     expect(localStorage.getItem('bjarnoy.onboardingComplete')).toBeNull();
   });
 });
+
+// Player logout/login gate: `forgetLocalIdentity` is the store half of
+// logging out (composables/useLogout.ts drives the rest — clearing the auth
+// session and reloading the page). `forgetLastAccount` is "start a new
+// realm instead" on ReturningLoginPanel.vue declining the resulting gate.
+describe('usePlayerStore forgetLocalIdentity / forgetLastAccount / lastAccount', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', fakeLocalStorage());
+  });
+
+  it('forgetLocalIdentity removes exactly the identity keys, keeps worldId/locale, and writes lastAccount', async () => {
+    const store = await loadStoreModule(false);
+    store.foundSettlement('settlement-a', 'world-a');
+    store.setNickname('Ragnar');
+    store.completeOnboarding();
+    store.dismissProfileNudge();
+    localStorage.setItem('bjarnoy.worldId', 'world-a');
+    localStorage.setItem('bjarnoy.locale', 'de');
+
+    store.forgetLocalIdentity('ragnar42');
+
+    for (const key of [
+      'bjarnoy.playerId',
+      'bjarnoy.settlementId',
+      'bjarnoy.settlementsByWorld',
+      'bjarnoy.onboardingComplete',
+      'bjarnoy.profileNudgeDismissed',
+      'bjarnoy.nickname',
+    ]) {
+      expect(localStorage.getItem(key), key).toBeNull();
+    }
+    // Device/session context, not identity — kept.
+    expect(localStorage.getItem('bjarnoy.worldId')).toBe('world-a');
+    expect(localStorage.getItem('bjarnoy.locale')).toBe('de');
+
+    expect(localStorage.getItem('bjarnoy.lastAccount')).toBe('ragnar42');
+    expect(store.lastAccount).toBe('ragnar42');
+  });
+
+  it('forgetLastAccount clears lastAccount', async () => {
+    const store = await loadStoreModule(false);
+    store.forgetLocalIdentity('ragnar42');
+
+    store.forgetLastAccount();
+
+    expect(store.lastAccount).toBeNull();
+    expect(localStorage.getItem('bjarnoy.lastAccount')).toBeNull();
+  });
+
+  it('a new store instance picks up lastAccount from localStorage', async () => {
+    const first = await loadStoreModule(false);
+    first.forgetLocalIdentity('ragnar42');
+
+    // Simulates the full page reload useLogout.ts does: a fresh module
+    // load, fresh Pinia store, same underlying localStorage.
+    const second = await loadStoreModule(false);
+
+    expect(second.lastAccount).toBe('ragnar42');
+  });
+});

@@ -564,6 +564,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Giants")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Index")
                         .HasColumnType("INTEGER");
 

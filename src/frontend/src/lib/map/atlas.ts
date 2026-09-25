@@ -41,6 +41,8 @@ export interface AtlasClip {
   frame_padding: number;
   frames: string[];
   parts: string[];
+  /** Which part of a "giant tile" (see `giantTiles.ts`) this clip animates — `C` for the anchor hex, or a `GiantPart` screen direction for a covered neighbour. Absent for every non-giant clip. */
+  giant_part?: string;
 }
 
 interface AtlasManifest {
@@ -120,6 +122,10 @@ export interface AtlasFrameRect {
   webpUrl: string;
   frame: { x: number; y: number; w: number; h: number };
   pageSize: { w: number; h: number };
+  /** The untrimmed source canvas this frame was cut from (e.g. 400x600 for a tile, 1200x1800 for a giant) — see `spriteSourceSize`. */
+  sourceSize: { w: number; h: number };
+  /** Where the (trimmed) `frame` rect sits inside `sourceSize` — a trimmed frame's opaque pixels don't start at the source's own origin. */
+  spriteSourceSize: { x: number; y: number; w: number; h: number };
 }
 
 // Manifests/webp URLs are already resolved eagerly at import time (see
@@ -129,9 +135,46 @@ export interface AtlasFrameRect {
 export function findAtlasFrame(category: string, name: string): AtlasFrameRect | undefined {
   for (const { manifest, webpUrl } of pagesFor(category)) {
     const frame = manifest.frames[name];
-    if (frame) return { webpUrl, frame: frame.frame, pageSize: manifest.meta.size };
+    if (frame) {
+      return {
+        webpUrl,
+        frame: frame.frame,
+        pageSize: manifest.meta.size,
+        sourceSize: frame.sourceSize,
+        spriteSourceSize: frame.spriteSourceSize,
+      };
+    }
   }
   return undefined;
+}
+
+/** The CSS `background-*` properties that render one `AtlasFrameRect` as a same-aspect-ratio element — shared by `AtlasSprite.vue` and anything laying out raw frames itself (e.g. the wasted-lands island), so the sprite math exists in exactly one place. */
+export interface AtlasBackgroundStyle {
+  aspectRatio: string;
+  backgroundImage: string;
+  backgroundRepeat: string;
+  backgroundSize: string;
+  backgroundPosition: string;
+  // Vue's `CSSProperties` requires an index signature for custom properties
+  // (`--foo`) — this object is never given any, but the type has to admit
+  // the possibility to satisfy `StyleValue` at both call sites (`:style`
+  // bindings in AtlasSprite.vue and the wasted-lands island).
+  [key: `--${string}`]: string | undefined;
+}
+
+export function atlasBackgroundStyle(rect: AtlasFrameRect): AtlasBackgroundStyle {
+  const { webpUrl, frame, pageSize } = rect;
+  const bgWidthPct = (pageSize.w / frame.w) * 100;
+  const bgHeightPct = (pageSize.h / frame.h) * 100;
+  const posXPct = pageSize.w === frame.w ? 0 : (frame.x / (pageSize.w - frame.w)) * 100;
+  const posYPct = pageSize.h === frame.h ? 0 : (frame.y / (pageSize.h - frame.h)) * 100;
+  return {
+    aspectRatio: `${frame.w} / ${frame.h}`,
+    backgroundImage: `url(${webpUrl})`,
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: `${bgWidthPct}% ${bgHeightPct}%`,
+    backgroundPosition: `${posXPct}% ${posYPct}%`,
+  };
 }
 
 const cache = new Map<string, Promise<LoadedAtlas>>();

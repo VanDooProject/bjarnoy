@@ -45,7 +45,7 @@ const kindFilter = ref<InboxKindFilter>('all');
 
 async function load() {
   if (!player.settlementId) return;
-  await reports.load(player.settlementId);
+  await reports.load(player.settlementId, player.id);
   // Opening the inbox (list or a specific report) is what "reading it"
   // means client-side — see stores/reports.ts's own comment on why there is
   // no backend read-state to defer to instead.

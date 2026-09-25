@@ -16,6 +16,10 @@
     "triggerSub": "or want to join another world",
     "logIn": "Log in"
   },
+  "accountMenu": {
+    "profile": "Profile",
+    "logout": "Log out"
+  },
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserved)",
@@ -26,10 +30,7 @@
     "toggle": "Show more"
   },
   "realmPanel": {
-    "level": "Lv {level}",
-    "claims": "Realm claims {count} hexes",
-    "levelHexesShort": "Lv {level} · {count} hexes",
-    "backToWorldMap": "← World map"
+    "levelHexesShort": "Lv {level} · {count} hexes"
   },
   "hoverTooltip": {
     "level": "LEVEL {level}",
@@ -84,14 +85,15 @@
       "sendSettlers": "Send settlers",
       "noSettlersYet": "You have no settlers available yet",
       "upgrade": "Upgrade",
-      "notEnough": "Not enough {resources}",
+      "notEnough": "Needs {resources}",
       "details": "Details",
       "raze": "Raze",
       "cantRazeLonghouse": "Can't raze the longhouse",
       "notWiredYet": "Not wired to the backend yet",
       "trainUnits": "Train units",
       "build": "Build",
-      "openWater": "Open water"
+      "openWater": "Open water",
+      "giantOccupied": "Occupied by a giant landmark"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -128,6 +130,16 @@
     "garrisonEmpty": "No units standing here yet.",
     "guests": "Guests",
     "unknownSettlement": "Unknown settlement"
+  },
+  "queueDrawer": {
+    "title": "Queues",
+    "close": "✕",
+    "openLabel": "Open build & training queues",
+    "closeLabel": "Close build & training queues",
+    "buildLabel": "Build",
+    "trainLabel": "Train",
+    "more": "+{count} more",
+    "chevron": "›"
   },
   "buildingModal": {
     "close": "✕",

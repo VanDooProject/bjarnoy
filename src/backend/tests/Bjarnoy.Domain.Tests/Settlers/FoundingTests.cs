@@ -47,6 +47,26 @@ public class FoundingTests
     }
 
     [Fact]
+    public void IsHexFoundable_is_false_on_a_giant_hex_regardless_of_spacing()
+    {
+        var target = new HexCoord(50, 50);
+        var giants = new GiantIndex([new Giant(target, "giantmountain", TileOrientation.E)]);
+
+        // No claimed settlements anywhere nearby — spacing alone would allow
+        // it — but the giant rule refuses it outright.
+        Assert.False(Founding.IsHexFoundable(target, [], minimumSpacing: 3, giants));
+    }
+
+    [Fact]
+    public void IsHexFoundable_is_true_for_a_non_giant_hex_when_a_giant_index_is_supplied()
+    {
+        var target = new HexCoord(50, 50);
+        var giants = new GiantIndex([new Giant(new HexCoord(0, 0), "giantmountain", TileOrientation.E)]);
+
+        Assert.True(Founding.IsHexFoundable(target, [], minimumSpacing: 3, giants));
+    }
+
+    [Fact]
     public void IsHexFoundable_is_false_inside_another_settlements_claim()
     {
         var settlements = new[] { (Centre: new HexCoord(0, 0), ClaimRadius: 3) };

@@ -58,6 +58,8 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  giantTopAnimFor,
+  giantTopTextureFor,
   loadBuildingAtlases,
   loadTerrainAtlas,
   mergeTileTextures,
@@ -68,7 +70,9 @@ import {
   type TileAnimClip,
   type TileTextures,
 } from './textures';
+import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
+import { PinchTracker } from './pinchGesture';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -606,7 +610,13 @@ export interface ArmyOverlayFrame {
  */
 export type HoverSubject =
   | { kind: 'building'; buildingType: NonNullable<Tile['buildingType']>; level: number }
-  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean };
+  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean }
+  // A hex covered by a giant tile (see giantTiles.ts) — named for the giant
+  // instead of the ground terrain it sits over, since the giant's opaque art
+  // fully covers that terrain. Generic over `family` (not a `'giantmountain'`
+  // literal) so a future giant building needs no change here; HexTooltip.vue
+  // falls back to the family id itself for one with no translated name yet.
+  | { kind: 'giant'; family: string };
 
 export interface HoverInfo {
   screenX: number;
@@ -637,6 +647,22 @@ export interface HoverInfo {
  */
 export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { terrain: Terrain; isRiver: boolean } {
   return { terrain: tile.terrain, isRiver: river !== undefined };
+}
+
+/**
+ * The `HoverSubject` a tile resolves to, from the tile's own fields alone —
+ * everything `hoverInfoFor` (the only real caller) adds on top (level,
+ * owner, stats) needs the live worldModel and isn't part of *which* subject
+ * kind gets shown. Pulled out purely so the precedence — a giant's opaque
+ * art fully covers the ground terrain, so `tile.giant` must win over both
+ * `buildingType` and `terrainTitleFor` — is unit-testable without a canvas/
+ * Pixi renderer, the same reason `terrainTitleFor` itself is extracted.
+ */
+export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
+  if (tile.giant) return { kind: 'giant', family: tile.giant.family };
+  if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
+  const { terrain, isRiver } = terrainTitleFor(tile, river);
+  return { kind: 'terrain', terrain, isRiver };
 }
 
 export interface RippleFrame {
@@ -723,6 +749,11 @@ const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // How far past the viewport edge (world-space) coordsInRect/isEntirelyDeepFog
 // consider a hex "visible" — shared so the two agree on exactly the same
 // rect every rebuild.
+//
+// This also covers giant tiles (giantTiles.ts), whose top parts rise above
+// their own hex's canvas: the tallest shipped part (giantmountain, 692 native
+// px) rises 392 native px = TILE_W * 392 / 200 ≈ 329 world units, inside
+// this margin. A taller giant would need this widened.
 const VISIBLE_RECT_MARGIN = TILE_W * 2;
 
 // The flat top-face diamond (isoTopPoints) spans world-y 0..TILE_H from the
@@ -1357,8 +1388,10 @@ export class HexMapRenderer {
   // `ArmyOverlayData.draftWaypoints`) the pointer grabbed, if any — set on
   // pointerdown over a pin instead of starting a camera pan, cleared on
   // pointerup. `lastCoordKey` suppresses repeat callbacks while the pointer
-  // moves within one hex.
-  private waypointDrag: { index: number; lastCoordKey: string } | null = null;
+  // moves within one hex. `pointerId` ties the drag to the exact finger that
+  // grabbed it, so a second finger landing during the drag (see `pinch`
+  // below) can't move or release someone else's pin.
+  private waypointDrag: { index: number; lastCoordKey: string; pointerId: number } | null = null;
 
   private textures: TileTextures | null = null;
 
@@ -1371,6 +1404,20 @@ export class HexMapRenderer {
 
   private dragging = false;
   private dragMoved = 0;
+  // The pointerId currently driving `dragging`'s single-finger pan — set by
+  // startDrag, kept so a second, untracked pointer's own move/up events
+  // (a stray finger, or one belonging to a pinch — see `pinch` below)
+  // can't feed into or end a drag that isn't theirs.
+  private dragPointerId: number | null = null;
+  // Tracks any second (and further) touch pointer once one lands during a
+  // drag, turning the gesture into a two-finger pinch — see the pinch branch
+  // of onPointerMove and zoomBy's own doc comment.
+  private pinch = new PinchTracker();
+  // Set for the rest of a gesture once it ever had two fingers down, so the
+  // final pointerup (whichever finger lifts last) doesn't also fire
+  // handleClick — a pinch that happens to end within DRAG_CLICK_SLOP_PX
+  // must not open the ring menu / found a settlement underneath it.
+  private pinched = false;
   // A wheel/pinch zoom is a gesture just like a drag — a continuous stream of
   // events, each one nudging `camera.zoom` — but unlike a drag it has no
   // "up" event to end it, so it's tracked with an idle timer instead (see
@@ -1575,6 +1622,7 @@ export class HexMapRenderer {
     canvas.addEventListener('pointerdown', this.onPointerDown);
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerLeave);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
     // A tap that opens the ring menu (via onPointerUp -> handleClick, below)
@@ -1906,20 +1954,40 @@ export class HexMapRenderer {
     // backdrop's own handler instead of this canvas-scoped listener — but
     // kept as a defensive guard rather than relying on that DOM layering.
     if (this.interactionLocked) return;
-    // Issue #93 "drag to move a placed waypoint": a pointerdown that lands on
-    // a draft pin grabs *that pin* rather than starting a camera pan — the
-    // two gestures are the same input, so the pin has to win the hit-test
-    // first or there is no way to correct a mis-clicked hex except undoing
-    // back to it.
-    const grabbed = this.draftWaypointAt(this.pointerScreen(e));
-    if (grabbed !== null) {
-      this.idleDrift = false;
-      this.waypointDrag = { index: grabbed, lastCoordKey: coordKey(this.armyOverlay!.draftWaypoints[grabbed]) };
-      this.setHoveredCoord(null);
-      this.setCursor('grabbing');
+    // A second finger landing while a pin drag is in progress is ignored
+    // entirely, rather than cancelled over into a pinch: onWaypointMove has
+    // already written the pin's position to the store per hex it crossed,
+    // so there is no clean "revert" to hand off to — simplest and safest is
+    // to let the first finger keep driving the pin and drop the second.
+    if (this.waypointDrag) return;
+    if (this.pinch.count === 0) {
+      // Issue #93 "drag to move a placed waypoint": a pointerdown that lands
+      // on a draft pin grabs *that pin* rather than starting a camera pan —
+      // the two gestures are the same input, so the pin has to win the
+      // hit-test first or there is no way to correct a mis-clicked hex
+      // except undoing back to it.
+      const grabbed = this.draftWaypointAt(this.pointerScreen(e));
+      if (grabbed !== null) {
+        this.idleDrift = false;
+        this.waypointDrag = {
+          index: grabbed,
+          lastCoordKey: coordKey(this.armyOverlay!.draftWaypoints[grabbed]),
+          pointerId: e.pointerId,
+        };
+        this.setHoveredCoord(null);
+        this.setCursor('grabbing');
+        return;
+      }
+      this.startDrag(e);
       return;
     }
-    this.startDrag(e);
+    // A drag (or an existing pinch) is already in progress and another
+    // finger just landed — join it as (or add to) a pinch. See the pinch
+    // branch of onPointerMove and zoomBy's own doc comment.
+    this.idleDrift = false;
+    this.pinch.down(e.pointerId, { x: e.clientX, y: e.clientY });
+    this.setHoveredCoord(null);
+    this.pinched = true;
   };
 
   /** Pointer position relative to the canvas — the space `hexCenterScreen`/`toScreen` report in. */
@@ -1977,6 +2045,10 @@ export class HexMapRenderer {
     this.idleDrift = false;
     this.dragging = true;
     this.dragMoved = 0;
+    this.dragPointerId = e.pointerId;
+    this.pinched = false;
+    this.pinch.clear();
+    this.pinch.down(e.pointerId, { x: e.clientX, y: e.clientY });
     this.lastPointer = { x: e.clientX, y: e.clientY };
     // The hover tooltip otherwise stays pinned to whatever hex was last
     // hovered while the player drags the camera underneath it — onPointerMove
@@ -2000,7 +2072,11 @@ export class HexMapRenderer {
     // (isoPixelToAxial), so the pin snaps to hexes rather than floating
     // between them. Reported only when the pointer actually crosses into a
     // different hex, so a jittery pointer doesn't fire a store write a frame.
+    // Gated to the exact finger that grabbed the pin — a second finger
+    // landing during the drag is ignored (see onPointerDown) and must not
+    // also move it.
     if (this.waypointDrag) {
+      if (e.pointerId !== this.waypointDrag.pointerId) return;
       const screen = this.pointerScreen(e);
       if (!screen) return;
       const world = screenToWorld(this.camera, screen, this.viewport);
@@ -2019,6 +2095,33 @@ export class HexMapRenderer {
       this.updateHover(e);
       return;
     }
+    // Two (or more) fingers down: pan by the pinch midpoint's own movement,
+    // then zoom anchored on that same (new) midpoint through the exact same
+    // `zoomBy` seam `onWheel` uses — see zoomBy's doc comment. Applying the
+    // pan first is what makes the content under both fingers actually
+    // follow them instead of drifting whenever the midpoint isn't stationary.
+    if (this.pinch.isPinching) {
+      const step = this.pinch.move(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!step) return;
+      this.dragMoved += Math.abs(step.pan.x) + Math.abs(step.pan.y);
+      if (this.lockCamera) return;
+      this.camera = {
+        ...this.camera,
+        x: this.camera.x - step.pan.x / this.camera.zoom,
+        y: this.camera.y - step.pan.y / this.camera.zoom,
+      };
+      const canvas = this.app?.canvas;
+      const rect = canvas?.getBoundingClientRect();
+      const screen = rect
+        ? { x: step.midpoint.x - rect.left, y: step.midpoint.y - rect.top }
+        : step.midpoint;
+      this.zoomBy(screen, step.factor);
+      return;
+    }
+    // A pointer not driving the single-finger drag (e.g. a leftover mouse
+    // move, or a finger onPointerDown ignored while a pin drag was active)
+    // must not feed into someone else's pan.
+    if (e.pointerId !== this.dragPointerId) return;
     const dx = e.clientX - this.lastPointer.x;
     const dy = e.clientY - this.lastPointer.y;
     this.dragMoved += Math.abs(dx) + Math.abs(dy);
@@ -2041,10 +2144,57 @@ export class HexMapRenderer {
     // must not fall through to handleClick — releasing a dragged waypoint
     // would otherwise *append* a second one on the hex it was dropped on.
     if (this.waypointDrag) {
+      if (e.pointerId !== this.waypointDrag.pointerId) return;
       this.waypointDrag = null;
       this.setCursor('');
       return;
     }
+    // Not a pointer this gesture is tracking (e.g. its down never reached
+    // this canvas, or it already ended) — nothing to release.
+    if (!this.dragging) return;
+    this.endTrackedPointer(e.pointerId, /* allowClick */ true, e);
+  };
+
+  /**
+   * A touch pointer went away mid-gesture without a normal `pointerup` — an
+   * OS-level gesture stealing it, palm rejection, or the tab losing focus.
+   * `touch-action: none` plus the `touchstart` preventDefault (onTouchStart)
+   * should keep this rare, but an orphaned pointer left in `pinch` would
+   * otherwise wedge future pinch geometry against a finger that is gone.
+   * Same pointer-lifecycle handling as onPointerUp, just never treated as a
+   * click.
+   */
+  private onPointerCancel = (e: PointerEvent) => {
+    if (this.waypointDrag) {
+      if (e.pointerId !== this.waypointDrag.pointerId) return;
+      this.waypointDrag = null;
+      this.setCursor('');
+      return;
+    }
+    if (!this.dragging) return;
+    this.endTrackedPointer(e.pointerId, /* allowClick */ false, e);
+  };
+
+  /**
+   * Shared pointerup/pointercancel bookkeeping once a gesture is confirmed
+   * to be in progress (`this.dragging`): releases `id` from the pinch
+   * tracker and either hands the gesture off to whichever pointer remains
+   * (two fingers down to one, or three down to two) or, once the last
+   * pointer is gone, ends the gesture — same click-vs-drag / forced-rebuild
+   * logic `onPointerUp` always had, just pointerId-aware.
+   */
+  private endTrackedPointer(id: number, allowClick: boolean, e: PointerEvent) {
+    this.pinch.up(id);
+    const remaining = this.pinch.primary();
+    if (remaining) {
+      // Two fingers down to one: hand the single-finger pan off to the
+      // survivor instead of ending the gesture.
+      this.dragPointerId = remaining.id;
+      this.lastPointer = remaining.p;
+      return;
+    }
+    if (this.pinch.count > 0) return; // e.g. three fingers down to two — still pinching
+    if (!allowClick) this.suppressNextClick = true;
     if (this.dragging && this.dragMoved < DRAG_CLICK_SLOP_PX && !this.suppressNextClick) {
       this.handleClick(e);
     }
@@ -2053,9 +2203,19 @@ export class HexMapRenderer {
     // so it alone doesn't say whether the camera actually moved. Gate the
     // rebuild below on the same slop threshold the click check above uses: a
     // click that never panned the map leaves every sprite exactly as it
-    // already is — no reason to pay for a full rebuild.
-    const wasDragging = this.dragging && this.dragMoved >= DRAG_CLICK_SLOP_PX;
+    // already is — no reason to pay for a full rebuild. A pinch that ended
+    // within the slop distance (e.g. a quick zoom-in-and-back) still counts,
+    // via `pinched`, since it changed `camera.zoom` without moving `camera.{x,y}`.
+    const wasDragging = this.dragging && (this.dragMoved >= DRAG_CLICK_SLOP_PX || this.pinched);
     this.dragging = false;
+    this.dragPointerId = null;
+    if (this.pinched) {
+      this.pinched = false;
+      // Bakes the settled view immediately rather than leaving the wheel/
+      // pinch idle timer (noteZoomActivity) to force a second, redundant
+      // rebuild ~WHEEL_IDLE_MS after a gesture that already has its own end.
+      this.endZoomActivity();
+    }
     if (wasDragging) {
       // The drag's last queued rebuild (scheduleCull's rAF, from the final
       // pointermove) may already have fired while dragging was still true —
@@ -2065,7 +2225,7 @@ export class HexMapRenderer {
       // frame regardless of camera movement, so there is nothing to rebake.
       this.rebuildAll();
     }
-  };
+  }
 
   private onPointerLeave = () => {
     this.setHoveredCoord(null);
@@ -2120,9 +2280,15 @@ export class HexMapRenderer {
     }
 
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
-    const flat = isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+    // A hex covered by a giant highlights the giant's whole 7-hex footprint
+    // (the object, not the one hex under the cursor), in the same `hover`
+    // layer as any other tile - under terrainTop, so the art sits on top of
+    // the highlight exactly the way every other tile's topping does.
+    const outline = tile.giant
+      ? giantFootprintOutline(tile.giant.anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y])
+      : isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
     this.hoverLayer
-      .poly(flat)
+      .poly(outline)
       .fill({ color: HOVER_FILL, alpha: 0.28 })
       .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
 
@@ -2159,27 +2325,29 @@ export class HexMapRenderer {
     const mine = owner?.ownerId === this.options.playerId;
     const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
 
-    if (tile.buildingType) {
-      const level = tile.buildingLevel ?? 1;
+    const subject = hoverSubjectFor(tile, river);
+    if (subject.kind === 'building') {
       // Stats are only for the viewer's own buildings — scouting a rival's
       // tile shows the building and its level, but the stats themselves are
       // gated behind Premium (see HoverInfo.premiumLocked).
-      const stats = mine ? this.buildingStats(tile, level) : undefined;
+      const stats = mine ? this.buildingStats(tile, subject.level) : undefined;
       return {
         screenX: screen.x,
         screenY: screen.y,
-        subject: { kind: 'building', buildingType: tile.buildingType, level },
+        subject,
         owner: ownerInfo,
         stats,
         premiumLocked: !mine,
         openable: mine,
       };
     }
-    const { terrain, isRiver } = terrainTitleFor(tile, river);
+    // Giant tiles carry no building economy of their own (types.ts), so
+    // 'giant' falls through here alongside plain 'terrain' — neither gets
+    // stats/openable.
     return {
       screenX: screen.x,
       screenY: screen.y,
-      subject: { kind: 'terrain', terrain, isRiver },
+      subject,
       owner: ownerInfo,
     };
   }
@@ -2214,18 +2382,13 @@ export class HexMapRenderer {
 
   /**
    * Anchor-preserving zoom: rescales the camera around a fixed screen point
-   * so that point stays under the cursor/pinch centre as zoom changes. The
-   * only caller today is `onWheel`; pulled out as its own method (rather than
-   * inlined there) so a future multi-touch pinch handler can drive the exact
-   * same math through the exact same seam — pinch just needs to compute its
-   * own `screen` (the midpoint between the two touches) and `factor` (the
-   * ratio of successive inter-touch distances) and call this, picking up the
-   * `lockCamera` guard and zoom clamp for free.
-   * TODO(pinch-zoom): no multi-touch/pointerId tracking exists yet (single
-   * `lastPointer`, see onPointerDown) — mobile currently has no way to zoom
-   * the map at all, since `touch-action: none` also suppresses the browser's
-   * own native pinch. See docs/design/zoom-transition.md §2 (out of scope
-   * for the zoom-transition work, tracked as a follow-up).
+   * so that point stays under the cursor/pinch centre as zoom changes.
+   * Pulled out as its own method (rather than inlined into a caller) so
+   * `onWheel` and the pinch branch of `onPointerMove` drive the exact same
+   * math through the exact same seam — pinch computes its own `screen` (the
+   * midpoint between the two touches) and `factor` (the ratio of successive
+   * inter-touch distances) and calls this, picking up the `lockCamera` guard
+   * and zoom clamp for free. See docs/design/zoom-transition.md §2/§9.
    */
   private zoomBy(screen: { x: number; y: number }, factor: number) {
     if (this.lockCamera) return;
@@ -2285,6 +2448,22 @@ export class HexMapRenderer {
       if (this.destroyed) return;
       this.forceRebuild();
     }, WHEEL_IDLE_MS);
+  }
+
+  /**
+   * Cancels any in-flight `noteZoomActivity` idle timer without waiting for
+   * it to fire. Used both by `destroy()` (a zoom gesture still settling when
+   * the renderer goes away must not fire its rebuild into a torn-down app)
+   * and by a pinch gesture's own end (`endTrackedPointer`) — a pinch already
+   * has a definite end (the last finger lifting), so there is no reason to
+   * also wait out the wheel idle timer for a second, redundant rebuild.
+   */
+  private endZoomActivity() {
+    if (this.wheelIdleTimer !== null) {
+      clearTimeout(this.wheelIdleTimer);
+      this.wheelIdleTimer = null;
+    }
+    this.wheeling = false;
   }
 
   private handleClick(e: PointerEvent) {
@@ -2767,6 +2946,33 @@ export class HexMapRenderer {
       const river = worldModel.getRiverTile(c.q, c.r);
 
       const key = coordKey(c);
+      // A giant tile (see giantTiles.ts) replaces only this hex's *top*
+      // sprite — its base stays whatever grass/forest-turned-grass art
+      // baseTextureFor would already draw. No real backend/live-mode
+      // interaction to worry about here (giants are demo-only, never
+      // rivers/buildings — WorldModel.canPlaceGiant already refuses those),
+      // so this is checked ahead of the river/sawmill branches below.
+      if (tile.giant) {
+        baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+        const giantAnim = giantTopAnimFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part);
+        // A giant part with an animated clip but no static frame of its own
+        // (shouldn't normally happen — every part ships both — but cheap to
+        // handle) still renders: the clip's own first frame doubles as the
+        // static texture/crop source, same sourceSize height as a real
+        // static frame would have.
+        const giantTexture =
+          giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part) ??
+          giantAnim?.textures[0];
+        if (giantTexture) {
+          // Degrades gracefully when the real art hasn't landed in the
+          // vendored atlas yet (giantTopTextureFor returns undefined) — the
+          // tile just draws with its plain base, no top sprite at all,
+          // rather than throwing or showing a placeholder.
+          topEntries.set(key, { texture: giantTexture, coord: c, crop: giantCrop(giantTexture.height), anim: giantAnim });
+        }
+        fogPerfStats.terrainDrawnCount++;
+        continue;
+      }
       // A Sawmill is built directly on a river tile (WorldModel.placeBuilding
       // only accepts a straight/bend one) — its sawmill+river composite art
       // replaces the plain river art the `river` branch below would
@@ -4071,16 +4277,14 @@ export class HexMapRenderer {
     canvas?.removeEventListener('pointerdown', this.onPointerDown);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerCancel);
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     canvas?.removeEventListener('touchstart', this.onTouchStart);
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
-    if (this.wheelIdleTimer !== null) {
-      clearTimeout(this.wheelIdleTimer);
-      this.wheelIdleTimer = null;
-    }
-    this.wheeling = false;
+    this.endZoomActivity();
+    this.pinch.clear();
     this.app?.ticker.remove(this.onTick);
     // app.destroy({ children: true }) destroys everything still attached to
     // the stage, but the fog layers' meshes are — see mount()'s addChild —

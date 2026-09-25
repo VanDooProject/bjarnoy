@@ -24,15 +24,9 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
 
     private static string UniqueName(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..24];
 
-    private async Task<WorldResponse> CreateWorldAsync(
-        HttpClient client, int seed = 4242, int radius = 30, int maxPlayers = 100)
-    {
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(UniqueName("world"), seed, radius, maxPlayers), Ct);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return await response.ReadStrictAsync<WorldResponse>(Ct);
-    }
+    private async Task<WorldEntity> CreateWorldAsync(
+        int seed = 4242, int radius = 30, int maxPlayers = 100) =>
+        await _fixture.Factory.CreateWorldAsync(UniqueName("world"), seed, radius, maxPlayers, cancellationToken: Ct);
 
     /// <summary>Registers a fresh player, promotes it to Admin in the DB, then logs in to mint a token carrying the role.</summary>
     private async Task<string> CreateAdminTokenAsync(HttpClient client)
@@ -58,7 +52,7 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
     }
 
     /// <summary>Founds a settlement (one longhouse) on <paramref name="world"/>'s first usable plot, under <paramref name="ownerId"/>.</summary>
-    private async Task<SettlementResponse> FoundSettlementAsync(HttpClient client, WorldResponse world, string ownerId)
+    private async Task<SettlementResponse> FoundSettlementAsync(HttpClient client, WorldEntity world, string ownerId)
     {
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -78,7 +72,7 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
     public async Task Joinable_worlds_omit_seed_generation_and_radius()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
 
         var response = await client.GetAsync("/api/v1/worlds/joinable", Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -95,6 +89,8 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
         Assert.Equal(world.MaxPlayers, listed.MaxPlayers);
         Assert.True(listed.Joinable);
         Assert.Equal("none", listed.JoinableReason);
+        // No players yet, so every seat is free.
+        Assert.Equal(world.MaxPlayers, listed.FreeSlots);
 
         // Belt-and-braces: the raw body itself must not mention any of the
         // fields JoinableWorldResponse deliberately drops, in case a future
@@ -110,7 +106,7 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
     public async Task A_world_with_joins_closed_is_reported_unjoinable_with_reason()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         Authorize(client, await CreateAdminTokenAsync(client));
 
         var patched = await client.PatchJsonAsync(
@@ -131,10 +127,25 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
     }
 
     [Fact]
+    public async Task Founding_a_settlement_shrinks_the_worlds_free_slots()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(maxPlayers: 3);
+        await FoundSettlementAsync(client, world, UniqueName("owner"));
+
+        var response = await client.GetAsync("/api/v1/worlds/joinable", Ct);
+        var worlds = await response.ReadStrictAsync<IReadOnlyList<JoinableWorldResponse>>(Ct);
+        var listed = Assert.Single(worlds, w => w.Id == world.Id);
+
+        Assert.Equal(3, listed.MaxPlayers);
+        Assert.Equal(2, listed.FreeSlots);
+    }
+
+    [Fact]
     public async Task Membership_reports_the_settlement_for_a_founder_and_null_for_a_stranger()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var ownerId = UniqueName("owner");
         var settlement = await FoundSettlementAsync(client, world, ownerId);
 
@@ -162,7 +173,7 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
     public async Task Membership_without_the_owner_header_is_a_400()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
 
         var response = await client.GetAsync($"/api/v1/worlds/{world.Id}/membership", Ct);
 
@@ -194,10 +205,10 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
         using var client = _fixture.CreateClient();
         var ownerId = UniqueName("owner");
 
-        var firstWorld = await CreateWorldAsync(client, seed: 11, radius: 30);
+        var firstWorld = await CreateWorldAsync(seed: 11, radius: 30);
         var firstSettlement = await FoundSettlementAsync(client, firstWorld, ownerId);
 
-        var secondWorld = await CreateWorldAsync(client, seed: 12, radius: 30);
+        var secondWorld = await CreateWorldAsync(seed: 12, radius: 30);
         var secondSettlement = await FoundSettlementAsync(client, secondWorld, ownerId);
 
         Assert.NotEqual(firstSettlement.Id, secondSettlement.Id);

@@ -98,6 +98,11 @@ public sealed class AuthService(
 
         _dbContext.Users.Add(user);
 
+        // Worlds touched by the claim below, for the RealmDirectory
+        // invalidation after SaveChangesAsync succeeds — populated only when
+        // there is something to claim.
+        IReadOnlyList<Guid> claimedWorldIds = [];
+
         if (!string.IsNullOrWhiteSpace(existingOwnerId))
         {
             // Tracked updates, not ExecuteUpdateAsync: that issues its UPDATE
@@ -113,12 +118,26 @@ public sealed class AuthService(
             {
                 settlement.UserId = user.Id;
             }
+
+            claimedWorldIds = [.. toClaim.Select(s => s.WorldId).Distinct()];
         }
 
         var (raw, token) = IssueRefreshToken(user.Id);
         _dbContext.RefreshTokens.Add(token);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // RealmDirectory's per-settlement and per-(world,owner) cache entries
+        // for every settlement just claimed above are now stale (UserId
+        // changed from Abandoned to this new account) — flush each affected
+        // world so the next lookup re-reads the real, now-claimed row rather
+        // than serving the unclaimed one for up to RealmDirectory's sliding
+        // expiration. Done after SaveChangesAsync succeeds, not before: an
+        // invalidation ahead of a failed save would have nothing to correct.
+        foreach (var worldId in claimedWorldIds)
+        {
+            RealmDirectory.InvalidateWorld(worldId);
+        }
 
         return new AuthResult(AuthOutcome.Success, user, raw);
     }
