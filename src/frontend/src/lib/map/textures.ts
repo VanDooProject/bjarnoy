@@ -838,6 +838,19 @@ export function riverArtFor(
 }
 
 /**
+ * The lava-spring art (`mountaintile_volcano_lavaspring_flows`) was rendered
+ * with its outflow two hex edges clockwise of `rivertile_spring`'s at the same
+ * orientation label (e.g. `_E`: the river spring drains out the lower-left
+ * edge, the lava spring out the top). So the orientation `springOrientationOf`
+ * picks for the river art is stepped two places back through
+ * `TILE_ORIENTATIONS` to put the lava tongue on the edge the stream leaves by.
+ */
+export function lavaSpringOrientationOf(riverSpringOrientation: TileOrientation): TileOrientation {
+  const i = TILE_ORIENTATIONS.indexOf(riverSpringOrientation);
+  return TILE_ORIENTATIONS[(i + TILE_ORIENTATIONS.length - 2) % TILE_ORIENTATIONS.length];
+}
+
+/**
  * A river tile's own base/top textures, overriding whatever the underlying
  * terrain would have drawn. `seaDirection` (only meaningful for a `Mouth`
  * tile — see `riverArtFor`) is the caller's own terrain lookup
@@ -857,8 +870,9 @@ export function riverTexturesFor(
   // art (no dedicated lava mouth asset), so every other shape falls through
   // to the ordinary lookup below even on a wasted island.
   if (river.wasted && (shape === 'straight' || shape === 'bend' || shape === 'bend60' || shape === 'spring')) {
-    const lavaBase = textures.lavaRiverBase[shape]?.[orientation];
-    const lavaTop = textures.lavaRiverTop[shape]?.[orientation];
+    const lavaOrientation = shape === 'spring' ? lavaSpringOrientationOf(orientation) : orientation;
+    const lavaBase = textures.lavaRiverBase[shape]?.[lavaOrientation];
+    const lavaTop = textures.lavaRiverTop[shape]?.[lavaOrientation];
     if (lavaBase && lavaTop) return { base: lavaBase, top: lavaTop };
   }
 

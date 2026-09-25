@@ -7,6 +7,7 @@ import {
   renumberTopVariants,
   riverArtFor,
   riverTexturesFor,
+  lavaSpringOrientationOf,
   textureKeyFor,
   type FamilyFrame,
   type TileTextures,
@@ -521,5 +522,17 @@ describe('riverTexturesFor lava-island shapes', () => {
     const result = riverTexturesFor(textures, river);
 
     expect(result.base).toBe('plain-river-base');
+  });
+});
+
+describe('lavaSpringOrientationOf', () => {
+  // The lava-spring render drains two hex edges clockwise of the river-spring
+  // render at the same label (_E: river spring out the lower-left edge, lava
+  // spring out the top), so its label steps two places back.
+  it('steps the river-spring orientation two places back', () => {
+    expect(lavaSpringOrientationOf('E')).toBe('SW');
+    expect(lavaSpringOrientationOf('NE')).toBe('SE');
+    expect(lavaSpringOrientationOf('NW')).toBe('E');
+    expect(lavaSpringOrientationOf('SE')).toBe('W');
   });
 });
