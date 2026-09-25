@@ -11,8 +11,17 @@
 // ResourceBar (in-game), since that's the one case it would push pills
 // off — everywhere else (docs-style pages) it stays inline, just shrunk to
 // a single compact line. Pills themselves must never be half-cut: the old
-// horizontal scroller is gone in favour of wrapping onto a second line, and
-// each pill's fill-track can never be wider than the numbers text above it.
+// horizontal scroller is gone, and each pill's fill-track can never be wider
+// than the numbers text above it.
+//
+// Mobile HUD bar rework, phase 3 (owner's decision): the row must never wrap
+// onto a second line either — a wrapped population pill at 320px with the
+// drawer open was flagged as bad, not fixed by giving it more room. With no
+// second line to fall back to, the row instead switches every pill to short
+// "k"/"M" notation together (`lib/hud/compactNumber.ts`) once full notation
+// genuinely doesn't fit, and pills spread evenly across the bar's full width
+// (centred within their own equal-width slot) instead of packing to the
+// left.
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
@@ -20,19 +29,29 @@ import { loginTestUser } from './helpers';
 import { SettlementPage } from './pages';
 
 /**
+ * ResourceBar.vue mounts a second, hidden `.resource-bar` alongside the real
+ * one purely to measure whether full notation would fit (`data-measure` on
+ * its root) — off-screen (`position: fixed`, far outside the viewport) and
+ * `aria-hidden`/`inert`, but still real DOM sharing the same classes, so
+ * every locator below that means "the pills the player actually sees" has
+ * to exclude it explicitly or it silently doubles counts and pulls
+ * bounding-box assertions off into space.
+ */
+const REAL_BAR = '.resource-bar:not([data-measure])';
+
+/**
  * Every `.resource-bar .resource` box must lie fully inside `.hud-bar`
- * horizontally (never half-cut), and the pill row itself must not scroll —
- * wrapping onto a second line is fine, clipping is not. Shared by the
- * collapsed and drawer-open (expanded) checks below, at both phone widths
- * this spec cares about.
+ * horizontally (never half-cut), and the pill row itself must not scroll or
+ * wrap — a single row, always. Shared by the collapsed and drawer-open
+ * (expanded) checks below, at every phone width this spec cares about.
  */
 async function expectPillsNotClipped(page: Page): Promise<void> {
   const bar = await page.locator('.hud-bar').boundingBox();
-  const row = page.locator('.resource-bar');
+  const row = page.locator(REAL_BAR);
   const overflow = await row.evaluate((el) => el.scrollWidth - el.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 
-  const pills = page.locator('.resource-bar .resource');
+  const pills = page.locator(`${REAL_BAR} .resource`);
   const count = await pills.count();
   expect(count).toBeGreaterThan(0);
   for (let i = 0; i < count; i++) {
@@ -45,7 +64,7 @@ async function expectPillsNotClipped(page: Page): Promise<void> {
 
 /** Each pill's `.fill-track` must never be wider than its own `.numbers`/`.numbers-compact` text above it. */
 async function expectFillTracksMatchNumbers(page: Page): Promise<void> {
-  const pills = page.locator('.resource-bar .resource');
+  const pills = page.locator(`${REAL_BAR} .resource`);
   const count = await pills.count();
   expect(count).toBeGreaterThan(0);
   for (let i = 0; i < count; i++) {
@@ -56,6 +75,57 @@ async function expectFillTracksMatchNumbers(page: Page): Promise<void> {
   }
 }
 
+/** Owner's decision, phase 3: the row must never wrap — every pill's own top edge must land on the same line. */
+async function expectSingleRow(page: Page): Promise<void> {
+  const pills = page.locator(`${REAL_BAR} .resource`);
+  const count = await pills.count();
+  expect(count).toBeGreaterThan(1);
+  const tops = await Promise.all(
+    Array.from({ length: count }, (_, i) => pills.nth(i).boundingBox().then((box) => box!.y)),
+  );
+  const first = tops[0];
+  for (const top of tops) expect(top).toBeCloseTo(first, 0);
+}
+
+/**
+ * Owner addition: pills spread evenly across the bar's full width and are
+ * centred within their own equal-width slot, rather than packed to the
+ * left — the gap from the bar's own left edge to the first pill's *content*
+ * (its icon) should roughly match the gap from the bar's right edge to the
+ * last pill's content (its numbers column's own right edge), and the gaps
+ * between one pill's content and the next should read as roughly even too.
+ * "Roughly" allows a few px of slack — pills can differ slightly in their
+ * own content width (e.g. population's longer number), which nudges a
+ * centred pill's own inset by a similarly small amount.
+ */
+async function expectPillsEvenlySpaced(page: Page): Promise<void> {
+  const bar = (await page.locator(REAL_BAR).boundingBox())!;
+  const pills = page.locator(`${REAL_BAR} .resource`);
+  const count = await pills.count();
+  expect(count).toBeGreaterThan(1);
+
+  const icons = await Promise.all(
+    Array.from({ length: count }, (_, i) => pills.nth(i).locator('.hex-icon').boundingBox()),
+  );
+  const numbers = await Promise.all(
+    Array.from({ length: count }, (_, i) => pills.nth(i).locator('.numbers, .numbers-compact').boundingBox()),
+  );
+
+  const leftGap = icons[0]!.x - bar.x;
+  const lastNumbers = numbers[numbers.length - 1]!;
+  const rightGap = bar.x + bar.width - (lastNumbers.x + lastNumbers.width);
+  // Slack tolerance: population's number is a different width than a
+  // resource pill's, which nudges a centred pill's own inset by a few px on
+  // a real page (~7px observed) even though every pill's own *slot* is an
+  // equal share of the row.
+  expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(10);
+
+  const gaps: number[] = [];
+  for (let i = 1; i < count; i++) gaps.push(icons[i]!.x - (numbers[i - 1]!.x + numbers[i - 1]!.width));
+  const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  for (const gap of gaps) expect(Math.abs(gap - avgGap)).toBeLessThanOrEqual(10);
+}
+
 test.describe('mobile HUD bar', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -64,7 +134,7 @@ test.describe('mobile HUD bar', () => {
     await loginTestUser(page);
     await SettlementPage.found(page);
 
-    const pills = page.locator('.resource-bar .resource--compact');
+    const pills = page.locator(`${REAL_BAR} .resource--compact`);
     await expect(pills.first()).toBeVisible();
 
     const wood = pills.nth(0);
@@ -79,15 +149,18 @@ test.describe('mobile HUD bar', () => {
     await expect(stone.locator('.value-compact')).toContainText('/h');
     await expect(wood.locator('.fill-track')).toBeVisible();
 
-    // A tap on a *different* pill still advances the one shared stage.
+    // A tap on a *different* pill still advances the one shared stage — the
+    // cap stage now reads the same "/{n}" the expanded view's cap line
+    // shows (owner's call), not a "max ..." label.
     await stone.click();
-    await expect(wood.locator('.value-compact')).toContainText('max');
-    await expect(stone.locator('.value-compact')).toContainText('max');
+    await expect(wood.locator('.value-compact')).toContainText('/');
+    await expect(stone.locator('.value-compact')).toContainText('/');
+    await expect(wood.locator('.value-compact')).not.toContainText('/h');
     await expect(wood.locator('.fill-track')).toBeVisible();
 
     await wood.click();
     await expect(wood.locator('.value-compact')).not.toContainText('/h');
-    await expect(wood.locator('.value-compact')).not.toContainText('max');
+    await expect(wood.locator('.value-compact')).not.toContainText('/');
   });
 
   test('dragging the collapsed bar down opens the pull-down drawer, dragging up closes it', async ({ page }) => {
@@ -126,7 +199,7 @@ test.describe('mobile HUD bar', () => {
     // drawer opens) and catch nothing — assert on the actual expanded
     // markup/class instead.
     const expandedBarBox = (await page.locator('.hud-bar').boundingBox())!;
-    await expect(page.locator('.resource-bar.expanded')).toBeVisible();
+    await expect(page.locator(`${REAL_BAR}.expanded`)).toBeVisible();
     await expect(page.locator('.resource--compact')).toHaveCount(0); // expanded, not the single-line cycle
     await expect(page.locator('.hud-bar .resource .rate').first()).toBeVisible();
 
@@ -156,7 +229,7 @@ test.describe('mobile HUD bar', () => {
       const collapsedBarBox = (await page.locator('.hud-bar').boundingBox())!;
       expect(collapsedBarBox.height).toBeCloseTo(box.height, 0);
     }).toPass();
-    await expect(page.locator('.resource-bar .resource--compact').first()).toBeVisible();
+    await expect(page.locator(`${REAL_BAR} .resource--compact`).first()).toBeVisible();
   });
 
   test('releasing short of the open threshold snaps the drawer back closed', async ({ page }) => {
@@ -219,7 +292,7 @@ test.describe('mobile HUD bar', () => {
     const grip = page.locator('.hud-grip');
     await expect(grip).toBeVisible();
     const gripBox = (await grip.boundingBox())!;
-    const pills = page.locator('.resource-bar .resource');
+    const pills = page.locator(`${REAL_BAR} .resource`);
     const count = await pills.count();
     for (let i = 0; i < count; i++) {
       const pillBox = (await pills.nth(i).boundingBox())!;
@@ -246,13 +319,39 @@ test.describe('mobile HUD bar', () => {
 
     await expectPillsNotClipped(page);
     await expectFillTracksMatchNumbers(page);
+    await expectSingleRow(page);
+    await expectPillsEvenlySpaced(page);
 
     // Same checks again once the drawer is open, where ResourceBar switches
     // every pill to its expanded (stacked value/rate/fill) rendering.
     await page.locator('.hud-grip').click();
-    await expect(page.locator('.resource-bar.expanded')).toBeVisible();
+    await expect(page.locator(`${REAL_BAR}.expanded`)).toBeVisible();
     await expectPillsNotClipped(page);
     await expectFillTracksMatchNumbers(page);
+    await expectSingleRow(page);
+    await expectPillsEvenlySpaced(page);
+  });
+
+  // Owner's decision, phase 3: at the suite's default 390px width, the
+  // default demo numbers are small enough that full notation fits — this
+  // pins that default (short notation is exercised separately below, at
+  // 320px with seeded large numbers) so a regression that always renders
+  // short wouldn't slip through unnoticed.
+  test('at 390px with the default demo numbers, full notation is shown (not short "k"/"M")', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    const pills = page.locator(`${REAL_BAR} .resource--compact`);
+    const wood = pills.nth(0);
+    await wood.click(); // rate
+    await wood.click(); // cap
+    await expect(wood.locator('.value-compact')).toContainText('/3,000');
+
+    await page.locator('.hud-grip').click();
+    await expect(page.locator(`${REAL_BAR}.expanded`)).toBeVisible();
+    const expandedWood = page.locator(`${REAL_BAR} .resource`).first();
+    await expect(expandedWood.locator('.cap')).toContainText('/3,000');
   });
 
   test('drawer account section: logged in shows Profile + Log out, Profile navigates', async ({ page }) => {
@@ -281,34 +380,71 @@ test.describe('mobile HUD bar', () => {
   });
 });
 
-test.describe('mobile HUD bar at a narrower phone width (320px)', () => {
-  test('collapsed and drawer-open pills still fit fully inside the bar with no clipping, scrolling, or fill-track overhang', async ({ page }) => {
+// [BUG] `SettlementPage.found`'s landfall click (helpers.ts's
+// `claimLandfall`, which asks the renderer for the preview plot's own screen
+// coordinate rather than guessing one) times out waiting for
+// `__demoWorld().selectedSettlementId` at a 320px-wide viewport — it
+// reproduces identically on `main`/this branch's own pre-existing code, with
+// none of this PR's HUD-bar changes applied, so it's a real, separate bug in
+// the founding flow at that width, not something this spec should paper
+// over or fix inline. Founding at the suite's usual 390px width (where it
+// works) and resizing down afterward is not a workaround for that bug —
+// these tests' own job is only to check the HUD bar's own pill layout at a
+// narrow width, not to re-prove founding works at every width, and this way
+// the bar still genuinely renders/measures at that width, same as if
+// founding itself had happened there.
+for (const width of [375, 320]) {
+  test.describe(`mobile HUD bar at a narrower phone width (${width}px)`, () => {
+    test('collapsed and drawer-open pills still fit fully inside the bar, in a single row, evenly spaced, with no clipping, scrolling, or fill-track overhang', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await loginTestUser(page);
+      await SettlementPage.found(page);
+      await page.setViewportSize({ width, height: 568 });
+
+      await expectPillsNotClipped(page);
+      await expectFillTracksMatchNumbers(page);
+      await expectSingleRow(page);
+      await expectPillsEvenlySpaced(page);
+
+      await page.locator('.hud-grip').click();
+      await expect(page.locator(`${REAL_BAR}.expanded`)).toBeVisible();
+      await expectPillsNotClipped(page);
+      await expectFillTracksMatchNumbers(page);
+      await expectSingleRow(page);
+      await expectPillsEvenlySpaced(page);
+    });
+  });
+}
+
+test.describe('mobile HUD bar short notation', () => {
+  test('seeding very large resources forces short "k"/"M" notation at 320px, and the row still fits on one line', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    // [BUG] found while writing this test, unrelated to this PR's own diff:
-    // `SettlementPage.found`'s landfall click (helpers.ts's `claimLandfall`,
-    // which asks the renderer for the preview plot's own screen coordinate
-    // rather than guessing one) times out waiting for
-    // `__demoWorld().selectedSettlementId` at a 320px-wide viewport — it
-    // reproduces identically on `main`/this branch's own pre-existing code,
-    // with none of this PR's HUD-bar changes applied, so it's a real,
-    // separate bug in the founding flow at that width, not something this
-    // spec should paper over or fix inline. Founding at the suite's usual
-    // 390px width (where it works) and resizing down afterward is not a
-    // workaround for that bug — this test's own job is only to check the
-    // HUD bar's own pill layout at 320px, not to re-prove founding works at
-    // every width, and this way it still genuinely renders/measures the bar
-    // at 320px, same as if founding itself had happened there.
     await loginTestUser(page);
-    await SettlementPage.found(page);
+    const settlement = await SettlementPage.found(page);
+    await settlement.setStorageCaps({ wood: 36_000_000, stone: 20_000_000, food: 40_000_000, iron: 10_000_000 });
+    await settlement.setResources({ wood: 12_345_678, stone: 9_800_000, food: 15_200_000, iron: 4_300_000 });
     await page.setViewportSize({ width: 320, height: 568 });
 
+    const pills = page.locator(`${REAL_BAR} .resource--compact`);
+    // Stock stage (default) — a full "12,345,678" would never fit a 320px
+    // pill, so this alone pins that the switch actually happened.
+    await expect(pills.first().locator('.value-compact')).toContainText(/[kM]/);
     await expectPillsNotClipped(page);
     await expectFillTracksMatchNumbers(page);
+    await expectSingleRow(page);
+
+    await pills.first().click(); // rate
+    await pills.first().click(); // cap
+    await expect(pills.first().locator('.value-compact')).toContainText(/\/[\d.,]+[kM]/);
 
     await page.locator('.hud-grip').click();
-    await expect(page.locator('.resource-bar.expanded')).toBeVisible();
+    await expect(page.locator(`${REAL_BAR}.expanded`)).toBeVisible();
+    const expandedWood = page.locator(`${REAL_BAR} .resource`).first();
+    await expect(expandedWood.locator('.value')).toContainText(/[kM]/);
+    await expect(expandedWood.locator('.cap')).toContainText(/\/[\d.,]+[kM]/);
     await expectPillsNotClipped(page);
     await expectFillTracksMatchNumbers(page);
+    await expectSingleRow(page);
   });
 });
 

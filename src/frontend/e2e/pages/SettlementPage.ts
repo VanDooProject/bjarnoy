@@ -283,6 +283,23 @@ export class SettlementPage {
     }, resources);
   }
 
+  /**
+   * Overrides the settlement's real storage cap (`Settlement.capacity` —
+   * `WorldModel.storageCapForDisplay` prefers this over its own
+   * level-derived guess, see its own comment) — for pushing the HUD's cap
+   * readout to large numbers regardless of settlement level, e.g. to force
+   * ResourceBar's short "k"/"M" notation.
+   */
+  async setStorageCaps(caps: { wood: number; stone: number; food: number; iron: number }): Promise<void> {
+    await this.page.evaluate((c) => {
+      const world = (window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+      }).__demoWorld();
+      world.model.getSettlement(world.selectedSettlementId).capacity = c;
+      world.syncHud();
+    }, caps);
+  }
+
   /** The HUD's current resource read-out. */
   hudResources(): Promise<{ wood: number; iron: number }> {
     return this.page.evaluate(
