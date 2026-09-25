@@ -309,7 +309,7 @@ function stageText(value: number, rate: number, cap: number): string {
    shrink to the space `.hud-bar-right` really has, and `flex-wrap` lets
    pills that still don't fit drop to a second line rather than overflow. */
 .resource-bar.expanded {
-  gap: 10px;
+  gap: 6px;
   row-gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
@@ -318,6 +318,19 @@ function stageText(value: number, rate: number, cap: number): string {
 .resource-bar.expanded .resource + .resource {
   padding-left: 0;
   border-left: none;
+}
+.resource-bar.expanded .resource {
+  gap: 4px;
+}
+/* A notch smaller than desktop's 14px value text so all five expanded
+   pills still fit one row on a 320–375px phone instead of the population
+   pill wrapping onto a line of its own. */
+.resource-bar.expanded .value {
+  font-size: 12px;
+}
+.resource-bar.expanded .hex-icon {
+  width: 11px;
+  height: 11px;
 }
 /* The shared `.fill-track` rule above carries a 64px min-width tuned for
    roomy desktop pills — on a narrow expanded mobile pill (where the cap now
@@ -380,11 +393,13 @@ function stageText(value: number, rate: number, cap: number): string {
      old scroller's "half-cut pill" bug into an "illegibly squeezed pill"
      one — the text would keep its own natural (nowrap) width regardless and
      spill past its own shrunk box, which is the same visual clipping under a
-     different name. `flex-wrap` above is what actually keeps every pill
-     whole: once pills can no longer all fit this floor on one line, the
-     excess wraps to a second line instead of being squeezed or sliced. */
-  flex: 1 1 68px;
-  min-width: 56px;
+     different name. The floor is the pill's own content width (not a fixed
+     guess — a fixed 68px basis wrapped the fifth pill onto its own line at
+     390px when all five fit), so the row wraps only when the pills'
+     real content genuinely doesn't fit, and otherwise shares the width
+     evenly. */
+  flex: 1 1 0;
+  min-width: min-content;
 }
 .resource--compact:focus-visible {
   outline: 2px solid var(--gold);
