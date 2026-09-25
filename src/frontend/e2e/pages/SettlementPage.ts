@@ -1,6 +1,6 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { expect, type Locator, type Page } from '@playwright/test';
-import { captureCanvas, claimLandfall, foundSettlement, waitForMapReady } from '../helpers';
+import { captureCanvas, claimLandfall, foundSettlement, placeGuidedBuildings, waitForMapReady } from '../helpers';
 import { RingMenuComponent } from './RingMenuComponent';
 
 export interface HexCoord {
@@ -135,6 +135,11 @@ export class SettlementPage {
   /** Clicks the deterministic starter plot and waits for the settlement to exist. */
   async claimLandfall(): Promise<void> {
     await claimLandfall(this.page);
+  }
+
+  /** Places the two guided onboarding buildings, completing onboarding (the completion banner then shows). */
+  async placeGuidedBuildings(): Promise<void> {
+    await placeGuidedBuildings(this.page);
   }
 
   /** The canvas's on-screen box. Cached — the canvas fills the viewport and never moves. */

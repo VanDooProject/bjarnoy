@@ -142,6 +142,22 @@ export async function foundSettlement(page: Page): Promise<void> {
 
   await claimLandfall(page);
 
+  await placeGuidedBuildings(page);
+
+  await page.getByTestId('onboarding-continue').click();
+  await page.waitForURL('**/settlement');
+  // The click navigates to a *new* SettlementCanvas mount (a fresh renderer,
+  // not the landing page's preview one) — wait for its own mount-complete
+  // signal instead of guessing how long that takes.
+  await waitForMapReady(page);
+}
+
+/**
+ * Places the 2 guided onboarding buildings (farm + lumberjack) next to the
+ * freshly founded settlement, which completes onboarding and shows the
+ * completion banner. Assumes `claimLandfall` has already run.
+ */
+export async function placeGuidedBuildings(page: Page): Promise<void> {
   // Places the 2 guided onboarding buildings directly against the model —
   // real click-to-build UI is settlement-interactions.spec's job to cover;
   // this helper only needs the onboarding *gate*
@@ -176,13 +192,6 @@ export async function foundSettlement(page: Page): Promise<void> {
     }
     world.syncHud();
   });
-
-  await page.getByTestId('onboarding-continue').click();
-  await page.waitForURL('**/settlement');
-  // The click navigates to a *new* SettlementCanvas mount (a fresh renderer,
-  // not the landing page's preview one) — wait for its own mount-complete
-  // signal instead of guessing how long that takes.
-  await waitForMapReady(page);
 }
 
 /**

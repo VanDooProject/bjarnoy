@@ -600,7 +600,7 @@ async function confirmFieldOrderClick() {
   .status-card.army-panel {
     max-width: calc(100vw - 24px);
     max-height: 40vh;
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
 }
 .status-card-header {

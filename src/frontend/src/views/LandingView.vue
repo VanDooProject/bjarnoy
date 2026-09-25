@@ -48,8 +48,8 @@ import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
+import { isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
-import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -365,9 +365,11 @@ const queueDrawerOpen = ref(false);
 // `hudPrefs.barPosition` preference), and QueueDrawer.vue now reads these
 // CSS custom properties to stay clear of the bar on either edge instead of
 // assuming it's always at the top.
-const hudPrefsForInsets = useHudPrefsStore();
 const isCompactHudLanding = useMediaQuery(HUD_COMPACT_QUERY);
-const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && hudPrefsForInsets.barPosition === 'bottom');
+// The bar's *effective* edge (TopBar publishes it), not the raw preference:
+// the pre-founding bar has no drawer and always sits at the top, so a saved
+// 'bottom' preference must not move the intro text or overlays up under it.
+const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && isHudBarAtBottom.value);
 const hudInsetTopPxLanding = computed(() => (hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value));
 const hudInsetBottomPxLanding = computed(() => (hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0));
 
@@ -1060,7 +1062,7 @@ h1 {
   .hero {
     left: 20px;
     right: 20px;
-    top: calc(var(--hud-bar-h, 64px) + 16px);
+    top: calc(var(--hud-inset-top, 64px) + 16px);
     max-width: none;
   }
   h1 {
@@ -1087,7 +1089,7 @@ h1 {
      view's scope attribute) docks right above the footer rather than on
      top of it, so the sea name / reservation countdown stays readable. */
   .landing > .tray {
-    bottom: calc(44px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(44px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
 }
 /* Short-landscape phones (finding b/g companion): the checklist tray is
