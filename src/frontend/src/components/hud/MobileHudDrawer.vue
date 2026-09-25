@@ -17,6 +17,7 @@ import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import type { MessageSchema } from '../../i18n/schema';
+import LocaleSwitcher from '../LocaleSwitcher.vue';
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -75,6 +76,11 @@ function go(path: string) {
     <button v-if="route.name !== 'landing'" class="link" @click="go('/')">
       {{ t('hud.nav.landing') }}
     </button>
+    <!-- The language switcher's only home at phone width — see
+         LocaleSwitcher.vue's own comment on why no bar carries it there. -->
+    <div class="drawer-locale">
+      <LocaleSwitcher in-drawer />
+    </div>
   </nav>
 </template>
 
@@ -99,6 +105,11 @@ function go(path: string) {
   text-align: left;
   font-family: inherit;
   -webkit-tap-highlight-color: transparent;
+}
+.drawer-locale {
+  padding: 10px 4px 4px;
+  border-top: 1px solid var(--panel-border);
+  margin-top: 4px;
 }
 .link.active {
   color: var(--gold);

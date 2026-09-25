@@ -238,6 +238,31 @@ test.describe('mobile HUD drawer on non-map pages', () => {
     await expect(page).toHaveURL('/');
   });
 
+  // On a phone the language switcher never sits in a bar — the locale
+  // already follows the browser, and the bar has no room for it. Every
+  // mount outside the HUD drawer hides itself at phone width.
+  test('no page shows the language switcher outside the drawer', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/tech-tree']) {
+      await page.goto(path);
+      // Mounted (so this can't pass just because the page hadn't rendered
+      // yet), but not shown.
+      await expect(page.locator('.locale-switcher:not(.in-drawer)').first(), path).toBeAttached();
+      await expect(page.locator('.locale-switcher:not(.in-drawer):visible'), path).toHaveCount(0);
+    }
+  });
+
+  test('the drawer carries the language switcher, and it switches the locale', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/docs');
+    await page.locator('.hud-grip').tap();
+
+    const switcher = page.locator('.hud-drawer .locale-switcher');
+    await expect(switcher).toBeVisible();
+    await switcher.getByRole('button', { name: 'DE' }).tap();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+  });
+
   test('the pre-founding landing page gets no grip at all', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await page.goto('/');
