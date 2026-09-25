@@ -156,7 +156,36 @@ const GAPPY_VARIANT_FAMILIES: ReadonlySet<string> = new Set(['wasteland', 'deadf
  * `classifyGiantFrames`'s own doc comment), so they need their own
  * classification path entirely.
  */
-const GIANT_FAMILIES: readonly string[] = ['giantmountain', 'giantshrine', 'giantvolcano', 'giantutgard'];
+const GIANT_FAMILIES: readonly string[] = [
+  'giantmountain',
+  'giantshrine',
+  'giantvolcano',
+  'giantutgard',
+  'giantvolcano_wasted',
+];
+
+/**
+ * A giant family's dedicated wasted-tile art variant, if the vendored pack
+ * ships one — today just `giantvolcano` (a mountain-cluster giant on a
+ * wasted island keeps the backend/domain family string `"giantvolcano"`
+ * either way; only the art changes). `giantArtFamilyFor` is what resolves
+ * this at render time, with a plain-family fallback when the wasted variant
+ * has no frames loaded yet.
+ */
+const WASTED_GIANT_FAMILY: Partial<Record<string, string>> = {
+  giantvolcano: 'giantvolcano_wasted',
+};
+
+/**
+ * Which giant art family to actually look up for a placement — `family`
+ * unchanged unless the anchor tile is wasted and `family` has a dedicated
+ * wasted variant (see `WASTED_GIANT_FAMILY`). Callers still need their own
+ * fallback to the plain family when the wasted variant's frames haven't
+ * loaded (same graceful-degradation contract every other giant lookup has).
+ */
+export function giantArtFamilyFor(family: string, wasted: boolean): string {
+  return (wasted && WASTED_GIANT_FAMILY[family]) || family;
+}
 
 /** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
 type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
@@ -169,15 +198,24 @@ const RIVER_FAMILY: Record<RiverArtShape, string> = {
   confluence: 'rivertile_y_narrow',
 };
 
+/** The lava-river shapes that have a dedicated wasted-island art family — see `TileTextures.lavaRiverBase`/`lavaRiverTop`'s own doc comment for why this doesn't cover every `RiverArtShape`. */
+type LavaRiverShape = 'straight' | 'bend' | 'bend60' | 'spring';
+
 /**
- * Lava-stream art families, one per shape a lava stream can actually take —
- * see `TileTextures.lavaRiverBase`/`lavaRiverTop`'s own doc comment for why
- * this doesn't cover every `RiverArtShape`.
+ * Lava-stream art families, one per `LavaRiverShape`. `spring`'s family
+ * (`mountaintile_volcano_lavaspring_flows`) is the mountain-shape family's
+ * own convention (base+top per orientation, no variants — same shape
+ * `mountaintile_saddleback_spring`/`mountaintile_corrie_spring` already
+ * use), not the plain river-family one; it only ever replaces a Spring
+ * tile's own overlay art (`riverTexturesFor`), never the underlying
+ * mountain's base texture, which stays whatever `MountainShapeAt`/
+ * `SpringMountainShapeAt` already picked either way.
  */
-const LAVA_RIVER_FAMILY: Record<'straight' | 'bend' | 'bend60', string> = {
+const LAVA_RIVER_FAMILY: Record<LavaRiverShape, string> = {
   straight: 'lavastream',
   bend: 'lavastream_bend',
   bend60: 'lavastream_bend60',
+  spring: 'mountaintile_volcano_lavaspring_flows',
 };
 
 /** The orientation token embedded in every frame name, e.g. `..._NE_...` or `..._NE`. */
@@ -401,14 +439,14 @@ export interface TileTextures {
   /** Coastal water bordering a wasted island (`blacksandcoast`) — see `baseTextureFor`'s `tile.wasted` branch. */
   wastedCoastalBase: OrientationMap<Texture[]>;
   /**
-   * Lava-stream art for a wasted island's rivers — only the three shapes a
-   * lava stream can actually take (`straight`/`bend`/`bend60`; confluence
-   * cannot occur on lava, and spring/mouth render with the plain river art
-   * per `riverTexturesFor`'s own doc comment). Sparse: a shape with no
-   * frames in the loaded atlas is simply absent.
+   * Lava-stream art for a wasted island's rivers — the shapes a lava
+   * stream can actually take (`straight`/`bend`/`bend60`/`spring`;
+   * confluence cannot occur on lava, and mouth renders with the plain
+   * river art per `riverTexturesFor`'s own doc comment). Sparse: a shape
+   * with no frames in the loaded atlas is simply absent.
    */
-  lavaRiverBase: Partial<Record<'straight' | 'bend' | 'bend60', OrientationMap<Texture>>>;
-  lavaRiverTop: Partial<Record<'straight' | 'bend' | 'bend60', OrientationMap<Texture>>>;
+  lavaRiverBase: Partial<Record<LavaRiverShape, OrientationMap<Texture>>>;
+  lavaRiverTop: Partial<Record<LavaRiverShape, OrientationMap<Texture>>>;
   /** Giant-tile top textures, keyed by family (e.g. `giantmountain`) — see `giantTiles.ts`. */
   giants: Partial<Record<string, GiantTextureMap<Texture>>>;
   /**
@@ -499,7 +537,12 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
   // frames happen to carry per-variant base textures too (unlike plain
   // coastal water's single level-invariant base), but the game still only
   // ever draws one texture for a coastal-water tile either way.
-  const wastedCoastalClassified = classifyFamilyFrames(framesOfFamily(merged, WASTED_COASTAL_FAMILY));
+  // renumberTopVariants here too: a stale, incomplete leftover copy of
+  // blacksandcoast's frames still lingers in the buildings-static atlas
+  // (from before this family moved into terrain — see the wasted-islands
+  // asset-bump commit), and its lone-frame-per-orientation shape is its own
+  // kind of gap classifyFamilyFrames would otherwise reject outright.
+  const wastedCoastalClassified = classifyFamilyFrames(renumberTopVariants(framesOfFamily(merged, WASTED_COASTAL_FAMILY)));
   const wastedCoastalBase =
     wastedCoastalClassified.baseIndexed ?? wastedCoastalClassified.top ?? emptyOrientationMap<Texture[]>(() => []);
 
@@ -514,7 +557,7 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
 
   const lavaRiverBase: TileTextures['lavaRiverBase'] = {};
   const lavaRiverTop: TileTextures['lavaRiverTop'] = {};
-  for (const [shape, family] of Object.entries(LAVA_RIVER_FAMILY) as ['straight' | 'bend' | 'bend60', string][]) {
+  for (const [shape, family] of Object.entries(LAVA_RIVER_FAMILY) as [LavaRiverShape, string][]) {
     const classified = classifyFamilyFrames(framesOfFamily(merged, family));
     if (classified.base) lavaRiverBase[shape] = classified.base;
     if (classified.top) lavaRiverTop[shape] = mapOrientations(classified.top, (_o, arr) => arr[0] ?? Texture.EMPTY);
@@ -569,13 +612,12 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
     coastalBase: a.coastalBase,
     riverBase: a.riverBase,
     riverTop: a.riverTop,
-    // Unlike plain coastal water/rivers, the wasted-island art families live
-    // in the buildings-static atlas, not terrain — so these merge like
-    // `top`/`base` (b's frames win) rather than being pinned to `a`.
-    wastedCoastalBase:
-      TILE_ORIENTATIONS.some((o) => b.wastedCoastalBase[o].length > 0) ? b.wastedCoastalBase : a.wastedCoastalBase,
-    lavaRiverBase: { ...a.lavaRiverBase, ...b.lavaRiverBase },
-    lavaRiverTop: { ...a.lavaRiverTop, ...b.lavaRiverTop },
+    // Like plain coastal water/rivers, the wasted-island terrain/lava-river
+    // art families live in the terrain atlas too, so these are pinned to
+    // `a` (the terrain-only load) the same way.
+    wastedCoastalBase: a.wastedCoastalBase,
+    lavaRiverBase: a.lavaRiverBase,
+    lavaRiverTop: a.lavaRiverTop,
     giants: { ...a.giants, ...b.giants },
     giantAnims: { ...a.giantAnims, ...b.giantAnims },
   };
@@ -796,13 +838,13 @@ export function riverTexturesFor(
 ): { base: Texture; top: Texture } {
   const { shape, orientation } = riverArtFor(river, seaDirection);
 
-  // Lava streams (wasted islands) swap in the lavastream families for the
-  // three shapes that have one — straight/bend/bend60. Confluence cannot
-  // occur on lava (RiverGenerator's allowConfluence: false), and spring/
-  // mouth deliberately keep the plain river art (no dedicated lava spring
-  // asset yet), so every other shape falls through to the ordinary lookup
-  // below even on a wasted island.
-  if (river.wasted && (shape === 'straight' || shape === 'bend' || shape === 'bend60')) {
+  // Lava streams (wasted islands) swap in the lavastream/lava-spring
+  // families for the shapes that have one — straight/bend/bend60/spring
+  // (LAVA_RIVER_FAMILY). Confluence cannot occur on lava (RiverGenerator's
+  // allowConfluence: false) and mouth deliberately keeps the plain river
+  // art (no dedicated lava mouth asset), so every other shape falls through
+  // to the ordinary lookup below even on a wasted island.
+  if (river.wasted && (shape === 'straight' || shape === 'bend' || shape === 'bend60' || shape === 'spring')) {
     const lavaBase = textures.lavaRiverBase[shape]?.[orientation];
     const lavaTop = textures.lavaRiverTop[shape]?.[orientation];
     if (lavaBase && lavaTop) return { base: lavaBase, top: lavaTop };

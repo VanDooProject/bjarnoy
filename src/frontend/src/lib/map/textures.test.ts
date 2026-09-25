@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFamilyClips, classifyFamilyFrames, renumberTopVariants, riverArtFor, textureKeyFor, type FamilyFrame } from './textures';
+import {
+  classifyFamilyClips,
+  classifyFamilyFrames,
+  giantArtFamilyFor,
+  renumberTopVariants,
+  riverArtFor,
+  riverTexturesFor,
+  textureKeyFor,
+  type FamilyFrame,
+  type TileTextures,
+} from './textures';
 import { bendOrientationOf } from './types';
 import type { RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
@@ -306,5 +316,125 @@ describe('textureKeyFor wasted-island mapping', () => {
   it('a building on a tile still takes priority over the wasted mapping', () => {
     const tile: Tile = { q: 0, r: 0, terrain: 'grass', wasted: true, buildingType: 'hut' };
     expect(textureKeyFor(tile)).toBe('hut');
+  });
+});
+
+describe('giantArtFamilyFor', () => {
+  it('swaps giantvolcano for its wasted art variant on a wasted tile', () => {
+    expect(giantArtFamilyFor('giantvolcano', true)).toBe('giantvolcano_wasted');
+  });
+
+  it('keeps giantvolcano plain on an unwasted tile', () => {
+    expect(giantArtFamilyFor('giantvolcano', false)).toBe('giantvolcano');
+  });
+
+  it('leaves a family with no dedicated wasted variant unchanged even when wasted', () => {
+    expect(giantArtFamilyFor('giantmountain', true)).toBe('giantmountain');
+    expect(giantArtFamilyFor('giantutgard', true)).toBe('giantutgard');
+    expect(giantArtFamilyFor('giantshrine', true)).toBe('giantshrine');
+  });
+});
+
+// riverTexturesFor's lava-shape swap — built against a minimal, hand-rolled
+// TileTextures fixture (plain strings standing in for real Pixi Textures,
+// same reasoning classifyFamilyFrames's own tests use) rather than the real
+// asset pipeline, which needs a browser `document` this repo's vitest
+// config doesn't provide.
+describe('riverTexturesFor lava-island shapes', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+
+  function fixture(): TileTextures {
+    return {
+      base: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      riverBase: {
+        straight: orientationMap('plain-river-base' as unknown as never),
+        bend: orientationMap('plain-river-base' as unknown as never),
+        bend60: orientationMap('plain-river-base' as unknown as never),
+        spring: orientationMap('plain-spring-base' as unknown as never),
+        confluence: orientationMap('plain-river-base' as unknown as never),
+      },
+      riverTop: {
+        straight: orientationMap('plain-river-top' as unknown as never),
+        bend: orientationMap('plain-river-top' as unknown as never),
+        bend60: orientationMap('plain-river-top' as unknown as never),
+        spring: orientationMap('plain-spring-top' as unknown as never),
+        confluence: orientationMap('plain-river-top' as unknown as never),
+      },
+      lavaRiverBase: {
+        straight: orientationMap('lava-base' as unknown as never),
+        spring: orientationMap('lava-spring-base' as unknown as never),
+      },
+      lavaRiverTop: {
+        straight: orientationMap('lava-top' as unknown as never),
+        spring: orientationMap('lava-spring-top' as unknown as never),
+      },
+      giants: {},
+      giantAnims: {},
+    };
+  }
+
+  it('uses the lava family for a wasted straight tile', () => {
+    const textures = fixture();
+    const river = { q: 0, r: 0, shape: 'straight' as const, inDirections: ['W' as const], outDirection: 'E' as const, wasted: true };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('lava-base');
+    expect(result.top).toBe('lava-top');
+  });
+
+  it('uses the plain river family for an unwasted straight tile', () => {
+    const textures = fixture();
+    const river = { q: 0, r: 0, shape: 'straight' as const, inDirections: ['W' as const], outDirection: 'E' as const, wasted: false };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('plain-river-base');
+    expect(result.top).toBe('plain-river-top');
+  });
+
+  it('uses the lava-spring family (mountaintile_volcano_lavaspring_flows) for a wasted spring tile', () => {
+    const textures = fixture();
+    const river = { q: 0, r: 0, shape: 'spring' as const, inDirections: [], outDirection: 'E' as const, wasted: true };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('lava-spring-base');
+    expect(result.top).toBe('lava-spring-top');
+  });
+
+  it('falls back to the plain family when the lava variant has no frames loaded for that shape', () => {
+    const textures = fixture();
+    // 'bend' has no lavaRiverBase/Top entry in this fixture.
+    const river = { q: 0, r: 0, shape: 'bend' as const, inDirections: ['W' as const], outDirection: 'NE' as const, wasted: true };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('plain-river-base');
+    expect(result.top).toBe('plain-river-top');
+  });
+
+  it('confluence never checks the lava family even when wasted (lava never confluences)', () => {
+    const textures = fixture();
+    const river = {
+      q: 0,
+      r: 0,
+      shape: 'confluence' as const,
+      inDirections: ['W' as const, 'E' as const],
+      outDirection: null,
+      wasted: true,
+    };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('plain-river-base');
   });
 });

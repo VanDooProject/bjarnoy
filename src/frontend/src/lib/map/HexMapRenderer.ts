@@ -58,6 +58,7 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
   loadBuildingAtlases,
@@ -2957,14 +2958,28 @@ export class HexMapRenderer {
       // so this is checked ahead of the river/sawmill branches below.
       if (tile.giant) {
         baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
-        const giantAnim = giantTopAnimFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part);
+        // A giant on a wasted island's own anchor tile renders with that
+        // family's dedicated wasted art variant if the vendored pack has
+        // one (today just giantvolcano_wasted) — falls back to the plain
+        // family when the wasted variant's frames haven't loaded, the same
+        // graceful-degradation contract giantTopTextureFor itself already
+        // has for a family with no art at all.
+        const giantFamily = giantArtFamilyFor(tile.giant.family, tile.wasted ?? false);
+        const giantAnim =
+          giantTopAnimFor(textures, giantFamily, tile.giant.orientation, tile.giant.part) ??
+          (giantFamily !== tile.giant.family
+            ? giantTopAnimFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part)
+            : undefined);
         // A giant part with an animated clip but no static frame of its own
         // (shouldn't normally happen — every part ships both — but cheap to
         // handle) still renders: the clip's own first frame doubles as the
         // static texture/crop source, same sourceSize height as a real
         // static frame would have.
         const giantTexture =
-          giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part) ??
+          giantTopTextureFor(textures, giantFamily, tile.giant.orientation, tile.giant.part) ??
+          (giantFamily !== tile.giant.family
+            ? giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part)
+            : undefined) ??
           giantAnim?.textures[0];
         if (giantTexture) {
           // Degrades gracefully when the real art hasn't landed in the
