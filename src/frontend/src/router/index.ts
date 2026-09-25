@@ -135,6 +135,11 @@ export const router = createRouter({
       component: () => import('../views/TileDocsView.vue'),
     },
     {
+      path: '/docs/wasted-lands',
+      name: 'wasted-lands-docs',
+      component: () => import('../views/WastedLandsView.vue'),
+    },
+    {
       path: '/admin',
       component: () => import('../views/admin/AdminLayout.vue'),
       meta: { requiresAdmin: true },
