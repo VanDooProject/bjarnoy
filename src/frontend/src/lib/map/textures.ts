@@ -719,6 +719,23 @@ export function baseTextureFor(
     const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
   }
+  // A wasted land tile with no dedicated wasted-family base of its own
+  // (mountain — see WASTED_TEXTURE_KEY's own doc comment — and any tile a
+  // giant's opaque top art fully covers, which can include a mountain-
+  // cluster giant's own Mountain footprint hexes) still needs to show
+  // *some* wasted ground rather than the plain green base, or every
+  // mountain/giant on a wasted island sits in a bright green ring. `wasteland`
+  // stands in for it — its own top art is never drawn here (a plain mountain
+  // keeps its own top via textureKeyFor below; a giant tile draws its own
+  // top separately, see HexMapRenderer's giant branch), only the base. Not
+  // routed through textureKeyFor itself: that key also decides *top* art
+  // (topTextureFor), and a wasted mountain's top stays the plain mountain
+  // shape for now (no dedicated wasted-mountain art yet), so only the base
+  // lookup here is allowed to diverge from it.
+  if (tile.wasted && !tile.buildingType && (tile.giant || !WASTED_TEXTURE_KEY[tile.terrain])) {
+    const wastelandBase = textures.base.wasteland;
+    if (wastelandBase) return wastelandBase[orientation];
+  }
   const key = textureKeyFor(tile, sawmillVariant);
   const indexed = textures.baseIndexed[key];
   if (indexed) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  baseTextureFor,
   classifyFamilyClips,
   classifyFamilyFrames,
   giantArtFamilyFor,
@@ -316,6 +317,89 @@ describe('textureKeyFor wasted-island mapping', () => {
   it('a building on a tile still takes priority over the wasted mapping', () => {
     const tile: Tile = { q: 0, r: 0, terrain: 'grass', wasted: true, buildingType: 'hut' };
     expect(textureKeyFor(tile)).toBe('hut');
+  });
+});
+
+// baseTextureFor's wasted-mountain/giant base swap — a minimal, hand-rolled
+// TileTextures fixture (plain strings standing in for real Pixi Textures,
+// same reasoning riverTexturesFor's own fixture above uses).
+describe('baseTextureFor wasted mountain/giant base', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+
+  function fixture(): TileTextures {
+    return {
+      base: {
+        mountain: orientationMap('green-mountain-base' as unknown as never),
+        grass: orientationMap('green-grass-base' as unknown as never),
+        wasteland: orientationMap('wasteland-base' as unknown as never),
+      },
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      riverBase: {
+        straight: orientationMap('r' as unknown as never),
+        bend: orientationMap('r' as unknown as never),
+        bend60: orientationMap('r' as unknown as never),
+        spring: orientationMap('r' as unknown as never),
+        confluence: orientationMap('r' as unknown as never),
+      },
+      riverTop: {
+        straight: orientationMap('r' as unknown as never),
+        bend: orientationMap('r' as unknown as never),
+        bend60: orientationMap('r' as unknown as never),
+        spring: orientationMap('r' as unknown as never),
+        confluence: orientationMap('r' as unknown as never),
+      },
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    };
+  }
+
+  it('uses the wasteland base for a wasted mountain tile (top art is untouched elsewhere)', () => {
+    const textures = fixture();
+    const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: true, orientation: 'NE' };
+
+    expect(baseTextureFor(textures, tile)).toBe('wasteland-base');
+  });
+
+  it('keeps the plain green mountain base for an unwasted mountain tile', () => {
+    const textures = fixture();
+    const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: false, orientation: 'NE' };
+
+    expect(baseTextureFor(textures, tile)).toBe('green-mountain-base');
+  });
+
+  it('uses the wasteland base for any wasted tile carrying a giant, mountain or not', () => {
+    const textures = fixture();
+    const giant = { family: 'giantvolcano' as const, anchor: { q: 0, r: 0 }, part: 'C' as const, orientation: 'E' as const };
+    const mountainWithGiant: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: true, orientation: 'E', giant };
+    const grassWithGiant: Tile = { q: 1, r: 0, terrain: 'grass', wasted: true, orientation: 'E', giant };
+
+    expect(baseTextureFor(textures, mountainWithGiant)).toBe('wasteland-base');
+    expect(baseTextureFor(textures, grassWithGiant)).toBe('wasteland-base');
+  });
+
+  it('keeps the plain green base for a giant on an unwasted island', () => {
+    const textures = fixture();
+    const giant = { family: 'giantmountain' as const, anchor: { q: 0, r: 0 }, part: 'C' as const, orientation: 'E' as const };
+    const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: false, orientation: 'E', giant };
+
+    expect(baseTextureFor(textures, tile)).toBe('green-mountain-base');
+  });
+
+  it('falls back to the plain mountain base when the wasteland family has no frames loaded', () => {
+    const textures = fixture();
+    textures.base = { mountain: textures.base.mountain };
+    const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: true, orientation: 'E' };
+
+    expect(baseTextureFor(textures, tile)).toBe('green-mountain-base');
   });
 });
 
