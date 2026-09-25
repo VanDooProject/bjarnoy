@@ -297,8 +297,23 @@ function stageText(value: number, rate: number, cap: number): string {
    numbers") between one pill's numbers and the next pill's icon. Match the
    already-established compact-mode numbers (10px gap, no border/padding
    separator) here too, for visual consistency across the two mobile states. */
+/* Owner's annotated screenshot, item 4: at a narrow-enough phone width (320px
+   with 5 expanded pills) the un-wrapped row is wider than the bar has room
+   for — the base `.resource-bar` rule above is `flex: none` (a roomy desktop
+   row that's never expected to shrink), so without this the row overflows
+   its `.hud-bar-right` parent, and that parent's own `justify-content:
+   flex-end` (right-anchored) pushes the overflow out past the bar's *left*
+   edge instead of the right — the same half-cut-pill problem the compact
+   row's own `flex-wrap` (below) already solves, just in the expanded
+   markup instead. `flex: 1 1 auto; min-width: 0` lets this row actually
+   shrink to the space `.hud-bar-right` really has, and `flex-wrap` lets
+   pills that still don't fit drop to a second line rather than overflow. */
 .resource-bar.expanded {
   gap: 10px;
+  row-gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 .resource-bar.expanded .resource + .resource {
   padding-left: 0;
@@ -323,25 +338,26 @@ function stageText(value: number, rate: number, cap: number): string {
    under HUD_COMPACT_QUERY (lib/breakpoints.ts) and while the drawer is
    closed; the desktop rules above are untouched, and are reused as-is for
    the mobile *expanded* state (drawer open — see ResourceBar.vue's isExpanded). */
-/* Finding #1/#3: horizontal scrolling for a too-narrow row of pills now
-   lives here instead of a wrapper TopBar.vue used to put around its whole
-   slot (which clipped every absolutely-positioned dropdown anywhere in the
-   bar down to that wrapper's own visible height — see TopBar.vue's own
-   comment). `pan-x` (not `none`, and not left to the default `auto`) tells
-   the browser this row itself may be panned horizontally by touch, while
-   still letting a vertical touch here bubble up to the collapsed bar's own
-   pointer handlers (TopBar.vue's `useHudDrawer`) as a pull-down-drawer drag
-   instead of being swallowed as a failed/rubber-banding scroll attempt. */
+/* Mobile HUD bar rework, phase 2 (owner's annotated screenshot): a pill
+   shown half-cut at the bar's own edge was one of the two things flagged for
+   removal, and finding #1/#3's horizontal scroller (this rule used to carry
+   `overflow-x: auto`/`touch-action: pan-x`) is exactly how that happened —
+   letting the row run wider than the bar and pan sideways to reach the rest
+   means whatever the bar's edge lands on mid-scroll is, by construction,
+   sliced in half. With the avatar/chevron also gone (TopBar.vue/HudNav.vue)
+   the row finally has the whole bar width to itself, so pills wrap onto a
+   second line instead of ever being cut off — `flex-wrap: wrap` here, and
+   each pill keeps a real minimum width below (not 0) so wrapping is driven
+   by genuine content need rather than squeezing every pill illegibly thin
+   first. This row no longer scrolls at all, so it no longer needs its own
+   `touch-action` opinion either — a plain touch here now falls through to
+   the bar's own pull-down-drawer drag handling like the rest of the bar. */
 .resource-bar.compact {
-  gap: 10px;
+  gap: 8px;
+  row-gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  touch-action: pan-x;
-}
-.resource-bar.compact::-webkit-scrollbar {
-  display: none;
+  flex-wrap: wrap;
 }
 /* The desktop `.resource + .resource` separator (22px padding + a border)
    would otherwise still apply here too — far too wide for 5 pills to fit a
@@ -360,6 +376,15 @@ function stageText(value: number, rate: number, cap: number): string {
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  /* A real floor (not 0): letting a pill shrink to 0 would only relocate the
+     old scroller's "half-cut pill" bug into an "illegibly squeezed pill"
+     one — the text would keep its own natural (nowrap) width regardless and
+     spill past its own shrunk box, which is the same visual clipping under a
+     different name. `flex-wrap` above is what actually keeps every pill
+     whole: once pills can no longer all fit this floor on one line, the
+     excess wraps to a second line instead of being squeezed or sliced. */
+  flex: 1 1 68px;
+  min-width: 56px;
 }
 .resource--compact:focus-visible {
   outline: 2px solid var(--gold);
@@ -370,7 +395,13 @@ function stageText(value: number, rate: number, cap: number): string {
   display: flex;
   flex-direction: column;
   line-height: 1.15;
-  min-width: 44px;
+  /* No floor here on purpose — the pill's own `min-width` above already
+     keeps the whole pill (icon + numbers) from wrapping too eagerly; a
+     second, independent floor on just this inner column would let it force
+     `.fill-track` (100% of this column's own width, just below) wider than
+     the actual value/rate text sitting above it whenever that text is
+     shorter than the floor — exactly the overhang issue/fix below. */
+  min-width: 0;
 }
 .value-compact {
   font-weight: 600;
@@ -387,8 +418,13 @@ function stageText(value: number, rate: number, cap: number): string {
   font-weight: 400;
   color: var(--muted);
 }
+/* Owner's annotated screenshot, finding 2: the collapsed track used to
+   overhang the (often much shorter) value text above it — this floor was
+   why. Dropping it lets `.fill-track` (width: 100%, in the shared rule
+   above) track the column's real content width instead of a fixed minimum,
+   same fix already applied to the expanded pills below. */
 .resource-bar.compact .fill-track {
-  min-width: 48px;
+  min-width: 0;
   margin-top: 2px;
 }
 .stage-dots {
