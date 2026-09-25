@@ -332,6 +332,12 @@ watch(() => route.fullPath, closeAccountMenu);
   z-index: 50;
   width: 160px;
   padding: 8px;
+  /* Same fix as ReturningPlayerMenu.vue's own identical `.menu` panel — see
+     that file's comment. `.hud-bar`'s ambient `pointer-events: none` only
+     gets re-enabled for `<button>`s via `.hud-bar-right :deep(button)`, so
+     this panel's own background/padding fell through to the canvas
+     underneath without this. */
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;

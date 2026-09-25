@@ -235,6 +235,17 @@ watch(() => route.fullPath, close);
   max-height: 70vh;
   overflow-y: auto;
   padding: 8px;
+  /* Finding #1's own regression check (an e2e hit-test at this panel's own
+     centre, not just its buttons): `.hud-bar` sets `pointer-events: none`
+     on itself so the map can be clicked through everywhere except real HUD
+     controls, and only `.hud-bar-right :deep(button)` opts back in — which
+     covers the "Log in" row and WorldList's own rows, but not this panel's
+     own background/padding/divider. A click there fell through to the
+     canvas underneath even though the panel visually sat on top of it.
+     Scoped to `.menu` alone (not the whole `.returning-player-menu` root)
+     so it doesn't reach the sibling `#nudge` slot — see this file's own
+     comment above on why the root deliberately stays pointer-events: none. */
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
