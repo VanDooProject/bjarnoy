@@ -2,10 +2,59 @@
 // bar pulls down into a drawer (Android-notification-shade style), and a
 // stored top/bottom docking preference is honoured. Desktop gets none of
 // this — see the final test.
+//
+// Mobile HUD bar rework, phase 2 (owner's annotated screenshot): the
+// chevron and the avatar/account-menu leave every phone bar entirely (a
+// thin drag handle, `.hud-grip`, replaces the chevron — Profile/Log out move
+// into the drawer's own account section); the anonymous ReturningPlayerMenu
+// trigger only moves into the drawer on a bar that also carries
+// ResourceBar (in-game), since that's the one case it would push pills
+// off — everywhere else (docs-style pages) it stays inline, just shrunk to
+// a single compact line. Pills themselves must never be half-cut: the old
+// horizontal scroller is gone in favour of wrapping onto a second line, and
+// each pill's fill-track can never be wider than the numbers text above it.
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { loginTestUser } from './helpers';
 import { SettlementPage } from './pages';
+
+/**
+ * Every `.resource-bar .resource` box must lie fully inside `.hud-bar`
+ * horizontally (never half-cut), and the pill row itself must not scroll —
+ * wrapping onto a second line is fine, clipping is not. Shared by the
+ * collapsed and drawer-open (expanded) checks below, at both phone widths
+ * this spec cares about.
+ */
+async function expectPillsNotClipped(page: Page): Promise<void> {
+  const bar = await page.locator('.hud-bar').boundingBox();
+  const row = page.locator('.resource-bar');
+  const overflow = await row.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+
+  const pills = page.locator('.resource-bar .resource');
+  const count = await pills.count();
+  expect(count).toBeGreaterThan(0);
+  for (let i = 0; i < count; i++) {
+    const pillBox = await pills.nth(i).boundingBox();
+    expect(pillBox).not.toBeNull();
+    expect(pillBox!.x).toBeGreaterThanOrEqual(bar!.x - 1);
+    expect(pillBox!.x + pillBox!.width).toBeLessThanOrEqual(bar!.x + bar!.width + 1);
+  }
+}
+
+/** Each pill's `.fill-track` must never be wider than its own `.numbers`/`.numbers-compact` text above it. */
+async function expectFillTracksMatchNumbers(page: Page): Promise<void> {
+  const pills = page.locator('.resource-bar .resource');
+  const count = await pills.count();
+  expect(count).toBeGreaterThan(0);
+  for (let i = 0; i < count; i++) {
+    const pill = pills.nth(i);
+    const trackBox = (await pill.locator('.fill-track').boundingBox())!;
+    const numbersBox = (await pill.locator('.numbers, .numbers-compact').boundingBox())!;
+    expect(trackBox.width).toBeLessThanOrEqual(numbersBox.width + 1);
+  }
+}
 
 test.describe('mobile HUD bar', () => {
   test.use({ viewport: { width: 390, height: 844 } });
@@ -149,9 +198,121 @@ test.describe('mobile HUD bar', () => {
     const armyBox = (await page.locator('.army-panel.status-card').boundingBox())!;
     expect(armyBox.y + armyBox.height).toBeLessThanOrEqual(barBox.y);
   });
+
+  // Owner's annotated screenshot: the chevron and the avatar/account trigger
+  // must not be in the in-game phone bar at all, and no pill may sit
+  // half-cut at the bar's edge — see this file's own top-of-file comment.
+  test('the in-game phone bar is resource pills only: no avatar, no account trigger, no locale switcher, a clear grip handle', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    // All three stay mounted (HudNav.vue/LocaleSwitcher.vue hide them with a
+    // plain CSS media query, not a `v-if`) — a DOM-presence check like
+    // `toHaveCount(0)` would pass for the wrong reason here, so assert on
+    // actual visibility instead (same reasoning as the existing "no page
+    // shows the language switcher outside the drawer" test below).
+    await expect(page.locator('.hud-bar .account-menu')).toBeHidden();
+    await expect(page.locator('.hud-bar .returning-player-menu')).toBeHidden();
+    await expect(page.locator('.hud-bar .locale-switcher')).toBeHidden();
+
+    const grip = page.locator('.hud-grip');
+    await expect(grip).toBeVisible();
+    const gripBox = (await grip.boundingBox())!;
+    const pills = page.locator('.resource-bar .resource');
+    const count = await pills.count();
+    for (let i = 0; i < count; i++) {
+      const pillBox = (await pills.nth(i).boundingBox())!;
+      const overlaps = !(
+        gripBox.x + gripBox.width <= pillBox.x
+        || pillBox.x + pillBox.width <= gripBox.x
+        || gripBox.y + gripBox.height <= pillBox.y
+        || pillBox.y + pillBox.height <= gripBox.y
+      );
+      expect(overlaps, `grip must not overlap pill ${i}`).toBe(false);
+    }
+
+    await grip.click();
+    await expect(async () => {
+      const openBox = (await page.locator('.hud-drawer').boundingBox())!;
+      expect(openBox.height).toBeGreaterThan(100);
+    }).toPass();
+  });
+
+  test('collapsed pills fit fully inside the bar with no clipping or scrolling, and fill-tracks never overhang their numbers', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    await expectPillsNotClipped(page);
+    await expectFillTracksMatchNumbers(page);
+
+    // Same checks again once the drawer is open, where ResourceBar switches
+    // every pill to its expanded (stacked value/rate/fill) rendering.
+    await page.locator('.hud-grip').click();
+    await expect(page.locator('.resource-bar.expanded')).toBeVisible();
+    await expectPillsNotClipped(page);
+    await expectFillTracksMatchNumbers(page);
+  });
+
+  test('drawer account section: logged in shows Profile + Log out, Profile navigates', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    await page.locator('.hud-grip').click();
+    const profile = page.locator('[data-testid="drawer-account-profile"]');
+    const logout = page.locator('[data-testid="drawer-account-logout"]');
+    await expect(profile).toBeVisible();
+    await expect(logout).toBeVisible();
+
+    await profile.click();
+    await expect(page).toHaveURL('/profile');
+  });
+
+  test('drawer account section: anonymous shows the log-in entry (the trigger itself stays out of this bar)', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.found(page); // anonymous — no loginTestUser
+
+    await expect(page.locator('.hud-bar .returning-player-menu')).toBeHidden();
+    await page.locator('.hud-grip').click();
+    await expect(page.locator('[data-testid="drawer-account-login"]')).toBeVisible();
+    await expect(page.locator('[data-testid="drawer-account-worlds"]')).toBeVisible();
+  });
 });
 
-test('desktop renders no compact pills and no drag grip', async ({ page }) => {
+test.describe('mobile HUD bar at a narrower phone width (320px)', () => {
+  test('collapsed and drawer-open pills still fit fully inside the bar with no clipping, scrolling, or fill-track overhang', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    // [BUG] found while writing this test, unrelated to this PR's own diff:
+    // `SettlementPage.found`'s landfall click (helpers.ts's `claimLandfall`,
+    // which asks the renderer for the preview plot's own screen coordinate
+    // rather than guessing one) times out waiting for
+    // `__demoWorld().selectedSettlementId` at a 320px-wide viewport — it
+    // reproduces identically on `main`/this branch's own pre-existing code,
+    // with none of this PR's HUD-bar changes applied, so it's a real,
+    // separate bug in the founding flow at that width, not something this
+    // spec should paper over or fix inline. Founding at the suite's usual
+    // 390px width (where it works) and resizing down afterward is not a
+    // workaround for that bug — this test's own job is only to check the
+    // HUD bar's own pill layout at 320px, not to re-prove founding works at
+    // every width, and this way it still genuinely renders/measures the bar
+    // at 320px, same as if founding itself had happened there.
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+    await page.setViewportSize({ width: 320, height: 568 });
+
+    await expectPillsNotClipped(page);
+    await expectFillTracksMatchNumbers(page);
+
+    await page.locator('.hud-grip').click();
+    await expect(page.locator('.resource-bar.expanded')).toBeVisible();
+    await expectPillsNotClipped(page);
+    await expectFillTracksMatchNumbers(page);
+  });
+});
+
+test('desktop renders no compact pills and no drag grip; the account menu stays inline in HudNav', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await loginTestUser(page);
   await SettlementPage.found(page);
@@ -159,6 +320,9 @@ test('desktop renders no compact pills and no drag grip', async ({ page }) => {
   await expect(page.locator('.resource--compact')).toHaveCount(0);
   await expect(page.locator('.hud-grip')).toHaveCount(0);
   await expect(page.locator('.hud-bar')).not.toHaveClass(/hud-bar--bottom/);
+  // Owner's annotated screenshot only asked for these gone on a phone —
+  // desktop keeps the avatar inline in HudNav exactly as before.
+  await expect(page.locator('.hud-nav .account-menu')).toBeVisible();
 });
 
 // Group E (a): desktop — a dropdown anywhere inside the bar must be
@@ -236,6 +400,42 @@ test.describe('mobile HUD drawer on non-map pages', () => {
     // previously missing entirely — tapping it must actually navigate.
     await page.getByRole('button', { name: 'Landing' }).tap();
     await expect(page).toHaveURL('/');
+  });
+
+  // Owner's clarification: a bar with no ResourceBar (every docs-style page)
+  // keeps the anonymous ReturningPlayerMenu trigger inline instead of moving
+  // it into the drawer — only an in-game bar (ResourceBar present) does
+  // that, since only there would the trigger push pills off. The avatar
+  // still leaves every phone bar regardless of ResourceBar.
+  test('on /docs: the returning-player trigger stays in the bar (compact), and the title still has room', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/docs');
+
+    const trigger = page.locator('.hud-bar [data-testid="returning-player-trigger"]');
+    await expect(trigger).toBeVisible();
+    await expect(page.locator('.hud-bar .account-menu')).toHaveCount(0);
+
+    // Not crushed to a single-letter ellipsis: with the avatar/chevron gone
+    // and the trigger shrunk to one compact line, "Docs" fits with room to
+    // spare — its own scrollWidth must not exceed what's actually rendered.
+    const title = page.locator('.mobile-title-text');
+    await expect(title).toHaveText('Docs');
+    const overflow = await title.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
+
+  // A longer title (vs. "Docs") makes the "not crushed" regression concrete:
+  // /showcase's "Bjarnoy" is exactly the kind of title that used to get
+  // ellipsis-cut down to "B…" once the avatar + chevron ate the row's width.
+  test('on /showcase: a longer title still renders in full next to the compact trigger', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/showcase');
+
+    await expect(page.locator('.hud-bar [data-testid="returning-player-trigger"]')).toBeVisible();
+    const title = page.locator('.mobile-title-text');
+    await expect(title).toHaveText('Bjarnoy');
+    const overflow = await title.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 
   // On a phone the language switcher never sits in a bar — the locale
