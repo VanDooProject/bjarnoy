@@ -168,6 +168,9 @@ const barRef = ref<HTMLElement | null>(null);
 const measureRef = ref<HTMLElement | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
+/** Smallest evenly spread gap short notation may leave before the font steps down a size. */
+const MIN_TIGHT_GAP_PX = 8;
+
 async function updateFit(): Promise<void> {
   if (!isCompact.value) {
     useShortNotation.value = false;
@@ -182,9 +185,13 @@ async function updateFit(): Promise<void> {
   useTightFont.value = false;
   if (!needsShort) return;
   // Let the DOM actually re-render in short notation before judging whether
-  // that alone was enough — only then does `bar.scrollWidth` reflect it.
+  // that alone was enough. "Enough" means the evenly spread row still keeps
+  // a visible gap (MIN_TIGHT_GAP_PX at each of its pills + 1 spaces, ends
+  // included) — not merely that it doesn't overflow, which would still let
+  // the pills sit nearly touching on the narrowest phones.
   await nextTick();
-  useTightFont.value = bar.scrollWidth > bar.clientWidth;
+  const pillsWidth = Array.from(bar.children).reduce((sum, el) => sum + el.getBoundingClientRect().width, 0);
+  useTightFont.value = pillsWidth + (bar.children.length + 1) * MIN_TIGHT_GAP_PX > bar.clientWidth;
 }
 
 onMounted(() => {
@@ -446,28 +453,26 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
    the row doesn't fit, `useShortNotation` (see the script above) switches
    every pill to short notation instead. */
 .resource-bar.expanded {
-  gap: 6px;
+  gap: 0;
   row-gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
+  justify-content: space-evenly;
 }
 .resource-bar.expanded .resource + .resource {
   padding-left: 0;
   border-left: none;
 }
-/* Owner addition: pills spread evenly across the bar's full width instead of
-   packing to the left, with each pill's own icon+numbers centred inside its
-   equal-width slot (`flex: 1 1 0` gives every pill the same share of the
-   row; `justify-content: center` centres this pill's own content within
-   that share). `min-width: min-content` is still a real floor — the same
-   "never squeeze below actual content" reasoning as the compact pills below
-   — the row switches to short notation (see the script above) rather than
-   ever shrinking a pill's numbers past their own natural width. */
+/* Owner: pills evenly distributed across the bar's full width — the same
+   visible gap between every pill and at both ends (`justify-content:
+   space-evenly` on the row, pills at their natural width), rather than
+   equal-width slots, whose visible gaps would vary with each pill's own
+   text width. When the full numbers can't keep a real gap between pills,
+   the row switches to short notation (see the script above and the
+   measuring row's 14px gap below) instead of letting pills touch. */
 .resource-bar.expanded .resource {
   gap: 4px;
-  flex: 1 1 0;
-  min-width: min-content;
-  justify-content: center;
+  flex: none;
 }
 /* A notch smaller than desktop's 14px value text so all five expanded
    pills still fit one row on a 320–375px phone instead of the population
@@ -513,10 +518,11 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
    touch here falls through to the bar's own pull-down-drawer drag handling
    like the rest of the bar. */
 .resource-bar.compact {
-  gap: 8px;
+  gap: 0;
   row-gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
+  justify-content: space-evenly;
 }
 /* The desktop `.resource + .resource` separator (22px padding + a border)
    would otherwise still apply here too — far too wide for 5 pills to fit a
@@ -546,9 +552,7 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
      wrapped the fifth pill onto its own line at 390px when all five fit),
      so short notation (see the script above) kicks in before the row would
      ever need to shrink a pill past that floor. */
-  flex: 1 1 0;
-  min-width: min-content;
-  justify-content: center;
+  flex: none;
 }
 .resource--compact:focus-visible {
   outline: 2px solid var(--gold);
@@ -608,6 +612,17 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
   visibility: hidden;
   pointer-events: none;
 }
+/* The breathing room full notation must leave between pills to count as
+   fitting — below it the row reads as pills stuck together, so it switches
+   to short notation instead. The padding counts the two outer spaces too,
+   since the visible row (`gap: 0; justify-content: space-evenly`) spreads
+   its free space equally over all six gaps, ends included. Needs the
+   `.compact`/`.expanded` qualifier to outrank those rows' own gap. */
+.resource-bar--measure.compact,
+.resource-bar--measure.expanded {
+  gap: 14px;
+  padding: 0 14px;
+}
 .resource-bar--measure.compact .resource--compact,
 .resource-bar--measure.expanded .resource {
   flex: none;
@@ -618,12 +633,10 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
 /* Owner's decision, last resort: short notation is expected to be enough on
    every real phone width, but `updateFit` still checks — five pills' worth
    of very large numbers can still overhang a 320px bar even abbreviated.
-   Rather than let that wrap or clip, drop one more size/gap step. Placed
+   Rather than let that wrap or clip, drop one text size (spacing stays the
+   row's own even `space-evenly` distribution). Placed
    last so it wins over the `.compact`/`.expanded` rules above at equal
    specificity. */
-.resource-bar.tight-font.compact {
-  gap: 5px;
-}
 .resource-bar.tight-font .value-compact {
   font-size: 10px;
 }
@@ -631,10 +644,8 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
   width: 10px;
   height: 10px;
 }
-.resource-bar.tight-font.expanded {
-  gap: 3px;
-}
-.resource-bar.tight-font.expanded .value {
+.resource-bar.tight-font.expanded .value,
+.resource-bar.tight-font.expanded .rate {
   font-size: 10px;
 }
 </style>
