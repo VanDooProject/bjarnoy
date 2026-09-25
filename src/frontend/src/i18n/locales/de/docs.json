@@ -16,6 +16,10 @@
       "wastedLands": {
         "title": "Ödlande",
         "description": "Das Endspiel: Utgard, die Inseln, die aus dem Meer steigen, und woraus sie bestehen."
+      },
+      "showcase": {
+        "title": "Showcase",
+        "description": "Ein spielerfokussiertes Pitch für das Spiel, plus ein Blick unter die Haube für alle, die wissen wollen, wie es gebaut ist."
       }
     }
   },

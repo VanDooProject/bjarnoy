@@ -16,6 +16,10 @@
       "wastedLands": {
         "title": "Wasted lands",
         "description": "The endgame: Utgard, the islands that rise from the sea, and what they are made of."
+      },
+      "showcase": {
+        "title": "Showcase",
+        "description": "A player-first pitch for the game, plus a look under the hood for anyone curious how it's built."
       }
     }
   },
