@@ -23,6 +23,13 @@ export type WaterMode = 'world' | 'settlement';
 // than the sea in docs/design/img/worldmap.png, the art direction of record.
 // Ending at the middle stop puts open water at the reference's own blue and
 // keeps the lighter teal as what it reads as there: a shelf hugging the shore.
+/**
+ * How opaque the tainted-water wash over the tile-art sea is at full taint
+ * (settlement mode, where the shader has no sea body of its own) — just short
+ * of opaque, so the painted water's own shading still reads through.
+ */
+const TAINT_WASH = 0.9;
+
 const SHALLOW_COLOR = 0x2a92ae;
 const DEEP_COLOR = 0x14657f;
 
@@ -353,6 +360,7 @@ export class WaterLayer {
       uTime: { value: 0, type: 'f32' },
       uWaveTime: { value: 0, type: 'f32' },
       uSeaBody: { value: 0, type: 'f32' },
+      uTaintWash: { value: TAINT_WASH, type: 'f32' },
       uMidWaterWaves: { value: 0, type: 'f32' },
       uShowMask: { value: 0, type: 'f32' },
       uShallowColor: { value: new Float32Array([shallowR, shallowG, shallowB]), type: 'vec3<f32>' },

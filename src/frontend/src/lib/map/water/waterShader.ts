@@ -72,6 +72,7 @@ uniform float uSeaBody;
 uniform float uMidWaterWaves;
 uniform float uShowMask;
 uniform vec3 uShallowColor;
+uniform float uTaintWash;
 uniform vec3 uDeepColor;
 uniform float uSeaMottle;
 uniform float uMottleScale;
@@ -559,6 +560,18 @@ void main() {
   // premultiplied — one \`src + dst * (1 - srcA)\` per term.
   vec4 acc = vec4(col * alpha, alpha);
 
+  // Tainted water in settlement mode. There the painted watertile_* art *is*
+  // the sea body (the term above is off), so mixing the body colour alone
+  // leaves plain blue tiles around a wasted island, and fading the caustics
+  // out by taint below only bares that flat blue. Wash the taint colour over
+  // the tile art instead, by the same field, so the sea darkens smoothly from
+  // the tainted coast tiles out to open water.
+  if (water && uSeaBody < 0.5 && taint > 0.0) {
+    float depthT = smoothstep(0.0, 1.0, m.g);
+    float wash = taint * uTaintWash;
+    acc = vec4(mix(uTaintShallowColor, uTaintDeepColor, depthT) * wash, wash) + acc * (1.0 - wash);
+  }
+
 
 // --- §4.2 mid-water waves ----------------------------------------------
   // Suppressed near the coast by the mask's R channel: the continuous
@@ -582,7 +595,9 @@ void main() {
       // isn't clear — so the field is faded out by taint exactly like it
       // already is over a muted prop tile, the two multiplied together
       // rather than picking one.
-      float quiet = (1.0 - mute) * (1.0 - taint);
+      // Kept faintly rather than switched off: with the taint wash under them
+      // a few dim ribbons stop tainted water reading as a flat fill.
+      float quiet = (1.0 - mute) * (1.0 - 0.75 * taint);
 
       // Three layers, dark to light, in that order: the shadows are depth *in*
       // the water, so both light nets draw over them, and the fine net is the
