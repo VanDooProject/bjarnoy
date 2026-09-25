@@ -676,9 +676,9 @@ test('bottom docking never covers the onboarding completion banner', async ({ pa
   await expect(page).toHaveURL(/\/settlement$/);
 });
 
-// Group E (f): a bottom-docked bar must not cover the queue rail — finding
+// Group E (f): a bottom-docked bar must not cover the queue handle — finding
 // #12's own regression (QueueDrawer never read `--hud-inset-bottom`).
-test('bottom docking clears the QueueDrawer rail', async ({ page }) => {
+test('bottom docking clears the QueueDrawer handle', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => window.localStorage.setItem('bjarnoy.hudBarPosition', 'bottom'));
@@ -686,7 +686,7 @@ test('bottom docking clears the QueueDrawer rail', async ({ page }) => {
   await SettlementPage.found(page);
 
   // A minimal seed (mirrors queue-drawer.spec.ts's own seedQueues) — just
-  // enough for QueueDrawer to actually mount its rail (it renders nothing
+  // enough for QueueDrawer to actually mount its handle (it renders nothing
   // at all when there's no queue/garrison/guest to show, per its own
   // `hasAnything` guard).
   await page.evaluate(() => {
@@ -723,10 +723,10 @@ test('bottom docking clears the QueueDrawer rail', async ({ page }) => {
 
   const bar = page.locator('.hud-bar');
   await expect(bar).toHaveClass(/hud-bar--bottom/);
-  const rail = page.locator('.queue-drawer-rail');
-  await expect(rail).toBeVisible();
+  const handle = page.locator('.queue-drawer-handle');
+  await expect(handle).toBeVisible();
 
   const barBox = (await bar.boundingBox())!;
-  const railBox = (await rail.boundingBox())!;
-  expect(railBox.y + railBox.height).toBeLessThanOrEqual(barBox.y);
+  const handleBox = (await handle.boundingBox())!;
+  expect(handleBox.y + handleBox.height).toBeLessThanOrEqual(barBox.y);
 });
