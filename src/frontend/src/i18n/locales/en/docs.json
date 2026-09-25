@@ -12,6 +12,10 @@
       "tiles": {
         "title": "Tiles",
         "description": "The terrain a world is made of, how it generates, and what can be built on it."
+      },
+      "showcase": {
+        "title": "Showcase",
+        "description": "A player-first pitch for the game, plus a look under the hood for anyone curious how it's built."
       }
     }
   },

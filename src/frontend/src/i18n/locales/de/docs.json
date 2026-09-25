@@ -12,6 +12,10 @@
       "tiles": {
         "title": "Kacheln",
         "description": "Das Gelände, aus dem eine Welt besteht, wie es entsteht und was darauf gebaut werden kann."
+      },
+      "showcase": {
+        "title": "Showcase",
+        "description": "Ein spielerfokussiertes Pitch für das Spiel, plus ein Blick unter die Haube für alle, die wissen wollen, wie es gebaut ist."
       }
     }
   },
