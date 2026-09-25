@@ -19,7 +19,7 @@
 import { ref, watchEffect } from 'vue';
 import { useRoute } from 'vue-router';
 
-const STORAGE_KEY = 'fjordhold:fogDebug';
+const STORAGE_KEY = 'bjarnoy:fogDebug';
 
 export function useFogDebug() {
   const route = useRoute();

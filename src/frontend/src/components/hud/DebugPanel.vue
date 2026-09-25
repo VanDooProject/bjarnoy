@@ -18,7 +18,7 @@ import { ref, watch } from 'vue';
 
 const props = defineProps<{ title: string; storageKey: string }>();
 
-const key = `fjordhold:debugPanel:${props.storageKey}`;
+const key = `bjarnoy:debugPanel:${props.storageKey}`;
 const collapsed = ref(sessionStorage.getItem(key) === '1');
 
 watch(collapsed, (value) => {

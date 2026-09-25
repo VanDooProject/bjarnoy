@@ -24,7 +24,7 @@ const tuning = reactive(zoomTransitionTuning);
 // here causes real navigations, so losing it to an accidental reload
 // mid-session is worse than for a pure visual toggle — see
 // docs/design/zoom-transition.md §3.
-const STORAGE_KEY = 'fjordhold:zoomTuning';
+const STORAGE_KEY = 'bjarnoy:zoomTuning';
 
 function load() {
   const raw = sessionStorage.getItem(STORAGE_KEY);
