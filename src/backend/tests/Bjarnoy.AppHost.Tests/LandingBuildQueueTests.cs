@@ -68,16 +68,20 @@ public class LandingBuildQueueTests
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
 
         var world = Assert.Single(
-            (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
-        var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
-            $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
-        var settlement = Assert.Single(settlements!);
+            (await apiClient.GetFromJsonAsync<WorldSummaryResponse[]>("/api/v1/worlds", cancellationToken))!);
 
         // The frontend generates and remembers its own anonymous player id
         // client-side (usePlayerStore, localStorage key "bjarnoy.playerId")
         // — it's what founding sent as the settlement's OwnerId, and the
-        // same id X-Owner-Id proves ownership with.
+        // same id X-Owner-Id proves ownership with. GET .../settlements is
+        // fog-gated, so this has to go on the header before even the
+        // just-founded settlement's own summary can be read back.
         var ownerId = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
+        apiClient.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
+        var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
+            $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
+        var settlement = Assert.Single(settlements!);
 
         // A grass neighbour of the settlement's own centre — guaranteed to
         // exist (WorldGenerator only picks a start position with at least

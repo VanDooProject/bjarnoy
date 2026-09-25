@@ -839,6 +839,92 @@ public class SettlementTests
     }
 
     [Fact]
+    public void Building_on_a_giant_hex_is_refused_even_when_fully_claimed()
+    {
+        // The giant's whole 7-hex footprint sits well inside the settlement's
+        // own claim (ClaimRadius at longhouse level 1 already reaches the
+        // giant's anchor and every neighbour), so this is purely the
+        // giant-occupied check, not a claim failure.
+        var giantAnchor = new HexCoord(1, 0);
+        var giants = new GiantIndex([new Giant(giantAnchor, "giantmountain", TileOrientation.E)]);
+        var settlement = Found();
+
+        Assert.True(settlement.Claims(giantAnchor), "sanity: the plain claim already reaches the giant hex");
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Farm, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
+            giants: giants);
+
+        Assert.Equal(BuildRejection.HexOccupiedByGiant, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_settlement_only_claims_a_giant_hex_once_every_footprint_hex_is_covered()
+    {
+        // ClaimRadius at longhouse level 2 is 3 (see the ClaimRadius table
+        // test above). The giant's anchor sits exactly on that disc's edge
+        // (distance 3) and 4 of its 7 footprint hexes fall within it, but 3
+        // of its neighbours (distance 4) fall just outside — so per the
+        // territory rule none of its 7 hexes, anchor included, are claimed.
+        var giantAnchor = new HexCoord(3, 0);
+        var giants = new GiantIndex([new Giant(giantAnchor, "giantmountain", TileOrientation.E)]);
+        var settlement = Found() with
+        {
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 2)],
+        };
+
+        Assert.False(settlement.Claims(giantAnchor, giants));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Farm, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
+            giants: giants);
+
+        // PlanBuild refuses a giant hex unconditionally (HexOccupiedByGiant,
+        // checked before the claim) — this settlement's partial coverage
+        // (Claims(giantAnchor, giants) is false, asserted above) would have
+        // produced HexNotInSettlement anyway, but the unconditional check is
+        // what actually fires here.
+        Assert.Equal(BuildRejection.HexOccupiedByGiant, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_towers_satellite_disc_can_complete_a_giant_enclosure_but_the_hex_stays_unbuildable()
+    {
+        // Longhouse at level 1 (ClaimRadius 2, centred on (0,0)) covers 4 of
+        // the giant-at-(2,0)'s 7 footprint hexes: (2,0), (2,-1), (1,0),
+        // (1,1). A level-1 Tower at (3,0) (TowerClaimRadius(1) == 1) covers
+        // the other 3: (3,0), (3,-1), (2,1) — completing the enclosure.
+        // Territory.Claims should read the giant as claimed once both discs
+        // are unioned, but PlanBuild still refuses to build directly on the
+        // giant hex itself: HexOccupiedByGiant is unconditional, not
+        // claim-dependent.
+        var giantAnchor = new HexCoord(2, 0);
+        var giants = new GiantIndex([new Giant(giantAnchor, "giantmountain", TileOrientation.E)]);
+        var towerCoord = new HexCoord(3, 0);
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 1),
+                new PlacedBuilding(towerCoord, BuildingType.Tower, 1),
+            ],
+        };
+
+        // Sanity: the longhouse disc alone does not fully cover the giant's
+        // footprint (only the tower's disc adds the missing 3 hexes).
+        var longhouseOnlyDiscs = new[] { (Centre, Settlement.ClaimRadiusForLonghouseLevel(1)) };
+        Assert.False(Territory.IsFullyCovered(longhouseOnlyDiscs, giants.TryGetGiant(giantAnchor, out var g) ? g : default));
+
+        Assert.True(settlement.Claims(giantAnchor, giants), "the union of discs should fully cover the giant");
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Farm, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
+            giants: giants);
+
+        Assert.Equal(BuildRejection.HexOccupiedByGiant, decision.Rejection);
+    }
+
+    [Fact]
     public void Building_on_the_wrong_terrain_is_refused()
     {
         var settlement = Found();

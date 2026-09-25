@@ -7,28 +7,38 @@ without re-deriving the onboarding flow every time.
 
 1. Start the dev server: `cd src/frontend && npx vite --port 5183`
 2. Make sure `src/frontend/vendor/bg_assets_hextile` is populated (it's a
-   gitignored submodule checkout — clone
-   `VanDooProject/bg_assets_hextile` and copy `hextiles/` + `README.md` in,
-   if missing).
+   gitignored submodule checkout — clone `VanDooProject/bg_assets_hextile`
+   and copy `hextiles/`, `atlas/`, and `README.md` in, if missing —
+   `atlas/` is what `textures.ts`'s `loadAtlasCategory` actually loads;
+   `hextiles/` is only for `buildingArt.ts`'s legacy per-tile PNGs).
 3. `node scripts/screenshot-helpers/flow.mjs [outDir]`
 
 ## Flow this script drives
 
-Demo mode has no login: landing (`/`) → "Enter the world" → world map (`/world`)
-→ click any green island hex → landfall modal ("Skip for now") → settlement
-view (`/settlement`). There is no nickname input on the landing page itself —
-naming happens in the post-landfall modal.
+Demo mode has no login and no separate world-map click-through before
+founding (zip 6a): landing (`/`) already *is* the village-view preview —
+clicking anywhere on it founds a settlement at the nearest good landfall
+(the same deterministic starter plot `flow.mjs`/`e2e/helpers.ts` both use),
+then the view flips into the settlement view in place, no remount and no
+nickname modal blocking it (design handoff "2a").
 
 `flow.mjs` walks this whole path in one run (it's cheaper than restarting the
 browser per screen) and drops a screenshot at each stop: `landing`,
-`world_map`, `landfall`, `settlement`, `settlement_panned` (camera dragged
+`landfall` (right after founding, still in preview framing), `settlement`
+(after switching to the Settlement tab), `settlement_panned` (camera dragged
 outward — checks fog continuity/gradient past the default view),
 `settlement_hover` (checks the hex tooltip), `settlement_tower_border`
 (places a border-anchoring tower via the demo-mode debug hook — checks the
 border/fog silhouette against a non-hex shape, not just every settlement's
-default hexagon), and `settlement_fog_debug` (opens `?debug=1`'s
-`FogDebugPanel`). Pass stop names as extra args to take only some of them,
-e.g.:
+default hexagon), `settlement_giant` (pans to the giant mountain demo mode
+auto-places a few hexes from the home hex — see
+`src/frontend/src/lib/map/giantTiles.ts` — and shoots it with its
+surrounding tiles in frame, so occlusion against neighbouring forest/
+building art is checkable), `settlement_giant_orientations` (one screenshot
+per camera rotation the giant can render in:
+`settlement_giant_orientations_<CAM>.png` for each of `E`/`NE`/`NW`/`W`/
+`SW`/`SE`), and `settlement_fog_debug` (opens `?debug=1`'s `FogDebugPanel`).
+Pass stop names as extra args to take only some of them, e.g.:
 
 ```
 node scripts/screenshot-helpers/flow.mjs /tmp/out '' settlement settlement_panned

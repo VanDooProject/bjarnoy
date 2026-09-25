@@ -77,6 +77,9 @@ public enum BuildRejection
     UnknownBuildingLevel,
     TerrainNotAllowed,
     HexNotInSettlement,
+
+    /// <summary>The hex belongs to a giant's 7-hex footprint — never buildable, regardless of claim (the territory rule).</summary>
+    HexOccupiedByGiant,
     HexOccupied,
     NotEnoughResources,
     LonghouseTooLow,

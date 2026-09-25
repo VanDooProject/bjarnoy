@@ -107,10 +107,24 @@ public static class FieldBattleResolver
     /// of its own to halve — uses the settlement's single highest Tower
     /// instead, representing overall fortification rather than one structure.
     /// </summary>
+    /// <param name="giants">
+    /// This world's giant index (the territory rule), or
+    /// <see langword="null"/> for none on hand. When <paramref name="hex"/>
+    /// belongs to a giant's footprint, this side's claim only counts when
+    /// every hex of that footprint is covered by its discs — a claim that
+    /// merely reaches this one hex of it does not grant the bonus.
+    /// </param>
     public static FieldBattleClaim ClaimAt(
-        HexCoord hex, HexCoord settlementCentre, IReadOnlyList<PlacedBuilding> buildings)
+        HexCoord hex, HexCoord settlementCentre, IReadOnlyList<PlacedBuilding> buildings, IGiantIndex? giants = null)
     {
         ArgumentNullException.ThrowIfNull(buildings);
+
+        var giantIndex = giants ?? GiantIndex.Empty;
+        if (giantIndex.TryGetGiant(hex, out var giant)
+            && !Territory.IsFullyCovered([.. Settlement.ClaimDiscsFor(settlementCentre, buildings)], giant))
+        {
+            return FieldBattleClaim.None;
+        }
 
         foreach (var building in buildings)
         {

@@ -660,13 +660,23 @@ const rootActions = computed<RingAction[]>(() => {
   }
   if (isMineTile.value) {
     const buildableSea = tile.terrain !== 'sea' || tile.isCoastalWater;
+    // A giant hex is never buildable, claimed or not — its own art fully
+    // occupies the ground there (mirrors WorldModel.placeBuilding's own
+    // `tile.giant` refusal). Checked ahead of the open-water hint since a
+    // giant is always land, so `buildableSea` alone would otherwise show
+    // "Build" as available on it.
+    const blockedByGiant = !!tile.giant;
     return [
       { id: 'details', label: t('hud.ringMenu.actions.details') },
       {
         id: 'build',
         label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea,
-        hint: buildableSea ? undefined : t('hud.ringMenu.actions.openWater'),
+        disabled: !buildableSea || blockedByGiant,
+        hint: blockedByGiant
+          ? t('hud.ringMenu.actions.giantOccupied')
+          : buildableSea
+            ? undefined
+            : t('hud.ringMenu.actions.openWater'),
       },
     ];
   }
@@ -785,11 +795,17 @@ const ringCategories = computed<RingCategory[]>(() => {
 });
 
 // The hub names what was clicked: the building standing on the hex if there
-// is one, otherwise the bare terrain.
+// is one, otherwise the bare terrain — a river tile's art fully overrides
+// its underlying land terrain (see HexMapRenderer's terrainTitleFor/
+// rebuildTerrain), so the hub needs to say "River" too, same as the hover
+// tooltip, rather than falling back to the land terrain underneath it.
 const ringTerrainLabel = computed(() => {
   const tile = selectedTile.value;
+  const coord = selectedCoord.value;
   if (!tile) return '';
-  return tile.buildingType ? buildingName(tile.buildingType) : terrainName(tile.terrain);
+  if (tile.buildingType) return buildingName(tile.buildingType);
+  if (coord && world.model.getRiverTile(coord.q, coord.r)) return t('hud.hoverTooltip.river');
+  return terrainName(tile.terrain);
 });
 const ringCoordLabel = computed(() => {
   const coord = selectedCoord.value;

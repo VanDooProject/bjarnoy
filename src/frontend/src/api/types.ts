@@ -21,6 +21,25 @@ export interface WorldResponse {
   movement: WorldMovementResponse;
 }
 
+/**
+ * Mirrors `WorldSummaryResponse` — one row of `GET /worlds`, the minimal
+ * public listing (name, joinability, seat counts). Deliberately narrower
+ * than `WorldResponse`: no seed/radius/generation/movement, since a player
+ * choosing a world from a list needs none of that map-reproducing data —
+ * `getWorld` fetches the full config once a world is actually picked.
+ */
+export interface WorldSummaryResponse {
+  id: string;
+  name: string;
+  status: string;
+  joinable: boolean;
+  joinableReason: string;
+  playerCount: number;
+  maxPlayers: number;
+  freeSlots: number;
+  startsAt: string | null;
+}
+
 /** Mirrors `WorldGenerationResponse` — see that record's own doc comments for field semantics. */
 export interface WorldGenerationResponse {
   islandCellSize: number;
@@ -63,6 +82,20 @@ export interface RiverTileResponse {
   outDirection: string | null;
 }
 
+/**
+ * Mirrors `GiantResponse` — a 7-hex giant feature (anchor + its six
+ * neighbours, see `lib/map/giantTiles.ts`'s `giantCoverage`) the server
+ * generated with the world. `orientation` is the wire name
+ * `TileOrientationExtensions.ToWireName` produces (e.g. `"E"`, `"NE"`), same
+ * as `RiverTileResponse`'s own direction fields.
+ */
+export interface GiantResponse {
+  family: string;
+  q: number;
+  r: number;
+  orientation: string;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;
@@ -72,6 +105,7 @@ export interface IslandResponse {
   tileCount: number;
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
+  giants: GiantResponse[];
 }
 
 /** Mirrors `PlotSuggestionResponse` — the plot this visitor is offered right now, pinned across reloads. */
@@ -81,6 +115,8 @@ export interface PlotSuggestionResponse {
   alternatives: TileCoordinate[];
   reserved: boolean;
   reservedUntil: string | null;
+  /** Who's already standing on this island — replaces the pre-founding, world-wide settlement list now that `listSettlements` is fog-gated. */
+  islandSettlements: SettlementSummary[];
 }
 
 /** Mirrors `JoinableWorldResponse` — one row of `GET /worlds/joinable`, the "join another world" picker. Public: no `X-Owner-Id` needed. */
@@ -89,6 +125,7 @@ export interface JoinableWorldResponse {
   name: string;
   playerCount: number;
   maxPlayers: number;
+  freeSlots: number;
   joinable: boolean;
   joinableReason: string;
   startsAt: string | null;
@@ -229,6 +266,24 @@ export interface SettlementSummary {
   r: number;
   longhouseLevel: number;
   islandId: string;
+}
+
+/**
+ * Mirrors `SettlementViewResponse` — the fog-gated read of any settlement
+ * whose ground the caller has explored (`GET /settlements/{id}/view`):
+ * identity, position and buildings only, no stock/rates/queue/garrison/runes.
+ * `buildings` is already filtered server-side to hexes the caller has
+ * actually explored.
+ */
+export interface SettlementViewResponse {
+  id: string;
+  name: string;
+  ownerName: string;
+  q: number;
+  r: number;
+  longhouseLevel: number;
+  islandId: string;
+  buildings: PlacedBuildingResponse[];
 }
 
 // Settlement expansion (issue #55) — mirrors the settler-crew additions to

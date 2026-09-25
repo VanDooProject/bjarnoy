@@ -334,6 +334,19 @@ public sealed record Settlement
     public bool Claims(HexCoord coord) => ClaimDiscs.Any(disc => disc.Centre.DistanceTo(coord) <= disc.Radius);
 
     /// <summary>
+    /// The giant-aware sibling of <see cref="Claims(HexCoord)"/>
+    /// (<see cref="Territory.Claims"/>): identical for a plain hex, but a
+    /// hex belonging to a <see cref="World.Giant"/>'s footprint is only
+    /// claimed when every hex of that footprint is covered by
+    /// <see cref="ClaimDiscs"/>. Every place that gates "is this hex in the
+    /// settlement's territory" on player-visible ground (building,
+    /// combat, shoreline) should use this, not the plain
+    /// <see cref="Claims(HexCoord)"/> — that one stays reserved for founding
+    /// spacing checks, which are deliberately disc-only.
+    /// </summary>
+    public bool Claims(HexCoord coord, World.IGiantIndex giants) => Territory.Claims(ClaimDiscs, coord, giants);
+
+    /// <summary>
     /// This settlement's leaderboard score (issue #43): the triangular number
     /// <c>L(L+1)/2</c> of each building's level, summed over <see cref="Buildings"/>.
     /// Rewards tall building over wide spam and needs no catalogue lookup or
@@ -944,6 +957,13 @@ public sealed record Settlement
     /// of soil. The caller resolves this once from the island's centre
     /// (<c>SettlementService.QueueBuildAsync</c>, <see cref="TerrainSampler.SoilAt"/>).
     /// </param>
+    /// <param name="giants">
+    /// This island's giant index (the territory rule), or
+    /// <see langword="null"/> for a world with no giants on hand. A hex
+    /// belonging to a giant's footprint is always refused — checked before
+    /// (and independently of) the claim check, since a giant hex is never
+    /// buildable even for the settlement whose claim fully encloses it.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -956,9 +976,16 @@ public sealed record Settlement
         int maxOrdersPerHex = DefaultMaxOrdersPerHex,
         RiverTileShape? riverShapeAt = null,
         IReadOnlySet<GodType>? shrineGodsElsewhereOnIsland = null,
-        SoilType? islandSoil = null)
+        SoilType? islandSoil = null,
+        World.IGiantIndex? giants = null)
     {
-        if (!Claims(coord))
+        var giantIndex = giants ?? World.GiantIndex.Empty;
+        if (giantIndex.TryGetGiant(coord, out _))
+        {
+            return BuildDecision.Rejected(BuildRejection.HexOccupiedByGiant);
+        }
+
+        if (!Claims(coord, giantIndex))
         {
             return BuildDecision.Rejected(BuildRejection.HexNotInSettlement);
         }
@@ -1377,9 +1404,16 @@ public sealed record Settlement
         DateTimeOffset now,
         double speedFactor = 1.0,
         IReadOnlyList<UnitStack>? guestStacks = null,
-        Func<HexCoord, Terrain>? terrainAt = null)
+        Func<HexCoord, Terrain>? terrainAt = null,
+        World.IGiantIndex? giants = null)
     {
-        if (!Claims(coord))
+        var giantIndex = giants ?? World.GiantIndex.Empty;
+        if (giantIndex.TryGetGiant(coord, out _))
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexOccupiedByGiant);
+        }
+
+        if (!Claims(coord, giantIndex))
         {
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexNotInSettlement);
         }

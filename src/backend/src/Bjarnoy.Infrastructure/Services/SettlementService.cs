@@ -216,6 +216,17 @@ public sealed class SettlementService(
     /// <summary>
     /// Founds a settlement on one of an island's precomputed start positions.
     /// </summary>
+    /// <param name="callerUserId">
+    /// The founding request's authenticated caller, if any (its JWT's
+    /// <c>ClaimTypes.NameIdentifier</c>) — becomes the new settlement's real
+    /// <see cref="SettlementEntity.UserId"/> straight away, instead of the
+    /// anonymous-founding default (<see cref="SystemUserIds.Abandoned"/>,
+    /// used when this is <see langword="null"/>). Without this, a logged-in
+    /// player founding in a world they have never played would get an
+    /// unclaimed realm nobody's account owns until some later, separate claim
+    /// — there is no reason to make them do that when the account founding it
+    /// is already known right here.
+    /// </param>
     public async Task<FoundingResult> FoundAsync(
         Guid worldId,
         Guid islandId,
@@ -223,6 +234,7 @@ public sealed class SettlementService(
         string name,
         string ownerName,
         string ownerId,
+        Guid? callerUserId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -264,7 +276,7 @@ public sealed class SettlementService(
         // One settlement per player per world — for now. Ships and carts will
         // one day let a player found a second one; until then this is a hard
         // rule, not just an unlikely-to-be-hit default.
-        if (await AlreadyFoundedAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false))
+        if (await AlreadyFoundedAsync(worldId, ownerId, callerUserId, cancellationToken).ConfigureAwait(false))
         {
             return new FoundingResult(FoundingRejection.AlreadyFounded);
         }
@@ -354,12 +366,13 @@ public sealed class SettlementService(
             Name = name,
             OwnerName = ownerName,
             OwnerId = ownerId,
-            // Anonymous founding — the only path today — has no real account
-            // yet, but UserId is required, so it starts out owned by the
-            // reserved "Abandoned" system user. AuthService.RegisterAsync
+            // A caller founding while already logged in owns it outright from
+            // the start (callerUserId). Anonymous founding has no real
+            // account yet, but UserId is required, so it starts out owned by
+            // the reserved "Abandoned" system user — AuthService.RegisterAsync
             // reassigns it to a real account when the client later registers
             // with this same OwnerId.
-            UserId = SystemUserIds.Abandoned,
+            UserId = callerUserId ?? SystemUserIds.Abandoned,
             FoundedAt = now,
         };
 
@@ -391,7 +404,7 @@ public sealed class SettlementService(
                 return new FoundingResult(FoundingRejection.PlotTaken);
             }
 
-            if (await AlreadyFoundedAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false))
+            if (await AlreadyFoundedAsync(worldId, ownerId, callerUserId, cancellationToken).ConfigureAwait(false))
             {
                 return new FoundingResult(FoundingRejection.AlreadyFounded);
             }
@@ -555,24 +568,6 @@ public sealed class SettlementService(
         }
 
         return (settlement, clock);
-    }
-
-    /// <summary>
-    /// A settlement's real owner (<see cref="SettlementEntity.UserId"/>) and
-    /// client-local owner id (<see cref="SettlementEntity.OwnerId"/>) — a
-    /// lightweight projection for the ownership-authorization endpoint
-    /// filters (<c>Bjarnoy.Api.Auth.OwnershipGate</c>), not a full load. Null
-    /// if no such settlement exists.
-    /// </summary>
-    public async Task<(Guid UserId, string OwnerId)?> GetOwnershipAsync(
-        Guid settlementId, CancellationToken cancellationToken = default)
-    {
-        var ownership = await _dbContext.Settlements
-            .Where(s => s.Id == settlementId)
-            .Select(s => new { s.UserId, s.OwnerId })
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-
-        return ownership is null ? null : (ownership.UserId, ownership.OwnerId);
     }
 
     /// <summary>Admin search: settlements by world and/or owner name, paged.</summary>
@@ -874,10 +869,11 @@ public sealed class SettlementService(
 
         var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
         var sampler = new TerrainSampler(settlement.World!.ToGenerationOptions());
+        var placeGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
 
         var result = settled.PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
-            now, settlement.World.SpeedFactor, guestStacks, sampler.TerrainAt);
+            now, settlement.World.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants);
 
         if (!result.Accepted)
         {
@@ -1011,6 +1007,22 @@ public sealed class SettlementService(
             .OrderBy(s => s.Id)
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// The settlements standing on one island — backs
+    /// <c>GET .../plot-suggestion</c>'s <c>IslandSettlements</c>, so a
+    /// landing-page visitor previewing a plot sees who their would-be
+    /// neighbours are without the world-wide list <c>ListForWorld</c> used to
+    /// (and no longer does) hand every anonymous caller.
+    /// </summary>
+    public Task<List<SettlementEntity>> GetForIslandAsync(
+        Guid islandId, CancellationToken cancellationToken = default) =>
+        _dbContext.Settlements
+            .AsNoTracking()
+            .Include(s => s.Buildings)
+            .Where(s => s.IslandId == islandId)
+            .OrderBy(s => s.Id)
+            .ToListAsync(cancellationToken);
+
     /// <summary>Queues a build, charging for it up front.</summary>
     public async Task<BuildResult> QueueBuildAsync(
         Guid settlementId,
@@ -1064,13 +1076,15 @@ public sealed class SettlementService(
             ? await IslandSoilAsync(settlement.IslandId, sampler, cancellationToken).ConfigureAwait(false)
             : null;
 
+        var buildGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
             settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
             maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
             riverShapeAt: riverShapeAt,
             shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland,
-            islandSoil: islandSoil);
+            islandSoil: islandSoil,
+            giants: buildGiants);
 
         if (!decision.Accepted)
         {
@@ -1167,10 +1181,17 @@ public sealed class SettlementService(
         // Ship training needs the settlement's *full* claimed territory to
         // reach the sea, not just its centre disc — a settlement inland at
         // its centre but with a tower on the coast is exactly the case this
-        // mechanic exists to enable. See Settlement.ClaimDiscs.
-        var hasShoreline = settled.ClaimDiscs
+        // mechanic exists to enable. See Settlement.ClaimDiscs. Filtered
+        // through the territory rule (Territory.Claims), not the raw disc
+        // union: a giant hex that only geometrically overlaps a disc but
+        // isn't actually claimed (its footprint isn't fully covered) must
+        // not count as this settlement's shoreline either.
+        var trainGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var discs = settled.ClaimDiscs.ToList();
+        var hasShoreline = discs
             .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
             .Distinct()
+            .Where(coord => Territory.Claims(discs, coord, trainGiants))
             .Any(sampler.IsShoreline);
 
         // Settler-crew training escalates per settlement the owning player
@@ -1389,6 +1410,28 @@ public sealed class SettlementService(
         return centre is null ? null : sampler.SoilAt(new HexCoord(centre.CentreQ, centre.CentreR));
     }
 
+    /// <summary>
+    /// Every giant across every island of <paramref name="worldId"/> (the
+    /// territory rule), built into one lookup — mirrors
+    /// <see cref="RiverShapeAtAsync"/>'s own whole-world scan, and
+    /// <c>ArmyService.LoadGiantIndexAsync</c> for the same reason.
+    /// </summary>
+    public async Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.Giants)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var giants = islands
+            .SelectMany(g => g)
+            .Select(g => new Giant(new HexCoord(g.Q, g.R), g.Family, (TileOrientation)g.Orientation))
+            .ToList();
+
+        return new GiantIndex(giants);
+    }
+
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements
             .Include(s => s.World)
@@ -1478,9 +1521,15 @@ public sealed class SettlementService(
             s => s.WorldId == worldId && s.CentreQ == coord.Q && s.CentreR == coord.R,
             cancellationToken);
 
-    private Task<bool> AlreadyFoundedAsync(Guid worldId, string ownerId, CancellationToken cancellationToken) =>
+    // `callerUserId` closes the cross-browser gap: a logged-in player's realm
+    // keeps the OwnerId of the browser it was founded in, so an OwnerId-only
+    // check would let the same account found a second realm in this world
+    // from any other browser (a fresh local id) just by being logged in.
+    private Task<bool> AlreadyFoundedAsync(
+        Guid worldId, string ownerId, Guid? callerUserId, CancellationToken cancellationToken) =>
         _dbContext.Settlements.AnyAsync(
-            s => s.WorldId == worldId && s.OwnerId == ownerId,
+            s => s.WorldId == worldId
+                && (s.OwnerId == ownerId || (callerUserId != null && s.UserId == callerUserId)),
             cancellationToken);
 
     /// <summary>

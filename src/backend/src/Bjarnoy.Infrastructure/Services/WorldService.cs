@@ -324,6 +324,12 @@ public sealed class WorldService(
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
+        // Every settlement this world had is now gone — RealmDirectory's
+        // cached realms for it (by settlement id, by user, by owner id) would
+        // otherwise keep answering with rows that no longer exist until they
+        // aged out on their own.
+        RealmDirectory.InvalidateWorld(worldId);
+
         _logger.LogWarning(
             "World {WorldId} ({Name}) reseeded to seed {Seed} by admin {AdminId}: " +
             "{Islands} islands, {Deleted} settlement(s) destroyed.",
@@ -399,6 +405,7 @@ public sealed class WorldService(
         TileCount = island.TileCount,
         StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
+        Giants = [.. island.Giants.Select(ToGiantRecord)],
     };
 
     /// <summary>
@@ -701,4 +708,10 @@ public sealed class WorldService(
         (int)tile.Shape,
         [.. tile.InDirections.Select(d => (int)d)],
         tile.OutDirection is { } outDirection ? (int)outDirection : null);
+
+    private static GiantRecord ToGiantRecord(Giant giant) => new(
+        giant.Anchor.Q,
+        giant.Anchor.R,
+        giant.Family,
+        (int)giant.Orientation);
 }

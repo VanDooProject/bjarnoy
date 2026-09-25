@@ -44,6 +44,14 @@ public sealed record GeneratedIsland
     /// </summary>
     public required IReadOnlyList<RiverTile> RiverTiles { get; init; }
 
+    /// <summary>
+    /// This island's 7-hex giant features, best-scored first. Empty for an
+    /// island too small to qualify (<see cref="GiantGenerator.SmallIslandGiantThreshold"/>).
+    /// See <see cref="GiantGenerator"/> and the territory rule in
+    /// <c>Bjarnoy.Domain.Buildings.Territory</c>.
+    /// </summary>
+    public required IReadOnlyList<Giant> Giants { get; init; }
+
     public int TileCount => Tiles.Count;
 }
 

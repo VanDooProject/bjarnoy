@@ -11,7 +11,7 @@ import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { BuildingOutput, BuildingModifier } from '../../lib/map/buildingEconomy';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName, terrainName, resourceName } from '../../i18n/catalogueNames';
+import { buildingName, terrainName, resourceName, giantName } from '../../i18n/catalogueNames';
 
 const props = defineProps<{ info: HoverInfo }>();
 
@@ -28,11 +28,9 @@ const style = computed(() => ({
 
 const title = computed(() => {
   const subject = props.info.subject;
-  return subject.kind === 'building'
-    ? buildingName(subject.buildingType)
-    : subject.isRiver
-      ? t('hud.hoverTooltip.river')
-      : terrainName(subject.terrain);
+  if (subject.kind === 'building') return buildingName(subject.buildingType);
+  if (subject.kind === 'giant') return giantName(subject.family);
+  return subject.isRiver ? t('hud.hoverTooltip.river') : terrainName(subject.terrain);
 });
 
 const level = computed(() => (props.info.subject.kind === 'building' ? props.info.subject.level : undefined));

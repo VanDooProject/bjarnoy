@@ -276,8 +276,7 @@ development.
 
 | Route | Description |
 |---|---|
-| `GET /api/v1/worlds` | list worlds |
-| `POST /api/v1/worlds` | generate and store a world |
+| `GET /api/v1/worlds` | list worlds (minimal: name, status, joinability, player count, free slots; creating one is admin-only via `POST /api/v1/admin/worlds`) |
 | `GET /api/v1/worlds/{id}` | one world |
 | `GET /api/v1/worlds/{id}/islands` | its islands and their start positions |
 | `GET /api/v1/worlds/{id}/tiles?qMin=&qMax=&rMin=&rMax=` | terrain for a window |

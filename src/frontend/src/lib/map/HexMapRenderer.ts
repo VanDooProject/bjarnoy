@@ -58,6 +58,8 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  giantTopAnimFor,
+  giantTopTextureFor,
   loadBuildingAtlases,
   loadTerrainAtlas,
   mergeTileTextures,
@@ -68,6 +70,7 @@ import {
   type TileAnimClip,
   type TileTextures,
 } from './textures';
+import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 
@@ -607,7 +610,13 @@ export interface ArmyOverlayFrame {
  */
 export type HoverSubject =
   | { kind: 'building'; buildingType: NonNullable<Tile['buildingType']>; level: number }
-  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean };
+  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean }
+  // A hex covered by a giant tile (see giantTiles.ts) — named for the giant
+  // instead of the ground terrain it sits over, since the giant's opaque art
+  // fully covers that terrain. Generic over `family` (not a `'giantmountain'`
+  // literal) so a future giant building needs no change here; HexTooltip.vue
+  // falls back to the family id itself for one with no translated name yet.
+  | { kind: 'giant'; family: string };
 
 export interface HoverInfo {
   screenX: number;
@@ -638,6 +647,22 @@ export interface HoverInfo {
  */
 export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { terrain: Terrain; isRiver: boolean } {
   return { terrain: tile.terrain, isRiver: river !== undefined };
+}
+
+/**
+ * The `HoverSubject` a tile resolves to, from the tile's own fields alone —
+ * everything `hoverInfoFor` (the only real caller) adds on top (level,
+ * owner, stats) needs the live worldModel and isn't part of *which* subject
+ * kind gets shown. Pulled out purely so the precedence — a giant's opaque
+ * art fully covers the ground terrain, so `tile.giant` must win over both
+ * `buildingType` and `terrainTitleFor` — is unit-testable without a canvas/
+ * Pixi renderer, the same reason `terrainTitleFor` itself is extracted.
+ */
+export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
+  if (tile.giant) return { kind: 'giant', family: tile.giant.family };
+  if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
+  const { terrain, isRiver } = terrainTitleFor(tile, river);
+  return { kind: 'terrain', terrain, isRiver };
 }
 
 export interface RippleFrame {
@@ -724,6 +749,11 @@ const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // How far past the viewport edge (world-space) coordsInRect/isEntirelyDeepFog
 // consider a hex "visible" — shared so the two agree on exactly the same
 // rect every rebuild.
+//
+// This also covers giant tiles (giantTiles.ts), whose top parts rise above
+// their own hex's canvas: the tallest shipped part (giantmountain, 692 native
+// px) rises 392 native px = TILE_W * 392 / 200 ≈ 329 world units, inside
+// this margin. A taller giant would need this widened.
 const VISIBLE_RECT_MARGIN = TILE_W * 2;
 
 // The flat top-face diamond (isoTopPoints) spans world-y 0..TILE_H from the
@@ -2250,9 +2280,15 @@ export class HexMapRenderer {
     }
 
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
-    const flat = isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+    // A hex covered by a giant highlights the giant's whole 7-hex footprint
+    // (the object, not the one hex under the cursor), in the same `hover`
+    // layer as any other tile - under terrainTop, so the art sits on top of
+    // the highlight exactly the way every other tile's topping does.
+    const outline = tile.giant
+      ? giantFootprintOutline(tile.giant.anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y])
+      : isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
     this.hoverLayer
-      .poly(flat)
+      .poly(outline)
       .fill({ color: HOVER_FILL, alpha: 0.28 })
       .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
 
@@ -2289,27 +2325,29 @@ export class HexMapRenderer {
     const mine = owner?.ownerId === this.options.playerId;
     const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
 
-    if (tile.buildingType) {
-      const level = tile.buildingLevel ?? 1;
+    const subject = hoverSubjectFor(tile, river);
+    if (subject.kind === 'building') {
       // Stats are only for the viewer's own buildings — scouting a rival's
       // tile shows the building and its level, but the stats themselves are
       // gated behind Premium (see HoverInfo.premiumLocked).
-      const stats = mine ? this.buildingStats(tile, level) : undefined;
+      const stats = mine ? this.buildingStats(tile, subject.level) : undefined;
       return {
         screenX: screen.x,
         screenY: screen.y,
-        subject: { kind: 'building', buildingType: tile.buildingType, level },
+        subject,
         owner: ownerInfo,
         stats,
         premiumLocked: !mine,
         openable: mine,
       };
     }
-    const { terrain, isRiver } = terrainTitleFor(tile, river);
+    // Giant tiles carry no building economy of their own (types.ts), so
+    // 'giant' falls through here alongside plain 'terrain' — neither gets
+    // stats/openable.
     return {
       screenX: screen.x,
       screenY: screen.y,
-      subject: { kind: 'terrain', terrain, isRiver },
+      subject,
       owner: ownerInfo,
     };
   }
@@ -2908,6 +2946,33 @@ export class HexMapRenderer {
       const river = worldModel.getRiverTile(c.q, c.r);
 
       const key = coordKey(c);
+      // A giant tile (see giantTiles.ts) replaces only this hex's *top*
+      // sprite — its base stays whatever grass/forest-turned-grass art
+      // baseTextureFor would already draw. No real backend/live-mode
+      // interaction to worry about here (giants are demo-only, never
+      // rivers/buildings — WorldModel.canPlaceGiant already refuses those),
+      // so this is checked ahead of the river/sawmill branches below.
+      if (tile.giant) {
+        baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+        const giantAnim = giantTopAnimFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part);
+        // A giant part with an animated clip but no static frame of its own
+        // (shouldn't normally happen — every part ships both — but cheap to
+        // handle) still renders: the clip's own first frame doubles as the
+        // static texture/crop source, same sourceSize height as a real
+        // static frame would have.
+        const giantTexture =
+          giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part) ??
+          giantAnim?.textures[0];
+        if (giantTexture) {
+          // Degrades gracefully when the real art hasn't landed in the
+          // vendored atlas yet (giantTopTextureFor returns undefined) — the
+          // tile just draws with its plain base, no top sprite at all,
+          // rather than throwing or showing a placeholder.
+          topEntries.set(key, { texture: giantTexture, coord: c, crop: giantCrop(giantTexture.height), anim: giantAnim });
+        }
+        fogPerfStats.terrainDrawnCount++;
+        continue;
+      }
       // A Sawmill is built directly on a river tile (WorldModel.placeBuilding
       // only accepts a straight/bend one) — its sawmill+river composite art
       // replaces the plain river art the `river` branch below would

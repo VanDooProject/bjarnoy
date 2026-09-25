@@ -10,6 +10,7 @@ import type {
   IslandResponse,
   PlacedBuildingResponse,
   RuneInstanceResponse,
+  SettlementSummary,
   ShipmentResponse,
   TradeOfferResponse,
   TrainingOrderResponse,
@@ -277,13 +278,13 @@ export const useWorldStore = defineStore('world', {
     // The target settlement's own placed buildings, fetched on demand once an
     // Attack dispatch's target is chosen (issue #40 phase 5) — this is what
     // the "preferred target building" picker in ArmyPanel.vue lists from.
-    // `GET /api/v1/settlements/{id}` (`api.getSettlement`) carries no
-    // ownership check, so it works for any settlement id, someone else's
-    // included — see the PR notes for why this phase reuses it rather than
-    // inventing a lighter endpoint. `dispatchTargetBuildingsFor` names which
-    // settlement `dispatchTargetBuildings` actually belongs to, so a stale
-    // fetch from a previously-picked target is never shown against a new one
-    // while the new fetch is still in flight.
+    // `GET /api/v1/settlements/{id}/view` (`api.getSettlementView`) is the
+    // fog-gated read that works for any explored settlement id, someone
+    // else's included, without handing back that rival's stock/rates/queue —
+    // see `loadDispatchTargetBuildings`'s own comment. `dispatchTargetBuildingsFor`
+    // names which settlement `dispatchTargetBuildings` actually belongs to,
+    // so a stale fetch from a previously-picked target is never shown against
+    // a new one while the new fetch is still in flight.
     dispatchTargetBuildings: null as PlacedBuildingResponse[] | null,
     dispatchTargetBuildingsFor: null as string | null,
     dispatchTargetBuildingsLoading: false,
@@ -441,18 +442,39 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
+      // Server-generated 7-hex giant features (see `IslandResponse.giants`)
+      // — the server is authoritative on where these sit, so this only
+      // tags the covered tiles for rendering (`WorldModel.setGiants`), no
+      // client-side placement validation.
+      this.model.setGiants(
+        this.islands.flatMap((island) =>
+          island.giants.map((giant) => ({
+            family: giant.family,
+            anchor: { q: giant.q, r: giant.r },
+            orientation: giant.orientation as TileOrientation,
+          })),
+        ),
+      );
       this.liveReady = true;
-      // Every other player already in this shared world needs to be known
-      // before the landing page picks a starting plot (nearestStartPosition
-      // must avoid their homes) and drawn on screen (rival realms are part
-      // of the world too, not just something the world map reveals later).
+      // Fog-gated (ExploredAreaService): for a caller with an existing realm
+      // (a returning/claimed player), this pulls in their own settlements and
+      // whatever rivals they've already explored, so the world map has
+      // something to draw immediately. For a brand-new anonymous visitor with
+      // no realm yet, this legitimately comes back empty — their own would-be
+      // neighbours are what `refreshPlotSuggestion`'s `islandSettlements`
+      // provides instead, once a plot has been offered.
       await this.refreshWorldSettlements();
     },
     /** The most recently created world, or null if none exist yet. */
     async newestWorld() {
-      const worlds = await api.listWorlds();
+      // GET /worlds answers with WorldSummaryResponse — enough to pick a
+      // world, but not the seed/generation this store actually needs to
+      // build its local map, so the pick is followed by a real getWorld.
+      const summaries = await api.listWorlds();
+      if (summaries.length === 0) return null;
       // GetWorldsAsync orders by id (UUIDv7, so creation order) ascending.
-      return worlds.length > 0 ? worlds[worlds.length - 1] : null;
+      const newest = summaries[summaries.length - 1];
+      return await api.getWorld(newest.id);
     },
     /**
      * The plot-suggestion's own pinned plot or one of its advisory
@@ -472,8 +494,34 @@ export const useWorldStore = defineStore('world', {
       const match = candidates.find((c) => c.q === at.q && c.r === at.r);
       return match ? { islandId: suggestion.islandId, at: match } : null;
     },
-    /** Demo mode: found instantly in the local `WorldModel`, no server round trip. */
+    /**
+     * Demo mode: found instantly in the local `WorldModel`, no server round
+     * trip.
+     *
+     * Giant placement v2: a provisional landfall identifies which island
+     * `near` is on (`findLandfall`, before any giant of this island's own
+     * exists to steer it away from — see that method's own doc comment on
+     * `isNearAnyGiantAnchor`), that island's giants are generated once
+     * (`WorldModel.placeGiantsForIsland`, a no-op on a repeat visit), and
+     * only then is `findLandfall` re-run so it can actually honour the
+     * exclusion around whatever giants just appeared. This mirrors the
+     * backend's own order (`WorldGenerator.Generate`: rivers, then giants,
+     * then start positions) as closely as a client with no backend to ask
+     * can.
+     *
+     * Placed *before* `foundSettlement` below, not after: `foundSettlement`
+     * claims territory internally (`WorldModel.claimTerritory`), and
+     * claiming is one-way (it only ever adds `ownerId`, never removes it —
+     * see `claimedHexes`' own doc comment). If a giant didn't exist yet at
+     * that first claim, a footprint hex close enough to sit inside the
+     * centre disc would get wrongly claimed there (the territory rule has no
+     * giant to exclude), and no later call could ever undo it. Placing
+     * giants first means the very first `claimTerritory` already sees them
+     * and applies the giant rule correctly from the start.
+     */
     foundStartingSettlement(ownerId: string, ownerName: string, name: string, near: AxialCoord) {
+      const provisionalLandfall = this.model.findLandfall(near) ?? near;
+      this.model.placeGiantsForIsland(provisionalLandfall, this.model.seed);
       const at = this.model.findLandfall(near) ?? near;
       const settlement = this.model.foundSettlement(ownerId, ownerName, name, at);
       this.selectedSettlementId = settlement.id;
@@ -646,7 +694,7 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       let response;
       try {
-        response = await api.getSettlement(this.selectedSettlementId);
+        response = await api.getSettlement(this.selectedSettlementId, this.ownerId ?? undefined);
       } catch (err) {
         if (isSettlementNotFound(err)) {
           // Unlike a transient failure, this settlement is never going to
@@ -720,7 +768,7 @@ export const useWorldStore = defineStore('world', {
         requestedResource,
         requestedAmount,
         guildOnly,
-      });
+      }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
     },
     /**
@@ -730,7 +778,7 @@ export const useWorldStore = defineStore('world', {
      */
     async acceptTradeOfferLive(offerId: string) {
       if (DEMO_MODE || !this.selectedSettlementId) return;
-      await api.acceptTradeOffer(offerId, { acceptorSettlementId: this.selectedSettlementId });
+      await api.acceptTradeOffer(offerId, { acceptorSettlementId: this.selectedSettlementId }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
       await this.refreshLiveSettlement();
     },
@@ -740,7 +788,7 @@ export const useWorldStore = defineStore('world', {
      */
     async cancelTradeOfferLive(offerId: string) {
       if (DEMO_MODE || !this.selectedSettlementId) return;
-      await api.cancelTradeOffer(offerId, { settlementId: this.selectedSettlementId });
+      await api.cancelTradeOffer(offerId, { settlementId: this.selectedSettlementId }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
       await this.refreshLiveSettlement();
     },
@@ -753,9 +801,9 @@ export const useWorldStore = defineStore('world', {
     async refreshTradeAsync() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [board, mine, shipments] = await Promise.all([
-        api.getTradeBoard(this.selectedSettlementId),
-        api.getMyTradeOffers(this.selectedSettlementId),
-        api.getShipments(this.selectedSettlementId),
+        api.getTradeBoard(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getMyTradeOffers(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getShipments(this.selectedSettlementId, this.ownerId ?? undefined),
       ]);
       this.hud.tradeBoard = board;
       this.hud.myTradeOffers = mine;
@@ -801,7 +849,7 @@ export const useWorldStore = defineStore('world', {
       await this.bootstrapLiveWorld();
       let response;
       try {
-        response = await api.getSettlement(settlementId);
+        response = await api.getSettlement(settlementId, ownerId);
       } catch (err) {
         if (isSettlementNotFound(err)) {
           // Same TOCTOU as refreshLiveSettlement: the persisted settlement
@@ -943,9 +991,13 @@ export const useWorldStore = defineStore('world', {
      * everyone (matching `prototypes/worldmap`'s `marks`), while the
      * landing/settlement preview only claims the island it's showing.
      */
-    async refreshWorldSettlements() {
-      if (DEMO_MODE || !this.worldId) return;
-      const summaries = await api.listSettlements(this.worldId);
+    /**
+     * Registers a batch of `SettlementSummary` rows into the local
+     * `WorldModel`, data-only — shared by `refreshWorldSettlements` (the
+     * fog-gated world list) and `refreshPlotSuggestion` (a suggestion's own
+     * `islandSettlements`), so the two don't duplicate this loop.
+     */
+    registerSettlementSummaries(summaries: SettlementSummary[]) {
       for (const summary of summaries) {
         if (summary.id === this.selectedSettlementId) continue;
         this.model.registerSettlement({
@@ -962,6 +1014,11 @@ export const useWorldStore = defineStore('world', {
           islandId: summary.islandId,
         });
       }
+    },
+    async refreshWorldSettlements() {
+      if (DEMO_MODE || !this.worldId) return;
+      const summaries = await api.listSettlements(this.worldId, this.ownerId ?? undefined);
+      this.registerSettlementSummaries(summaries);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1025,6 +1082,12 @@ export const useWorldStore = defineStore('world', {
         reserved: response.reserved,
         reservedUntil: response.reservedUntil,
       };
+      // The suggested island's own settlements — replaces the pre-founding,
+      // world-wide list `refreshWorldSettlements` used to provide before
+      // `listSettlements` became fog-gated (an anonymous visitor has no
+      // explored ground of their own yet to fog-gate against).
+      this.registerSettlementSummaries(response.islandSettlements);
+      if (!this.worldMapActive) this.model.claimTerritoryOnIsland(response.islandId);
       return { kind: 'ok', changed: previous?.plot.q !== response.plot.q || previous?.plot.r !== response.plot.r };
     },
     /**
@@ -1053,15 +1116,15 @@ export const useWorldStore = defineStore('world', {
     async refreshArmies() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [summaries, guests] = await Promise.all([
-        api.getSettlementArmies(this.selectedSettlementId),
-        api.getSettlementGuests(this.selectedSettlementId),
+        api.getSettlementArmies(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getSettlementGuests(this.selectedSettlementId, this.ownerId ?? undefined),
       ]);
       // ArmySummary (the list endpoint) omits unit composition/movement/
       // provisions — ArmyPanel needs those, so fetch each army's full detail.
       // Settlements realistically hold a handful of dispatched armies at
       // once, so N+1 here is a non-issue compared to a purpose-built bulk
       // endpoint the backend doesn't expose.
-      this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id)));
+      this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, this.ownerId ?? undefined)));
       this.armiesFetchedAt = Date.now();
       this.guestArmies = guests;
       this.guestArmiesFetchedAt = Date.now();
@@ -1211,20 +1274,24 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * Fetches the target settlement's placed buildings for the "preferred
-     * target building" picker (issue #40 phase 5) — see
-     * `dispatchTargetBuildings`'s own comment on why `api.getSettlement`
-     * works here even though `settlementId` is someone else's settlement.
-     * Swallows a failure into `dispatchTargetBuildingsError` rather than
-     * surfacing it as a dispatch-blocking error: the picker is a nice-to-have
-     * preference, not a requirement to dispatch (the backend's own fallback
-     * is a random pick), so ArmyPanel just falls back to "no preference"
-     * copy when this can't be loaded.
+     * target building" picker (issue #40 phase 5), via the fog-gated
+     * `getSettlementView` — `settlementId` is someone else's settlement, and
+     * the owner-only `getSettlement` now 403s for a non-owner (see
+     * SettlementOwnershipEndpointFilter). `getSettlementView` only succeeds
+     * (and only returns buildings) for ground this player has actually
+     * explored, which is a fine limit for a dispatch-target picker: an
+     * unexplored target can still be attacked, it just offers no per-building
+     * preference. Swallows a failure into `dispatchTargetBuildingsError`
+     * rather than surfacing it as a dispatch-blocking error: the picker is a
+     * nice-to-have preference, not a requirement to dispatch (the backend's
+     * own fallback is a random pick), so ArmyPanel just falls back to "no
+     * preference" copy when this can't be loaded.
      */
     async loadDispatchTargetBuildings(settlementId: string) {
       this.dispatchTargetBuildingsLoading = true;
       this.dispatchTargetBuildingsError = false;
       try {
-        const response = await api.getSettlement(settlementId);
+        const response = await api.getSettlementView(settlementId, this.ownerId ?? undefined);
         this.dispatchTargetBuildings = response.buildings;
         this.dispatchTargetBuildingsFor = settlementId;
       } catch {

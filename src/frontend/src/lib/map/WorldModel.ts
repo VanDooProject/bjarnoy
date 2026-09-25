@@ -6,11 +6,15 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
+import { giantCoverage, type GiantPart } from './giantTiles';
+import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
+import { claimsWithGiants } from './territory';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import {
   DEFAULT_GENERATION,
   generateTile,
+  hash2,
   soilAt,
   springMountainShapeAt,
   terrainAt,
@@ -144,6 +148,17 @@ export const PREVIEW_ISLAND_RADIUS = 7;
 // island.
 export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 24;
 
+// Demo mode's `placeGiantsForIsland` needs the landfall's *whole* island
+// (giant placement rules — size thresholds, spacing — care about the real
+// island, not a viewport crop), so this deliberately doesn't reuse
+// `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` (tuned tight around the render crop's own
+// `PREVIEW_ISLAND_RADIUS`): a larger island than that bound would silently
+// come back truncated (a `null` from `floodFillLandmass`, treated as "no
+// island" below) rather than getting its due giants. Generous rather than
+// unbounded for the same "must not hang on a pathological seed" reason
+// `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` itself gives.
+const GIANT_ISLAND_FLOOD_MAX_RADIUS = 60;
+
 /**
  * Iterative flood fill (an explicit queue, not recursion — the same "one
  * stack frame per land hex overflows on any island worth playing on" reason
@@ -264,6 +279,27 @@ export class WorldModel {
    * `applyServerSnapshot` (live mode) and `placeBuilding` (demo mode).
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
+  /**
+   * Every hex belonging to a giant's 7-hex footprint, mapped to that giant's
+   * own anchor coord — this model's own `IGiantIndex` (see the backend's
+   * `Bjarnoy.Domain.World.GiantIndex`), populated by `placeGiant` (demo
+   * mode) and `setGiants` (live mode). Kept separate from `tiles`' own
+   * `Tile.giant` field (which a coord's own lookup could also read once its
+   * `Tile` is materialised) so `claimsWithGiants`' `giantAt` lookup never has
+   * to materialise a `Tile` — the whole point of `terrain`'s own separate
+   * cache for the same reason (see its doc comment) — for a hex nothing else
+   * has touched yet.
+   */
+  private giantAnchorByHex = new Map<string, AxialCoord>();
+  /**
+   * Demo mode: which islands `placeGiantsForIsland` has already run giant
+   * placement for, keyed by the island's own lowest-(q, r) tile (`coordKey`)
+   * — placement should happen at most once per island per model, the same
+   * way a real world's giants are generated once at world creation rather
+   * than re-rolled. Live mode never touches this: `setGiants` tags the
+   * server's authoritative giants directly.
+   */
+  private giantPlacedIslands = new Set<string>();
 
   constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
@@ -307,6 +343,39 @@ export class WorldModel {
 
   getRiverTile(q: number, r: number): RiverTile | undefined {
     return this.riverTiles.get(coordKey({ q, r }));
+  }
+
+  /**
+   * `coord`'s giant anchor, or `null` if it isn't part of any giant's 7-hex
+   * footprint — this model's `IGiantIndex`-equivalent lookup (see
+   * `giantAnchorByHex`), the `giantAt` callback `claimsWithGiants` (the
+   * territory rule, `territory.ts`) needs. Public: `TrainingModal.vue`'s
+   * coastal check needs the same giant-aware territory answer
+   * `hasShorelineInTerritory` does.
+   */
+  giantAnchorAt(coord: AxialCoord): AxialCoord | null {
+    return this.giantAnchorByHex.get(coordKey(coord)) ?? null;
+  }
+
+  /**
+   * Whether `coord` sits within `StartPositionExclusionRadius + 1` hexes of
+   * any placed giant's anchor — the same exclusion
+   * `WorldGenerator.FindStartPositions` (backend) enforces, mirrored here so
+   * `findLandfall` can steer a demo-mode landfall clear of a giant's
+   * footprint the same way a real world's start positions already are. Scans
+   * the *distinct* anchors in `giantAnchorByHex` (deduping its 7-hex-per-
+   * giant fan-out) rather than every covered hex, since the exclusion is
+   * always measured from the anchor.
+   */
+  private isNearAnyGiantAnchor(coord: AxialCoord): boolean {
+    const seen = new Set<string>();
+    for (const anchor of this.giantAnchorByHex.values()) {
+      const key = coordKey(anchor);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (hexDistance(coord, anchor) < StartPositionExclusionRadius + 1) return true;
+    }
+    return false;
   }
 
   /**
@@ -609,6 +678,13 @@ export class WorldModel {
     for (let radius = 0; radius <= maxRadius; radius++) {
       for (const c of hexesInRadius(near, radius)) {
         if (!this.isLand(c.q, c.r)) continue;
+        // Giant placement v2: never land within a giant's own start-position
+        // exclusion — mirrors `WorldGenerator.FindStartPositions` (backend)
+        // dropping the same candidates. Placement always runs before this is
+        // called (see `stores/world.ts`'s `foundStartingSettlement`), so
+        // `giantAnchorByHex` already reflects the island's giants by the
+        // time this scan happens.
+        if (this.isNearAnyGiantAnchor(c)) continue;
         firstLand ??= c;
         if (this.isGoodStartCandidate(c)) return c;
       }
@@ -855,19 +931,34 @@ export class WorldModel {
   }
 
   /**
-   * The union of every hex within each of `claimDiscsFor`'s discs — this
-   * settlement's actual claimed territory, towers included, rather than
-   * just the centre disc `borderRadius` alone describes.
+   * The union of every hex within each of `claimDiscsFor`'s discs that the
+   * territory rule (`claimsWithGiants`, `territory.ts`) actually claims —
+   * this settlement's real claimed territory, towers included, rather than
+   * just the centre disc `borderRadius` alone describes. A hex that is part
+   * of a giant's 7-hex footprint is only included once *every* one of that
+   * footprint's hexes falls inside this same disc union — a disc that only
+   * touches or partially covers a giant excludes all 7 of its hexes, not
+   * just the ones outside the disc.
+   *
+   * Re-derived fresh from the settlement's *current* discs on every call
+   * (rather than cached), which is what makes a giant that only becomes
+   * fully enclosed later (a Tower completing the enclosure) start being
+   * included the next time this runs, with no separate "did a giant just
+   * get enclosed" tracking needed — every caller here only ever *adds*
+   * ownership (`if (!tile.ownerId) tile.ownerId = ...`), never removes it,
+   * so a hex excluded on an earlier call and included on a later one is
+   * exactly the one-way claiming this model already promises elsewhere.
    */
   private claimedHexes(settlement: Settlement): AxialCoord[] {
+    const discs = this.claimDiscsFor(settlement);
     const seen = new Set<string>();
     const hexes: AxialCoord[] = [];
-    for (const disc of this.claimDiscsFor(settlement)) {
+    for (const disc of discs) {
       for (const c of hexesInRadius({ q: disc.q, r: disc.r }, disc.radius)) {
         const key = coordKey(c);
         if (seen.has(key)) continue;
         seen.add(key);
-        hexes.push(c);
+        if (claimsWithGiants(discs, c, (coord) => this.giantAnchorAt(coord))) hexes.push(c);
       }
     }
     return hexes;
@@ -875,9 +966,8 @@ export class WorldModel {
 
   /** Whether `at` is inside this settlement's claimed territory — see `claimedHexes`. */
   private claims(settlement: Settlement, at: AxialCoord): boolean {
-    return this.claimDiscsFor(settlement).some(
-      (disc) => hexDistance({ q: disc.q, r: disc.r }, at) <= disc.radius,
-    );
+    const discs = this.claimDiscsFor(settlement);
+    return claimsWithGiants(discs, at, (coord) => this.giantAnchorAt(coord));
   }
 
   /**
@@ -1086,6 +1176,13 @@ export class WorldModel {
       return false;
     }
     const tile = this.getTile(at.q, at.r);
+    // A giant hex is never buildable, claimed or not — the giant's own art
+    // fully occupies the ground there (matches the backend's own rule; see
+    // `Tile.giant`'s doc comment and `Territory`'s own remarks). Checked
+    // even though `claims` above already excludes an *unclaimed* giant hex,
+    // since a giant whose whole 7-hex footprint *is* fully enclosed reads as
+    // claimed but must still refuse building on it.
+    if (tile.giant) return false;
     // Every other building needs dry land; the fishing hut, dockyard, and
     // fisher hut are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
@@ -1143,6 +1240,165 @@ export class WorldModel {
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
     return true;
+  }
+
+  /**
+   * Whether a "giant tile" (see `giantTiles.ts`) could be placed with its
+   * anchor at `at`: all 7 covered hexes (the anchor + its six neighbours,
+   * `giantCoverage`) must be dry land the giant's footprint can actually
+   * replace — Grass or Forest, matching the demo's home-island terrain, not
+   * Sea/Sand/Mountain — and free of any building or existing giant. A spike
+   * rule, not the backend's: there is no server-side notion of a giant tile
+   * yet (see `Tile.giant`'s own doc comment).
+   */
+  canPlaceGiant(at: AxialCoord): boolean {
+    return giantCoverage(at).every(({ coord }) => {
+      const tile = this.getTile(coord.q, coord.r);
+      if (tile.terrain !== 'grass' && tile.terrain !== 'forest') return false;
+      if (tile.buildingType) return false;
+      if (tile.giant) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Places a giant tile anchored at `at`, tagging all 7 covered hexes with
+   * `Tile.giant` (see that field's own doc comment) and — for a covered hex
+   * that was Forest — flattening it to Grass first, so the giant's own art
+   * is what actually reads on screen instead of a tree top poking through
+   * it. Returns `false` (no mutation) when `canPlaceGiant(at)` would.
+   *
+   * `orientation` defaults to the anchor tile's own generated orientation
+   * (`orientationAt`, same as every other tile) — a giant can be placed in
+   * any of the 6, but with no orientation given, "however this hex would
+   * already render" is the least surprising default.
+   */
+  placeGiant(at: AxialCoord, family: GiantFamily = 'giantmountain', orientation?: TileOrientation): boolean {
+    if (!this.canPlaceGiant(at)) return false;
+    const resolvedOrientation = orientation ?? this.getTile(at.q, at.r).orientation ?? 'SE';
+    for (const { coord, part } of giantCoverage(at)) {
+      this.tagGiantHex(coord, at, family, resolvedOrientation, part);
+    }
+    return true;
+  }
+
+  /**
+   * Demo mode's own giant generation — the local counterpart to the
+   * backend's `WorldGenerator` running `GiantGenerator` once per island at
+   * world creation. Flood-fills `near`'s whole island
+   * (`GIANT_ISLAND_FLOOD_MAX_RADIUS` — see that constant's own doc comment
+   * for why this can't reuse `previewIslandTiles`'s tighter crop bound), and
+   * if this model hasn't already placed giants for that island
+   * (`giantPlacedIslands`, keyed by the island's own lowest-(q, r) tile —
+   * the demo has no backend island id to key by instead), runs the shared
+   * `placeGiants` core (mirrors `GiantGenerator.PlaceCore`) against it and
+   * tags each result via `setGiants`.
+   *
+   * `islandIndex` has no backend equivalent to borrow in demo mode (there is
+   * no island list to index into) — it is derived instead from a hash of the
+   * island's own lowest-(q, r) tile, scaled into a large integer range the
+   * same way a real per-island index would vary the shrine/tie-break rolls
+   * from one island to the next. This is a demo-only stand-in, not a port of
+   * anything the backend does with island indices.
+   *
+   * A no-op if `near` isn't land, if its island has already had giants
+   * placed, or if `placeGiants` offers nothing (most demo islands are far
+   * smaller than `SmallIslandGiantThreshold`, so this often places nothing
+   * at all — see `stores/world.ts`'s `foundStartingSettlement` for where
+   * this is called and why it must run before `foundSettlement`).
+   */
+  placeGiantsForIsland(near: AxialCoord, worldSeed: number): void {
+    if (!this.isLand(near.q, near.r)) return;
+
+    const islandTiles = floodFillLandmass(near, (c) => this.isLand(c.q, c.r), GIANT_ISLAND_FLOOD_MAX_RADIUS);
+    if (!islandTiles || islandTiles.length === 0) return;
+
+    let lowest = islandTiles[0];
+    for (const tile of islandTiles) {
+      if (tile.q < lowest.q || (tile.q === lowest.q && tile.r < lowest.r)) {
+        lowest = tile;
+      }
+    }
+
+    const islandKey = coordKey(lowest);
+    if (this.giantPlacedIslands.has(islandKey)) return;
+    this.giantPlacedIslands.add(islandKey);
+
+    const islandIndex = Math.floor(hash2(lowest.q, lowest.r, worldSeed) * 1_000_000);
+    const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex);
+    // `placeGiants` already enforced the real placement rules, so these go
+    // through `setGiants` (like the server's giants in live mode), not
+    // `placeGiant`: the latter's `canPlaceGiant` spike rule only accepts
+    // Grass/Forest, which would silently drop every mountain giant — a
+    // mountain giant's footprint has Mountain hexes by construction.
+    this.setGiants(
+      placements.map((p) => ({
+        family: p.family,
+        anchor: p.anchor,
+        orientation: this.getTile(p.anchor.q, p.anchor.r).orientation ?? 'SE',
+      })),
+    );
+  }
+
+  /**
+   * The per-hex work `placeGiant` (demo) and `setGiants` (live) share:
+   * tags `coord` as part of `anchor`'s giant footprint and, if it was
+   * Forest, flattens it to Grass first so the giant's own art is what
+   * actually reads on screen instead of a tree top poking through it — see
+   * `placeGiant`'s own doc comment for why that flattening has to happen at
+   * all.
+   */
+  private tagGiantHex(
+    coord: AxialCoord,
+    anchor: AxialCoord,
+    family: GiantFamily,
+    orientation: TileOrientation,
+    part: GiantPart,
+  ) {
+    const tile = this.getTile(coord.q, coord.r);
+    if (tile.terrain === 'forest') {
+      tile.terrain = 'grass';
+      // Keep the pure terrain cache (`terrainOf`/`isLand`, see its own doc
+      // comment) in step with the materialised `Tile` it was sampled from —
+      // both are land either way, but leaving it stale as `forest` would
+      // mislead anything that later asks `terrainOf` specifically (rather
+      // than reading the covered `Tile` this method already updated).
+      this.terrain.set(terrainKey(coord.q, coord.r), 'grass');
+    }
+    tile.giant = { family, anchor, part, orientation };
+    this.giantAnchorByHex.set(coordKey(coord), anchor);
+  }
+
+  /**
+   * Live mode: tags every hex covered by each of the server's authoritative
+   * giants (`IslandResponse.giants`, see `stores/world.ts`) with `Tile.giant`
+   * — reuses `placeGiant`'s own covered-hex/forest-flattening logic
+   * (`tagGiantHex`), but skips `canPlaceGiant`'s validation entirely: the
+   * server is authoritative on where a giant sits (it already enforced its
+   * own placement rules at generation time), this client only needs to
+   * render it.
+   *
+   * Idempotent and additive, like every other territory-painting method
+   * here: a hex whose `Tile.giant` is already set is left untouched rather
+   * than re-tagged every poll (cheap early-out, and avoids re-flattening a
+   * tile a player might — in principle — have otherwise touched), and a
+   * giant whose anchor hex is already tagged by a *different* anchor is
+   * skipped outright rather than partially overwritten (shouldn't happen —
+   * the backend's own giants never overlap — but this must never make that
+   * worse).
+   */
+  setGiants(giants: { family: string; anchor: AxialCoord; orientation: TileOrientation }[]) {
+    for (const giant of giants) {
+      const anchorTile = this.getTile(giant.anchor.q, giant.anchor.r);
+      if (anchorTile.giant && (anchorTile.giant.anchor.q !== giant.anchor.q || anchorTile.giant.anchor.r !== giant.anchor.r)) {
+        continue;
+      }
+      const family = giant.family as GiantFamily;
+      for (const { coord, part } of giantCoverage(giant.anchor)) {
+        if (this.getTile(coord.q, coord.r).giant) continue;
+        this.tagGiantHex(coord, giant.anchor, family, giant.orientation, part);
+      }
+    }
   }
 
   /**
@@ -1352,10 +1608,11 @@ export class WorldModel {
     for (const settlement of this.settlements.values()) {
       const res = settlement.resources;
       const rate = settlement.rates;
-      res.wood += rate.wood * dtHours;
-      res.stone += rate.stone * dtHours;
-      res.food += rate.food * dtHours;
-      res.iron += rate.iron * dtHours;
+      const cap = this.storageCapForDisplay(settlement.id);
+      res.wood = Math.min(cap.wood, res.wood + rate.wood * dtHours);
+      res.stone = Math.min(cap.stone, res.stone + rate.stone * dtHours);
+      res.food = Math.min(cap.food, res.food + rate.food * dtHours);
+      res.iron = Math.min(cap.iron, res.iron + rate.iron * dtHours);
     }
   }
 }

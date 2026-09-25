@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
@@ -6,6 +7,7 @@ using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.World;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -37,7 +39,8 @@ public static class SettlementEndpoints
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
-            .WithSummary("Lists the settlements in a world.");
+            .WithSummary("Lists this caller's own settlements plus every rival settlement they have explored.")
+            .RequireCallerRealm();
 
         var settlements = app.MapGroup("/api/v1/settlements")
             .WithApiVersionSet(versionSet)
@@ -45,41 +48,50 @@ public static class SettlementEndpoints
 
         settlements.MapGet("/{settlementId:guid}", Get)
             .WithName("GetSettlement")
-            .WithSummary("Fetches a settlement as of now, completing anything its queue owed.");
+            .WithSummary("Fetches a settlement as of now, completing anything its queue owed.")
+            // Full read (stock/rates/queues/garrison/runes) — owner only. A
+            // rival is offered GetView below instead, fog-gated and without
+            // any of that.
+            .RequireSettlementOwner();
+
+        settlements.MapGet("/{settlementId:guid}/view", GetView)
+            .WithName("GetSettlementView")
+            .WithSummary("A fog-gated read of any settlement whose ground the caller has explored.")
+            .RequireCallerRealm();
 
         settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
             .WithName("QueueBuild")
             .WithSummary("Queues a building, charging its cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/builds/{orderId:guid}/cancel", CancelBuild)
             .WithName("CancelBuild")
             .WithSummary("Cancels a still-queued build order, refunding its cost.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
             .WithName("SlotRune")
             .WithSummary("Slots an unslotted rune into the shrine standing on a hex.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/unslot", UnslotRune)
             .WithName("UnslotRune")
             .WithSummary("Returns a slotted rune to storage.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         app.MapGet("/api/v1/buildings", Catalogue)
@@ -101,11 +113,22 @@ public static class SettlementEndpoints
         Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> Found(
         Guid worldId,
         FoundSettlementRequest request,
+        HttpContext httpContext,
         SettlementService settlements,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        // A caller founding while already logged in should own the new
+        // settlement outright, not land it in the Abandoned/unclaimed limbo
+        // meant for players who have no account yet — see
+        // SettlementService.FoundAsync's callerUserId remarks.
+        var user = httpContext.User;
+        var idClaim = user.Identity?.IsAuthenticated == true
+            ? user.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        Guid? callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : null;
 
         var result = await settlements.FoundAsync(
             worldId,
@@ -114,6 +137,7 @@ public static class SettlementEndpoints
             request.Name,
             request.OwnerName,
             request.OwnerId,
+            callerUserId,
             cancellationToken);
 
         if (result.Accepted)
@@ -158,19 +182,127 @@ public static class SettlementEndpoints
             SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
     }
 
-    private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(
-        Guid worldId,
+    /// <summary>
+    /// The rival-safe counterpart to <see cref="Get"/>: identity, position and
+    /// buildings only, and only once the caller has actually explored this
+    /// settlement's own centre hex — see <see cref="SettlementViewResponse"/>.
+    /// Resolves the caller's realm the same way the per-world reads in
+    /// <see cref="WorldEndpoints"/> do (<see cref="CallerRealmResolver"/>): no
+    /// realm at all is refused rather than answered with an empty view, since
+    /// (unlike <c>ListForWorld</c>) a single settlement id is already a
+    /// specific ask, not a passive listing an anonymous landing-page visitor
+    /// happens to poll.
+    /// </summary>
+    private static async Task<IResult> GetView(
+        Guid settlementId,
+        HttpContext httpContext,
         SettlementService settlements,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
+        var found = await settlements.GetAsync(settlementId, cancellationToken);
+        if (found is null)
+        {
+            return TypedResults.NotFound(SettlementNotFoundProblem());
+        }
+
+        var (entity, _) = found.Value;
+
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, entity.WorldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            // MissingHeader/Refused: nothing to check explored ground
+            // against — same 403 the fog-mask/plot-suggestion reads answer
+            // with for the same two outcomes.
+            return NotOwnerRefusal();
+        }
+
+        var area = await exploredArea.GetAsync(entity.WorldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            // The world resolved a moment ago but is gone by the time this
+            // read actually ran — same "stopped existing under us" case
+            // WorldEndpoints' reads recover from.
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var isOwnSettlement = string.Equals(entity.OwnerId, realm.OwnerId, StringComparison.Ordinal);
+        if (!isOwnSettlement && !area.Hexes.Contains(new HexCoord(entity.CentreQ, entity.CentreR)))
+        {
+            // Never reveal that an unexplored settlement even exists.
+            return TypedResults.NotFound(SettlementNotFoundProblem());
+        }
+
+        IReadOnlyList<PlacedBuildingResponse> buildings =
+        [
+            .. entity.Buildings
+                .Where(b => isOwnSettlement || area.Hexes.Contains(new HexCoord(b.Q, b.R)))
+                .Select(b => new PlacedBuildingResponse(b.Q, b.R, b.Type.ToWireName(), b.Level)),
+        ];
+
+        return TypedResults.Ok(new SettlementViewResponse(
+            entity.Id,
+            entity.Name,
+            entity.OwnerName,
+            entity.CentreQ,
+            entity.CentreR,
+            entity.ToDomain().LonghouseLevel,
+            entity.IslandId,
+            buildings));
+    }
+
+    /// <summary>
+    /// Fog-gated per <c>docs/design/map-fog-v2.md</c>: a caller with no
+    /// resolvable realm at all (an anonymous landing-page visitor — the
+    /// frontend polls this before founding) just sees nothing, same
+    /// reasoning <see cref="WorldEndpoints.GetMembership"/> gives for
+    /// treating <see cref="CallerRealmOutcome.Refused"/> as "no realm here"
+    /// rather than a 403/400 — this is a passive listing, not a specific
+    /// ask. Otherwise: the caller's own settlements (every realm they hold,
+    /// not just their primary one — settler-convoy foundings can leave a
+    /// player with several) plus every settlement whose centre hex is in
+    /// their explored area (<see cref="ExploredAreaService"/>) — exactly
+    /// what their own fog mask/world map already shows them.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(
+        Guid worldId,
+        HttpContext httpContext,
+        SettlementService settlements,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<SettlementSummary>>([]);
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return TypedResults.Ok<IReadOnlyList<SettlementSummary>>([]);
+        }
+
+        var user = httpContext.User;
+        var idClaim = user.Identity?.IsAuthenticated == true
+            ? user.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
+
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
 
         IReadOnlyList<SettlementSummary> response =
         [
-            .. entities.Select(s => new SettlementSummary(
-                s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-                s.IslandId)),
+            .. entities
+                .Where(s => s.OwnerId == realm.OwnerId
+                    || (callerUserId is not null && s.UserId == callerUserId)
+                    || area.Hexes.Contains(new HexCoord(s.CentreQ, s.CentreR)))
+                .Select(s => new SettlementSummary(
+                    s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
+                    s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
+                    s.IslandId)),
         ];
 
         return TypedResults.Ok(response);
@@ -456,6 +588,34 @@ public static class SettlementEndpoints
         return problem;
     }
 
+    /// <summary>
+    /// <see cref="GetView"/>'s 403 when <see cref="CallerRealmResolver"/>
+    /// resolves neither a JWT realm nor a usable <c>X-Owner-Id</c> header, or
+    /// refuses one naming someone else's already-claimed realm — the same
+    /// body <see cref="OwnershipGate"/> and <see cref="WorldEndpoints"/>'s
+    /// fog-mask/plot-suggestion reads use for the same outcomes.
+    /// </summary>
+    private static IResult NotOwnerRefusal() =>
+        Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
+
+    /// <summary>
+    /// <see cref="GetView"/>'s 404 when the settlement's own world stopped
+    /// existing between resolving it and reading its explored area — same
+    /// machine-readable body as <see cref="WorldEndpoints.WorldNotFoundProblem"/>
+    /// (private there, so duplicated rather than shared across files).
+    /// </summary>
+    private static ProblemDetails WorldNotFoundProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Title = "No such world.",
+            Detail = "This world does not exist, or no longer does.",
+            Status = StatusCodes.Status404NotFound,
+        };
+        problem.Extensions["error"] = "world_not_found";
+        return problem;
+    }
+
     private static ProblemDetails WorldPausedProblem()
     {
         var problem = new ProblemDetails
@@ -516,6 +676,7 @@ public static class SettlementEndpoints
             $"Needs a {missing.Type.ToWireName()} at level {missing.Level} first.",
         BuildRejection.TerrainNotAllowed => "That building cannot stand on that terrain.",
         BuildRejection.HexNotInSettlement => "That hex is outside the settlement's borders.",
+        BuildRejection.HexOccupiedByGiant => "That hex is part of a giant feature and can never be built on.",
         BuildRejection.HexOccupied => "Another building already stands there.",
         BuildRejection.NotEnoughResources =>
             "Not enough resources (some may be reserved for queued construction).",

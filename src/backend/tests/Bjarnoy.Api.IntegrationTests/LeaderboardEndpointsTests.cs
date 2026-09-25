@@ -37,12 +37,11 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     private static void Authorize(HttpClient client, string accessToken) =>
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-    private async Task<Guid> CreateWorldAsync(HttpClient client)
+    private async Task<Guid> CreateWorldAsync()
     {
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("world"), Seed: 4242, Radius: 60, MaxPlayers: 100), Ct);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return (await response.ReadStrictAsync<WorldResponse>(Ct)).Id;
+        var world = await _factory.CreateWorldAsync(
+            Unique("world"), seed: 4242, radius: 60, maxPlayers: 100, cancellationToken: Ct);
+        return world.Id;
     }
 
     private async Task<Queue<(Guid IslandId, int Q, int R)>> GetPlotsAsync(HttpClient client, Guid worldId)
@@ -106,7 +105,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Directory_reports_dark_reserved_boards_and_lights_up_once_computed()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
 
         var before = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
             $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
@@ -158,7 +157,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Unknown_scope_or_category_is_a_bad_request()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
 
         var response = await client.GetAsync($"/api/v1/worlds/{worldId}/leaderboards/nonsense/score", Ct);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -185,7 +184,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task A_dark_board_page_is_200_with_no_entries_rather_than_404()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
 
         var response = await client.GetAsync($"/api/v1/worlds/{worldId}/leaderboards/guild/score", Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -225,7 +224,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Board_page_keyset_pagination_walks_every_entry_exactly_once_in_rank_order()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         // Triangular numbers -> distinct scores 55, 45, 36, 28, 21 for levels 10..6.
         await BuildUserBoardAsync(client, worldId, [10, 9, 8, 7, 6]);
 
@@ -257,7 +256,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Board_page_breaks_ties_by_ascending_subject_id_and_reports_delta()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         var settlements = await BuildUserBoardAsync(client, worldId, [4, 4]);
 
         var page = await client.GetFromJsonAsync<LeaderboardBoardResponse>(
@@ -274,7 +273,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Me_requires_authentication()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
 
         var response = await client.GetAsync($"/api/v1/worlds/{worldId}/leaderboards/user/score/me", Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -284,7 +283,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Me_returns_a_window_around_the_callers_rank()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         // 7 users -> the target (rank 4, middle) has a full radius-3 window on both sides.
         var settlements = await BuildUserBoardAsync(client, worldId, [10, 9, 8, 7, 6, 5, 4]);
         var target = settlements[3].Settlement; // level 7 -> rank 4.
@@ -315,7 +314,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Me_is_404_when_the_caller_has_no_entry_on_the_board()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         // A user with no settlement in this world at all.
         var (_, token) = await RegisterAndClaimAsync(client, Unique("unclaimed"));
         Authorize(client, token);
@@ -328,7 +327,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Me_for_settlement_scope_defaults_to_the_callers_own_settlement()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, worldId);
         var ownerId = Unique("owner");
         var settlement = await FoundSettlementAsync(client, worldId, plots, ownerId);
@@ -354,7 +353,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Me_for_settlement_scope_refuses_a_settlement_the_caller_does_not_own()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, worldId);
 
         var myOwnerId = Unique("owner");
@@ -377,7 +376,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Me_for_settlement_scope_404s_for_an_unknown_settlement_id()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, worldId);
         var myOwnerId = Unique("owner");
         await FoundSettlementAsync(client, worldId, plots, myOwnerId);
@@ -394,7 +393,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Directory_returns_closed_windows_once_the_first_one_closes_and_lights_up_weekly_score_gained()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         var (settlement, _) = (await BuildUserBoardAsync(client, worldId, [5]))[0]; // score 15
 
         var before = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
@@ -421,7 +420,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Board_page_with_period_start_returns_the_matching_final_weekly_snapshot()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         await BuildUserBoardAsync(client, worldId, [5]); // score 15
 
         _factory.Time.Advance(LeaderboardService.WeeklyWindowLength + TimeSpan.FromMinutes(1));
@@ -453,7 +452,7 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     public async Task Weekly_stats_endpoint_pages_newest_window_first()
     {
         using var client = Client();
-        var worldId = await CreateWorldAsync(client);
+        var worldId = await CreateWorldAsync();
         var settlements = await BuildUserBoardAsync(client, worldId, [5]);
         var userId = settlements[0].UserId;
 

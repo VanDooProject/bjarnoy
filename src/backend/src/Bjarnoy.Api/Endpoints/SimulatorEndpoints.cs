@@ -53,7 +53,7 @@ public static class SimulatorEndpoints
             .WithTags("Simulator")
             .WithName("SimulateBattle")
             .WithSummary("Premium-only: resolves a hypothetical battle with no persistence.")
-            .AddEndpointFilter<PremiumUserEndpointFilter>();
+            .RequirePremiumUser();
 
         return app;
     }

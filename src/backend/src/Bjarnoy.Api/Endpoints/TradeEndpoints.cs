@@ -23,23 +23,39 @@ public static class TradeEndpoints
         settlements.MapPost("/{settlementId:guid}/trade-offers", PostOffer)
             .WithName("PostTradeOffer")
             .WithSummary("Posts a trade offer at the longhouse, escrowing the offered goods.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            // Pre-existing gap found while auditing the read endpoints
+            // (issue: no ownership check at all, unlike QueueBuild/TrainUnits/
+            // etc.) — any caller could escrow another settlement's goods.
+            // Closed the same way those mutations are.
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner();
 
         settlements.MapGet("/{settlementId:guid}/trade-offers/board", Board)
             .WithName("GetTradeBoard")
-            .WithSummary("Open offers this settlement is in range to accept.");
+            .WithSummary("Open offers this settlement is in range to accept.")
+            // Owner-gates the *browsing* settlement (the caller must own
+            // {settlementId}) — not the offers themselves. The board
+            // deliberately lists every open offer in range, including other
+            // players' postings: that's the feature (a public trade board),
+            // not a leak. Without this gate a caller could enumerate any
+            // settlement's trade range/position by probing arbitrary ids,
+            // which is the actual thing being closed here.
+            .RequireSettlementOwner();
 
         settlements.MapGet("/{settlementId:guid}/trade-offers/mine", Mine)
             .WithName("GetMyTradeOffers")
-            .WithSummary("This settlement's own offers, in any state.");
+            .WithSummary("This settlement's own offers, in any state.")
+            .RequireSettlementOwner();
 
         settlements.MapGet("/{settlementId:guid}/shipments", Shipments)
             .WithName("GetShipments")
-            .WithSummary("Cart shipments in transit either way, and recently delivered ones.");
+            .WithSummary("Cart shipments in transit either way, and recently delivered ones.")
+            .RequireSettlementOwner();
 
         settlements.MapGet("/{settlementId:guid}/trade-reports", ListReportsForSettlement)
             .WithName("ListSettlementTradeReports")
-            .WithSummary("Lists completed trade reports touching a settlement, as poster or acceptor, newest first.");
+            .WithSummary("Lists completed trade reports touching a settlement, as poster or acceptor, newest first.")
+            .RequireSettlementOwner();
 
         var offers = app.MapGroup("/api/v1/trade-offers")
             .WithApiVersionSet(versionSet)
@@ -48,12 +64,18 @@ public static class TradeEndpoints
         offers.MapPost("/{offerId:guid}/accept", Accept)
             .WithName("AcceptTradeOffer")
             .WithSummary("Accepts an open offer, escrowing the acceptor's goods and dispatching both shipments.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            // The acting settlement comes from the request body and used to be
+            // trusted as-is — anyone could act as any settlement here.
+            .RequireRequestSettlementOwner();
 
         offers.MapPost("/{offerId:guid}/cancel", Cancel)
             .WithName("CancelTradeOffer")
             .WithSummary("Withdraws an open offer and refunds its escrow.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            // The acting settlement comes from the request body and used to be
+            // trusted as-is — anyone could act as any settlement here.
+            .RequireRequestSettlementOwner();
 
         return app;
     }

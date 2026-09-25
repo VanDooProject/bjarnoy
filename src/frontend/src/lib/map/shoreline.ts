@@ -11,7 +11,8 @@
 // from that same seed on load (see its `WorldModel(world.seed)` call) — so
 // `WorldModel.isLand` already agrees with the backend's `TerrainSampler` for
 // every hex, live mode included, with no extra round trip.
-import { hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
+import { coordKey, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
+import { claimsWithGiants } from './territory';
 
 /** The subset of `WorldModel` this needs — narrowed so tests can pass a plain object instead of a full model. */
 export interface TerrainLookup {
@@ -92,7 +93,33 @@ export function claimDiscs(
  * hex, not just the centre disc. This is what a real coastal-training check
  * needs: a settlement inland at its centre but with a Tower on the coast is
  * exactly the case the multi-disc territory mechanic exists to enable.
+ *
+ * Every candidate hex is filtered through `claimsWithGiants` before the
+ * shoreline check, not just unioned by raw disc membership — mirrors
+ * `SettlementService.PlanTrainAsync`'s own giant-aware rewrite: a hex that
+ * only geometrically overlaps a disc but isn't actually claimed (it belongs
+ * to a giant whose 7-hex footprint isn't fully covered by the disc union)
+ * must not count as this settlement's shoreline either. `giantAt` defaults
+ * to "no giants" for callers with no giant data on hand (matches
+ * `GiantIndex.Empty`'s role backend-side).
  */
-export function hasShorelineInTerritory(discs: ClaimDisc[], terrain: TerrainLookup): boolean {
-  return discs.some((disc) => hasShoreline({ q: disc.q, r: disc.r }, disc.radius, terrain));
+export function hasShorelineInTerritory(
+  discs: ClaimDisc[],
+  terrain: TerrainLookup,
+  giantAt: (coord: AxialCoord) => AxialCoord | null = () => null,
+): boolean {
+  const seen = new Set<string>();
+  for (const disc of discs) {
+    for (const hex of hexesInRadius({ q: disc.q, r: disc.r }, disc.radius)) {
+      const key = coordKey(hex);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!claimsWithGiants(discs, hex, giantAt)) continue;
+      // `hasShoreline` with radius 0 checks exactly this one hex: land with
+      // at least one sea neighbour — reused rather than re-inlined so this
+      // stays the one place that predicate lives.
+      if (hasShoreline(hex, 0, terrain)) return true;
+    }
+  }
+  return false;
 }

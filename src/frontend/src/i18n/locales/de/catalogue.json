@@ -39,6 +39,11 @@
     "karve": "Karve",
     "longship": "Langschiff"
   },
+  "giants": {
+    "giantmountain": "Riesenberg",
+    "giantshrine": "Runensteinheiligtum",
+    "giantvolcano": "Vulkan"
+  },
   "terrain": {
     "sea": "Offenes Wasser",
     "sand": "Ufer",

@@ -176,6 +176,20 @@ public sealed class AdminGodModeTests
     }
 
     [Fact]
+    public void Admin_placement_is_refused_on_a_giant_hex_even_inside_the_claim()
+    {
+        var settlement = NewSettlement();
+        var giantHex = new HexCoord(1, 0);
+        var giants = new GiantIndex([new Giant(giantHex, "giantmountain", TileOrientation.E)]);
+
+        var result = settlement.PlaceBuilding(
+            giantHex, BuildingType.Farm, level: 1, Terrain.Grass, isCoastalWater: false, Start,
+            terrainAt: Grass, giants: giants);
+
+        Assert.Equal(AdminBuildingEditRejection.HexOccupiedByGiant, result.Rejection);
+    }
+
+    [Fact]
     public void The_single_longhouse_can_be_relevelled_but_never_duplicated_moved_or_razed()
     {
         var settlement = NewSettlement();

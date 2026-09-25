@@ -12,6 +12,14 @@
       "tiles": {
         "title": "Tiles",
         "description": "The terrain a world is made of, how it generates, and what can be built on it."
+      },
+      "wastedLands": {
+        "title": "Wasted lands",
+        "description": "The endgame: Utgard, the islands that rise from the sea, and what they are made of."
+      },
+      "showcase": {
+        "title": "Showcase",
+        "description": "A player-first pitch for the game, plus a look under the hood for anyone curious how it's built."
       }
     }
   },
@@ -186,5 +194,118 @@
   "impressum": {
     "title": "Impressum",
     "body": "Fjørdhold is a hobby project built for the VanDooProject community. This placeholder page exists so the real landing page has somewhere to link to — replace it with your actual legal notice (operator, contact address, and any disclosures your jurisdiction requires) before going live."
+  },
+  "wastedLands": {
+    "title": "The Wasted Lands",
+    "intro": "Where the world ends. The Wasted Lands are a world's endgame: islands that rise from the sea when the giants wake, the fortress at the heart of them, and the last war the jarls of Bjarnøy fight.",
+    "lore": {
+      "heading": "The long winter's edge",
+      "p1": "The skalds say the sea around Bjarnøy was never empty. Past the last skerries, where the charts stop, lies Útgarðr: the Outyard, home of the Jötnar, the giants who were here before gods or men. For as long as the islands are young, the giants sleep, and the jarls fight each other for timber, stone and glory.",
+      "p2": "But every age grows old. When the halls are full and the runestones stand on every island, the giants wake. Out past the charted islands the sea boils, and new land rises from it: islands that were never green. On each of them smokes a fire-mountain, and on the greatest stands Utgard, a black citadel whose windows burn with cold rune-fire.",
+      "p3": "Nothing living has ever grown there. The ground is ash and cinder, the forests are bleached snags with their crowns snapped off, and the rivers run with fire. The beaches are black sand, and the sea around them is a sick green-black, choked around the wrecks of the longships that sailed too close to see what had risen. On the ridges, Jötun watchtowers keep the approaches, and Utgard's walls run from crag to shore.",
+      "p4": "No single jarl breaks Utgard. Its walls are built for a siege that lasts a generation, and the giants grow stronger while the jarls argue. Only guilds that sail as one host can storm the Outyard. Whoever throws down its gate ends the age, and their name is the last one carved before the world begins again.",
+      "caption": "This is how the endgame is meant to feel, not a rulebook. The mechanics are still being designed and may change."
+    },
+    "utgard": {
+      "heading": "Utgard, the Outyard",
+      "body": "A giant tile: one fortress over seven hexes, a basalt crag with a curtain wall, round towers and a central keep, lit from within by rune-fire and wrapped in mist. The whole crag is cut into seven pieces, so each piece sorts on the map with the hex it stands on, like any other tile.",
+      "camera": "Camera"
+    },
+    "volcano": {
+      "heading": "The fire-mountain",
+      "body": "The second giant of the Wasted Lands: a mountain that never cooled. Lava runs down its flanks, the crater bubbles and smoke rises from it without end. Like Utgard it covers seven hexes, and it is animated."
+    },
+    "defences": {
+      "heading": "Utgard's defences",
+      "body": "The giants don't leave their islands open. Jötun watchtowers guard the approaches, and walls in Utgard's own masonry close the ground between them, down to the waterline.",
+      "level": "Level",
+      "watchtower": {
+        "heading": "Jötun watchtower",
+        "body": "Utgard's answer to the jarls' towers: a round tower of dark coursed stone with rune-lit arrow slits. It rises in three stages, from scaffolding to a crowned top where the rune-fire burns in the open."
+      },
+      "walls": {
+        "heading": "Utgard walls",
+        "body": "Battlemented curtain walls built from pieces that join edge to edge: straight runs, a gate, gentle and sharp bends, ends that finish on a tower, and ends that break off where they meet the sea.",
+        "piece": "Piece"
+      },
+      "pieces": {
+        "straight": "Straight",
+        "gate": "Gate",
+        "bend120": "Bend",
+        "bend60": "Sharp bend",
+        "end": "End",
+        "endCoast": "End at the shore"
+      }
+    },
+    "island": {
+      "heading": "Living and wasted, side by side",
+      "body": "Wasted islands are born wasted: they rise from the sea as they are, and no living island ever turns. This made-up island is only a toy for comparing the two tile sets. Drag the slider to swap its living tiles for their wasted counterparts, ring by ring from the centre out.",
+      "blight": "Wasted",
+      "play": "Play",
+      "rotateLeft": "Rotate left",
+      "rotateRight": "Rotate right",
+      "hoverHint": "Point at a hex to see what it is.",
+      "stages": {
+        "s0": "All living",
+        "s1": "Centre swapped",
+        "s2": "Land swapped",
+        "s3": "Shore swapped",
+        "s4": "All wasted"
+      },
+      "giantLiving": "Stone ring (giant shrine)",
+      "giantWasted": "Utgard",
+      "giantMountainLiving": "Great mountain (giant)",
+      "giantVolcano": "Fire-mountain"
+    },
+    "pairs": {
+      "heading": "Living and wasted",
+      "body": "Every wasted tile has a living counterpart of the same shape, so rivers, coasts and mountain feet line up the same way on both kinds of island.",
+      "living": "Living",
+      "wasted": "Wasted",
+      "looks": "Looks"
+    },
+    "tiles": {
+      "grass": {
+        "living": "Grassland",
+        "wasted": "Wasteland",
+        "lore": "Ash-mottled basalt. It can be rubble, obsidian shards, a rune-lit fissure, a web of lava cracks or a smoking vent."
+      },
+      "forest": {
+        "living": "Forest",
+        "wasted": "Dead forest",
+        "lore": "A snag stands where each tree stood. They are bleached, grey or charred, and a third of them have snapped off."
+      },
+      "sand": {
+        "living": "Sand",
+        "wasted": "Black sand",
+        "lore": "Volcanic grit, scattered with pebbles of the same stone."
+      },
+      "mountain": {
+        "living": "Mountain",
+        "wasted": "Jagged peak",
+        "lore": "Slim spires of dark rock with ash on their crests. Nothing grows on them."
+      },
+      "river": {
+        "living": "River",
+        "wasted": "Lava stream",
+        "lore": "The same channel as a river, running with fire instead of water. Where one rises, lava wells up from a small cone of its own."
+      },
+      "sea": {
+        "living": "Sea",
+        "wasted": "Tainted water",
+        "lore": "Green-black water over a dark seabed."
+      },
+      "coast": {
+        "living": "Coastal water",
+        "wasted": "Black-sand coast",
+        "lore": "Shallows over black sand. Here lie the wreck of a longship, a basalt rock and a reef of obsidian spikes."
+      }
+    },
+    "lavaShapes": {
+      "straight": "Straight",
+      "bend": "Bend",
+      "bend60": "Sharp bend",
+      "spring": "Spring"
+    }
   }
 }

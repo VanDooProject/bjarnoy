@@ -7,7 +7,14 @@ import { axialToOddQ, hexDistance, oddQToAxial, neighbors } from '../hex/coords'
 import { TILE_ORIENTATIONS } from './types';
 import type { IslandLabel, Terrain, Tile, TileOrientation } from './types';
 
-function hash2(x: number, y: number, seed: number): number {
+/**
+ * Deterministic 2D hash in `[0, 1)` — the ECMAScript-integer-coercion-exact
+ * function `Bjarnoy.Domain.World.ValueNoise.Hash2` (backend) is a bit-exact
+ * port of. Exported so `giantPlacement.ts` can roll the same
+ * shrine-chance/tie-break hashes the backend's `GiantGenerator` does,
+ * without duplicating the arithmetic.
+ */
+export function hash2(x: number, y: number, seed: number): number {
   let h = x * 374761393 + y * 668265263 + seed * 2147483647;
   h = (h ^ (h >>> 13)) * 1274126177;
   h = h ^ (h >>> 16);
