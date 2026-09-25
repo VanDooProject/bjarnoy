@@ -7,6 +7,13 @@
   "reportSent": "Report sent — thank you.",
   "joined": "Joined",
   "settlements": "Settlements",
+  "hudBar": {
+    "title": "HUD bar",
+    "hint": "Applies on small screens only.",
+    "position": "Bar position",
+    "top": "Top",
+    "bottom": "Bottom"
+  },
   "bio": {
     "title": "Bio",
     "edit": "Edit bio",

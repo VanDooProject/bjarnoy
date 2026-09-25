@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import WastedIsland from '../components/docs/WastedIsland.vue';
 import AnimatedGiant from '../components/docs/AnimatedGiant.vue';
@@ -175,6 +176,9 @@ const wallFrame = computed(() => {
   <div class="wasted-lands">
     <TopBar docked :title="$t('docs.wastedLands.title')" caption="DOCS · WASTED LANDS">
       <HudNav />
+      <template #drawer="{ close }">
+        <MobileHudDrawer @close="close" />
+      </template>
     </TopBar>
     <main class="body">
       <h1>{{ $t('docs.wastedLands.title') }}</h1>

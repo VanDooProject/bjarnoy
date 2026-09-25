@@ -577,7 +577,9 @@ async function confirmFieldOrderClick() {
 .status-card {
   position: absolute;
   right: 16px;
-  bottom: 16px;
+  /* --hud-inset-bottom only differs from 0px on a mobile-docked-bottom HUD
+     bar (see MapView.vue's own hudInsetBottomPx). */
+  bottom: calc(16px + var(--hud-inset-bottom, 0px));
   z-index: 10;
   width: 260px;
   max-height: 60vh;
@@ -598,7 +600,7 @@ async function confirmFieldOrderClick() {
   .status-card.army-panel {
     max-width: calc(100vw - 24px);
     max-height: 40vh;
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
 }
 .status-card-header {

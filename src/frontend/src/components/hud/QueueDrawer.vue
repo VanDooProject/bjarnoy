@@ -562,8 +562,18 @@ onUnmounted(() => {
 .queue-drawer {
   position: fixed;
   left: 0;
-  top: 76px;
-  bottom: 0;
+  /* Finding #12: was a hardcoded `top: 76px` (TopBar's own 64px height plus
+     a 12px gap — see MapView.vue's ringBounds comment for that same
+     arithmetic) that never actually read `--hud-inset-top`/
+     `--hud-inset-bottom` (MapView.vue's root sets both, mirroring the bar's
+     *real*, current edge/height — see hudBarHeight.ts), so a bottom-docked
+     mobile bar left this rail's top clearance wrong (still reserving a top
+     gap for a bar that had moved to the bottom) and its bottom edge sitting
+     underneath a bottom-docked bar rather than clear of it. `--hud-inset-top`
+     is 0 whenever the bar isn't at the top (desktop's own fallback here, 0,
+     matches its actual "no top HUD chrome" case exactly as well). */
+  top: calc(var(--hud-inset-top, 0px) + 12px);
+  bottom: var(--hud-inset-bottom, 0px);
   z-index: 38;
   display: flex;
   width: min(86vw, 340px);

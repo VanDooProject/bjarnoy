@@ -11,6 +11,14 @@ import { useRouter } from 'vue-router';
 import { usePlayerStore } from '../../stores/player';
 import type { MessageSchema } from '../../i18n/schema';
 
+// Mobile HUD bar rework, phase 2: on an in-game phone bar the anonymous
+// trigger this nudge normally anchors to (ReturningPlayerMenu's own
+// `#nudge` slot) is hidden entirely — MobileHudDrawer.vue renders this same
+// component inline in its account section instead, `inDrawer`, dropping the
+// absolute-positioned floating-tooltip look for a plain block that sits in
+// the drawer's own flow. Same pattern as LocaleSwitcher.vue's `inDrawer`.
+defineProps<{ inDrawer?: boolean }>();
+
 const player = usePlayerStore();
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -21,7 +29,7 @@ function nameYourJarl() {
 </script>
 
 <template>
-  <div class="nudge panel" data-testid="profile-nudge">
+  <div class="nudge panel" :class="{ 'in-drawer': inDrawer }" data-testid="profile-nudge">
     <div class="notch" />
     <div class="eyebrow">{{ t('onboarding.profileNudge.eyebrow') }}</div>
     <div class="title">{{ t('onboarding.profileNudge.title') }}</div>
@@ -56,6 +64,26 @@ function nameYourJarl() {
   padding: 18px 20px;
   border-color: rgba(255, 197, 92, 0.55);
   animation: nudge-bob 2.4s ease-in-out infinite;
+  /* Regression found while verifying finding #1: ReturningPlayerMenu.vue's
+     own root deliberately stays `pointer-events: none` so this panel's
+     non-button text doesn't eat clicks meant for whatever is underneath it
+     (its own comment: caught once already by trade.spec.ts's `.trade-toggle`
+     click). That relied on nothing upstream re-enabling pointer events —
+     true on desktop, but `.hud-bar--drag-enabled` (the mobile-only drag
+     surface) sets `pointer-events: auto` on the *whole bar* on a phone, so
+     every descendant, this panel included, inherits `auto` there regardless
+     of ReturningPlayerMenu's own choice. Finding #1's removal of
+     `.hud-bar-scroll`'s clipping wrapper is what actually surfaced this in
+     practice: this panel used to be clipped down to near-nothing by that
+     wrapper's implied `overflow-y: auto` (an `overflow-x` value other than
+     `visible` forces the *other* axis to `auto` too, per spec), which
+     incidentally also hid this exact interception from ever mattering.
+     Setting it explicitly here — rather than depending on an ancestor's
+     default that a mobile-only rule can override out from under it — is
+     correct on both desktop and mobile; the panel's own buttons
+     (`.cta`/`.later`) opt back in via `.hud-bar-right :deep(button)`, same
+     as every other HUD control. */
+  pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .nudge {
@@ -121,5 +149,19 @@ function nameYourJarl() {
 }
 .later:hover {
   color: var(--text);
+}
+
+/* Mobile HUD bar rework, phase 2: MobileHudDrawer's own account section
+   renders this inline, in normal flow — none of the floating-tooltip
+   positioning/animation makes sense sitting inside a drawer that already
+   scrolls with the rest of its content. */
+.nudge.in-drawer {
+  position: static;
+  width: auto;
+  margin-top: 10px;
+  animation: none;
+}
+.nudge.in-drawer .notch {
+  display: none;
 }
 </style>

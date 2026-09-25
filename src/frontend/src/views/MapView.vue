@@ -8,6 +8,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import TradePanel from '../components/hud/TradePanel.vue';
@@ -31,6 +32,11 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
+import { useMediaQuery } from '../composables/useMediaQuery';
+import { hudBarHeightPx } from '../composables/hudBarHeight';
+import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { useHudPrefsStore } from '../stores/hudPrefs';
+import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
@@ -52,6 +58,19 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const hudPrefs = useHudPrefsStore();
+
+// Mobile-only HUD bar: whether the collapsed bar (and its pull-down drawer)
+// is actually docked at the bottom edge right now — desktop and the default
+// 'top' preference both keep the bar (and every offset below) exactly where
+// it's always been. The bar's own height isn't always 64px on mobile
+// anymore (it grows once the drawer is open — see ResourceBar.vue's
+// isExpanded), so this reads the real, currently-measured height
+// (TopBar.vue's own ResizeObserver) rather than assuming a fixed number.
+const isCompactHud = useMediaQuery(HUD_COMPACT_QUERY);
+const hudBarAtBottom = computed(() => isCompactHud.value && hudPrefs.barPosition === 'bottom');
+const hudInsetTopPx = computed(() => (hudBarAtBottom.value ? 0 : hudBarHeightPx.value));
+const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? hudBarHeightPx.value : 0));
 const unitCatalogue = useUnitCatalogueStore();
 const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();
@@ -401,14 +420,16 @@ onUnmounted(() => stageObserver?.disconnect());
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
 // These are worst-case constants: every panel is treated as present. On
 // mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
-// collapsed rail (.queue-drawer-rail, 96px wide) pinned to the left edge —
-// the other desktop panels still render at their fixed positions there too
-// (out of scope for this change), so only the left edge changes.
-const ringBounds = computed(() =>
-  isMobile.value
-    ? { left: 112, top: 76, right: stage.value.w - 16, bottom: stage.value.h - 16 }
-    : { left: 268, top: 76, right: Math.max(420, stage.value.w - 348), bottom: stage.value.h - 16 },
-);
+// collapsed rail (.queue-drawer-rail, 96px wide) pinned to the left edge, and
+// the HUD bar can be docked at the bottom instead of the top (see
+// ArmyPanel.vue's `--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx`
+// above mirror the bar's real height into whichever edge it occupies now.
+const ringBounds = computed(() => ({
+  left: isMobile.value ? 112 : 268,
+  top: hudInsetTopPx.value + 12,
+  right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 348),
+  bottom: stage.value.h - (hudInsetBottomPx.value + 16),
+}));
 // The card gets its own, roomier area on purpose. What `ringBounds` leaves
 // over once every panel is reserved is about 308x404 at 1280x720 — too small
 // to hold the 200x222 card anywhere clear of the ring, so the card would end
@@ -416,9 +437,9 @@ const ringBounds = computed(() =>
 // harmful than one covering the menu.
 const ringCardBounds = computed(() => ({
   left: 16,
-  top: 76,
+  top: hudInsetTopPx.value + 12,
   right: stage.value.w - 16,
-  bottom: stage.value.h - 16,
+  bottom: stage.value.h - (hudInsetBottomPx.value + 16),
 }));
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
@@ -427,9 +448,24 @@ const ringCardBounds = computed(() => ({
 // lock out hover/wheel there for as long as a ring is showing. The mobile
 // queue drawer floats over the canvas the same way while open, so it shares
 // the same lock.
-const canvasInteractionLocked = computed(() => !!ringScreen.value || queueDrawerOpen.value);
+const canvasInteractionLocked = computed(
+  () => !!ringScreen.value || queueDrawerOpen.value || isHudDrawerOpen.value,
+);
 watch(canvasInteractionLocked, (locked) => {
   canvasRef.value?.renderer?.setInteractionLocked(locked);
+});
+
+// Finding #12: the queue drawer and the mobile HUD pull-down drawer are two
+// separate floating sheets that can both open over the same canvas — only
+// one should ever be open at a time (opening either one is a strong enough
+// "I want to look at this now" signal that the other one being open too is
+// just visual clutter, on top of the z-index tie TopBar.vue's own comment
+// covers for the moment they'd otherwise overlap).
+watch(queueDrawerOpen, (open) => {
+  if (open) closeHudDrawer();
+});
+watch(isHudDrawerOpen, (open) => {
+  if (open) queueDrawerOpen.value = false;
 });
 
 // A mousedown on the ring's own backdrop (not a bubble) closes the ring and
@@ -1012,7 +1048,11 @@ async function upgrade() {
 </script>
 
 <template>
-  <div ref="stageRef" class="map-view">
+  <div
+    ref="stageRef"
+    class="map-view"
+    :style="{ '--hud-inset-top': hudInsetTopPx + 'px', '--hud-inset-bottom': hudInsetBottomPx + 'px' }"
+  >
     <SettlementCanvas
       v-if="world.selectedSettlementId"
       ref="canvasRef"
@@ -1043,10 +1083,13 @@ async function upgrade() {
          the camera starts — this scrim (matching Viking Realm.dc.html's own
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
-    <div class="hud-scrim" />
+    <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
     <TopBar :hide-title="mode === 'settlement'">
       <ResourceBar :ring-open="ringOpen" />
-      <HudNav />
+      <HudNav has-resource-bar />
+      <template #drawer="{ close }">
+        <MobileHudDrawer has-resource-bar @close="close" />
+      </template>
     </TopBar>
     <template v-if="mode === 'settlement'">
       <template v-if="isMobile">
@@ -1112,6 +1155,11 @@ async function upgrade() {
   /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
      viewport, as a progressive enhancement over the 100vh above. */
   height: 100dvh;
+  /* Without this, a vertical touch-drag on the mobile HUD bar can fall
+     through to the browser's own overscroll/pull-to-refresh handling,
+     cancelling the pointer capture the drag-to-open drawer gesture
+     (TopBar.vue's useHudDrawer) relies on. */
+  overscroll-behavior-y: none;
 }
 .hud-scrim {
   position: absolute;
@@ -1122,6 +1170,13 @@ async function upgrade() {
   z-index: 5;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
+}
+/* Mobile only: the collapsed bar can dock to the bottom edge instead (see
+   hudBarAtBottom above) — the readability scrim follows it there. */
+.hud-scrim--bottom {
+  top: auto;
+  bottom: 0;
+  background: linear-gradient(0deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
 }
 .fog-debug-stack {
   position: absolute;

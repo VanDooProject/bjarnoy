@@ -235,6 +235,17 @@ watch(() => route.fullPath, close);
   max-height: 70vh;
   overflow-y: auto;
   padding: 8px;
+  /* Finding #1's own regression check (an e2e hit-test at this panel's own
+     centre, not just its buttons): `.hud-bar` sets `pointer-events: none`
+     on itself so the map can be clicked through everywhere except real HUD
+     controls, and only `.hud-bar-right :deep(button)` opts back in — which
+     covers the "Log in" row and WorldList's own rows, but not this panel's
+     own background/padding/divider. A click there fell through to the
+     canvas underneath even though the panel visually sat on top of it.
+     Scoped to `.menu` alone (not the whole `.returning-player-menu` root)
+     so it doesn't reach the sibling `#nudge` slot — see this file's own
+     comment above on why the root deliberately stays pointer-events: none. */
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -271,5 +282,34 @@ watch(() => route.fullPath, close);
   margin: 4px 2px;
   background: var(--panel-border);
   flex: none;
+}
+
+/* Mobile HUD bar rework, phase 2 (owner clarification): this trigger stays
+   inline in every phone bar that has no ResourceBar to compete with (docs,
+   tech tree, showcase, the landing header) — HudNav.vue hides it entirely
+   only where ResourceBar shares the same bar (see its own `hasResourceBar`
+   comment). Where it stays, it must shrink to a single compact line so the
+   bar's title still gets room instead of being crushed to "D…": the
+   "or want to join another world" sub-line drops, and the main line
+   ellipsis-truncates rather than pushing the trigger wide. `min-height`
+   keeps the tap target at the usual ~44px floor despite the now-shorter
+   single line of text. Same breakpoint as lib/breakpoints.ts's
+   HUD_COMPACT_MAX_WIDTH — plain CSS here can't read that JS constant, so it
+   has to be repeated as a literal (see that file's own comment). */
+@media (max-width: 768px) {
+  .trigger {
+    max-width: 132px;
+    min-height: 44px;
+  }
+  .trigger-sub {
+    display: none;
+  }
+  .trigger-main {
+    display: inline-block;
+    max-width: 92px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
 }
 </style>

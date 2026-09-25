@@ -23,7 +23,13 @@
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserved)",
-    "rate": "+{n}/h"
+    "rate": "{n}/h"
+  },
+  "drawer": {
+    "toggle": "Show more"
+  },
+  "realmPanel": {
+    "levelHexesShort": "Lv {level} · {count} hexes"
   },
   "hoverTooltip": {
     "level": "LEVEL {level}",
