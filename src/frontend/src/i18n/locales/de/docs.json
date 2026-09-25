@@ -15,7 +15,7 @@
       },
       "wastedLands": {
         "title": "Ödlande",
-        "description": "Das Endspiel: Utgard, die Inseln, die sich die Riesen zurückholen, und was aus jedem Feld wird."
+        "description": "Das Endspiel: Utgard, die Inseln, die aus dem Meer steigen, und woraus sie bestehen."
       }
     }
   },
@@ -161,13 +161,13 @@
   },
   "wastedLands": {
     "title": "Die Ödlande",
-    "intro": "Wo die Welt endet. Die Ödlande sind das Endspiel einer Welt: die Inseln, die sich die Jötnar zurückholen, die Festung in ihrer Mitte und der letzte Krieg der Jarle von Bjarnøy.",
+    "intro": "Wo die Welt endet. Die Ödlande sind das Endspiel einer Welt: Inseln, die aus dem Meer steigen, wenn die Riesen erwachen, die Festung in ihrer Mitte und der letzte Krieg der Jarle von Bjarnøy.",
     "lore": {
       "heading": "Am Rand des langen Winters",
       "p1": "Die Skalden sagen, das Meer um Bjarnøy war nie leer. Hinter den letzten Schären, wo die Seekarten enden, liegt Útgarðr, der Außenhof, die Heimat der Jötnar, der Riesen, die vor Göttern und Menschen hier waren. Solange die Inseln jung sind, schlafen die Riesen, und die Jarle kämpfen untereinander um Holz, Stein und Ruhm.",
-      "p2": "Doch jedes Zeitalter wird alt. Wenn die Hallen voll sind und auf jeder Insel Runensteine stehen, erwachen die Riesen. Zuerst holen sie sich die alten Orte: die Steinkreise, die die ersten Siedler errichtet und dann vergessen haben. Wo ein solcher Kreis unbewacht steht, wächst Utgard über Nacht aus dem Basalt, eine schwarze Zitadelle, deren Fenster in kaltem Runenfeuer brennen.",
-      "p3": "Das Land ringsum kippt, Ring um Ring. Gras wird zu Asche und Schlacke. Wälder sterben, wo sie stehen, zu gebleichten Stümpfen mit abgebrochenen Kronen. Die alten Berge brechen auf und erwachen als Feuerberge, und ihre Flüsse führen Feuer. Strände werden zu schwarzem Sand, und das Meer wird kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten.",
-      "p4": "Kein einzelner Jarl bricht Utgard. Seine Mauern sind für eine Belagerung gebaut, die eine Generation dauert, und die Fäule breitet sich weiter aus, während die Jarle streiten. Nur Gilden, die als ein Heer segeln, können den Außenhof stürmen. Wer sein Tor niederwirft, beendet das Zeitalter, und sein Name wird als letzter eingeritzt, bevor die Welt von vorn beginnt.",
+      "p2": "Doch jedes Zeitalter wird alt. Wenn die Hallen voll sind und auf jeder Insel Runensteine stehen, erwachen die Riesen. Hinter den kartierten Inseln beginnt das Meer zu kochen, und neues Land steigt daraus auf: Inseln, die nie grün waren. Auf jeder raucht ein Feuerberg, und auf der größten steht Utgard, eine schwarze Zitadelle, deren Fenster in kaltem Runenfeuer brennen.",
+      "p3": "Dort ist nie etwas Lebendiges gewachsen. Der Boden ist Asche und Schlacke, die Wälder sind gebleichte Stümpfe mit abgebrochenen Kronen, und die Flüsse führen Feuer. Die Strände sind schwarzer Sand, und das Meer ringsum ist kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten, um zu sehen, was aufgestiegen war.",
+      "p4": "Kein einzelner Jarl bricht Utgard. Seine Mauern sind für eine Belagerung gebaut, die eine Generation dauert, und die Riesen werden stärker, während die Jarle streiten. Nur Gilden, die als ein Heer segeln, können den Außenhof stürmen. Wer sein Tor niederwirft, beendet das Zeitalter, und sein Name wird als letzter eingeritzt, bevor die Welt von vorn beginnt.",
       "caption": "So soll sich das Endspiel anfühlen, ein Regelwerk ist das nicht. Die Mechanik wird noch entworfen und kann sich ändern."
     },
     "utgard": {
@@ -177,22 +177,22 @@
     },
     "volcano": {
       "heading": "Der Feuerberg",
-      "body": "Der zweite Riese der Ödlande. Erreicht die Fäule einen großen Berg, bricht er auf. Lava rinnt über seine Flanken, der Krater brodelt, und Rauch steigt ohne Ende auf. Wie Utgard bedeckt er sieben Hexfelder, und er ist animiert."
+      "body": "Der zweite Riese der Ödlande: ein Berg, der nie erkaltet ist. Lava rinnt über seine Flanken, der Krater brodelt, und Rauch steigt ohne Ende auf. Wie Utgard bedeckt er sieben Hexfelder, und er ist animiert."
     },
     "island": {
-      "heading": "Eine Insel kippt",
-      "body": "Eine erfundene Insel für diese Seite, keine aus einer echten Welt. Zieh den Regler und sieh zu, wie sich die Fäule vom alten Steinkreis bis ins Meer ausbreitet. Jedes lebendige Feld wird durch sein ödes Gegenstück ersetzt: Aus dem Steinkreis wird Utgard, aus dem großen Berg ein Feuerberg.",
-      "blight": "Fäule",
+      "heading": "Lebendig und öde, nebeneinander",
+      "body": "Öde Inseln sind von Anfang an öde: Sie steigen so aus dem Meer, wie sie sind, und keine lebendige Insel kippt je. Diese erfundene Insel ist nur ein Spielzeug, um die beiden Feldsätze zu vergleichen. Zieh den Regler, um ihre lebendigen Felder Ring um Ring von der Mitte aus gegen ihre öden Gegenstücke zu tauschen.",
+      "blight": "Öde",
       "play": "Abspielen",
       "rotateLeft": "Nach links drehen",
       "rotateRight": "Nach rechts drehen",
       "hoverHint": "Zeig auf ein Hexfeld, um zu sehen, was es ist.",
       "stages": {
-        "s0": "Eine lebendige Insel",
-        "s1": "Utgard erhebt sich",
-        "s2": "Das Land verdorrt",
-        "s3": "Die Küste wird schwarz",
-        "s4": "Das Meer erkrankt"
+        "s0": "Alles lebendig",
+        "s1": "Mitte getauscht",
+        "s2": "Land getauscht",
+        "s3": "Küste getauscht",
+        "s4": "Alles öde"
       },
       "giantLiving": "Steinkreis (Riesenschrein)",
       "giantWasted": "Utgard",
@@ -201,7 +201,7 @@
     },
     "pairs": {
       "heading": "Lebendig und öde",
-      "body": "Jedes öde Feld ersetzt genau ein lebendiges. Die Form des Bodens bleibt gleich, damit Flüsse, Küsten und Bergfüße weiter zusammenpassen, wenn eine Insel kippt.",
+      "body": "Jedes öde Feld hat ein lebendiges Gegenstück derselben Form, damit Flüsse, Küsten und Bergfüße auf beiden Arten von Inseln gleich zusammenpassen.",
       "living": "Lebendig",
       "wasted": "Öde",
       "looks": "Varianten"

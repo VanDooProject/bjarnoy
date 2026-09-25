@@ -15,7 +15,7 @@
       },
       "wastedLands": {
         "title": "Wasted lands",
-        "description": "The endgame: Utgard, the islands the giants take back, and what each tile turns into."
+        "description": "The endgame: Utgard, the islands that rise from the sea, and what they are made of."
       }
     }
   },
@@ -161,13 +161,13 @@
   },
   "wastedLands": {
     "title": "The Wasted Lands",
-    "intro": "Where the world ends. The Wasted Lands are a world's endgame: the islands the Jötnar take back, the fortress they raise at the heart of them, and the last war the jarls of Bjarnøy fight.",
+    "intro": "Where the world ends. The Wasted Lands are a world's endgame: islands that rise from the sea when the giants wake, the fortress at the heart of them, and the last war the jarls of Bjarnøy fight.",
     "lore": {
       "heading": "The long winter's edge",
       "p1": "The skalds say the sea around Bjarnøy was never empty. Past the last skerries, where the charts stop, lies Útgarðr: the Outyard, home of the Jötnar, the giants who were here before gods or men. For as long as the islands are young, the giants sleep, and the jarls fight each other for timber, stone and glory.",
-      "p2": "But every age grows old. When the halls are full and the runestones stand on every island, the giants wake. They come for the old places first: the rings of standing stones the first settlers raised and then forgot. Where such a ring stands unguarded, Utgard rises overnight out of the basalt, a black citadel whose windows burn with cold rune-fire.",
-      "p3": "The land around it turns, one ring at a time. Grass goes to ash and cinder. Forests die where they stand, bleached snags with their crowns snapped off. The old mountains split open and wake as fire-mountains, and their rivers run with fire. Beaches turn to black sand, and the sea goes a sick green-black, choked around the wrecks of the longships that sailed too close.",
-      "p4": "No single jarl breaks Utgard. Its walls are built for a siege that lasts a generation, and the blight keeps spreading while the jarls argue. Only guilds that sail as one host can storm the Outyard. Whoever throws down its gate ends the age, and their name is the last one carved before the world begins again.",
+      "p2": "But every age grows old. When the halls are full and the runestones stand on every island, the giants wake. Out past the charted islands the sea boils, and new land rises from it: islands that were never green. On each of them smokes a fire-mountain, and on the greatest stands Utgard, a black citadel whose windows burn with cold rune-fire.",
+      "p3": "Nothing living has ever grown there. The ground is ash and cinder, the forests are bleached snags with their crowns snapped off, and the rivers run with fire. The beaches are black sand, and the sea around them is a sick green-black, choked around the wrecks of the longships that sailed too close to see what had risen.",
+      "p4": "No single jarl breaks Utgard. Its walls are built for a siege that lasts a generation, and the giants grow stronger while the jarls argue. Only guilds that sail as one host can storm the Outyard. Whoever throws down its gate ends the age, and their name is the last one carved before the world begins again.",
       "caption": "This is how the endgame is meant to feel, not a rulebook. The mechanics are still being designed and may change."
     },
     "utgard": {
@@ -177,22 +177,22 @@
     },
     "volcano": {
       "heading": "The fire-mountain",
-      "body": "The second giant of the Wasted Lands. When the blight reaches a great mountain, it splits open. Lava runs down its flanks, the crater bubbles and smoke rises from it without end. Like Utgard it covers seven hexes, and it is animated."
+      "body": "The second giant of the Wasted Lands: a mountain that never cooled. Lava runs down its flanks, the crater bubbles and smoke rises from it without end. Like Utgard it covers seven hexes, and it is animated."
     },
     "island": {
-      "heading": "A turning island",
-      "body": "A made-up island for this page, not from a real world. Drag the slider to watch the blight spread from the old stone ring out to the sea. Every living tile swaps for its wasted counterpart: the stone ring becomes Utgard, the great mountain a fire-mountain.",
-      "blight": "Blight",
+      "heading": "Living and wasted, side by side",
+      "body": "Wasted islands are born wasted: they rise from the sea as they are, and no living island ever turns. This made-up island is only a toy for comparing the two tile sets. Drag the slider to swap its living tiles for their wasted counterparts, ring by ring from the centre out.",
+      "blight": "Wasted",
       "play": "Play",
       "rotateLeft": "Rotate left",
       "rotateRight": "Rotate right",
       "hoverHint": "Point at a hex to see what it is.",
       "stages": {
-        "s0": "A living island",
-        "s1": "Utgard rises",
-        "s2": "The land withers",
-        "s3": "The shore turns black",
-        "s4": "The sea sickens"
+        "s0": "All living",
+        "s1": "Centre swapped",
+        "s2": "Land swapped",
+        "s3": "Shore swapped",
+        "s4": "All wasted"
       },
       "giantLiving": "Stone ring (giant shrine)",
       "giantWasted": "Utgard",
@@ -201,7 +201,7 @@
     },
     "pairs": {
       "heading": "Living and wasted",
-      "body": "Each wasted tile replaces one living tile. The ground stays the same shape, so rivers, coasts and mountain feet still line up when an island turns.",
+      "body": "Every wasted tile has a living counterpart of the same shape, so rivers, coasts and mountain feet line up the same way on both kinds of island.",
       "living": "Living",
       "wasted": "Wasted",
       "looks": "Looks"

@@ -77,14 +77,14 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     expect(await view.noHorizontalOverflow()).toBe(true);
   });
 
-  test('wasted lands island blight slider shows the living-island stage', async ({ page }) => {
+  test('wasted lands island slider shows the all-living stage', async ({ page }) => {
     await page.goto('/docs/wasted-lands');
     await page.locator('.island-sprite').first().waitFor();
 
     const slider = page.getByTestId('blight-slider');
     await slider.fill('0');
 
-    await expect(page.locator('.wasted-island .stage-label')).toHaveText('A living island');
+    await expect(page.locator('.wasted-island .stage-label')).toHaveText('All living');
     await expect(page.getByTestId('island-caption')).toHaveText('Point at a hex to see what it is.');
   });
 });
