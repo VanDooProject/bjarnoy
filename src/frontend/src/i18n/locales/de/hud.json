@@ -84,6 +84,10 @@
       "landHere": "Hier landen",
       "sendSettlers": "Siedler entsenden",
       "noSettlersYet": "Du hast noch keine verfügbaren Siedler",
+      "sendArmyHere": "Armee hierher entsenden",
+      "attack": "Angreifen",
+      "support": "Unterstützen",
+      "noUnitsAtHome": "Keine Einheiten daheim",
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "details": "Details",
@@ -134,9 +138,10 @@
   "queueDrawer": {
     "title": "Warteschlangen",
     "close": "✕",
-    "openLabel": "Bau- und Ausbildungswarteschlangen öffnen",
-    "closeLabel": "Bau- und Ausbildungswarteschlangen schließen",
-    "chevron": "›"
+    "openLabel": "Bau, Ausbildung & Armeen öffnen",
+    "closeLabel": "Bau, Ausbildung & Armeen schließen",
+    "chevron": "›",
+    "armies": "Armeen"
   },
   "buildingModal": {
     "close": "✕",
@@ -339,6 +344,22 @@
     "provisions": "Proviant",
     "dispatching": "Wird entsendet…",
     "confirmDispatch": "Entsendung bestätigen"
+  },
+  "dispatchSheet": {
+    "cancel": "Entsendung abbrechen",
+    "expand": "Entsendungsblatt ausklappen",
+    "collapse": "Entsendungsblatt einklappen",
+    "stopsSummary": "{count} {stopWord}",
+    "stopWord": "Stopp | Stopps",
+    "toTarget": "→ {name}",
+    "units": "Einheiten ({count})",
+    "stops": "Stopps ({count})",
+    "start": "Start",
+    "starting": "Wird gestartet…",
+    "fieldOrderTitle": "Marschbefehl",
+    "allButton": "Alle",
+    "decrement": "−",
+    "increment": "+"
   },
   "tradeReport": {
     "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"

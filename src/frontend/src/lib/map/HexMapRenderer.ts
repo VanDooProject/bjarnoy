@@ -490,6 +490,12 @@ export interface HexMapRendererOptions {
    * (`world.moveWaypoint`) is idempotent for the same coordinate.
    */
   onWaypointMove?: (index: number, coord: AxialCoord) => void;
+  // Fired instead of onWaypointMove when a grabbed pin is released without
+  // ever being dragged onto a different hex (a tap, not a drag) — the mobile
+  // dispatch flow uses this to remove the waypoint. Optional: desktop passes
+  // none, so nothing changes there (a stationary click on a pin previously
+  // did nothing at all — see the pointerup early-return this replaces).
+  onWaypointTap?: (index: number) => void;
   /**
    * docs/design/zoom-transition.md: fired when a wheel/pinch zoom step
    * crosses the enter-settlement or exit-to-world threshold
@@ -1170,6 +1176,9 @@ const ROUTE_ARROW_PX = 13;
 const ROUTE_ARROW_MIN_SEGMENT_PX = 26;
 /** Pointer distance (screen px) within which a pointerdown counts as grabbing a draft waypoint pin. */
 const WAYPOINT_GRAB_RADIUS_PX = 16;
+// Touch-only bump (see draftWaypointAt) — a fingertip is much wider than a
+// mouse cursor's hotspot.
+const WAYPOINT_GRAB_RADIUS_PX_TOUCH = 24;
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
@@ -1406,8 +1415,17 @@ export class HexMapRenderer {
   // pointerup. `lastCoordKey` suppresses repeat callbacks while the pointer
   // moves within one hex. `pointerId` ties the drag to the exact finger that
   // grabbed it, so a second finger landing during the drag (see `pinch`
-  // below) can't move or release someone else's pin.
-  private waypointDrag: { index: number; lastCoordKey: string; pointerId: number } | null = null;
+  // below) can't move or release someone else's pin. `startCoordKey`/
+  // `startScreen` record where the grab began, so onPointerUp can tell a tap
+  // (pin never left its hex, or barely moved) from a real drag and fire
+  // `onWaypointTap` instead of leaving the pin where it already was.
+  private waypointDrag: {
+    index: number;
+    lastCoordKey: string;
+    startCoordKey: string;
+    startScreen: { x: number; y: number };
+    pointerId: number;
+  } | null = null;
 
   private textures: TileTextures | null = null;
 
@@ -1982,12 +2000,16 @@ export class HexMapRenderer {
       // the two gestures are the same input, so the pin has to win the
       // hit-test first or there is no way to correct a mis-clicked hex
       // except undoing back to it.
-      const grabbed = this.draftWaypointAt(this.pointerScreen(e));
-      if (grabbed !== null) {
+      const screen = this.pointerScreen(e);
+      const grabbed = this.draftWaypointAt(screen, e.pointerType);
+      if (grabbed !== null && screen) {
         this.idleDrift = false;
+        const startCoordKey = coordKey(this.armyOverlay!.draftWaypoints[grabbed]);
         this.waypointDrag = {
           index: grabbed,
-          lastCoordKey: coordKey(this.armyOverlay!.draftWaypoints[grabbed]),
+          lastCoordKey: startCoordKey,
+          startCoordKey,
+          startScreen: screen,
           pointerId: e.pointerId,
         };
         this.setHoveredCoord(null);
@@ -2020,14 +2042,18 @@ export class HexMapRenderer {
    * everything else in `markerLayer`) rather than against the hexes under
    * them, so grabbing a pin stays equally easy at every zoom level.
    */
-  private draftWaypointAt(screen: { x: number; y: number } | null): number | null {
+  private draftWaypointAt(screen: { x: number; y: number } | null, pointerType?: string): number | null {
     // docs/design/ship-movement.md §5: a fleet's draft waypoints drag the
     // same way at world zoom as at settlement zoom — water crossings are
     // routed on the world map, not the settlement one.
     const waypoints = this.armyOverlay?.draftWaypoints;
     if (!screen || !waypoints?.length) return null;
     let best: number | null = null;
-    let bestDistance = WAYPOINT_GRAB_RADIUS_PX;
+    // A 16px grab radius is finger-hostile — a touch pointer gets a bigger
+    // one so tapping a pin to remove it (or starting a drag) is reliable,
+    // while mouse behaviour (and hover-cursor hit-testing, which never
+    // passes a pointerType) stays exactly as before.
+    let bestDistance = pointerType === 'touch' ? WAYPOINT_GRAB_RADIUS_PX_TOUCH : WAYPOINT_GRAB_RADIUS_PX;
     waypoints.forEach((c, i) => {
       const p = this.hexCenterScreen(c);
       const distance = Math.hypot(p.x - screen.x, p.y - screen.y);
@@ -2161,8 +2187,17 @@ export class HexMapRenderer {
     // would otherwise *append* a second one on the hex it was dropped on.
     if (this.waypointDrag) {
       if (e.pointerId !== this.waypointDrag.pointerId) return;
+      const { index, lastCoordKey, startCoordKey, startScreen } = this.waypointDrag;
+      const screen = this.pointerScreen(e);
+      const moved = screen ? Math.hypot(screen.x - startScreen.x, screen.y - startScreen.y) : 0;
+      // A tap: the pin never crossed into a different hex, and the finger/
+      // cursor barely moved — same slop budget a map click gets. Anything
+      // more decisive is a real drag, already applied hex-by-hex via
+      // onWaypointMove, and releasing it here must not also remove the pin.
+      const wasTap = lastCoordKey === startCoordKey && moved < DRAG_CLICK_SLOP_PX;
       this.waypointDrag = null;
       this.setCursor('');
+      if (wasTap) this.options.onWaypointTap?.(index);
       return;
     }
     // Not a pointer this gesture is tracking (e.g. its down never reached

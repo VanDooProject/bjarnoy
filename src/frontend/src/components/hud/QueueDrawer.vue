@@ -21,12 +21,13 @@ import {
   type BuildOrderRow,
   type TrainingOrderRow,
 } from '../../composables/useQueueOrders';
+import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const open = defineModel<boolean>('open', { default: false });
-const emit = defineEmits<{ select: [coord: { q: number; r: number }] }>();
+const emit = defineEmits<{ select: [coord: { q: number; r: number }]; 'select-army': [armyId: string] }>();
 
 const buildOrders = useBuildOrders();
 const trainingOrders = useTrainingOrders();
@@ -85,8 +86,41 @@ const reservedTotal = computed(() => {
   return r.wood + r.stone + r.food + r.iron;
 });
 
+// Issue: mobile army dispatch — armies dispatched from this settlement,
+// listed between Training and Garrison (see the drawer template below).
+// Sorted soonest-ETA-first the same way as the queues above it; a
+// supporting army (no active ETA) sorts last.
+const armyRows = useArmyRows();
+const sortedArmyRows = computed(() => sortArmyRowsByEta(armyRows.value));
+const recallingId = ref<string | null>(null);
+async function recall(armyId: string) {
+  recallingId.value = armyId;
+  try {
+    await world.recallArmyLive(armyId);
+  } finally {
+    recallingId.value = null;
+  }
+}
+function beginFieldOrder(armyId: string) {
+  close();
+  world.startFieldOrder(armyId);
+}
+function selectArmy(armyId: string) {
+  close();
+  if (world.selectedArmyId === armyId) {
+    world.clearSelectedArmy();
+    return;
+  }
+  emit('select-army', armyId);
+}
+
 const hasAnything = computed(
-  () => buildOrders.value.length > 0 || trainingOrders.value.length > 0 || garrison.value.length > 0 || guests.value.length > 0,
+  () =>
+    buildOrders.value.length > 0
+    || trainingOrders.value.length > 0
+    || garrison.value.length > 0
+    || guests.value.length > 0
+    || armyRows.value.length > 0,
 );
 
 // The whole drawer (v-if="hasAnything" on the template root) unmounts the
@@ -313,7 +347,48 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length }">
+          <template v-if="sortedArmyRows.length">
+            <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length }">
+              <span class="status-card-title">{{ t('hud.queueDrawer.armies') }}</span>
+              <span class="status-card-count">{{ sortedArmyRows.length }}</span>
+            </div>
+            <div v-for="row in sortedArmyRows" :key="row.id" class="status-row army-row" :class="{ 'is-selected': row.selected }">
+              <button type="button" class="status-row-click" @click="selectArmy(row.id)">
+                <div class="status-row-top">
+                  <span class="status-row-name">{{ row.composition }}</span>
+                  <span class="status-row-time">{{ row.eta ?? '—' }}</span>
+                </div>
+                <div v-if="row.progress !== null" class="status-progress">
+                  <div class="status-progress-fill" :style="{ width: `${Math.round(row.progress * 100)}%` }" />
+                </div>
+                <div class="status-subtext">
+                  {{ row.status }}<span v-if="row.mission" class="mission-tag"> · {{ row.mission }}</span>
+                </div>
+              </button>
+              <div class="army-row-actions">
+                <button
+                  v-if="row.canFieldOrder"
+                  type="button"
+                  class="cancel-button"
+                  :disabled="row.fieldOrderLocked"
+                  @click.stop="beginFieldOrder(row.id)"
+                >
+                  {{ row.fieldOrderLabel }}
+                </button>
+                <button
+                  v-if="row.canRecall"
+                  type="button"
+                  class="cancel-button recall"
+                  :disabled="recallingId === row.id"
+                  @click.stop="recall(row.id)"
+                >
+                  {{ recallingId === row.id ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length || sortedArmyRows.length }">
             <span class="status-card-title">{{ t('hud.trainingQueue.garrison') }}</span>
           </div>
           <div v-if="garrison.length" class="garrison-grid">
@@ -481,6 +556,24 @@ onUnmounted(() => {
 .cancel-button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.army-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+.army-row.is-selected {
+  background: rgba(255, 197, 92, 0.08);
+}
+.mission-tag {
+  color: var(--gold);
+}
+.army-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.recall {
+  color: #e08a8a;
 }
 .garrison-grid,
 .guests-grid {
