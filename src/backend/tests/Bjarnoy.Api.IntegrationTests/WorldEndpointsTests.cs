@@ -146,7 +146,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         // Seed/radius known (Bjarnoy.Domain.Tests.GiantGenerationTests) to
         // place two giants on one island, so this doesn't depend on getting
         // lucky with the default.
-        var world = await CreateWorldAsync(client, seed: 55, radius: 90);
+        var world = await CreateWorldAsync(seed: 55, radius: 90);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
