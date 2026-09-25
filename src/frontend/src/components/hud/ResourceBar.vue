@@ -323,8 +323,25 @@ function stageText(value: number, rate: number, cap: number): string {
    under HUD_COMPACT_QUERY (lib/breakpoints.ts) and while the drawer is
    closed; the desktop rules above are untouched, and are reused as-is for
    the mobile *expanded* state (drawer open — see ResourceBar.vue's isExpanded). */
+/* Finding #1/#3: horizontal scrolling for a too-narrow row of pills now
+   lives here instead of a wrapper TopBar.vue used to put around its whole
+   slot (which clipped every absolutely-positioned dropdown anywhere in the
+   bar down to that wrapper's own visible height — see TopBar.vue's own
+   comment). `pan-x` (not `none`, and not left to the default `auto`) tells
+   the browser this row itself may be panned horizontally by touch, while
+   still letting a vertical touch here bubble up to the collapsed bar's own
+   pointer handlers (TopBar.vue's `useHudDrawer`) as a pull-down-drawer drag
+   instead of being swallowed as a failed/rubber-banding scroll attempt. */
 .resource-bar.compact {
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.resource-bar.compact::-webkit-scrollbar {
+  display: none;
 }
 /* The desktop `.resource + .resource` separator (22px padding + a border)
    would otherwise still apply here too — far too wide for 5 pills to fit a

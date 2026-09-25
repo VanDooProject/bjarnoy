@@ -16,13 +16,14 @@
 // per stores/hudPrefs.ts's `barPosition` (a user-set preference, not tied to
 // the drag gesture). Desktop and `docked` mode are completely untouched:
 // no grip, no drawer, no new CSS outside the compact media query.
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useId, useSlots, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useHudDrawer } from '../../composables/useHudDrawer';
-import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
+import { isHudDrawerOpen, setHudDrawerCloseFn } from '../../composables/hudDrawerOpenState';
+import { isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
 import { hudBarHeightPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
@@ -54,6 +55,7 @@ const props = defineProps<{
 const world = useWorldStore();
 const hudPrefs = useHudPrefsStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const slots = useSlots();
 
 const settlementName = computed(() => props.title || world.hud.settlementName || null);
 
@@ -75,8 +77,21 @@ const caption = computed(() => {
 // --- Mobile pull-down drawer ---
 
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
-const dragEnabled = computed(() => isCompact.value && !props.docked);
-const barPosition = computed(() => hudPrefs.barPosition);
+// Group C decision (finding #9): the grip/drag/drawer trio is only ever
+// warranted when the caller actually gave this bar something to show inside
+// the drawer — a bare `<TopBar>` with no `#drawer` slot (the pre-founding
+// landing page: just a locale switcher and "I already have a realm") would
+// otherwise get a grip that opens an empty sheet. `docked` no longer gates
+// this at all (finding #8): every docs-style page that renders `<HudNav>`
+// passes a `#drawer` slot of its own now (see those views), so this reduces
+// to "is there a drawer slot" regardless of docked/map context.
+const hasDrawerSlot = computed(() => !!slots.drawer);
+const dragEnabled = computed(() => isCompact.value && hasDrawerSlot.value);
+// Docked pages (docs) are a sticky in-flow header, not a map overlay — there
+// is no "bottom of the screen" for them to dock to, so the global
+// top/bottom preference (a map-only concept) is forced to 'top' there
+// regardless of what the player has chosen for the map bar.
+const barPosition = computed(() => (props.docked ? 'top' : hudPrefs.barPosition));
 
 // Mobile-only settlement bubble: on a phone the bar has no room for the
 // name/caption inline (see `.titles`, hidden below under isCompact), so it
@@ -87,8 +102,25 @@ const barPosition = computed(() => hudPrefs.barPosition);
 // clutter next to the in-scene canvas label on a desktop-sized settlement
 // view — on mobile there's no such redundancy concern, and the bar's own
 // space is too tight to show it any other way).
+//
+// Finding #10: only ever the *real* in-game settlement, never a page that
+// named itself via `title` (a docs page, or the pre-founding landing's
+// "Bjarnoy") — those get an inline truncated title in the bar itself
+// instead (see `.mobile-title` below), not a second "Lv N · M hexes" bubble
+// that has nothing to do with them.
 const claimedHexes = computed(() => world.hud.claimedHexes);
+const showSettlementBubble = computed(() => isCompact.value && !props.title && !!world.hud.settlementName);
 const settlementBubbleTop = computed(() => (barPosition.value === 'top' ? `${hudBarHeightPx.value + 8}px` : '8px'));
+// Finding #13: only counts as "shown" once it's actually visible on screen —
+// the drawer hides it (`v-show="!isHudDrawerOpen"` below) without unmounting
+// it, so a plain `showSettlementBubble` alone would keep DemoModeBadge.vue
+// pinned below a bubble the player can't currently see.
+watch(
+  () => showSettlementBubble.value && !isHudDrawerOpen.value,
+  (shown) => { isSettlementBubbleShown.value = shown; },
+  { immediate: true },
+);
+onBeforeUnmount(() => { isSettlementBubbleShown.value = false; });
 
 const drawerContentRef = ref<HTMLElement | null>(null);
 const drawerHeight = ref(0);
@@ -123,9 +155,9 @@ onBeforeUnmount(() => drawerObserver?.disconnect());
 // drawer is open, ResourceBar's pills switch to their expanded (desktop-style
 // stacked) rendering, which is taller. Measure the real height so the drawer
 // can sit flush against it, and so other HUD chrome (MapView's insets,
-// RealmPanel/ArmyPanel's --hud-inset-bottom) can stay clear of it too,
-// rather than assuming a fixed 64px. Same "watch the ref" pattern as
-// drawerContentRef above, for the same reason.
+// ArmyPanel's --hud-inset-bottom) can stay clear of it too, rather than
+// assuming a fixed 64px. Same "watch the ref" pattern as drawerContentRef
+// above, for the same reason.
 const barRef = ref<HTMLElement | null>(null);
 let barObserver: ResizeObserver | null = null;
 watch(
@@ -133,9 +165,17 @@ watch(
   (el) => {
     barObserver?.disconnect();
     if (!el || typeof ResizeObserver === 'undefined') return;
-    barObserver = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect) hudBarHeightPx.value = rect.height;
+    barObserver = new ResizeObserver(() => {
+      // Finding #16: `contentRect` excludes border/padding — this element has
+      // a 1px border (`.hud-bar`'s `border-bottom`/`border-top`), so reading
+      // it gave 63px on a desktop bar that is actually 64px border-box tall,
+      // shifting every consumer of this value (RingMenu's bounds, ArmyPanel's
+      // `--hud-inset-bottom`, ...) by a stray pixel. `getBoundingClientRect`
+      // reports the real, rendered border-box height regardless of
+      // box-sizing, so desktop (where this never actually changes) reads
+      // exactly 64 again.
+      const el2 = barRef.value;
+      if (el2) hudBarHeightPx.value = el2.getBoundingClientRect().height;
     });
     barObserver.observe(el);
   },
@@ -147,6 +187,38 @@ onBeforeUnmount(() => {
 });
 
 const drawer = useHudDrawer(barPosition, drawerHeight);
+// Finding #12: hands this instance's own `close` to the shared singleton so
+// MapView/LandingView's mutual-exclusion watch (opening the queue drawer
+// should close this one) can reach it — see hudDrawerOpenState.ts's own
+// comment. Only one TopBar with a drawer is ever mounted at a time in
+// practice, so there's nothing to arbitrate between multiple writers.
+setHudDrawerCloseFn(drawer.close);
+onBeforeUnmount(() => setHudDrawerCloseFn(null));
+// Finding #19: the grip's `aria-controls` needs a real id to point at, and a
+// stable one — a fresh string every render would just churn the attribute
+// for no reason.
+const drawerContentId = useId();
+
+// Finding #19: Escape closes the open drawer, same as QueueDrawer.vue's own
+// keydown handler for its own drawer.
+function onDocumentKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && drawer.isOpen.value) drawer.close();
+}
+onMounted(() => document.addEventListener('keydown', onDocumentKeydown));
+onBeforeUnmount(() => document.removeEventListener('keydown', onDocumentKeydown));
+
+// Finding #18: crossing the compact breakpoint (rotate/resize) while a drag
+// is mid-flight, or while the drawer is open, must not strand the drawer in
+// a state its own grip/gesture no longer exists to close (dragEnabled false
+// means neither the bar nor the drawer even render any more, per the v-if
+// below) — hide it and cancel the drag first so nothing stays open with no
+// way left to reach it.
+watch(dragEnabled, (enabled) => {
+  if (!enabled) {
+    drawer.cancelDrag();
+    drawer.close();
+  }
+});
 
 function onBarPointerDown(e: PointerEvent) {
   if (dragEnabled.value) drawer.onPointerDown(e);
@@ -160,14 +232,24 @@ function onBarPointerUp(e: PointerEvent) {
 function onBarPointerCancel(e: PointerEvent) {
   if (dragEnabled.value) drawer.onPointerCancel(e);
 }
+// Finding #7: wired to both the bar and the drawer's own `lostpointercapture`
+// — see useHudDrawer's own comment on why a lost capture must not strand the
+// drag.
+function onBarLostPointerCapture(e: PointerEvent) {
+  if (dragEnabled.value) drawer.onLostPointerCapture(e);
+}
 function onGripClick() {
   if (dragEnabled.value) drawer.toggle();
 }
-function onDrawerClickCapture(e: MouseEvent) {
-  // Swallow the one synthetic click a drag-to-close gesture leaves behind
-  // when it started on top of an interactive element (a nav link) — see
+function onClickCapture(e: MouseEvent) {
+  // Swallow the one synthetic click a drag leaves behind when it started on
+  // top of an interactive element — a nav link inside the open drawer
+  // (drag-to-close), but also the grip itself or a resource pill on the
+  // *collapsed* bar (finding #6: a mouse-drag starting on the grip used to
+  // re-toggle it open-then-immediately-closed via that same follow-up
+  // click, since only the drawer, not the bar, ever swallowed it). See
   // useHudDrawer's own comment on `consumeClickSuppression`. Capture phase
-  // so this runs before the link's own bubble-phase click handler does.
+  // so this runs before the target's own bubble-phase click handler does.
   if (drawer.consumeClickSuppression()) {
     e.stopPropagation();
     e.preventDefault();
@@ -175,10 +257,18 @@ function onDrawerClickCapture(e: MouseEvent) {
 }
 
 const drawerVisible = computed(() => dragEnabled.value && (drawer.isOpen.value || drawer.dragging.value));
-// DemoModeBadge.vue reads this shared singleton so it can get out of the
-// drawer's way while it's open — its own fixed top offset otherwise lands
-// right on top of the drawer's first content row.
-watch(drawerVisible, (visible) => { isHudDrawerOpen.value = visible; }, { immediate: true });
+// Finding #7: this used to mirror `drawerVisible` (open OR dragging), which
+// meant ResourceBar swapped its pills to the expanded (drawer-open)
+// rendering the instant a drag armed — mid-gesture, before the player had
+// actually committed to opening anything. That expanded rendering is a
+// different, taller DOM element than the collapsed compact pill, so
+// swapping it out from under the finger that is `setPointerCapture`d on it
+// silently loses the drag (the captured element gets removed/replaced).
+// Only the *committed* state (`isOpen`, set on release) should flip the
+// expanded layout — DemoModeBadge.vue reads this same singleton to get out
+// of the drawer's way while it's genuinely open, not merely being dragged
+// towards open.
+watch(drawer.isOpen, (open) => { isHudDrawerOpen.value = open; }, { immediate: true });
 onBeforeUnmount(() => { isHudDrawerOpen.value = false; });
 const drawerStyle = computed(() => ({
   height: `${drawer.currentOffset()}px`,
@@ -208,6 +298,8 @@ const backdropStyle = computed(() => {
     @pointermove="onBarPointerMove"
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
+    @lostpointercapture="onBarLostPointerCapture"
+    @click.capture="onClickCapture"
   >
     <!-- The logo lives in the mobile settlement-bubble instead (below) —
          an empty .brand would still eat the bar's gap for nothing, so it's
@@ -223,22 +315,39 @@ const backdropStyle = computed(() => {
         <span v-if="caption" class="caption">{{ caption }}</span>
       </div>
     </div>
+    <!-- Finding #10: a page that named itself via `title` (docs, the
+         pre-founding landing) has no settlement bubble to fall back on —
+         give it its own compact brand instead, truncated rather than
+         pushing the resource/nav content off-screen. -->
+    <div v-if="isCompact && props.title" class="mobile-title">
+      <span class="logo-hex" aria-hidden="true">
+        <svg viewBox="0 0 100 100">
+          <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
+        </svg>
+      </span>
+      <span class="mobile-title-text">{{ props.title }}</span>
+    </div>
     <div class="hud-bar-right">
-      <!-- Compact mode has too little width to guarantee everything fits
-           (5 resource pills + the nav trigger + locale switcher) — scroll
-           this inner row horizontally rather than silently overflowing off
-           either edge. Unconditional (not just under dragEnabled) so it
-           costs nothing on desktop, where the content already fits and this
-           never engages. The grip stays outside it so it's always reachable
-           regardless of scroll position. -->
-      <div class="hud-bar-scroll">
-        <slot />
-      </div>
+      <!-- Finding #1: this used to wrap `<slot />` in its own
+           `overflow-x: auto` scroller so 5 resource pills + nav + locale
+           switcher could fit a phone width — but that clips every
+           absolutely-positioned dropdown anywhere inside it (a nav account
+           menu, ReturningPlayerMenu's panel, ProfileNudge) to the scroller's
+           own ~30px visible height, ON DESKTOP TOO, since this wrapper was
+           unconditional. Horizontal scrolling now lives only on
+           ResourceBar's own compact pill row (`.resource-bar.compact`,
+           gated to the same mobile query) — HudNav/ReturningPlayerMenu never
+           needed to scroll, they just needed room, which removing this
+           wrapper also restores (see `.hud-bar-right`'s own
+           `justify-content: flex-end` below, no longer defeated by this
+           intermediate flex box). -->
+      <slot />
       <button
         v-if="dragEnabled"
         type="button"
         class="hud-grip"
         :aria-expanded="drawer.isOpen.value"
+        :aria-controls="drawerContentId"
         :aria-label="t('hud.drawer.toggle')"
         @click="onGripClick"
       >
@@ -247,7 +356,7 @@ const backdropStyle = computed(() => {
     </div>
   </header>
   <div
-    v-if="isCompact && settlementName"
+    v-if="showSettlementBubble"
     class="settlement-bubble"
     :style="{ top: settlementBubbleTop }"
     v-show="!isHudDrawerOpen"
@@ -277,7 +386,8 @@ const backdropStyle = computed(() => {
     @pointermove="onBarPointerMove"
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
-    @click.capture="onDrawerClickCapture"
+    @lostpointercapture="onBarLostPointerCapture"
+    @click.capture="onClickCapture"
   >
     <!-- The collapsed bar (and its grip) stays pinned to the screen's own
          edge even once open, so there is no room to keep dragging past it
@@ -286,7 +396,13 @@ const backdropStyle = computed(() => {
          the 8px arm threshold keeps a plain tap on a nav link/resource row
          inside from being mistaken for a drag, exactly as it does on the
          collapsed bar's own resource pills. -->
-    <div ref="drawerContentRef" class="hud-drawer-content">
+    <div
+      :id="drawerContentId"
+      ref="drawerContentRef"
+      class="hud-drawer-content"
+      :inert="!drawer.isOpen.value"
+      :aria-hidden="!drawer.isOpen.value"
+    >
       <slot name="drawer" :close="drawer.close" :is-open="drawer.isOpen.value" />
     </div>
   </div>
@@ -375,17 +491,29 @@ const backdropStyle = computed(() => {
   min-width: 0;
   justify-content: flex-end;
 }
-.hud-bar-scroll {
+/* Finding #10: the inline brand for a page that named itself via `title`
+   (docs pages, the pre-founding landing) — the settlement bubble is reserved
+   for a real in-game settlement (see `showSettlementBubble`), so these pages
+   get their name here instead, shrinking/truncating rather than crowding out
+   the resource pills or nav. */
+.mobile-title {
   display: flex;
   align-items: center;
-  gap: 24px;
-  flex: 1 1 auto;
+  gap: 8px;
+  flex: 0 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.hud-bar-scroll::-webkit-scrollbar {
-  display: none;
+.mobile-title .logo-hex {
+  width: 20px;
+  height: 20px;
+}
+.mobile-title-text {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Mobile-only: the collapsed bar itself is the drag surface, so it needs to
@@ -489,17 +617,43 @@ const backdropStyle = computed(() => {
 .hud-drawer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 38;
+  /* Finding #12: was 38, tied with QueueDrawer.vue's own `.queue-drawer`
+     (also 38) — at equal z-index, whichever painted later in the DOM won
+     the tie, which happened to be the queue rail (it mounts after TopBar in
+     MapView.vue's template), so this backdrop failed to dim it while the
+     HUD drawer was open. 39 (matching `.hud-drawer` below — see that rule's
+     own comment on why tying the two together here is safe) puts both
+     strictly above QueueDrawer's 37/38 while staying below the collapsed
+     bar itself (`.hud-bar`, 40) and true modals (BuildingModal/TrainingModal/
+     TopBar, 40; ReturningPlayerMenu/ProfileNudge, 50). MapView.vue's mutual
+     -exclusion watch (opening one drawer closes the other) means the two are
+     never actually both open at once in practice — this is the defense in
+     depth for the transition frame where they briefly could be. */
+  z-index: 39;
   background: #000;
   transition: opacity 120ms ease;
 }
 
 .hud-drawer {
   /* `top`/`bottom` come from the inline `drawerStyle` binding — the bar's
-     real, current (possibly expanded) height, not a fixed guess. */
-  position: absolute;
+     real, current (possibly expanded) height, not a fixed guess.
+     Finding #8: `fixed`, not `absolute` — a docked bar (docs pages) is a
+     `position: sticky` header inside a page that scrolls itself
+     (`.docs { overflow: auto }` and friends), which is not itself a
+     positioned ancestor, so an `absolute` drawer here would be positioned
+     against the document root and scroll away instead of staying pinned
+     under the sticky bar. `fixed` always pins to the viewport, which is
+     also exactly what the non-docked map views already got from `absolute`
+     (their positioned ancestor is a `position: relative` root that already
+     fills the viewport with no scroll offset of its own), so this is a
+     no-op there. */
+  position: fixed;
   left: 0;
   right: 0;
+  /* Same value as `.hud-drawer-backdrop` above on purpose — ties resolve by
+     document order in the same stacking context, and this element is always
+     the later sibling of the two in the template below, so it still paints
+     above its own backdrop. See that rule's own comment for why 39. */
   z-index: 39;
   overflow: hidden;
   background: linear-gradient(180deg, rgba(6, 12, 16, 0.97), rgba(6, 12, 16, 0.93));

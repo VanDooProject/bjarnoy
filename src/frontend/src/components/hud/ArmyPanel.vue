@@ -577,8 +577,8 @@ async function confirmFieldOrderClick() {
 .status-card {
   position: absolute;
   right: 16px;
-  /* See RealmPanel.vue's identical rule — --hud-inset-bottom only differs
-     from 0px on a mobile-docked-bottom HUD bar. */
+  /* --hud-inset-bottom only differs from 0px on a mobile-docked-bottom HUD
+     bar (see MapView.vue's own hudInsetBottomPx). */
   bottom: calc(16px + var(--hud-inset-bottom, 0px));
   z-index: 10;
   width: 260px;
