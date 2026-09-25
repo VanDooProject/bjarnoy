@@ -15,6 +15,19 @@ function showcase(name: string): AtlasFrameRect | undefined {
   return findAtlasFrame('showcase', name);
 }
 
+// AtlasSprite fills its box's width and keeps its aspect ratio only until
+// `max-height` clamps it: in a fixed-height box a frame taller than the box
+// is then squeezed vertically but keeps the full width, and reads as
+// stretched. Capping the width at what the box height allows keeps it
+// contained. `boxHeight` is the box's inner height in px.
+const GIANT_BOX_H = 318;
+const DEFENCE_BOX_H = 238;
+const THUMB_BOX_H = 148;
+function fit(frame: AtlasFrameRect | undefined, boxHeight: number): { width: string } | undefined {
+  if (!frame) return undefined;
+  return { width: `min(100%, ${(boxHeight * frame.frame.w) / frame.frame.h}px)` };
+}
+
 // --- Giants -------------------------------------------------------------
 
 const utgardCamera = ref<TileOrientation>('SE');
@@ -153,7 +166,7 @@ const wallFrame = computed(() => {
           <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>
           <p>{{ $t('docs.wastedLands.utgard.body') }}</p>
           <div class="giant-box">
-            <AtlasSprite v-if="utgardFrame" :frame="utgardFrame" />
+            <AtlasSprite v-if="utgardFrame" :frame="utgardFrame" :style="fit(utgardFrame, GIANT_BOX_H)" />
           </div>
           <div class="camera-pills">
             <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
@@ -174,7 +187,7 @@ const wallFrame = computed(() => {
           <h2>{{ $t('docs.wastedLands.volcano.heading') }}</h2>
           <p>{{ $t('docs.wastedLands.volcano.body') }}</p>
           <div class="giant-box">
-            <AtlasSprite v-if="volcanoFrame" :frame="volcanoFrame" />
+            <AtlasSprite v-if="volcanoFrame" :frame="volcanoFrame" :style="fit(volcanoFrame, GIANT_BOX_H)" />
           </div>
           <div class="camera-pills">
             <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
@@ -200,7 +213,7 @@ const wallFrame = computed(() => {
             <h3>{{ $t('docs.wastedLands.defences.watchtower.heading') }}</h3>
             <p>{{ $t('docs.wastedLands.defences.watchtower.body') }}</p>
             <div class="giant-box defence-box">
-              <AtlasSprite v-if="towerFrame" :frame="towerFrame" />
+              <AtlasSprite v-if="towerFrame" :frame="towerFrame" :style="fit(towerFrame, DEFENCE_BOX_H)" />
             </div>
             <div class="camera-pills">
               <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
@@ -221,7 +234,7 @@ const wallFrame = computed(() => {
             <h3>{{ $t('docs.wastedLands.defences.walls.heading') }}</h3>
             <p>{{ $t('docs.wastedLands.defences.walls.body') }}</p>
             <div class="giant-box defence-box">
-              <AtlasSprite v-if="wallFrame" :frame="wallFrame" />
+              <AtlasSprite v-if="wallFrame" :frame="wallFrame" :style="fit(wallFrame, DEFENCE_BOX_H)" />
             </div>
             <div class="camera-pills">
               <span class="variants-label">{{ $t('docs.wastedLands.defences.walls.piece') }}</span>
@@ -268,7 +281,11 @@ const wallFrame = computed(() => {
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
               <div class="thumb">
-                <AtlasSprite v-if="pairLivingFrame(pair)" :frame="pairLivingFrame(pair)!" />
+                <AtlasSprite
+                  v-if="pairLivingFrame(pair)"
+                  :frame="pairLivingFrame(pair)!"
+                  :style="fit(pairLivingFrame(pair), THUMB_BOX_H)"
+                />
               </div>
               <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
             </div>
@@ -276,7 +293,11 @@ const wallFrame = computed(() => {
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
               <div class="thumb">
-                <AtlasSprite v-if="pairWastedFrame(pair)" :frame="pairWastedFrame(pair)!" />
+                <AtlasSprite
+                  v-if="pairWastedFrame(pair)"
+                  :frame="pairWastedFrame(pair)!"
+                  :style="fit(pairWastedFrame(pair), THUMB_BOX_H)"
+                />
               </div>
               <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
             </div>
@@ -304,7 +325,11 @@ const wallFrame = computed(() => {
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
               <div class="thumb">
-                <AtlasSprite v-if="pairLivingFrame(PAIRS[3]!)" :frame="pairLivingFrame(PAIRS[3]!)!" />
+                <AtlasSprite
+                  v-if="pairLivingFrame(PAIRS[3]!)"
+                  :frame="pairLivingFrame(PAIRS[3]!)!"
+                  :style="fit(pairLivingFrame(PAIRS[3]!), THUMB_BOX_H)"
+                />
               </div>
               <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.living') }}</span>
             </div>
@@ -312,7 +337,11 @@ const wallFrame = computed(() => {
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
               <div class="thumb">
-                <AtlasSprite v-if="pairWastedFrame(PAIRS[3]!)" :frame="pairWastedFrame(PAIRS[3]!)!" />
+                <AtlasSprite
+                  v-if="pairWastedFrame(PAIRS[3]!)"
+                  :frame="pairWastedFrame(PAIRS[3]!)!"
+                  :style="fit(pairWastedFrame(PAIRS[3]!), THUMB_BOX_H)"
+                />
               </div>
               <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.wasted') }}</span>
             </div>
@@ -327,7 +356,11 @@ const wallFrame = computed(() => {
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
               <div class="thumb">
-                <AtlasSprite v-if="riverLivingFrame" :frame="riverLivingFrame" />
+                <AtlasSprite
+                  v-if="riverLivingFrame"
+                  :frame="riverLivingFrame"
+                  :style="fit(riverLivingFrame, THUMB_BOX_H)"
+                />
               </div>
               <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.living') }}</span>
             </div>
@@ -335,7 +368,11 @@ const wallFrame = computed(() => {
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
               <div class="thumb">
-                <AtlasSprite v-if="riverWastedFrame" :frame="riverWastedFrame" />
+                <AtlasSprite
+                  v-if="riverWastedFrame"
+                  :frame="riverWastedFrame"
+                  :style="fit(riverWastedFrame, THUMB_BOX_H)"
+                />
               </div>
               <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.wasted') }}</span>
             </div>
@@ -361,7 +398,11 @@ const wallFrame = computed(() => {
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
               <div class="thumb">
-                <AtlasSprite v-if="pairLivingFrame(pair)" :frame="pairLivingFrame(pair)!" />
+                <AtlasSprite
+                  v-if="pairLivingFrame(pair)"
+                  :frame="pairLivingFrame(pair)!"
+                  :style="fit(pairLivingFrame(pair), THUMB_BOX_H)"
+                />
               </div>
               <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
             </div>
@@ -369,7 +410,11 @@ const wallFrame = computed(() => {
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
               <div class="thumb">
-                <AtlasSprite v-if="pairWastedFrame(pair)" :frame="pairWastedFrame(pair)!" />
+                <AtlasSprite
+                  v-if="pairWastedFrame(pair)"
+                  :frame="pairWastedFrame(pair)!"
+                  :style="fit(pairWastedFrame(pair), THUMB_BOX_H)"
+                />
               </div>
               <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
             </div>
