@@ -1057,6 +1057,49 @@ describe('WorldModel wasted-island reveal', () => {
     expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('sea');
   });
 
+  it('never wipes green-island state (buildings, ownership, giant tags) on reveal', () => {
+    // Seed 20260824 (the app's own demo seed): (-5,-7) is a real landfall
+    // near origin; (-12,-17) is a real giant-placeable anchor whose
+    // footprint includes a Forest hex (found by scanning canPlaceGiant), so
+    // this also covers tagGiantHex's Forest->Grass flattening surviving a
+    // reveal.
+    const model = new WorldModel(20260824);
+    const settlement = model.foundSettlement('owner-1', 'Owner', 'Home', { q: -5, r: -7 });
+
+    // A claimed, non-giant, non-longhouse hex next to home to build a hut on.
+    const buildAt = { q: settlement.q + 1, r: settlement.r };
+    expect(model.placeBuilding(settlement.id, buildAt, 'hut')).toBe(true);
+
+    const giantAnchor = { q: -12, r: -17 };
+    const footprint = giantCoverage(giantAnchor).map((c) => c.coord);
+    const forestHex = footprint.find((c) => model.getTile(c.q, c.r).terrain === 'forest');
+    expect(forestHex).toBeDefined();
+    expect(model.placeGiant(giantAnchor, 'giantmountain')).toBe(true);
+
+    model.setWastedRevealed(true);
+
+    // Building + ownership survive.
+    const built = model.getTile(buildAt.q, buildAt.r);
+    expect(built.buildingType).toBe('hut');
+    expect(built.ownerId).toBe(settlement.id);
+    const home = model.getTile(settlement.q, settlement.r);
+    expect(home.buildingType).toBe('longhouse');
+    expect(home.ownerId).toBe(settlement.id);
+
+    // The giant's tag survives on all 7 covered hexes, and giantAnchorByHex
+    // (read via giantAnchorAt) still agrees with it.
+    for (const coord of footprint) {
+      const tile = model.getTile(coord.q, coord.r);
+      expect(tile.giant?.anchor).toEqual(giantAnchor);
+      expect(tile.giant?.family).toBe('giantmountain');
+      expect(model.giantAnchorAt(coord)).toEqual(giantAnchor);
+    }
+
+    // The Forest->Grass flattening tagGiantHex wrote survives too (reverting
+    // to Forest would put a tree top back through the giant's own art).
+    expect(model.getTile(forestHex!.q, forestHex!.r).terrain).toBe('grass');
+  });
+
   it('is a no-op when set to its current value (cache stays warm)', () => {
     const model = new WorldModel(WASTED_SEED);
     const before = model.getTile(0, 0).terrain;

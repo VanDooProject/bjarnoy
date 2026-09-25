@@ -216,6 +216,12 @@ function terrainKey(q: number, r: number): number {
   return ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
 }
 
+/** The exact inverse of `terrainKey` — only ever needed by `setWastedRevealed`'s cache-invalidation sweep. */
+function decodeTerrainKey(key: number): { q: number; r: number } {
+  const u = key >>> 0;
+  return { q: ((u >>> 16) & 0xffff) - 0x8000, r: (u & 0xffff) - 0x8000 };
+}
+
 
 
 export class WorldModel {
@@ -519,19 +525,39 @@ export class WorldModel {
 
   /**
    * Reveals (or hides again) this world's wasted islands — see
-   * `wastedRevealed`'s own doc comment. Clears every cache that could
-   * otherwise keep answering a revealed hex as sea, or an already-generated
-   * `Tile` as missing its `wasted` art tag; the renderer itself still needs
-   * an explicit `forceRebuild()` from the caller (mirrors how every other
-   * "the underlying map just changed under the renderer" mutation here —
+   * `wastedRevealed`'s own doc comment. Invalidates only the cache entries
+   * whose answer can actually change: a hex the *green* layer alone (plain
+   * `terrainAt`, ignoring any reveal state) calls sea might materialise as
+   * wasted land — or, once already revealed, revert to plain sea when
+   * hidden again — so those are dropped and re-derived on next access.
+   * Checked against the pure green sample rather than the cached value
+   * itself, since the cached value's own meaning flips with the reveal
+   * state (a hex cached as `'forest'` while revealed is exactly the kind of
+   * entry that must still be invalidated on hide, even though it isn't
+   * cached as `'sea'` any more). Green land never changes on reveal either
+   * way, so every other cached `Tile` — buildings, ownership, `tile.giant`
+   * tags, the Forest→Grass flattening `tagGiantHex` wrote into `terrain` —
+   * is left exactly as it was; wiping the whole cache here previously
+   * discarded all of that (a real bug: `giantAnchorByHex` kept a giant's
+   * covered hexes, but the wiped `tiles`/`terrain` caches forgot them, so
+   * the two disagreed on rebuild). The renderer itself still needs an
+   * explicit `forceRebuild()` from the caller (mirrors how every other "the
+   * underlying map just changed under the renderer" mutation here —
    * reseeding, placing a giant — leaves that to its own caller rather than
    * reaching into HexMapRenderer from this model).
    */
   setWastedRevealed(revealed: boolean) {
     if (this.wastedRevealed === revealed) return;
     this.wastedRevealed = revealed;
-    this.terrain.clear();
-    this.tiles.clear();
+    const world = { seed: this.seed, generation: this.generation };
+    const isGreenSea = (q: number, r: number) => terrainAt(q, r, world) === 'sea';
+    for (const key of this.terrain.keys()) {
+      const { q, r } = decodeTerrainKey(key);
+      if (isGreenSea(q, r)) this.terrain.delete(key);
+    }
+    for (const [key, tile] of this.tiles) {
+      if (isGreenSea(tile.q, tile.r)) this.tiles.delete(key);
+    }
     this.islandFootprintCache.clear();
     this.previewIslandTilesCache.clear();
   }
