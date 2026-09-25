@@ -1,4 +1,4 @@
-# Fjørdhold — frontend
+# Bjarnøy — frontend
 
 Vue 3 + TypeScript + Vite frontend for the browsergame described in
 `../../README.md` and `../../prototypes/MECHANICS.md`. This app is the
