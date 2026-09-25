@@ -74,6 +74,8 @@ import {
 import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
+import { computeGlowMist, glowKindFor, type GlowMistEmitter, type GlowMistHex } from './glowMist';
+import { mistTextureVariant } from './glowMistTexture';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -408,6 +410,26 @@ function createSpriteLayer(): SpriteLayer {
   const container = new Container();
   container.sortableChildren = true;
   return { pool: [], active: new Map(), container };
+}
+
+/**
+ * One hex's live glow-mist sprite + its animation state — see
+ * `syncMistLayer`/`advanceMist`. Kept in its own map (not `SpriteLayer.active`)
+ * so `syncSpriteLayer`'s removal loop for `terrainTop` — which only iterates
+ * `layer.active` — never touches these sprites even though they're parented
+ * to `terrainTop.container`.
+ */
+interface MistSpriteState {
+  sprite: Sprite;
+  /** `MIST_MAX_ALPHA * intensity` — the un-animated alpha the breathing oscillates around. */
+  baseAlpha: number;
+  /** World-x the sprite drifts around (the hex's own centre x). */
+  baseX: number;
+  /** Per-hex phase offset (radians) so neighbouring hexes don't breathe in lockstep. */
+  phase: number;
+  /** Per-hex breathing period, so the "wall of mist" doesn't pulse as one flat sheet. */
+  periodMs: number;
+  elapsedMs: number;
 }
 
 /** One hex's live `buildings-anim` playback state — see `syncTopAnim`/`advanceTopAnimations`. */
@@ -769,6 +791,41 @@ const VISIBLE_RECT_MARGIN = TILE_W * 2;
 // settlement badge all noticeably below the tile they were meant to sit
 // on/over, on the far edge of (or past) the tile's own front face.
 const TILE_CENTER_Y_OFFSET = TILE_H / 2;
+
+// Glow mist (wasted islands, settlement view only — see glowMist.ts). How
+// many hex-steps a light source (Utgard fortress, lava) reaches before the
+// falloff hits zero.
+const MIST_RADIUS = 3;
+// Wide enough to visibly bleed past the hex's own left/right neighbours
+// (a "creeping" mist reads as spreading sideways, not a column stood
+// straight up on one hex), without ballooning into unrelated columns.
+const MIST_WIDTH = TILE_W * 1.5;
+// Anchored at the hex's own front (lowest) edge (see syncMistLayer) and
+// rising from there: one row's own pitch is exactly TILE_H (isoGridPosition
+// steps `row` by TILE_H), so anything taller than that pokes up past the
+// hex directly behind this one — which is the whole point ("creeping from
+// behind" a dark building/mountain on the row behind). 1.4x gives a clear
+// margin above that row without the mist sprite dwarfing the tile art.
+const MIST_HEIGHT = TILE_H * 1.4;
+// Normal (not additive) blend mode keeps mist sprites batchable with the
+// rest of terrainTop's tile art (same texture atlas usage pattern), rather
+// than forcing a separate draw call per additive sprite. Scaled per kind by
+// glowMist.ts's GLOW_STRENGTH.
+const MIST_MAX_ALPHA = 0.5;
+// "Breathing" alpha oscillation, ±25% of the base alpha.
+const MIST_BREATH_AMPLITUDE = 0.25;
+const MIST_BREATH_PERIOD_MIN_MS = 6000;
+const MIST_BREATH_PERIOD_MAX_MS = 9000;
+// Small horizontal drift, in world units — "a few px" at TILE_W=168 scale.
+const MIST_DRIFT_PX = 4;
+// Shared empty map for the (overwhelmingly common) no-emitters rebuild, so
+// that path allocates nothing new.
+const EMPTY_GLOW_MIST: ReadonlyMap<string, GlowMistHex> = new Map();
+// Distinct hash01 salts so a mist hex's phase/period/texture-variant don't
+// all move in lockstep off the same derived number.
+const MIST_PHASE_SALT = 0x6d697374; // 'mist'
+const MIST_PERIOD_SALT = 0x6d697370; // 'misp' — deliberately close but distinct
+const MIST_VARIANT_SALT = 0x6d697376; // 'misv'
 
 /**
  * A small pointy-top regular hexagon centred at (cx, cy) with "radius" r
@@ -1242,6 +1299,16 @@ export class HexMapRenderer {
   // survives *between* rebuilds, so a looping clip doesn't reset its phase
   // every time the camera merely moves.
   private topAnimState = new Map<string, TopAnimState>();
+  // Glow-mist sprites (see glowMist.ts, MistSpriteState above). Parented to
+  // `terrainTop.container` for depth-correct interleaving, but tracked in
+  // this separate pool/active pair — never in `terrainTop`'s own
+  // pool/active — so `syncSpriteLayer`'s removal loop for terrainTop, which
+  // only walks `layer.active`, cannot reclaim/reposition them, and
+  // `syncMistLayer` re-sorts `terrainTop.container` itself after adding or
+  // removing any of these (syncSpriteLayer's own sortChildren() call runs
+  // first, before mist sprites for this rebuild are synced in).
+  private mistPool: Sprite[] = [];
+  private mistActive = new Map<string, MistSpriteState>();
   private terrainFlat = new Graphics();
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
@@ -1777,6 +1844,7 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.advanceTopAnimations(this.app!.ticker.deltaMS);
+    this.advanceMist(this.app!.ticker.deltaMS);
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -2945,6 +3013,13 @@ export class HexMapRenderer {
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
+    // Glow mist (glowMist.ts): light-source hexes collected during this same
+    // loop below, resolved into the actual mist to draw once the loop (and
+    // so the drawn coord set) is known. Stays empty — and syncMistLayer
+    // skips the computeGlowMist call entirely — on every island with no
+    // giant/river light source at all, which is every non-wasted island.
+    const glowEmitters: GlowMistEmitter[] = [];
+
     for (const c of coords) {
       // zip 6a: before a settlement exists, this is the landing page's
       // preview — a small crop of one island, not a slice of the whole
@@ -2976,6 +3051,8 @@ export class HexMapRenderer {
       // Tile itself, so a tile cached before that fetch lands never goes
       // stale (see WorldModel.setRiverTiles).
       const river = worldModel.getRiverTile(c.q, c.r);
+      const glowKind = glowKindFor(tile, river);
+      if (glowKind) glowEmitters.push({ coord: c, kind: glowKind });
 
       const key = coordKey(c);
       // A giant tile (see giantTiles.ts) replaces only this hex's *top*
@@ -3064,6 +3141,22 @@ export class HexMapRenderer {
 
     this.syncSpriteLayer(this.terrainBase, baseEntries);
     this.syncSpriteLayer(this.terrainTop, topEntries);
+
+    // Zero cost on every normal (non-wasted) island: no emitters were found
+    // in the loop above, so computeGlowMist is never even called.
+    let glowMist: ReadonlyMap<string, GlowMistHex> = EMPTY_GLOW_MIST;
+    if (glowEmitters.length > 0) {
+      const raw = computeGlowMist(glowEmitters, (mc) => worldModel.isWastedLandAt(mc.q, mc.r), MIST_RADIUS);
+      // Keep only hexes this rebuild actually drew a base sprite for
+      // (baseEntries is a superset of topEntries — every processed coord
+      // gets at least a base entry — so this is exactly "the drawn set of
+      // this rebuild").
+      glowMist = new Map();
+      for (const [k, v] of raw) {
+        if (baseEntries.has(k)) glowMist.set(k, v);
+      }
+    }
+    this.syncMistLayer(glowMist);
   }
 
   // zip 7: world-map islands are flat coloured hexes, not tile art — see
@@ -3375,6 +3468,94 @@ export class HexMapRenderer {
         }
       }
       if (advanced) state.sprite.texture = state.clip.textures[state.frame]!;
+    }
+  }
+
+  /**
+   * Reconciles the glow-mist sprites (glowMist.ts) against this rebuild's
+   * mist map. Mirrors `syncSpriteLayer`'s add/reuse-from-pool/remove-to-pool
+   * shape, but against `this.mistActive`/`this.mistPool` — never
+   * `terrainTop.active`/`terrainTop.pool` — so `syncSpriteLayer`'s own
+   * removal loop for `terrainTop` (which iterates only `layer.active`)
+   * cannot reclaim these sprites out from under it. They're still parented
+   * to `terrainTop.container` directly, for depth-correct interleaving with
+   * the top sprites; `syncSpriteLayer(this.terrainTop, ...)` already called
+   * `terrainTop.container.sortChildren()` once by the time this runs (see
+   * rebuildTerrain), so this calls it again once mist sprites are added or
+   * removed, otherwise a freshly-added mist sprite would render at
+   * insertion order rather than by its (isoDepthKey - 0.5) zIndex.
+   */
+  private syncMistLayer(entries: ReadonlyMap<string, GlowMistHex>) {
+    if (entries.size === 0 && this.mistActive.size === 0) return;
+
+    for (const [key, { coord, intensity, color }] of entries) {
+      let state = this.mistActive.get(key);
+      const isNew = !state;
+      if (!state) {
+        const sprite = this.mistPool.pop() ?? new Sprite();
+        sprite.anchor.set(0.5, 1);
+        sprite.blendMode = 'normal';
+        state = {
+          sprite,
+          baseAlpha: 0,
+          baseX: 0,
+          // Deterministic per-hex hash (hash01, above) rather than Math.random,
+          // so breathing/drift phase never depends on load order and a test
+          // asserting on it stays reproducible.
+          phase: hash01(coord.q, coord.r, MIST_PHASE_SALT) * Math.PI * 2,
+          periodMs:
+            MIST_BREATH_PERIOD_MIN_MS +
+            hash01(coord.q, coord.r, MIST_PERIOD_SALT) * (MIST_BREATH_PERIOD_MAX_MS - MIST_BREATH_PERIOD_MIN_MS),
+          elapsedMs: 0,
+        };
+        this.mistActive.set(key, state);
+        this.terrainTop.container.addChild(sprite);
+      }
+      const sprite = state.sprite;
+      sprite.texture = mistTextureVariant(Math.floor(hash01(coord.q, coord.r, MIST_VARIANT_SALT) * 1000));
+      sprite.tint = color;
+      sprite.width = MIST_WIDTH;
+      sprite.height = MIST_HEIGHT;
+      const grid = isoGridPosition(coord, TILE_W, TILE_H);
+      // Anchored (0.5, 1) at the hex's own front (lowest) top-face edge —
+      // isoTopPoints' bottom edge midpoint, (TILE_W/2, TILE_H) relative to
+      // the grid origin — so the mist never paints over the base tile of a
+      // hex in front of it (matching how e.g. `bottomWorldY` elsewhere in
+      // this file already treats `grid.y + TILE_H` as "this hex's own
+      // bottom vertex, as a floor").
+      state.baseX = grid.x + TILE_W / 2;
+      sprite.position.set(state.baseX, grid.y + TILE_H);
+      sprite.zIndex = isoDepthKey(coord) - 0.5;
+      state.baseAlpha = MIST_MAX_ALPHA * intensity;
+      if (isNew) {
+        // Starts mid-breath (via `phase`) rather than at a shared t=0, but
+        // give it its resting alpha immediately rather than waiting for the
+        // next tick to set it for the first time.
+        sprite.alpha = state.baseAlpha;
+      }
+    }
+
+    for (const [key, state] of this.mistActive) {
+      if (entries.has(key)) continue;
+      this.terrainTop.container.removeChild(state.sprite);
+      this.mistPool.push(state.sprite);
+      this.mistActive.delete(key);
+    }
+    this.terrainTop.container.sortChildren();
+  }
+
+  /** Advances every active mist sprite's breathing alpha + horizontal drift by `deltaMs`. O(active mist sprites), no allocations. */
+  private advanceMist(deltaMs: number) {
+    for (const state of this.mistActive.values()) {
+      state.elapsedMs += deltaMs;
+      const t = (state.elapsedMs / state.periodMs) * Math.PI * 2 + state.phase;
+      const breath = Math.sin(t);
+      state.sprite.alpha = state.baseAlpha * (1 + MIST_BREATH_AMPLITUDE * breath);
+      // A slower, independent frequency for drift so it doesn't read as
+      // simply "the same pulse, sideways" — 0.63x the breathing frequency
+      // (chosen off the golden ratio's inverse purely to avoid the two ever
+      // landing back in phase).
+      state.sprite.x = state.baseX + MIST_DRIFT_PX * Math.sin(t * 0.63);
     }
   }
 
@@ -4284,6 +4465,7 @@ export class HexMapRenderer {
       this.syncSpriteLayer(this.terrainBase, new Map());
       this.syncSpriteLayer(this.terrainTop, new Map());
       this.topAnimState.clear();
+      this.syncMistLayer(new Map());
       this.blackFogLayer.setArmyVisionSources([], 0);
       this.whiteMistLayer.setArmyVisionSources([], 0);
     } else {
