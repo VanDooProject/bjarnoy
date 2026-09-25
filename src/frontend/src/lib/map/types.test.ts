@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   bendOrientationOf,
+  confluenceOrientationOf,
+  confluenceWideOrientationOf,
   mouthOrientationOf,
   springOrientationOf,
   straightOrientationOf,
@@ -134,5 +136,89 @@ describe('mouthOrientationOf', () => {
         orientation: bendOrientationOf(inDirection, seaDirectionReverse),
       });
     }
+  });
+});
+
+describe('confluenceOrientationOf', () => {
+  // Pixel-sampled the same way (`is_blue` along each polygon edge, against
+  // every rendered `rivertile_y_narrow_*` file): file D touches a fixed
+  // opposite pair (the trunk, edges 1+D and 4+D) plus a third edge adjacent
+  // to one end (the branch, edge 5+D) — converting through edge(d) = (3-d)
+  // mod 6 gives out=(5-D)%6 (the trunk's far/branch-adjacent end, where the
+  // merged flow exits), trunkIn=(2-D)%6 (the trunk's other end), and
+  // branchIn=(4-D)%6. File 'E' (D=0): out=SE, trunkIn=NW, branchIn=SW.
+  it('picks the file whose trunk/branch match a real (in1, in2, out) triple', () => {
+    expect(confluenceOrientationOf(['NW', 'SW'], 'SE')).toBe('E');
+    // Order of the two inflows shouldn't matter — they're a set, not a pair.
+    expect(confluenceOrientationOf(['SW', 'NW'], 'SE')).toBe('E');
+  });
+
+  it('rotates consistently for every file, matching the pixel-sampled edge formula', () => {
+    for (let d = 0; d < 6; d++) {
+      const out = TILE_ORIENTATIONS[(5 - d + 6) % 6]!;
+      const trunkIn = TILE_ORIENTATIONS[(2 - d + 6) % 6]!;
+      const branchIn = TILE_ORIENTATIONS[(4 - d + 6) % 6]!;
+      expect(confluenceOrientationOf([trunkIn, branchIn], out)).toBe(TILE_ORIENTATIONS[d]);
+    }
+  });
+
+  it('returns null for a triple the asset has no rotation to represent (two independent paths colliding at an angle the fixed trunk/branch shape cannot show)', () => {
+    // E and NE are only 1 apart — the trunk is always an *opposite* pair,
+    // so no rotation of this asset ever touches two adjacent directions
+    // together with any third as its full in/in/out triple.
+    expect(confluenceOrientationOf(['E', 'NE'], 'SW')).toBeNull();
+  });
+
+  it('falls back to any rotation covering both inflows when there is no outDirection (a confluence that is also the coast)', () => {
+    // Same trunk/branch pair as the first case, but with nothing
+    // downstream to anchor which end is "out" — still renders coherently
+    // rather than picking an arbitrary untransformed file.
+    expect(confluenceOrientationOf(['NW', 'SW'], null)).toBe('E');
+  });
+
+  it('always finds a covering rotation with no outDirection, unlike the anchored-on-out case', () => {
+    // Every one of the 15 possible inflow pairs turns out to be covered by
+    // some rotation's 3-direction touched set once "out" isn't fixed — the
+    // outDirection-anchored case above is the one that can genuinely fail
+    // (E/NE only 1 apart, matching no rotation's fixed *opposite* trunk
+    // pair); dropping that anchor gives every pair a third slot to land in.
+    for (let i = 0; i < TILE_ORIENTATIONS.length; i++) {
+      for (let j = i + 1; j < TILE_ORIENTATIONS.length; j++) {
+        expect(confluenceOrientationOf([TILE_ORIENTATIONS[i]!, TILE_ORIENTATIONS[j]!], null)).not.toBeNull();
+      }
+    }
+  });
+});
+
+describe('confluenceWideOrientationOf', () => {
+  // Pixel-sampled the same way, against every rendered `rivertile_ywide_*`
+  // file: file D touches edges 1+D, 3+D, 5+D (mod 6) — every other edge,
+  // evenly spaced, unlike y_narrow's opposite-pair-plus-branch. Converting
+  // through edge(d) = (3-d) mod 6 gives three directions each exactly 2
+  // apart (120°) from both others, with no distinguished role — any of the
+  // three real directions can fill any of the three touched slots.
+  it('picks the file whose three touched directions match a real triple, in any role', () => {
+    expect(confluenceWideOrientationOf(['NW', 'SW'], 'E')).toBe('E');
+    // Order of the two inflows shouldn't matter.
+    expect(confluenceWideOrientationOf(['SW', 'NW'], 'E')).toBe('E');
+  });
+
+  it('only matches the two mutually-120°-apart triples on the wheel, not the y_narrow trunk/branch pattern', () => {
+    // NW/SE is an opposite pair (confluenceOrientationOf's own trunk shape),
+    // never 120° apart from anything — so this never matches it either.
+    expect(confluenceWideOrientationOf(['NW', 'SE'], 'SW')).toBeNull();
+  });
+
+  it('returns null for a triple neither confluence asset can represent', () => {
+    expect(confluenceWideOrientationOf(['E', 'NE'], 'SW')).toBeNull();
+  });
+
+  it('falls back to any rotation covering both inflows when there is no outDirection', () => {
+    expect(confluenceWideOrientationOf(['NW', 'SW'], null)).toBe('E');
+  });
+
+  it('needs at least two known directions to ever match', () => {
+    expect(confluenceWideOrientationOf(['NW'], null)).toBeNull();
+    expect(confluenceWideOrientationOf([], null)).toBeNull();
   });
 });

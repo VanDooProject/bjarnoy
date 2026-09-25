@@ -11,7 +11,19 @@ import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { BuildingOutput, BuildingModifier } from '../../lib/map/buildingEconomy';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName, terrainName, resourceName, giantName } from '../../i18n/catalogueNames';
+import { buildingName, terrainName, wastedTerrainName, resourceName, giantName } from '../../i18n/catalogueNames';
+
+// Mirrors textures.ts's WASTED_TEXTURE_KEY (grass/forest/sand -> their
+// wasted-island art family) plus the coastal case (sea bordering wasted
+// land renders as blacksandcoast — see WorldModel.getTile's own `wasted`
+// tagging, which only ever sets it on sea when that sea is coastal).
+// Mountain has no dedicated wasted family, so it isn't listed here either.
+const WASTED_TERRAIN_LABEL_KEY: Partial<Record<string, string>> = {
+  grass: 'wasteland',
+  forest: 'deadforest',
+  sand: 'blacksand',
+  sea: 'blacksandcoast',
+};
 
 const props = defineProps<{ info: HoverInfo }>();
 
@@ -30,7 +42,12 @@ const title = computed(() => {
   const subject = props.info.subject;
   if (subject.kind === 'building') return buildingName(subject.buildingType);
   if (subject.kind === 'giant') return giantName(subject.family);
-  return subject.isRiver ? t('hud.hoverTooltip.river') : terrainName(subject.terrain);
+  if (subject.isRiver) return t('hud.hoverTooltip.river');
+  if (subject.wasted) {
+    const key = WASTED_TERRAIN_LABEL_KEY[subject.terrain];
+    if (key) return wastedTerrainName(key);
+  }
+  return terrainName(subject.terrain);
 });
 
 const level = computed(() => (props.info.subject.kind === 'building' ? props.info.subject.level : undefined));
@@ -71,8 +88,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierTrainsLandTroops');
     case 'trainsShips':
       return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'garrison':
-      return t('hud.hoverTooltip.modifierGarrison');
+    case 'trainsCivilianCrews':
+      return t('hud.hoverTooltip.modifierTrainsCivilianCrews');
     case 'terrainBoost':
       return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
     case 'coastal':
@@ -91,6 +108,12 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierShrineFavour', {
         percent: modifier.percent,
         domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
+      });
+    case 'radiusBoost':
+      return t('hud.hoverTooltip.modifierRadiusBoost', {
+        percent: modifier.percent,
+        range: modifier.range,
+        resource: t(modifier.resource === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
       });
   }
 }

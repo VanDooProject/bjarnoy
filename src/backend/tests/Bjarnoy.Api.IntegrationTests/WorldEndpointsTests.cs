@@ -2,6 +2,9 @@ using System.Net;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -156,6 +159,44 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         Assert.NotEmpty(giants);
         Assert.All(giants, g => Assert.Equal("giantmountain", g.Family));
         Assert.All(giants, g => Assert.Contains(g.Orientation, new[] { "E", "NE", "NW", "W", "SW", "SE" }));
+    }
+
+    [Fact]
+    public async Task Wasted_islands_are_hidden_until_the_endboss_triggers()
+    {
+        using var client = _fixture.CreateClient();
+        // Seed/radius known (Bjarnoy.Domain.Tests.WastedIslandGenerationTests)
+        // to place two wasted islands with lava rivers and giants, so this
+        // doesn't depend on getting lucky with the default.
+        var world = await CreateWorldAsync(seed: 61, radius: 90);
+        var wastedCount = world.Islands.Count(i => i.IsWasted);
+        Assert.True(wastedCount > 0, "expected the fixture seed to actually place wasted islands");
+
+        var beforeReveal = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(beforeReveal);
+        Assert.Equal(world.Islands.Count - wastedCount, beforeReveal.Count);
+        Assert.All(beforeReveal, i => Assert.False(i.Wasted));
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var worldEntity = await db.Worlds.SingleAsync(w => w.Id == world.Id, Ct);
+            worldEntity.EndbossTriggeredAt = _fixture.Factory.Time.GetUtcNow();
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var afterReveal = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(afterReveal);
+        Assert.Equal(world.Islands.Count, afterReveal.Count);
+        Assert.Equal(wastedCount, afterReveal.Count(i => i.Wasted));
+        Assert.All(afterReveal.Where(i => i.Wasted), i => Assert.Empty(i.StartPositions));
+        Assert.Contains(
+            afterReveal.SelectMany(i => i.Giants),
+            g => g.Family is "giantvolcano" or "giantutgard");
     }
 
     [Fact]

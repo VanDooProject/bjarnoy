@@ -33,7 +33,14 @@ public sealed class AdminGodModeTests
             Id = Guid.CreateVersion7(),
             Name = "Bjornstad",
             Centre = at,
-            Buildings = [new PlacedBuilding(at, BuildingType.Longhouse, 1)],
+            // Thrall now trains at a Barracks (see UnitCatalogue), so this
+            // fixture carries one by default for the PlanTrain(Thrall, ...)
+            // tests below.
+            Buildings =
+            [
+                new PlacedBuilding(at, BuildingType.Longhouse, 1),
+                new PlacedBuilding(new HexCoord(at.Q + 9, at.R + 9), BuildingType.Barracks, 1),
+            ],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000), production, capacity, Start),
         };

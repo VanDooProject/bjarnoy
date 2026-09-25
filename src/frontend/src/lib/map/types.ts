@@ -105,6 +105,114 @@ export function mouthOrientationOf(
   return { shape: 'straight', orientation: straightOrientationOf(inDirection) };
 }
 
+/**
+ * The `y_narrow` confluence asset's rotation convention, pixel-sampled the
+ * same way `docs/design/river-generation.md`'s "Art pack orientation
+ * convention" derived Bend/Spring/Straight — `is_blue` sampling along each
+ * of a rendered file's six polygon edges (inset toward centre) against
+ * every orientation, not eyeballed. File `D` touches edges `1+D`, `4+D`,
+ * `5+D` (mod 6) — a fixed *opposite* pair (`1+D`/`4+D`, the trunk: a
+ * straight line clear across the hex) plus a third edge (`5+D`) adjacent to
+ * the second of that pair, where the art shows a branch joining the trunk
+ * right before it exits. Converting through `edge(d) = (3-d) mod 6` (see
+ * that doc section) gives the three directions file `D` actually renders:
+ * `out = (5-D) mod 6` (the far end of the trunk, where the merged flow
+ * exits), `trunkIn = (2-D) mod 6` (the trunk's near end — one tributary,
+ * unbranched all the way across), `branchIn = (4-D) mod 6` (the branch —
+ * the other tributary, joining in right at the exit).
+ *
+ * Unlike Bend/Spring, this pattern only covers *one* fixed relative
+ * arrangement of (in1, in2, out) — confluences come from two independently
+ * traced paths colliding (`RiverGenerator.ResolveCollisions`), so nothing
+ * on the generation side constrains their angles the way an ordinary bend's
+ * fixed 2-apart turn does. Most real confluences won't match this asset's
+ * one rotation-class at all; this returns `null` for those (a real,
+ * currently-unrepresentable case — fixing it for every possible triple
+ * would mean the collision resolution itself choosing tiles that fit a
+ * representable angle, not just picking a rotation after the fact), and
+ * the caller falls back to its own best-effort the way `mouthOrientationOf`
+ * does for its one unrepresentable angle.
+ *
+ * A confluence always has exactly two inflows (`RiverGenerator`'s own
+ * `ins.Count >= 2` classification), but `outDirection` can be absent — a
+ * confluence that also sits at the coast, with nothing downstream to point
+ * at. Without a real `out` to anchor the trunk's far end, this instead
+ * looks for any rotation whose three touched directions cover both real
+ * inflows (in either trunk/branch role), so the picture is at least
+ * hydrologically coherent even though which slot is nominally "out" is
+ * arbitrary in that case.
+ */
+export function confluenceOrientationOf(
+  inDirections: readonly TileOrientation[],
+  outDirection: TileOrientation | null,
+): TileOrientation | null {
+  const ins = inDirections.map((d) => TILE_ORIENTATIONS.indexOf(d));
+
+  if (outDirection) {
+    const outIndex = TILE_ORIENTATIONS.indexOf(outDirection);
+    const d = (5 - outIndex + 6) % 6;
+    const trunkIn = (2 - d + 6) % 6;
+    const branchIn = (4 - d + 6) % 6;
+    if (ins.length === 2 && ins.includes(trunkIn) && ins.includes(branchIn)) {
+      return TILE_ORIENTATIONS[d]!;
+    }
+    return null;
+  }
+
+  for (let d = 0; d < 6; d++) {
+    const out = (5 - d + 6) % 6;
+    const trunkIn = (2 - d + 6) % 6;
+    const branchIn = (4 - d + 6) % 6;
+    const touched = new Set([out, trunkIn, branchIn]);
+    if (ins.every((i) => touched.has(i))) {
+      return TILE_ORIENTATIONS[d]!;
+    }
+  }
+  return null;
+}
+
+/**
+ * The `y_wide` confluence asset's rotation convention — a second, later-
+ * added junction (`VanDooProject/3d_assets`' asset-inventory.md: "the
+ * **second** junction and the other way to pick three edges... every pair
+ * 120 degrees apart... three arms radiating rather than two turned toward
+ * each other"), pixel-sampled the same way as `confluenceOrientationOf`
+ * above. File `D` touches edges `1+D`, `3+D`, `5+D` (mod 6) — every other
+ * edge, evenly spaced, unlike `y_narrow`'s opposite-pair-plus-branch.
+ * Converting through `edge(d) = (3-d) mod 6` gives directions `{(2-D),
+ * (0-D), (4-D)} mod 6` — three directions each exactly 2 apart (120°) from
+ * both others, with no distinguished "trunk" or "branch": since the three
+ * arms are geometrically identical and evenly spaced, the whole pattern
+ * repeats every 2 steps of `D` (only two distinct pictures exist, at even
+ * and odd `D`) and any of the three real directions can fill any of the
+ * three touched slots.
+ *
+ * A real (in1, in2, out) triple matches only when all three directions are
+ * mutually 120° apart — the two possible sets on a six-direction wheel are
+ * `{E, NW, SW}` and `{NE, W, SE}` — which `confluenceOrientationOf`'s
+ * opposite-pair-anchored `y_narrow` pattern can never itself satisfy (a
+ * 120°-only spacing never contains an opposite, 180°-apart pair), so the two
+ * functions' representable triples never overlap: a caller can safely try
+ * this one as a second, independent chance after `y_narrow`'s fails.
+ */
+export function confluenceWideOrientationOf(
+  inDirections: readonly TileOrientation[],
+  outDirection: TileOrientation | null,
+): TileOrientation | null {
+  const known = [...inDirections, ...(outDirection ? [outDirection] : [])].map((d) =>
+    TILE_ORIENTATIONS.indexOf(d),
+  );
+  if (known.length < 2) return null;
+
+  for (let d = 0; d < 6; d++) {
+    const touched = new Set([(2 - d + 6) % 6, (0 - d + 6) % 6, (4 - d + 6) % 6]);
+    if (known.every((i) => touched.has(i))) {
+      return TILE_ORIENTATIONS[d]!;
+    }
+  }
+  return null;
+}
+
 export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
 export type Resources = Record<ResourceKind, number>;
@@ -115,6 +223,14 @@ export interface Tile {
   terrain: Terrain;
   /** Sea that borders land — the ring a coastal-water sprite belongs on. */
   isCoastalWater?: boolean;
+  /**
+   * This hex is (or borders) a wasted island — hidden as sea until the
+   * world's endboss triggers (see `WorldModel.setWastedRevealed`). Once
+   * revealed, it renders with the wasted terrain families (wasteland/
+   * deadforest/blacksand/blacksandcoast) instead of the plain green ones —
+   * see `textures.ts`'s wasted family mapping.
+   */
+  wasted?: boolean;
   /** Which art-pack rotation to render this hex with. */
   orientation?: TileOrientation;
   /** Which numbered variant of this terrain's tile art to use. */
@@ -141,7 +257,14 @@ export interface Tile {
     | 'fisherhut'
     | 'sawmill'
     | 'shrineofullr'
-    | 'shrineofnjord';
+    | 'shrineofnjord'
+    | 'meadery'
+    | 'townsquare'
+    | 'cropmill'
+    | 'smithy'
+    | 'druidhut'
+    | 'cartworkshop'
+    | 'claybrickworks';
   buildingLevel?: number;
   /**
    * This hex's place in a "giant tile" — one art object spanning a centre
@@ -157,7 +280,7 @@ export interface Tile {
    * of its own (it isn't a `buildingType`).
    */
   giant?: {
-    family: 'giantmountain' | 'giantshrine' | 'giantvolcano';
+    family: 'giantmountain' | 'giantshrine' | 'giantvolcano' | 'giantutgard';
     anchor: { q: number; r: number };
     part: import('./giantTiles').GiantPart;
     orientation: TileOrientation;
@@ -233,6 +356,8 @@ export interface RiverTile {
   shape: RiverTileShape;
   inDirections: TileOrientation[];
   outDirection: TileOrientation | null;
+  /** True for a lava stream on a wasted island — renders with the lavastream art families instead of rivertile. */
+  wasted?: boolean;
 }
 
 export function emptyResources(): Resources {

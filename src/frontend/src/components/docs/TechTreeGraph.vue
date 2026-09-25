@@ -310,7 +310,11 @@ function clear() {
   overflow: visible;
 }
 .link {
-  stroke: rgba(255, 255, 255, 0.28);
+  /* Opaque, not alpha over the shell background: translucent strokes
+     compound wherever two links cross, so every intersection reads as an
+     odd, brighter blotch. A flat color that matches the same visual weight
+     keeps every crossing looking like every other stretch of line. */
+  stroke: #4f5457;
   stroke-width: 1.5;
   transition: stroke 120ms ease;
 }

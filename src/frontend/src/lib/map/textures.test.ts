@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFamilyClips, classifyFamilyFrames, riverArtFor, type FamilyFrame } from './textures';
+import {
+  baseTextureFor,
+  classifyFamilyClips,
+  classifyFamilyFrames,
+  giantArtFamilyFor,
+  renumberTopVariants,
+  riverArtFor,
+  riverTexturesFor,
+  lavaSpringOrientationOf,
+  mergeTileTextures,
+  textureKeyFor,
+  RIVER_FAMILY,
+  type FamilyFrame,
+  type TileTextures,
+} from './textures';
 import { bendOrientationOf } from './types';
-import type { RiverTile } from './types';
+import type { RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
 
 // classifyFamilyFrames turns one family's raw atlas frame names into the
@@ -72,6 +86,57 @@ describe('riverArtFor', () => {
 
     expect(result.shape).toBe('bend');
     expect(result.orientation).toBe(bendOrientationOf('NW', 'SW'));
+  });
+
+  it('resolves a representable Confluence tile through confluenceOrientationOf (y_narrow), not the untransformed fallback', () => {
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'SE' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluencenarrow');
+    expect(result.orientation).toBe('E');
+    // The untransformed fallback this used to always return.
+    expect(result.orientation).not.toBe('SE');
+  });
+
+  it('resolves a Confluence tile matching the wide junction (ywide), not the narrow one', () => {
+    // E, NW, SW are mutually 120° apart — unrepresentable by y_narrow's
+    // opposite-pair-plus-branch shape, but exactly ywide's own pattern.
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'E' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluencewide');
+  });
+
+  it('falls back to the untransformed outDirection for a Confluence angle neither asset can represent', () => {
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['E', 'NE'], outDirection: 'SW' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluencenarrow');
+    expect(result.orientation).toBe('SW');
+  });
+
+  it('points Spring at a mountain-spring family, not the old flat rivertile_spring placeholder', () => {
+    // Regression coverage for a bug where the live map rendered every
+    // Spring river tile with a flat, undecorated pond-on-grass composite —
+    // a placeholder from before the pack had proper mountain-spring art
+    // (a spring bursting from a corrie/saddleback rock formation, matching
+    // the lore: a spring rises on a mountain cluster). See buildingArt.ts's
+    // matching docs-page fix for the same family swap.
+    expect(RIVER_FAMILY.springcorrie).toBe('mountaintile_corrie_spring');
+    expect(RIVER_FAMILY.springsaddleback).toBe('mountaintile_saddleback_spring');
+    expect(Object.values(RIVER_FAMILY)).not.toContain('rivertile_spring');
+  });
+
+  it('resolves a Spring tile to whichever of the two spring-capable mountain shapes the caller asks for', () => {
+    // Both art families actually get used, keyed on the caller's own
+    // per-coordinate lookup (WorldModel.springShapeAt) — not one hardcoded
+    // shape for every spring on the map.
+    const tile = riverTile('spring', null, 'SW');
+
+    expect(riverArtFor(tile, null, 'corrie').shape).toBe('springcorrie');
+    expect(riverArtFor(tile, null, 'saddleback').shape).toBe('springsaddleback');
+    // Defaults to corrie when the caller doesn't pass one.
+    expect(riverArtFor(tile, null).shape).toBe('springcorrie');
   });
 });
 
@@ -233,5 +298,320 @@ describe('classifyFamilyClips', () => {
     for (const orientation of ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const) {
       expect(result[orientation].size).toBe(0);
     }
+  });
+});
+
+// renumberTopVariants fixes a genuine gap in the vendored art pack: wasteland/
+// deadforest/blacksand's top variants are numbered starting at _variant001
+// with no _variant000 at all, which classifyFamilyFrames would otherwise
+// reject outright (see GAPPY_VARIANT_FAMILIES' own doc comment, and the
+// "throws on a real gap" test above that this deliberately doesn't disturb).
+describe('renumberTopVariants', () => {
+  it('closes a plain+variant001 gap into contiguous 0/1 indices', () => {
+    const frames = [frame('wasteland_E', 'top'), frame('wasteland_E_variant001', 'top')];
+
+    const classified = classifyFamilyFrames(renumberTopVariants(frames));
+
+    expect(classified.top?.E).toEqual(['wasteland_E', 'wasteland_E_variant001']);
+  });
+
+  it('closes a wider gap (plain + variant001..005) into 0..5', () => {
+    const frames = [
+      frame('wasteland_E', 'top'),
+      frame('wasteland_E_variant001', 'top'),
+      frame('wasteland_E_variant002', 'top'),
+      frame('wasteland_E_variant003', 'top'),
+      frame('wasteland_E_variant004', 'top'),
+      frame('wasteland_E_variant005', 'top'),
+    ];
+
+    const classified = classifyFamilyFrames(renumberTopVariants(frames));
+
+    expect(classified.top?.E.length).toBe(6);
+  });
+
+  it('leaves base/composite frames untouched, only renumbering top', () => {
+    const frames = [frame('wasteland_E_base', 'base'), frame('wasteland_E', 'top'), frame('wasteland_E_variant001', 'top')];
+
+    const classified = classifyFamilyFrames(renumberTopVariants(frames));
+
+    expect(classified.base?.E).toBe('wasteland_E_base');
+    expect(classified.top?.E).toEqual(['wasteland_E', 'wasteland_E_variant001']);
+  });
+
+  it('is a no-op for an already-contiguous family (does not disturb the real-gap-detection test above)', () => {
+    const frames = [frame('grasstile_E', 'top'), frame('grasstile_E_variant000', 'top'), frame('grasstile_E_variant001', 'top')];
+
+    const classified = classifyFamilyFrames(renumberTopVariants(frames));
+
+    expect(classified.top?.E).toEqual(['grasstile_E', 'grasstile_E_variant000', 'grasstile_E_variant001']);
+  });
+});
+
+describe('textureKeyFor wasted-island mapping', () => {
+  function wastedTile(terrain: Tile['terrain'], wasted = true): Tile {
+    return { q: 0, r: 0, terrain, wasted };
+  }
+
+  it('maps grass/forest/sand to their wasted art families', () => {
+    expect(textureKeyFor(wastedTile('grass'))).toBe('wasteland');
+    expect(textureKeyFor(wastedTile('forest'))).toBe('deadforest');
+    expect(textureKeyFor(wastedTile('sand'))).toBe('blacksand');
+  });
+
+  it('maps a wasted mountain to the jagged ash mountain and keeps (non-coastal) sea plain', () => {
+    expect(textureKeyFor(wastedTile('mountain'))).toBe('wastedmountain');
+    expect(textureKeyFor(wastedTile('sea'))).toBe('sea');
+  });
+
+  it('does not remap an unwasted tile', () => {
+    expect(textureKeyFor(wastedTile('grass', false))).toBe('grass');
+  });
+
+  it('a building on a tile still takes priority over the wasted mapping', () => {
+    const tile: Tile = { q: 0, r: 0, terrain: 'grass', wasted: true, buildingType: 'hut' };
+    expect(textureKeyFor(tile)).toBe('hut');
+  });
+});
+
+// baseTextureFor's wasted-mountain/giant base swap — a minimal, hand-rolled
+// TileTextures fixture (plain strings standing in for real Pixi Textures,
+// same reasoning riverTexturesFor's own fixture above uses).
+describe('baseTextureFor wasted mountain/giant base', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+
+  function fixture(): TileTextures {
+    return {
+      base: {
+        mountain: orientationMap('green-mountain-base' as unknown as never),
+        grass: orientationMap('green-grass-base' as unknown as never),
+        wasteland: orientationMap('wasteland-base' as unknown as never),
+        wastedmountain: orientationMap('jagged-mountain-base' as unknown as never),
+      },
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      riverBase: {
+        straight: orientationMap('r' as unknown as never),
+        bend: orientationMap('r' as unknown as never),
+        bend60: orientationMap('r' as unknown as never),
+        springcorrie: orientationMap('r' as unknown as never),
+        springsaddleback: orientationMap('r' as unknown as never),
+        confluencenarrow: orientationMap('r' as unknown as never),
+        confluencewide: orientationMap('r' as unknown as never),
+      },
+      riverTop: {
+        straight: orientationMap('r' as unknown as never),
+        bend: orientationMap('r' as unknown as never),
+        bend60: orientationMap('r' as unknown as never),
+        springcorrie: orientationMap('r' as unknown as never),
+        springsaddleback: orientationMap('r' as unknown as never),
+        confluencenarrow: orientationMap('r' as unknown as never),
+        confluencewide: orientationMap('r' as unknown as never),
+      },
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    };
+  }
+
+  it('uses the jagged ash mountain base for a wasted mountain tile', () => {
+    const textures = fixture();
+    const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: true, orientation: 'NE' };
+
+    expect(baseTextureFor(textures, tile)).toBe('jagged-mountain-base');
+  });
+
+  it('keeps the plain green mountain base for an unwasted mountain tile', () => {
+    const textures = fixture();
+    const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: false, orientation: 'NE' };
+
+    expect(baseTextureFor(textures, tile)).toBe('green-mountain-base');
+  });
+
+  it('uses the wasteland base for any wasted tile carrying a giant, mountain or not', () => {
+    const textures = fixture();
+    const giant = { family: 'giantvolcano' as const, anchor: { q: 0, r: 0 }, part: 'C' as const, orientation: 'E' as const };
+    const mountainWithGiant: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: true, orientation: 'E', giant };
+    const grassWithGiant: Tile = { q: 1, r: 0, terrain: 'grass', wasted: true, orientation: 'E', giant };
+
+    expect(baseTextureFor(textures, mountainWithGiant)).toBe('wasteland-base');
+    expect(baseTextureFor(textures, grassWithGiant)).toBe('wasteland-base');
+  });
+
+  it('keeps the plain green base for a giant on an unwasted island', () => {
+    const textures = fixture();
+    const giant = { family: 'giantmountain' as const, anchor: { q: 0, r: 0 }, part: 'C' as const, orientation: 'E' as const };
+    const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: false, orientation: 'E', giant };
+
+    expect(baseTextureFor(textures, tile)).toBe('green-mountain-base');
+  });
+
+  it('falls back to the plain mountain base when the wasteland family has no frames loaded', () => {
+    const textures = fixture();
+    textures.base = { mountain: textures.base.mountain };
+    const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: true, orientation: 'E' };
+
+    expect(baseTextureFor(textures, tile)).toBe('green-mountain-base');
+  });
+});
+
+describe('giantArtFamilyFor', () => {
+  it('swaps giantvolcano for its wasted art variant on a wasted tile', () => {
+    expect(giantArtFamilyFor('giantvolcano', true)).toBe('giantvolcano_wasted');
+  });
+
+  it('keeps giantvolcano plain on an unwasted tile', () => {
+    expect(giantArtFamilyFor('giantvolcano', false)).toBe('giantvolcano');
+  });
+
+  it('leaves a family with no dedicated wasted variant unchanged even when wasted', () => {
+    expect(giantArtFamilyFor('giantmountain', true)).toBe('giantmountain');
+    expect(giantArtFamilyFor('giantutgard', true)).toBe('giantutgard');
+    expect(giantArtFamilyFor('giantshrine', true)).toBe('giantshrine');
+  });
+});
+
+// riverTexturesFor's lava-shape swap — built against a minimal, hand-rolled
+// TileTextures fixture (plain strings standing in for real Pixi Textures,
+// same reasoning classifyFamilyFrames's own tests use) rather than the real
+// asset pipeline, which needs a browser `document` this repo's vitest
+// config doesn't provide.
+describe('riverTexturesFor lava-island shapes', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+
+  function fixture(): TileTextures {
+    return {
+      base: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      riverBase: {
+        straight: orientationMap('plain-river-base' as unknown as never),
+        bend: orientationMap('plain-river-base' as unknown as never),
+        bend60: orientationMap('plain-river-base' as unknown as never),
+        springcorrie: orientationMap('plain-spring-base' as unknown as never),
+        springsaddleback: orientationMap('plain-spring-base' as unknown as never),
+        confluencenarrow: orientationMap('plain-river-base' as unknown as never),
+        confluencewide: orientationMap('plain-river-base' as unknown as never),
+      },
+      riverTop: {
+        straight: orientationMap('plain-river-top' as unknown as never),
+        bend: orientationMap('plain-river-top' as unknown as never),
+        bend60: orientationMap('plain-river-top' as unknown as never),
+        springcorrie: orientationMap('plain-spring-top' as unknown as never),
+        springsaddleback: orientationMap('plain-spring-top' as unknown as never),
+        confluencenarrow: orientationMap('plain-river-top' as unknown as never),
+        confluencewide: orientationMap('plain-river-top' as unknown as never),
+      },
+      lavaRiverBase: {
+        straight: orientationMap('lava-base' as unknown as never),
+        springcorrie: orientationMap('lava-spring-base' as unknown as never),
+      },
+      lavaRiverTop: {
+        straight: orientationMap('lava-top' as unknown as never),
+        springcorrie: orientationMap('lava-spring-top' as unknown as never),
+      },
+      giants: {},
+      giantAnims: {},
+    };
+  }
+
+  it('uses the lava family for a wasted straight tile', () => {
+    const textures = fixture();
+    const river = { q: 0, r: 0, shape: 'straight' as const, inDirections: ['W' as const], outDirection: 'E' as const, wasted: true };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('lava-base');
+    expect(result.top).toBe('lava-top');
+  });
+
+  it('uses the plain river family for an unwasted straight tile', () => {
+    const textures = fixture();
+    const river = { q: 0, r: 0, shape: 'straight' as const, inDirections: ['W' as const], outDirection: 'E' as const, wasted: false };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('plain-river-base');
+    expect(result.top).toBe('plain-river-top');
+  });
+
+  it('uses the lava-spring family (mountaintile_volcano_lavaspring_flows) for a wasted spring tile', () => {
+    const textures = fixture();
+    const river = { q: 0, r: 0, shape: 'spring' as const, inDirections: [], outDirection: 'E' as const, wasted: true };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('lava-spring-base');
+    expect(result.top).toBe('lava-spring-top');
+  });
+
+  it('falls back to the plain family when the lava variant has no frames loaded for that shape', () => {
+    const textures = fixture();
+    // 'bend' has no lavaRiverBase/Top entry in this fixture.
+    const river = { q: 0, r: 0, shape: 'bend' as const, inDirections: ['W' as const], outDirection: 'NE' as const, wasted: true };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('plain-river-base');
+    expect(result.top).toBe('plain-river-top');
+  });
+
+  it('confluence never checks the lava family even when wasted (lava never confluences)', () => {
+    const textures = fixture();
+    const river = {
+      q: 0,
+      r: 0,
+      shape: 'confluence' as const,
+      inDirections: ['W' as const, 'E' as const],
+      outDirection: null,
+      wasted: true,
+    };
+
+    const result = riverTexturesFor(textures, river);
+
+    expect(result.base).toBe('plain-river-base');
+  });
+});
+
+describe('lavaSpringOrientationOf', () => {
+  // The lava-spring render drains two hex edges clockwise of the river-spring
+  // render at the same label (_E: river spring out the lower-left edge, lava
+  // spring out the top), so its label steps two places back.
+  it('steps the river-spring orientation two places back', () => {
+    expect(lavaSpringOrientationOf('E')).toBe('SW');
+    expect(lavaSpringOrientationOf('NE')).toBe('SE');
+    expect(lavaSpringOrientationOf('NW')).toBe('E');
+    expect(lavaSpringOrientationOf('SE')).toBe('W');
+  });
+});
+
+describe('mergeTileTextures terrain ownership', () => {
+  // bg_assets_hextile 24f0644 left a few stale wasteland frames in
+  // buildings-static; merged over the terrain load they used to replace the
+  // whole family, so every wasteland tile of one orientation drew the same
+  // single frame.
+  it('keeps the terrain load\'s terrain families when a later load carries a partial copy', () => {
+    const full = { E: ['plain', 'rocks', 'spikes'] } as unknown as never;
+    const stale = { E: ['rocks'] } as unknown as never;
+    const a = { base: {}, baseIndexed: {}, top: { wasteland: full }, animTop: {}, giants: {}, giantAnims: {} } as unknown as TileTextures;
+    const b = { base: {}, baseIndexed: {}, top: { wasteland: stale, hut: stale }, animTop: {}, giants: {}, giantAnims: {} } as unknown as TileTextures;
+
+    const merged = mergeTileTextures(a, b);
+
+    expect(merged.top.wasteland).toBe(full);
+    expect(merged.top.hut).toBe(stale);
   });
 });

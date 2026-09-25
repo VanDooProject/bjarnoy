@@ -75,12 +75,21 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfThor] =
                 [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
             [BuildingType.ShrineOfFreyja] =
-                [new(BuildingType.Farm, 10), new(BuildingType.PumpkinFarm, 10)],
+                [
+                    new(BuildingType.Farm, 10), new(BuildingType.PumpkinFarm, 10),
+                    new(BuildingType.CropMill, 10), new(BuildingType.Meadery, 10),
+                ],
             [BuildingType.ShrineOfUllr] =
                 [new(BuildingType.Lumberjack, 10), new(BuildingType.Sawmill, 10)],
             [BuildingType.ShrineOfNjord] =
                 [new(BuildingType.FishingHut, 10), new(BuildingType.Dockyard, 10)],
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 10)],
+            [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
+            [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
+            [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 1)],
+            [BuildingType.Smithy] =
+                [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
+            [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 1)],
         };
 
     /// <summary>
@@ -114,12 +123,21 @@ public static class BuildingCatalogue
             BuildingType.Longhouse => Longhouse(level),
             BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 30, 0, 0, 0)),
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 24, 0, 0)),
+            // Farm is the settlement's always-available staple, buildable on
+            // any island regardless of soil.
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
             BuildingType.FishingHut => FishingHut(level),
             BuildingType.MagicTower => Producer(type, level, Grass, new ResourceAmounts(0, 0, 0, Iron: 6)),
-            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
+            // The bonus crop: only buildable on a Pumpkin-soil island
+            // (Settlement.PlanBuild's islandSoil parameter, from
+            // World.TerrainSampler.SoilAt) — not a free player choice, and
+            // not gated the other way (Farm stays buildable everywhere).
+            // Yields more than Farm: an indirect fertility signal via the
+            // production curve rather than a separate bonus multiplier —
+            // that's what makes a Pumpkin-soil island "more fertile".
+            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 44, 0)),
             BuildingType.ShrineOfThor => Shrine(type, level),
             BuildingType.ShrineOfFreyja => Shrine(type, level),
             BuildingType.ShrineOfUllr => Shrine(type, level),
@@ -134,9 +152,44 @@ public static class BuildingCatalogue
             // BuildingDefinition.RequiresRiverShape. A late-game capstone on
             // a maxed Lumberjack (see PrerequisiteTable), so its longhouse
             // gate overrides Producer's usual early-unlock curve.
+            //
+            // No Wood of its own — a radius-boost producer instead (see
+            // RadiusBoostTargets/RadiusBoostPercent/RadiusBoostRange): it
+            // raises every Lumberjack within its level's range by a
+            // percentage of that Lumberjack's own production, applied in
+            // Totals(IEnumerable{PlacedBuilding}, Func{HexCoord,Terrain}?).
             BuildingType.Sawmill =>
-                Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0))
+                Producer(type, level, Grass, ResourceAmounts.Zero)
                     with { RequiresRiverShape = SawmillRiverShapes, RequiredLonghouseLevel = 10 },
+            // No production of its own yet — its mead is meant for a future
+            // morale-boost mechanic (see BuildingType.Smithy's own note on
+            // its retired Iron production), buildable now so it has a place
+            // in the tech tree ahead of that mechanic landing.
+            BuildingType.Meadery => Producer(type, level, Grass, ResourceAmounts.Zero),
+            BuildingType.TownSquare => TownSquare(level),
+            // Same capstone shape as Sawmill: behind a maxed Farm, so its
+            // longhouse gate overrides Producer's usual early-unlock curve.
+            //
+            // No Food of its own, same reasoning as Sawmill above — boosts
+            // every Farm within range instead. Not PumpkinFarm: a mill
+            // grinds grain, and PumpkinFarm is a different crop (see
+            // RadiusBoostTargets).
+            BuildingType.CropMill =>
+                Producer(type, level, Grass, ResourceAmounts.Zero)
+                    with { RequiresRiverShape = CropMillRiverShapes, RequiredLonghouseLevel = 10 },
+            // No production of its own yet — retired Iron production in
+            // favour of a future troop-upgrade mechanic (costs/effects not
+            // yet designed); still a military-line capstone alongside
+            // Shrine of Thor, behind the same maxed Barracks/ArcheryRange
+            // pair (see PrerequisiteTable), so its longhouse gate overrides
+            // Producer's usual early-unlock curve the same way
+            // Sawmill's/Crop Mill's do.
+            BuildingType.Smithy =>
+                Producer(type, level, SandOrGrass, ResourceAmounts.Zero)
+                    with { RequiredLonghouseLevel = 10 },
+            BuildingType.DruidHut => DruidHut(level),
+            BuildingType.CartWorkshop => CartWorkshop(level),
+            BuildingType.ClayBrickworks => Producer(type, level, Grass, new ResourceAmounts(0, Stone: 20, 0, 0)),
             _ => null,
         };
 
@@ -195,7 +248,9 @@ public static class BuildingCatalogue
     /// <summary>
     /// Total production and storage a completed set of placed buildings
     /// contributes, applying each terrain-bound producer's adjacency boost
-    /// (see <see cref="Boosts"/>) from <paramref name="terrainAt"/>.
+    /// (see <see cref="Boosts"/>) from <paramref name="terrainAt"/> and each
+    /// radius-boost producer's (Sawmill, Crop Mill — see
+    /// <see cref="RadiusBoostTargets"/>) reach over its own neighbourhood.
     /// </summary>
     /// <param name="terrainAt">
     /// Terrain of any hex on the map, land or sea, in or out of the
@@ -208,23 +263,34 @@ public static class BuildingCatalogue
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
+        var placed = buildings.Where(b => b.Level >= 1).ToList();
+
+        // Radius-boost sources standing among these buildings, with their
+        // level's percent/range already resolved once rather than per
+        // boosted building below.
+        var radiusBoosters = placed
+            .Where(b => RadiusBoostTargets.ContainsKey(b.Type))
+            .Select(b => (b.Coord, b.Type, Percent: RadiusBoostPercent(b.Level), Range: RadiusBoostRange(b.Level)))
+            .ToList();
+
         var production = ResourceAmounts.Zero;
         var capacity = BaseStorageCapacity;
 
-        foreach (var building in buildings)
+        foreach (var building in placed)
         {
-            if (building.Level < 1)
-            {
-                continue;
-            }
-
             var definition = TryGet(building.Type, Math.Min(building.Level, MaxLevel));
             if (definition is null)
             {
                 continue;
             }
 
-            production += definition.ProductionPerHour * BoostMultiplier(building.Type, building.Coord, terrainAt);
+            var radiusBoostPercent = radiusBoosters
+                .Where(b => RadiusBoostTargets[b.Type].Contains(building.Type)
+                    && b.Coord.DistanceTo(building.Coord) <= b.Range)
+                .Sum(b => b.Percent);
+
+            var multiplier = BoostMultiplier(building.Type, building.Coord, terrainAt) * (1.0 + radiusBoostPercent / 100.0);
+            production += definition.ProductionPerHour * multiplier;
             capacity += definition.StorageCapacity;
         }
 
@@ -281,11 +347,46 @@ public static class BuildingCatalogue
             // around it (rather than the land it backs onto) is what makes a
             // fishing spot better.
             [BuildingType.FishingHut] = new(Sea, PerTilePercent: 0.10, CapPercent: 0.50),
-            // Refines what a neighbouring Lumberjack cuts — same boost shape,
-            // same terrain, as a second demand on the forest ring rather than
-            // a resource of its own.
-            [BuildingType.Sawmill] = new(Forest, PerTilePercent: 0.10, CapPercent: 0.50),
+            // Sawmill no longer has an entry here — it produces nothing of
+            // its own to boost with terrain any more, see RadiusBoostTargets
+            // below for its replacement mechanic (boosting Lumberjack
+            // instead of being boosted by Forest).
         };
+
+    /// <summary>
+    /// Which building type a radius-boost producer (Sawmill, Crop Mill)
+    /// raises the production of, within <see cref="RadiusBoostRange"/> rings
+    /// of itself — applied in
+    /// <see cref="Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>.
+    /// Crop Mill grinds grain, so it only boosts Farm — PumpkinFarm is a
+    /// different crop (see <see cref="BuildingType.PumpkinFarm"/>'s own doc
+    /// comment: the Pumpkin-soil-only bonus, not the staple a mill grinds).
+    /// </summary>
+    private static readonly IReadOnlyDictionary<BuildingType, IReadOnlySet<BuildingType>> RadiusBoostTargets =
+        new Dictionary<BuildingType, IReadOnlySet<BuildingType>>
+        {
+            [BuildingType.Sawmill] = new HashSet<BuildingType> { BuildingType.Lumberjack },
+            [BuildingType.CropMill] = new HashSet<BuildingType> { BuildingType.Farm },
+        };
+
+    /// <summary>
+    /// Percent a radius-boost building (Sawmill, Crop Mill) at
+    /// <paramref name="level"/> adds to each boosted building's own
+    /// production within its range — linear from 5% at level 1 to 100% at
+    /// level 10 (a rough design figure from the original discussion, not
+    /// tuned balance).
+    /// </summary>
+    public static double RadiusBoostPercent(int level) =>
+        5.0 + (Math.Clamp(level, 1, MaxLevel) - 1) * (95.0 / (MaxLevel - 1));
+
+    /// <summary>
+    /// How many rings out a radius-boost building's boost reaches at
+    /// <paramref name="level"/>: 1 ring at levels 1-2, growing by one ring
+    /// every 2 levels after — a flat step per design ("no curve over
+    /// range"), not a smoothly growing radius.
+    /// </summary>
+    public static int RadiusBoostRange(int level) =>
+        1 + (Math.Clamp(level, 1, MaxLevel) - 1) / 2;
 
     /// <summary>
     /// The production multiplier <paramref name="type"/> earns at
@@ -416,6 +517,10 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<RiverTileShape> SawmillRiverShapes =
         new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend };
 
+    /// <summary>Unlike the Sawmill, the Crop Mill's vendor art only has a Straight-river composite — its waterwheel stands directly in the current.</summary>
+    private static readonly IReadOnlySet<RiverTileShape> CropMillRiverShapes =
+        new HashSet<RiverTileShape> { RiverTileShape.Straight };
+
     /// <summary>
     /// A shrine contributes no flat production or storage of its own — its
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
@@ -514,6 +619,57 @@ public static class BuildingCatalogue
         // standing first (see PrerequisiteTable) and gates Archery Range in
         // turn, so raising an army is a mid-game commitment rather than
         // something a settlement can start with.
+        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// No production or storage yet — a civic building that will later
+    /// become a prerequisite or grant a boost (a settler-cap increase is the
+    /// leading idea), buildable now so it has a place in the tech tree
+    /// ahead of that mechanic landing.
+    /// </summary>
+    private static BuildingDefinition TownSquare(int level) => new()
+    {
+        Type = BuildingType.TownSquare,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 160, Stone: 140, Food: 40, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(8, level),
+        AllowedTerrain = Grass,
+        RequiredLonghouseLevel = 5 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// No production or storage yet — its ring of runestones is meant for a
+    /// future favour/rune mechanic (see <see cref="BuildingType.ShrineOfThor"/>'s
+    /// "slotted runes" reference), buildable now so it has a place in the
+    /// tech tree ahead of that mechanic landing.
+    /// </summary>
+    private static BuildingDefinition DruidHut(int level) => new()
+    {
+        Type = BuildingType.DruidHut,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 160, Stone: 110, Food: 80, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(9, level),
+        AllowedTerrain = Grass,
+        RequiredLonghouseLevel = 6 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// place of the Longhouse (see
+    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>) — the basic
+    /// melee/archer/ship split's shape, applied to the civilian line.
+    /// Purely a training gate, no storage of its own — a settlement's yard
+    /// isn't where resources are kept. Behind a standing
+    /// <see cref="BuildingType.TownSquare"/> (see <see cref="PrerequisiteTable"/>).
+    /// </summary>
+    private static BuildingDefinition CartWorkshop(int level) => new()
+    {
+        Type = BuildingType.CartWorkshop,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 150, Stone: 110, Food: 0, Iron: 10) * CostFactor(level),
+        BuildDuration = Duration(7, level),
+        AllowedTerrain = Grass,
         RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 }

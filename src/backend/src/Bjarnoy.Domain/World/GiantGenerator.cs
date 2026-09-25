@@ -47,11 +47,21 @@ internal static class GiantGenerator
     /// <summary>An island needs at least this many land tiles to be offered a second giant.</summary>
     public const int LargeIslandGiantThreshold = 450;
 
-    /// <summary>The tile-art family a mountain-cluster giant uses.</summary>
+    /// <summary>The tile-art family a mountain-cluster giant uses on a green island.</summary>
     public const string MountainFamily = "giantmountain";
+
+    /// <summary>The tile-art family a mountain-cluster giant uses on a wasted island.</summary>
+    public const string VolcanoFamily = "giantvolcano";
 
     /// <summary>The tile-art family a shrine giant uses.</summary>
     public const string ShrineFamily = "giantshrine";
+
+    /// <summary>
+    /// The tile-art family a wasted island's own giant uses — placed instead
+    /// of a shrine, one per wasted island with a valid spot, no chance roll
+    /// or size threshold beyond <see cref="SmallIslandGiantThreshold"/>.
+    /// </summary>
+    public const string UtgardFamily = "giantutgard";
 
     /// <summary>
     /// Per-island odds (rolled with the world seed and the island index, so
@@ -75,9 +85,10 @@ internal static class GiantGenerator
         TerrainSampler sampler,
         WorldGenerationOptions options,
         int islandIndex,
-        IReadOnlySet<HexCoord> riverTiles)
+        IReadOnlySet<HexCoord> riverTiles,
+        bool wasted = false)
     {
-        var placements = PlaceCore(islandTiles, land, riverTiles, options.Seed, islandIndex);
+        var placements = PlaceCore(islandTiles, land, riverTiles, options.Seed, islandIndex, wasted);
 
         var chosen = new List<Giant>(placements.Count);
         foreach (var placement in placements)
@@ -104,7 +115,8 @@ internal static class GiantGenerator
         IReadOnlyDictionary<HexCoord, Terrain> land,
         IReadOnlySet<HexCoord> riverTiles,
         int worldSeed,
-        int islandIndex)
+        int islandIndex,
+        bool wasted = false)
     {
         var islandLand = new HashSet<HexCoord>(islandTiles);
         var placements = new List<Placement>();
@@ -152,8 +164,28 @@ internal static class GiantGenerator
                 }
 
                 mountainAnchors.Add(candidate.Anchor);
-                placements.Add(new Placement(candidate.Anchor, MountainFamily));
+                placements.Add(new Placement(candidate.Anchor, wasted ? VolcanoFamily : MountainFamily));
             }
+        }
+
+        if (wasted)
+        {
+            // Wasted islands get no shrine and no chance roll: instead, one
+            // Utgard giant per wasted island with a valid spot — same
+            // candidate rules as a shrine (footprint Grass/Forest only, no
+            // river/lava tile, non-coastal, spaced from every volcano
+            // anchor), same tie-break, but unconditional above the same size
+            // threshold a mountain giant needs.
+            if (islandTiles.Count >= SmallIslandGiantThreshold)
+            {
+                var utgardAnchor = PickShrineAnchor(islandTiles, islandLand, land, riverTiles, mountainAnchors, seed);
+                if (utgardAnchor is { } anchor)
+                {
+                    placements.Add(new Placement(anchor, UtgardFamily));
+                }
+            }
+
+            return placements;
         }
 
         // Shrines are additional — rolled independently of the mountain

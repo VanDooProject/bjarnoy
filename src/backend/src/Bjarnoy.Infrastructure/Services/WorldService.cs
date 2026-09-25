@@ -102,7 +102,7 @@ public sealed class WorldService(
         var (generated, usedOptions) = await GenerateWithRetryAsync(options, autoSeed, cancellationToken)
             .ConfigureAwait(false);
 
-        if (generated.Islands.Count == 0)
+        if (!HasFoundableIslands(generated))
         {
             throw new WorldCreationException(
                 $"Seed {usedOptions.Seed} at radius {usedOptions.Radius} produced no islands. " +
@@ -176,7 +176,7 @@ public sealed class WorldService(
                 () => new WorldGenerator(candidate).Generate(cancellationToken),
                 cancellationToken).ConfigureAwait(false);
 
-            if (generated.Islands.Count > 0 || !autoSeed || attempt >= MaxAutoSeedAttempts)
+            if (HasFoundableIslands(generated) || !autoSeed || attempt >= MaxAutoSeedAttempts)
             {
                 return (generated, candidate);
             }
@@ -292,7 +292,7 @@ public sealed class WorldService(
         }
 
         var generated = await PreviewAsync(options, cancellationToken).ConfigureAwait(false);
-        if (generated.Islands.Count == 0)
+        if (!HasFoundableIslands(generated))
         {
             return new ReseedResult(ReseedOutcome.NoIslands);
         }
@@ -395,6 +395,17 @@ public sealed class WorldService(
     }
 
     /// <summary>A generated island, as the row that stores it.</summary>
+    /// <summary>
+    /// Whether a generated world has at least one island a player could
+    /// actually found on — i.e. a green (non-wasted) island. A wasted-only
+    /// draw is not a usable map: wasted islands carry no start positions
+    /// (see <see cref="GeneratedIsland.IsWasted"/>) and stay hidden as sea
+    /// until the world's endboss triggers, so a seed that only produces
+    /// those must be treated the same as one that produces no islands at
+    /// all, not reported as a successful "islands found" draw.
+    /// </summary>
+    private static bool HasFoundableIslands(GeneratedWorld generated) => generated.Islands.Any(i => !i.IsWasted);
+
     private static IslandEntity ToIslandEntity(Guid worldId, GeneratedIsland island) => new()
     {
         WorldId = worldId,
@@ -406,6 +417,7 @@ public sealed class WorldService(
         StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
         Giants = [.. island.Giants.Select(ToGiantRecord)],
+        IsWasted = island.IsWasted,
     };
 
     /// <summary>

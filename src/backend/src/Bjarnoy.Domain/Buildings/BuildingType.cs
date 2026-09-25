@@ -121,6 +121,60 @@ public enum BuildingType
     /// water line's own capstone, alongside <see cref="Dockyard"/>.
     /// </summary>
     ShrineOfNjord = 18,
+
+    /// <summary>
+    /// Food, on grass, behind a level-5 <see cref="Farm"/> — a third grass
+    /// food producer alongside <see cref="Farm"/>/<see cref="PumpkinFarm"/>,
+    /// not a converter (the domain has no input-consumption mechanic).
+    /// </summary>
+    Meadery = 19,
+
+    /// <summary>
+    /// No production or storage of its own yet — a civic building that will
+    /// later become a prerequisite or grant a boost (a settler-cap increase
+    /// is the leading idea). Placed on grass.
+    /// </summary>
+    TownSquare = 20,
+
+    /// <summary>
+    /// Food, on grass — refines what a maxed <see cref="Farm"/> grows, the
+    /// same shape as <see cref="Sawmill"/> refining a maxed
+    /// <see cref="Lumberjack"/>. Its own hex must be a Straight river tile
+    /// (see <see cref="BuildingDefinition.RequiresRiverShape"/>) — its
+    /// waterwheel stands in the stream.
+    /// </summary>
+    CropMill = 21,
+
+    /// <summary>
+    /// Iron, on grass or sand — takes over <see cref="MagicTower"/>'s
+    /// economic role as that building is retired from the game. A
+    /// military-line capstone behind the same maxed <see cref="Barracks"/>/
+    /// <see cref="ArcheryRange"/> pair as <see cref="ShrineOfThor"/>.
+    /// </summary>
+    Smithy = 22,
+
+    /// <summary>
+    /// No production or storage of its own yet — its ring of runestones is
+    /// meant for a future favour/rune mechanic. Placed on grass, behind a
+    /// standing <see cref="TownSquare"/>.
+    /// </summary>
+    DruidHut = 23,
+
+    /// <summary>
+    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// place of the Longhouse (see
+    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>), plus a
+    /// modest storage bonus. Behind a level-3 <see cref="StorageHouse"/> and
+    /// a standing <see cref="TownSquare"/>. Placed on grass.
+    /// </summary>
+    CartWorkshop = 24,
+
+    /// <summary>
+    /// Stone, on grass — an alternative to <see cref="Quarry"/> that needs
+    /// no Mountain hex (<see cref="World.WorldGenerator"/> does not
+    /// guarantee one within reach of a starting position), at a lower rate.
+    /// </summary>
+    ClayBrickworks = 25,
 }
 
 public static class BuildingTypeExtensions
@@ -146,6 +200,13 @@ public static class BuildingTypeExtensions
         BuildingType.Sawmill => "sawmill",
         BuildingType.ShrineOfUllr => "shrineofullr",
         BuildingType.ShrineOfNjord => "shrineofnjord",
+        BuildingType.Meadery => "meadery",
+        BuildingType.TownSquare => "townsquare",
+        BuildingType.CropMill => "cropmill",
+        BuildingType.Smithy => "smithy",
+        BuildingType.DruidHut => "druidhut",
+        BuildingType.CartWorkshop => "cartworkshop",
+        BuildingType.ClayBrickworks => "claybrickworks",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

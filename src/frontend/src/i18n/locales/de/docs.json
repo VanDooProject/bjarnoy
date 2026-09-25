@@ -41,7 +41,12 @@
     "archeryrange": "Schießplatz",
     "dockyard": "Werft",
     "greatstorehouse": "Großes Lagerhaus",
-    "fisherhut": "Fischerhütte"
+    "fisherhut": "Fischerhütte",
+    "townsquare": "Dorfplatz",
+    "cropmill": "Getreidemühle",
+    "druidhut": "Druidenhütte",
+    "cartworkshop": "Wagnerei",
+    "claybrickworks": "Ziegelei"
   },
   "techTree": {
     "title": "Techbaum",
@@ -52,9 +57,7 @@
     "needsFirst": "Benötigt zuerst: {prerequisites}",
     "graphEyebrow": "Docs · Techbaum",
     "imageSize": {
-      "label": "Bildgröße:",
-      "normal": "Normal",
-      "large": "Groß"
+      "toggle": "Klicken, um dieses Bild zu vergrößern"
     },
     "artVariant": "Aussehen:",
     "sawmillVariants": {
@@ -62,32 +65,45 @@
       "river": "Fluss",
       "bend": "Flussbiegung"
     },
+    "quarryVariants": {
+      "corrie": "Kar",
+      "saddleback": "Sattel"
+    },
     "categories": {
       "anchor": "Anker",
       "production": "Produktion",
       "military": "Militär",
-      "logistics": "Logistik"
+      "logistics": "Logistik",
+      "religion": "Schreine",
+      "water": "Wasser"
     },
     "lore": {
       "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und wie viele Siedler im Dorf leben — jede Siedlung beginnt mit einem, stehend auf Gras.",
       "lumberjack": "Fällt Holz auf bewaldetem Grund — das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm — die Knochen jeder Festung.",
-      "farm": "Zieht Nahrung auf offenem Grasland und hält den Tisch des Langhauses gefüllt.",
+      "farm": "Zieht Nahrung auf offenem Grasland und hält den Tisch des Langhauses gefüllt. Auf jeder Insel baubar, unabhängig vom Boden.",
       "storagehouse": "Zusätzlicher Platz für die Ernte auf Gras, damit ein volles Lager die Produktion nie stoppt.",
       "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter hinausschiebt.",
       "fishinghut": "Ein Steg über flachem Wasser, der die Untiefen befischt, die ein Bauernhof nie erreichen könnte.",
       "magictower": "Arkanes Eisen aus Grasland — kein Erz, keine Ader, nur die Arbeit selbst.",
-      "pumpkinfarm": "Eine zweite Ernte für Gras — Kürbisse neben den gewöhnlichen Feldern.",
-      "shrineofthor": "Für Thor errichtet auf Gras — seine Gunst steigert die Holz- und Steinproduktion.",
-      "shrineoffreyja": "Für Freyja errichtet auf Gras — ihre Gunst steigert die Nahrungsproduktion.",
-      "shrineofullr": "Für Ullr errichtet auf Gras — seine Gunst steigert die Holzproduktion.",
-      "shrineofnjord": "Für Njörd errichtet auf Gras — seine Gunst steigert die Lagerkapazität statt einer Ressourcenproduktion.",
-      "archeryrange": "Bildet die Landarmee aus — von Speerkämpfern bis Katapulten — auf Gras oder Sand, anstelle des Langhauses.",
+      "pumpkinfarm": "Eine zweite Ernte für Gras — Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Nur auf einer Kürbisboden-Insel baubar (das Spiel bestimmt den Boden jeder Insel, nicht der Spieler) — der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
+      "shrineofthor": "Für Thor errichtet auf Gras — seine Gunst steigert die Holz- und Steinproduktion. Pro Insel darf nur ein Schrein je Gott stehen — eine Siedlung kann weiterhin alle vier errichten, nur nie einen zweiten für Thor.",
+      "shrineoffreyja": "Für Freyja errichtet auf Gras — ihre Gunst steigert die Nahrungsproduktion. Pro Insel darf nur ein Schrein je Gott stehen — eine Siedlung kann weiterhin alle vier errichten, nur nie einen zweiten für Freyja.",
+      "shrineofullr": "Für Ullr errichtet auf Gras — seine Gunst steigert die Holzproduktion. Pro Insel darf nur ein Schrein je Gott stehen — eine Siedlung kann weiterhin alle vier errichten, nur nie einen zweiten für Ullr.",
+      "shrineofnjord": "Für Njörd errichtet auf Gras — seine Gunst steigert die Lagerkapazität statt einer Ressourcenproduktion. Pro Insel darf nur ein Schrein je Gott stehen — eine Siedlung kann weiterhin alle vier errichten, nur nie einen zweiten für Njörd.",
+      "archeryrange": "Bildet die Fernkämpfer der Landarmee aus — Bogenschützen und, sobald eine in der Kaserne ausgebildete Berserker-Linie steht, Katapulte — auf Gras oder Sand, anstelle des Langhauses.",
       "dockyard": "Bildet Schiffe auf flachem (Küsten-)Wasser aus, anstelle des Langhauses.",
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras, die sowohl das Langhaus als auch das eigene Lagerhaus dieser Siedlung auf Stufe 10 benötigt.",
-      "barracks": "Eine Garnison, errichtet auf Gras oder Sand an der Grenze.",
+      "barracks": "Bildet die Kernlinie der Landarmee aus — Thralls, Speerkämpfer, Axtkämpfer und Berserker — auf Gras oder Sand an der Grenze, anstelle des Langhauses. Der Schießplatz bildet den Rest des Truppenspektrums aus (Bogenschützen, Katapulte); beide bilden nie dieselbe Einheit aus.",
       "fisherhut": "Ein zweiter Steg für den Tisch, der Grasland wie ein Bauernhof bewirtschaftet statt der Untiefen.",
-      "sawmill": "Verarbeitet Holz auf Gras, neben einem benachbarten Holzfäller — sein Aussehen ändert sich, wenn es neben einem Fluss oder einer Flussbiegung gebaut wird."
+      "sawmill": "Verarbeitet Holz auf Gras, neben einem benachbarten Holzfäller — sein Aussehen ändert sich, wenn es neben einem Fluss oder einer Flussbiegung gebaut wird. Kein eigenes Holz: stattdessen steigert es jeden Holzfäller im Umkreis seiner Stufe (mit steigender Stufe wachsen Reichweite und Bonus).",
+      "meadery": "Hält Bienen auf Gras hinter einem Bauernhof der Stufe 5 — Bienenkörbe, eine Honigpresse und ein Metkeller. Noch ohne eigene Wirkung: der Met ist für einen künftigen Moralbonus gedacht.",
+      "townsquare": "Der eigene Marktplatz des Dorfes auf Gras — noch ohne eigene Wirkung, aber eine künftige Voraussetzung oder ein künftiger Bonus.",
+      "cropmill": "Mahlt das Getreide eines ausgebauten Bauernhofs auf einer geraden Flusskachel — ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Keine eigene Nahrung: stattdessen steigert sie jeden Bauernhof im Umkreis ihrer Stufe (mit steigender Stufe wachsen Reichweite und Bonus) — nicht die Kürbisfarm, eine andere Feldfrucht, die eine Mühle nicht mahlt.",
+      "smithy": "Eine Esse auf Gras oder Sand hinter einer ausgebauten Kaserne und einem Schießplatz — die Schmiede der Siedlung, die den ausrangierten Magischen Turm als zweiten Gipfelpunkt der Militärlinie ersetzt. Noch ohne eigene Wirkung: für eine künftige Truppen-Aufwertungsmechanik gedacht.",
+      "druidhut": "Ein Rundhaus mit Grasdach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen — noch ohne eigene Wirkung, aber für eine künftige Gunst- oder Runenmechanik gedacht.",
+      "cartworkshop": "Baut die Karren der Siedlung auf Gras hinter einem Dorfplatz — bildet Furiere und Siedlertrupps anstelle des Langhauses aus. Keine eigene Lagerkapazität.",
+      "claybrickworks": "Gräbt und brennt Ton auf Gras — eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht."
     },
     "table": {
       "level": "Stufe",
@@ -114,6 +130,22 @@
     "none": "keine",
     "riverVariants": "Form:",
     "riverSawmillNote": "Die Sägemühle ist das einzige Gebäude, das direkt auf einer Flusskachel steht — nur auf einer geraden oder gebogenen.",
+    "riverLookLabel": "Aussehen:",
+    "riverLooks": {
+      "plain": "Schlicht",
+      "island": "Insel",
+      "meander": "Mäander",
+      "loop": "Schlaufe",
+      "narrow": "Schmal",
+      "wide": "Breit"
+    },
+    "mountainVariants": "Landform:",
+    "mountainLandforms": {
+      "plain": "Schlicht",
+      "corrie": "Kar",
+      "saddleback": "Sattel",
+      "table": "Tafelberg"
+    },
     "riverShapes": {
       "spring": "Quelle",
       "straight": "Gerade",

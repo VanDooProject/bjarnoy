@@ -24,20 +24,30 @@ export function canAfford(cost: ResourceLine, stock: ResourceLine): boolean {
 
 /**
  * Whether `type` is trainable at `longhouseLevel` — mirrors the backend's
- * `UnitCatalogue.IsAvailable`: the longhouse is high enough, and
- * (recursively) any prerequisite unit is itself available at that same
- * longhouse level. `byType` is the catalogue indexed by wire type name (see
+ * `UnitCatalogue.IsAvailable`: the longhouse is high enough, its training
+ * building (`requiredBuildingType`) stands if `buildingLevelOf` is supplied,
+ * and (recursively) any prerequisite unit is itself available under the same
+ * conditions. `byType` is the catalogue indexed by wire type name (see
  * `stores/unitCatalogue.ts`'s `byType` getter).
+ *
+ * `buildingLevelOf` mirrors `Settlement.PlanTrain`'s own lookup (a
+ * settlement's level of a given building type, 0 if it has none); omitting
+ * it skips the training-building check entirely, the same "unknown" escape
+ * hatch the backend uses for callers with no settlement to check against.
  */
 export function isUnitAvailable(
   type: string,
   longhouseLevel: number,
   byType: Record<string, UnitDefinitionResponse>,
+  buildingLevelOf?: (buildingType: string) => number,
 ): boolean {
   const definition = byType[type];
   if (!definition) return false;
   if (longhouseLevel < definition.requiredLonghouseLevel) return false;
-  return !definition.requiredUnitType || isUnitAvailable(definition.requiredUnitType, longhouseLevel, byType);
+  if (buildingLevelOf && buildingLevelOf(definition.requiredBuildingType) < 1) return false;
+  return (
+    !definition.requiredUnitType || isUnitAvailable(definition.requiredUnitType, longhouseLevel, byType, buildingLevelOf)
+  );
 }
 
 /** `count` batches of `seconds` each, formatted as `Hh Mm`/`Mm Ss`/`Ss`. */

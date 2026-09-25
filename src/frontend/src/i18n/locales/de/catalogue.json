@@ -19,7 +19,14 @@
     "archeryrange": "Schießplatz",
     "dockyard": "Werft",
     "barracks": "Kaserne",
-    "sawmill": "Sägewerk"
+    "sawmill": "Sägewerk",
+    "meadery": "Met-Brennerei",
+    "townsquare": "Dorfplatz",
+    "cropmill": "Getreidemühle",
+    "smithy": "Schmiede",
+    "druidhut": "Druidenhütte",
+    "cartworkshop": "Wagnerei",
+    "claybrickworks": "Ziegelei"
   },
   "units": {
     "thrall": "Knecht",
@@ -35,7 +42,8 @@
   "giants": {
     "giantmountain": "Riesenberg",
     "giantshrine": "Runensteinheiligtum",
-    "giantvolcano": "Vulkan"
+    "giantvolcano": "Vulkan",
+    "giantutgard": "Utgard"
   },
   "terrain": {
     "sea": "Offenes Wasser",
@@ -43,6 +51,12 @@
     "grass": "Grasland",
     "forest": "Wald",
     "mountain": "Gebirge"
+  },
+  "wastedTerrain": {
+    "wasteland": "Ödland",
+    "deadforest": "Toter Wald",
+    "blacksand": "Schwarzer Sand",
+    "blacksandcoast": "Schwarzer Sand"
   },
   "resources": {
     "wood": "Holz",

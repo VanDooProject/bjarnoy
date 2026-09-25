@@ -17,26 +17,33 @@ export interface AsyncBakeInput {
   generation: WorldGenerationConstants;
   /** Hexes carrying a building, for the prop channel — see BakeRequest. Omitted in world mode, which does not read that channel. */
   buildingHexes?: number[];
+  /** See `BakeRequest.wastedRevealed`. */
+  wastedRevealed?: boolean;
 }
 
 export class WaterMaskBaker {
   private worker: Worker | null = null;
   /** Bumped per request, so a response can be matched against the request still outstanding. */
   private nextId = 1;
-  private onDone: ((mask: WaterMask, region: WaterMaskRegion, bakeMs: number) => void) | null = null;
+  private onDone: ((mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean) => void) | null =
+    null;
   /**
-   * The one request still outstanding, with the region it was made for.
+   * The one request still outstanding, with the region and reveal state it
+   * was made for.
    *
-   * Both halves matter. The id is how a superseded response is recognised and
+   * All three matter. The id is how a superseded response is recognised and
    * dropped — applying it would put an older, smaller mask over a newer one.
    * The region is carried here rather than read back off the response because
    * the renderer records it as what the current mask covers, and a region that
    * did not come from the request being answered would make that coverage
-   * check lie about the mask actually on screen.
+   * check lie about the mask actually on screen. `wastedRevealed` is carried
+   * the same way, for the same reason: the response itself doesn't echo back
+   * what it was baked with, and the reveal flag could in principle flip while
+   * this exact request is still in flight.
    */
-  private pending: { id: number; region: WaterMaskRegion } | null = null;
+  private pending: { id: number; region: WaterMaskRegion; wastedRevealed: boolean } | null = null;
 
-  constructor(handle: (mask: WaterMask, region: WaterMaskRegion, bakeMs: number) => void) {
+  constructor(handle: (mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean) => void) {
     this.onDone = handle;
     this.worker = createWorker();
     if (this.worker) {
@@ -68,7 +75,7 @@ export class WaterMaskBaker {
   bake(input: AsyncBakeInput, terrain: TerrainLookup): WaterMask | null {
     if (!this.worker) return bakeWaterMask(input.region, input.tileWidth, input.tileHeight, terrain);
     const id = this.nextId++;
-    this.pending = { id, region: input.region };
+    this.pending = { id, region: input.region, wastedRevealed: input.wastedRevealed ?? false };
     const request: BakeRequest = {
       id,
       region: input.region,
@@ -77,6 +84,7 @@ export class WaterMaskBaker {
       seed: input.seed,
       generation: input.generation,
       buildingHexes: input.buildingHexes,
+      wastedRevealed: input.wastedRevealed,
     };
     this.worker.postMessage(request);
     return null;
@@ -105,9 +113,10 @@ export class WaterMaskBaker {
     this.pending = null;
     if (!this.onDone) return;
     this.onDone(
-      { data: response.data, width: response.width, height: response.height, region: pending.region },
+      { data: response.data, width: response.width, height: response.height, region: pending.region, taint: response.taint },
       pending.region,
       response.bakeMs,
+      pending.wastedRevealed,
     );
   }
 }

@@ -48,7 +48,7 @@ import {
   type BuildingModifier,
   type BuildingOutput,
 } from '../lib/map/buildingEconomy';
-import { formatBuildTime, formatMissingResources, longhouseLock, sawmillAllowedHere } from '../lib/map/ringCatalogue';
+import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
@@ -501,7 +501,14 @@ type BuildableType =
   | 'fishinghut'
   | 'barracks'
   | 'fisherhut'
-  | 'sawmill';
+  | 'sawmill'
+  | 'meadery'
+  | 'townsquare'
+  | 'cropmill'
+  | 'smithy'
+  | 'druidhut'
+  | 'cartworkshop'
+  | 'claybrickworks';
 
 interface BuildCategory {
   id: string;
@@ -542,25 +549,41 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       buildings: [
         { type: 'farm' },
         { type: 'pumpkinfarm' },
-        // Sawmill is only actually buildable on a Grass hex that is itself a
-        // Straight/Bend river tile (BuildingDefinition.RequiresRiverShape) —
-        // still listed here (this bucket is terrain-keyed, not hex-specific)
-        // but filtered back out per-hex when that isn't the case, rather than
-        // offered locked (see ringCategories' sawmillAllowedHere filter).
+        // Sawmill and Crop Mill are only actually buildable on a Grass hex
+        // that is itself a river tile of the right shape
+        // (BuildingDefinition.RequiresRiverShape) — still listed here (this
+        // bucket is terrain-keyed, not hex-specific) but filtered back out
+        // per-hex when that isn't the case, rather than offered locked (see
+        // ringCategories' riverBuildingAllowedHere filter).
         { type: 'sawmill' },
+        { type: 'cropmill' },
+        { type: 'meadery' },
+        { type: 'claybrickworks' },
       ],
     },
     {
       id: 'military',
-      buildings: [{ type: 'tower' }, { type: 'magictower' }, { type: 'archeryrange' }, { type: 'barracks' }],
+      buildings: [
+        { type: 'tower' },
+        { type: 'magictower' },
+        { type: 'archeryrange' },
+        { type: 'barracks' },
+        { type: 'smithy' },
+      ],
     },
     {
       id: 'logistics',
-      buildings: [{ type: 'storagehouse' }, { type: 'greatstorehouse' }],
+      buildings: [
+        { type: 'storagehouse' },
+        { type: 'greatstorehouse' },
+        { type: 'townsquare' },
+        { type: 'cartworkshop' },
+        { type: 'druidhut' },
+      ],
     },
     SHRINE_CATEGORY,
   ],
-  sand: [{ id: 'military', buildings: [{ type: 'tower' }] }],
+  sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }],
   mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
 };
@@ -654,15 +677,18 @@ const rootActions = computed<RingAction[]>(() => {
     // Training is queued against the settlement, not a specific hex, so the
     // action itself is the same TrainingModal regardless of which building
     // opens it (see onRingSelect's 'train' case) — only which tiles offer the
-    // action changes. Originally longhouse-only (issue #40 phase 1); the
-    // archery range and dockyard now train land troops and ships
-    // respectively (UnitDefinition.RequiredBuildingType), so they get the
-    // same action. The backend enforces the real gate either way — this is
-    // just where the UI surfaces the button.
+    // action changes. Originally longhouse-only (issue #40 phase 1); every
+    // building any UnitDefinition.RequiredBuildingType now points at
+    // (archery range and dockyard for land troops/ships, then barracks and
+    // cart workshop once Thrall/Provisioner/SettlerCrew moved off the
+    // longhouse) gets the same action. The backend enforces the real gate
+    // either way — this is just where the UI surfaces the button.
     if (
       tile.buildingType === 'longhouse'
       || tile.buildingType === 'archeryrange'
       || tile.buildingType === 'dockyard'
+      || tile.buildingType === 'barracks'
+      || tile.buildingType === 'cartworkshop'
     ) {
       actions.push({ id: 'train', label: t('hud.ringMenu.actions.trainUnits') });
     }
@@ -726,8 +752,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierTrainsLandTroops');
     case 'trainsShips':
       return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'garrison':
-      return t('hud.hoverTooltip.modifierGarrison');
+    case 'trainsCivilianCrews':
+      return t('hud.hoverTooltip.modifierTrainsCivilianCrews');
     case 'terrainBoost':
       return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
     case 'coastal':
@@ -747,17 +773,30 @@ function formatModifier(modifier: BuildingModifier): string {
         percent: modifier.percent,
         domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
       });
+    case 'radiusBoost':
+      return t('hud.hoverTooltip.modifierRadiusBoost', {
+        percent: modifier.percent,
+        range: modifier.range,
+        resource: t(modifier.resource === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
+      });
   }
 }
 
-// Sawmill is built directly on a river tile, and only a Straight/Bend one has
-// matching art — mirrors WorldModel.placeBuilding's own check. This is a
-// fixed property of the hex (see sawmillAllowedHere), so ringCategories below
-// filters the bubble out entirely on a hex that will never qualify, rather
-// than rendering it locked.
-function hasMatchingRiverShape(coord: AxialCoord): boolean {
-  const shape = world.model.getRiverTile(coord.q, coord.r)?.shape;
-  return shape === 'straight' || shape === 'bend';
+// Sawmill and Crop Mill are built directly on a river tile, and only some
+// shapes have matching art — mirrors WorldModel.placeBuilding's own check.
+// This is a fixed property of the hex (see riverBuildingAllowedHere), so
+// ringCategories below filters the bubble out entirely on a hex that will
+// never qualify, rather than rendering it locked.
+function riverShapeAt(coord: AxialCoord): string | undefined {
+  return world.model.getRiverTile(coord.q, coord.r)?.shape;
+}
+
+// PumpkinFarm is only offered on a Pumpkin-soil island — mirrors
+// WorldModel.placeBuilding's own check, same "filter out of the category
+// rather than render locked" reasoning riverShapeAt above uses, since this
+// too is a fixed property of the settlement rather than a progression gate.
+function currentIslandSoil(): 'wheat' | 'pumpkin' | undefined {
+  return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
 }
 
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
@@ -785,7 +824,8 @@ const ringCategories = computed<RingCategory[]>(() => {
     label: t(`hud.ringMenu.categories.${category.id}`),
     color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
     buildings: category.buildings
-      .filter((b) => sawmillAllowedHere(b.type, hasMatchingRiverShape(coord)))
+      .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord)))
+      .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
       .map((b) => ringBuildingFor(b.type, coord)),
   }));
 });

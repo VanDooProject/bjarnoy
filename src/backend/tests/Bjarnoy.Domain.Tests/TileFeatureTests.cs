@@ -252,6 +252,38 @@ public class TileFeatureTests
         }
     }
 
+    [Fact]
+    public void SoilAt_is_seed_stable_for_the_same_island_centre()
+    {
+        var a = new TerrainSampler(WorldGenerationOptions.ForSeed(21));
+        var b = new TerrainSampler(WorldGenerationOptions.ForSeed(21));
+
+        foreach (var centre in HexCoord.Origin.WithinRadius(20))
+        {
+            Assert.Equal(a.SoilAt(centre), b.SoilAt(centre));
+        }
+    }
+
+    [Fact]
+    public void SoilAt_produces_both_crops_over_a_sample_of_island_centres()
+    {
+        // Not every island should grow the same crop — a real distribution,
+        // not always Wheat or always Pumpkin.
+        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(11));
+        var seenWheat = false;
+        var seenPumpkin = false;
+
+        foreach (var centre in HexCoord.Origin.WithinRadius(60))
+        {
+            var soil = sampler.SoilAt(centre);
+            seenWheat |= soil == SoilType.Wheat;
+            seenPumpkin |= soil == SoilType.Pumpkin;
+        }
+
+        Assert.True(seenWheat, "expected at least one Wheat pick over this sample");
+        Assert.True(seenPumpkin, "expected at least one Pumpkin pick over this sample");
+    }
+
     /// <summary>
     /// Locks the server's orientation/variant functions to the frontend's, the
     /// same way <see cref="TerrainSamplerParityTests"/> does for terrain.

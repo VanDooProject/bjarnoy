@@ -28,17 +28,17 @@ const river: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], out
 
 describe('terrainTitleFor', () => {
   it('names the underlying terrain when there is no river', () => {
-    expect(terrainTitleFor(tileOf('sand'), undefined)).toEqual({ terrain: 'sand', isRiver: false });
-    expect(terrainTitleFor(tileOf('grass'), undefined)).toEqual({ terrain: 'grass', isRiver: false });
+    expect(terrainTitleFor(tileOf('sand'), undefined)).toEqual({ terrain: 'sand', isRiver: false, wasted: false });
+    expect(terrainTitleFor(tileOf('grass'), undefined)).toEqual({ terrain: 'grass', isRiver: false, wasted: false });
   });
 
   it('flags the river instead of the underlying terrain when one is present — even on sand (the reported case)', () => {
-    expect(terrainTitleFor(tileOf('sand'), river)).toEqual({ terrain: 'sand', isRiver: true });
+    expect(terrainTitleFor(tileOf('sand'), river)).toEqual({ terrain: 'sand', isRiver: true, wasted: false });
   });
 
   it('flags the river regardless of which terrain it sits on', () => {
     for (const terrain of ['sea', 'sand', 'grass', 'forest', 'mountain'] as const) {
-      expect(terrainTitleFor(tileOf(terrain), river)).toEqual({ terrain, isRiver: true });
+      expect(terrainTitleFor(tileOf(terrain), river)).toEqual({ terrain, isRiver: true, wasted: false });
     }
   });
 });
@@ -132,8 +132,8 @@ describe('hoverSubjectFor', () => {
   it('falls back to building, then terrain, when there is no giant', () => {
     const building = { ...tileOf('grass'), buildingType: 'hut' as const, buildingLevel: 2 };
     expect(hoverSubjectFor(building, undefined)).toEqual({ kind: 'building', buildingType: 'hut', level: 2 });
-    expect(hoverSubjectFor(tileOf('sand'), undefined)).toEqual({ kind: 'terrain', terrain: 'sand', isRiver: false });
-    expect(hoverSubjectFor(tileOf('sand'), river)).toEqual({ kind: 'terrain', terrain: 'sand', isRiver: true });
+    expect(hoverSubjectFor(tileOf('sand'), undefined)).toEqual({ kind: 'terrain', terrain: 'sand', isRiver: false, wasted: false });
+    expect(hoverSubjectFor(tileOf('sand'), river)).toEqual({ kind: 'terrain', terrain: 'sand', isRiver: true, wasted: false });
   });
 });
 

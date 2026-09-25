@@ -1,17 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
+import AnimatedBuildingSprite from '../components/AnimatedBuildingSprite.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import TechTreeGraph from '../components/docs/TechTreeGraph.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
-import { buildingArt, buildingArtByFamily, terrainArt, type ArtRef } from '../lib/map/buildingArt';
+import {
+  buildingArt,
+  buildingArtByFamily,
+  buildingLayersForType,
+  buildingLayers,
+  terrainArt,
+  type ArtRef,
+} from '../lib/map/buildingArt';
 import type { MessageSchema } from '../i18n/schema';
 import { HIDDEN_FROM_DOCS } from '../lib/techtree/layout';
 import { prerequisitesOf } from '../lib/techtree/nodes';
+import { GRAPH_CATEGORY_ORDER, graphCategoryOf } from '../lib/techtree/buildingPresentation';
 
 const catalogue = useBuildingCatalogueStore();
 const { t, te, n, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -28,43 +37,20 @@ function typeLabel(type: string): string {
   return te(key) ? t(key) : type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-// Mirrors prototypes/MECHANICS.md's building categories (anchor / production
-// / military / logistics) — the closest thing this codebase has to a
-// canonical grouping — rather than inventing a new taxonomy for this page.
-// (The dependency graph above splits these a little finer — see
-// buildingPresentation.ts's GRAPH_CATEGORY_ORDER — but this page's section
-// headings keep the coarser four.)
-const CATEGORY_ORDER = ['anchor', 'production', 'military', 'logistics'] as const;
-type Category = (typeof CATEGORY_ORDER)[number];
-
-const CATEGORY_LABELS: Record<Category, string> = {
+// The same categorisation the dependency graph above draws its legend
+// from (buildingPresentation.ts's GRAPH_CATEGORY_ORDER/graphCategoryOf) —
+// this page used to keep its own separate, coarser copy that never
+// listed the shrine types at all, so they silently fell into the generic
+// "production" section here while the graph correctly grouped them under
+// "Shrines". One shared table now, so this page and the graph can't drift.
+const CATEGORY_LABELS: Record<(typeof GRAPH_CATEGORY_ORDER)[number], string> = {
   anchor: t('docs.techTree.categories.anchor'),
   production: t('docs.techTree.categories.production'),
   military: t('docs.techTree.categories.military'),
   logistics: t('docs.techTree.categories.logistics'),
+  religion: t('docs.techTree.categories.religion'),
+  water: t('docs.techTree.categories.water'),
 };
-
-const CATEGORY_OF: Record<string, Category> = {
-  longhouse: 'anchor',
-  farm: 'production',
-  pumpkinfarm: 'production',
-  lumberjack: 'production',
-  quarry: 'production',
-  fishinghut: 'production',
-  magictower: 'production',
-  fisherhut: 'production',
-  sawmill: 'production',
-  tower: 'military',
-  archeryrange: 'military',
-  barracks: 'military',
-  storagehouse: 'logistics',
-  greatstorehouse: 'logistics',
-  dockyard: 'logistics',
-};
-
-function categoryOf(type: string): Category {
-  return CATEGORY_OF[type] ?? 'production';
-}
 
 // Buildings on their way out of the game are left off the page entirely —
 // graph and tables both — so the docs stop advertising something a player
@@ -73,10 +59,10 @@ function categoryOf(type: string): Category {
 const documented = computed(() => catalogue.types.filter((t) => !HIDDEN_FROM_DOCS.includes(t)));
 
 const categories = computed(() =>
-  CATEGORY_ORDER.map((id) => ({
+  GRAPH_CATEGORY_ORDER.map((id) => ({
     id,
     label: CATEGORY_LABELS[id],
-    types: documented.value.filter((t) => categoryOf(t) === id),
+    types: documented.value.filter((t) => graphCategoryOf(t) === id),
   })).filter((c) => c.types.length > 0),
 );
 
@@ -89,10 +75,30 @@ const categories = computed(() =>
  */
 const hoveredLevel = ref<Record<string, number>>({});
 
-/** Normal matches the long-standing 96x144 thumb; large roughly doubles it for a closer look at the art. */
-const THUMB_SIZES = ['normal', 'large'] as const;
-type ThumbSize = (typeof THUMB_SIZES)[number];
-const thumbSize = ref<ThumbSize>('normal');
+/**
+ * Whether every building's thumbnail is shown large (roughly double the
+ * long-standing 96x144 size, for a closer look at the art) — one shared
+ * setting for the whole page, same as the old Normal/Large buttons, just
+ * toggled by clicking any thumbnail instead of a separate control.
+ */
+const thumbsLarge = ref(false);
+
+/**
+ * Toggling resizes every thumbnail on the page at once, which reflows
+ * everything below (and, for a thumbnail partway down the page, above) the
+ * one that was clicked — left alone, the browser keeps the scroll position
+ * in pixels, so the clicked thumbnail visibly jumps out from under the
+ * pointer. Recording its viewport position before the resize and scrolling
+ * by exactly how far it moved after Vue re-renders keeps it (and whatever
+ * the reader was looking at) exactly where it was.
+ */
+async function toggleThumbSize(event: MouseEvent | KeyboardEvent) {
+  const el = event.currentTarget as HTMLElement;
+  const before = el.getBoundingClientRect().top;
+  thumbsLarge.value = !thumbsLarge.value;
+  await nextTick();
+  window.scrollBy(0, el.getBoundingClientRect().top - before);
+}
 
 function maxLevelOf(type: string): number {
   const levels = catalogue.byType[type];
@@ -123,6 +129,11 @@ const ART_VARIANTS: Partial<Record<string, { id: string; family: string; labelKe
     { id: 'river', family: 'sawmillriver', labelKey: 'docs.techTree.sawmillVariants.river' },
     { id: 'bend', family: 'sawmillbend', labelKey: 'docs.techTree.sawmillVariants.bend' },
   ],
+  // The two mountain landforms the pack carves a quarry into.
+  quarry: [
+    { id: 'corrie', family: 'quarry_corrie', labelKey: 'docs.techTree.quarryVariants.corrie' },
+    { id: 'saddleback', family: 'quarry_saddleback', labelKey: 'docs.techTree.quarryVariants.saddleback' },
+  ],
 };
 
 const selectedVariant = ref<Record<string, string>>({});
@@ -136,7 +147,6 @@ function selectedVariantId(type: string): string {
 }
 
 function thumbArt(type: string): ArtRef {
-  if (type === 'quarry') return terrainArt('mountain');
   const level = hoveredLevel.value[type] ?? maxLevelOf(type);
   const variants = variantsOf(type);
   if (variants.length > 0) {
@@ -155,6 +165,24 @@ function thumbFrame(type: string): AtlasFrameRect | null {
 function thumbUrl(type: string): string | null {
   const a = thumbArt(type);
   return a.kind === 'png' ? a.url : null;
+}
+
+/**
+ * A moving part (waterwheel, walk cycle, smoke) beats the flattened
+ * `showcase` picture `thumbArt` otherwise shows — only set when this exact
+ * type/level (and, for a type with a variant picker, the currently
+ * selected variant's own family) has a `buildings-anim` clip; everything
+ * else keeps the static picture, `AnimatedBuildingSprite` isn't rendered
+ * at all for those.
+ */
+function thumbAnimatedLayers(type: string) {
+  const level = hoveredLevel.value[type] ?? maxLevelOf(type);
+  const variants = variantsOf(type);
+  const layers =
+    variants.length > 0
+      ? buildingLayers((variants.find((v) => v.id === selectedVariantId(type)) ?? variants[0]!).family, level)
+      : buildingLayersForType(type, level);
+  return layers?.clip ? layers : undefined;
 }
 
 /**
@@ -194,15 +222,17 @@ function formatAmount(value: number): string {
       </template>
     </TopBar>
     <div class="page">
-    <div class="graph-wrap">
-      <TechTreeGraph v-if="catalogue.types.length > 0" :by-type="catalogue.byType" />
-    </div>
-    <main class="body">
+    <div class="head">
+      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.techTree.title') }}</h1>
       <p class="intro">
         {{ $t('docs.techTree.intro') }}
       </p>
-
+    </div>
+    <div class="graph-wrap">
+      <TechTreeGraph v-if="catalogue.types.length > 0" :by-type="catalogue.byType" />
+    </div>
+    <main class="body">
       <p v-if="catalogue.loading" class="status">{{ $t('docs.status.loading') }}</p>
       <p v-else-if="catalogue.error" class="status error">{{ catalogue.error }}</p>
       <p v-else-if="catalogue.source === 'fallback'" class="status">
@@ -214,20 +244,6 @@ function formatAmount(value: number): string {
           })
         }}
       </p>
-
-      <div class="size-toggle" role="group" :aria-label="$t('docs.techTree.imageSize.label')">
-        <span class="size-toggle-label">{{ $t('docs.techTree.imageSize.label') }}</span>
-        <button
-          v-for="size in THUMB_SIZES"
-          :key="size"
-          type="button"
-          class="variant-button"
-          :class="{ active: thumbSize === size }"
-          @click="thumbSize = size"
-        >
-          {{ $t(`docs.techTree.imageSize.${size}`) }}
-        </button>
-      </div>
 
       <nav v-if="categories.length > 0" class="toc" :aria-label="$t('docs.status.toc')">
         <div v-for="cat in categories" :key="cat.id" class="toc-group">
@@ -243,11 +259,18 @@ function formatAmount(value: number): string {
           <div class="building-header">
             <div
               class="thumb"
-              :class="{ large: thumbSize === 'large' }"
+              :class="{ large: thumbsLarge }"
+              role="button"
+              tabindex="0"
+              :aria-label="$t('docs.techTree.imageSize.toggle')"
               @mouseenter="hoverThumb(type)"
               @mouseleave="resetThumb(type)"
+              @click="toggleThumbSize($event)"
+              @keydown.enter="toggleThumbSize($event)"
+              @keydown.space.prevent="toggleThumbSize($event)"
             >
-              <AtlasSprite v-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
+              <AnimatedBuildingSprite v-if="thumbAnimatedLayers(type)" :layers="thumbAnimatedLayers(type)!" />
+              <AtlasSprite v-else-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
               <img v-else-if="thumbUrl(type)" class="thumb-img" :src="thumbUrl(type)!" alt="" />
             </div>
             <div class="building-intro">
@@ -375,6 +398,11 @@ function formatAmount(value: number): string {
 }
 /* The graph is wider than the prose column, and wider than most windows —
    it gets the full page width and scrolls sideways inside itself. */
+.head {
+  max-width: 90ch;
+  padding-top: 24px;
+  color: var(--text);
+}
 .graph-wrap {
   padding-top: 24px;
 }
@@ -382,6 +410,17 @@ function formatAmount(value: number): string {
   max-width: 90ch;
   padding: 24px 0 60px;
   color: var(--text);
+}
+.breadcrumb {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.breadcrumb:hover {
+  color: var(--gold);
+  text-decoration: underline;
 }
 .intro {
   color: var(--muted);
@@ -447,21 +486,6 @@ function formatAmount(value: number): string {
   align-items: center;
   gap: 16px;
 }
-.size-toggle {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin-top: 16px;
-}
-.size-toggle-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  margin-right: 4px;
-}
 .thumb {
   display: flex;
   align-items: flex-end;
@@ -473,6 +497,12 @@ function formatAmount(value: number): string {
   border-radius: 8px;
   background: var(--panel, #1c1710);
   border: 1px solid var(--panel-border);
+  cursor: pointer;
+}
+.thumb:hover,
+.thumb:focus-visible {
+  border-color: var(--gold);
+  outline: none;
 }
 .thumb.large {
   width: 176px;

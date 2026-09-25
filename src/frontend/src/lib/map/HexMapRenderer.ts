@@ -58,6 +58,7 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
   loadBuildingAtlases,
@@ -610,7 +611,7 @@ export interface ArmyOverlayFrame {
  */
 export type HoverSubject =
   | { kind: 'building'; buildingType: NonNullable<Tile['buildingType']>; level: number }
-  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean }
+  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean; wasted: boolean }
   // A hex covered by a giant tile (see giantTiles.ts) — named for the giant
   // instead of the ground terrain it sits over, since the giant's opaque art
   // fully covers that terrain. Generic over `family` (not a `'giantmountain'`
@@ -645,8 +646,11 @@ export interface HoverInfo {
  * sand tile hovered as "Shore" before this, since `river` wasn't threaded
  * through to the tooltip at all.
  */
-export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { terrain: Terrain; isRiver: boolean } {
-  return { terrain: tile.terrain, isRiver: river !== undefined };
+export function terrainTitleFor(
+  tile: Tile,
+  river: RiverTile | undefined,
+): { terrain: Terrain; isRiver: boolean; wasted: boolean } {
+  return { terrain: tile.terrain, isRiver: river !== undefined, wasted: tile.wasted ?? false };
 }
 
 /**
@@ -661,8 +665,8 @@ export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { ter
 export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
   if (tile.giant) return { kind: 'giant', family: tile.giant.family };
   if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
-  const { terrain, isRiver } = terrainTitleFor(tile, river);
-  return { kind: 'terrain', terrain, isRiver };
+  const { terrain, isRiver, wasted } = terrainTitleFor(tile, river);
+  return { kind: 'terrain', terrain, isRiver, wasted };
 }
 
 export interface RippleFrame {
@@ -1250,6 +1254,18 @@ export class HexMapRenderer {
   // margin is three tiles.
   private waterMaskRegionBuilt: WaterMaskRegion | null = null;
   /**
+   * Whether `worldModel.isWastedRevealed()` was true for the bake that
+   * produced `waterMaskRegionBuilt` — the water mask's `isLand` (baked in
+   * `waterMask.worker.ts`, which has no live connection to `WorldModel`) has
+   * no other way to notice the reveal flipping under it, so `maybeBakeWaterMask`
+   * compares this against the model's current answer on every call and drops
+   * `waterMaskRegionBuilt` (forcing a rebake) the moment they disagree —
+   * otherwise a wasted island revealed after its region was last baked would
+   * keep drawing the plain sea's foam/squiggle surface over now-land hexes
+   * until some unrelated camera move happened to invalidate coverage anyway.
+   */
+  private waterMaskWastedRevealed = false;
+  /**
    * Set whenever a rebuild wanted a bake but deferred it (see
    * `maybeBakeWaterMask`), and cleared by the bake that services it.
    *
@@ -1281,9 +1297,9 @@ export class HexMapRenderer {
    * fetched and compiled while the map is still loading, instead of on the
    * first camera move that needs a mask.
    */
-  private maskBaker = new WaterMaskBaker((mask, region, bakeMs) => {
+  private maskBaker = new WaterMaskBaker((mask, region, bakeMs, wastedRevealed) => {
     if (this.destroyed) return;
-    this.applyWaterMask(mask, region, bakeMs, true);
+    this.applyWaterMask(mask, region, bakeMs, true, wastedRevealed);
   });
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
@@ -2707,6 +2723,13 @@ export class HexMapRenderer {
    * inside it" is asked about what is actually on screen.
    */
   private maybeBakeWaterMask() {
+    const { worldModel } = this.options;
+    // The reveal flag isn't part of the viewport, so a coverage check alone
+    // would never notice it flipped — drop the recorded region outright so
+    // the coverage check below always misses and a fresh bake goes out.
+    if (this.waterMaskRegionBuilt && this.waterMaskWastedRevealed !== worldModel.isWastedRevealed()) {
+      this.waterMaskRegionBuilt = null;
+    }
     const viewport = visibleWorldRect(this.camera, this.viewport);
     if (this.waterMaskRegionBuilt && waterMaskCovers(this.waterMaskRegionBuilt, viewport)) return;
     // A bake already out with the worker that covers what is on screen is the
@@ -2729,7 +2752,6 @@ export class HexMapRenderer {
       return;
     }
     this.waterMaskDirty = false;
-    const { worldModel } = this.options;
     const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN), TILE_W);
     // Timed rather than estimated: the bake is one isoPixelToAxial per texel
     // plus three distance transforms, and it is the only CPU work this
@@ -2747,11 +2769,12 @@ export class HexMapRenderer {
         // uPropMute nowhere else), so only it pays for the list — and the
         // list, not a lookup, is what lets that mode bake off-thread at all.
         buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
+        wastedRevealed: worldModel.isWastedRevealed(),
       },
       this.waterMaskTerrain(),
     );
     if (!mask) return; // off to the worker; applyWaterMask finishes it
-    this.applyWaterMask(mask, region, performance.now() - bakeStart, false);
+    this.applyWaterMask(mask, region, performance.now() - bakeStart, false, worldModel.isWastedRevealed());
   }
 
   /**
@@ -2762,7 +2785,13 @@ export class HexMapRenderer {
    * keeps the foam it had rather than losing it for the length of the bake,
    * and the coverage check keeps answering about a mask that actually exists.
    */
-  private applyWaterMask(mask: WaterMask, region: WaterMaskRegion, bakeMs: number, onWorker: boolean) {
+  private applyWaterMask(
+    mask: WaterMask,
+    region: WaterMaskRegion,
+    bakeMs: number,
+    onWorker: boolean,
+    wastedRevealed: boolean,
+  ) {
     waterPerfStats.bakeMs = bakeMs;
     waterPerfStats.bakedOnWorker = onWorker;
     // Only a bake this thread actually ran belongs in the rebuild breakdown.
@@ -2776,6 +2805,7 @@ export class HexMapRenderer {
     waterPerfStats.bakes += 1;
     this.waterLayer.setMask(mask);
     this.waterMaskRegionBuilt = region;
+    this.waterMaskWastedRevealed = wastedRevealed;
   }
 
   /**
@@ -2799,10 +2829,12 @@ export class HexMapRenderer {
    */
   private waterMaskTerrain(): TerrainLookup {
     const { worldModel } = this.options;
-    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r) };
+    const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
+    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r), isWastedLand };
     return {
       isLand: (q, r) => worldModel.isLand(q, r),
       hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
+      isWastedLand,
     };
   }
 
@@ -2954,14 +2986,28 @@ export class HexMapRenderer {
       // so this is checked ahead of the river/sawmill branches below.
       if (tile.giant) {
         baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
-        const giantAnim = giantTopAnimFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part);
+        // A giant on a wasted island's own anchor tile renders with that
+        // family's dedicated wasted art variant if the vendored pack has
+        // one (today just giantvolcano_wasted) — falls back to the plain
+        // family when the wasted variant's frames haven't loaded, the same
+        // graceful-degradation contract giantTopTextureFor itself already
+        // has for a family with no art at all.
+        const giantFamily = giantArtFamilyFor(tile.giant.family, tile.wasted ?? false);
+        const giantAnim =
+          giantTopAnimFor(textures, giantFamily, tile.giant.orientation, tile.giant.part) ??
+          (giantFamily !== tile.giant.family
+            ? giantTopAnimFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part)
+            : undefined);
         // A giant part with an animated clip but no static frame of its own
         // (shouldn't normally happen — every part ships both — but cheap to
         // handle) still renders: the clip's own first frame doubles as the
         // static texture/crop source, same sourceSize height as a real
         // static frame would have.
         const giantTexture =
-          giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part) ??
+          giantTopTextureFor(textures, giantFamily, tile.giant.orientation, tile.giant.part) ??
+          (giantFamily !== tile.giant.family
+            ? giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part)
+            : undefined) ??
           giantAnim?.textures[0];
         if (giantTexture) {
           // Degrades gracefully when the real art hasn't landed in the
@@ -2992,7 +3038,9 @@ export class HexMapRenderer {
         // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
         // for every other shape.
         const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
-        const riverTextures = riverTexturesFor(textures, river, seaDirection);
+        // Likewise, only a Spring's art actually branches on this.
+        const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
+        const riverTextures = riverTexturesFor(textures, river, seaDirection, springShape);
         baseEntries.set(key, { texture: riverTextures.base, coord: c });
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;

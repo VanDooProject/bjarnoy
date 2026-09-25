@@ -18,6 +18,7 @@ interface Scenario {
   name: string;
   worldSeed: number;
   islandIndex: number;
+  wasted?: boolean;
   tiles: [number, number, Terrain][];
   rivers: [number, number][];
   giants: { q: number; r: number; family: string }[];
@@ -38,7 +39,7 @@ describe('giant-placement golden fixture (giant placement v2 parity)', () => {
     const riverKeys = new Set(scenario.rivers.map(([q, r]) => coordKey({ q, r })));
     const isRiver = (c: AxialCoord) => riverKeys.has(coordKey(c));
 
-    const actual = placeGiants(tiles, terrainOf, scenario.worldSeed, scenario.islandIndex, isRiver);
+    const actual = placeGiants(tiles, terrainOf, scenario.worldSeed, scenario.islandIndex, isRiver, scenario.wasted ?? false);
 
     expect(actual.map((p) => ({ q: p.anchor.q, r: p.anchor.r, family: p.family }))).toEqual(scenario.giants);
   });

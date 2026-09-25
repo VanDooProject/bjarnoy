@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
+import { DEFAULT_GENERATION, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
@@ -496,6 +497,167 @@ describe('WorldModel.seaFacingDirectionOf', () => {
     // land.
     const model = new WorldModel(783131215);
     expect(model.seaFacingDirectionOf({ q: -70, r: -36 })).toBeNull();
+  });
+});
+
+describe('WorldModel.springShapeAt', () => {
+  it('matches the standalone springMountainShapeAt for the same coordinate/seed', () => {
+    // Regression coverage for a bug where the live map hardcoded every
+    // Spring river tile to the 'corrie' shape — WorldModel now delegates to
+    // the exact same seed-hash mirror of the backend's
+    // TerrainSampler.SpringMountainShapeAt that generateTile/variantAt
+    // already use elsewhere, rather than picking one shape for everything.
+    const model = new WorldModel(783131215);
+    for (const at of [
+      { q: 0, r: 0 },
+      { q: -70, r: -31 },
+      { q: 12, r: -5 },
+      { q: -3, r: 8 },
+    ]) {
+      const expected = springMountainShapeAt(at.q, at.r, { seed: model.seed, generation: model.generation });
+      expect(model.springShapeAt(at)).toBe(expected === 2 ? 'saddleback' : 'corrie');
+    }
+  });
+
+  it('actually uses both spring-capable shapes across coordinates, not just one', () => {
+    const model = new WorldModel(783131215);
+    const shapes = new Set<string>();
+    for (let q = 0; q < 40; q++) {
+      shapes.add(model.springShapeAt({ q, r: 0 }));
+    }
+    expect(shapes).toEqual(new Set(['corrie', 'saddleback']));
+  });
+});
+
+// Scans a run of island centres for one whose soilAt (a pure hash — see
+// worldGenerator.ts's own doc comment) is the requested crop, rather than a
+// hardcoded coordinate — same "search, don't pin a magic value" reasoning
+// SoilAt_produces_both_crops_over_a_sample_of_island_centres uses on the
+// backend.
+function findIslandCentreWithSoil(seed: number, soil: 'wheat' | 'pumpkin'): AxialCoord {
+  for (let q = 0; q < 200; q++) {
+    const centre = { q, r: 0 };
+    if (soilAt(centre.q, centre.r, { seed, generation: DEFAULT_GENERATION }) === soil) return centre;
+  }
+  throw new Error(`no ${soil} island centre found in sample range for seed ${seed}`);
+}
+
+describe('WorldModel.soilForSettlement / soilAtIslandCentre', () => {
+  it('soilAtIslandCentre matches the standalone soilAt for the same coordinate/seed', () => {
+    const model = new WorldModel(11);
+    for (const centre of [
+      { q: 0, r: 0 },
+      { q: 15, r: -8 },
+      { q: -20, r: 4 },
+    ]) {
+      const expected = soilAt(centre.q, centre.r, { seed: model.seed, generation: model.generation });
+      expect(model.soilAtIslandCentre(centre)).toBe(expected);
+    }
+  });
+
+  it('soilForSettlement resolves through the settlement’s stored islandId against listIslands', () => {
+    const model = new WorldModel(11);
+    const centre = { q: 15, r: -8 };
+    model.setIslands([{ id: 'isl-1', name: 'Testisle', q: centre.q, r: centre.r }]);
+    const settlement = model.registerSettlement({
+      id: 'stl-1',
+      ownerId: 'p1',
+      ownerName: 'Tester',
+      name: 'Testerhold',
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'isl-1',
+    });
+
+    expect(model.soilForSettlement(settlement.id)).toBe(model.soilAtIslandCentre(centre));
+  });
+
+  it('is undefined for a settlement with no islandId (a bare demo founding)', () => {
+    const model = new WorldModel(11);
+    const { settlement } = foundLandedSettlement(model);
+    expect(model.soilForSettlement(settlement.id)).toBeUndefined();
+  });
+
+  it('is undefined when the islandId does not match any known island', () => {
+    const model = new WorldModel(11);
+    const settlement = model.registerSettlement({
+      id: 'stl-2',
+      ownerId: 'p1',
+      ownerName: 'Tester',
+      name: 'Testerhold',
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'does-not-exist',
+    });
+
+    expect(model.soilForSettlement(settlement.id)).toBeUndefined();
+  });
+});
+
+describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
+  it('refuses a new PumpkinFarm on a Wheat-soil island', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+    const centre = findIslandCentreWithSoil(model.seed, 'wheat');
+    settlement.islandId = 'isl-wheat';
+    model.setIslands([{ id: 'isl-wheat', name: 'Wheatisle', q: centre.q, r: centre.r }]);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'pumpkinfarm')).toBe(false);
+  });
+
+  it('accepts a new PumpkinFarm on a Pumpkin-soil island', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+    const centre = findIslandCentreWithSoil(model.seed, 'pumpkin');
+    settlement.islandId = 'isl-pumpkin';
+    model.setIslands([{ id: 'isl-pumpkin', name: 'Pumpkinisle', q: centre.q, r: centre.r }]);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'pumpkinfarm')).toBe(true);
+  });
+
+  it('never refuses Farm, on either soil', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+    const centre = findIslandCentreWithSoil(model.seed, 'wheat');
+    settlement.islandId = 'isl-wheat';
+    model.setIslands([{ id: 'isl-wheat', name: 'Wheatisle', q: centre.q, r: centre.r }]);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'farm')).toBe(true);
+  });
+
+  it('allows PumpkinFarm when the settlement has no resolvable island (permissive default)', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'pumpkinfarm')).toBe(true);
   });
 });
 
@@ -991,5 +1153,132 @@ describe('placeGiantsForIsland (demo giant placement v2)', () => {
     const first = tagged();
     model.placeGiantsForIsland({ q: mountainAnchor.q + 1, r: mountainAnchor.r }, DEMO_SEED);
     expect(tagged()).toBe(first);
+  });
+});
+
+describe('WorldModel wasted-island reveal', () => {
+  // Seed 12, radius-40 region — matches src/shared/wasted-terrain-golden.json.
+  // (18, -29) is a wasted-forest hex whose 6 neighbours are also wasted land
+  // (fully interior, so a coastal check on it would be misleading); (17, -30)
+  // borders wasted land (17, -29) but is plain open sea itself.
+  const WASTED_SEED = 12;
+  const wastedForest = { q: 18, r: -29 };
+  const seaBorderingWasted = { q: 17, r: -30 };
+
+  it('hides a wasted hex as sea before the reveal', () => {
+    const model = new WorldModel(WASTED_SEED);
+    expect(model.isWastedRevealed()).toBe(false);
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('sea');
+    expect(model.isLand(wastedForest.q, wastedForest.r)).toBe(false);
+    const tile = model.getTile(wastedForest.q, wastedForest.r);
+    expect(tile.terrain).toBe('sea');
+    expect(tile.wasted).toBeUndefined();
+  });
+
+  it('materialises wasted land, with the wasted flag, once revealed', () => {
+    const model = new WorldModel(WASTED_SEED);
+    model.setWastedRevealed(true);
+    expect(model.isWastedRevealed()).toBe(true);
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('forest');
+    expect(model.isLand(wastedForest.q, wastedForest.r)).toBe(true);
+    const tile = model.getTile(wastedForest.q, wastedForest.r);
+    expect(tile.terrain).toBe('forest');
+    expect(tile.wasted).toBe(true);
+  });
+
+  it('tags sea bordering wasted land as wasted (for the blacksandcoast art) once revealed', () => {
+    const model = new WorldModel(WASTED_SEED);
+    model.setWastedRevealed(true);
+    const tile = model.getTile(seaBorderingWasted.q, seaBorderingWasted.r);
+    expect(tile.terrain).toBe('sea');
+    expect(tile.isCoastalWater).toBe(true);
+    expect(tile.wasted).toBe(true);
+  });
+
+  it('never tags a green terrain hex as wasted, before or after reveal', () => {
+    const model = new WorldModel(WASTED_SEED);
+    // Plain land, nowhere near any wasted island.
+    model.getTile(0, 0);
+    model.setWastedRevealed(true);
+    const tile = model.getTile(0, 0);
+    expect(tile.wasted).toBeUndefined();
+  });
+
+  it('invalidates the terrain/tile caches when the reveal flips', () => {
+    const model = new WorldModel(WASTED_SEED);
+    // Materialise the hex's sea answer into both caches first.
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('sea');
+    expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('sea');
+
+    model.setWastedRevealed(true);
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('forest');
+    expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('forest');
+
+    model.setWastedRevealed(false);
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('sea');
+    expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('sea');
+  });
+
+  it('never wipes green-island state (buildings, ownership, giant tags) on reveal', () => {
+    // Seed 20260824 (the app's own demo seed): (-5,-7) is a real landfall
+    // near origin; (-12,-17) is a real giant-placeable anchor whose
+    // footprint includes a Forest hex (found by scanning canPlaceGiant), so
+    // this also covers tagGiantHex's Forest->Grass flattening surviving a
+    // reveal.
+    const model = new WorldModel(20260824);
+    const settlement = model.foundSettlement('owner-1', 'Owner', 'Home', { q: -5, r: -7 });
+
+    // A claimed, non-giant, non-longhouse hex next to home to build a hut on.
+    const buildAt = { q: settlement.q + 1, r: settlement.r };
+    expect(model.placeBuilding(settlement.id, buildAt, 'hut')).toBe(true);
+
+    const giantAnchor = { q: -12, r: -17 };
+    const footprint = giantCoverage(giantAnchor).map((c) => c.coord);
+    const forestHex = footprint.find((c) => model.getTile(c.q, c.r).terrain === 'forest');
+    expect(forestHex).toBeDefined();
+    expect(model.placeGiant(giantAnchor, 'giantmountain')).toBe(true);
+
+    model.setWastedRevealed(true);
+
+    // Building + ownership survive.
+    const built = model.getTile(buildAt.q, buildAt.r);
+    expect(built.buildingType).toBe('hut');
+    expect(built.ownerId).toBe(settlement.id);
+    const home = model.getTile(settlement.q, settlement.r);
+    expect(home.buildingType).toBe('longhouse');
+    expect(home.ownerId).toBe(settlement.id);
+
+    // The giant's tag survives on all 7 covered hexes, and giantAnchorByHex
+    // (read via giantAnchorAt) still agrees with it.
+    for (const coord of footprint) {
+      const tile = model.getTile(coord.q, coord.r);
+      expect(tile.giant?.anchor).toEqual(giantAnchor);
+      expect(tile.giant?.family).toBe('giantmountain');
+      expect(model.giantAnchorAt(coord)).toEqual(giantAnchor);
+    }
+
+    // The Forest->Grass flattening tagGiantHex wrote survives too (reverting
+    // to Forest would put a tree top back through the giant's own art).
+    expect(model.getTile(forestHex!.q, forestHex!.r).terrain).toBe('grass');
+  });
+
+  it('is a no-op when set to its current value (cache stays warm)', () => {
+    const model = new WorldModel(WASTED_SEED);
+    const before = model.getTile(0, 0).terrain;
+    model.setWastedRevealed(false);
+    // Same answer either way — a fresh materialisation would agree too, so
+    // this only checks the call didn't throw/behave oddly, not cache identity.
+    expect(model.getTile(0, 0).terrain).toBe(before);
+  });
+
+  it('revealWastedIslands (demo debug hook) reveals and places giants on a nearby wasted island', () => {
+    const model = new WorldModel(WASTED_SEED);
+    expect(model.isWastedRevealed()).toBe(false);
+
+    const discovered = model.revealWastedIslands(WASTED_SEED, wastedForest, 5);
+
+    expect(model.isWastedRevealed()).toBe(true);
+    expect(discovered.length).toBeGreaterThan(0);
+    expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('forest');
   });
 });

@@ -135,6 +135,23 @@ public class TroopTrainingAndDispatchTests
             cancellationToken);
         grantResponse.EnsureSuccessStatusCode();
 
+        // --- Admin: place a Barracks — Thrall now trains there rather than
+        // at the longhouse alone (UnitCatalogue.RequiredBuildingType), and
+        // Settlement.PlanTrain checks for one standing anywhere in the
+        // settlement, not specifically behind whichever ring the training UI
+        // was opened from (see MapView.vue's own comment on that). This
+        // still opens the Longhouse's ring below, same as before — it just
+        // needs a Barracks to exist somewhere first.
+        var layout = await adminHttpClient.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{settlementId}/layout", cancellationToken);
+        var barracksHex = layout!.Hexes.First(
+            h => !h.IsCentre && h.Building is null && (h.Terrain == "grass" || h.Terrain == "sand"));
+        var placeBarracksResponse = await adminHttpClient.PutAsJsonAsync(
+            $"/api/v1/admin/settlements/{settlementId}/buildings/{barracksHex.Q}/{barracksHex.R}",
+            new PlaceBuildingRequest("barracks", 1),
+            cancellationToken);
+        placeBarracksResponse.EnsureSuccessStatusCode();
+
         // --- Admin: speed the world way up so the Thrall's real 10-minute
         // training timer resolves in seconds instead (see class remarks) ---
         var speedUpResponse = await adminHttpClient.PatchAsJsonAsync(

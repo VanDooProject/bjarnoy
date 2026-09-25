@@ -1061,12 +1061,30 @@ public sealed class SettlementService(
         var terrain = sampler.TerrainAt(coord);
         var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
+
+        // Only worth a query for an actual shrine — every other building
+        // type has no god, so PlanBuild's check is a no-op for it regardless
+        // of what set we hand it.
+        var shrineGodsElsewhereOnIsland = BuildingCatalogue.GodOf(type) is not null
+            ? await ShrineGodsElsewhereOnIslandAsync(settlement.IslandId, settlement.Id, coord, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
+        // Likewise, only PumpkinFarm cares which crop this island grows —
+        // Farm stays buildable everywhere.
+        var islandSoil = type == BuildingType.PumpkinFarm
+            ? await IslandSoilAsync(settlement.IslandId, sampler, cancellationToken).ConfigureAwait(false)
+            : null;
+
         var buildGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
             settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
             maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
-            riverShapeAt: riverShapeAt, giants: buildGiants);
+            riverShapeAt: riverShapeAt,
+            shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland,
+            islandSoil: islandSoil,
+            giants: buildGiants);
 
         if (!decision.Accepted)
         {
@@ -1346,6 +1364,50 @@ public sealed class SettlementService(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Which gods already have a standing shrine somewhere on
+    /// <paramref name="islandId"/>, at a hex other than
+    /// (<paramref name="settlementId"/>, <paramref name="coord"/>) — spanning
+    /// every settlement on the island, so a second settlement can't raise the
+    /// same god's shrine just because it isn't the one that already has it
+    /// (see <see cref="Settlement.PlanBuild"/>'s
+    /// shrineGodsElsewhereOnIsland parameter).
+    /// </summary>
+    private async Task<IReadOnlySet<GodType>> ShrineGodsElsewhereOnIslandAsync(
+        Guid islandId, Guid settlementId, HexCoord coord, CancellationToken cancellationToken)
+    {
+        var shrineTypesOnIsland = await _dbContext.PlacedBuildings
+            .Where(b => b.Settlement!.IslandId == islandId
+                && (b.SettlementId != settlementId || b.Q != coord.Q || b.R != coord.R))
+            .Select(b => b.Type)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return shrineTypesOnIsland
+            .Select(BuildingCatalogue.GodOf)
+            .Where(god => god is not null)
+            .Select(god => god!.Value)
+            .ToHashSet();
+    }
+
+    /// <summary>
+    /// Which crop <paramref name="islandId"/>'s island grows
+    /// (<see cref="TerrainSampler.SoilAt"/>, from its stored centre) — or
+    /// <see langword="null"/> if the island row is somehow missing, in which
+    /// case <see cref="Settlement.PlanBuild"/> just skips the soil check
+    /// rather than refusing every Farm/PumpkinFarm build outright.
+    /// </summary>
+    private async Task<SoilType?> IslandSoilAsync(Guid islandId, TerrainSampler sampler, CancellationToken cancellationToken)
+    {
+        var centre = await _dbContext.Islands
+            .Where(i => i.Id == islandId)
+            .Select(i => new { i.CentreQ, i.CentreR })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return centre is null ? null : sampler.SoilAt(new HexCoord(centre.CentreQ, centre.CentreR));
     }
 
     /// <summary>

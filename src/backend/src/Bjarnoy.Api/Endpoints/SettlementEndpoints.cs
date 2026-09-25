@@ -695,7 +695,8 @@ public static class SettlementEndpoints
 
     private static string DescribeTrain(TrainRejection rejection) => rejection switch
     {
-        TrainRejection.UnitNotAvailable => "That unit is not available at this longhouse level yet.",
+        TrainRejection.UnitNotAvailable =>
+            "That unit isn't available yet — check its required longhouse level and training building.",
         TrainRejection.TrainingQueueFull =>
             $"The training queue is full (max {Settlement.MaxTrainingQueueLength}).",
         TrainRejection.NotEnoughResources =>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBuildTime, formatMissingResources, longhouseLock, sawmillAllowedHere } from './ringCatalogue';
+import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -42,18 +42,51 @@ describe('longhouseLock', () => {
   });
 });
 
-describe('sawmillAllowedHere', () => {
-  it('excludes a sawmill from a hex with no matching river shape', () => {
-    expect(sawmillAllowedHere('sawmill', false)).toBe(false);
+describe('riverBuildingAllowedHere', () => {
+  it('excludes a sawmill from a hex with no river tile at all', () => {
+    expect(riverBuildingAllowedHere('sawmill', undefined)).toBe(false);
   });
 
-  it('allows a sawmill on a straight/bend river hex', () => {
-    expect(sawmillAllowedHere('sawmill', true)).toBe(true);
+  it('allows a sawmill on a straight or bend river hex', () => {
+    expect(riverBuildingAllowedHere('sawmill', 'straight')).toBe(true);
+    expect(riverBuildingAllowedHere('sawmill', 'bend')).toBe(true);
+  });
+
+  it('excludes a sawmill from a non-matching river shape', () => {
+    expect(riverBuildingAllowedHere('sawmill', 'confluence')).toBe(false);
+  });
+
+  it('only allows a crop mill on a straight river hex, unlike the sawmill', () => {
+    expect(riverBuildingAllowedHere('cropmill', 'straight')).toBe(true);
+    expect(riverBuildingAllowedHere('cropmill', 'bend')).toBe(false);
+    expect(riverBuildingAllowedHere('cropmill', undefined)).toBe(false);
   });
 
   it('is a no-op for every other buildable type', () => {
-    expect(sawmillAllowedHere('farm', false)).toBe(true);
-    expect(sawmillAllowedHere('quarry', false)).toBe(true);
+    expect(riverBuildingAllowedHere('farm', undefined)).toBe(true);
+    expect(riverBuildingAllowedHere('quarry', undefined)).toBe(true);
+  });
+});
+
+describe('cropAllowedHere', () => {
+  it('only allows pumpkinfarm on pumpkin soil', () => {
+    expect(cropAllowedHere('pumpkinfarm', 'pumpkin')).toBe(true);
+    expect(cropAllowedHere('pumpkinfarm', 'wheat')).toBe(false);
+  });
+
+  it('is permissive when the soil is unresolvable (undefined)', () => {
+    expect(cropAllowedHere('pumpkinfarm', undefined)).toBe(true);
+  });
+
+  it('never refuses farm, on either soil or unresolvable soil', () => {
+    expect(cropAllowedHere('farm', 'wheat')).toBe(true);
+    expect(cropAllowedHere('farm', 'pumpkin')).toBe(true);
+    expect(cropAllowedHere('farm', undefined)).toBe(true);
+  });
+
+  it('is a no-op for every other buildable type', () => {
+    expect(cropAllowedHere('quarry', 'wheat')).toBe(true);
+    expect(cropAllowedHere('sawmill', 'wheat')).toBe(true);
   });
 });
 

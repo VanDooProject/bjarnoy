@@ -81,13 +81,14 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
   });
 
   it('farm and pumpkinfarm ignore terrain adjacency entirely, matching Boosts excluding them', () => {
-    // BuildingCatalogue.cs: Farm 36/level, PumpkinFarm 36/level, neither in Boosts.
+    // BuildingCatalogue.cs: Farm 36/level, PumpkinFarm 44/level (the bonus,
+    // Pumpkin-soil-only crop yields more), neither in Boosts.
     expect(buildingStatsFor('farm', 1, 6)).toEqual({
       output: { kind: 'resourceRate', resource: 'food', amount: 36 },
       workers: { cap: 4 },
     });
     expect(buildingStatsFor('pumpkinfarm', 2, 6)).toEqual({
-      output: { kind: 'resourceRate', resource: 'food', amount: 72 },
+      output: { kind: 'resourceRate', resource: 'food', amount: 88 },
       workers: { cap: 8 },
     });
   });
@@ -106,18 +107,38 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
     });
   });
 
-  it('sawmill scales 10%/matching forest neighbour, mirroring lumberjack', () => {
+  it('sawmill has no production of its own — it boosts Lumberjack within range instead', () => {
     expect(buildingStatsFor('sawmill', 1, 0)).toEqual({
-      output: { kind: 'resourceRate', resource: 'wood', amount: 26 },
-      modifier: undefined,
+      modifier: { kind: 'radiusBoost', percent: 5, range: 1, resource: 'wood' },
     });
-    expect(buildingStatsFor('sawmill', 1, 5)).toEqual({
-      output: { kind: 'resourceRate', resource: 'wood', amount: 39 },
-      modifier: { kind: 'terrainBoost', terrain: 'forest', percent: 50 },
+    expect(buildingStatsFor('sawmill', 10, 0)).toEqual({
+      modifier: { kind: 'radiusBoost', percent: 100, range: 5, resource: 'wood' },
+    });
+    // Sawmill's own neighbours no longer matter — it has nothing left for a
+    // terrain-adjacency boost to multiply.
+    expect(buildingStatsFor('sawmill', 1, 6)).toEqual({
+      modifier: { kind: 'radiusBoost', percent: 5, range: 1, resource: 'wood' },
     });
   });
 
-  it('barracks has no production/storage of its own yet', () => {
-    expect(buildingStatsFor('barracks', 1, 0)).toEqual({ modifier: { kind: 'garrison' } });
+  it('cropmill has no production of its own — it boosts Farm (not PumpkinFarm) within range instead', () => {
+    expect(buildingStatsFor('cropmill', 1, 0)).toEqual({
+      modifier: { kind: 'radiusBoost', percent: 5, range: 1, resource: 'food' },
+    });
+    expect(buildingStatsFor('cropmill', 10, 0)).toEqual({
+      modifier: { kind: 'radiusBoost', percent: 100, range: 5, resource: 'food' },
+    });
+  });
+
+  it('barracks trains the land army in place of the Longhouse, same as Archery Range', () => {
+    expect(buildingStatsFor('barracks', 1, 0)).toEqual({ modifier: { kind: 'trainsLandTroops' } });
+  });
+
+  it('meadery has no production/storage of its own yet', () => {
+    expect(buildingStatsFor('meadery', 1, 0)).toEqual({});
+  });
+
+  it('smithy has no production/storage of its own yet', () => {
+    expect(buildingStatsFor('smithy', 1, 0)).toEqual({});
   });
 });

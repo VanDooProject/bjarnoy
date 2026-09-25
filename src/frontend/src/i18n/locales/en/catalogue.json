@@ -19,7 +19,14 @@
     "archeryrange": "Archery Range",
     "dockyard": "Dockyard",
     "barracks": "Barracks",
-    "sawmill": "Sawmill"
+    "sawmill": "Sawmill",
+    "meadery": "Meadery",
+    "townsquare": "Town Square",
+    "cropmill": "Crop Mill",
+    "smithy": "Smithy",
+    "druidhut": "Druid's Hut",
+    "cartworkshop": "Cart Workshop",
+    "claybrickworks": "Clay Brickworks"
   },
   "units": {
     "thrall": "Thrall",
@@ -35,7 +42,8 @@
   "giants": {
     "giantmountain": "Giant mountain",
     "giantshrine": "Runestone shrine",
-    "giantvolcano": "Volcano"
+    "giantvolcano": "Volcano",
+    "giantutgard": "Utgard"
   },
   "terrain": {
     "sea": "Open water",
@@ -43,6 +51,12 @@
     "grass": "Grassland",
     "forest": "Forest",
     "mountain": "Mountain"
+  },
+  "wastedTerrain": {
+    "wasteland": "Wasteland",
+    "deadforest": "Dead forest",
+    "blacksand": "Black sand",
+    "blacksandcoast": "Black sand"
   },
   "resources": {
     "wood": "Wood",

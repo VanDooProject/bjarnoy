@@ -19,7 +19,7 @@
 // other input to `hasWaterProp` — sea, coastal, variant — is a pure function
 // of the world seed and is computed here.
 import { bakeWaterMask, hasWaterProp } from './waterMask';
-import { generateTile, terrainAt, type WorldGenerationConstants } from '../worldGenerator';
+import { generateTile, terrainAt, wastedTerrainAt, type WorldGenerationConstants } from '../worldGenerator';
 import type { WaterMaskRegion } from './waterMaskLayout';
 
 export interface BakeRequest {
@@ -40,6 +40,15 @@ export interface BakeRequest {
    * all and no prop work is done.
    */
   buildingHexes?: number[];
+  /**
+   * Whether this world's wasted islands are currently revealed
+   * (`WorldModel.isWastedRevealed`) — a hex the plain green `terrainAt`
+   * calls sea may actually be wasted land once this is set, and must bake
+   * as land (no foam/squiggle water surface drawn over it) the same way
+   * `WorldModel.terrainOf` treats it. Defaults to `false` (every existing
+   * caller's assumption) when omitted.
+   */
+  wastedRevealed?: boolean;
 }
 
 export interface BakeResponse {
@@ -47,6 +56,8 @@ export interface BakeResponse {
   data: Uint8Array;
   width: number;
   height: number;
+  /** See `WaterMask.taint`. */
+  taint: Uint8Array;
   /** What the bake itself took here, so the panel reports the real cost rather than the round trip. */
   bakeMs: number;
 }
@@ -63,16 +74,37 @@ export interface BakeResponse {
  * new worker with it.
  */
 let cacheSeed: number | null = null;
+let cacheWastedRevealed = false;
 let cache = new Map<number, boolean>();
+
+// Separate cache from `isLandFor`'s: that one answers "is this land at all",
+// folding the wasted layer into the same yes/no `isLand` every other caller
+// wants. The taint field needs the narrower question — "is this land *only*
+// because the wasted layer says so" — which `isLandFor`'s cached answer
+// can't be un-mixed back into, so this keeps its own memo table rather than
+// deriving from it.
+let wastedCacheSeed: number | null = null;
+let wastedCacheRevealed = false;
+let wastedCache = new Map<number, boolean>();
 
 /** `WorldModel`'s own packing, so the two agree about what a hex key is. */
 function hexKey(q: number, r: number): number {
   return ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
 }
 
-function isLandFor(seed: number, generation: WorldGenerationConstants) {
-  if (cacheSeed !== seed) {
+// Exported (only) so waterMask.worker.test.ts can exercise the reveal-aware
+// land check directly, without spinning up a real Worker (workers need a
+// browser/worker global this repo's node-environment vitest config doesn't
+// provide).
+export function isLandFor(seed: number, generation: WorldGenerationConstants, wastedRevealed: boolean) {
+  // Cleared on a reveal flip too, not just a seed change: a cached `false`
+  // (sea) from before the reveal would otherwise survive and keep drawing
+  // water over now-revealed wasted land — see WorldModel.setWastedRevealed's
+  // own reasoning for why this can only ever go stale in the "was sea"
+  // direction.
+  if (cacheSeed !== seed || cacheWastedRevealed !== wastedRevealed) {
     cacheSeed = seed;
+    cacheWastedRevealed = wastedRevealed;
     cache = new Map();
   }
   const world = { seed, generation };
@@ -81,7 +113,39 @@ function isLandFor(seed: number, generation: WorldGenerationConstants) {
     let land = cache.get(k);
     if (land === undefined) {
       land = terrainAt(q, r, world) !== 'sea';
+      // Mirrors WorldModel.terrainOf's own fall-through to the wasted layer
+      // for a hex the green layer alone calls sea.
+      if (!land && wastedRevealed) {
+        land = wastedTerrainAt(q, r, world) !== 'sea';
+      }
       cache.set(k, land);
+    }
+    return land;
+  };
+}
+
+// Exported (only) so waterMask.worker.test.ts can exercise the taint-aware
+// wasted-land check directly, the same way it exercises `isLandFor` — see
+// that export's own comment for why (no `self` under this repo's
+// node-environment vitest config).
+export function isWastedLandFor(
+  seed: number,
+  generation: WorldGenerationConstants,
+  wastedRevealed: boolean,
+): (q: number, r: number) => boolean {
+  if (wastedCacheSeed !== seed || wastedCacheRevealed !== wastedRevealed) {
+    wastedCacheSeed = seed;
+    wastedCacheRevealed = wastedRevealed;
+    wastedCache = new Map();
+  }
+  const world = { seed, generation };
+  return (q: number, r: number): boolean => {
+    if (!wastedRevealed) return false;
+    const k = hexKey(q, r);
+    let land = wastedCache.get(k);
+    if (land === undefined) {
+      land = terrainAt(q, r, world) === 'sea' && wastedTerrainAt(q, r, world) !== 'sea';
+      wastedCache.set(k, land);
     }
     return land;
   };
@@ -134,26 +198,35 @@ function hasPropFor(
   };
 }
 
-self.onmessage = (event: MessageEvent<BakeRequest>) => {
-  const { id, region, tileWidth, tileHeight, seed, generation, buildingHexes } = event.data;
-  const started = performance.now();
-  const isLand = isLandFor(seed, generation);
-  // No prop predicate at all where the caller sent no building list: that is
-  // the documented way to ask for an all-zero A channel, and it is what world
-  // mode reads anyway (see this file's header).
-  const mask = bakeWaterMask(region, tileWidth, tileHeight, {
-    isLand,
-    hasProp: buildingHexes ? hasPropFor(seed, generation, isLand, buildingHexes) : undefined,
-  });
-  const response: BakeResponse = {
-    id,
-    data: mask.data,
-    width: mask.width,
-    height: mask.height,
-    bakeMs: performance.now() - started,
+// Guarded rather than assigned unconditionally: this lets
+// waterMask.worker.test.ts import isLandFor/hasPropFor directly (they have
+// no Worker dependency of their own) under this repo's node-environment
+// vitest config, which has no `self` at all — a real worker context always
+// has one, so this changes nothing there.
+if (typeof self !== 'undefined') {
+  self.onmessage = (event: MessageEvent<BakeRequest>) => {
+    const { id, region, tileWidth, tileHeight, seed, generation, buildingHexes, wastedRevealed } = event.data;
+    const started = performance.now();
+    const isLand = isLandFor(seed, generation, wastedRevealed ?? false);
+    // No prop predicate at all where the caller sent no building list: that
+    // is the documented way to ask for an all-zero A channel, and it is
+    // what world mode reads anyway (see this file's header).
+    const mask = bakeWaterMask(region, tileWidth, tileHeight, {
+      isLand,
+      hasProp: buildingHexes ? hasPropFor(seed, generation, isLand, buildingHexes) : undefined,
+      isWastedLand: isWastedLandFor(seed, generation, wastedRevealed ?? false),
+    });
+    const response: BakeResponse = {
+      id,
+      data: mask.data,
+      width: mask.width,
+      height: mask.height,
+      taint: mask.taint,
+      bakeMs: performance.now() - started,
+    };
+    // Transferred, not copied: the mask is 2.7MB at world zoom and
+    // structured cloning it would put a chunk of the cost back on the main
+    // thread, which is the whole thing this is here to avoid.
+    (self as unknown as Worker).postMessage(response, [response.data.buffer, response.taint.buffer]);
   };
-  // Transferred, not copied: the mask is 2.7MB at world zoom and structured
-  // cloning it would put a chunk of the cost back on the main thread, which is
-  // the whole thing this is here to avoid.
-  (self as unknown as Worker).postMessage(response, [response.data.buffer]);
-};
+}

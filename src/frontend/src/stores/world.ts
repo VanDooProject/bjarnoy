@@ -361,6 +361,23 @@ export const useWorldStore = defineStore('world', {
   }),
   actions: {
     /**
+     * Demo mode's `window.__demoWorld().revealWastedIslands()` debug hook
+     * (main.ts) — reveals this world's wasted islands (sea -> wasteland/
+     * deadforest/blacksand/blacksandcoast, per `WorldModel.setWastedRevealed`)
+     * and places each discovered wasted landmass's giants, near the
+     * player's own settlement if founded (else the world origin). This is a
+     * debug hook for screenshots/manual QA, not a test-environment branch —
+     * a live world reveals the same way, automatically, from
+     * `endbossTriggered`. The renderer itself still needs a `forceRebuild()`
+     * from the caller (same as every other demo console mutation — see
+     * `__settlementRenderer` in MapView.vue for grabbing it).
+     */
+    revealWastedIslands() {
+      const settlement = this.selectedSettlementId ? this.model.getSettlement(this.selectedSettlementId) : undefined;
+      const near = settlement ? { q: settlement.q, r: settlement.r } : { q: 0, r: 0 };
+      return this.model.revealWastedIslands(this.model.seed, near);
+    },
+    /**
      * Connects to the real backend when the app isn't running in demo mode
      * (see `config.ts`): joins an existing running world or creates one, then
      * reseeds the local `WorldModel` from that world's seed so this client
@@ -408,6 +425,7 @@ export const useWorldStore = defineStore('world', {
       this.worldStartsAt = world.startsAt;
       localStorage.setItem('bjarnoy.worldId', world.id);
       this.model = markRaw(new WorldModel(world.seed, world.generation));
+      this.model.setWastedRevealed(world.endbossTriggered);
       try {
         this.islands = await api.getIslands(world.id);
       } catch (err) {
@@ -439,6 +457,7 @@ export const useWorldStore = defineStore('world', {
             shape: tile.shape,
             inDirections: tile.inDirections as TileOrientation[],
             outDirection: tile.outDirection as TileOrientation | null,
+            wasted: island.wasted,
           })),
         ),
       );
