@@ -755,11 +755,17 @@ const ringCategories = computed<RingCategory[]>(() => {
 });
 
 // The hub names what was clicked: the building standing on the hex if there
-// is one, otherwise the bare terrain.
+// is one, otherwise the bare terrain — a river tile's art fully overrides
+// its underlying land terrain (see HexMapRenderer's terrainTitleFor/
+// rebuildTerrain), so the hub needs to say "River" too, same as the hover
+// tooltip, rather than falling back to the land terrain underneath it.
 const ringTerrainLabel = computed(() => {
   const tile = selectedTile.value;
+  const coord = selectedCoord.value;
   if (!tile) return '';
-  return tile.buildingType ? buildingName(tile.buildingType) : terrainName(tile.terrain);
+  if (tile.buildingType) return buildingName(tile.buildingType);
+  if (coord && world.model.getRiverTile(coord.q, coord.r)) return t('hud.hoverTooltip.river');
+  return terrainName(tile.terrain);
 });
 const ringCoordLabel = computed(() => {
   const coord = selectedCoord.value;
