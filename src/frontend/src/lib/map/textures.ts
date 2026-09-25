@@ -31,7 +31,14 @@
 // so it's exercised directly rather than only through a loaded atlas).
 import { Texture } from 'pixi.js';
 import { loadAtlasCategory, type AtlasClip, type LoadedAtlas } from './atlas';
-import { classifyGiantFrames, giantTop as giantTopLookup, type GiantPart, type GiantTextureMap } from './giantTiles';
+import {
+  classifyGiantClips,
+  classifyGiantFrames,
+  giantTop as giantTopLookup,
+  type GiantFamilyClip,
+  type GiantPart,
+  type GiantTextureMap,
+} from './giantTiles';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import {
   bendOrientationOf,
@@ -116,7 +123,7 @@ const COASTAL_FAMILY = 'coastalwatertile';
  * `classifyGiantFrames`'s own doc comment), so they need their own
  * classification path entirely.
  */
-const GIANT_FAMILIES: readonly string[] = ['giantmountain'];
+const GIANT_FAMILIES: readonly string[] = ['giantmountain', 'giantshrine', 'giantvolcano'];
 
 /** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
 type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
@@ -315,6 +322,19 @@ export interface TileTextures {
   riverTop: Record<RiverArtShape, OrientationMap<Texture>>;
   /** Giant-tile top textures, keyed by family (e.g. `giantmountain`) — see `giantTiles.ts`. */
   giants: Partial<Record<string, GiantTextureMap<Texture>>>;
+  /**
+   * Giant-tile top *animations*, same family/orientation/part indexing as
+   * `giants` — a sparse overlay: only a (family, orientation, part) whose
+   * `buildings-anim` clip fully resolved carries an entry (mirrors
+   * `animTop`'s own sparse-overlay contract). A giant frame name
+   * (`<family>_<CAM>_level<NNN>_part<DIR>`) never matches `ANIM_LEVEL_RE`
+   * (anchored at the end, right after the level digits) since it always has
+   * a trailing `_part<DIR>`, so giant clips never leak into the regular
+   * per-`TextureKey` `animTop` built below — they're read straight off
+   * `animAtlas.clips` via `classifyGiantClips` instead, same as `giants`
+   * reads its static frames straight off the atlas via `classifyGiantFrames`.
+   */
+  giantAnims: Partial<Record<string, GiantTextureMap<TileAnimClip>>>;
 }
 
 function framesOfFamily(atlas: LoadedAtlas, family: string): FamilyFrame<Texture>[] {
@@ -394,13 +414,29 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
   }
 
   const giants: TileTextures['giants'] = {};
+  const giantAnims: TileTextures['giantAnims'] = {};
   for (const family of GIANT_FAMILIES) {
     const frames = framesOfFamily(merged, family);
-    if (frames.length === 0) continue;
-    giants[family] = classifyGiantFrames(frames);
+    if (frames.length > 0) giants[family] = classifyGiantFrames(frames);
+
+    if (animAtlas) {
+      const familyClips: GiantFamilyClip[] = Object.values(animAtlas.clips).filter((clip) => clip.family === family);
+      if (familyClips.length > 0) {
+        const clipMap = classifyGiantClips(familyClips, (name) => animAtlas.textures[name]);
+        const anims = mapOrientations(clipMap, (_o, parts) =>
+          Object.fromEntries(
+            (Object.entries(parts) as [GiantPart, { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong' }][]).map(
+              ([part, clip]) => [part, { textures: clip.textures, fps: clip.fps, playback: clip.playback }],
+            ),
+          ) as Partial<Record<GiantPart, TileAnimClip>>,
+        );
+        const hasAny = TILE_ORIENTATIONS.some((o) => Object.keys(anims[o]).length > 0);
+        if (hasAny) giantAnims[family] = anims;
+      }
+    }
   }
 
-  return { base, coastalBase, baseIndexed, top, animTop, riverBase, riverTop, giants };
+  return { base, coastalBase, baseIndexed, top, animTop, riverBase, riverTop, giants, giantAnims };
 }
 
 /** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the terrain atlas, so `a`'s copies win unconditionally. */
@@ -414,6 +450,7 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
     riverBase: a.riverBase,
     riverTop: a.riverTop,
     giants: { ...a.giants, ...b.giants },
+    giantAnims: { ...a.giantAnims, ...b.giantAnims },
   };
 }
 
@@ -631,4 +668,21 @@ export function giantTopTextureFor(
   part: GiantPart,
 ): Texture | undefined {
   return giantTopLookup(textures.giants, family, orientation, part);
+}
+
+/**
+ * A giant tile's part *animation* — `undefined` if this `TileTextures` has
+ * no `buildings-anim` clip for this exact family/orientation/part (most
+ * giants; a giant with static art but no animated clip is the normal case,
+ * same as any other building rung with no `animTop` entry). Callers
+ * (`HexMapRenderer.rebuildTerrain`) fall back to the plain static texture
+ * from `giantTopTextureFor` when this is `undefined`, same as `topAnimFor`.
+ */
+export function giantTopAnimFor(
+  textures: TileTextures,
+  family: string,
+  orientation: TileOrientation,
+  part: GiantPart,
+): TileAnimClip | undefined {
+  return giantTopLookup(textures.giantAnims, family, orientation, part);
 }

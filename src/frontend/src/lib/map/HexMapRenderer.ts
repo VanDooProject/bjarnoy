@@ -58,6 +58,7 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  giantTopAnimFor,
   giantTopTextureFor,
   loadBuildingAtlases,
   loadTerrainAtlas,
@@ -2953,13 +2954,21 @@ export class HexMapRenderer {
       // so this is checked ahead of the river/sawmill branches below.
       if (tile.giant) {
         baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
-        const giantTexture = giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part);
+        const giantAnim = giantTopAnimFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part);
+        // A giant part with an animated clip but no static frame of its own
+        // (shouldn't normally happen — every part ships both — but cheap to
+        // handle) still renders: the clip's own first frame doubles as the
+        // static texture/crop source, same sourceSize height as a real
+        // static frame would have.
+        const giantTexture =
+          giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part) ??
+          giantAnim?.textures[0];
         if (giantTexture) {
           // Degrades gracefully when the real art hasn't landed in the
           // vendored atlas yet (giantTopTextureFor returns undefined) — the
           // tile just draws with its plain base, no top sprite at all,
           // rather than throwing or showing a placeholder.
-          topEntries.set(key, { texture: giantTexture, coord: c, crop: giantCrop(giantTexture.height) });
+          topEntries.set(key, { texture: giantTexture, coord: c, crop: giantCrop(giantTexture.height), anim: giantAnim });
         }
         fogPerfStats.terrainDrawnCount++;
         continue;

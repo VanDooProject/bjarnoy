@@ -216,4 +216,22 @@ describe('classifyFamilyClips', () => {
       expect(result[orientation].size).toBe(0);
     }
   });
+
+  it('never matches a giant clip name (its own classifyGiantClips path handles those, not this one)', () => {
+    // A giant clip's name always ends in `_part<DIR>` after the level
+    // digits (e.g. `giantshrine_E_level000_partC`), so ANIM_LEVEL_RE's
+    // end-anchored `_level(\d{3})$` never matches it — this is the actual
+    // mechanism (checked directly, not just asserted) that keeps giant
+    // clips from leaking into the regular per-TextureKey animTop map built
+    // in buildTileTextures (see TileTextures.giantAnims's own doc comment).
+    const result = classifyFamilyClips(
+      [clip({ name: 'giantshrine_E_level000_partC', orientation: 'E', frames: ['f00'], family: 'giantshrine' })],
+      resolveAll,
+    );
+
+    expect(result.E.get(0)).toBeUndefined();
+    for (const orientation of ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const) {
+      expect(result[orientation].size).toBe(0);
+    }
+  });
 });

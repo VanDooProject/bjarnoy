@@ -669,11 +669,7 @@ describe('WorldModel.previewCropTiles', () => {
 });
 
 
-// Same demo seed the app itself boots into (stores/world.ts's DEMO_SEED) —
-// findGiantAnchor's own doc comment promises a deterministic result for a
-// given seed, so pinning this one lets these tests double as a check that
-// the actual demo placement keeps working, not just some other arbitrary
-// seed.
+// Same demo seed the app itself boots into (stores/world.ts's DEMO_SEED).
 const DEMO_SEED = 20260824;
 
 function foundLandedSettlementAt(model: WorldModel, seedHex: AxialCoord) {
@@ -682,11 +678,31 @@ function foundLandedSettlementAt(model: WorldModel, seedHex: AxialCoord) {
   return { settlement: model.foundSettlement('p1', 'Tester', 'Testerhold', at), at };
 }
 
+/**
+ * Test-only stand-in for the removed `WorldModel.findGiantAnchor`: the
+ * nearest hex to `home` `canPlaceGiant` would accept, searched outward
+ * ring-by-ring. Giant placement v2 places giants through `placeGiantsForIsland`
+ * (`giantPlacement.ts`'s `placeGiants`, which needs real Mountain/Grass/
+ * Forest terrain and an island large enough to qualify) rather than "nearest
+ * grass/forest clearing to home", so these `placeGiant`/`canPlaceGiant`
+ * mechanics tests just need *some* valid anchor to exercise against — this
+ * gives them one without depending on production code that no longer exists.
+ */
+function findValidGiantAnchor(model: WorldModel, home: AxialCoord, minRadius = 3, maxRadius = 20): AxialCoord | null {
+  for (let radius = minRadius; radius <= maxRadius; radius++) {
+    for (const c of hexesInRadius(home, radius)) {
+      if (hexDistance(home, c) !== radius) continue;
+      if (model.canPlaceGiant(c)) return c;
+    }
+  }
+  return null;
+}
+
 describe('WorldModel.placeGiant / canPlaceGiant', () => {
   it('accepts a valid anchor: tags all 7 covered hexes with the right family/anchor/part', () => {
     const model = new WorldModel(DEMO_SEED);
     const { at } = foundLandedSettlementAt(model, { q: 0, r: 0 });
-    const anchor = model.findGiantAnchor(at);
+    const anchor = findValidGiantAnchor(model, at);
     expect(anchor).not.toBeNull();
 
     expect(model.canPlaceGiant(anchor!)).toBe(true);
@@ -707,7 +723,7 @@ describe('WorldModel.placeGiant / canPlaceGiant', () => {
   it("every covered hex uses the anchor tile's own orientation when none is given", () => {
     const model = new WorldModel(DEMO_SEED);
     const { at } = foundLandedSettlementAt(model, { q: 0, r: 0 });
-    const anchor = model.findGiantAnchor(at)!;
+    const anchor = findValidGiantAnchor(model, at)!;
     const expectedOrientation = model.getTile(anchor.q, anchor.r).orientation;
 
     model.placeGiant(anchor, 'giantmountain');
@@ -720,7 +736,7 @@ describe('WorldModel.placeGiant / canPlaceGiant', () => {
   it("an explicit orientation overrides the anchor tile's own", () => {
     const model = new WorldModel(DEMO_SEED);
     const { at } = foundLandedSettlementAt(model, { q: 0, r: 0 });
-    const anchor = model.findGiantAnchor(at)!;
+    const anchor = findValidGiantAnchor(model, at)!;
 
     model.placeGiant(anchor, 'giantmountain', 'W');
 
@@ -732,7 +748,7 @@ describe('WorldModel.placeGiant / canPlaceGiant', () => {
   it('converts a covered Forest hex to Grass, in both the Tile and the pure terrain cache', () => {
     const model = new WorldModel(DEMO_SEED);
     const { at } = foundLandedSettlementAt(model, { q: 0, r: 0 });
-    const anchor = model.findGiantAnchor(at)!;
+    const anchor = findValidGiantAnchor(model, at)!;
     const forestCovered = giantCoverage(anchor).find(
       (c) => model.getTile(c.coord.q, c.coord.r).terrain === 'forest',
     );
@@ -766,7 +782,7 @@ describe('WorldModel.placeGiant / canPlaceGiant', () => {
   it('rejects an anchor whose footprint overlaps an existing building', () => {
     const model = new WorldModel(DEMO_SEED);
     const { settlement, at } = foundLandedSettlementAt(model, { q: 0, r: 0 });
-    const anchor = model.findGiantAnchor(at)!;
+    const anchor = findValidGiantAnchor(model, at)!;
     const buildOn = giantCoverage(anchor)[1].coord; // a non-anchor covered hex
     // placeBuilding requires ownership — claim the hex directly rather than
     // growing the settlement's border out to reach it.
@@ -783,7 +799,7 @@ describe('WorldModel.placeGiant / canPlaceGiant', () => {
   it('rejects an anchor that overlaps an already-placed giant', () => {
     const model = new WorldModel(DEMO_SEED);
     const { at } = foundLandedSettlementAt(model, { q: 0, r: 0 });
-    const firstAnchor = model.findGiantAnchor(at)!;
+    const firstAnchor = findValidGiantAnchor(model, at)!;
     expect(model.placeGiant(firstAnchor, 'giantmountain')).toBe(true);
 
     // The first giant's own anchor, re-tried, must be rejected (already
@@ -793,14 +809,6 @@ describe('WorldModel.placeGiant / canPlaceGiant', () => {
     const overlappingAnchor = giantCoverage(firstAnchor)[1].coord;
     expect(model.canPlaceGiant(overlappingAnchor)).toBe(false);
     expect(model.placeGiant(overlappingAnchor, 'giantmountain')).toBe(false);
-  });
-
-  it('findGiantAnchor is deterministic for a given seed/home hex', () => {
-    const modelA = new WorldModel(DEMO_SEED);
-    const modelB = new WorldModel(DEMO_SEED);
-    const home: AxialCoord = { q: 0, r: 0 };
-
-    expect(modelA.findGiantAnchor(home)).toEqual(modelB.findGiantAnchor(home));
   });
 
   // Regression guard for the store's `foundStartingSettlement` call order
@@ -814,16 +822,16 @@ describe('WorldModel.placeGiant / canPlaceGiant', () => {
     const model = new WorldModel(DEMO_SEED);
     const at = model.findLandfall({ q: 0, r: 0 });
     if (!at) throw new Error('no land found near origin for this seed — pick a different test seed');
-    const anchor = model.findGiantAnchor(at);
+    const anchor = findValidGiantAnchor(model, at);
     expect(anchor).not.toBeNull();
     expect(model.placeGiant(anchor!, 'giantmountain')).toBe(true);
 
     model.foundSettlement('p1', 'Tester', 'Testerhold', at);
 
-    // The demo giant sits 3-4 hexes out (findGiantAnchor's own defaults)
-    // while a fresh level-1 longhouse's claim radius is only 2 — it used to
-    // straddle the home realm's border under the old (no-giant-rule) claim
-    // logic. Under the giants territory rule a claim that only partially
+    // The chosen anchor sits well past a fresh level-1 longhouse's claim
+    // radius of 2 — it used to straddle the home realm's border under the
+    // old (no-giant-rule) claim logic. Under the giants territory rule a
+    // claim that only partially
     // covers a giant's 7-hex footprint claims none of it, so every one of
     // the 7 must read back unowned.
     for (const { coord } of giantCoverage(anchor!)) {
@@ -923,7 +931,7 @@ describe('WorldModel.setGiants (live mode)', () => {
     // observe getting updated in step with the materialised `Tile`.
     const model = new WorldModel(DEMO_SEED);
     const { at } = foundLandedSettlementAt(model, { q: 0, r: 0 });
-    const anchor = model.findGiantAnchor(at)!;
+    const anchor = findValidGiantAnchor(model, at)!;
     const forestCovered = giantCoverage(anchor).find(
       (c) => model.getTile(c.coord.q, c.coord.r).terrain === 'forest',
     );
@@ -951,5 +959,37 @@ describe('WorldModel.setGiants (live mode)', () => {
     const tile = model.getTile(overlappingAnchor.q, overlappingAnchor.r);
     expect(tile.giant?.anchor).toEqual(anchorA);
     expect(tile.giant?.orientation).toBe('E');
+  });
+});
+
+describe('placeGiantsForIsland (demo giant placement v2)', () => {
+  // The default demo seed's home island (284 tiles) gets one mountain giant
+  // anchored at (-7, -15) — a footprint that sits on real Mountain hexes.
+  const DEMO_SEED = 20260824;
+  const mountainAnchor = { q: -7, r: -15 };
+
+  it('tags a mountain giant even though its footprint is Mountain terrain', () => {
+    const model = new WorldModel(DEMO_SEED);
+    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
+    for (const { coord } of giantCoverage(mountainAnchor)) {
+      expect(model.getTile(coord.q, coord.r).giant?.family).toBe('giantmountain');
+    }
+  });
+
+  it('keeps the landfall clear of every placed giant', () => {
+    const model = new WorldModel(DEMO_SEED);
+    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
+    const at = model.findLandfall(mountainAnchor);
+    expect(at).not.toBeNull();
+    expect(hexDistance(at!, mountainAnchor)).toBeGreaterThanOrEqual(5);
+  });
+
+  it('places an island’s giants once, however many times it is visited', () => {
+    const model = new WorldModel(DEMO_SEED);
+    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
+    const tagged = () => [...hexesInRadius(mountainAnchor, 40)].filter((c) => model.getTile(c.q, c.r).giant).length;
+    const first = tagged();
+    model.placeGiantsForIsland({ q: mountainAnchor.q + 1, r: mountainAnchor.r }, DEMO_SEED);
+    expect(tagged()).toBe(first);
   });
 });

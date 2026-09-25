@@ -101,6 +101,53 @@ export function classifyGiantFrames<T>(frames: GiantFamilyFrame<T>[]): GiantText
 }
 
 /**
+ * One `buildings-anim` clip narrowed to what `classifyGiantClips` needs — a
+ * local structural type (not `AtlasClip` from `atlas.ts`) for the same
+ * import-cycle reason `GiantFamilyFrame` is kept local: `textures.ts` imports
+ * this module to build `TileTextures.giantAnims`.
+ */
+export interface GiantFamilyClip {
+  family: string;
+  orientation: string;
+  giant_part?: string;
+  frames: string[];
+  fps: number;
+  playback: 'loop' | 'pingpong';
+}
+
+/**
+ * Groups one giant family's `buildings-anim` clips (already filtered to that
+ * family) into a `GiantTextureMap`, purely from each clip's own
+ * `orientation`/`giant_part` fields — no Pixi/Texture dependency, mirroring
+ * `classifyGiantFrames`'s split of static frames for the same reason
+ * (unit-testable with plain strings — see `giantTiles.test.ts`).
+ *
+ * `resolveFrame` resolves one clip frame name against the loaded atlas's
+ * textures; a clip with any frame missing (a page that failed to parse) is
+ * dropped entirely rather than partially resolved, same as
+ * `classifyFamilyClips` in textures.ts. A clip whose `orientation` isn't a
+ * `TileOrientation` or whose `giant_part` isn't a `GiantPart` is skipped —
+ * shouldn't happen for a family that only ever renders giants, but cheap to
+ * be defensive about (mirrors `classifyGiantFrames`'s own silent skip).
+ */
+export function classifyGiantClips<T>(
+  clips: GiantFamilyClip[],
+  resolveFrame: (name: string) => T | undefined,
+): GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong' }> {
+  const result = {} as GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong' }>;
+  for (const orientation of TILE_ORIENTATIONS) result[orientation] = {};
+  for (const clip of clips) {
+    const orientation = clip.orientation as TileOrientation;
+    if (!TILE_ORIENTATIONS.includes(orientation)) continue;
+    if (!clip.giant_part || !isGiantPart(clip.giant_part)) continue;
+    const frameValues = clip.frames.map(resolveFrame);
+    if (frameValues.some((v) => v === undefined)) continue;
+    result[orientation][clip.giant_part] = { textures: frameValues as T[], fps: clip.fps, playback: clip.playback };
+  }
+  return result;
+}
+
+/**
  * The top-layer value for one part of one giant family, or `undefined` if
  * there's no such frame (e.g. the real art hasn't landed yet — callers must
  * degrade gracefully). Generic over the resolved value for the same reason

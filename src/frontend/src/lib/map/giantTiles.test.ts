@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { neighbors, type AxialCoord } from '../hex/coords';
 import { isoGridPosition, isoTopPoints, type Point } from '../hex/geometry';
 import {
+  classifyGiantClips,
   classifyGiantFrames,
   giantCoverage,
   giantCrop,
@@ -9,6 +10,7 @@ import {
   GIANT_NEIGHBOR_PARTS,
   giantTop,
   parseGiantFrameName,
+  type GiantFamilyClip,
   type GiantFamilyFrame,
 } from './giantTiles';
 
@@ -122,6 +124,89 @@ describe('classifyGiantFrames / giantTop', () => {
     expect(giantTop(giants, 'giantmountain', 'SE', 'N')).toBeUndefined();
     expect(giantTop(giants, 'giantmountain', 'NE', 'C')).toBeUndefined();
     expect(giantTop(giants, 'unknownfamily', 'SE', 'C')).toBeUndefined();
+  });
+});
+
+describe('classifyGiantClips', () => {
+  function giantClip(overrides: Partial<GiantFamilyClip> & Pick<GiantFamilyClip, 'family' | 'orientation' | 'frames'>): GiantFamilyClip {
+    return { fps: 4, playback: 'loop', giant_part: 'C', ...overrides };
+  }
+
+  function resolveAll(name: string): string | undefined {
+    return name;
+  }
+
+  it('resolves a valid giant clip into a map entry with its textures/fps/playback', () => {
+    const result = classifyGiantClips(
+      [
+        giantClip({
+          family: 'giantshrine',
+          orientation: 'E',
+          giant_part: 'C',
+          frames: ['giantshrine_E_level000_partC_f00', 'giantshrine_E_level000_partC_f01'],
+          fps: 1,
+          playback: 'loop',
+        }),
+      ],
+      resolveAll,
+    );
+
+    expect(result.E.C).toEqual({
+      textures: ['giantshrine_E_level000_partC_f00', 'giantshrine_E_level000_partC_f01'],
+      fps: 1,
+      playback: 'loop',
+    });
+  });
+
+  it('drops a clip when any of its frames fails to resolve', () => {
+    const result = classifyGiantClips(
+      [
+        giantClip({
+          family: 'giantvolcano',
+          orientation: 'NE',
+          giant_part: 'S',
+          frames: ['giantvolcano_NE_level000_partS_f00', 'missing_frame'],
+        }),
+      ],
+      (name) => (name === 'missing_frame' ? undefined : name),
+    );
+
+    expect(result.NE.S).toBeUndefined();
+  });
+
+  it('ignores a clip whose giant_part is missing or not a valid GiantPart', () => {
+    const noPart = classifyGiantClips(
+      [giantClip({ family: 'giantshrine', orientation: 'SE', frames: ['f00'], giant_part: undefined })],
+      resolveAll,
+    );
+    const badPart = classifyGiantClips(
+      [giantClip({ family: 'giantshrine', orientation: 'SE', frames: ['f00'], giant_part: 'XX' })],
+      resolveAll,
+    );
+
+    expect(noPart.SE).toEqual({});
+    expect(badPart.SE).toEqual({});
+  });
+
+  it('is expected to be pre-filtered by family by the caller — classifyGiantClips itself does not check clip.family', () => {
+    // Mirrors classifyFamilyClips (textures.ts): the caller (buildTileTextures)
+    // filters `animAtlas.clips` to one family before calling this, the same
+    // way it filters before calling classifyFamilyClips. Passing an
+    // unfiltered mix here would wrongly merge both families' parts, so
+    // callers must never skip that filter — this test documents the
+    // contract rather than re-implementing the filter itself.
+    const result = classifyGiantClips(
+      [
+        giantClip({ family: 'giantshrine', orientation: 'E', giant_part: 'C', frames: ['a'] }),
+        giantClip({ family: 'giantvolcano', orientation: 'E', giant_part: 'N', frames: ['b'] }),
+      ],
+      resolveAll,
+    );
+
+    // Both land in the result since nothing here filters by family —
+    // proving the responsibility sits with the caller.
+    expect(result.E.C).toBeDefined();
+    expect(result.E.N).toBeDefined();
   });
 });
 

@@ -33,7 +33,9 @@
     "longship": "Longship"
   },
   "giants": {
-    "giantmountain": "Giant mountain"
+    "giantmountain": "Giant mountain",
+    "giantshrine": "Runestone shrine",
+    "giantvolcano": "Volcano"
   },
   "terrain": {
     "sea": "Open water",
