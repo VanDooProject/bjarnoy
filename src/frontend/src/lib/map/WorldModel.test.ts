@@ -961,3 +961,35 @@ describe('WorldModel.setGiants (live mode)', () => {
     expect(tile.giant?.orientation).toBe('E');
   });
 });
+
+describe('placeGiantsForIsland (demo giant placement v2)', () => {
+  // The default demo seed's home island (284 tiles) gets one mountain giant
+  // anchored at (-7, -15) — a footprint that sits on real Mountain hexes.
+  const DEMO_SEED = 20260824;
+  const mountainAnchor = { q: -7, r: -15 };
+
+  it('tags a mountain giant even though its footprint is Mountain terrain', () => {
+    const model = new WorldModel(DEMO_SEED);
+    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
+    for (const { coord } of giantCoverage(mountainAnchor)) {
+      expect(model.getTile(coord.q, coord.r).giant?.family).toBe('giantmountain');
+    }
+  });
+
+  it('keeps the landfall clear of every placed giant', () => {
+    const model = new WorldModel(DEMO_SEED);
+    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
+    const at = model.findLandfall(mountainAnchor);
+    expect(at).not.toBeNull();
+    expect(hexDistance(at!, mountainAnchor)).toBeGreaterThanOrEqual(5);
+  });
+
+  it('places an island’s giants once, however many times it is visited', () => {
+    const model = new WorldModel(DEMO_SEED);
+    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
+    const tagged = () => [...hexesInRadius(mountainAnchor, 40)].filter((c) => model.getTile(c.q, c.r).giant).length;
+    const first = tagged();
+    model.placeGiantsForIsland({ q: mountainAnchor.q + 1, r: mountainAnchor.r }, DEMO_SEED);
+    expect(tagged()).toBe(first);
+  });
+});

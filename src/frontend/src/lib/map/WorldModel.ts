@@ -1234,7 +1234,7 @@ export class WorldModel {
    * (`giantPlacedIslands`, keyed by the island's own lowest-(q, r) tile —
    * the demo has no backend island id to key by instead), runs the shared
    * `placeGiants` core (mirrors `GiantGenerator.PlaceCore`) against it and
-   * places each result with `placeGiant`.
+   * tags each result via `setGiants`.
    *
    * `islandIndex` has no backend equivalent to borrow in demo mode (there is
    * no island list to index into) — it is derived instead from a hash of the
@@ -1268,9 +1268,18 @@ export class WorldModel {
 
     const islandIndex = Math.floor(hash2(lowest.q, lowest.r, worldSeed) * 1_000_000);
     const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex);
-    for (const placement of placements) {
-      this.placeGiant(placement.anchor, placement.family);
-    }
+    // `placeGiants` already enforced the real placement rules, so these go
+    // through `setGiants` (like the server's giants in live mode), not
+    // `placeGiant`: the latter's `canPlaceGiant` spike rule only accepts
+    // Grass/Forest, which would silently drop every mountain giant — a
+    // mountain giant's footprint has Mountain hexes by construction.
+    this.setGiants(
+      placements.map((p) => ({
+        family: p.family,
+        anchor: p.anchor,
+        orientation: this.getTile(p.anchor.q, p.anchor.r).orientation ?? 'SE',
+      })),
+    );
   }
 
   /**
