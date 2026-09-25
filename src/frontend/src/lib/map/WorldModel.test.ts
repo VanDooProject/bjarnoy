@@ -1065,4 +1065,15 @@ describe('WorldModel wasted-island reveal', () => {
     // this only checks the call didn't throw/behave oddly, not cache identity.
     expect(model.getTile(0, 0).terrain).toBe(before);
   });
+
+  it('revealWastedIslands (demo debug hook) reveals and places giants on a nearby wasted island', () => {
+    const model = new WorldModel(WASTED_SEED);
+    expect(model.isWastedRevealed()).toBe(false);
+
+    const discovered = model.revealWastedIslands(WASTED_SEED, wastedForest, 5);
+
+    expect(model.isWastedRevealed()).toBe(true);
+    expect(discovered.length).toBeGreaterThan(0);
+    expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('forest');
+  });
 });

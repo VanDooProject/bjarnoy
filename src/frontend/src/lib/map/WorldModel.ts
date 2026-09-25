@@ -540,6 +540,37 @@ export class WorldModel {
     return this.wastedRevealed;
   }
 
+  /**
+   * Demo mode's `window.__demoWorld().revealWastedIslands()` debug hook
+   * (see main.ts): reveals this world's wasted islands and, for each
+   * wasted landmass found by flood-fill within `searchRadius` of `near`
+   * (typically the player's own settlement/view — demo mode has no world-
+   * wide island list to consult), runs the same wasted-mode giant
+   * placement live worlds get from `WorldGenerator`. Demo mode has no
+   * rivers, so there is no lava to place here — that side is verified by
+   * unit tests only (see WastedIslandGenerationTests.cs and the frontend's
+   * own textures tests). Idempotent per island the same way
+   * `placeGiantsForIsland` already is; returns each discovered landmass's
+   * first-visited hex, purely so a caller (or test) can see what was found.
+   */
+  revealWastedIslands(worldSeed: number, near: AxialCoord = { q: 0, r: 0 }, searchRadius = 90): AxialCoord[] {
+    this.setWastedRevealed(true);
+
+    const visited = new Set<string>();
+    const discovered: AxialCoord[] = [];
+    for (const coord of hexesInRadius(near, searchRadius)) {
+      const key = coordKey(coord);
+      if (visited.has(key) || !this.isWastedLandAt(coord.q, coord.r)) continue;
+
+      const islandTiles = floodFillLandmass(coord, (c) => this.isLand(c.q, c.r), GIANT_ISLAND_FLOOD_MAX_RADIUS) ?? [coord];
+      for (const tile of islandTiles) visited.add(coordKey(tile));
+
+      this.placeGiantsForIsland(coord, worldSeed, true);
+      discovered.push(coord);
+    }
+    return discovered;
+  }
+
   getTile(q: number, r: number): Tile {
     const k = coordKey({ q, r });
     let tile = this.tiles.get(k);
@@ -1317,7 +1348,7 @@ export class WorldModel {
    * at all — see `stores/world.ts`'s `foundStartingSettlement` for where
    * this is called and why it must run before `foundSettlement`).
    */
-  placeGiantsForIsland(near: AxialCoord, worldSeed: number): void {
+  placeGiantsForIsland(near: AxialCoord, worldSeed: number, wasted = false): void {
     if (!this.isLand(near.q, near.r)) return;
 
     const islandTiles = floodFillLandmass(near, (c) => this.isLand(c.q, c.r), GIANT_ISLAND_FLOOD_MAX_RADIUS);
@@ -1335,7 +1366,7 @@ export class WorldModel {
     this.giantPlacedIslands.add(islandKey);
 
     const islandIndex = Math.floor(hash2(lowest.q, lowest.r, worldSeed) * 1_000_000);
-    const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex);
+    const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex, () => false, wasted);
     // `placeGiants` already enforced the real placement rules, so these go
     // through `setGiants` (like the server's giants in live mode), not
     // `placeGiant`: the latter's `canPlaceGiant` spike rule only accepts
