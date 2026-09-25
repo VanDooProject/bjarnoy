@@ -1,4 +1,7 @@
 {
+  "notifications": {
+    "dismiss": "Schließen"
+  },
   "nav": {
     "settlement": "Siedlung",
     "worldMap": "Weltkarte",

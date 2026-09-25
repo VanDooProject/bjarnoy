@@ -25,6 +25,7 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
+import { useNotificationsStore } from '../stores/notifications';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
@@ -51,6 +52,7 @@ import { reachableRange, type PathContext } from '../lib/map/hexPath';
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
+const notifications = useNotificationsStore();
 const player = usePlayerStore();
 const unitCatalogue = useUnitCatalogueStore();
 const buildingCatalogue = useBuildingCatalogueStore();
@@ -881,34 +883,41 @@ async function onRingSelect(id: string) {
   const tile = selectedTile.value;
   if (tile && categoriesFor(tile).some((c) => c.buildings.some((b) => b.type === id))) {
     const placed = await buildType(id as BuildableType);
-    // Unlike 'upgrade' below, a rejection here must NOT fall through to
-    // BuildingModal: that modal's empty-tile view always defaults to a hut
-    // (see its own upgradeType computed) regardless of which building was
-    // actually attempted, so it used to show a mismatched cost/afford
-    // message for whatever the ring tried to build, with a "Build here"
-    // button that would then build a hut instead of retrying the real
-    // pick. Closing the ring on a rejection is its own wrong signal too —
-    // it reads as "something happened" — so a rejected build now just
-    // leaves the ring exactly as it was, the same as a click the ring
-    // already refuses (a locked or terrain-inappropriate bubble).
+    // A rejection here must NOT fall through to BuildingModal: that modal's
+    // empty-tile view always defaults to a hut (see its own upgradeType
+    // computed) regardless of which building was actually attempted, so it
+    // used to show a mismatched cost/afford message for whatever the ring
+    // tried to build, with a "Build here" button that would then build a hut
+    // instead of retrying the real pick. Closing the ring on a rejection is
+    // its own wrong signal too — it reads as "something happened" — so a
+    // rejected build now just leaves the ring exactly as it was, the same as
+    // a click the ring already refuses (a locked or terrain-inappropriate
+    // bubble), with the rejection reason surfaced as a dismissible
+    // notification instead of silently dropped.
     if (placed) closeRing();
-    else actionError.value = null;
+    else if (actionError.value) notifications.push(actionError.value);
+    actionError.value = null;
     return;
   }
   switch (id) {
     case 'details':
     case 'info':
       // Falls through to BuildingModal below; the ring stays "open" only long
-      // enough for the modal to take over the same selectedTile.
+      // enough for the modal to take over the same selectedTile. This is the
+      // *only* path that opens BuildingModal — every other ring action either
+      // closes the ring outright or, on failure, reports via a notification
+      // instead, so the modal never pops open behind the player's back.
       ringScreen.value = null;
       return;
     case 'upgrade':
-      // upgrade() already closes on success (both branches); on failure it
-      // deliberately leaves selectedTile/ringScreen alone so this can drop
-      // through to BuildingModal instead, where the error renders.
+      // upgrade() already closes on success. On failure it must NOT fall
+      // through to BuildingModal (same reasoning as the build case above) —
+      // the ring stays open and the rejection reason surfaces as a
+      // notification instead.
       await upgrade();
       if (actionError.value) {
-        ringScreen.value = null;
+        notifications.push(actionError.value);
+        actionError.value = null;
       } else {
         closeRing();
       }
