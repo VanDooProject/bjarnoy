@@ -317,6 +317,14 @@ watch(() => route.fullPath, closeAccountMenu);
   .hud-nav--with-resources:not(.hud-nav--no-drawer) .returning-player-menu {
     display: none;
   }
+  /* With the links, locale switcher, avatar and trigger all moved into the
+     drawer, nothing of HudNav is left to show in the in-game phone bar — but
+     its own box (padding + divider) still took ~23px on the right, which
+     shoved the evenly spread resource row off-centre to the left. Drop the
+     empty nav entirely so the row spans the whole bar. */
+  .hud-nav--with-resources:not(.hud-nav--no-drawer) {
+    display: none;
+  }
 }
 .badge {
   display: inline-flex;

@@ -591,6 +591,16 @@ const backdropStyle = computed(() => {
 .hud-bar--drag-enabled.hud-bar--bottom {
   padding-top: 20px;
 }
+/* In-game phone bar: the resource pills are the only thing left in it, and
+   their row spreads its free space evenly (`space-evenly`) — the bar's own
+   20px side padding on top of that made both ends visibly wider than the
+   gaps between pills, clumping them towards the middle. Let the row own the
+   full width so the outer gaps equal the inner ones. Docs-style bars (title
+   + trigger, no ResourceBar) keep their padding. */
+.hud-bar--drag-enabled:has(.resource-bar) {
+  padding-left: 0;
+  padding-right: 0;
+}
 /* Android-notification-shade style grabber: a short rounded bar centred on
    the reserved strip above, not a chevron — the owner's annotated screenshot
    asked for the chevron gone entirely, not just relabelled. `position:

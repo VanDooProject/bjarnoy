@@ -104,6 +104,16 @@ async function expectPillsEvenlySpaced(page: Page): Promise<void> {
     return out;
   });
   expect(gaps.length).toBeGreaterThan(2);
+  // Evenly spread *across the screen*, not just within the row: the row's
+  // own box can end short of the bar (a leftover empty element beside it
+  // once pushed the pills left of centre while their in-row gaps still
+  // looked perfectly even), so also require the first pill's distance from
+  // the screen's left edge to match the last pill's from the right edge.
+  const screen = await page.locator(REAL_BAR).evaluate((row) => {
+    const pills = Array.from(row.children).map((el) => el.getBoundingClientRect());
+    return { left: pills[0].left, right: window.innerWidth - pills[pills.length - 1].right };
+  });
+  expect(Math.abs(screen.left - screen.right), `screen edges L=${Math.round(screen.left)} R=${Math.round(screen.right)}`).toBeLessThanOrEqual(2);
   const min = Math.min(...gaps);
   const max = Math.max(...gaps);
   expect(max - min, `gaps ${gaps.map(Math.round).join(',')}`).toBeLessThanOrEqual(2);
@@ -317,11 +327,11 @@ test.describe('mobile HUD bar', () => {
   });
 
   // Owner: short notation only *when needed*. At the suite's default 390px
-  // width the default demo stock and rates fit in full with an even gap, so
-  // they must stay full (a regression that always abbreviates would fail
-  // here); five full caps ("/3,000") don't leave that gap, so the cap stage
-  // and the three-line drawer row abbreviate — still one evenly spaced row.
-  test('at 390px the bar abbreviates only the stages whose full numbers do not fit', async ({ page }) => {
+  // width the default demo numbers fit in full with an even gap in every
+  // stage and in the drawer-open row, so nothing may be abbreviated there
+  // (a regression that always abbreviates would fail here); short notation
+  // itself is exercised below with seeded large numbers at 320px.
+  test('at 390px the default numbers stay in full notation in every stage', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await loginTestUser(page);
     await SettlementPage.found(page);
@@ -333,12 +343,12 @@ test.describe('mobile HUD bar', () => {
     await expect(wood.locator('.value-compact')).toContainText('/h');
     await expect(row).not.toContainText(/\d(k|M)\b/);
     await wood.click(); // cap
-    await expect(wood.locator('.value-compact')).toContainText('/3k');
+    await expect(wood.locator('.value-compact')).toContainText('/3,000');
     await expectPillsEvenlySpaced(page);
 
     await page.locator('.hud-grip').click();
     await expect(page.locator(`${REAL_BAR}.expanded`)).toBeVisible();
-    await expect(page.locator(`${REAL_BAR} .resource`).first().locator('.cap')).toContainText('/3k');
+    await expect(page.locator(`${REAL_BAR} .resource`).first().locator('.cap')).toContainText('/3,000');
     await expectPillsEvenlySpaced(page);
   });
 
