@@ -23,8 +23,7 @@
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserved)",
-    "rate": "+{n}/h",
-    "capMax": "max {n}"
+    "rate": "{n}/h"
   },
   "drawer": {
     "toggle": "Show more"

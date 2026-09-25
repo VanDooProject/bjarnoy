@@ -18,12 +18,26 @@
 // drawer doesn't need its own separate (and duplicate) resource list.
 // The fill bar itself is never part of the cycle — it renders identically in
 // every stage/branch. Desktop keeps today's markup and styling untouched.
-import { computed, onBeforeUnmount, ref } from 'vue';
+//
+// Mobile HUD bar rework, phase 3 (owner's decision): the phone row must
+// NEVER wrap onto a second line, in either the collapsed or the expanded
+// (drawer-open) state — a wrapped population pill at 320px was flagged as
+// bad, not fixed by giving it more room. With wrapping no longer a release
+// valve, the row instead measures itself (`useShortNotation`/`updateFit`
+// below) and switches every pill's numbers to short "k"/"M" notation
+// together — see `lib/hud/compactNumber.ts` — only once the full-notation
+// row genuinely doesn't fit. The hidden `.resource-bar--measure` clone
+// mirrors the visible row but forced to full notation, so fit is always
+// judged against "would full notation fit", never against whatever is
+// currently on screen — that's what keeps the row from flip-flopping right
+// at the boundary.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
+import { formatHudNumber } from '../../lib/hud/compactNumber';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -35,7 +49,7 @@ const props = defineProps<{
 }>();
 
 const world = useWorldStore();
-const { t, n } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 const isExpanded = computed(() => isCompact.value && isHudDrawerOpen.value);
@@ -54,8 +68,30 @@ const pills = computed(() => [
 
 const population = computed(() => world.hud.population);
 
-function fmt(value: number): string {
-  return n(Math.floor(value), 'integer');
+// --- Number formatting (full by default, short only once measured to not fit) ---
+
+/** Whether the phone row is currently showing short "k"/"M" notation instead of full grouped numbers. Always false on desktop. */
+const useShortNotation = ref(false);
+
+/**
+ * Owner's decision, last resort: "if even short notation doesn't fit
+ * (very unlikely), shrink the font a step rather than wrap." Set once
+ * `updateFit` finds the row still overflowing even after switching to short
+ * notation — e.g. five pills' worth of very large numbers on the narrowest
+ * (320px) phone. Never set without `useShortNotation` also being true.
+ */
+const useTightFont = ref(false);
+
+/** `forceFull` lets the hidden measurer (below) always render full notation regardless of `useShortNotation`, since it exists to answer "would full notation fit". */
+function fmt(value: number, forceFull = false): string {
+  return formatHudNumber(Math.floor(value), locale.value, forceFull ? false : useShortNotation.value);
+}
+
+/** A rate carries its own sign (`+60/h`, `-12/h`) — `formatHudNumber` already signs negatives, so only the positive case needs a `+` added here. */
+function fmtRate(rate: number, forceFull = false): string {
+  const rounded = Math.round(rate);
+  const formatted = formatHudNumber(rounded, locale.value, forceFull ? false : useShortNotation.value);
+  return rounded < 0 ? formatted : `+${formatted}`;
 }
 
 function fillPct(value: number, cap: number): number {
@@ -109,15 +145,75 @@ function cycle() {
 
 onBeforeUnmount(clearRevertTimer);
 
-function stageText(value: number, rate: number, cap: number): string {
-  if (stage.value === 1) return t('hud.resourceBar.rate', { n: Math.round(rate) });
-  if (stage.value === 2) return t('hud.resourceBar.capMax', { n: fmt(cap) });
-  return fmt(value);
+// Cap stage now reuses the exact same "/{n}" the expanded view's cap line
+// shows (owner's call — a bare "/3,000" reads as continuing the "current"
+// line's own cap, exactly like the expanded pill directly above it does),
+// not a standalone "max {n}" label.
+function stageText(value: number, rate: number, cap: number, forceFull = false): string {
+  if (stage.value === 1) return t('hud.resourceBar.rate', { n: fmtRate(rate, forceFull) });
+  if (stage.value === 2) return t('hud.resourceBar.capSuffix', { n: fmt(cap, forceFull) });
+  return fmt(value, forceFull);
 }
+
+// --- Fit measurement: does full notation fit the row's real width? ---
+// `barRef` is the actual, visible `.resource-bar` — the one whose width the
+// row must fit into. `measureRef` is the hidden clone below (forced full
+// notation, `flex: none` on its own pills so it reports its true unwrapped
+// content width via `scrollWidth`, and `position: fixed` so it never
+// participates in `.hud-bar-right`'s own flex layout). Comparing the two,
+// rather than trying to guess a width in pixels, is what makes this correct
+// at every phone width and font/locale combination instead of just the ones
+// tested by hand.
+const barRef = ref<HTMLElement | null>(null);
+const measureRef = ref<HTMLElement | null>(null);
+let resizeObserver: ResizeObserver | null = null;
+
+async function updateFit(): Promise<void> {
+  if (!isCompact.value) {
+    useShortNotation.value = false;
+    useTightFont.value = false;
+    return;
+  }
+  const bar = barRef.value;
+  const measure = measureRef.value;
+  if (!bar || !measure) return;
+  const needsShort = measure.scrollWidth > bar.clientWidth;
+  useShortNotation.value = needsShort;
+  useTightFont.value = false;
+  if (!needsShort) return;
+  // Let the DOM actually re-render in short notation before judging whether
+  // that alone was enough — only then does `bar.scrollWidth` reflect it.
+  await nextTick();
+  useTightFont.value = bar.scrollWidth > bar.clientWidth;
+}
+
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined' && barRef.value) {
+    resizeObserver = new ResizeObserver(() => void updateFit());
+    resizeObserver.observe(barRef.value);
+  }
+  void nextTick(updateFit);
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+});
+
+// Re-check whenever anything that can change either row's rendered width
+// does: the numbers themselves, the stage being cycled (collapsed mode only
+// shows one stage's text at a time), and collapsed <-> expanded (a
+// completely different markup shape) — a bar *resize* (rotation, drawer
+// animation) is already covered by the ResizeObserver above.
+watch([pills, population, stage, isExpanded, isCompact, locale], () => void updateFit(), { deep: true });
 </script>
 
 <template>
-  <div class="resource-bar" :class="{ disabled: props.ringOpen, compact: isCompact && !isExpanded, expanded: isExpanded }">
+  <div
+    ref="barRef"
+    class="resource-bar"
+    :class="{ disabled: props.ringOpen, compact: isCompact && !isExpanded, expanded: isExpanded, 'tight-font': useTightFont }"
+  >
     <template v-if="!isCompact || isExpanded">
       <div v-for="pill in pills" :key="pill.key" class="resource">
         <span class="hex-icon" :style="{ background: pill.color }" />
@@ -126,7 +222,7 @@ function stageText(value: number, rate: number, cap: number): string {
             {{ fmt(pill.value) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap) }) }}</span>
             <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}</span>
           </span>
-          <span class="rate">{{ t('hud.resourceBar.rate', { n: Math.round(pill.rate) }) }}</span>
+          <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(pill.rate) }) }}</span>
           <span class="fill-track">
             <span class="fill" :style="{ width: fillPct(pill.value, pill.cap) + '%', background: pill.color }" />
             <span
@@ -144,7 +240,7 @@ function stageText(value: number, rate: number, cap: number): string {
         <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
         <div class="numbers">
           <span class="value">{{ fmt(population.current) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(population.max) }) }}</span></span>
-          <span class="rate">{{ t('hud.resourceBar.rate', { n: Math.round(population.rate) }) }}</span>
+          <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(population.rate) }) }}</span>
           <span class="fill-track"><span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop, #7fb3d5)' }" /></span>
         </div>
       </div>
@@ -179,9 +275,6 @@ function stageText(value: number, rate: number, cap: number): string {
               }"
             />
           </span>
-          <span class="stage-dots" aria-hidden="true">
-            <span v-for="i in STAGE_COUNT" :key="i" class="dot" :class="{ active: stage === i - 1 }" />
-          </span>
         </div>
       </button>
       <button
@@ -200,11 +293,59 @@ function stageText(value: number, rate: number, cap: number): string {
           <span class="fill-track">
             <span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop, #7fb3d5)' }" />
           </span>
-          <span class="stage-dots" aria-hidden="true">
-            <span v-for="i in STAGE_COUNT" :key="i" class="dot" :class="{ active: stage === i - 1 }" />
-          </span>
         </div>
       </button>
+    </template>
+  </div>
+
+  <!-- Hidden fit-measurement clone (see `updateFit` above) — same shape as
+       the visible row above, always in full notation, never wrapped, laid
+       out off-screen via `position: fixed` so it can't affect `.hud-bar-right`'s
+       real layout or be seen/hit-tested. Exists only on phones. -->
+  <div
+    v-if="isCompact"
+    ref="measureRef"
+    class="resource-bar resource-bar--measure"
+    :class="{ compact: !isExpanded, expanded: isExpanded }"
+    aria-hidden="true"
+    data-measure="true"
+    inert
+  >
+    <template v-if="isExpanded">
+      <div v-for="pill in pills" :key="pill.key" class="resource">
+        <span class="hex-icon" :style="{ background: pill.color }" />
+        <div class="numbers">
+          <span class="value">
+            {{ fmt(pill.value, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap, true) }) }}</span>
+            <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved, true) }) }}</span>
+          </span>
+          <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(pill.rate, true) }) }}</span>
+        </div>
+      </div>
+      <div v-if="population.max > 0" class="resource population">
+        <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+        <div class="numbers">
+          <span class="value">{{ fmt(population.current, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(population.max, true) }) }}</span></span>
+          <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(population.rate, true) }) }}</span>
+        </div>
+      </div>
+    </template>
+    <template v-else>
+      <div v-for="pill in pills" :key="pill.key" class="resource resource--compact">
+        <span class="hex-icon" :style="{ background: pill.color }" />
+        <div class="numbers-compact">
+          <span class="value-compact">
+            {{ stageText(pill.value, pill.rate, pill.cap, true) }}
+            <span v-if="stage === 0 && pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved, true) }) }}</span>
+          </span>
+        </div>
+      </div>
+      <div v-if="population.max > 0" class="resource resource--compact population">
+        <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+        <div class="numbers-compact">
+          <span class="value-compact">{{ stageText(population.current, population.rate, population.max, true) }}</span>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -297,30 +438,36 @@ function stageText(value: number, rate: number, cap: number): string {
    numbers") between one pill's numbers and the next pill's icon. Match the
    already-established compact-mode numbers (10px gap, no border/padding
    separator) here too, for visual consistency across the two mobile states. */
-/* Owner's annotated screenshot, item 4: at a narrow-enough phone width (320px
-   with 5 expanded pills) the un-wrapped row is wider than the bar has room
-   for — the base `.resource-bar` rule above is `flex: none` (a roomy desktop
-   row that's never expected to shrink), so without this the row overflows
-   its `.hud-bar-right` parent, and that parent's own `justify-content:
-   flex-end` (right-anchored) pushes the overflow out past the bar's *left*
-   edge instead of the right — the same half-cut-pill problem the compact
-   row's own `flex-wrap` (below) already solves, just in the expanded
-   markup instead. `flex: 1 1 auto; min-width: 0` lets this row actually
-   shrink to the space `.hud-bar-right` really has, and `flex-wrap` lets
-   pills that still don't fit drop to a second line rather than overflow. */
+/* Owner's decision, phase 3: the row must never wrap, at any phone width —
+   `flex: 1 1 auto; min-width: 0` still lets the row shrink to whatever
+   width `.hud-bar-right` actually has (a roomy desktop row is never
+   expected to shrink, hence the base `.resource-bar` rule above being
+   `flex: none`), but there is no second line to fall back to any more: once
+   the row doesn't fit, `useShortNotation` (see the script above) switches
+   every pill to short notation instead. */
 .resource-bar.expanded {
   gap: 6px;
   row-gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
-  flex-wrap: wrap;
 }
 .resource-bar.expanded .resource + .resource {
   padding-left: 0;
   border-left: none;
 }
+/* Owner addition: pills spread evenly across the bar's full width instead of
+   packing to the left, with each pill's own icon+numbers centred inside its
+   equal-width slot (`flex: 1 1 0` gives every pill the same share of the
+   row; `justify-content: center` centres this pill's own content within
+   that share). `min-width: min-content` is still a real floor — the same
+   "never squeeze below actual content" reasoning as the compact pills below
+   — the row switches to short notation (see the script above) rather than
+   ever shrinking a pill's numbers past their own natural width. */
 .resource-bar.expanded .resource {
   gap: 4px;
+  flex: 1 1 0;
+  min-width: min-content;
+  justify-content: center;
 }
 /* A notch smaller than desktop's 14px value text so all five expanded
    pills still fit one row on a 320–375px phone instead of the population
@@ -358,19 +505,18 @@ function stageText(value: number, rate: number, cap: number): string {
    letting the row run wider than the bar and pan sideways to reach the rest
    means whatever the bar's edge lands on mid-scroll is, by construction,
    sliced in half. With the avatar/chevron also gone (TopBar.vue/HudNav.vue)
-   the row finally has the whole bar width to itself, so pills wrap onto a
-   second line instead of ever being cut off — `flex-wrap: wrap` here, and
-   each pill keeps a real minimum width below (not 0) so wrapping is driven
-   by genuine content need rather than squeezing every pill illegibly thin
-   first. This row no longer scrolls at all, so it no longer needs its own
-   `touch-action` opinion either — a plain touch here now falls through to
-   the bar's own pull-down-drawer drag handling like the rest of the bar. */
+   the row finally has the whole bar width to itself. Phase 3 (owner's
+   decision): the row must never wrap onto a second line either, at any
+   phone width — see `useShortNotation`/`updateFit` in the script above for
+   what happens instead once the row stops fitting. This row still doesn't
+   scroll, so it still doesn't need its own `touch-action` opinion — a plain
+   touch here falls through to the bar's own pull-down-drawer drag handling
+   like the rest of the bar. */
 .resource-bar.compact {
   gap: 8px;
   row-gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
-  flex-wrap: wrap;
 }
 /* The desktop `.resource + .resource` separator (22px padding + a border)
    would otherwise still apply here too — far too wide for 5 pills to fit a
@@ -389,17 +535,20 @@ function stageText(value: number, rate: number, cap: number): string {
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  /* A real floor (not 0): letting a pill shrink to 0 would only relocate the
-     old scroller's "half-cut pill" bug into an "illegibly squeezed pill"
-     one — the text would keep its own natural (nowrap) width regardless and
-     spill past its own shrunk box, which is the same visual clipping under a
-     different name. The floor is the pill's own content width (not a fixed
-     guess — a fixed 68px basis wrapped the fifth pill onto its own line at
-     390px when all five fit), so the row wraps only when the pills'
-     real content genuinely doesn't fit, and otherwise shares the width
-     evenly. */
+  /* Owner addition: pills spread evenly across the bar's full width,
+     centred within their own equal-width slot — same reasoning as the
+     expanded pills' rule above. A real floor (not 0): letting a pill shrink
+     to 0 would only relocate the old scroller's "half-cut pill" bug into an
+     "illegibly squeezed pill" one — the text would keep its own natural
+     (nowrap) width regardless and spill past its own shrunk box, which is
+     the same visual clipping under a different name. The floor is the
+     pill's own content width (not a fixed guess — a fixed 68px basis
+     wrapped the fifth pill onto its own line at 390px when all five fit),
+     so short notation (see the script above) kicks in before the row would
+     ever need to shrink a pill past that floor. */
   flex: 1 1 0;
   min-width: min-content;
+  justify-content: center;
 }
 .resource--compact:focus-visible {
   outline: 2px solid var(--gold);
@@ -442,18 +591,50 @@ function stageText(value: number, rate: number, cap: number): string {
   min-width: 0;
   margin-top: 2px;
 }
-.stage-dots {
-  display: flex;
+
+/* Hidden fit-measurement clone (see `updateFit` in the script above) — laid
+   out off-screen, never wrapped, and with `flex: none` on its own pills so
+   each one reports its true unwrapped content width instead of sharing the
+   row evenly like the visible pills do. `position: fixed` takes it out of
+   normal/flex flow entirely, so it can't affect `.hud-bar-right`'s real
+   layout despite sitting alongside the visible `.resource-bar` as a sibling
+   root node. */
+.resource-bar--measure {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  flex-wrap: nowrap;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+.resource-bar--measure.compact .resource--compact,
+.resource-bar--measure.expanded .resource {
+  flex: none;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+/* Owner's decision, last resort: short notation is expected to be enough on
+   every real phone width, but `updateFit` still checks — five pills' worth
+   of very large numbers can still overhang a 320px bar even abbreviated.
+   Rather than let that wrap or clip, drop one more size/gap step. Placed
+   last so it wins over the `.compact`/`.expanded` rules above at equal
+   specificity. */
+.resource-bar.tight-font.compact {
+  gap: 5px;
+}
+.resource-bar.tight-font .value-compact {
+  font-size: 10px;
+}
+.resource-bar.tight-font .hex-icon {
+  width: 10px;
+  height: 10px;
+}
+.resource-bar.tight-font.expanded {
   gap: 3px;
-  margin-top: 2px;
 }
-.stage-dots .dot {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--panel-border);
-}
-.stage-dots .dot.active {
-  background: var(--gold);
+.resource-bar.tight-font.expanded .value {
+  font-size: 10px;
 }
 </style>

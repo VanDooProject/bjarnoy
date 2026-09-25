@@ -131,6 +131,28 @@ describe('ResourceBar (compact / mobile)', () => {
     wrapper.unmount();
   });
 
+  it('never renders the removed stage-dots indicator', async () => {
+    setup();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    expect(wrapper.find('.stage-dots').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('the cap stage shows the same "/cap" format as the expanded view, not a "max" label', async () => {
+    setup();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    const wood = wrapper.findAll('.resource--compact')[0];
+
+    await wood.trigger('click'); // rate
+    await wood.trigger('click'); // cap
+    expect(wood.get('.value-compact').text()).toContain('/12,000');
+    expect(wood.get('.value-compact').text()).not.toContain('max');
+    wrapper.unmount();
+  });
+
   it('tapping any pill cycles ALL pills together through stock -> rate -> max -> stock', async () => {
     setup();
     const wrapper = mountResourceBar();
@@ -145,8 +167,8 @@ describe('ResourceBar (compact / mobile)', () => {
     expect(stone.get('.value-compact').text()).toContain('+45/h'); // switched too, in sync
 
     await wood.trigger('click');
-    expect(wood.get('.value-compact').text()).toContain('max 12,000');
-    expect(stone.get('.value-compact').text()).toContain('max 8,000');
+    expect(wood.get('.value-compact').text()).toContain('/12,000');
+    expect(stone.get('.value-compact').text()).toContain('/8,000');
 
     // Tapping a *different* pill still advances the one shared stage.
     await stone.trigger('click');
