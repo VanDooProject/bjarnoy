@@ -5,7 +5,7 @@
 // exercises `enumerateIslands`, demo mode's own island list, directly.
 import { describe, expect, it } from 'vitest';
 import { hexDistance } from '../hex/coords';
-import { DEFAULT_GENERATION, enumerateIslands, wastedVariantAt, type WorldSeed } from './worldGenerator';
+import { DEFAULT_GENERATION, enumerateIslands, generateTile, wastedVariantAt, type WorldSeed } from './worldGenerator';
 import { WorldModel } from './WorldModel';
 
 const SEED: WorldSeed = { seed: 20260824, generation: DEFAULT_GENERATION };
@@ -64,6 +64,21 @@ describe('wastedVariantAt', () => {
     expect(counts[3] / total).toBeLessThan(0.1);
     expect((counts[4] + counts[5]) / total).toBeGreaterThan(0.15);
     for (const c of counts) expect(c).toBeGreaterThan(0);
+  });
+
+  it('does not pin a variant to one orientation', () => {
+    // Regression: salted next to orientation's hash, every variant only ever
+    // showed in a single rotation.
+    const rotations = new Map<number, Set<string>>();
+    for (let q = -30; q < 30; q++) {
+      for (let r = -30; r < 30; r++) {
+        const v = wastedVariantAt(q, r, world, 'grass');
+        const o = generateTile(q, r, world).orientation ?? 'SE';
+        if (!rotations.has(v)) rotations.set(v, new Set());
+        rotations.get(v)!.add(o);
+      }
+    }
+    for (const seen of rotations.values()) expect(seen.size).toBe(6);
   });
 
   it('uses both frames of dead forest and black sand', () => {

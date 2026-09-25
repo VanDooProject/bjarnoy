@@ -475,11 +475,17 @@ const WASTED_VARIANT_WEIGHTS: Partial<Record<Terrain, number[]>> = {
   sand: [0.6, 0.4],
 };
 
+const WASTED_VARIANT_SALT = 1_000_003;
+
 /** The top-variant index a revealed wasted-island tile of `terrain` shows at `(q, r)` — see `WASTED_VARIANT_WEIGHTS`. */
 export function wastedVariantAt(q: number, r: number, world: WorldSeed, terrain: Terrain): number {
   const weights = WASTED_VARIANT_WEIGHTS[terrain];
   if (!weights) return 0;
-  return weightedIndex(hash2(q, r, world.seed + 31), weights);
+  // A salt far from orientation's `seed + 29`: hash2 barely mixes its seed
+  // term, so a nearby salt (the green variant's `+ 31`) lands every hex in
+  // the same bucket as its orientation and pins each variant to one
+  // rotation.
+  return weightedIndex(hash2(q, r, world.seed + WASTED_VARIANT_SALT), weights);
 }
 
 /** Picks an index from `weights` (assumed to sum to ~1) using a `[0, 1)` roll `h`. */
