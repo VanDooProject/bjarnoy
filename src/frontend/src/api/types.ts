@@ -106,6 +106,8 @@ export interface IslandResponse {
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
+  /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
+  wasted: boolean;
 }
 
 /** Mirrors `PlotSuggestionResponse` — the plot this visitor is offered right now, pinned across reloads. */

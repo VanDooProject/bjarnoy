@@ -230,7 +230,8 @@ public sealed record IslandResponse(
     int TileCount,
     IReadOnlyList<TileCoordinate> StartPositions,
     IReadOnlyList<RiverTileResponse> RiverTiles,
-    IReadOnlyList<GiantResponse> Giants)
+    IReadOnlyList<GiantResponse> Giants,
+    bool Wasted)
 {
     public static IslandResponse From(IslandEntity island)
     {
@@ -245,7 +246,8 @@ public sealed record IslandResponse(
             island.TileCount,
             [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
             [.. island.RiverTiles.Select(RiverTileResponse.From)],
-            [.. island.Giants.Select(GiantResponse.From)]);
+            [.. island.Giants.Select(GiantResponse.From)],
+            island.IsWasted);
     }
 }
 

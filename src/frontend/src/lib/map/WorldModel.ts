@@ -10,7 +10,15 @@ import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './g
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
 import { validateTradeRatio } from '../trade/tradeRatio';
-import { DEFAULT_GENERATION, generateTile, hash2, terrainAt, type WorldGenerationConstants } from './worldGenerator';
+import {
+  DEFAULT_GENERATION,
+  generateTile,
+  hash2,
+  terrainAt,
+  wastedTerrainAt,
+  wastedVariantAt,
+  type WorldGenerationConstants,
+} from './worldGenerator';
 import {
   emptyResources,
   TILE_ORIENTATIONS,
@@ -209,6 +217,12 @@ function terrainKey(q: number, r: number): number {
   return ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
 }
 
+/** The exact inverse of `terrainKey` — only ever needed by `setWastedRevealed`'s cache-invalidation sweep. */
+function decodeTerrainKey(key: number): { q: number; r: number } {
+  const u = key >>> 0;
+  return { q: ((u >>> 16) & 0xffff) - 0x8000, r: (u & 0xffff) - 0x8000 };
+}
+
 
 
 export class WorldModel {
@@ -240,6 +254,16 @@ export class WorldModel {
    * one function.
    */
   private terrain = new Map<number, Terrain>();
+  /**
+   * Whether wasted islands are revealed for this world — false until the
+   * world's endboss triggers (see `setWastedRevealed`, called from the
+   * world response's `endbossTriggered` in live mode, and from the demo
+   * mode's `window.__demoWorld().revealWastedIslands()` debug hook). While
+   * false, `terrainOf`/`isLand` treat a wasted hex exactly like the plain
+   * sea it always was; flipping it invalidates every cache that could hold
+   * a stale sea answer for a now-revealed hex.
+   */
+  private wastedRevealed = false;
   private settlements = new Map<string, Settlement>();
   /** Trade carts in transit — see `CartShipment`'s own doc comment. */
   private cartShipments = new Map<string, CartShipment>();
@@ -477,16 +501,124 @@ export class WorldModel {
     let terrain = this.terrain.get(k);
     if (terrain === undefined) {
       terrain = terrainAt(q, r, { seed: this.seed, generation: this.generation });
+      if (terrain === 'sea' && this.wastedRevealed) {
+        const wasted = wastedTerrainAt(q, r, { seed: this.seed, generation: this.generation });
+        if (wasted !== 'sea') terrain = wasted;
+      }
       this.terrain.set(k, terrain);
     }
     return terrain;
   };
+
+  /**
+   * Whether `(q, r)` is a hex a wasted-island reveal materialises — i.e. it
+   * is sea to the plain green terrain layer but land once the wasted layer
+   * is consulted. Only meaningful (and only ever true) once
+   * `wastedRevealed` is set; before that, every hex is answered purely from
+   * the green layer, matching every existing caller's assumption.
+   *
+   * Public so a terrain-only caller — the water-mask bake's
+   * `isWastedLand` (see `TerrainLookup` in `water/waterMask.ts`) — can
+   * ask this without materialising a `Tile` per water texel, the same
+   * reason `hasProp` exists there instead of `getTile`.
+   */
+  isWastedLandAt(q: number, r: number): boolean {
+    if (!this.wastedRevealed) return false;
+    const world = { seed: this.seed, generation: this.generation };
+    if (terrainAt(q, r, world) !== 'sea') return false;
+    return wastedTerrainAt(q, r, world) !== 'sea';
+  }
+
+  /**
+   * Reveals (or hides again) this world's wasted islands — see
+   * `wastedRevealed`'s own doc comment. Invalidates only the cache entries
+   * whose answer can actually change: a hex the *green* layer alone (plain
+   * `terrainAt`, ignoring any reveal state) calls sea might materialise as
+   * wasted land — or, once already revealed, revert to plain sea when
+   * hidden again — so those are dropped and re-derived on next access.
+   * Checked against the pure green sample rather than the cached value
+   * itself, since the cached value's own meaning flips with the reveal
+   * state (a hex cached as `'forest'` while revealed is exactly the kind of
+   * entry that must still be invalidated on hide, even though it isn't
+   * cached as `'sea'` any more). Green land never changes on reveal either
+   * way, so every other cached `Tile` — buildings, ownership, `tile.giant`
+   * tags, the Forest→Grass flattening `tagGiantHex` wrote into `terrain` —
+   * is left exactly as it was; wiping the whole cache here previously
+   * discarded all of that (a real bug: `giantAnchorByHex` kept a giant's
+   * covered hexes, but the wiped `tiles`/`terrain` caches forgot them, so
+   * the two disagreed on rebuild). The renderer itself still needs an
+   * explicit `forceRebuild()` from the caller (mirrors how every other "the
+   * underlying map just changed under the renderer" mutation here —
+   * reseeding, placing a giant — leaves that to its own caller rather than
+   * reaching into HexMapRenderer from this model).
+   */
+  setWastedRevealed(revealed: boolean) {
+    if (this.wastedRevealed === revealed) return;
+    this.wastedRevealed = revealed;
+    const world = { seed: this.seed, generation: this.generation };
+    const isGreenSea = (q: number, r: number) => terrainAt(q, r, world) === 'sea';
+    for (const key of this.terrain.keys()) {
+      const { q, r } = decodeTerrainKey(key);
+      if (isGreenSea(q, r)) this.terrain.delete(key);
+    }
+    for (const [key, tile] of this.tiles) {
+      if (isGreenSea(tile.q, tile.r)) this.tiles.delete(key);
+    }
+    this.islandFootprintCache.clear();
+    this.previewIslandTilesCache.clear();
+  }
+
+  isWastedRevealed(): boolean {
+    return this.wastedRevealed;
+  }
+
+  /**
+   * Demo mode's `window.__demoWorld().revealWastedIslands()` debug hook
+   * (see main.ts): reveals this world's wasted islands and, for each
+   * wasted landmass found by flood-fill within `searchRadius` of `near`
+   * (typically the player's own settlement/view — demo mode has no world-
+   * wide island list to consult), runs the same wasted-mode giant
+   * placement live worlds get from `WorldGenerator`. Demo mode has no
+   * rivers, so there is no lava to place here — that side is verified by
+   * unit tests only (see WastedIslandGenerationTests.cs and the frontend's
+   * own textures tests). Idempotent per island the same way
+   * `placeGiantsForIsland` already is; returns each discovered landmass's
+   * first-visited hex, purely so a caller (or test) can see what was found.
+   */
+  revealWastedIslands(worldSeed: number, near: AxialCoord = { q: 0, r: 0 }, searchRadius = 90): AxialCoord[] {
+    this.setWastedRevealed(true);
+
+    const visited = new Set<string>();
+    const discovered: AxialCoord[] = [];
+    for (const coord of hexesInRadius(near, searchRadius)) {
+      const key = coordKey(coord);
+      if (visited.has(key) || !this.isWastedLandAt(coord.q, coord.r)) continue;
+
+      const islandTiles = floodFillLandmass(coord, (c) => this.isLand(c.q, c.r), GIANT_ISLAND_FLOOD_MAX_RADIUS) ?? [coord];
+      for (const tile of islandTiles) visited.add(coordKey(tile));
+
+      this.placeGiantsForIsland(coord, worldSeed, true);
+      discovered.push(coord);
+    }
+    return discovered;
+  }
 
   getTile(q: number, r: number): Tile {
     const k = coordKey({ q, r });
     let tile = this.tiles.get(k);
     if (!tile) {
       tile = generateTile(q, r, { seed: this.seed, generation: this.generation }, this.terrainOf);
+      if (this.wastedRevealed) {
+        if (this.isWastedLandAt(q, r)) {
+          tile.wasted = true;
+          tile.variant = wastedVariantAt(q, r, { seed: this.seed, generation: this.generation }, tile.terrain);
+        } else if (tile.terrain === 'sea' && tile.isCoastalWater) {
+          // Coastal water bordering wasted land also renders as wasted
+          // (blacksandcoast) — see textures.ts's wasted family mapping.
+          const bordersWasted = neighbors({ q, r }).some((n) => this.isWastedLandAt(n.q, n.r));
+          if (bordersWasted) tile.wasted = true;
+        }
+      }
       this.tiles.set(k, tile);
     }
     return tile;
@@ -1249,7 +1381,7 @@ export class WorldModel {
    * at all — see `stores/world.ts`'s `foundStartingSettlement` for where
    * this is called and why it must run before `foundSettlement`).
    */
-  placeGiantsForIsland(near: AxialCoord, worldSeed: number): void {
+  placeGiantsForIsland(near: AxialCoord, worldSeed: number, wasted = false): void {
     if (!this.isLand(near.q, near.r)) return;
 
     const islandTiles = floodFillLandmass(near, (c) => this.isLand(c.q, c.r), GIANT_ISLAND_FLOOD_MAX_RADIUS);
@@ -1267,7 +1399,7 @@ export class WorldModel {
     this.giantPlacedIslands.add(islandKey);
 
     const islandIndex = Math.floor(hash2(lowest.q, lowest.r, worldSeed) * 1_000_000);
-    const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex);
+    const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex, () => false, wasted);
     // `placeGiants` already enforced the real placement rules, so these go
     // through `setGiants` (like the server's giants in live mode), not
     // `placeGiant`: the latter's `canPlaceGiant` spike rule only accepts

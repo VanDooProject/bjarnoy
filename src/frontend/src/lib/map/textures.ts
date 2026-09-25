@@ -70,7 +70,20 @@ export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
 // a Sawmill's wire building type always stays 'sawmill' (see
 // `WorldModel.sawmillArtVariantOf`) — they're purely extra texture-lookup
 // keys for its two river-adjacent art families.
-export type TextureKey = Terrain | NonNullable<Tile['buildingType']> | 'sawmillriver' | 'sawmillbend';
+// 'wasteland'/'deadforest'/'blacksand'/'wastedmountain' aren't real
+// `Terrain` values either — a wasted tile's wire terrain stays
+// 'grass'/'forest'/'sand'/'mountain' (see `Tile.wasted`) — they're purely the
+// wasted-island art-family lookup keys `textureKeyFor` swaps to when a tile
+// is wasted.
+export type TextureKey =
+  | Terrain
+  | NonNullable<Tile['buildingType']>
+  | 'sawmillriver'
+  | 'sawmillbend'
+  | 'wasteland'
+  | 'deadforest'
+  | 'blacksand'
+  | 'wastedmountain';
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
@@ -107,10 +120,32 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   fisherhut: 'fisherhut',
   sawmillriver: 'sawmillriver',
   sawmillbend: 'sawmillbend',
+  wasteland: 'wasteland',
+  deadforest: 'deadforest',
+  blacksand: 'blacksand',
+  wastedmountain: 'mountaintile_jagged',
 };
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
 const COASTAL_FAMILY = 'coastalwatertile';
+
+/** Coastal water bordering a wasted island renders with this family instead of `COASTAL_FAMILY` — see `TileTextures.wastedCoastalBase`. */
+const WASTED_COASTAL_FAMILY = 'blacksandcoast';
+
+/**
+ * `wasteland`/`deadforest`/`blacksand`'s numbered top variants in the
+ * vendored art pack all start at `_variant001` with no `_variant000` at
+ * all — a genuine gap in the source numbering (`blacksandcoast`, by
+ * contrast, numbers its variants from `_variant000` like every green
+ * terrain family does). `classifyFamilyFrames` deliberately treats *any*
+ * numbering gap as a hard error elsewhere (see its own test): for a
+ * building's level sequence a gap really does mean a broken render pass,
+ * so silently tolerating one there would hide a real bug. Here it just
+ * reflects how these three families happened to be numbered, so their top
+ * frames are renumbered contiguously (see `renumberTopVariants`) before
+ * classification instead of being fed through as-is.
+ */
+const GAPPY_VARIANT_FAMILIES: ReadonlySet<string> = new Set(['wasteland', 'deadforest', 'blacksand']);
 
 /**
  * "Giant tile" families — one art object spanning a hex plus its six
@@ -123,7 +158,36 @@ const COASTAL_FAMILY = 'coastalwatertile';
  * `classifyGiantFrames`'s own doc comment), so they need their own
  * classification path entirely.
  */
-const GIANT_FAMILIES: readonly string[] = ['giantmountain', 'giantshrine', 'giantvolcano'];
+const GIANT_FAMILIES: readonly string[] = [
+  'giantmountain',
+  'giantshrine',
+  'giantvolcano',
+  'giantutgard',
+  'giantvolcano_wasted',
+];
+
+/**
+ * A giant family's dedicated wasted-tile art variant, if the vendored pack
+ * ships one — today just `giantvolcano` (a mountain-cluster giant on a
+ * wasted island keeps the backend/domain family string `"giantvolcano"`
+ * either way; only the art changes). `giantArtFamilyFor` is what resolves
+ * this at render time, with a plain-family fallback when the wasted variant
+ * has no frames loaded yet.
+ */
+const WASTED_GIANT_FAMILY: Partial<Record<string, string>> = {
+  giantvolcano: 'giantvolcano_wasted',
+};
+
+/**
+ * Which giant art family to actually look up for a placement — `family`
+ * unchanged unless the anchor tile is wasted and `family` has a dedicated
+ * wasted variant (see `WASTED_GIANT_FAMILY`). Callers still need their own
+ * fallback to the plain family when the wasted variant's frames haven't
+ * loaded (same graceful-degradation contract every other giant lookup has).
+ */
+export function giantArtFamilyFor(family: string, wasted: boolean): string {
+  return (wasted && WASTED_GIANT_FAMILY[family]) || family;
+}
 
 /** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
 type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
@@ -134,6 +198,26 @@ const RIVER_FAMILY: Record<RiverArtShape, string> = {
   bend60: 'rivertile_bend60',
   spring: 'rivertile_spring',
   confluence: 'rivertile_y_narrow',
+};
+
+/** The lava-river shapes that have a dedicated wasted-island art family — see `TileTextures.lavaRiverBase`/`lavaRiverTop`'s own doc comment for why this doesn't cover every `RiverArtShape`. */
+type LavaRiverShape = 'straight' | 'bend' | 'bend60' | 'spring';
+
+/**
+ * Lava-stream art families, one per `LavaRiverShape`. `spring`'s family
+ * (`mountaintile_volcano_lavaspring_flows`) is the mountain-shape family's
+ * own convention (base+top per orientation, no variants — same shape
+ * `mountaintile_saddleback_spring`/`mountaintile_corrie_spring` already
+ * use), not the plain river-family one; it only ever replaces a Spring
+ * tile's own overlay art (`riverTexturesFor`), never the underlying
+ * mountain's base texture, which stays whatever `MountainShapeAt`/
+ * `SpringMountainShapeAt` already picked either way.
+ */
+const LAVA_RIVER_FAMILY: Record<LavaRiverShape, string> = {
+  straight: 'lavastream',
+  bend: 'lavastream_bend',
+  bend60: 'lavastream_bend60',
+  spring: 'mountaintile_volcano_lavaspring_flows',
 };
 
 /** The orientation token embedded in every frame name, e.g. `..._NE_...` or `..._NE`. */
@@ -188,6 +272,40 @@ function mapOrientations<T, U>(map: OrientationMap<T>, fn: (o: TileOrientation, 
   const result = {} as OrientationMap<U>;
   for (const orientation of TILE_ORIENTATIONS) {
     result[orientation] = fn(orientation, map[orientation]);
+  }
+  return result;
+}
+
+/**
+ * Renumbers a family's `top`-layer frames to be contiguous per orientation
+ * (0, 1, 2, ... in original-index order), leaving `base`/`composite` frames
+ * untouched — see `GAPPY_VARIANT_FAMILIES`'s own doc comment for why this
+ * exists. The renamed frame carries no real family/orientation text beyond
+ * what `orientationOf`/`explicitIndexOf` need to re-derive it, since nothing
+ * downstream of `classifyFamilyFrames` looks at a frame's name again.
+ */
+// Exported (only) so textures.test.ts can exercise the gap-renumbering
+// directly, the same reason classifyFamilyFrames itself is exported.
+export function renumberTopVariants<T>(frames: FamilyFrame<T>[]): FamilyFrame<T>[] {
+  const byOrientation = emptyOrientationMap<{ layer: FamilyFrame<T>['layer']; value: T; index: number }[]>(() => []);
+  const untouched: FamilyFrame<T>[] = [];
+
+  for (const frame of frames) {
+    if (frame.layer !== 'top') {
+      untouched.push(frame);
+      continue;
+    }
+    const orientation = orientationOf(frame.name);
+    byOrientation[orientation].push({ layer: frame.layer, value: frame.value, index: explicitIndexOf(frame.name) ?? 0 });
+  }
+
+  const result = [...untouched];
+  for (const orientation of TILE_ORIENTATIONS) {
+    const sorted = [...byOrientation[orientation]].sort((a, b) => a.index - b.index);
+    sorted.forEach((entry, i) => {
+      const name = i === 0 ? `renumbered_${orientation}` : `renumbered_${orientation}_variant${String(i - 1).padStart(3, '0')}`;
+      result.push({ name, layer: entry.layer, value: entry.value });
+    });
   }
   return result;
 }
@@ -320,6 +438,17 @@ export interface TileTextures {
   animTop: Partial<Record<TextureKey, OrientationMap<(TileAnimClip | undefined)[]>>>;
   riverBase: Record<RiverArtShape, OrientationMap<Texture>>;
   riverTop: Record<RiverArtShape, OrientationMap<Texture>>;
+  /** Coastal water bordering a wasted island (`blacksandcoast`) — see `baseTextureFor`'s `tile.wasted` branch. */
+  wastedCoastalBase: OrientationMap<Texture[]>;
+  /**
+   * Lava-stream art for a wasted island's rivers — the shapes a lava
+   * stream can actually take (`straight`/`bend`/`bend60`/`spring`;
+   * confluence cannot occur on lava, and mouth renders with the plain
+   * river art per `riverTexturesFor`'s own doc comment). Sparse: a shape
+   * with no frames in the loaded atlas is simply absent.
+   */
+  lavaRiverBase: Partial<Record<LavaRiverShape, OrientationMap<Texture>>>;
+  lavaRiverTop: Partial<Record<LavaRiverShape, OrientationMap<Texture>>>;
   /** Giant-tile top textures, keyed by family (e.g. `giantmountain`) — see `giantTiles.ts`. */
   giants: Partial<Record<string, GiantTextureMap<Texture>>>;
   /**
@@ -375,7 +504,8 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
   const top: TileTextures['top'] = {};
   const animTop: TileTextures['animTop'] = {};
   for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
-    const classified = classifyFamilyFrames(framesOfFamily(merged, family));
+    const frames = framesOfFamily(merged, family);
+    const classified = classifyFamilyFrames(GAPPY_VARIANT_FAMILIES.has(family) ? renumberTopVariants(frames) : frames);
     if (classified.base) base[key] = classified.base;
     if (classified.baseIndexed) baseIndexed[key] = classified.baseIndexed;
     if (classified.top) top[key] = classified.top;
@@ -404,6 +534,20 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
   const coastalBase =
     coastalClassified.baseIndexed ?? coastalClassified.top ?? emptyOrientationMap<Texture[]>(() => []);
 
+  // Same base/top ambiguity as plain coastal water above, and the same
+  // "whichever bucket turned out indexed" resolution — blacksandcoast's own
+  // frames happen to carry per-variant base textures too (unlike plain
+  // coastal water's single level-invariant base), but the game still only
+  // ever draws one texture for a coastal-water tile either way.
+  // renumberTopVariants here too: a stale, incomplete leftover copy of
+  // blacksandcoast's frames still lingers in the buildings-static atlas
+  // (from before this family moved into terrain — see the wasted-islands
+  // asset-bump commit), and its lone-frame-per-orientation shape is its own
+  // kind of gap classifyFamilyFrames would otherwise reject outright.
+  const wastedCoastalClassified = classifyFamilyFrames(renumberTopVariants(framesOfFamily(merged, WASTED_COASTAL_FAMILY)));
+  const wastedCoastalBase =
+    wastedCoastalClassified.baseIndexed ?? wastedCoastalClassified.top ?? emptyOrientationMap<Texture[]>(() => []);
+
   const riverBase = {} as Record<RiverArtShape, OrientationMap<Texture>>;
   const riverTop = {} as Record<RiverArtShape, OrientationMap<Texture>>;
   for (const [shape, family] of Object.entries(RIVER_FAMILY) as [RiverArtShape, string][]) {
@@ -411,6 +555,14 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
     riverBase[shape] = classified.base ?? emptyOrientationMap<Texture>(() => Texture.EMPTY);
     const topArr = classified.top ?? emptyOrientationMap<Texture[]>(() => []);
     riverTop[shape] = mapOrientations(topArr, (_o, arr) => arr[0] ?? Texture.EMPTY);
+  }
+
+  const lavaRiverBase: TileTextures['lavaRiverBase'] = {};
+  const lavaRiverTop: TileTextures['lavaRiverTop'] = {};
+  for (const [shape, family] of Object.entries(LAVA_RIVER_FAMILY) as [LavaRiverShape, string][]) {
+    const classified = classifyFamilyFrames(framesOfFamily(merged, family));
+    if (classified.base) lavaRiverBase[shape] = classified.base;
+    if (classified.top) lavaRiverTop[shape] = mapOrientations(classified.top, (_o, arr) => arr[0] ?? Texture.EMPTY);
   }
 
   const giants: TileTextures['giants'] = {};
@@ -436,19 +588,67 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
     }
   }
 
-  return { base, coastalBase, baseIndexed, top, animTop, riverBase, riverTop, giants, giantAnims };
+  return {
+    base,
+    coastalBase,
+    wastedCoastalBase,
+    baseIndexed,
+    top,
+    animTop,
+    riverBase,
+    riverTop,
+    lavaRiverBase,
+    lavaRiverTop,
+    giants,
+    giantAnims,
+  };
+}
+
+/**
+ * Terrain families (green and wasted) belong to the terrain atlas, `a` in
+ * `mergeTileTextures`. A later load may still carry a few frames under the
+ * same names (bg_assets_hextile 24f0644 left stale `wasteland`/`blacksand`
+ * variants in buildings-static), and a plain spread let that partial copy
+ * replace the whole family: every orientation collapsed to its one stale
+ * frame. Terrain keys already in `a` therefore win; everything else merges
+ * as before.
+ */
+const TERRAIN_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
+  'sea',
+  'sand',
+  'grass',
+  'forest',
+  'mountain',
+  'wasteland',
+  'deadforest',
+  'blacksand',
+  'wastedmountain',
+]);
+
+function mergeKeyed<V>(a: Partial<Record<TextureKey, V>>, b: Partial<Record<TextureKey, V>>): Partial<Record<TextureKey, V>> {
+  const merged = { ...a, ...b };
+  for (const key of TERRAIN_TEXTURE_KEYS) {
+    if (a[key] !== undefined) merged[key] = a[key];
+  }
+  return merged;
 }
 
 /** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the terrain atlas, so `a`'s copies win unconditionally. */
 export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTextures {
   return {
-    base: { ...a.base, ...b.base },
-    baseIndexed: { ...a.baseIndexed, ...b.baseIndexed },
-    top: { ...a.top, ...b.top },
-    animTop: { ...a.animTop, ...b.animTop },
+    base: mergeKeyed(a.base, b.base),
+    baseIndexed: mergeKeyed(a.baseIndexed, b.baseIndexed),
+    top: mergeKeyed(a.top, b.top),
+    animTop: mergeKeyed(a.animTop, b.animTop),
     coastalBase: a.coastalBase,
     riverBase: a.riverBase,
     riverTop: a.riverTop,
+    // Like plain coastal water/rivers, the wasted-island terrain/lava-river
+    // art families live in the terrain atlas too, so these are pinned to
+    // `a` (the terrain-only load) the same way.
+    wastedCoastalBase: a.wastedCoastalBase,
+    lavaRiverBase: a.lavaRiverBase,
+    lavaRiverTop: a.lavaRiverTop,
     giants: { ...a.giants, ...b.giants },
     giantAnims: { ...a.giantAnims, ...b.giantAnims },
   };
@@ -503,9 +703,26 @@ export function loadTileTextures(): Promise<TileTextures> {
  * tile's own art instead of any building standing "on" it). Ignored for
  * every other building/terrain.
  */
+/**
+ * A wasted tile's green terrain, mapped to the wasted-island art family it
+ * renders with instead — see `docs/design/river-generation.md`'s wasted-
+ * island section and `WorldModel.setWastedRevealed`. A wasted mountain is
+ * the ashen `mountaintile_jagged` (the plain `mountaintile` art, base and
+ * top, carries a green grass skirt). Open sea (not coastal) stays plain sea
+ * either way.
+ */
+const WASTED_TEXTURE_KEY: Partial<Record<Terrain, TextureKey>> = {
+  grass: 'wasteland',
+  forest: 'deadforest',
+  sand: 'blacksand',
+  mountain: 'wastedmountain',
+};
+
 export function textureKeyFor(tile: Tile, sawmillVariant?: 'sawmillriver' | 'sawmillbend'): TextureKey {
   if (tile.buildingType === 'sawmill' && sawmillVariant) return sawmillVariant;
-  return tile.buildingType ?? tile.terrain;
+  if (tile.buildingType) return tile.buildingType;
+  if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
+  return tile.terrain;
 }
 
 /** Clamps an index into `[0, length)` — the shared fallback for both terrain variants and building levels: an index the art pack doesn't have falls back to its richest known one. */
@@ -530,8 +747,18 @@ export function baseTextureFor(
 ): Texture {
   const orientation = tile.orientation ?? 'SE';
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
-    const arr = textures.coastalBase[orientation];
+    const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
+  }
+  // A giant on a wasted island (and any wasted land tile without a wasted
+  // family of its own) sits on the `wasteland` base: the giant's own terrain
+  // key would pick a green grass or mountain base, leaving every volcano and
+  // Utgard in a bright green ring. Not routed through textureKeyFor, which
+  // also decides top art — a giant draws its own top (HexMapRenderer's giant
+  // branch), so only the base diverges here.
+  if (tile.wasted && !tile.buildingType && (tile.giant || !WASTED_TEXTURE_KEY[tile.terrain])) {
+    const wastelandBase = textures.base.wasteland;
+    if (wastelandBase) return wastelandBase[orientation];
   }
   const key = textureKeyFor(tile, sawmillVariant);
   const indexed = textures.baseIndexed[key];
@@ -640,6 +867,19 @@ export function riverArtFor(
 }
 
 /**
+ * The lava-spring art (`mountaintile_volcano_lavaspring_flows`) was rendered
+ * with its outflow two hex edges clockwise of `rivertile_spring`'s at the same
+ * orientation label (e.g. `_E`: the river spring drains out the lower-left
+ * edge, the lava spring out the top). So the orientation `springOrientationOf`
+ * picks for the river art is stepped two places back through
+ * `TILE_ORIENTATIONS` to put the lava tongue on the edge the stream leaves by.
+ */
+export function lavaSpringOrientationOf(riverSpringOrientation: TileOrientation): TileOrientation {
+  const i = TILE_ORIENTATIONS.indexOf(riverSpringOrientation);
+  return TILE_ORIENTATIONS[(i + TILE_ORIENTATIONS.length - 2) % TILE_ORIENTATIONS.length];
+}
+
+/**
  * A river tile's own base/top textures, overriding whatever the underlying
  * terrain would have drawn. `seaDirection` (only meaningful for a `Mouth`
  * tile — see `riverArtFor`) is the caller's own terrain lookup
@@ -651,6 +891,20 @@ export function riverTexturesFor(
   seaDirection: TileOrientation | null = null,
 ): { base: Texture; top: Texture } {
   const { shape, orientation } = riverArtFor(river, seaDirection);
+
+  // Lava streams (wasted islands) swap in the lavastream/lava-spring
+  // families for the shapes that have one — straight/bend/bend60/spring
+  // (LAVA_RIVER_FAMILY). Confluence cannot occur on lava (RiverGenerator's
+  // allowConfluence: false) and mouth deliberately keeps the plain river
+  // art (no dedicated lava mouth asset), so every other shape falls through
+  // to the ordinary lookup below even on a wasted island.
+  if (river.wasted && (shape === 'straight' || shape === 'bend' || shape === 'bend60' || shape === 'spring')) {
+    const lavaOrientation = shape === 'spring' ? lavaSpringOrientationOf(orientation) : orientation;
+    const lavaBase = textures.lavaRiverBase[shape]?.[lavaOrientation];
+    const lavaTop = textures.lavaRiverTop[shape]?.[lavaOrientation];
+    if (lavaBase && lavaTop) return { base: lavaBase, top: lavaTop };
+  }
+
   return { base: textures.riverBase[shape][orientation], top: textures.riverTop[shape][orientation] };
 }
 

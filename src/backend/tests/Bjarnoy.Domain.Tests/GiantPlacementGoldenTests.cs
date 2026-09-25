@@ -35,7 +35,7 @@ public class GiantPlacementGoldenTests
 
         var rivers = scenario.Rivers.Select(r => new HexCoord(r[0], r[1])).ToHashSet();
 
-        var actual = GiantGenerator.PlaceCore(tiles, land, rivers, scenario.WorldSeed, scenario.IslandIndex);
+        var actual = GiantGenerator.PlaceCore(tiles, land, rivers, scenario.WorldSeed, scenario.IslandIndex, scenario.Wasted);
 
         Assert.Equal(scenario.Giants.Count, actual.Count);
         for (var i = 0; i < scenario.Giants.Count; i++)
@@ -97,6 +97,8 @@ public class GiantPlacementGoldenTests
         public int WorldSeed { get; set; }
 
         public int IslandIndex { get; set; }
+
+        public bool Wasted { get; set; }
 
         public List<List<JsonElement>> Tiles { get; set; } = [];
 

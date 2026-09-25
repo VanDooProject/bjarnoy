@@ -23,8 +23,32 @@ export type WaterMode = 'world' | 'settlement';
 // than the sea in docs/design/img/worldmap.png, the art direction of record.
 // Ending at the middle stop puts open water at the reference's own blue and
 // keeps the lighter teal as what it reads as there: a shelf hugging the shore.
+/**
+ * How opaque the tainted-water wash over the tile-art sea is at full taint
+ * (settlement mode, where the shader has no sea body of its own) — just short
+ * of opaque, so the painted water's own shading still reads through.
+ */
+const TAINT_WASH = 0.9;
+
 const SHALLOW_COLOR = 0x2a92ae;
 const DEEP_COLOR = 0x14657f;
+
+/**
+ * Tainted water, around a revealed wasted island (docs/design/water-shader.md's
+ * "Tainted water" section). `SHALLOW`/`DEEP` are the shore/open-water ends of
+ * the sea-body mix, exactly like `SHALLOW_COLOR`/`DEEP_COLOR` above; `FOAM` is
+ * what both the foam band and the wave crests mix toward — the same ash
+ * grey-green rather than a second, separate wave colour, because a tainted
+ * coast is meant to read as one palette taking over, not two competing tints.
+ *
+ * `SHALLOW`/`DEEP` are the same #13342b/#0b211b the baked coastal-water art
+ * (blacksandcoast/taintedwater) already uses — the shader's taint is this
+ * water continuing offshore, not a different one starting where the tile art
+ * ends.
+ */
+const TAINT_SHALLOW_COLOR = 0x13342b;
+const TAINT_DEEP_COLOR = 0x0b211b;
+const TAINT_FOAM_COLOR = 0x7d8a82;
 
 /**
  * Peak-to-peak brightness of the open-water mottle, and the reciprocal of its
@@ -284,6 +308,15 @@ function placeholderTexture(): Texture {
   return sharedPlaceholderTexture;
 }
 
+let sharedPlaceholderTaintTexture: Texture | null = null;
+/** A 1x1 "no taint" texture, for the same reason `placeholderTexture` exists — a frame drawn before the first bake gets untainted water, not a stale or garbage value. */
+function placeholderTaintTexture(): Texture {
+  sharedPlaceholderTaintTexture ??= new Texture({
+    source: new BufferImageSource({ resource: new Uint8Array([0]), width: 1, height: 1, format: 'r8unorm' }),
+  });
+  return sharedPlaceholderTaintTexture;
+}
+
 export class WaterLayer {
   readonly mesh: Mesh<MeshGeometry, Shader>;
   private readonly uniforms: UniformGroup;
@@ -295,6 +328,9 @@ export class WaterLayer {
   private texture: Texture | null = null;
   // The previous mask texture, kept one generation past its replacement — see setMask.
   private retiredTexture: Texture | null = null;
+  // Same pair, for the taint field — see setMask's taint half.
+  private taintTexture: Texture | null = null;
+  private retiredTaintTexture: Texture | null = null;
   private hasMask = false;
   // The shader's own clock, accumulated rather than read off performance.now()
   // — same rationale as FogMaskLayer.tick's: the wave-speed slider changes the
@@ -315,12 +351,16 @@ export class WaterLayer {
     const [foamR, foamG, foamB] = hexToRgb01(FOAM_COLOR);
     const [causticR, causticG, causticB] = hexToRgb01(CAUSTIC_COLOR);
     const [fineR, fineG, fineB] = hexToRgb01(CAUSTIC_FINE_COLOR);
+    const [taintShallowR, taintShallowG, taintShallowB] = hexToRgb01(TAINT_SHALLOW_COLOR);
+    const [taintDeepR, taintDeepG, taintDeepB] = hexToRgb01(TAINT_DEEP_COLOR);
+    const [taintFoamR, taintFoamG, taintFoamB] = hexToRgb01(TAINT_FOAM_COLOR);
     const [blobR, blobG, blobB] = hexToRgb01(CAUSTIC_BLOB_COLOR);
 
     this.uniforms = new UniformGroup({
       uTime: { value: 0, type: 'f32' },
       uWaveTime: { value: 0, type: 'f32' },
       uSeaBody: { value: 0, type: 'f32' },
+      uTaintWash: { value: TAINT_WASH, type: 'f32' },
       uMidWaterWaves: { value: 0, type: 'f32' },
       uShowMask: { value: 0, type: 'f32' },
       uShallowColor: { value: new Float32Array([shallowR, shallowG, shallowB]), type: 'vec3<f32>' },
@@ -376,6 +416,10 @@ export class WaterLayer {
       // Half-range of the mask's signed near field, so the shader can decode R
       // back into tile widths.
       uNearSpan: { value: NEAR_SPAN_TILES, type: 'f32' },
+      // Tainted water around a revealed wasted island — see TAINT_*_COLOR above.
+      uTaintShallowColor: { value: new Float32Array([taintShallowR, taintShallowG, taintShallowB]), type: 'vec3<f32>' },
+      uTaintDeepColor: { value: new Float32Array([taintDeepR, taintDeepG, taintDeepB]), type: 'vec3<f32>' },
+      uTaintFoamColor: { value: new Float32Array([taintFoamR, taintFoamG, taintFoamB]), type: 'vec3<f32>' },
     });
 
     this.geometry = new MeshGeometry({
@@ -388,7 +432,11 @@ export class WaterLayer {
       geometry: this.geometry,
       shader: new Shader({
         glProgram: waterGlProgram(),
-        resources: { waterUniforms: this.uniforms, uWaterMask: placeholderTexture().source },
+        resources: {
+          waterUniforms: this.uniforms,
+          uWaterMask: placeholderTexture().source,
+          uWaterTaint: placeholderTaintTexture().source,
+        },
       }),
     });
     // Like the fog quads: this covers the whole viewport and would otherwise
@@ -444,6 +492,32 @@ export class WaterLayer {
         }),
       });
       this.mesh.shader!.resources.uWaterMask = this.texture.source;
+    }
+
+    if (this.taintTexture && this.taintTexture.width === mask.width && this.taintTexture.height === mask.height) {
+      const source = this.taintTexture.source as BufferImageSource;
+      source.resource = mask.taint;
+      source.update();
+    } else {
+      this.retiredTaintTexture?.destroy(true);
+      this.retiredTaintTexture = this.taintTexture;
+      this.taintTexture = new Texture({
+        source: new BufferImageSource({
+          resource: mask.taint,
+          width: mask.width,
+          height: mask.height,
+          // Same reasoning as the main mask's texture: a continuous field,
+          // sampled with the same UVs, wants the same linear/clamp treatment
+          // so its own zero crossing (full taint to none) lands at a
+          // sub-texel position rather than on a texel edge.
+          scaleMode: 'linear',
+          addressMode: 'clamp-to-edge',
+          // Single channel (§ WaterMask.taint) — no alpha to premultiply
+          // against, so none of the main mask's alphaMode concern applies here.
+          format: 'r8unorm',
+        }),
+      });
+      this.mesh.shader!.resources.uWaterTaint = this.taintTexture.source;
     }
 
     const { minX, minY, maxX, maxY } = mask.region.rect;
@@ -549,6 +623,8 @@ export class WaterLayer {
   destroy(): void {
     this.retiredTexture?.destroy(true);
     this.texture?.destroy(true);
+    this.retiredTaintTexture?.destroy(true);
+    this.taintTexture?.destroy(true);
     this.mesh.destroy();
   }
 }

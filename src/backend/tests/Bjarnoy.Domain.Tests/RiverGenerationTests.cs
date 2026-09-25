@@ -281,7 +281,8 @@ public class RiverGenerationTests
                     continue;
                 }
 
-                var qualifyingClusters = CountQualifyingMountainClusters(island.Tiles, sampler);
+                var qualifyingClusters = CountQualifyingMountainClusters(
+                    island.Tiles, island.IsWasted ? sampler.WastedTerrainAt : sampler.TerrainAt);
                 Assert.True(
                     springCount <= qualifyingClusters,
                     $"seed {seed} island {island.Index}: {springCount} springs but only {qualifyingClusters} mountain clusters of 2+ tiles");
@@ -290,9 +291,10 @@ public class RiverGenerationTests
     }
 
     /// <summary>Independent re-implementation of the clustering rule, so this test doesn't just restate the production code.</summary>
-    private static int CountQualifyingMountainClusters(IReadOnlyList<HexCoord> islandTiles, TerrainSampler sampler)
+    private static int CountQualifyingMountainClusters(
+        IReadOnlyList<HexCoord> islandTiles, Func<HexCoord, Terrain> terrainAt)
     {
-        var mountains = new HashSet<HexCoord>(islandTiles.Where(t => sampler.TerrainAt(t) == Terrain.Mountain));
+        var mountains = new HashSet<HexCoord>(islandTiles.Where(t => terrainAt(t) == Terrain.Mountain));
         var visited = new HashSet<HexCoord>();
         var qualifying = 0;
 

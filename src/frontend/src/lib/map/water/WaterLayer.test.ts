@@ -30,6 +30,7 @@ function maskOver(minX: number, minY: number, maxX: number, maxY: number): Water
     width: region.width,
     height: region.height,
     region,
+    taint: new Uint8Array(region.width * region.height),
   };
 }
 
@@ -351,6 +352,36 @@ describe('WaterLayer', () => {
     const before = layer.mesh.shader!.resources.uWaterMask;
     layer.setMask(maskOver(-380, -230, 620, 370));
     expect(layer.mesh.shader!.resources.uWaterMask).toBe(before);
+  });
+
+  it('carries the tainted-water colour uniforms, distinct from the plain sea/foam colours', () => {
+    // §"Tainted water": the shader mixes toward these by the taint field
+    // rather than sharing the untainted palette's uniforms outright.
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    const u = uniformsOf(layer);
+    for (const key of ['uTaintShallowColor', 'uTaintDeepColor', 'uTaintFoamColor']) {
+      expect(u[key]).toBeInstanceOf(Float32Array);
+      expect((u[key] as Float32Array).length).toBe(3);
+    }
+    expect(u.uTaintShallowColor).not.toEqual(u.uShallowColor);
+    expect(u.uTaintDeepColor).not.toEqual(u.uDeepColor);
+    expect(u.uTaintFoamColor).not.toEqual(u.uFoamColor);
+  });
+
+  it('uploads a second, single-channel texture for the taint field alongside the mask', () => {
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    // Before any bake: a placeholder, so a frame drawn before the first bake
+    // gets untainted water rather than a stale/garbage sample.
+    expect(layer.mesh.shader!.resources.uWaterTaint).toBeDefined();
+    const placeholder = layer.mesh.shader!.resources.uWaterTaint;
+
+    layer.setMask(maskOver(-400, -250, 600, 350));
+    expect(layer.mesh.shader!.resources.uWaterTaint).not.toBe(placeholder);
+
+    // Same reuse-on-same-dimensions behaviour as uWaterMask above.
+    const afterFirstBake = layer.mesh.shader!.resources.uWaterTaint;
+    layer.setMask(maskOver(-380, -230, 620, 370));
+    expect(layer.mesh.shader!.resources.uWaterTaint).toBe(afterFirstBake);
   });
 
   // docs/design/zoom-transition.md §4: the zoom-driven mode switch flips the
