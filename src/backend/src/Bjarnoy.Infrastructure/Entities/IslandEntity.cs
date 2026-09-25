@@ -64,6 +64,15 @@ public class IslandEntity
     /// <see cref="Persistence.GiantListConverter"/> for the encoding.
     /// </remarks>
     public List<GiantRecord> Giants { get; set; } = [];
+
+    /// <summary>
+    /// True for an island generated from the wasted-island terrain layer —
+    /// see <c>Bjarnoy.Domain.World.GeneratedIsland.IsWasted</c>. Hidden from
+    /// the islands list until the world's endboss triggers; defaults to
+    /// <see langword="false"/> so every existing island stays a plain green
+    /// one. Existing worlds only ever gain wasted islands on reseed.
+    /// </summary>
+    public bool IsWasted { get; set; }
 }
 
 /// <summary>
