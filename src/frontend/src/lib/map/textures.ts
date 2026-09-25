@@ -123,7 +123,7 @@ const COASTAL_FAMILY = 'coastalwatertile';
  * `classifyGiantFrames`'s own doc comment), so they need their own
  * classification path entirely.
  */
-const GIANT_FAMILIES: readonly string[] = ['giantmountain', 'giantshrine', 'giantvolcano'];
+const GIANT_FAMILIES: readonly string[] = ['giantmountain', 'giantshrine', 'giantvolcano', 'giantutgard'];
 
 /** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
 type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
