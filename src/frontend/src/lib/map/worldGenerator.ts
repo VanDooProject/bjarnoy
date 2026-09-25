@@ -191,11 +191,21 @@ function islandCellDepth(
 // (jittered) centre sits, and how big it is — all as O(1) hashes of the
 // cell's own coordinates, so a hex's terrain never depends on generating
 // its neighbours.
-function closestIsland(col: number, row: number, seed: number, gen: WorldGenerationConstants): { t: number } | null {
+function closestIsland(
+  col: number,
+  row: number,
+  seed: number,
+  gen: WorldGenerationConstants,
+  islandChance = gen.islandChance,
+  excludeGreenCells = false,
+  greenSeed = seed,
+): { t: number } | null {
   // A cheap domain warp applied once per hex, before distance is measured
   // against any island's lobes, so coastlines wobble instead of tracing
   // perfect arcs. Zero when islandCoastWarp is 0, which keeps this
-  // identical to the un-warped sample point.
+  // identical to the un-warped sample point. Uses the same seed+53/+71
+  // offsets as green islands: the warp noise field is shared, only the cell
+  // grid below differs by seed.
   let px = col;
   let py = row;
   if (gen.islandCoastWarp > 0) {
@@ -209,7 +219,8 @@ function closestIsland(col: number, row: number, seed: number, gen: WorldGenerat
     for (let dcy = -1; dcy <= 1; dcy++) {
       const cellCol = Math.floor(col / gen.islandCellSize) + dcx;
       const cellRow = Math.floor(row / gen.islandCellSize) + dcy;
-      if (hash2(cellCol, cellRow, seed) > gen.islandChance) continue;
+      if (hash2(cellCol, cellRow, seed) > islandChance) continue;
+      if (excludeGreenCells && hash2(cellCol, cellRow, greenSeed) <= gen.islandChance) continue;
       const jitter = gen.islandCellSize * 0.55;
       const centerCol =
         cellCol * gen.islandCellSize + gen.islandCellSize / 2 + (hash2(cellCol, cellRow, seed + 11) - 0.5) * jitter;
@@ -222,6 +233,50 @@ function closestIsland(col: number, row: number, seed: number, gen: WorldGenerat
     }
   }
   return best;
+}
+
+/**
+ * Extra seed offset added on top of the world seed for every wasted-island
+ * hash — mirrors the backend's `TerrainSampler.WastedSeedOffset` exactly.
+ */
+export const WASTED_SEED_OFFSET = 1_000_003;
+
+/**
+ * Fraction of `islandChance` a wasted island cell rolls against — mirrors
+ * the backend's `TerrainSampler.WastedIslandChanceFactor` exactly.
+ */
+export const WASTED_ISLAND_CHANCE_FACTOR = 0.1;
+
+/**
+ * Wasted islands are extra islands generated from the same seed on a
+ * separate, rarer cell grid, hidden as sea until the world's endboss is
+ * triggered — mirrors the backend's `TerrainSampler.WastedTerrainAt`
+ * exactly, including never touching (or growing onto) a green island's
+ * footprint. Unlike `terrainAt`, this is not what any existing renderer
+ * queries by default: a caller that knows the wasted reveal has fired
+ * switches to this instead (see `WorldModel.setWastedRevealed`).
+ */
+export function wastedTerrainAt(q: number, r: number, world: WorldSeed): Terrain {
+  const { col, row } = axialToOddQ({ q, r });
+  const gen = world.generation;
+
+  // Never on a green island: this guarantees wasted land can never fuse
+  // with (or hide inside) a green island's own footprint.
+  if (closestIsland(col, row, world.seed, gen)) return 'sea';
+
+  const wastedSeed = world.seed + WASTED_SEED_OFFSET;
+  const island = closestIsland(col, row, wastedSeed, gen, gen.islandChance * WASTED_ISLAND_CHANCE_FACTOR, true, world.seed);
+  if (!island) return 'sea';
+
+  // Nor may it touch green land through any of its six neighbours — this is
+  // what stops a wasted island from growing a land bridge onto a green
+  // island's coast.
+  if (neighbors({ q, r }).some((n) => isLand(n.q, n.r, world))) return 'sea';
+
+  if (island.t > gen.beachThreshold) return 'sand';
+  const rockiness = valueNoise(q, r, world.seed + 2, 2.5);
+  if (island.t < gen.mountainThreshold && rockiness > gen.mountainRockiness) return 'mountain';
+  return rockiness > gen.forestRockiness ? 'forest' : 'grass';
 }
 
 // Deterministic Norse-flavoured island names, mirroring the backend's
