@@ -98,9 +98,9 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
    plus nowrap title/unwrapped body forced the body text into a tall, narrow
    column inside the pill on a narrow viewport. A softer, wrappable card
    fixes that; the landfall variant also has to sit below the mobile header
-   instead of a flat 96px, since the header's own height varies (~56px
-   pre-founding, ~100px once it holds a resource strip) — `--hud-bar-h` is
-   written onto `.landing`'s root by TopBar for exactly this. */
+   instead of a flat 96px. `--hud-bar-h` lets a header whose height varies
+   on mobile publish its real height; until one does, it falls back to
+   TopBar's fixed 64px. */
 @media (max-width: 768px) {
   .banner {
     border-radius: 16px;
@@ -116,7 +116,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
     flex: 1 1 100%;
   }
   .banner.landfall {
-    top: calc(var(--hud-bar-h, 56px) + 12px);
+    top: calc(var(--hud-bar-h, 64px) + 12px);
   }
   .banner.complete {
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));

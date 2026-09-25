@@ -58,11 +58,6 @@ export async function waitForMapReady(page: Page): Promise<void> {
  * switch happened.
  */
 export async function gotoWorldMap(page: Page): Promise<void> {
-  // On a phone-width viewport HudNav folds its links behind a menu toggle
-  // (mobile-readiness audit) — open it first, so this helper works at any
-  // viewport a spec picks rather than only the desktop default.
-  const menuToggle = page.getByTestId('hud-nav-menu-toggle');
-  if (await menuToggle.isVisible()) await menuToggle.click();
   await page.locator('.hud-nav button', { hasText: 'World map' }).click();
   await page.waitForURL('**/world');
   await waitForMapReady(page);

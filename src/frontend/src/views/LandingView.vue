@@ -1022,7 +1022,7 @@ h1 {
   .hero {
     left: 20px;
     right: 20px;
-    top: calc(var(--hud-bar-h, 56px) + 16px);
+    top: calc(var(--hud-bar-h, 64px) + 16px);
     max-width: none;
   }
   h1 {
