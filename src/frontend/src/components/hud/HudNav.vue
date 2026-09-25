@@ -26,7 +26,23 @@ import type { MessageSchema } from '../../i18n/schema';
 // opt-out rather than an unconditional media query so a future HudNav usage
 // with no drawer doesn't silently lose its links on a phone with nothing
 // left to reach them from.
-withDefaults(defineProps<{ hasDrawer?: boolean }>(), { hasDrawer: true });
+//
+// Mobile HUD bar rework, phase 2 (owner clarification): the logged-in
+// avatar/account-menu leaves the phone bar on every page — Profile/Log out
+// move into MobileHudDrawer's own account section instead, unconditionally.
+// The anonymous ReturningPlayerMenu trigger is different: it only moves into
+// the drawer on a bar that also carries ResourceBar (in-game MapView), where
+// there genuinely isn't room for both — everywhere else (docs/tech-tree/
+// showcase, the post-founding landing header) it stays inline, just shrunk
+// to a single compact line (see ReturningPlayerMenu.vue's own mobile rules)
+// so the bar's title still gets room. `hasResourceBar` is a static per-page
+// fact the caller already knows (only MapView passes a sibling
+// `<ResourceBar>` into this same bar), not something HudNav can infer on its
+// own.
+withDefaults(defineProps<{ hasDrawer?: boolean; hasResourceBar?: boolean }>(), {
+  hasDrawer: true,
+  hasResourceBar: false,
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -121,7 +137,7 @@ watch(() => route.fullPath, closeAccountMenu);
 </script>
 
 <template>
-  <nav class="hud-nav" :class="{ 'hud-nav--no-drawer': !hasDrawer }">
+  <nav class="hud-nav" :class="{ 'hud-nav--no-drawer': !hasDrawer, 'hud-nav--with-resources': hasResourceBar }">
     <button
       v-if="player.hasFoundedSettlement"
       class="link"
@@ -279,6 +295,26 @@ watch(() => route.fullPath, closeAccountMenu);
    reach them from — see the `hasDrawer` prop's own comment above. */
 @media (max-width: 768px) {
   .hud-nav:not(.hud-nav--no-drawer) .link {
+    display: none;
+  }
+}
+/* Mobile HUD bar rework, phase 2 (owner clarification): the logged-in
+   avatar/account-menu leaves the phone bar everywhere, regardless of
+   `hasResourceBar` — see `hasResourceBar`'s own comment above. Profile/Log
+   out live in MobileHudDrawer's account section instead. */
+@media (max-width: 768px) {
+  .hud-nav:not(.hud-nav--no-drawer) .account-menu {
+    display: none;
+  }
+}
+/* The anonymous ReturningPlayerMenu trigger only leaves the bar where
+   ResourceBar also lives in it — everywhere else it stays inline (shrunk to
+   a compact single line, see ReturningPlayerMenu.vue's own mobile rules),
+   since there's nothing else contending for that room. Its account-creation
+   nudge (ProfileNudge, in its `#nudge` slot) moves along with it into
+   MobileHudDrawer's account section in that one case. */
+@media (max-width: 768px) {
+  .hud-nav--with-resources:not(.hud-nav--no-drawer) .returning-player-menu {
     display: none;
   }
 }

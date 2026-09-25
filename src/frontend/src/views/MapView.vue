@@ -1086,9 +1086,9 @@ async function upgrade() {
     <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
     <TopBar :hide-title="mode === 'settlement'">
       <ResourceBar :ring-open="ringOpen" />
-      <HudNav />
+      <HudNav has-resource-bar />
       <template #drawer="{ close }">
-        <MobileHudDrawer @close="close" />
+        <MobileHudDrawer has-resource-bar @close="close" />
       </template>
     </TopBar>
     <template v-if="mode === 'settlement'">

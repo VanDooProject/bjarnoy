@@ -283,4 +283,33 @@ watch(() => route.fullPath, close);
   background: var(--panel-border);
   flex: none;
 }
+
+/* Mobile HUD bar rework, phase 2 (owner clarification): this trigger stays
+   inline in every phone bar that has no ResourceBar to compete with (docs,
+   tech tree, showcase, the landing header) — HudNav.vue hides it entirely
+   only where ResourceBar shares the same bar (see its own `hasResourceBar`
+   comment). Where it stays, it must shrink to a single compact line so the
+   bar's title still gets room instead of being crushed to "D…": the
+   "or want to join another world" sub-line drops, and the main line
+   ellipsis-truncates rather than pushing the trigger wide. `min-height`
+   keeps the tap target at the usual ~44px floor despite the now-shorter
+   single line of text. Same breakpoint as lib/breakpoints.ts's
+   HUD_COMPACT_MAX_WIDTH — plain CSS here can't read that JS constant, so it
+   has to be repeated as a literal (see that file's own comment). */
+@media (max-width: 768px) {
+  .trigger {
+    max-width: 132px;
+    min-height: 44px;
+  }
+  .trigger-sub {
+    display: none;
+  }
+  .trigger-main {
+    display: inline-block;
+    max-width: 92px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
 </style>

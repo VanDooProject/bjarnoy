@@ -11,6 +11,14 @@ import { useRouter } from 'vue-router';
 import { usePlayerStore } from '../../stores/player';
 import type { MessageSchema } from '../../i18n/schema';
 
+// Mobile HUD bar rework, phase 2: on an in-game phone bar the anonymous
+// trigger this nudge normally anchors to (ReturningPlayerMenu's own
+// `#nudge` slot) is hidden entirely — MobileHudDrawer.vue renders this same
+// component inline in its account section instead, `inDrawer`, dropping the
+// absolute-positioned floating-tooltip look for a plain block that sits in
+// the drawer's own flow. Same pattern as LocaleSwitcher.vue's `inDrawer`.
+defineProps<{ inDrawer?: boolean }>();
+
 const player = usePlayerStore();
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -21,7 +29,7 @@ function nameYourJarl() {
 </script>
 
 <template>
-  <div class="nudge panel" data-testid="profile-nudge">
+  <div class="nudge panel" :class="{ 'in-drawer': inDrawer }" data-testid="profile-nudge">
     <div class="notch" />
     <div class="eyebrow">{{ t('onboarding.profileNudge.eyebrow') }}</div>
     <div class="title">{{ t('onboarding.profileNudge.title') }}</div>
@@ -141,5 +149,19 @@ function nameYourJarl() {
 }
 .later:hover {
   color: var(--text);
+}
+
+/* Mobile HUD bar rework, phase 2: MobileHudDrawer's own account section
+   renders this inline, in normal flow — none of the floating-tooltip
+   positioning/animation makes sense sitting inside a drawer that already
+   scrolls with the rest of its content. */
+.nudge.in-drawer {
+  position: static;
+  width: auto;
+  margin-top: 10px;
+  animation: none;
+}
+.nudge.in-drawer .notch {
+  display: none;
 }
 </style>

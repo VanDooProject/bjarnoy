@@ -24,6 +24,7 @@ import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useHudDrawer } from '../../composables/useHudDrawer';
 import { isHudDrawerOpen, setHudDrawerCloseFn } from '../../composables/hudDrawerOpenState';
 import { isHudBarAtBottom, isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
+import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { hudBarHeightPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
@@ -347,26 +348,44 @@ const backdropStyle = computed(() => {
            absolutely-positioned dropdown anywhere inside it (a nav account
            menu, ReturningPlayerMenu's panel, ProfileNudge) to the scroller's
            own ~30px visible height, ON DESKTOP TOO, since this wrapper was
-           unconditional. Horizontal scrolling now lives only on
-           ResourceBar's own compact pill row (`.resource-bar.compact`,
-           gated to the same mobile query) — HudNav/ReturningPlayerMenu never
-           needed to scroll, they just needed room, which removing this
-           wrapper also restores (see `.hud-bar-right`'s own
-           `justify-content: flex-end` below, no longer defeated by this
+           unconditional. Mobile HUD bar rework, phase 2: ResourceBar's own
+           compact pill row briefly took over horizontal scrolling instead
+           (`.resource-bar.compact`) — that's gone too now, in favour of
+           wrapping onto a second line, since a pill scrolled half past the
+           bar's own edge is just as much a "half-cut pill" as one clipped by
+           a wrapper (see ResourceBar.vue's own comment). HudNav/
+           ReturningPlayerMenu never needed to scroll, they just needed room,
+           which removing this wrapper also restores (see `.hud-bar-right`'s
+           own `justify-content: flex-end` below, no longer defeated by this
            intermediate flex box). -->
       <slot />
-      <button
-        v-if="dragEnabled"
-        type="button"
-        class="hud-grip"
-        :aria-expanded="drawer.isOpen.value"
-        :aria-controls="drawerContentId"
-        :aria-label="t('hud.drawer.toggle')"
-        @click="onGripClick"
-      >
-        <span class="chevron" :class="{ open: drawer.isOpen.value }" aria-hidden="true" />
-      </button>
     </div>
+    <!-- Mobile HUD bar rework, phase 2: an Android-notification-shade style
+         grabber replaces the old inline chevron button — the owner's
+         annotated screenshot called out the chevron (and the avatar) for
+         taking space away from the resource pills. This handle takes NONE:
+         it's absolutely positioned against the bar's own free edge (see
+         `.hud-grip` below), reserved for it via extra bar padding, rather
+         than living in the `.hud-bar-right` flex row the pills now have
+         entirely to themselves. Same aria wiring and click handler as
+         before, and the class name stays `hud-grip` — existing
+         tests/selectors already mean "the drawer toggle" by it. -->
+    <button
+      v-if="dragEnabled"
+      type="button"
+      class="hud-grip"
+      :aria-expanded="drawer.isOpen.value"
+      :aria-controls="drawerContentId"
+      :aria-label="t('hud.drawer.toggle')"
+      @click="onGripClick"
+    >
+      <span class="grip-handle" aria-hidden="true" />
+      <!-- hudDrawerPendingState.ts: the anonymous account-creation nudge
+           moves into the drawer on an in-game bar (no room for its usual
+           anchored trigger there) — this is its only remaining on-screen
+           sign once tucked away. -->
+      <span v-if="isHudDrawerPending" class="grip-dot" aria-hidden="true" />
+    </button>
   </header>
   <div
     v-if="showSettlementBubble"
@@ -536,6 +555,18 @@ const backdropStyle = computed(() => {
   pointer-events: auto;
   touch-action: none;
 }
+/* Mobile HUD bar rework, phase 2: reserve a thin strip on the bar's own free
+   edge (the edge with nothing docked to it) for the grip handle below, so it
+   never eats into the row the pills use — see `.hud-grip`'s own comment.
+   Top-docked (the default): the free edge is the bottom, so the strip is
+   extra padding-bottom. `:not(.hud-bar--bottom)` matters here, not just for
+   clarity — `.hud-bar--bottom` below sets its own `padding-bottom` (the
+   physical screen edge's safe-area inset) at equal specificity, and later in
+   this stylesheet, so an unqualified rule here would silently overwrite it
+   whenever a bar is both bottom-docked and drag-enabled. */
+.hud-bar--drag-enabled:not(.hud-bar--bottom) {
+  padding-bottom: 20px;
+}
 .hud-bar--bottom {
   inset: auto 0 0 0;
   border-bottom: none;
@@ -552,10 +583,30 @@ const backdropStyle = computed(() => {
   height: auto;
   min-height: 64px;
 }
+/* Bottom-docked: the free edge is the top instead — `.hud-bar--bottom`
+   above keeps its own `padding-bottom` (the attached, physical screen edge's
+   safe-area inset) untouched; this adds the handle's reserved space on top
+   of it. Paired with `.hud-bar--drag-enabled` so a page whose bar has no
+   drawer at all never reserves space for a handle it doesn't render. */
+.hud-bar--drag-enabled.hud-bar--bottom {
+  padding-top: 20px;
+}
+/* Android-notification-shade style grabber: a short rounded bar centred on
+   the reserved strip above, not a chevron — the owner's annotated screenshot
+   asked for the chevron gone entirely, not just relabelled. `position:
+   absolute` against `.hud-bar` (already positioned, see its own `position`
+   rule) takes it out of the pill row's flex flow completely, so it can never
+   be "half cut" alongside them regardless of how many pills there are. The
+   44x20px hit area comfortably clears the usual ~44px touch-target floor
+   despite the handle itself only being visually 36x4px. */
 .hud-grip {
-  flex: none;
-  width: 28px;
-  height: 36px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  z-index: 1;
+  width: 44px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -566,21 +617,40 @@ const backdropStyle = computed(() => {
   pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
 }
+.hud-bar--bottom .hud-grip {
+  bottom: auto;
+  top: 0;
+}
 .hud-grip:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
   border-radius: 4px;
 }
-.chevron {
-  width: 10px;
-  height: 10px;
-  border-right: 2px solid var(--muted);
-  border-bottom: 2px solid var(--muted);
-  transform: rotate(45deg);
-  transition: transform 150ms ease;
+.grip-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--muted);
+  opacity: 0.55;
+  transition: opacity 150ms ease;
 }
-.chevron.open {
-  transform: rotate(225deg);
+.hud-grip:hover .grip-handle,
+.hud-grip:focus-visible .grip-handle {
+  opacity: 0.9;
+}
+.grip-dot {
+  position: absolute;
+  top: 1px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rival);
+  border: 1.5px solid var(--shell);
+}
+.hud-bar--bottom .grip-dot {
+  top: auto;
+  bottom: 1px;
 }
 
 /* Mobile-only settlement bubble — replaces the inline `.titles` name/caption
