@@ -993,3 +993,76 @@ describe('placeGiantsForIsland (demo giant placement v2)', () => {
     expect(tagged()).toBe(first);
   });
 });
+
+describe('WorldModel wasted-island reveal', () => {
+  // Seed 12, radius-40 region — matches src/shared/wasted-terrain-golden.json.
+  // (18, -29) is a wasted-forest hex whose 6 neighbours are also wasted land
+  // (fully interior, so a coastal check on it would be misleading); (17, -30)
+  // borders wasted land (17, -29) but is plain open sea itself.
+  const WASTED_SEED = 12;
+  const wastedForest = { q: 18, r: -29 };
+  const seaBorderingWasted = { q: 17, r: -30 };
+
+  it('hides a wasted hex as sea before the reveal', () => {
+    const model = new WorldModel(WASTED_SEED);
+    expect(model.isWastedRevealed()).toBe(false);
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('sea');
+    expect(model.isLand(wastedForest.q, wastedForest.r)).toBe(false);
+    const tile = model.getTile(wastedForest.q, wastedForest.r);
+    expect(tile.terrain).toBe('sea');
+    expect(tile.wasted).toBeUndefined();
+  });
+
+  it('materialises wasted land, with the wasted flag, once revealed', () => {
+    const model = new WorldModel(WASTED_SEED);
+    model.setWastedRevealed(true);
+    expect(model.isWastedRevealed()).toBe(true);
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('forest');
+    expect(model.isLand(wastedForest.q, wastedForest.r)).toBe(true);
+    const tile = model.getTile(wastedForest.q, wastedForest.r);
+    expect(tile.terrain).toBe('forest');
+    expect(tile.wasted).toBe(true);
+  });
+
+  it('tags sea bordering wasted land as wasted (for the blacksandcoast art) once revealed', () => {
+    const model = new WorldModel(WASTED_SEED);
+    model.setWastedRevealed(true);
+    const tile = model.getTile(seaBorderingWasted.q, seaBorderingWasted.r);
+    expect(tile.terrain).toBe('sea');
+    expect(tile.isCoastalWater).toBe(true);
+    expect(tile.wasted).toBe(true);
+  });
+
+  it('never tags a green terrain hex as wasted, before or after reveal', () => {
+    const model = new WorldModel(WASTED_SEED);
+    // Plain land, nowhere near any wasted island.
+    model.getTile(0, 0);
+    model.setWastedRevealed(true);
+    const tile = model.getTile(0, 0);
+    expect(tile.wasted).toBeUndefined();
+  });
+
+  it('invalidates the terrain/tile caches when the reveal flips', () => {
+    const model = new WorldModel(WASTED_SEED);
+    // Materialise the hex's sea answer into both caches first.
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('sea');
+    expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('sea');
+
+    model.setWastedRevealed(true);
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('forest');
+    expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('forest');
+
+    model.setWastedRevealed(false);
+    expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('sea');
+    expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('sea');
+  });
+
+  it('is a no-op when set to its current value (cache stays warm)', () => {
+    const model = new WorldModel(WASTED_SEED);
+    const before = model.getTile(0, 0).terrain;
+    model.setWastedRevealed(false);
+    // Same answer either way — a fresh materialisation would agree too, so
+    // this only checks the call didn't throw/behave oddly, not cache identity.
+    expect(model.getTile(0, 0).terrain).toBe(before);
+  });
+});

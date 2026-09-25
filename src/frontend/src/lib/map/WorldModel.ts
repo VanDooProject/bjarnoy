@@ -10,7 +10,14 @@ import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './g
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
 import { validateTradeRatio } from '../trade/tradeRatio';
-import { DEFAULT_GENERATION, generateTile, hash2, terrainAt, type WorldGenerationConstants } from './worldGenerator';
+import {
+  DEFAULT_GENERATION,
+  generateTile,
+  hash2,
+  terrainAt,
+  wastedTerrainAt,
+  type WorldGenerationConstants,
+} from './worldGenerator';
 import {
   emptyResources,
   TILE_ORIENTATIONS,
@@ -240,6 +247,16 @@ export class WorldModel {
    * one function.
    */
   private terrain = new Map<number, Terrain>();
+  /**
+   * Whether wasted islands are revealed for this world — false until the
+   * world's endboss triggers (see `setWastedRevealed`, called from the
+   * world response's `endbossTriggered` in live mode, and from the demo
+   * mode's `window.__demoWorld().revealWastedIslands()` debug hook). While
+   * false, `terrainOf`/`isLand` treat a wasted hex exactly like the plain
+   * sea it always was; flipping it invalidates every cache that could hold
+   * a stale sea answer for a now-revealed hex.
+   */
+  private wastedRevealed = false;
   private settlements = new Map<string, Settlement>();
   /** Trade carts in transit — see `CartShipment`'s own doc comment. */
   private cartShipments = new Map<string, CartShipment>();
@@ -477,16 +494,67 @@ export class WorldModel {
     let terrain = this.terrain.get(k);
     if (terrain === undefined) {
       terrain = terrainAt(q, r, { seed: this.seed, generation: this.generation });
+      if (terrain === 'sea' && this.wastedRevealed) {
+        const wasted = wastedTerrainAt(q, r, { seed: this.seed, generation: this.generation });
+        if (wasted !== 'sea') terrain = wasted;
+      }
       this.terrain.set(k, terrain);
     }
     return terrain;
   };
+
+  /**
+   * Whether `(q, r)` is a hex a wasted-island reveal materialises — i.e. it
+   * is sea to the plain green terrain layer but land once the wasted layer
+   * is consulted. Only meaningful (and only ever true) once
+   * `wastedRevealed` is set; before that, every hex is answered purely from
+   * the green layer, matching every existing caller's assumption.
+   */
+  private isWastedLandAt(q: number, r: number): boolean {
+    if (!this.wastedRevealed) return false;
+    const world = { seed: this.seed, generation: this.generation };
+    if (terrainAt(q, r, world) !== 'sea') return false;
+    return wastedTerrainAt(q, r, world) !== 'sea';
+  }
+
+  /**
+   * Reveals (or hides again) this world's wasted islands — see
+   * `wastedRevealed`'s own doc comment. Clears every cache that could
+   * otherwise keep answering a revealed hex as sea, or an already-generated
+   * `Tile` as missing its `wasted` art tag; the renderer itself still needs
+   * an explicit `forceRebuild()` from the caller (mirrors how every other
+   * "the underlying map just changed under the renderer" mutation here —
+   * reseeding, placing a giant — leaves that to its own caller rather than
+   * reaching into HexMapRenderer from this model).
+   */
+  setWastedRevealed(revealed: boolean) {
+    if (this.wastedRevealed === revealed) return;
+    this.wastedRevealed = revealed;
+    this.terrain.clear();
+    this.tiles.clear();
+    this.islandFootprintCache.clear();
+    this.previewIslandTilesCache.clear();
+  }
+
+  isWastedRevealed(): boolean {
+    return this.wastedRevealed;
+  }
 
   getTile(q: number, r: number): Tile {
     const k = coordKey({ q, r });
     let tile = this.tiles.get(k);
     if (!tile) {
       tile = generateTile(q, r, { seed: this.seed, generation: this.generation }, this.terrainOf);
+      if (this.wastedRevealed) {
+        if (this.isWastedLandAt(q, r)) {
+          tile.wasted = true;
+        } else if (tile.terrain === 'sea' && tile.isCoastalWater) {
+          // Coastal water bordering wasted land also renders as wasted
+          // (blacksandcoast) — see textures.ts's wasted family mapping.
+          const bordersWasted = neighbors({ q, r }).some((n) => this.isWastedLandAt(n.q, n.r));
+          if (bordersWasted) tile.wasted = true;
+        }
+      }
       this.tiles.set(k, tile);
     }
     return tile;

@@ -408,6 +408,7 @@ export const useWorldStore = defineStore('world', {
       this.worldStartsAt = world.startsAt;
       localStorage.setItem('bjarnoy.worldId', world.id);
       this.model = markRaw(new WorldModel(world.seed, world.generation));
+      this.model.setWastedRevealed(world.endbossTriggered);
       try {
         this.islands = await api.getIslands(world.id);
       } catch (err) {
@@ -439,6 +440,7 @@ export const useWorldStore = defineStore('world', {
             shape: tile.shape,
             inDirections: tile.inDirections as TileOrientation[],
             outDirection: tile.outDirection as TileOrientation | null,
+            wasted: island.wasted,
           })),
         ),
       );

@@ -115,6 +115,14 @@ export interface Tile {
   terrain: Terrain;
   /** Sea that borders land — the ring a coastal-water sprite belongs on. */
   isCoastalWater?: boolean;
+  /**
+   * This hex is (or borders) a wasted island — hidden as sea until the
+   * world's endboss triggers (see `WorldModel.setWastedRevealed`). Once
+   * revealed, it renders with the wasted terrain families (wasteland/
+   * deadforest/blacksand/blacksandcoast) instead of the plain green ones —
+   * see `textures.ts`'s wasted family mapping.
+   */
+  wasted?: boolean;
   /** Which art-pack rotation to render this hex with. */
   orientation?: TileOrientation;
   /** Which numbered variant of this terrain's tile art to use. */
@@ -233,6 +241,8 @@ export interface RiverTile {
   shape: RiverTileShape;
   inDirections: TileOrientation[];
   outDirection: TileOrientation | null;
+  /** True for a lava stream on a wasted island — renders with the lavastream art families instead of rivertile. */
+  wasted?: boolean;
 }
 
 export function emptyResources(): Resources {
