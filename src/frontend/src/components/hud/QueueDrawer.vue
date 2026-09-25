@@ -3,12 +3,12 @@
 // narrow viewport there isn't room for two 240px status cards, so both
 // queues (plus the garrison/guests) live in one slide-out drawer instead.
 //
-// The collapsed rail deliberately does NOT show a slot count the way the
+// The collapsed handle deliberately does NOT show a slot count the way the
 // desktop panels do — with more than a handful of slots (premium accounts
 // can queue well past 3), a static "N / M" count stops being useful at a
-// glance. Instead it shows only the single soonest-to-finish item per
-// category, plus a "+N more" chip for the rest — see soonestBuild/
-// soonestTraining below.
+// glance. Instead it's a small 28x80 edge tab showing a total-order count
+// badge plus a thin progress bar for whichever build/training order is
+// soonest to finish — see soonest() below.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
@@ -51,12 +51,14 @@ function soonest<T extends { remainingSeconds: number | null }>(pool: T[]): T | 
   return pool.reduce((best, r) => ((r.remainingSeconds ?? Infinity) < (best.remainingSeconds ?? Infinity) ? r : best));
 }
 
-const soonestBuild = computed<BuildOrderRow | null>(() => {
-  const active = buildOrders.value.filter((o) => !o.waiting);
-  return soonest(active.length ? active : buildOrders.value);
+// Single soonest-to-finish order across BOTH queues, for the handle's
+// progress bar — waiting build orders (no active progress yet) are excluded.
+const soonestActive = computed<BuildOrderRow | TrainingOrderRow | null>(() => {
+  const activeBuilds = buildOrders.value.filter((o) => !o.waiting);
+  return soonest([...activeBuilds, ...trainingOrders.value]);
 });
 
-const soonestTraining = computed<TrainingOrderRow | null>(() => soonest(trainingOrders.value));
+const orderCount = computed(() => buildOrders.value.length + trainingOrders.value.length);
 
 const garrison = computed(() =>
   world.hud.garrison
@@ -107,9 +109,9 @@ function close() {
 }
 
 // Drag-to-open/close (issue: mobile queue sidebar). Matches the CSS's own
-// dimensions — see the `.queue-drawer`/`.queue-drawer-rail` rules below —
+// dimensions — see the `.queue-drawer`/`.queue-drawer-handle` rules below —
 // so the drag transform lines up with the resting transform exactly.
-const RAIL_W = 96;
+const HANDLE_W = 28;
 // A plain computed() here would cache window.innerWidth from whenever it
 // was first read and never update — a rotation/resize would then desync
 // the drag clamp/threshold math from the CSS transform, which recomputes
@@ -119,7 +121,7 @@ function onWindowResize() {
   viewportWidth.value = window.innerWidth;
 }
 const OPEN_W = computed(() => Math.min(viewportWidth.value * 0.86, 340));
-const TRAVEL = computed(() => OPEN_W.value - RAIL_W);
+const TRAVEL = computed(() => OPEN_W.value - HANDLE_W);
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -146,9 +148,9 @@ const rootStyle = computed(() => {
   return { transform: `translateX(${base + dragPx.value}px)` };
 });
 
-function onRailPointerDown(event: PointerEvent) {
-  const rail = event.currentTarget as HTMLElement;
-  rail.setPointerCapture(event.pointerId);
+function onHandlePointerDown(event: PointerEvent) {
+  const handle = event.currentTarget as HTMLElement;
+  handle.setPointerCapture(event.pointerId);
   dragState = {
     pointerId: event.pointerId,
     startX: event.clientX,
@@ -160,7 +162,7 @@ function onRailPointerDown(event: PointerEvent) {
   dragPx.value = 0;
 }
 
-function onRailPointerMove(event: PointerEvent) {
+function onHandlePointerMove(event: PointerEvent) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   const dx = event.clientX - dragState.startX;
   const dy = event.clientY - dragState.startY;
@@ -182,8 +184,8 @@ function onRailPointerMove(event: PointerEvent) {
 
 function settleDrag(event: PointerEvent) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
-  const rail = event.currentTarget as HTMLElement;
-  if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
+  const handle = event.currentTarget as HTMLElement;
+  if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
 
   const dx = event.clientX - dragState.startX;
   const dy = event.clientY - dragState.startY;
@@ -211,18 +213,18 @@ function settleDrag(event: PointerEvent) {
   }
 }
 
-function onRailPointerCancel(event: PointerEvent) {
+function onHandlePointerCancel(event: PointerEvent) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   dragState = null;
   dragPx.value = null;
 }
 
 // The pointerup tap path above already toggles `open` — this only handles
-// the keyboard-activated click (Enter/Space on the focused rail button),
+// the keyboard-activated click (Enter/Space on the focused handle button),
 // which fires with `detail === 0`. A touch/mouse-generated click always has
 // detail >= 1, so it's a no-op duplicate of the pointer path, not a second
 // toggle.
-function onRailClick(event: MouseEvent) {
+function onHandleClick(event: MouseEvent) {
   if (event.detail === 0) toggle();
 }
 
@@ -339,47 +341,23 @@ onUnmounted(() => {
 
       <button
         type="button"
-        class="queue-drawer-rail"
+        class="queue-drawer-handle"
         :aria-expanded="open"
         aria-controls="queue-drawer-body"
         :aria-label="open ? t('hud.queueDrawer.closeLabel') : t('hud.queueDrawer.openLabel')"
-        @pointerdown="onRailPointerDown"
-        @pointermove="onRailPointerMove"
+        @pointerdown="onHandlePointerDown"
+        @pointermove="onHandlePointerMove"
         @pointerup="settleDrag"
-        @pointercancel="onRailPointerCancel"
-        @click="onRailClick"
+        @pointercancel="onHandlePointerCancel"
+        @click="onHandleClick"
       >
-        <!-- The full list is already showing in .queue-drawer-panel right next
-             to this once open — rendering the rail's own mini summary too
-             would visually duplicate it (looked like the drawer was "open
-             twice"). Collapse to a bare drag/tap grip while open instead. -->
-        <div v-if="!open" class="queue-drawer-rail-content">
-          <div v-if="soonestBuild" class="rail-row">
-            <div class="rail-row-top">
-              <span class="rail-row-label">{{ t('hud.queueDrawer.buildLabel') }}</span>
-              <span v-if="buildOrders.length > 1" class="rail-row-more">{{ t('hud.queueDrawer.more', { count: buildOrders.length - 1 }) }}</span>
-            </div>
-            <div class="rail-row-name">{{ soonestBuild.name }}</div>
-            <div class="rail-row-bottom">
-              <span class="rail-row-time">{{ soonestBuild.remaining }}</span>
-            </div>
-            <div v-if="!soonestBuild.waiting" class="status-progress">
-              <div class="status-progress-fill" :class="{ 'is-done': soonestBuild.done }" :style="{ width: `${Math.round(soonestBuild.progress * 100)}%` }" />
-            </div>
-          </div>
-          <div v-if="soonestTraining" class="rail-row">
-            <div class="rail-row-top">
-              <span class="rail-row-label">{{ t('hud.queueDrawer.trainLabel') }}</span>
-              <span v-if="trainingOrders.length > 1" class="rail-row-more">{{ t('hud.queueDrawer.more', { count: trainingOrders.length - 1 }) }}</span>
-            </div>
-            <div class="rail-row-name">{{ soonestTraining.name }}</div>
-            <div class="rail-row-bottom">
-              <span class="rail-row-time">{{ soonestTraining.remaining }}</span>
-            </div>
-            <div class="status-progress">
-              <div class="status-progress-fill" :class="{ 'is-done': soonestTraining.done }" :style="{ width: `${Math.round(soonestTraining.progress * 100)}%` }" />
-            </div>
-          </div>
+        <span v-if="orderCount > 0" class="queue-drawer-badge">{{ orderCount }}</span>
+        <div v-if="soonestActive" class="queue-drawer-handle-progress">
+          <div
+            class="queue-drawer-handle-progress-fill"
+            :class="{ 'is-done': soonestActive.done }"
+            :style="{ height: `${Math.round(soonestActive.progress * 100)}%` }"
+          />
         </div>
         <span class="queue-drawer-chevron" :class="{ 'is-open': open }" aria-hidden="true">{{ t('hud.queueDrawer.chevron') }}</span>
       </button>
@@ -567,7 +545,7 @@ onUnmounted(() => {
      arithmetic) that never actually read `--hud-inset-top`/
      `--hud-inset-bottom` (MapView.vue's root sets both, mirroring the bar's
      *real*, current edge/height — see hudBarHeight.ts), so a bottom-docked
-     mobile bar left this rail's top clearance wrong (still reserving a top
+     mobile bar left this drawer's top clearance wrong (still reserving a top
      gap for a bar that had moved to the bottom) and its bottom edge sitting
      underneath a bottom-docked bar rather than clear of it. `--hud-inset-top`
      is 0 whenever the bar isn't at the top (desktop's own fallback here, 0,
@@ -576,9 +554,15 @@ onUnmounted(() => {
   bottom: var(--hud-inset-bottom, 0px);
   z-index: 38;
   display: flex;
+  align-items: stretch;
   width: min(86vw, 340px);
-  transform: translateX(calc(-1 * (min(86vw, 340px) - 96px)));
+  transform: translateX(calc(-1 * (min(86vw, 340px) - 28px)));
   transition: transform 180ms ease;
+  /* Most of this column's width, above/below the 80px-tall handle, is
+     transparent — without this the whole column would still swallow map
+     taps even while closed. .queue-drawer-panel and .queue-drawer-handle
+     below opt back in. */
+  pointer-events: none;
 }
 .queue-drawer.is-open {
   transform: translateX(0);
@@ -602,6 +586,7 @@ onUnmounted(() => {
   border: 1px solid var(--panel-border);
   border-left: none;
   overflow: hidden;
+  pointer-events: auto;
 }
 .queue-drawer-header {
   display: flex;
@@ -629,84 +614,65 @@ onUnmounted(() => {
   overscroll-behavior: contain;
   padding: 12px 15px 16px;
 }
-.queue-drawer-rail {
+.queue-drawer-handle {
   flex: none;
-  width: 96px;
+  align-self: center;
+  width: 28px;
+  height: 80px;
+  /* Fixed height sized to its content: 16px badge + 28px progress bar +
+     14px chevron + two 4px gaps = 66px, plus 4px padding top and bottom. */
+  padding: 4px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 10px 8px;
+  justify-content: center;
+  gap: 4px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: grab;
   touch-action: none;
-  /* Not while dragging (dragPx !== null skips the CSS transform entirely —
-     see rootStyle) or the width snap would fight the drag's own transform
-     each frame the same way the transition does (see .is-dragging above). */
-  transition: width 180ms ease;
+  pointer-events: auto;
 }
-.queue-drawer-rail:focus-visible {
+.queue-drawer-handle:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: -2px;
 }
-/* The full expanded list already shows everything the rail's own mini
-   summary would — see the template comment above .queue-drawer-rail-content
-   — so once open this is just a slim grip for dragging/tapping shut. */
-.queue-drawer.is-open .queue-drawer-rail {
-  width: 28px;
-  padding: 10px 2px;
-  justify-content: center;
+.queue-drawer-badge {
+  flex: none;
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #1a1a1a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
 }
-.queue-drawer.is-dragging .queue-drawer-rail {
-  transition: none;
+.queue-drawer-handle-progress {
+  flex: none;
+  width: 4px;
+  height: 28px;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.1);
 }
-.queue-drawer-rail-content {
+.queue-drawer-handle-progress-fill {
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  background: var(--gold);
 }
-.rail-row-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 4px;
-}
-.rail-row-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.rail-row-more {
-  font-size: 10px;
-  color: var(--muted);
-}
-.rail-row-name {
-  margin-top: 2px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rail-row-bottom {
-  margin-top: 2px;
-}
-.rail-row-time {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--gold);
+.queue-drawer-handle-progress-fill.is-done {
+  background: #5ab0e6;
 }
 .queue-drawer-chevron {
   flex: none;
-  font-size: 18px;
+  font-size: 14px;
+  line-height: 14px;
   color: var(--muted);
   transition: transform 180ms ease;
 }

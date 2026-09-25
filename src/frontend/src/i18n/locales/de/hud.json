@@ -136,9 +136,6 @@
     "close": "✕",
     "openLabel": "Bau- und Ausbildungswarteschlangen öffnen",
     "closeLabel": "Bau- und Ausbildungswarteschlangen schließen",
-    "buildLabel": "Bau",
-    "trainLabel": "Ausbildung",
-    "more": "+{count} weitere",
     "chevron": "›"
   },
   "buildingModal": {

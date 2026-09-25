@@ -256,7 +256,7 @@ watch(visible, (isVisible) => {
 }
 /* Mobile-readiness audit: guard against the fixed 240px status-card width
    (see BuildQueuePanel.vue, whose rules this shares) overflowing a very
-   narrow viewport — its left/top position vs. mobile's QueueDrawer rail is
+   narrow viewport — its left/top position vs. mobile's QueueDrawer handle is
    pre-existing and out of scope here (see MapView.vue's ringBounds comment). */
 @media (max-width: 768px) {
   .expansion-card {
