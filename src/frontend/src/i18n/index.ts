@@ -35,6 +35,8 @@ import enSimulator from './locales/en/simulator.json';
 import deSimulator from './locales/de/simulator.json';
 import enDocs from './locales/en/docs.json';
 import deDocs from './locales/de/docs.json';
+import enShowcase from './locales/en/showcase.json';
+import deShowcase from './locales/de/showcase.json';
 import enAdminActivityChart from './locales/en/adminActivityChart.json';
 import enAdminActivity from './locales/en/adminActivity.json';
 import enAdminIslandLab from './locales/en/adminIslandLab.json';
@@ -105,6 +107,7 @@ export const i18n = createI18n({
       reports: enReports,
       simulator: enSimulator,
       docs: enDocs,
+      showcase: enShowcase,
       // Admin surface (en-only — German deliberately deferred; fallbackLocale
       // below covers these, and src/test/i18n.ts skips the parity check for
       // namespaces with no de/ file).
@@ -141,6 +144,7 @@ export const i18n = createI18n({
       reports: deReports,
       simulator: deSimulator,
       docs: deDocs,
+      showcase: deShowcase,
     },
   },
   datetimeFormats,

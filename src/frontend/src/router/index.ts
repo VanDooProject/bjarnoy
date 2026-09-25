@@ -125,6 +125,15 @@ export const router = createRouter({
       component: () => import('../views/DocsView.vue'),
     },
     {
+      // Public marketing/portfolio page — lives inside the game app (not a
+      // static screenshot page) so it mounts the real WorldMapCanvas/
+      // SettlementCanvas components against a standalone, backend-free
+      // WorldModel and can never drift from what the live renderer shows.
+      path: '/showcase',
+      name: 'showcase',
+      component: () => import('../views/ShowcaseView.vue'),
+    },
+    {
       path: '/tech-tree',
       name: 'tech-tree',
       component: () => import('../views/TechTreeView.vue'),

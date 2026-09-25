@@ -1,0 +1,94 @@
+{
+  "brand": "Bjarnoy",
+  "hero": {
+    "eyebrow": "Ein Echtzeit-Wikinger-Inselspiel",
+    "title": "Bjarnoy",
+    "tagline": "Eine Insel. Ein Meer. Niemals Stillstand.",
+    "pitch": "Stich in See, beanspruche einen Bauplatz und errichte ein Reich, das auch offline weiterwächst — Bauaufträge laufen weiter, Flotten segeln, und Überfälle landen nach der echten Uhrzeit, nicht nach Spielzügen.",
+    "playCta": "Jetzt spielen",
+    "docsCta": "Dokumentation lesen",
+    "seed": "Welt-Seed {seed}",
+    "reroll": "Neue Welt",
+    "explore": "Karte erkunden",
+    "exploreDone": "Fertig"
+  },
+  "oneView": {
+    "title": "Eine Ansicht — Karte und Dorf",
+    "body": "Die Weltkarte und dein Dorf sind dasselbe Sechseckgitter, nicht zwei getrennte Ansichten. Zoome auf eine Insel, und dieselbe gerenderte Fläche wird aus Gelände und Territorium zu Hütten, Feldern und Menschen — nichts \"öffnet\" eine eigene Ansicht."
+  },
+  "features": {
+    "title": "Gebaut zum Spielen, nicht nur zum Ansehen",
+    "intro": "Jedes Feature unten läuft auf derselben Engine, die du oben siehst — keine Attrappen.",
+    "items": {
+      "sharedIslands": {
+        "title": "Geteilte Inseln",
+        "body": "Inseln sind gemeinsamer Boden — die Siedlungen vieler Spieler können nebeneinander auf derselben Insel stehen."
+      },
+      "borders": {
+        "title": "Grenzen, die wachsen",
+        "body": "Territorium folgt der Settlers-II-Logik: Dein Claim-Radius wächst mit deinem Langhaus und deinen Grenztürmen — und schrumpft, wenn sie fallen."
+      },
+      "realTime": {
+        "title": "Echtzeit, ständig in Bewegung",
+        "body": "Bauaufträge, Ausbauten und Flotten laufen nach der Uhr. Logg dich morgen wieder ein, und die Welt hat sich ohne dich weitergedreht."
+      },
+      "fogOfWar": {
+        "title": "Nebel des Krieges & Aufklärung",
+        "body": "Unerkundetes Gebiet bleibt verborgen, bis ein Späher oder eine Siedlung es aufdeckt — die Karte zu kennen ist Teil des Spiels."
+      },
+      "expansion": {
+        "title": "Expansion über See",
+        "body": "Lade eine Siedlermannschaft auf ein Langschiff, segle zu einem unbeanspruchten Küstenhex auf einer beliebigen Insel und gründe eine zweite Siedlung."
+      },
+      "trade": {
+        "title": "Handel zwischen Spielern",
+        "body": "Nichts ist gemeinsam — Karawanen und Schiffe bewegen Güter zwischen Siedlungen, deinen eigenen und denen, mit denen du einen Handel schließt."
+      },
+      "guilds": {
+        "title": "Gilden & Bündnisse",
+        "body": "Schließe dich mit anderen Jarls zusammen, um Sicht zu teilen, Landungen zu koordinieren und Inseln gemeinsam zu halten."
+      },
+      "battles": {
+        "title": "Kämpfe, Berichte & ein Simulator",
+        "body": "Überfälle und Belagerungen enden in lesbaren Kampfberichten, und ein Kampfsimulator lässt dich einen Angriff planen, bevor du Truppen einsetzt."
+      }
+    }
+  },
+  "engineering": {
+    "title": "Unter der Haube",
+    "intro": "Die Portfolio-Hälfte dieser Seite — wie das Ganze tatsächlich gebaut ist.",
+    "items": {
+      "renderer": {
+        "title": "Ein Sechseck-Renderer, zwei Ansichten",
+        "body": "Ein einziger Pixi.js-v8-Renderer zeichnet ein axiales Sechseckgitter mit isometrischer Projektion — Weltkarte und Dorfansicht sind derselbe Codepfad, nur unterschiedlich gezoomt."
+      },
+      "generation": {
+        "title": "Bitgenaue Inselgenerierung",
+        "body": "Prozedurale Inselformen werden auf dem .NET-Backend und in diesem TypeScript-Client identisch erzeugt, abgesichert durch geteilte Golden-Fixture-Paritätstests, damit beide nie auseinanderlaufen."
+      },
+      "backend": {
+        "title": ".NET 10 + Aspire + PostgreSQL",
+        "body": "Ein ASP.NET-Core-Backend, orchestriert mit .NET Aspire und gestützt auf PostgreSQL, ausgeliefert als ein einziges Docker-Image mit diesem Frontend direkt eingebaut."
+      },
+      "e2e": {
+        "title": "Gesplittete Playwright-E2E-Suite",
+        "body": "Eine echte End-to-End-Testsuite steuert einen echten Browser gegen einen Produktions-Build, aufgeteilt auf CI-Shards, damit Läufe schnell bleiben."
+      },
+      "deploy": {
+        "title": "Preview-Umgebungen pro Pull Request",
+        "body": "Jeder Pull Request bekommt eine eigene Wegwerf-Preview-Umgebung auf Coolify, damit eine Änderung laufend begutachtet werden kann, nicht nur als Diff gelesen."
+      },
+      "i18n": {
+        "title": "Englisch + Deutsch, immer im Gleichschritt",
+        "body": "Jeder sichtbare Text erscheint auf Englisch und Deutsch, automatisierte Tests erzwingen die Schlüsselparität zwischen beiden."
+      }
+    },
+    "techTreeLink": "Zum Technologiebaum →",
+    "tileDocsLink": "Zur Kachel-Dokumentation →"
+  },
+  "footer": {
+    "docs": "Dokumentation",
+    "impressum": "Impressum",
+    "play": "Jetzt spielen"
+  }
+}
