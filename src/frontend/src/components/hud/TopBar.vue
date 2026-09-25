@@ -5,7 +5,7 @@
 // the rest of the row, matching the reference screenshot's single-strip
 // layout. The hex logo stands for the game (Bjarnoy) on its own, as in the
 // reference — see its title attribute for the accessible name.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import { useWorldStore } from '../../stores/world';
 
 const props = defineProps<{
@@ -47,35 +47,10 @@ const caption = computed(() => {
   const parts = [islandName.value?.toUpperCase(), `LONGHOUSE ${world.hud.level}`].filter(Boolean);
   return parts.length ? parts.join(' · ') : null;
 });
-
-// Mobile audit: on narrow viewports the bar wraps to a second row (ResourceBar
-// sitting under the brand/nav row) and grows past its desktop 64px height.
-// Sibling overlays anchored with a fixed offset from the header (TradePanel's
-// toggle/popover) need to know the *real* rendered height to sit below it
-// instead of overlapping — publish it as a CSS var on the parent element
-// rather than threading a prop through every caller. ResizeObserver isn't
-// available in jsdom unit tests, so this is a no-op there (the var's CSS
-// fallback covers desktop-shaped tests).
-const barEl = ref<HTMLElement | null>(null);
-let resizeObserver: ResizeObserver | null = null;
-
-onMounted(() => {
-  if (typeof ResizeObserver === 'undefined' || !barEl.value?.parentElement) return;
-  const parent = barEl.value.parentElement;
-  resizeObserver = new ResizeObserver((entries) => {
-    const height = entries[0]?.contentRect.height;
-    if (height) parent.style.setProperty('--hud-bar-h', `${Math.round(height)}px`);
-  });
-  resizeObserver.observe(barEl.value);
-});
-onBeforeUnmount(() => {
-  resizeObserver?.disconnect();
-  barEl.value?.parentElement?.style.removeProperty('--hud-bar-h');
-});
 </script>
 
 <template>
-  <header ref="barEl" class="hud-bar" :class="{ 'hud-bar--docked': docked }">
+  <header class="hud-bar" :class="{ 'hud-bar--docked': docked }">
     <div class="brand">
       <span class="logo-hex" aria-hidden="true" title="Bjarnoy">
         <svg viewBox="0 0 100 100">
@@ -175,42 +150,5 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   min-width: 0;
   justify-content: flex-end;
-}
-
-/* Mobile audit (390px iPhone 13): HudNav and ResourceBar are both `flex: none`
-   slotted children fighting the brand block for a single fixed-height 64px
-   row, which is what pushes them off-screen to the left. Wrap the bar into a
-   two-row header instead — brand + nav on row one, ResourceBar (when present)
-   flowing onto its own full-width row two — and let `.hud-bar-right` stop
-   being its own flex box so its children (HudNav, ResourceBar) lay out
-   directly against `.hud-bar`'s own wrap, each free to pick its own
-   `order`/`flex-basis` (see ResourceBar.vue/HudNav.vue's own mobile rules). */
-@media (max-width: 768px) {
-  .hud-bar {
-    height: auto;
-    min-height: 56px;
-    flex-wrap: wrap;
-    padding: 8px 12px;
-    gap: 8px 12px;
-  }
-  .hud-bar-right {
-    display: contents;
-  }
-  /* Basis 0, not auto: the brand gives up its width (ellipsising the
-     title) before the nav controls get wrapped onto a row of their own, so
-     the bar stays one row unless a ResourceBar asks for the second. */
-  .brand {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-  .titles {
-    min-width: 0;
-  }
-  .name,
-  .caption {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 }
 </style>

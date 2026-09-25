@@ -108,64 +108,10 @@ onBeforeUnmount(() => {
 // A navigation while the menu is open should close it, same as
 // ReturningPlayerMenu does for its own panel.
 watch(() => route.fullPath, closeAccountMenu);
-
-// Mobile audit: `.hud-nav` is `flex: none` inside TopBar's fixed 64px row, so
-// every link renders off-screen to the left on a 390px viewport. Below the
-// breakpoint the links move into a collapsible dropdown behind a hamburger
-// toggle instead — same buttons, same DOM order, just hidden until opened
-// (see HudNav.test.ts / e2e's `.hud-nav button` queries, which keep working
-// unchanged since nothing is removed, only wrapped).
-const menuOpen = ref(false);
-const navLinksRoot = ref<HTMLDivElement | null>(null);
-
-function toggleMenu() {
-  menuOpen.value = !menuOpen.value;
-}
-function closeMenu() {
-  menuOpen.value = false;
-}
-function onMenuPointerDown(event: PointerEvent) {
-  if (!menuOpen.value) return;
-  const target = event.target as Node | null;
-  if (navLinksRoot.value && target && !navLinksRoot.value.contains(target)) closeMenu();
-}
-function onMenuKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') closeMenu();
-}
-onMounted(() => {
-  document.addEventListener('pointerdown', onMenuPointerDown, true);
-  document.addEventListener('keydown', onMenuKeydown);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', onMenuPointerDown, true);
-  document.removeEventListener('keydown', onMenuKeydown);
-});
-watch(() => route.fullPath, closeMenu);
 </script>
 
 <template>
   <nav class="hud-nav">
-    <button
-      type="button"
-      class="menu-toggle"
-      data-testid="hud-nav-menu-toggle"
-      :aria-expanded="menuOpen"
-      aria-controls="hud-nav-links"
-      :aria-label="t('hud.nav.menu')"
-      @click="toggleMenu"
-    >
-      <span class="menu-toggle-bar" aria-hidden="true" />
-      <span class="menu-toggle-bar" aria-hidden="true" />
-      <span class="menu-toggle-bar" aria-hidden="true" />
-    </button>
-    <div
-      ref="navLinksRoot"
-      class="nav-links"
-      :class="{ open: menuOpen }"
-      id="hud-nav-links"
-      data-testid="hud-nav-links"
-      @click="closeMenu"
-    >
     <button
       v-if="player.hasFoundedSettlement"
       class="link"
@@ -233,7 +179,6 @@ watch(() => route.fullPath, closeMenu);
       {{ t('hud.nav.landing') }}
     </button>
     <LocaleSwitcher />
-    </div>
     <!-- Logged in, the avatar opens a small account dropdown — Profile
          (issue #42) or Log out (player logout/login gate: `useLogout`
          clears the local identity and drops back to a full page reload).
@@ -279,15 +224,6 @@ watch(() => route.fullPath, closeMenu);
   flex: none;
   padding-left: 22px;
   border-left: 1px solid var(--panel-border);
-}
-/* Desktop: the toggle never shows, and the links wrapper contributes nothing
-   of its own — its children lay out as direct flex items of `.hud-nav`,
-   exactly as before this wrapper existed. */
-.menu-toggle {
-  display: none;
-}
-.nav-links {
-  display: contents;
 }
 .link {
   background: transparent;
@@ -396,85 +332,5 @@ watch(() => route.fullPath, closeMenu);
 .row:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--gold);
-}
-
-/* Mobile audit (390px iPhone 13): every `.link` here used to render at
-   x≈-200..16 — off-screen and unreachable — because `.hud-nav` is `flex:
-   none` fighting the brand block for a fixed-height row. Collapse the links
-   (+ LocaleSwitcher) behind a hamburger toggle into an anchored dropdown
-   instead, same shape as `.account-panel`/ReturningPlayerMenu's `.menu`
-   above. The avatar/ReturningPlayerMenu trigger stay in the bar itself —
-   only `.nav-links` moves into the panel. */
-@media (max-width: 768px) {
-  .hud-nav {
-    /* No longer its own flex row: the toggle/panel position against
-       `.hud-bar` (already a containing block — see TopBar.vue), not against
-       this now-inline element. */
-    position: static;
-    gap: 8px;
-    padding-left: 0;
-    border-left: none;
-  }
-  .menu-toggle {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    width: 44px;
-    height: 44px;
-    flex: none;
-    background: transparent;
-    border: 1px solid var(--panel-border);
-    border-radius: 8px;
-    cursor: pointer;
-    padding: 0;
-  }
-  .menu-toggle-bar {
-    display: block;
-    width: 18px;
-    height: 2px;
-    background: var(--text);
-    border-radius: 1px;
-  }
-  .nav-links {
-    display: none;
-  }
-  .nav-links.open {
-    display: flex;
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 8px;
-    min-width: 200px;
-    max-width: calc(100vw - 16px);
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-    padding: 8px;
-    /* The existing panel look (see `.account-panel` above), but opaque:
-       --panel-bg's slight translucency lets the onboarding banner/pointer
-       underneath read through the menu rows. */
-    background: #0a141b;
-    border: 1px solid var(--panel-border);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-    pointer-events: auto;
-    z-index: 50;
-  }
-  .nav-links.open .link {
-    width: 100%;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    font-size: 14px;
-    text-align: left;
-  }
-  .nav-links.open :deep(.locale-switcher) {
-    align-self: flex-start;
-  }
-  .avatar {
-    width: 36px;
-    height: 36px;
-  }
 }
 </style>

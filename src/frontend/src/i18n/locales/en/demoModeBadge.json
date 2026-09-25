@@ -1,5 +1,4 @@
 {
   "label": "Demo mode — progress isn't saved",
-  "short": "Demo",
   "title": "No backend is connected — progress lives only in this browser tab and is lost on reload."
 }

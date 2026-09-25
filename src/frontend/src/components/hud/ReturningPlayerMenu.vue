@@ -272,29 +272,4 @@ watch(() => route.fullPath, close);
   background: var(--panel-border);
   flex: none;
 }
-
-/* Mobile audit (390px iPhone 13): the two-line trigger ("I already have a
-   realm" / "or want to join another world") takes most of the header width
-   on its own. Drop the sub-line and cap the width so the trigger reads as a
-   single compact pill next to the (also-mobile) HudNav toggle. `.menu`
-   already caps itself at `calc(100vw - 32px)` so the dropdown panel doesn't
-   need its own override here. */
-@media (max-width: 768px) {
-  .trigger {
-    max-width: 160px;
-    min-height: 44px;
-  }
-  .trigger-sub {
-    display: none;
-  }
-  .trigger-text {
-    min-width: 0;
-  }
-  .trigger-main {
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-}
 </style>
