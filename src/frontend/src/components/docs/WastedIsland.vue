@@ -6,7 +6,8 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { atlasBackgroundStyle, type AtlasBackgroundStyle } from '../../lib/map/atlas';
-import { isoTopPoints, isoGridPosition } from '../../lib/hex/geometry';
+import { isoTopPoints, isoGridPosition, hexUnionOutline } from '../../lib/hex/geometry';
+import type { AxialCoord } from '../../lib/hex/coords';
 import {
   buildIsland,
   resolveIslandFrame,
@@ -139,6 +140,37 @@ const hexPolygons = computed<HexPoly[]>(() => {
     }
   }
   return polys;
+});
+
+// One outer outline per hover group (a plain tile's own single hex, or a
+// giant's whole 7-hex footprint) rather than stroking every hex in the
+// group individually — the same `hexUnionOutline` the in-game map's own
+// giant hover highlight uses (HexMapRenderer.ts's `giantFootprintOutline`),
+// generalised here to the island's own hex set instead of a real giant
+// anchor.
+const hoverGroupHexes = computed<Map<string, AxialCoord[]>>(() => {
+  const map = new Map<string, AxialCoord[]>();
+  const seen = new Set<string>();
+  for (const p of placements.value) {
+    for (const hex of p.hexes) {
+      const dedupeKey = `${p.hoverGroup}:${hex.q},${hex.r}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      const list = map.get(p.hoverGroup);
+      if (list) list.push(hex);
+      else map.set(p.hoverGroup, [hex]);
+    }
+  }
+  return map;
+});
+
+const hoverOutlinePoints = computed<string | null>(() => {
+  if (!hoveredKey.value) return null;
+  const hexes = hoverGroupHexes.value.get(hoveredKey.value);
+  if (!hexes || hexes.length === 0) return null;
+  return hexUnionOutline(hexes, TILE_W, TOP_FACE_H)
+    .map((pt) => `${pt.x},${pt.y}`)
+    .join(' ');
 });
 
 const bounds = computed(() => {
@@ -378,9 +410,13 @@ function togglePlay(): void {
             :key="poly.key"
             :points="shiftedPolygonPoints(poly.points)"
             class="hex-hit"
-            :class="{ hovered: poly.placementKey === hoveredKey }"
             @mouseenter="onEnterHex(poly.placementKey)"
             @mouseleave="onLeaveHex"
+          />
+          <polygon
+            v-if="hoverOutlinePoints"
+            :points="shiftedPolygonPoints(hoverOutlinePoints)"
+            class="hover-outline"
           />
         </svg>
       </div>
@@ -482,8 +518,11 @@ function togglePlay(): void {
   pointer-events: all;
   cursor: pointer;
 }
-.hex-hit.hovered {
+.hover-outline {
+  fill: transparent;
   stroke: var(--gold);
+  stroke-width: 2px;
+  pointer-events: none;
 }
 .caption {
   margin: 0;

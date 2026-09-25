@@ -8,6 +8,78 @@
 import type { AxialCoord } from './coords';
 import { axialToOddQ } from './coords';
 
+/** A polygon edge (world coords), in the winding order it was drawn — see `hexUnionOutline`. */
+interface Edge {
+  a: Point;
+  b: Point;
+}
+
+/**
+ * Rounds a world-space point to a stable string key so two hexes' shared
+ * edge (drawn independently, but landing on the same pixels by
+ * `isoTopPoints`'s construction — they abut with no gaps or overlaps)
+ * compares equal despite any floating-point noise from the two separate
+ * `isoGridPosition` calls that produced it.
+ */
+function pointKey(p: Point): string {
+  return `${Math.round(p.x * 1000)}:${Math.round(p.y * 1000)}`;
+}
+
+/**
+ * The union outline (in world coords, same space a single-hex hover polygon
+ * is drawn in) of an arbitrary set of hexes — for highlighting a whole
+ * multi-hex object's footprint on hover instead of stroking each of its
+ * hexes individually (see `giantFootprintOutline`, its original single-use
+ * caller, and the Wasted Lands docs page's turning island, which reuses this
+ * for the same reason on its own made-up hex set).
+ *
+ * Every hex's 6 edges are collected; an edge shared by two of the hexes —
+ * walked in opposite directions by the two polygons that share it, since
+ * both are traced in the same rotational order — is dropped as interior.
+ * What's left is the outer boundary, chained into one closed loop.
+ */
+export function hexUnionOutline(hexes: AxialCoord[], w: number, h: number): Point[] {
+  const allEdges: Edge[] = [];
+  for (const coord of hexes) {
+    const grid = isoGridPosition(coord, w, h);
+    const points = isoTopPoints(w, h).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+    for (let i = 0; i < points.length; i++) {
+      allEdges.push({ a: points[i]!, b: points[(i + 1) % points.length]! });
+    }
+  }
+
+  const removed = new Set<number>();
+  for (let i = 0; i < allEdges.length; i++) {
+    if (removed.has(i)) continue;
+    for (let j = i + 1; j < allEdges.length; j++) {
+      if (removed.has(j)) continue;
+      const shared =
+        pointKey(allEdges[i]!.a) === pointKey(allEdges[j]!.b) && pointKey(allEdges[i]!.b) === pointKey(allEdges[j]!.a);
+      if (shared) {
+        removed.add(i);
+        removed.add(j);
+        break;
+      }
+    }
+  }
+
+  const boundary = allEdges.filter((_, i) => !removed.has(i));
+  const byStartKey = new Map<string, Edge>();
+  for (const edge of boundary) byStartKey.set(pointKey(edge.a), edge);
+
+  const outline: Point[] = [];
+  if (boundary.length === 0) return outline;
+  const startKey = pointKey(boundary[0]!.a);
+  let current: Edge | undefined = boundary[0];
+  for (let guard = 0; current && guard <= boundary.length; guard++) {
+    outline.push(current.a);
+    const nextKey = pointKey(current.b);
+    if (nextKey === startKey) break;
+    current = byStartKey.get(nextKey);
+  }
+  return outline;
+}
+
 export interface Point {
   x: number;
   y: number;
