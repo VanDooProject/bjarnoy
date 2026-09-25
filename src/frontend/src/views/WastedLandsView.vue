@@ -44,6 +44,8 @@ interface PairEntry {
   kind: SimplePairKind;
   livingFamily: string;
   wastedFamily: string;
+  /** Living-tile variant suffixes (`''` for the plain look). A pill picks `livingSuffixes[i % length]`, so the living thumbnail changes along with the wasted one even where the two families ship a different number of looks. */
+  livingSuffixes?: string[];
   /** Wasted-tile variant suffixes (`''` for the plain look), in pill display order. */
   wastedSuffixes: string[];
   /** Mountain has no `_SE` suffix — its families already carry `_level000`. */
@@ -54,12 +56,14 @@ const PAIRS: PairEntry[] = [
   {
     kind: 'grass',
     livingFamily: 'grasstile',
+    livingSuffixes: ['', '_variant000', '_variant001', '_variant002'],
     wastedFamily: 'wasteland',
     wastedSuffixes: ['', '_variant001', '_variant002', '_variant003', '_variant004', '_variant005'],
   },
   {
     kind: 'forest',
     livingFamily: 'foresttile',
+    livingSuffixes: ['', '_variant000', '_variant001'],
     wastedFamily: 'deadforest',
     wastedSuffixes: ['', '_variant001'],
   },
@@ -79,6 +83,7 @@ const PAIRS: PairEntry[] = [
   {
     kind: 'coast',
     livingFamily: 'coastalwatertile',
+    livingSuffixes: ['', '_variant000', '_variant001'],
     wastedFamily: 'blacksandcoast',
     wastedSuffixes: ['', '_variant000', '_variant001', '_variant002'],
   },
@@ -100,7 +105,9 @@ const variantIndex = reactive<Record<SimplePairKind, number>>({
 });
 
 function pairLivingFrame(pair: PairEntry): AtlasFrameRect | undefined {
-  return showcase(`${pair.livingFamily}_SE${pair.level000 ? '_level000' : ''}`);
+  const looks = pair.livingSuffixes ?? [''];
+  const suffix = looks[variantIndex[pair.kind] % looks.length] ?? '';
+  return showcase(`${pair.livingFamily}_SE${pair.level000 ? '_level000' : ''}${suffix}`);
 }
 function pairWastedFrame(pair: PairEntry): AtlasFrameRect | undefined {
   const suffix = pair.wastedSuffixes[variantIndex[pair.kind]] ?? '';
@@ -110,13 +117,15 @@ function pairWastedFrame(pair: PairEntry): AtlasFrameRect | undefined {
 // The river/lava-stream row switches shape rather than variant, and both
 // thumbnails at once (see `docs.wastedLands.lavaShapes`).
 // A lava stream rises from a lava spring on a small cone of its own, where a
-// river rises from a mountain spring.
+// river rises from a mountain spring — the same corrie cut the map draws for
+// a spring (textures.ts's RIVER_FAMILY), not the flat `rivertile_spring`
+// placeholder.
 type RiverShape = 'straight' | 'bend' | 'bend60' | 'spring';
 const RIVER_SHAPE_FRAMES: Record<RiverShape, { living: string; wasted: string }> = {
   straight: { living: 'rivertile_SE', wasted: 'lavastream_SE' },
   bend: { living: 'rivertile_bend_SE', wasted: 'lavastream_bend_SE' },
   bend60: { living: 'rivertile_bend60_SE', wasted: 'lavastream_bend60_SE' },
-  spring: { living: 'rivertile_spring_SE', wasted: 'mountaintile_volcano_lavaspring_flows_SE_level000' },
+  spring: { living: 'mountaintile_corrie_spring_SE', wasted: 'mountaintile_volcano_lavaspring_flows_SE_level000' },
 };
 const riverShape = ref<RiverShape>('straight');
 const riverLivingFrame = computed(() => showcase(RIVER_SHAPE_FRAMES[riverShape.value].living));
