@@ -8,24 +8,11 @@
 // The frame renders at its own aspect ratio (no cropping): give the parent
 // a fixed size and this fits inside it, same as `object-fit: contain`.
 import { computed } from 'vue';
-import type { AtlasFrameRect } from '../lib/map/atlas';
+import { atlasBackgroundStyle, type AtlasFrameRect } from '../lib/map/atlas';
 
 const props = defineProps<{ frame: AtlasFrameRect }>();
 
-const style = computed(() => {
-  const { webpUrl, frame, pageSize } = props.frame;
-  const bgWidthPct = (pageSize.w / frame.w) * 100;
-  const bgHeightPct = (pageSize.h / frame.h) * 100;
-  const posXPct = pageSize.w === frame.w ? 0 : (frame.x / (pageSize.w - frame.w)) * 100;
-  const posYPct = pageSize.h === frame.h ? 0 : (frame.y / (pageSize.h - frame.h)) * 100;
-  return {
-    aspectRatio: `${frame.w} / ${frame.h}`,
-    backgroundImage: `url(${webpUrl})`,
-    backgroundRepeat: 'no-repeat',
-    backgroundSize: `${bgWidthPct}% ${bgHeightPct}%`,
-    backgroundPosition: `${posXPct}% ${posYPct}%`,
-  };
-});
+const style = computed(() => atlasBackgroundStyle(props.frame));
 </script>
 
 <template>

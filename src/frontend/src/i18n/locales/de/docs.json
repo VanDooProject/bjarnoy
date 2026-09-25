@@ -12,6 +12,14 @@
       "tiles": {
         "title": "Kacheln",
         "description": "Das Gelände, aus dem eine Welt besteht, wie es entsteht und was darauf gebaut werden kann."
+      },
+      "wastedLands": {
+        "title": "Ödlande",
+        "description": "Das Endspiel: Utgard, die Inseln, die aus dem Meer steigen, und woraus sie bestehen."
+      },
+      "showcase": {
+        "title": "Showcase",
+        "description": "Ein spielerfokussiertes Pitch für das Spiel, plus ein Blick unter die Haube für alle, die wissen wollen, wie es gebaut ist."
       }
     }
   },
@@ -154,5 +162,118 @@
   "impressum": {
     "title": "Impressum",
     "body": "Fjørdhold ist ein Hobbyprojekt für die VanDooProject-Community. Diese Platzhalterseite existiert, damit die echte Landingpage etwas hat, worauf sie verlinken kann — ersetze sie durch dein tatsächliches Impressum (Betreiber, Kontaktadresse und alle Angaben, die deine Rechtsordnung verlangt), bevor du live gehst."
+  },
+  "wastedLands": {
+    "title": "Die Ödlande",
+    "intro": "Wo die Welt endet. Die Ödlande sind das Endspiel einer Welt: Inseln, die aus dem Meer steigen, wenn die Riesen erwachen, die Festung in ihrer Mitte und der letzte Krieg der Jarle von Bjarnøy.",
+    "lore": {
+      "heading": "Am Rand des langen Winters",
+      "p1": "Die Skalden sagen, das Meer um Bjarnøy war nie leer. Hinter den letzten Schären, wo die Seekarten enden, liegt Útgarðr, der Außenhof, die Heimat der Jötnar, der Riesen, die vor Göttern und Menschen hier waren. Solange die Inseln jung sind, schlafen die Riesen, und die Jarle kämpfen untereinander um Holz, Stein und Ruhm.",
+      "p2": "Doch jedes Zeitalter wird alt. Wenn die Hallen voll sind und auf jeder Insel Runensteine stehen, erwachen die Riesen. Hinter den kartierten Inseln beginnt das Meer zu kochen, und neues Land steigt daraus auf: Inseln, die nie grün waren. Auf jeder raucht ein Feuerberg, und auf der größten steht Utgard, eine schwarze Zitadelle, deren Fenster in kaltem Runenfeuer brennen.",
+      "p3": "Dort ist nie etwas Lebendiges gewachsen. Der Boden ist Asche und Schlacke, die Wälder sind gebleichte Stümpfe mit abgebrochenen Kronen, und die Flüsse führen Feuer. Die Strände sind schwarzer Sand, und das Meer ringsum ist kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten, um zu sehen, was aufgestiegen war. Auf den Graten bewachen Jötun-Wachtürme die Zugänge, und Utgards Mauern ziehen sich vom Fels bis ans Ufer.",
+      "p4": "Kein einzelner Jarl bricht Utgard. Seine Mauern sind für eine Belagerung gebaut, die eine Generation dauert, und die Riesen werden stärker, während die Jarle streiten. Nur Gilden, die als ein Heer segeln, können den Außenhof stürmen. Wer sein Tor niederwirft, beendet das Zeitalter, und sein Name wird als letzter eingeritzt, bevor die Welt von vorn beginnt.",
+      "caption": "So soll sich das Endspiel anfühlen, ein Regelwerk ist das nicht. Die Mechanik wird noch entworfen und kann sich ändern."
+    },
+    "utgard": {
+      "heading": "Utgard, der Außenhof",
+      "body": "Ein Riesenfeld: eine Festung über sieben Hexfelder, ein Basaltfels mit Ringmauer, Rundtürmen und einem Bergfried in der Mitte, von innen in Runenfeuer getaucht und in Nebel gehüllt. Der Fels ist in sieben Stücke geschnitten, damit jedes Stück auf der Karte mit seinem Hexfeld sortiert wird wie jedes andere Feld.",
+      "camera": "Kamera"
+    },
+    "volcano": {
+      "heading": "Der Feuerberg",
+      "body": "Der zweite Riese der Ödlande: ein Berg, der nie erkaltet ist. Lava rinnt über seine Flanken, der Krater brodelt, und Rauch steigt ohne Ende auf. Wie Utgard bedeckt er sieben Hexfelder, und er ist animiert."
+    },
+    "defences": {
+      "heading": "Utgards Wehranlagen",
+      "body": "Die Riesen lassen ihre Inseln nicht offen. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinab ans Wasser.",
+      "level": "Stufe",
+      "watchtower": {
+        "heading": "Jötun-Wachturm",
+        "body": "Utgards Antwort auf die Türme der Jarle: ein Rundturm aus dunklem, geschichtetem Stein mit runenhellen Schießscharten. Er wächst in drei Stufen, vom Gerüst bis zur gekrönten Spitze, auf der das Runenfeuer offen brennt."
+      },
+      "walls": {
+        "heading": "Utgards Mauern",
+        "body": "Zinnenbewehrte Ringmauern aus Stücken, die Kante an Kante passen: gerade Abschnitte, ein Tor, flache und enge Biegungen, Enden, die an einem Turm abschließen, und Enden, die dort abbrechen, wo sie aufs Meer treffen.",
+        "piece": "Stück"
+      },
+      "pieces": {
+        "straight": "Gerade",
+        "gate": "Tor",
+        "bend120": "Biegung",
+        "bend60": "Enge Biegung",
+        "end": "Ende",
+        "endCoast": "Ende am Ufer"
+      }
+    },
+    "island": {
+      "heading": "Lebendig und öde, nebeneinander",
+      "body": "Öde Inseln sind von Anfang an öde: Sie steigen so aus dem Meer, wie sie sind, und keine lebendige Insel kippt je. Diese erfundene Insel ist nur ein Spielzeug, um die beiden Feldsätze zu vergleichen. Zieh den Regler, um ihre lebendigen Felder Ring um Ring von der Mitte aus gegen ihre öden Gegenstücke zu tauschen.",
+      "blight": "Öde",
+      "play": "Abspielen",
+      "rotateLeft": "Nach links drehen",
+      "rotateRight": "Nach rechts drehen",
+      "hoverHint": "Zeig auf ein Hexfeld, um zu sehen, was es ist.",
+      "stages": {
+        "s0": "Alles lebendig",
+        "s1": "Mitte getauscht",
+        "s2": "Land getauscht",
+        "s3": "Küste getauscht",
+        "s4": "Alles öde"
+      },
+      "giantLiving": "Steinkreis (Riesenschrein)",
+      "giantWasted": "Utgard",
+      "giantMountainLiving": "Großer Berg (Riesenfeld)",
+      "giantVolcano": "Feuerberg"
+    },
+    "pairs": {
+      "heading": "Lebendig und öde",
+      "body": "Jedes öde Feld hat ein lebendiges Gegenstück derselben Form, damit Flüsse, Küsten und Bergfüße auf beiden Arten von Inseln gleich zusammenpassen.",
+      "living": "Lebendig",
+      "wasted": "Öde",
+      "looks": "Varianten"
+    },
+    "tiles": {
+      "grass": {
+        "living": "Grasland",
+        "wasted": "Ödland",
+        "lore": "Aschefleckiger Basalt. Darauf liegen Geröll, Obsidiansplitter, ein runenhell leuchtender Spalt, ein Netz aus Lavarissen oder ein rauchender Schlot."
+      },
+      "forest": {
+        "living": "Wald",
+        "wasted": "Toter Wald",
+        "lore": "Wo jeder Baum stand, steht jetzt ein Stumpf. Sie sind gebleicht, grau oder verkohlt, und ein Drittel ist abgebrochen."
+      },
+      "sand": {
+        "living": "Sand",
+        "wasted": "Schwarzer Sand",
+        "lore": "Vulkanischer Grus, übersät mit Kieseln aus demselben Gestein."
+      },
+      "mountain": {
+        "living": "Berg",
+        "wasted": "Zackengipfel",
+        "lore": "Schlanke Spitzen aus dunklem Fels mit Asche auf den Graten. Dort wächst nichts."
+      },
+      "river": {
+        "living": "Fluss",
+        "wasted": "Lavastrom",
+        "lore": "Dasselbe Bett wie ein Fluss, nur fließt darin Feuer statt Wasser. Wo einer entspringt, quillt Lava aus einem eigenen kleinen Kegel."
+      },
+      "sea": {
+        "living": "Meer",
+        "wasted": "Verseuchtes Wasser",
+        "lore": "Grünschwarzes Wasser über dunklem Grund."
+      },
+      "coast": {
+        "living": "Küstenwasser",
+        "wasted": "Schwarzsandküste",
+        "lore": "Flaches Wasser über schwarzem Sand. Hier liegen das Wrack eines Langschiffs, ein Basaltfels und ein Riff aus Obsidianspitzen."
+      }
+    },
+    "lavaShapes": {
+      "straight": "Gerade",
+      "bend": "Biegung",
+      "bend60": "Enge Biegung",
+      "spring": "Quelle"
+    }
   }
 }

@@ -1,0 +1,94 @@
+{
+  "brand": "Bjarnoy",
+  "hero": {
+    "eyebrow": "A real-time viking island game",
+    "title": "Bjarnoy",
+    "tagline": "One island. One sea. Never at rest.",
+    "pitch": "Sail out, claim a plot, and build a realm that keeps growing while you're offline — build queues run, fleets sail, and raids land on a wall clock, not a turn counter.",
+    "playCta": "Play now",
+    "docsCta": "Read the docs",
+    "seed": "World seed {seed}",
+    "reroll": "New world",
+    "explore": "Explore the map",
+    "exploreDone": "Done exploring"
+  },
+  "oneView": {
+    "title": "One view — map and village",
+    "body": "The world map and your village are the same hex lattice, not two screens. Zoom in on an island and the same rendered surface turns from territory and terrain into huts, farms and people — nothing ever \"opens\" a separate view."
+  },
+  "features": {
+    "title": "Built to play, not just to look at",
+    "intro": "Every feature below runs on the same engine you're looking at above — no mockups.",
+    "items": {
+      "sharedIslands": {
+        "title": "Shared islands",
+        "body": "Islands are shared ground — many players' settlements can stand on the same island, side by side."
+      },
+      "borders": {
+        "title": "Borders that grow",
+        "body": "Territory follows Settlers-II logic: your claim radius grows with your Longhouse and border towers, and contracts if they fall."
+      },
+      "realTime": {
+        "title": "Real time, always running",
+        "body": "Build queues, upgrades and fleets run on a wall clock. Log back in tomorrow and the world moved without you."
+      },
+      "fogOfWar": {
+        "title": "Fog of war & scouting",
+        "body": "Unexplored ground stays hidden until a scout or a settlement reveals it — knowing the map is part of the game."
+      },
+      "expansion": {
+        "title": "Expansion by sea",
+        "body": "Load a settler crew onto a longship, sail it to an unclaimed coastal hex on any island, and found a second settlement."
+      },
+      "trade": {
+        "title": "Trade between players",
+        "body": "Nothing is pooled — caravans and ships move goods between settlements, yours and anyone else's you strike a deal with."
+      },
+      "guilds": {
+        "title": "Guilds & alliances",
+        "body": "Band together with other jarls to share vision, coordinate landings, and hold islands jointly."
+      },
+      "battles": {
+        "title": "Battles, reports & a simulator",
+        "body": "Raids and sieges resolve into readable battle reports, and a fight simulator lets you plan an attack before you commit troops."
+      }
+    }
+  },
+  "engineering": {
+    "title": "Under the hood",
+    "intro": "The portfolio half of this page — how it's actually built.",
+    "items": {
+      "renderer": {
+        "title": "One hex renderer, two views",
+        "body": "A single Pixi.js v8 renderer draws one axial hex lattice with an isometric projection — the world map and the village view are the same code path, just zoomed differently."
+      },
+      "generation": {
+        "title": "Bit-exact island generation",
+        "body": "Procedural island shapes are generated identically on the .NET backend and in this TypeScript client, guarded by shared golden-fixture parity tests so the two never drift apart."
+      },
+      "backend": {
+        "title": ".NET 10 + Aspire + PostgreSQL",
+        "body": "An ASP.NET Core backend orchestrated with .NET Aspire, backed by PostgreSQL, shipped as a single Docker image with this frontend built right in."
+      },
+      "e2e": {
+        "title": "Sharded Playwright e2e suite",
+        "body": "A real end-to-end test suite drives an actual browser against a production build, split across CI shards to keep runs fast."
+      },
+      "deploy": {
+        "title": "Per-PR preview environments",
+        "body": "Every pull request gets its own throwaway preview deployment on Coolify, so a change can be reviewed running, not just read as a diff."
+      },
+      "i18n": {
+        "title": "English + German, fully in step",
+        "body": "Every user-visible string ships in English and German, with automated tests enforcing key parity between the two."
+      }
+    },
+    "techTreeLink": "See the tech tree →",
+    "tileDocsLink": "See the tile docs →"
+  },
+  "footer": {
+    "docs": "Docs",
+    "impressum": "Impressum",
+    "play": "Play now"
+  }
+}
