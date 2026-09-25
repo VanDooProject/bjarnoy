@@ -1,4 +1,7 @@
 {
+  "notifications": {
+    "dismiss": "Dismiss"
+  },
   "nav": {
     "settlement": "Settlement",
     "worldMap": "World map",

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AccountRestrictedBanner from './components/AccountRestrictedBanner.vue';
 import DemoModeBadge from './components/DemoModeBadge.vue';
+import NotificationStack from './components/hud/NotificationStack.vue';
 import { useActivityHeartbeat } from './composables/useActivityHeartbeat';
 
 // Mounted once, app-wide: it no-ops of its own accord (via authStore.isAuthenticated)
@@ -13,5 +14,6 @@ useActivityHeartbeat();
 <template>
   <AccountRestrictedBanner />
   <DemoModeBadge />
+  <NotificationStack />
   <router-view />
 </template>
