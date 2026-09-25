@@ -82,13 +82,15 @@ public class GiantGenerationTests
                 : island.TileCount >= GiantGenerator.SmallIslandGiantThreshold
                     ? 1
                     : 0;
-            var mountainGiants = island.Giants.Count(g => g.Family != GiantGenerator.ShrineFamily);
+            var isClearingFamily = (string family) =>
+                family is GiantGenerator.ShrineFamily or GiantGenerator.UtgardFamily;
+            var mountainGiants = island.Giants.Count(g => !isClearingFamily(g.Family));
             Assert.True(mountainGiants <= maxGiants, $"island {island.Index}: too many mountain giants for its size");
 
-            // At most one shrine per island — it is rolled once, not scored/capped like mountains.
+            // At most one shrine/Utgard per island — it is rolled/placed once, not scored/capped like mountains.
             Assert.True(
-                island.Giants.Count(g => g.Family == GiantGenerator.ShrineFamily) <= 1,
-                $"island {island.Index}: more than one shrine");
+                island.Giants.Count(g => isClearingFamily(g.Family)) <= 1,
+                $"island {island.Index}: more than one shrine/Utgard");
 
             foreach (var giant in island.Giants)
             {
@@ -101,8 +103,8 @@ public class GiantGenerationTests
                     Assert.Contains(hex, islandLand);
                     Assert.DoesNotContain(hex, riverTiles);
 
-                    var terrain = sampler.TerrainAt(hex);
-                    var allowed = giant.Family == GiantGenerator.ShrineFamily
+                    var terrain = island.IsWasted ? sampler.WastedTerrainAt(hex) : sampler.TerrainAt(hex);
+                    var allowed = isClearingFamily(giant.Family)
                         ? terrain is Terrain.Grass or Terrain.Forest
                         : terrain is Terrain.Grass or Terrain.Forest or Terrain.Mountain;
                     Assert.True(
@@ -114,7 +116,7 @@ public class GiantGenerationTests
                     }
                 }
 
-                if (giant.Family == GiantGenerator.ShrineFamily)
+                if (isClearingFamily(giant.Family))
                 {
                     // Not coastal: every hex within 2 of the anchor is island land.
                     Assert.All(giant.Anchor.WithinRadius(2), c => Assert.Contains(c, islandLand));
@@ -161,16 +163,17 @@ public class GiantGenerationTests
     }
 
     [Fact]
-    public void No_giant_is_ever_a_volcano_in_worldgen()
+    public void No_giant_is_ever_a_volcano_on_a_green_island()
     {
-        // Volcanoes are a build-mode-only family today (see the shared golden
-        // fixture's scenario notes) — WorldGenerator never places one.
+        // Volcanoes are a wasted-island-only family — WorldGenerator never
+        // places one on a green island (see WastedIslandGenerationTests for
+        // the wasted side, which does place them).
         foreach (var seed in Enumerable.Range(1, 60))
         {
             var world = Generate(seed);
-            foreach (var island in world.Islands)
+            foreach (var island in world.Islands.Where(i => !i.IsWasted))
             {
-                Assert.DoesNotContain(island.Giants, g => g.Family == "giantvolcano");
+                Assert.DoesNotContain(island.Giants, g => g.Family == GiantGenerator.VolcanoFamily);
             }
         }
     }

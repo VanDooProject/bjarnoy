@@ -20,6 +20,22 @@ import type { WaterMaskRegion } from './waterMaskLayout';
 export interface TerrainLookup {
   isLand(q: number, r: number): boolean;
   /**
+   * Whether `(q, r)` is wasted land — a hex the plain green terrain layer
+   * calls sea but the wasted layer, once revealed, calls land (see
+   * `WorldModel.isWastedLandAt`). Drives the taint field (§ below): sea
+   * around a revealed wasted island renders dark/ash instead of the normal
+   * blue/white, the same way its coastal-water tiles already do in the
+   * baked art.
+   *
+   * Reveal-gating is the caller's job, not this file's — a caller answers
+   * `false` for every hex while wasted islands are hidden, exactly as
+   * `WorldModel.isWastedLandAt` and the worker's `isLandFor` already do for
+   * `isLand` itself. Optional, and omitted entirely, so a caller with no
+   * wasted islands to worry about (or a test) gets an all-zero taint field
+   * for free rather than having to pass `() => false`.
+   */
+  isWastedLand?(q: number, r: number): boolean;
+  /**
    * The whole tile, when the caller has one — only used to spot the coastal
    * water variants that carry a prop (`hasWaterProp`). Optional so a test can
    * still pass a bare `isLand`, and because a caller that omits neither this
@@ -116,6 +132,21 @@ export interface WaterMask {
   width: number;
   height: number;
   region: WaterMaskRegion;
+  /**
+   * Tainted-water field for wasted islands: one byte per texel, `width *
+   * height`, 255 in water within `TAINT_INNER_TILES` of wasted land, fading
+   * to 0 by `TAINT_REACH_TILES`, and 255 on wasted land itself so linear
+   * filtering at the shore doesn't dip. All zero wherever `TerrainLookup`
+   * carries no `isWastedLand` or it never answers true over `region` — which
+   * keeps every mask baked for a world with no wasted islands (or one not
+   * yet revealed) byte-identical to what this shipped before taint existed.
+   *
+   * A separate array rather than a fifth mask channel: the mask's own RGBA
+   * byte is already spent (§ the four fields on `data` above), and this is a
+   * different quantity read by a different part of the shader, not a
+   * refinement of any of the four.
+   */
+  taint: Uint8Array;
 }
 
 const EDT_INF = 1e20;
@@ -293,6 +324,38 @@ export function propMute(distance: number, fade: number): number {
 }
 
 /**
+ * Out to `TAINT_INNER_TILES` of a wasted-land hex, water renders fully
+ * tainted (dark/ash) — the tainted look is meant to read as *this stretch of
+ * sea*, not a thin ring hugging the shore. `FOAM_REACH_TILES` for comparison
+ * is 1.5, so a full tile of unfaded taint already reaches past where foam
+ * would sit.
+ */
+export const TAINT_INNER_TILES = 1;
+
+/**
+ * Where the taint field reaches zero, in tile widths — the far edge of
+ * `TAINT_INNER_TILES`'s fade-out. Comfortably past `FOAM_REACH_TILES` so the
+ * taint colour has room to fully take over the sea body before the foam band
+ * (which reads its own field, not this one) would otherwise be arguing with
+ * it about what colour the water near a wasted shore is.
+ */
+export const TAINT_REACH_TILES = 2.5;
+
+/**
+ * The taint ramp: 1 within `inner` world units of wasted land, smoothly to 0
+ * by `reach`. Same smoothstep shape as `propMute` and for the same reason
+ * (a linear ramp's corner at the far end reads as a visible ring in a colour
+ * mix) — just with a flat plateau in front of it instead of starting the
+ * fade at distance zero, since taint is not meant to be a thin band.
+ */
+export function taintFade(distance: number, inner: number, reach: number): number {
+  if (distance <= inner) return 1;
+  if (distance >= reach) return 0;
+  const t = (distance - inner) / (reach - inner);
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/**
  * Deterministic per-hex pseudo-random seed for the shader's foam ruggedness
  * and wave phase — the same hash `demoFogMask`'s `noiseSeed` uses, and for the
  * same reason: it is only ever sampled locally, never compared against a
@@ -333,6 +396,8 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
   const land = new Uint8Array(count);
   const seed = new Uint8Array(count);
   const prop = new Uint8Array(count);
+  const wasted = new Uint8Array(count);
+  let wastedTexels = 0;
   // Which hex each texel fell in, kept for the refine pass below rather than
   // recomputed there. `isoPixelToAxial` is cheap now but not free, and the
   // refine pass would otherwise ask it the exact same question a second time
@@ -360,6 +425,10 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       if (!isLand && propAt !== null && propAt(hex.q, hex.r)) {
         prop[row + x] = 1;
         propTexels++;
+      }
+      if (terrain.isWastedLand && terrain.isWastedLand(hex.q, hex.r)) {
+        wasted[row + x] = 1;
+        wastedTexels++;
       }
     }
   }
@@ -399,6 +468,18 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
   const distanceFromProp = propTexels > 0 ? euclideanDistanceTransform(prop, width, height, yCurvature) : null;
   const propFadeWorld = PROP_MUTE_FADE_TILES * tileWidth;
 
+  // Distance out of the wasted-land texels, for the taint field. Raster only
+  // — no mitre refine pass like the near field's — because the taint ramp is
+  // over a tile wide (TAINT_INNER_TILES plus its fade), so the texel-raster
+  // error that the refine pass exists to correct on the *foam* band (a third
+  // of a tile wide) is invisible at this scale. Skipped outright, like the
+  // prop distance above, when the region has no wasted land in it at all —
+  // which keeps a world with none, or one not yet revealed, baking a taint
+  // field of all zero at no extra cost.
+  const distanceFromWasted = wastedTexels > 0 ? euclideanDistanceTransform(wasted, width, height, yCurvature) : null;
+  const taintInnerWorld = TAINT_INNER_TILES * tileWidth;
+  const taintReachWorld = TAINT_REACH_TILES * tileWidth;
+
   // The refine pass's candidate list for one hex, reused across the run of
   // texels that fall in it.
   //
@@ -420,6 +501,7 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
   let candWater = false;
 
   const data = new Uint8Array(count * 4);
+  const taint = new Uint8Array(count);
   for (let y = 0; y < height; y++) {
     const wy = rect.minY + (y + 0.5) * texelWorldSize;
     for (let x = 0; x < width; x++) {
@@ -472,7 +554,11 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       data[i * 4 + 1] = Math.round(255 * Math.min(1, rasterOutward / reachWorld));
       data[i * 4 + 2] = seed[i];
       data[i * 4 + 3] = distanceFromProp === null ? 0 : Math.round(255 * propMute(distanceFromProp[i] * texelWorldSize, propFadeWorld));
+      taint[i] =
+        distanceFromWasted === null
+          ? 0
+          : Math.round(255 * taintFade(distanceFromWasted[i] * texelWorldSize, taintInnerWorld, taintReachWorld));
     }
   }
-  return { data, width, height, region };
+  return { data, width, height, region, taint };
 }

@@ -44,10 +44,53 @@ public sealed class TerrainSampler
     /// How far into the nearest island a hex sits, as a fraction of that island's
     /// radius: 0 at the centre, 1 at the shoreline, <see langword="null"/> at sea.
     /// </summary>
-    public double? IslandDepthAt(HexCoord coord)
+    public double? IslandDepthAt(HexCoord coord) => IslandDepthAt(coord, _options.Seed);
+
+    /// <summary>
+    /// Extra seed offset added on top of the world seed for every wasted-island
+    /// hash, so wasted islands are seeded from a noise field entirely
+    /// independent of the green islands drawn from the same world seed.
+    /// </summary>
+    public const int WastedSeedOffset = 1_000_003;
+
+    /// <summary>
+    /// Fraction of <see cref="WorldGenerationOptions.IslandChance"/> a wasted
+    /// island cell rolls against — wasted islands are rarer than green ones.
+    /// </summary>
+    public const double WastedIslandChanceFactor = 0.1;
+
+    /// <summary>
+    /// Same shape as <see cref="IslandDepthAt(HexCoord)"/> but seeded with
+    /// <see cref="WastedSeedOffset"/> and gated by <see cref="WastedIslandChanceFactor"/>
+    /// — the wasted-island equivalent of the green island grid. Returns the
+    /// depth into the nearest *wasted* island cell, independent of whether the
+    /// hex also happens to sit in a green island (that exclusion is applied by
+    /// <see cref="WastedTerrainAt"/>, not here).
+    /// </summary>
+    public double? WastedDepthAt(HexCoord coord) => IslandDepthAt(
+        coord,
+        _options.Seed + WastedSeedOffset,
+        _options.IslandChance * WastedIslandChanceFactor,
+        excludeGreenCells: true);
+
+    /// <summary>
+    /// Shared implementation behind <see cref="IslandDepthAt(HexCoord)"/> and
+    /// <see cref="WastedDepthAt"/>: identical cell-grid/lobe-chain math, just
+    /// parameterised on which seed and island-chance threshold to hash
+    /// against, so wasted islands are a bit-exact mirror of green ones under a
+    /// different seed rather than a re-derived algorithm that could drift.
+    /// </summary>
+    /// <param name="excludeGreenCells">
+    /// When set (the wasted path only), a cell that also qualifies as a green
+    /// island cell (<c>Hash2(cell, seed) &lt;= IslandChance</c>, the world
+    /// seed, not <paramref name="seed"/>) is skipped entirely, so a wasted
+    /// island's own cell grid never overlaps a green island's cell grid.
+    /// </param>
+    private double? IslandDepthAt(
+        HexCoord coord, int seed, double? islandChanceOverride = null, bool excludeGreenCells = false)
     {
         var (col, row) = coord.ToOddQ();
-        var seed = _options.Seed;
+        var islandChance = islandChanceOverride ?? _options.IslandChance;
         var cellSize = _options.IslandCellSize;
         var jitter = cellSize * 0.55;
 
@@ -57,7 +100,9 @@ public sealed class TerrainSampler
         // A cheap domain warp applied once per hex, before distance is measured
         // against any island's lobes, so coastlines wobble instead of tracing
         // perfect arcs. Zero when IslandCoastWarp is 0 (the legacy default),
-        // which keeps this identical to the un-warped sample point.
+        // which keeps this identical to the un-warped sample point. Uses the
+        // same seed+53/+71 offsets as green islands: the warp noise field is
+        // shared, only the cell grid below differs by seed.
         var px = (double)col;
         var py = (double)row;
         if (_options.IslandCoastWarp > 0)
@@ -76,7 +121,12 @@ public sealed class TerrainSampler
                 var cellCol = baseCol + dCol;
                 var cellRow = baseRow + dRow;
 
-                if (ValueNoise.Hash2(cellCol, cellRow, seed) > _options.IslandChance)
+                if (ValueNoise.Hash2(cellCol, cellRow, seed) > islandChance)
+                {
+                    continue;
+                }
+
+                if (excludeGreenCells && ValueNoise.Hash2(cellCol, cellRow, _options.Seed) <= _options.IslandChance)
                 {
                     continue;
                 }
@@ -210,6 +260,56 @@ public sealed class TerrainSampler
         if (depth is null)
         {
             return Terrain.Sea;
+        }
+
+        if (depth > _options.BeachThreshold)
+        {
+            return Terrain.Sand;
+        }
+
+        var rockiness = ValueNoise.Sample(coord.Q, coord.R, _options.Seed + 2, 2.5);
+
+        if (depth < _options.MountainThreshold && rockiness > _options.MountainRockiness)
+        {
+            return Terrain.Mountain;
+        }
+
+        return rockiness > _options.ForestRockiness ? Terrain.Forest : Terrain.Grass;
+    }
+
+    /// <summary>
+    /// The terrain of a single hex if it belongs to a wasted island — sea
+    /// (i.e. hidden) everywhere else, including on every green island. See
+    /// <see cref="WastedDepthAt"/> and the class remarks. Unlike
+    /// <see cref="TerrainAt"/>, this is not what game logic queries: wasted
+    /// land stays sea to every existing caller until the world's endboss is
+    /// triggered, at which point callers that know about the reveal switch to
+    /// this method instead.
+    /// </summary>
+    public Terrain WastedTerrainAt(HexCoord coord)
+    {
+        // Never on a green island: this guarantees wasted land can never fuse
+        // with (or hide inside) a green island's own footprint.
+        if (IslandDepthAt(coord) is not null)
+        {
+            return Terrain.Sea;
+        }
+
+        var depth = WastedDepthAt(coord);
+        if (depth is null || depth > 1.0)
+        {
+            return Terrain.Sea;
+        }
+
+        // Nor may it touch green land through any of its six neighbours —
+        // this is what stops a wasted island from growing a land bridge onto
+        // a green island's coast.
+        foreach (var neighbour in coord.Neighbours())
+        {
+            if (TerrainAt(neighbour).IsLand())
+            {
+                return Terrain.Sea;
+            }
         }
 
         if (depth > _options.BeachThreshold)

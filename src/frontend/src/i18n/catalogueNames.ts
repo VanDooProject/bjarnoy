@@ -8,6 +8,8 @@ function lookup(path: string, fallback: string): string {
 export const buildingName = (type: string) => lookup(`buildings.${type}`, type);
 export const unitName = (type: string) => lookup(`units.${type}`, type);
 export const terrainName = (terrain: string) => lookup(`terrain.${terrain}`, terrain);
+/** A wasted tile's terrain name — `family` is `textures.ts`'s wasted-island `TextureKey` (e.g. `'wasteland'`), not the wire `Terrain`. */
+export const wastedTerrainName = (family: string) => lookup(`wastedTerrain.${family}`, family);
 export const giantName = (family: string) => lookup(`giants.${family}`, family);
 export const resourceName = (resource: string) => lookup(`resources.${resource}`, resource);
 export const missionName = (mission: string) => lookup(`missions.${mission}`, mission);

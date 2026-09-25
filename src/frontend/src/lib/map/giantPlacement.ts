@@ -16,7 +16,7 @@ import { hash2 } from './worldGenerator';
 import type { Terrain } from './types';
 
 /** The tile-art family a giant placement uses. Widened to match `Tile.giant.family` — see that field's own doc comment. */
-export type GiantFamily = 'giantmountain' | 'giantshrine' | 'giantvolcano';
+export type GiantFamily = 'giantmountain' | 'giantshrine' | 'giantvolcano' | 'giantutgard';
 
 /**
  * No island start position may fall within this many hex-distance steps
@@ -39,11 +39,17 @@ export const SmallIslandGiantThreshold = 150;
 /** An island needs at least this many land tiles to be offered a second mountain giant. */
 export const LargeIslandGiantThreshold = 450;
 
-/** The tile-art family a mountain-cluster giant uses. */
+/** The tile-art family a mountain-cluster giant uses on a green island. */
 export const MountainFamily: GiantFamily = 'giantmountain';
+
+/** The tile-art family a mountain-cluster giant uses on a wasted island. */
+export const VolcanoFamily: GiantFamily = 'giantvolcano';
 
 /** The tile-art family a shrine giant uses. */
 export const ShrineFamily: GiantFamily = 'giantshrine';
+
+/** The tile-art family a wasted island's own giant uses, placed instead of a shrine. */
+export const UtgardFamily: GiantFamily = 'giantutgard';
 
 /** Per-island odds that a qualifying island is offered a shrine — see `GiantGenerator.ShrineChance`. */
 export const ShrineChance = 1 / 12;
@@ -177,6 +183,7 @@ export function placeGiants(
   worldSeed: number,
   islandIndex: number,
   isRiver: (c: AxialCoord) => boolean = () => false,
+  wasted = false,
 ): GiantPlacement[] {
   const islandLand = new Set(islandTiles.map((c) => coordKey(c)));
   const placements: GiantPlacement[] = [];
@@ -206,8 +213,21 @@ export function placeGiants(
       if (mountainAnchors.some((a) => hexDistanceAxial(a, candidate.anchor) < MinimumGiantSpacing)) continue;
 
       mountainAnchors.push(candidate.anchor);
-      placements.push({ anchor: candidate.anchor, family: MountainFamily });
+      placements.push({ anchor: candidate.anchor, family: wasted ? VolcanoFamily : MountainFamily });
     }
+  }
+
+  if (wasted) {
+    // Wasted islands get no shrine and no chance roll: instead, one Utgard
+    // giant per wasted island with a valid spot — same candidate rules as a
+    // shrine, unconditional above the same size threshold a mountain giant
+    // needs.
+    if (islandTiles.length >= SmallIslandGiantThreshold) {
+      const utgardAnchor = pickShrineAnchor(islandTiles, islandLand, terrainOf, isRiver, mountainAnchors, seed);
+      if (utgardAnchor) placements.push({ anchor: utgardAnchor, family: UtgardFamily });
+    }
+
+    return placements;
   }
 
   // Shrines are additional — rolled independently of the mountain

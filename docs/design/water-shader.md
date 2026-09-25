@@ -142,6 +142,10 @@ An RGBA8 texture over a world-space rect:
 | **B** | Per-hex pseudo-random seed, as fog v2's B channel does (`demoFogMask.ts`'s `noiseSeed`). **Nothing samples it any more** — see §4.3 on why a per-hex value is the wrong shape for anything the foam does — and it is kept for the debug view and for whatever wants a per-hex constant next. |
 | **A** | The prop-tile mute (§4.4b): `1` over a coastal water tile whose art carries a boat or a rock, ramping to `0` over `PROP_MUTE_FADE_TILES` outside it. |
 
+All four channels are spoken for, so the tainted-water field around a revealed
+wasted island (§4.4c) is a **second, single-purpose bake** — `WaterMask.taint`,
+uploaded as its own texture — rather than a fifth channel squeezed in here.
+
 **No channel is a step**, and that is the point. An earlier version stored two
 unsigned distances (outward and inward) plus a water-coverage *bit* in A, and
 had the shader pick between them on `A >= 0.5`. A 0/255 step sampled with linear filtering is a *texel-quantised*
@@ -910,10 +914,68 @@ bare `isLand`. `WorldModel` already satisfies it. `hasWaterProp` mirrors
 `baseTextureFor`'s own conditions, building included: a fishing hut or dockyard
 replaces the coastal tile with its own art, so there is no prop left to protect.
 
+### 4.4c Tainted water (wasted islands)
+
+Wasted islands are hidden until the endboss triggers, then revealed through
+`WorldModel.setWastedRevealed`; a revealed wasted hex's coastal-water tiles
+already render as dark tainted art (`blacksandcoast`/`taintedwater`, `#13342b`).
+The shader knew nothing about them, so the open sea *around* one of those
+islands stayed the ordinary blue (`#3860b1`), with bright white foam, waves and
+caustics — a lit, living sea wrapped around a dead shore.
+
+The mask's four channels (R/G/B/A above) are all spoken for, so this is a
+**second single-purpose bake**, `taint`: one byte per texel, `1.0` in water
+within `TAINT_INNER_TILES` (1 tile) of wasted land, fading smoothly to `0` by
+`TAINT_REACH_TILES` (2.5 tiles) — comfortably past `FOAM_REACH_TILES`, so the
+taint colour has room to fully take over before the foam band is drawn.
+Wasted land itself bakes to `1.0` too, so linear filtering at the shore
+doesn't dip toward untainted for a frame. Raster distance only (the same EDT
+helpers the main mask's far field uses, no mitre refine): the ramp is over a
+tile wide, well past the texel-raster error the refine pass exists to correct
+on the third-of-a-tile foam band.
+
+`TerrainLookup` gains an optional `isWastedLand?(q, r)`, the same optional
+shape as `hasProp`/`getTile`: a caller that omits it, or one that never
+answers true over the baked region, gets an all-zero `taint` array — which is
+also why every mask baked for a world with no wasted islands (or one not yet
+revealed) stays byte-identical to what shipped before this existed. Reveal
+gating is the caller's job, not the bake's: the worker's `isWastedLand` is
+`wastedRevealed && terrainAt(q, r, world) === 'sea' && wastedTerrainAt(q, r,
+world) !== 'sea'`, mirroring `WorldModel.isWastedLandAt` (now public, so the
+renderer's own inline fallback can ask it directly without materialising a
+`Tile` per water texel — the same reasoning `hasProp` exists for the A
+channel).
+
+`WaterLayer` uploads `taint` as a second texture, `uWaterTaint` — single
+channel (`r8unorm`, no premultiply-alpha concern at all, since there's no
+alpha channel to premultiply against) rather than a fourth RGBA copy — sampled
+with the same UVs and linear/clamp filtering as `uWaterMask`, so its own zero
+crossing lands at the same sub-texel precision. The shader reads it once,
+`float taint = texture(uWaterTaint, uv).r;`, and every term that already reads
+distance also reads this:
+
+- **Sea body**: `col` mixes toward `uTaintShallowColor`/`uTaintDeepColor`
+  (`#13342b`/`#0b211b` — the baked coastal-water art's own colours, so the
+  shader's sea continues that art rather than starting a third palette) at the
+  same depth the untainted mix uses, by `taint`.
+- **Foam**: colour mixes toward `uTaintFoamColor` (`#7d8a82`, ash grey-green)
+  by `taint`; alpha is scaled by `mix(1.0, 0.55, taint)` — dimmed further than
+  the crests below, because foam starts brighter than open water and needs
+  more of a pull to stop reading as clean surf against a dead coast.
+- **Waves**: colour mixes toward the same `uTaintFoamColor` (one taint colour
+  for "white water", not two to keep in step) by `taint`; alpha scaled by
+  `mix(1.0, 0.4, taint)`.
+- **Caustics**: multiplied by `(1.0 - taint)`, folded into the same `quiet`
+  factor the prop-tile mute already uses (`quiet = (1.0 - mute) * (1.0 -
+  taint)`) — sunlight-through-clear-water ribbons don't belong on water that
+  isn't clear, the same reasoning that already mutes them over a prop tile.
+
 ### 4.4 Uniforms
 
 ```
 sampler2D uWaterMask
+sampler2D uWaterTaint              taint field (§4.4c), single channel
+vec3  uTaintShallowColor, uTaintDeepColor, uTaintFoamColor
 float uTime, uWaveTime            base clock; wave clock, scaled by waveSpeed
 float uSeaBody, uMidWaterWaves, uShorelineFoam, uCaustics   0/1
 float uShowMask                   debug: render the mask channels raw

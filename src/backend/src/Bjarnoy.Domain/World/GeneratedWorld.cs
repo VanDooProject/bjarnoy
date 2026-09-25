@@ -52,6 +52,17 @@ public sealed record GeneratedIsland
     /// </summary>
     public required IReadOnlyList<Giant> Giants { get; init; }
 
+    /// <summary>
+    /// True for an island generated from the wasted-island terrain layer
+    /// (see <see cref="TerrainSampler.WastedTerrainAt"/>): hidden as sea
+    /// until the world's endboss triggers, no start positions, its rivers
+    /// (if any) are lava streams and its "shrine" giant is
+    /// <see cref="GiantGenerator.UtgardFamily"/> rather than
+    /// <see cref="GiantGenerator.ShrineFamily"/>. False for an ordinary
+    /// green island.
+    /// </summary>
+    public bool IsWasted { get; init; }
+
     public int TileCount => Tiles.Count;
 }
 

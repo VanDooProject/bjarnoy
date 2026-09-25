@@ -97,8 +97,13 @@ public sealed class PlotReservationService(
             return new PlotSuggestionResult(PlotSuggestionRejection.AlreadyFounded, ExistingSettlementId: existingSettlementId);
         }
 
+        // Wasted islands carry no start positions anyway (so they'd never
+        // actually be picked below), but excluding them here is explicit
+        // about why: they're sea to a founding player, endboss-triggered or
+        // not — the reveal only ever changes what renders, never what can be
+        // founded on.
         var islands = await _dbContext.Islands
-            .Where(i => i.WorldId == worldId)
+            .Where(i => i.WorldId == worldId && !i.IsWasted)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         if (islands.Count == 0)

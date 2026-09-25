@@ -195,12 +195,24 @@ public static class WorldEndpoints
         WorldService worlds,
         CancellationToken cancellationToken)
     {
-        if (await worlds.GetWorldAsync(worldId, cancellationToken) is null)
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
         {
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
         var islands = await worlds.GetIslandsAsync(worldId, cancellationToken);
+
+        // Wasted islands are hidden — as far as this player-facing endpoint
+        // is concerned, sea — until the world's endboss has actually
+        // triggered. They carry no start positions anyway, but excluding
+        // them outright also keeps them off the world map/labels before the
+        // reveal, not just un-founded on.
+        if (world.EndbossTriggeredAt is null)
+        {
+            islands = [.. islands.Where(i => !i.IsWasted)];
+        }
+
         IReadOnlyList<IslandResponse> response = [.. islands.Select(IslandResponse.From)];
 
         return TypedResults.Ok(response);
