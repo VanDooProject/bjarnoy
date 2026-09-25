@@ -166,7 +166,7 @@
       "heading": "Am Rand des langen Winters",
       "p1": "Die Skalden sagen, das Meer um Bjarnøy war nie leer. Hinter den letzten Schären, wo die Seekarten enden, liegt Útgarðr, der Außenhof, die Heimat der Jötnar, der Riesen, die vor Göttern und Menschen hier waren. Solange die Inseln jung sind, schlafen die Riesen, und die Jarle kämpfen untereinander um Holz, Stein und Ruhm.",
       "p2": "Doch jedes Zeitalter wird alt. Wenn die Hallen voll sind und auf jeder Insel Runensteine stehen, erwachen die Riesen. Hinter den kartierten Inseln beginnt das Meer zu kochen, und neues Land steigt daraus auf: Inseln, die nie grün waren. Auf jeder raucht ein Feuerberg, und auf der größten steht Utgard, eine schwarze Zitadelle, deren Fenster in kaltem Runenfeuer brennen.",
-      "p3": "Dort ist nie etwas Lebendiges gewachsen. Der Boden ist Asche und Schlacke, die Wälder sind gebleichte Stümpfe mit abgebrochenen Kronen, und die Flüsse führen Feuer. Die Strände sind schwarzer Sand, und das Meer ringsum ist kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten, um zu sehen, was aufgestiegen war.",
+      "p3": "Dort ist nie etwas Lebendiges gewachsen. Der Boden ist Asche und Schlacke, die Wälder sind gebleichte Stümpfe mit abgebrochenen Kronen, und die Flüsse führen Feuer. Die Strände sind schwarzer Sand, und das Meer ringsum ist kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten, um zu sehen, was aufgestiegen war. Auf den Graten bewachen Jötun-Wachtürme die Zugänge, und Utgards Mauern ziehen sich vom Fels bis ans Ufer.",
       "p4": "Kein einzelner Jarl bricht Utgard. Seine Mauern sind für eine Belagerung gebaut, die eine Generation dauert, und die Riesen werden stärker, während die Jarle streiten. Nur Gilden, die als ein Heer segeln, können den Außenhof stürmen. Wer sein Tor niederwirft, beendet das Zeitalter, und sein Name wird als letzter eingeritzt, bevor die Welt von vorn beginnt.",
       "caption": "So soll sich das Endspiel anfühlen, ein Regelwerk ist das nicht. Die Mechanik wird noch entworfen und kann sich ändern."
     },
@@ -178,6 +178,28 @@
     "volcano": {
       "heading": "Der Feuerberg",
       "body": "Der zweite Riese der Ödlande: ein Berg, der nie erkaltet ist. Lava rinnt über seine Flanken, der Krater brodelt, und Rauch steigt ohne Ende auf. Wie Utgard bedeckt er sieben Hexfelder, und er ist animiert."
+    },
+    "defences": {
+      "heading": "Utgards Wehranlagen",
+      "body": "Die Riesen lassen ihre Inseln nicht offen. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinab ans Wasser.",
+      "level": "Stufe",
+      "watchtower": {
+        "heading": "Jötun-Wachturm",
+        "body": "Utgards Antwort auf die Türme der Jarle: ein Rundturm aus dunklem, geschichtetem Stein mit runenhellen Schießscharten. Er wächst in drei Stufen, vom Gerüst bis zur gekrönten Spitze, auf der das Runenfeuer offen brennt."
+      },
+      "walls": {
+        "heading": "Utgards Mauern",
+        "body": "Zinnenbewehrte Ringmauern aus Stücken, die Kante an Kante passen: gerade Abschnitte, ein Tor, flache und enge Biegungen, Enden, die an einem Turm abschließen, und Enden, die dort abbrechen, wo sie aufs Meer treffen.",
+        "piece": "Stück"
+      },
+      "pieces": {
+        "straight": "Gerade",
+        "gate": "Tor",
+        "bend120": "Biegung",
+        "bend60": "Enge Biegung",
+        "end": "Ende",
+        "endCoast": "Ende am Ufer"
+      }
     },
     "island": {
       "heading": "Lebendig und öde, nebeneinander",
@@ -230,7 +252,7 @@
       "river": {
         "living": "Fluss",
         "wasted": "Lavastrom",
-        "lore": "Dasselbe Bett wie ein Fluss, nur fließt darin Feuer statt Wasser."
+        "lore": "Dasselbe Bett wie ein Fluss, nur fließt darin Feuer statt Wasser. Wo einer entspringt, quillt Lava aus einem eigenen kleinen Kegel."
       },
       "sea": {
         "living": "Meer",
@@ -246,7 +268,8 @@
     "lavaShapes": {
       "straight": "Gerade",
       "bend": "Biegung",
-      "bend60": "Enge Biegung"
+      "bend60": "Enge Biegung",
+      "spring": "Quelle"
     }
   }
 }

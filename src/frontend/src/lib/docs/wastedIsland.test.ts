@@ -116,6 +116,14 @@ describe('buildIsland', () => {
         }
       });
 
+      it('stands both wasted giants on wasteland ground', () => {
+        const giantBases = placements.filter((p) => p.layer === 'base');
+        expect(giantBases).toHaveLength(14);
+        for (const p of giantBases) expect(p.wastedFrame).toMatch(/^wasteland_(E|NE|NW|W|SW|SE)$/);
+        const volcanoTops = placements.filter((p) => p.kind === 'volcano' && p.layer === 'top');
+        for (const p of volcanoTops) expect(p.wastedFrame).toMatch(/^giantvolcano_wasted_/);
+      });
+
       it("draws in one depth-sorted pass, a giant's plate before its own top part", () => {
         for (let i = 1; i < placements.length; i++) {
           expect(placements[i]!.depth).toBeGreaterThanOrEqual(placements[i - 1]!.depth);

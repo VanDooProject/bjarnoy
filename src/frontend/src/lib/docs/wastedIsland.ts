@@ -330,7 +330,15 @@ export function buildIsland(rotation: number): IslandPlacement[] {
   for (const p of giantPlacements('utgard', ORIGIN, 'giantshrine', 'giantutgard', 'buildings-static', 1, rotation)) {
     (p.layer === 'base' ? baseLayer : topLayer).push(p);
   }
-  for (const p of giantPlacements('volcano', VOLCANO_CENTER, 'giantmountain', 'giantvolcano', 'terrain', 2, rotation)) {
+  for (const p of giantPlacements(
+    'volcano',
+    VOLCANO_CENTER,
+    'giantmountain',
+    'giantvolcano_wasted',
+    'terrain',
+    2,
+    rotation,
+  )) {
     (p.layer === 'base' ? baseLayer : topLayer).push(p);
   }
 
@@ -372,11 +380,6 @@ function giantPlacements(
   const rotatedCenter = rotateAxial(center, rotation);
   const orientation = orientationAt(5, rotation); // giants render at a fixed base camera ('SE')
   const hoverGroup = kind;
-  // Wasted base: the real wasteland ground plate under the Utgard flower;
-  // under the volcano the shipped art still carries a grass skirt (a known
-  // art issue — see docs/asset-inventory.md upstream), so its wasted base
-  // frame is the same living grass tile.
-  const wastedBasePrefix = kind === 'utgard' ? 'wasteland' : 'grasstile';
 
   const out: IslandPlacement[] = [];
   for (const { coord, part } of giantCoverage(rotatedCenter)) {
@@ -391,7 +394,7 @@ function giantPlacements(
       key: `${keyBase}:base`,
       kind,
       livingFrame: `grasstile_${orientation}`,
-      wastedFrame: `${wastedBasePrefix}_${orientation}`,
+      wastedFrame: `wasteland_${orientation}`,
       category: 'showcase',
       x: g.x,
       y: g.y - TOP_FACE_Y,

@@ -21,7 +21,7 @@ const utgardCamera = ref<TileOrientation>('SE');
 const volcanoCamera = ref<TileOrientation>('SE');
 
 const utgardFrame = computed(() => showcase(`giantutgard_${utgardCamera.value}_level000`));
-const volcanoFrame = computed(() => showcase(`giantvolcano_${volcanoCamera.value}_level000`));
+const volcanoFrame = computed(() => showcase(`giantvolcano_wasted_${volcanoCamera.value}_level000`));
 
 // --- Living/wasted pairs -------------------------------------------------
 
@@ -96,14 +96,38 @@ function pairWastedFrame(pair: PairEntry): AtlasFrameRect | undefined {
 
 // The river/lava-stream row switches shape rather than variant, and both
 // thumbnails at once (see `docs.wastedLands.lavaShapes`).
-const RIVER_SHAPE_FAMILIES: Record<'straight' | 'bend' | 'bend60', { living: string; wasted: string }> = {
-  straight: { living: 'rivertile', wasted: 'lavastream' },
-  bend: { living: 'rivertile_bend', wasted: 'lavastream_bend' },
-  bend60: { living: 'rivertile_bend60', wasted: 'lavastream_bend60' },
+// A lava stream rises from a lava spring on a small cone of its own, where a
+// river rises from a mountain spring.
+type RiverShape = 'straight' | 'bend' | 'bend60' | 'spring';
+const RIVER_SHAPE_FRAMES: Record<RiverShape, { living: string; wasted: string }> = {
+  straight: { living: 'rivertile_SE', wasted: 'lavastream_SE' },
+  bend: { living: 'rivertile_bend_SE', wasted: 'lavastream_bend_SE' },
+  bend60: { living: 'rivertile_bend60_SE', wasted: 'lavastream_bend60_SE' },
+  spring: { living: 'rivertile_spring_SE', wasted: 'mountaintile_volcano_lavaspring_flows_SE_level000' },
 };
-const riverShape = ref<'straight' | 'bend' | 'bend60'>('straight');
-const riverLivingFrame = computed(() => showcase(`${RIVER_SHAPE_FAMILIES[riverShape.value].living}_SE`));
-const riverWastedFrame = computed(() => showcase(`${RIVER_SHAPE_FAMILIES[riverShape.value].wasted}_SE`));
+const riverShape = ref<RiverShape>('straight');
+const riverLivingFrame = computed(() => showcase(RIVER_SHAPE_FRAMES[riverShape.value].living));
+const riverWastedFrame = computed(() => showcase(RIVER_SHAPE_FRAMES[riverShape.value].wasted));
+
+// --- Defences ------------------------------------------------------------
+
+const DEFENCE_LEVELS = [0, 1, 2] as const;
+const WALL_PIECES = [
+  { id: 'straight', family: 'utgardwall_straight180' },
+  { id: 'gate', family: 'utgardwall_gate180' },
+  { id: 'bend120', family: 'utgardwall_bend120' },
+  { id: 'bend60', family: 'utgardwall_bend60' },
+  { id: 'end', family: 'utgardwall_end' },
+  { id: 'endCoast', family: 'utgardwall_end_coast' },
+] as const;
+const towerLevel = ref(2);
+const wallLevel = ref(2);
+const wallPiece = ref<(typeof WALL_PIECES)[number]['id']>('straight');
+const towerFrame = computed(() => showcase(`jotunwatchtower_SE_level00${towerLevel.value}`));
+const wallFrame = computed(() => {
+  const family = WALL_PIECES.find((p) => p.id === wallPiece.value)!.family;
+  return showcase(`${family}_SE_level00${wallLevel.value}`);
+});
 </script>
 
 <template>
@@ -164,6 +188,67 @@ const riverWastedFrame = computed(() => showcase(`${RIVER_SHAPE_FAMILIES[riverSh
             >
               {{ cam }}
             </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="defences" class="defences-section">
+        <h2>{{ $t('docs.wastedLands.defences.heading') }}</h2>
+        <p>{{ $t('docs.wastedLands.defences.body') }}</p>
+        <div class="giants-section">
+          <div class="giant-card">
+            <h3>{{ $t('docs.wastedLands.defences.watchtower.heading') }}</h3>
+            <p>{{ $t('docs.wastedLands.defences.watchtower.body') }}</p>
+            <div class="giant-box defence-box">
+              <AtlasSprite v-if="towerFrame" :frame="towerFrame" />
+            </div>
+            <div class="camera-pills">
+              <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
+              <button
+                v-for="level in DEFENCE_LEVELS"
+                :key="level"
+                type="button"
+                class="variant-button"
+                :class="{ active: towerLevel === level }"
+                @click="towerLevel = level"
+              >
+                {{ level + 1 }}
+              </button>
+            </div>
+          </div>
+
+          <div class="giant-card">
+            <h3>{{ $t('docs.wastedLands.defences.walls.heading') }}</h3>
+            <p>{{ $t('docs.wastedLands.defences.walls.body') }}</p>
+            <div class="giant-box defence-box">
+              <AtlasSprite v-if="wallFrame" :frame="wallFrame" />
+            </div>
+            <div class="camera-pills">
+              <span class="variants-label">{{ $t('docs.wastedLands.defences.walls.piece') }}</span>
+              <button
+                v-for="piece in WALL_PIECES"
+                :key="piece.id"
+                type="button"
+                class="variant-button"
+                :class="{ active: wallPiece === piece.id }"
+                @click="wallPiece = piece.id"
+              >
+                {{ t(`docs.wastedLands.defences.pieces.${piece.id}`) }}
+              </button>
+            </div>
+            <div class="camera-pills level-pills">
+              <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
+              <button
+                v-for="level in DEFENCE_LEVELS"
+                :key="level"
+                type="button"
+                class="variant-button"
+                :class="{ active: wallLevel === level }"
+                @click="wallLevel = level"
+              >
+                {{ level + 1 }}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -259,7 +344,7 @@ const riverWastedFrame = computed(() => showcase(`${RIVER_SHAPE_FAMILIES[riverSh
           <div class="variants">
             <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
             <button
-              v-for="shape in ['straight', 'bend', 'bend60'] as const"
+              v-for="shape in ['straight', 'bend', 'bend60', 'spring'] as const"
               :key="shape"
               type="button"
               class="variant-button"
@@ -379,6 +464,21 @@ h2 {
   border: 1px solid var(--panel-border);
   overflow: hidden;
   margin-bottom: 10px;
+}
+.defences-section {
+  margin-top: 32px;
+}
+.defences-section .giants-section {
+  margin-top: 12px;
+}
+.giant-card h3 {
+  margin: 0 0 4px;
+}
+.defence-box {
+  height: 240px;
+}
+.level-pills {
+  margin-top: 8px;
 }
 .camera-pills {
   display: flex;
