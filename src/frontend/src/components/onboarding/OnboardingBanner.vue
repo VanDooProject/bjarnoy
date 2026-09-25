@@ -93,4 +93,39 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
   cursor: pointer;
   white-space: nowrap;
 }
+
+/* Mobile-readiness audit (finding c): the pill's fixed `border-radius: 999px`
+   plus nowrap title/unwrapped body forced the body text into a tall, narrow
+   column inside the pill on a narrow viewport. A softer, wrappable card
+   fixes that; the landfall variant also has to sit below the mobile header
+   instead of a flat 96px, since the header's own height varies (~56px
+   pre-founding, ~100px once it holds a resource strip) — `--hud-bar-h` is
+   written onto `.landing`'s root by TopBar for exactly this. */
+@media (max-width: 768px) {
+  .banner {
+    border-radius: 16px;
+    flex-wrap: wrap;
+    width: calc(100vw - 24px);
+    padding: 10px 14px;
+    gap: 6px 10px;
+  }
+  .title {
+    white-space: normal;
+  }
+  .body {
+    flex: 1 1 100%;
+  }
+  .banner.landfall {
+    top: calc(var(--hud-bar-h, 56px) + 12px);
+  }
+  .banner.complete {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .continue {
+    min-height: 44px;
+    padding: 8px 16px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
 </style>

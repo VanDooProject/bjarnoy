@@ -52,4 +52,18 @@ describe('OnboardingChecklist', () => {
     expect(wrapper.text()).toContain('Found your longhouse first');
     expect(wrapper.text()).not.toContain('Click an empty hex');
   });
+
+  // Mobile-readiness audit (finding a): the mobile/short-viewport CSS hides
+  // every non-`.current` row with `display: none` rather than removing them
+  // from the DOM (a v-if would), so the header's step count/progress bar
+  // stay accurate relative to what e2e/unit assertions can still find — all
+  // three rows (and their state classes) must still be present regardless of
+  // viewport.
+  it('renders all three rows in the DOM (mobile CSS hides, not removes, non-current ones)', () => {
+    const wrapper = mountChecklist(true, ['longhouse', 'lumberjack']);
+    const rows = wrapper.findAll('.tray-item');
+    expect(rows).toHaveLength(3);
+    expect(rows.filter((row) => row.classes().includes('done'))).toHaveLength(2);
+    expect(rows.filter((row) => row.classes().includes('current'))).toHaveLength(1);
+  });
 });

@@ -173,4 +173,28 @@ const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius)
 .chip.right {
   left: calc(100% + 14px);
 }
+
+/* Mobile-readiness audit (finding d): the chip sat to the LEFT of the arrow
+   with nowrap uppercase text ("NOW BUILD HERE" / "THIS ONE FITS GRASSLAND"),
+   which on a narrow screen ran clean off the left edge. Centring it above
+   the arrow instead keeps it inside the viewport regardless of where the
+   arrow itself lands horizontally. The arrow's own rendered size (110px, via
+   `width`/`height` on `.arrow-svg`) is left untouched here: `arrowTipOffset`
+   (guidanceArrowGeometry.ts) derives its shift from `ARROW_RENDERED_SIZE`,
+   so shrinking the rendered box without re-deriving that offset would land
+   the tip off-target — correctness of the tip position matters more than
+   the arrow's on-screen size. */
+@media (max-width: 768px) {
+  .chip.left,
+  .chip.right {
+    top: auto;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 6px 10px;
+  }
+}
 </style>
