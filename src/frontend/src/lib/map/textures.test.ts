@@ -305,8 +305,8 @@ describe('textureKeyFor wasted-island mapping', () => {
     expect(textureKeyFor(wastedTile('sand'))).toBe('blacksand');
   });
 
-  it('keeps mountain and (non-coastal) sea on their plain families even when wasted', () => {
-    expect(textureKeyFor(wastedTile('mountain'))).toBe('mountain');
+  it('maps a wasted mountain to the jagged ash mountain and keeps (non-coastal) sea plain', () => {
+    expect(textureKeyFor(wastedTile('mountain'))).toBe('wastedmountain');
     expect(textureKeyFor(wastedTile('sea'))).toBe('sea');
   });
 
@@ -335,6 +335,7 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         mountain: orientationMap('green-mountain-base' as unknown as never),
         grass: orientationMap('green-grass-base' as unknown as never),
         wasteland: orientationMap('wasteland-base' as unknown as never),
+        wastedmountain: orientationMap('jagged-mountain-base' as unknown as never),
       },
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
@@ -362,11 +363,11 @@ describe('baseTextureFor wasted mountain/giant base', () => {
     };
   }
 
-  it('uses the wasteland base for a wasted mountain tile (top art is untouched elsewhere)', () => {
+  it('uses the jagged ash mountain base for a wasted mountain tile', () => {
     const textures = fixture();
     const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: true, orientation: 'NE' };
 
-    expect(baseTextureFor(textures, tile)).toBe('wasteland-base');
+    expect(baseTextureFor(textures, tile)).toBe('jagged-mountain-base');
   });
 
   it('keeps the plain green mountain base for an unwasted mountain tile', () => {

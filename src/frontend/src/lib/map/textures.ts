@@ -70,11 +70,11 @@ export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
 // a Sawmill's wire building type always stays 'sawmill' (see
 // `WorldModel.sawmillArtVariantOf`) — they're purely extra texture-lookup
 // keys for its two river-adjacent art families.
-// 'wasteland'/'deadforest'/'blacksand' aren't real `Terrain` values either —
-// a wasted tile's wire terrain stays 'grass'/'forest'/'sand' (see
-// `Tile.wasted`) — they're purely the wasted-island art-family lookup keys
-// `textureKeyFor` swaps to when a tile is wasted (mountain keeps its plain
-// `mountaintile` art either way — see that function's own doc comment).
+// 'wasteland'/'deadforest'/'blacksand'/'wastedmountain' aren't real
+// `Terrain` values either — a wasted tile's wire terrain stays
+// 'grass'/'forest'/'sand'/'mountain' (see `Tile.wasted`) — they're purely the
+// wasted-island art-family lookup keys `textureKeyFor` swaps to when a tile
+// is wasted.
 export type TextureKey =
   | Terrain
   | NonNullable<Tile['buildingType']>
@@ -82,7 +82,8 @@ export type TextureKey =
   | 'sawmillbend'
   | 'wasteland'
   | 'deadforest'
-  | 'blacksand';
+  | 'blacksand'
+  | 'wastedmountain';
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
@@ -122,6 +123,7 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   wasteland: 'wasteland',
   deadforest: 'deadforest',
   blacksand: 'blacksand',
+  wastedmountain: 'mountaintile_jagged',
 };
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
@@ -675,16 +677,16 @@ export function loadTileTextures(): Promise<TileTextures> {
 /**
  * A wasted tile's green terrain, mapped to the wasted-island art family it
  * renders with instead — see `docs/design/river-generation.md`'s wasted-
- * island section and `WorldModel.setWastedRevealed`. Mountain isn't listed:
- * a wasted mountain keeps the plain `mountaintile` art (no dedicated wasted
- * mountain family exists in the vendored pack), so it simply falls through
- * `textureKeyFor`'s lookup below unchanged. Open sea (not coastal) also
- * stays plain sea either way.
+ * island section and `WorldModel.setWastedRevealed`. A wasted mountain is
+ * the ashen `mountaintile_jagged` (the plain `mountaintile` art, base and
+ * top, carries a green grass skirt). Open sea (not coastal) stays plain sea
+ * either way.
  */
 const WASTED_TEXTURE_KEY: Partial<Record<Terrain, TextureKey>> = {
   grass: 'wasteland',
   forest: 'deadforest',
   sand: 'blacksand',
+  mountain: 'wastedmountain',
 };
 
 export function textureKeyFor(tile: Tile, sawmillVariant?: 'sawmillriver' | 'sawmillbend'): TextureKey {
@@ -719,19 +721,12 @@ export function baseTextureFor(
     const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
   }
-  // A wasted land tile with no dedicated wasted-family base of its own
-  // (mountain — see WASTED_TEXTURE_KEY's own doc comment — and any tile a
-  // giant's opaque top art fully covers, which can include a mountain-
-  // cluster giant's own Mountain footprint hexes) still needs to show
-  // *some* wasted ground rather than the plain green base, or every
-  // mountain/giant on a wasted island sits in a bright green ring. `wasteland`
-  // stands in for it — its own top art is never drawn here (a plain mountain
-  // keeps its own top via textureKeyFor below; a giant tile draws its own
-  // top separately, see HexMapRenderer's giant branch), only the base. Not
-  // routed through textureKeyFor itself: that key also decides *top* art
-  // (topTextureFor), and a wasted mountain's top stays the plain mountain
-  // shape for now (no dedicated wasted-mountain art yet), so only the base
-  // lookup here is allowed to diverge from it.
+  // A giant on a wasted island (and any wasted land tile without a wasted
+  // family of its own) sits on the `wasteland` base: the giant's own terrain
+  // key would pick a green grass or mountain base, leaving every volcano and
+  // Utgard in a bright green ring. Not routed through textureKeyFor, which
+  // also decides top art — a giant draws its own top (HexMapRenderer's giant
+  // branch), so only the base diverges here.
   if (tile.wasted && !tile.buildingType && (tile.giant || !WASTED_TEXTURE_KEY[tile.terrain])) {
     const wastelandBase = textures.base.wasteland;
     if (wastelandBase) return wastelandBase[orientation];
