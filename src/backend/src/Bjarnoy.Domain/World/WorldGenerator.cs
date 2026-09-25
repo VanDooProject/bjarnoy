@@ -74,6 +74,50 @@ public sealed class WorldGenerator
                 StartPositions = startPositions,
                 RiverTiles = riverTiles,
                 Giants = giants,
+                IsWasted = false,
+            });
+        }
+
+        // Wasted islands: classified and flood-filled the same way as green
+        // islands, over the same world radius, using WastedTerrainAt instead
+        // of TerrainAt. Appended after every green island so indices/names
+        // continue from where the green scan left off. No start positions
+        // (wasted islands can never be founded on) and no shrine — a wasted
+        // island's rivers are lava streams (RiverGenerator's allowConfluence:
+        // false mode) and its "shrine" giant is a single Utgard.
+        var wastedLand = ClassifyWastedLand(cancellationToken);
+        var wastedVisited = new HashSet<HexCoord>();
+
+        foreach (var coord in wastedLand.Keys.OrderBy(c => c.Q).ThenBy(c => c.R))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!wastedVisited.Add(coord))
+            {
+                continue;
+            }
+
+            var tiles = FloodFill(coord, wastedLand, wastedVisited);
+            if (tiles.Count < _options.MinimumIslandTiles)
+            {
+                continue;
+            }
+
+            var index = islands.Count;
+            var riverTiles = RiverGenerator.Generate(
+                tiles, wastedLand, _sampler, _options, index, wasted: true, allowConfluence: false);
+            var riverTileSet = riverTiles.Select(t => t.Coord).ToHashSet();
+            var giants = GiantGenerator.Generate(tiles, wastedLand, _sampler, _options, index, riverTileSet, wasted: true);
+            islands.Add(new GeneratedIsland
+            {
+                Index = index,
+                Name = NextUniqueName(index, usedNames),
+                Tiles = tiles,
+                Centre = CentreOf(tiles),
+                StartPositions = [],
+                RiverTiles = riverTiles,
+                Giants = giants,
+                IsWasted = true,
             });
         }
 
@@ -83,6 +127,24 @@ public sealed class WorldGenerator
             Islands = islands,
             LandTileCount = land.Count,
         };
+    }
+
+    private Dictionary<HexCoord, Terrain> ClassifyWastedLand(CancellationToken cancellationToken)
+    {
+        var land = new Dictionary<HexCoord, Terrain>();
+
+        foreach (var coord in HexCoord.Origin.WithinRadius(_options.Radius))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var terrain = _sampler.WastedTerrainAt(coord);
+            if (terrain.IsLand())
+            {
+                land[coord] = terrain;
+            }
+        }
+
+        return land;
     }
 
     private Dictionary<HexCoord, Terrain> ClassifyLand(CancellationToken cancellationToken)

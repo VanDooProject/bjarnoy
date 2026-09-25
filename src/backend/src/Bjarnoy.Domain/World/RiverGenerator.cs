@@ -14,13 +14,31 @@ internal static class RiverGenerator
         Dictionary<HexCoord, Terrain> land,
         TerrainSampler sampler,
         WorldGenerationOptions options,
-        int islandIndex)
+        int islandIndex,
+        bool wasted = false,
+        bool allowConfluence = true)
     {
         var islandLand = new HashSet<HexCoord>(islandTiles);
 
         // Large prime spacing so two islands never draw from overlapping
         // noise, the same trick IslandNames uses for its own per-index offset.
         var seed = options.Seed + (islandIndex * 104_729);
+
+        // Wasted islands use the wasted-depth field (their own separate cell
+        // grid); green islands use the ordinary one. Passed through rather
+        // than branching inline everywhere depth is sampled, so a green
+        // island's trace is untouched byte-for-byte.
+        Func<HexCoord, double?> depthAt = wasted ? sampler.WastedDepthAt : sampler.IslandDepthAt;
+
+        // Sea/coast detection. TerrainAt (and therefore sampler.IsLand)
+        // reports wasted land as Sea, so a wasted island's own trace must
+        // check its land set directly instead — but a green island's trace
+        // keeps sampler.IsLand exactly as before (rather than islandLand),
+        // since a hex just past the world's generation radius can still
+        // sample as land there even though it was never flood-filled into
+        // any island's tile list, and treating it as "sea" would truncate a
+        // river a hex early right at the map edge.
+        Func<HexCoord, bool> isLand = wasted ? islandLand.Contains : sampler.IsLand;
 
         var springs = new List<HexCoord>();
         foreach (var cluster in ClusterMountains(islandTiles, land))
@@ -36,14 +54,14 @@ internal static class RiverGenerator
         var paths = new List<List<HexCoord>>();
         foreach (var spring in springs)
         {
-            var path = TracePath(spring, islandLand, sampler, options, seed, out var reachedSea);
+            var path = TracePath(spring, islandLand, depthAt, isLand, options, seed, out var reachedSea);
             if (reachedSea && path.Count >= options.MinRiverLength)
             {
                 paths.Add(path);
             }
         }
 
-        var survivors = ResolveCollisions(paths, options);
+        var survivors = ResolveCollisions(paths, options, allowConfluence);
         return BuildRiverTiles(survivors);
     }
 
@@ -144,7 +162,8 @@ internal static class RiverGenerator
     private static List<HexCoord> TracePath(
         HexCoord spring,
         HashSet<HexCoord> islandLand,
-        TerrainSampler sampler,
+        Func<HexCoord, double?> depthAt,
+        Func<HexCoord, bool> isLand,
         WorldGenerationOptions options,
         int seed,
         out bool reachedSea)
@@ -152,7 +171,7 @@ internal static class RiverGenerator
         var path = new List<HexCoord> { spring };
         var visited = new HashSet<HexCoord> { spring };
         var frames = new Stack<TraceFrame>();
-        frames.Push(new TraceFrame(BuildCandidates(spring, path, islandLand, visited, sampler, options, seed)));
+        frames.Push(new TraceFrame(BuildCandidates(spring, path, islandLand, visited, depthAt, options, seed)));
 
         // Each tile's candidate list is built once, when it's pushed, and
         // every candidate in it is consumed at most once before the frame is
@@ -164,7 +183,7 @@ internal static class RiverGenerator
         while (frames.Count > 0 && budget-- > 0)
         {
             var current = path[^1];
-            if (TouchesSea(current, sampler))
+            if (TouchesSea(current, isLand))
             {
                 reachedSea = true;
                 return path;
@@ -189,18 +208,24 @@ internal static class RiverGenerator
             }
 
             path.Add(next);
-            frames.Push(new TraceFrame(BuildCandidates(next, path, islandLand, visited, sampler, options, seed)));
+            frames.Push(new TraceFrame(BuildCandidates(next, path, islandLand, visited, depthAt, options, seed)));
         }
 
         reachedSea = false;
         return path;
     }
 
-    private static bool TouchesSea(HexCoord tile, TerrainSampler sampler)
+    /// <summary>
+    /// A tile "touches the sea" when at least one of its neighbours is not
+    /// land, per <paramref name="isLand"/> — a green island's own
+    /// <c>sampler.IsLand</c>, or a wasted island's own land set (since
+    /// <c>TerrainAt</c> reports wasted land as Sea).
+    /// </summary>
+    private static bool TouchesSea(HexCoord tile, Func<HexCoord, bool> isLand)
     {
         foreach (var neighbour in tile.Neighbours())
         {
-            if (!sampler.IsLand(neighbour))
+            if (!isLand(neighbour))
             {
                 return true;
             }
@@ -227,7 +252,7 @@ internal static class RiverGenerator
         List<HexCoord> path,
         HashSet<HexCoord> islandLand,
         HashSet<HexCoord> visited,
-        TerrainSampler sampler,
+        Func<HexCoord, double?> depthAt,
         WorldGenerationOptions options,
         int seed)
     {
@@ -248,7 +273,7 @@ internal static class RiverGenerator
             sharpTurnB = (straightAhead + 4) % 6;
         }
 
-        var currentDepth = sampler.IslandDepthAt(tile) ?? 0.0;
+        var currentDepth = depthAt(tile) ?? 0.0;
         var forward = new List<(HexCoord Coord, double Score)>();
         var fallback = new List<(HexCoord Coord, double Score)>();
 
@@ -260,7 +285,7 @@ internal static class RiverGenerator
                 continue;
             }
 
-            var depth = sampler.IslandDepthAt(neighbour);
+            var depth = depthAt(neighbour);
             if (depth is null)
             {
                 continue;
@@ -293,7 +318,8 @@ internal static class RiverGenerator
     /// </summary>
     private static List<List<HexCoord>> ResolveCollisions(
         List<List<HexCoord>> paths,
-        WorldGenerationOptions options)
+        WorldGenerationOptions options,
+        bool allowConfluence)
     {
         var ordered = paths.OrderBy(p => p[0].Q).ThenBy(p => p[0].R).ToList();
         var claimCount = new Dictionary<HexCoord, int>();
@@ -301,6 +327,30 @@ internal static class RiverGenerator
 
         foreach (var path in ordered)
         {
+            if (!allowConfluence)
+            {
+                // Lava streams never merge, never share a tile: a path that
+                // reaches any tile an earlier path already claimed is
+                // dropped entirely rather than truncated into a confluence.
+                if (path.Any(tile => claimCount.ContainsKey(tile)))
+                {
+                    continue;
+                }
+
+                if (path.Count < options.MinRiverLength)
+                {
+                    continue;
+                }
+
+                foreach (var tile in path)
+                {
+                    claimCount[tile] = 1;
+                }
+
+                survivors.Add(path);
+                continue;
+            }
+
             var truncated = new List<HexCoord>();
 
             foreach (var tile in path)
