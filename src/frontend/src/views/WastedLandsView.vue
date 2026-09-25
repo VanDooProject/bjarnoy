@@ -1,41 +1,31 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
-import { useI18n } from "vue-i18n";
-import type { MessageSchema } from "../i18n/schema";
-import TopBar from "../components/hud/TopBar.vue";
-import HudNav from "../components/hud/HudNav.vue";
-import AtlasSprite from "../components/AtlasSprite.vue";
-import WastedIsland from "../components/docs/WastedIsland.vue";
-import { findAtlasFrame, type AtlasFrameRect } from "../lib/map/atlas";
-import { TILE_ORIENTATIONS, type TileOrientation } from "../lib/map/types";
+import { computed, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../i18n/schema';
+import TopBar from '../components/hud/TopBar.vue';
+import HudNav from '../components/hud/HudNav.vue';
+import AtlasSprite from '../components/AtlasSprite.vue';
+import WastedIsland from '../components/docs/WastedIsland.vue';
+import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: "global" });
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 function showcase(name: string): AtlasFrameRect | undefined {
-  return findAtlasFrame("showcase", name);
+  return findAtlasFrame('showcase', name);
 }
 
 // --- Giants -------------------------------------------------------------
 
-const utgardCamera = ref<TileOrientation>("SE");
-const volcanoCamera = ref<TileOrientation>("SE");
+const utgardCamera = ref<TileOrientation>('SE');
+const volcanoCamera = ref<TileOrientation>('SE');
 
-const utgardFrame = computed(() =>
-  showcase(`giantutgard_${utgardCamera.value}_level000`),
-);
-const volcanoFrame = computed(() =>
-  showcase(`giantvolcano_${volcanoCamera.value}_level000`),
-);
+const utgardFrame = computed(() => showcase(`giantutgard_${utgardCamera.value}_level000`));
+const volcanoFrame = computed(() => showcase(`giantvolcano_${volcanoCamera.value}_level000`));
 
 // --- Living/wasted pairs -------------------------------------------------
 
-type SimplePairKind =
-  | "grass"
-  | "forest"
-  | "sand"
-  | "mountain"
-  | "coast"
-  | "sea";
+type SimplePairKind = 'grass' | 'forest' | 'sand' | 'mountain' | 'coast' | 'sea';
 
 interface PairEntry {
   kind: SimplePairKind;
@@ -49,48 +39,41 @@ interface PairEntry {
 
 const PAIRS: PairEntry[] = [
   {
-    kind: "grass",
-    livingFamily: "grasstile",
-    wastedFamily: "wasteland",
-    wastedSuffixes: [
-      "",
-      "_variant001",
-      "_variant002",
-      "_variant003",
-      "_variant004",
-      "_variant005",
-    ],
+    kind: 'grass',
+    livingFamily: 'grasstile',
+    wastedFamily: 'wasteland',
+    wastedSuffixes: ['', '_variant001', '_variant002', '_variant003', '_variant004', '_variant005'],
   },
   {
-    kind: "forest",
-    livingFamily: "foresttile",
-    wastedFamily: "deadforest",
-    wastedSuffixes: ["", "_variant001"],
+    kind: 'forest',
+    livingFamily: 'foresttile',
+    wastedFamily: 'deadforest',
+    wastedSuffixes: ['', '_variant001'],
   },
   {
-    kind: "sand",
-    livingFamily: "sandtile",
-    wastedFamily: "blacksand",
-    wastedSuffixes: ["", "_variant001"],
+    kind: 'sand',
+    livingFamily: 'sandtile',
+    wastedFamily: 'blacksand',
+    wastedSuffixes: ['', '_variant001'],
   },
   {
-    kind: "mountain",
-    livingFamily: "mountaintile",
-    wastedFamily: "mountaintile_jagged",
-    wastedSuffixes: [""],
+    kind: 'mountain',
+    livingFamily: 'mountaintile',
+    wastedFamily: 'mountaintile_jagged',
+    wastedSuffixes: [''],
     level000: true,
   },
   {
-    kind: "coast",
-    livingFamily: "coastalwatertile",
-    wastedFamily: "blacksandcoast",
-    wastedSuffixes: ["", "_variant000", "_variant001", "_variant002"],
+    kind: 'coast',
+    livingFamily: 'coastalwatertile',
+    wastedFamily: 'blacksandcoast',
+    wastedSuffixes: ['', '_variant000', '_variant001', '_variant002'],
   },
   {
-    kind: "sea",
-    livingFamily: "watertile",
-    wastedFamily: "taintedwater",
-    wastedSuffixes: [""],
+    kind: 'sea',
+    livingFamily: 'watertile',
+    wastedFamily: 'taintedwater',
+    wastedSuffixes: [''],
   },
 ];
 
@@ -104,67 +87,52 @@ const variantIndex = reactive<Record<SimplePairKind, number>>({
 });
 
 function pairLivingFrame(pair: PairEntry): AtlasFrameRect | undefined {
-  return showcase(`${pair.livingFamily}_SE${pair.level000 ? "_level000" : ""}`);
+  return showcase(`${pair.livingFamily}_SE${pair.level000 ? '_level000' : ''}`);
 }
 function pairWastedFrame(pair: PairEntry): AtlasFrameRect | undefined {
-  const suffix = pair.wastedSuffixes[variantIndex[pair.kind]] ?? "";
-  return showcase(
-    `${pair.wastedFamily}_SE${pair.level000 ? "_level000" : ""}${suffix}`,
-  );
+  const suffix = pair.wastedSuffixes[variantIndex[pair.kind]] ?? '';
+  return showcase(`${pair.wastedFamily}_SE${pair.level000 ? '_level000' : ''}${suffix}`);
 }
 
 // The river/lava-stream row switches shape rather than variant, and both
 // thumbnails at once (see `docs.wastedLands.lavaShapes`).
-const RIVER_SHAPE_FAMILIES: Record<
-  "straight" | "bend" | "bend60",
-  { living: string; wasted: string }
-> = {
-  straight: { living: "rivertile", wasted: "lavastream" },
-  bend: { living: "rivertile_bend", wasted: "lavastream_bend" },
-  bend60: { living: "rivertile_bend60", wasted: "lavastream_bend60" },
+const RIVER_SHAPE_FAMILIES: Record<'straight' | 'bend' | 'bend60', { living: string; wasted: string }> = {
+  straight: { living: 'rivertile', wasted: 'lavastream' },
+  bend: { living: 'rivertile_bend', wasted: 'lavastream_bend' },
+  bend60: { living: 'rivertile_bend60', wasted: 'lavastream_bend60' },
 };
-const riverShape = ref<"straight" | "bend" | "bend60">("straight");
-const riverLivingFrame = computed(() =>
-  showcase(`${RIVER_SHAPE_FAMILIES[riverShape.value].living}_SE`),
-);
-const riverWastedFrame = computed(() =>
-  showcase(`${RIVER_SHAPE_FAMILIES[riverShape.value].wasted}_SE`),
-);
+const riverShape = ref<'straight' | 'bend' | 'bend60'>('straight');
+const riverLivingFrame = computed(() => showcase(`${RIVER_SHAPE_FAMILIES[riverShape.value].living}_SE`));
+const riverWastedFrame = computed(() => showcase(`${RIVER_SHAPE_FAMILIES[riverShape.value].wasted}_SE`));
 </script>
 
 <template>
   <div class="wasted-lands">
-    <TopBar
-      docked
-      :title="$t('docs.wastedLands.title')"
-      caption="DOCS · WASTED LANDS"
-    >
+    <TopBar docked :title="$t('docs.wastedLands.title')" caption="DOCS · WASTED LANDS">
       <HudNav />
     </TopBar>
     <main class="body">
-      <h1>{{ $t("docs.wastedLands.title") }}</h1>
-      <p class="intro">{{ $t("docs.wastedLands.intro") }}</p>
+      <h1>{{ $t('docs.wastedLands.title') }}</h1>
+      <p class="intro">{{ $t('docs.wastedLands.intro') }}</p>
 
       <section id="lore" class="lore-section">
-        <h2>{{ $t("docs.wastedLands.lore.heading") }}</h2>
-        <p class="saga">{{ $t("docs.wastedLands.lore.p1") }}</p>
-        <p class="saga">{{ $t("docs.wastedLands.lore.p2") }}</p>
-        <p class="saga">{{ $t("docs.wastedLands.lore.p3") }}</p>
-        <p class="saga">{{ $t("docs.wastedLands.lore.p4") }}</p>
-        <p class="caption-note">{{ $t("docs.wastedLands.lore.caption") }}</p>
+        <h2>{{ $t('docs.wastedLands.lore.heading') }}</h2>
+        <p class="saga">{{ $t('docs.wastedLands.lore.p1') }}</p>
+        <p class="saga">{{ $t('docs.wastedLands.lore.p2') }}</p>
+        <p class="saga">{{ $t('docs.wastedLands.lore.p3') }}</p>
+        <p class="saga">{{ $t('docs.wastedLands.lore.p4') }}</p>
+        <p class="caption-note">{{ $t('docs.wastedLands.lore.caption') }}</p>
       </section>
 
       <section id="giants" class="giants-section">
         <div class="giant-card">
-          <h2>{{ $t("docs.wastedLands.utgard.heading") }}</h2>
-          <p>{{ $t("docs.wastedLands.utgard.body") }}</p>
+          <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>
+          <p>{{ $t('docs.wastedLands.utgard.body') }}</p>
           <div class="giant-box">
             <AtlasSprite v-if="utgardFrame" :frame="utgardFrame" />
           </div>
           <div class="camera-pills">
-            <span class="variants-label">{{
-              $t("docs.wastedLands.utgard.camera")
-            }}</span>
+            <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
             <button
               v-for="cam in TILE_ORIENTATIONS"
               :key="cam"
@@ -179,15 +147,13 @@ const riverWastedFrame = computed(() =>
         </div>
 
         <div class="giant-card">
-          <h2>{{ $t("docs.wastedLands.volcano.heading") }}</h2>
-          <p>{{ $t("docs.wastedLands.volcano.body") }}</p>
+          <h2>{{ $t('docs.wastedLands.volcano.heading') }}</h2>
+          <p>{{ $t('docs.wastedLands.volcano.body') }}</p>
           <div class="giant-box">
             <AtlasSprite v-if="volcanoFrame" :frame="volcanoFrame" />
           </div>
           <div class="camera-pills">
-            <span class="variants-label">{{
-              $t("docs.wastedLands.utgard.camera")
-            }}</span>
+            <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
             <button
               v-for="cam in TILE_ORIENTATIONS"
               :key="cam"
@@ -203,59 +169,38 @@ const riverWastedFrame = computed(() =>
       </section>
 
       <section id="island" class="island-section">
-        <h2>{{ $t("docs.wastedLands.island.heading") }}</h2>
-        <p>{{ $t("docs.wastedLands.island.body") }}</p>
+        <h2>{{ $t('docs.wastedLands.island.heading') }}</h2>
+        <p>{{ $t('docs.wastedLands.island.body') }}</p>
         <WastedIsland />
       </section>
 
       <section id="pairs" class="pairs-section">
-        <h2>{{ $t("docs.wastedLands.pairs.heading") }}</h2>
-        <p>{{ $t("docs.wastedLands.pairs.body") }}</p>
+        <h2>{{ $t('docs.wastedLands.pairs.heading') }}</h2>
+        <p>{{ $t('docs.wastedLands.pairs.body') }}</p>
 
-        <div
-          v-for="pair in PAIRS.slice(0, 3)"
-          :key="pair.kind"
-          :id="`pair-${pair.kind}`"
-          class="pair-row"
-        >
+        <div v-for="pair in PAIRS.slice(0, 3)" :key="pair.kind" :id="`pair-${pair.kind}`" class="pair-row">
           <div class="pair-thumbs">
             <div class="thumb-col">
-              <span class="thumb-caption">{{
-                $t("docs.wastedLands.pairs.living")
-              }}</span>
+              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
               <div class="thumb">
-                <AtlasSprite
-                  v-if="pairLivingFrame(pair)"
-                  :frame="pairLivingFrame(pair)!"
-                />
+                <AtlasSprite v-if="pairLivingFrame(pair)" :frame="pairLivingFrame(pair)!" />
               </div>
-              <span class="thumb-name">{{
-                t(`docs.wastedLands.tiles.${pair.kind}.living`)
-              }}</span>
+              <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
             </div>
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
-              <span class="thumb-caption">{{
-                $t("docs.wastedLands.pairs.wasted")
-              }}</span>
+              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
               <div class="thumb">
-                <AtlasSprite
-                  v-if="pairWastedFrame(pair)"
-                  :frame="pairWastedFrame(pair)!"
-                />
+                <AtlasSprite v-if="pairWastedFrame(pair)" :frame="pairWastedFrame(pair)!" />
               </div>
-              <span class="thumb-name">{{
-                t(`docs.wastedLands.tiles.${pair.kind}.wasted`)
-              }}</span>
+              <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
             </div>
           </div>
           <p class="pair-lore">
             {{ t(`docs.wastedLands.tiles.${pair.kind}.lore`) }}
           </p>
           <div v-if="pair.wastedSuffixes.length > 1" class="variants">
-            <span class="variants-label">{{
-              $t("docs.wastedLands.pairs.looks")
-            }}</span>
+            <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
             <button
               v-for="(suffix, i) in pair.wastedSuffixes"
               :key="suffix"
@@ -272,77 +217,47 @@ const riverWastedFrame = computed(() =>
         <div id="pair-mountain" class="pair-row">
           <div class="pair-thumbs">
             <div class="thumb-col">
-              <span class="thumb-caption">{{
-                $t("docs.wastedLands.pairs.living")
-              }}</span>
+              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
               <div class="thumb">
-                <AtlasSprite
-                  v-if="pairLivingFrame(PAIRS[3]!)"
-                  :frame="pairLivingFrame(PAIRS[3]!)!"
-                />
+                <AtlasSprite v-if="pairLivingFrame(PAIRS[3]!)" :frame="pairLivingFrame(PAIRS[3]!)!" />
               </div>
-              <span class="thumb-name">{{
-                t("docs.wastedLands.tiles.mountain.living")
-              }}</span>
+              <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.living') }}</span>
             </div>
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
-              <span class="thumb-caption">{{
-                $t("docs.wastedLands.pairs.wasted")
-              }}</span>
+              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
               <div class="thumb">
-                <AtlasSprite
-                  v-if="pairWastedFrame(PAIRS[3]!)"
-                  :frame="pairWastedFrame(PAIRS[3]!)!"
-                />
+                <AtlasSprite v-if="pairWastedFrame(PAIRS[3]!)" :frame="pairWastedFrame(PAIRS[3]!)!" />
               </div>
-              <span class="thumb-name">{{
-                t("docs.wastedLands.tiles.mountain.wasted")
-              }}</span>
+              <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.wasted') }}</span>
             </div>
           </div>
           <p class="pair-lore">
-            {{ t("docs.wastedLands.tiles.mountain.lore") }}
+            {{ t('docs.wastedLands.tiles.mountain.lore') }}
           </p>
         </div>
 
         <div id="pair-river" class="pair-row">
           <div class="pair-thumbs">
             <div class="thumb-col">
-              <span class="thumb-caption">{{
-                $t("docs.wastedLands.pairs.living")
-              }}</span>
+              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
               <div class="thumb">
-                <AtlasSprite
-                  v-if="riverLivingFrame"
-                  :frame="riverLivingFrame"
-                />
+                <AtlasSprite v-if="riverLivingFrame" :frame="riverLivingFrame" />
               </div>
-              <span class="thumb-name">{{
-                t("docs.wastedLands.tiles.river.living")
-              }}</span>
+              <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.living') }}</span>
             </div>
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
-              <span class="thumb-caption">{{
-                $t("docs.wastedLands.pairs.wasted")
-              }}</span>
+              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
               <div class="thumb">
-                <AtlasSprite
-                  v-if="riverWastedFrame"
-                  :frame="riverWastedFrame"
-                />
+                <AtlasSprite v-if="riverWastedFrame" :frame="riverWastedFrame" />
               </div>
-              <span class="thumb-name">{{
-                t("docs.wastedLands.tiles.river.wasted")
-              }}</span>
+              <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.wasted') }}</span>
             </div>
           </div>
-          <p class="pair-lore">{{ t("docs.wastedLands.tiles.river.lore") }}</p>
+          <p class="pair-lore">{{ t('docs.wastedLands.tiles.river.lore') }}</p>
           <div class="variants">
-            <span class="variants-label">{{
-              $t("docs.wastedLands.pairs.looks")
-            }}</span>
+            <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
             <button
               v-for="shape in ['straight', 'bend', 'bend60'] as const"
               :key="shape"
@@ -356,50 +271,29 @@ const riverWastedFrame = computed(() =>
           </div>
         </div>
 
-        <div
-          v-for="pair in PAIRS.slice(4)"
-          :key="pair.kind"
-          :id="`pair-${pair.kind}`"
-          class="pair-row"
-        >
+        <div v-for="pair in PAIRS.slice(4)" :key="pair.kind" :id="`pair-${pair.kind}`" class="pair-row">
           <div class="pair-thumbs">
             <div class="thumb-col">
-              <span class="thumb-caption">{{
-                $t("docs.wastedLands.pairs.living")
-              }}</span>
+              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
               <div class="thumb">
-                <AtlasSprite
-                  v-if="pairLivingFrame(pair)"
-                  :frame="pairLivingFrame(pair)!"
-                />
+                <AtlasSprite v-if="pairLivingFrame(pair)" :frame="pairLivingFrame(pair)!" />
               </div>
-              <span class="thumb-name">{{
-                t(`docs.wastedLands.tiles.${pair.kind}.living`)
-              }}</span>
+              <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
             </div>
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
-              <span class="thumb-caption">{{
-                $t("docs.wastedLands.pairs.wasted")
-              }}</span>
+              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
               <div class="thumb">
-                <AtlasSprite
-                  v-if="pairWastedFrame(pair)"
-                  :frame="pairWastedFrame(pair)!"
-                />
+                <AtlasSprite v-if="pairWastedFrame(pair)" :frame="pairWastedFrame(pair)!" />
               </div>
-              <span class="thumb-name">{{
-                t(`docs.wastedLands.tiles.${pair.kind}.wasted`)
-              }}</span>
+              <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
             </div>
           </div>
           <p class="pair-lore">
             {{ t(`docs.wastedLands.tiles.${pair.kind}.lore`) }}
           </p>
           <div v-if="pair.wastedSuffixes.length > 1" class="variants">
-            <span class="variants-label">{{
-              $t("docs.wastedLands.pairs.looks")
-            }}</span>
+            <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
             <button
               v-for="(suffix, i) in pair.wastedSuffixes"
               :key="suffix"

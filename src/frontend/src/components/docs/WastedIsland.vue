@@ -2,18 +2,19 @@
 // The Wasted Lands docs page's "turning island": a made-up island (see
 // wastedIsland.ts for the data it renders) whose hexes cross-fade from their
 // living art to their wasted counterpart as the blight slider advances.
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
-import { useI18n } from "vue-i18n";
-import type { MessageSchema } from "../../i18n/schema";
-import { atlasBackgroundStyle } from "../../lib/map/atlas";
-import { isoTopPoints, isoGridPosition } from "../../lib/hex/geometry";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../../i18n/schema';
+import { atlasBackgroundStyle } from '../../lib/map/atlas';
+import { isoTopPoints, isoGridPosition } from '../../lib/hex/geometry';
 import {
   buildIsland,
   resolveIslandFrame,
+  GIANT_PART_NATIVE_CANVAS_H,
   type IslandPlacement,
-} from "../../lib/docs/wastedIsland";
+} from '../../lib/docs/wastedIsland';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: "global" });
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const TILE_W = 400;
 const TOP_FACE_H = 184;
@@ -25,8 +26,8 @@ const hoveredKey = ref<string | null>(null);
 let playTimer: ReturnType<typeof setInterval> | null = null;
 
 const reducedMotion =
-  typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
     : false;
 
 const placements = computed(() => buildIsland(rotation.value));
@@ -46,8 +47,25 @@ interface ResolvedPlacement {
 }
 
 function spriteBox(p: IslandPlacement, frameName: string): SpriteBox | null {
-  const rect = resolveIslandFrame(frameName);
+  const rect = resolveIslandFrame(frameName, p.category);
   if (!rect) return null;
+
+  if (p.giantTopPart) {
+    // 1x terrain/buildings-static art (native width 200, height varies per
+    // part) rendered at 2x into this island's showcase-pixel space, its
+    // bottom edge anchored to the bottom of the hex's normal 400x600 canvas
+    // (mirrors the game's own `giantCrop`: the part's extra height rises
+    // *above* the canvas rather than extending below it).
+    const sourceTop = p.y + 2 * (GIANT_PART_NATIVE_CANVAS_H - rect.sourceSize.h);
+    return {
+      left: p.x + 2 * rect.spriteSourceSize.x,
+      top: sourceTop + 2 * rect.spriteSourceSize.y,
+      width: 2 * rect.frame.w,
+      height: 2 * rect.frame.h,
+      style: atlasBackgroundStyle(rect),
+    };
+  }
+
   return {
     left: p.x + rect.spriteSourceSize.x,
     top: p.y + rect.spriteSourceSize.y,
@@ -74,12 +92,20 @@ interface HexPoly {
 const hexPolygons = computed<HexPoly[]>(() => {
   const polys: HexPoly[] = [];
   for (const p of placements.value) {
+    // A giant's own ground plates (layer "base") sit on the same hexes as
+    // its top parts — skip them here so each covered hex gets one hit
+    // polygon, not two identical ones stacked on top of each other.
+    if (p.layer === 'base') continue;
     for (const hex of p.hexes) {
       const g = isoGridPosition(hex, TILE_W, TOP_FACE_H);
       const points = isoTopPoints(TILE_W, TOP_FACE_H)
         .map((pt) => `${pt.x + g.x},${pt.y + g.y}`)
-        .join(" ");
-      polys.push({ key: `${hex.q},${hex.r}`, placementKey: p.key, points });
+        .join(' ');
+      polys.push({
+        key: `${hex.q},${hex.r}`,
+        placementKey: p.hoverGroup,
+        points,
+      });
     }
   }
   return polys;
@@ -107,13 +133,12 @@ const bounds = computed(() => {
     }
   }
   for (const poly of hexPolygons.value) {
-    for (const pair of poly.points.split(" ")) {
-      const [x, y] = pair.split(",").map(Number);
+    for (const pair of poly.points.split(' ')) {
+      const [x, y] = pair.split(',').map(Number);
       grow(x!, y!);
     }
   }
-  if (!Number.isFinite(minX))
-    return { minX: 0, minY: 0, width: TILE_W, height: TOP_FACE_H };
+  if (!Number.isFinite(minX)) return { minX: 0, minY: 0, width: TILE_W, height: TOP_FACE_H };
   return { minX, minY, width: maxX - minX, height: maxY - minY };
 });
 
@@ -135,26 +160,26 @@ function shift(box: SpriteBox): {
 function shiftedPolygonPoints(points: string): string {
   const b = bounds.value;
   return points
-    .split(" ")
+    .split(' ')
     .map((pair) => {
-      const [x, y] = pair.split(",").map(Number);
+      const [x, y] = pair.split(',').map(Number);
       return `${x! - b.minX},${y! - b.minY}`;
     })
-    .join(" ");
+    .join(' ');
 }
 
 function spriteStyle(box: SpriteBox, turned: boolean, delay: number) {
   const s = shift(box);
   return {
     ...box.style,
-    position: "absolute" as const,
+    position: 'absolute' as const,
     left: `${s.left}px`,
     top: `${s.top}px`,
     width: `${s.width}px`,
     height: `${s.height}px`,
     opacity: turned ? 1 : 0,
-    transitionDuration: reducedMotion ? "0ms" : "700ms",
-    transitionDelay: reducedMotion ? "0ms" : `${delay * 400}ms`,
+    transitionDuration: reducedMotion ? '0ms' : '700ms',
+    transitionDelay: reducedMotion ? '0ms' : `${delay * 400}ms`,
   };
 }
 
@@ -165,7 +190,7 @@ const containerWidth = ref(0);
 let resizeObserver: ResizeObserver | null = null;
 
 onMounted(() => {
-  if (stageEl.value && typeof ResizeObserver !== "undefined") {
+  if (stageEl.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) containerWidth.value = entry.contentRect.width;
@@ -190,9 +215,11 @@ const stageHeight = computed(() => bounds.value.height * scale.value);
 
 // --- Hover / caption ----------------------------------------------------
 
-const hoveredPlacement = computed(
-  () => placements.value.find((p) => p.key === hoveredKey.value) ?? null,
-);
+// `hoveredKey` holds a `hoverGroup` value, not a placement `key`: a giant's
+// 14 placements (7 base + 7 top) all share one `hoverGroup`, so hovering any
+// of its hexes finds (any) one of them here to drive the caption, while
+// `hexPolygons`' matching class highlights every hex sharing that group.
+const hoveredPlacement = computed(() => placements.value.find((p) => p.hoverGroup === hoveredKey.value) ?? null);
 
 function onEnterHex(placementKey: string): void {
   hoveredKey.value = placementKey;
@@ -202,20 +229,15 @@ function onLeaveHex(): void {
 }
 
 function tileNameKey(p: IslandPlacement, turned: boolean): string {
-  if (p.kind === "utgard")
-    return turned
-      ? "wastedLands.island.giantWasted"
-      : "wastedLands.island.giantLiving";
-  if (p.kind === "volcano")
-    return turned
-      ? "wastedLands.island.giantVolcano"
-      : "wastedLands.island.giantMountainLiving";
-  return `wastedLands.tiles.${p.kind}.${turned ? "wasted" : "living"}`;
+  if (p.kind === 'utgard') return turned ? 'wastedLands.island.giantWasted' : 'wastedLands.island.giantLiving';
+  if (p.kind === 'volcano')
+    return turned ? 'wastedLands.island.giantVolcano' : 'wastedLands.island.giantMountainLiving';
+  return `wastedLands.tiles.${p.kind}.${turned ? 'wasted' : 'living'}`;
 }
 
 const captionText = computed(() => {
   const p = hoveredPlacement.value;
-  if (!p) return t("docs.wastedLands.island.hoverHint");
+  if (!p) return t('docs.wastedLands.island.hoverHint');
   return t(tileNameKey(p, stage.value >= p.turnsAt));
 });
 
@@ -250,9 +272,7 @@ function togglePlay(): void {
   <div class="wasted-island">
     <div class="controls">
       <label class="slider-row">
-        <span class="slider-label">{{
-          $t("docs.wastedLands.island.blight")
-        }}</span>
+        <span class="slider-label">{{ $t('docs.wastedLands.island.blight') }}</span>
         <input
           type="range"
           min="0"
@@ -262,13 +282,11 @@ function togglePlay(): void {
           data-testid="blight-slider"
           :aria-label="$t('docs.wastedLands.island.blight')"
         />
-        <span class="stage-label">{{
-          t(`docs.wastedLands.island.stages.s${stage}`)
-        }}</span>
+        <span class="stage-label">{{ t(`docs.wastedLands.island.stages.s${stage}`) }}</span>
       </label>
       <div class="buttons">
         <button type="button" class="play-button" @click="togglePlay">
-          {{ $t("docs.wastedLands.island.play") }}
+          {{ $t('docs.wastedLands.island.play') }}
         </button>
         <button
           type="button"
@@ -302,24 +320,12 @@ function togglePlay(): void {
           <div
             v-if="r.living"
             class="island-sprite"
-            :style="
-              spriteStyle(
-                r.living,
-                stage < r.placement.turnsAt,
-                r.placement.delay,
-              )
-            "
+            :style="spriteStyle(r.living, stage < r.placement.turnsAt, r.placement.delay)"
           />
           <div
             v-if="r.wasted"
             class="island-sprite"
-            :style="
-              spriteStyle(
-                r.wasted,
-                stage >= r.placement.turnsAt,
-                r.placement.delay,
-              )
-            "
+            :style="spriteStyle(r.wasted, stage >= r.placement.turnsAt, r.placement.delay)"
           />
         </template>
         <svg class="overlay" :width="bounds.width" :height="bounds.height">
@@ -366,7 +372,7 @@ function togglePlay(): void {
   letter-spacing: 0.05em;
   color: var(--muted);
 }
-.slider-row input[type="range"] {
+.slider-row input[type='range'] {
   flex: 1;
   min-width: 100px;
 }
