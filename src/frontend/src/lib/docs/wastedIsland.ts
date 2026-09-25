@@ -17,8 +17,8 @@
 // would otherwise paint over the neighbouring island hexes.
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import { isoGridPosition } from '../hex/geometry';
-import { findAtlasFrame, type AtlasFrameRect } from '../map/atlas';
-import { giantCoverage } from '../map/giantTiles';
+import { findAtlasClip, findAtlasFrame, type AtlasClip, type AtlasFrameRect } from '../map/atlas';
+import { giantCoverage, GIANT_PARTS } from '../map/giantTiles';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../map/types';
 
 /** One island hex's terrain family, or one of the two giants. */
@@ -60,7 +60,8 @@ export interface IslandPlacement {
 // `WastedIsland.vue`'s `spriteBox`.
 const TILE_W = 400;
 const TOP_FACE_H = 184;
-const TOP_FACE_Y = 280;
+/** A tile's top face's own bounding-box y-offset within its 400x600 source canvas — also usable by a standalone giant layout (e.g. `AnimatedGiant.vue`) that needs the same `g.y - TOP_FACE_Y` placement math `buildIsland` uses. */
+export const TOP_FACE_Y = 280;
 /** A tile's full source-canvas height (400x600) — also the reference a giant top part's 2x-scaled box anchors its bottom edge to (see `giantTopPart` on `IslandPlacement`). */
 export const TILE_SOURCE_H = 600;
 /** Native (1x) canvas height a giant top part's `sourceSize.h` is measured against — mirrors `giantTiles.ts`'s `giantCrop`/`NATIVE_CANVAS_H`. */
@@ -470,6 +471,78 @@ function withOrientation(name: string): string {
 /** True if `name` resolves in `category` without needing `resolveIslandFrame`'s fallback chain — used by tests to guard against a silent atlas rename. */
 export function resolvesDirectly(name: string, category: string): boolean {
   return findAtlasFrame(category, name) !== undefined;
+}
+
+/**
+ * Resolves a giant top part's frame name (e.g.
+ * `giantshrine_SE_level000_partC`) to its `buildings-anim` clip, when one
+ * exists — a clip's name is exactly its static top-part frame's name, so
+ * this is `resolveIslandFrame`'s sibling for the `"buildings-anim"`
+ * category rather than a placement's own `category` (clips live on their
+ * own atlas pages, separate from the static `buildings-static`/`terrain`
+ * frame they replace — see this module's doc comment and
+ * `HexMapRenderer.ts`'s `giantTopAnimFor`). Only the SE-orientation
+ * fallback leg applies here (a giant top part's name never carries a
+ * `_variantNNN` suffix). `undefined` for a family/part with no animated
+ * clip (e.g. `giantutgard`, `giantmountain`) — the caller then keeps the
+ * static frame, same graceful-degradation contract `resolveIslandFrame`
+ * has.
+ */
+export function resolveIslandClip(name: string): (AtlasClip & { frameRects: AtlasFrameRect[] }) | undefined {
+  const direct = findAtlasClip('buildings-anim', name);
+  if (direct) return direct;
+  const seOriented = withOrientation(name);
+  if (seOriented !== name) return findAtlasClip('buildings-anim', seOriented);
+  return undefined;
+}
+
+/** Whether `family` has an animated clip for *any* of its 7 parts at `orientation` — used to decide whether a giant card's hover-to-animate affordance applies at all (e.g. `giantvolcano_wasted` does, `giantutgard` doesn't). */
+export function giantFamilyHasClip(family: string, orientation: TileOrientation): boolean {
+  return GIANT_PARTS.some((part) => resolveIslandClip(`${family}_${orientation}_level000_part${part}`) !== undefined);
+}
+
+/** One resolved sprite's on-canvas box, in the island's showcase-pixel space — the shared shape `tileSpriteBox`/`giantTopPartBox` return and `WastedIsland.vue`/`AnimatedGiant.vue` position an element with. */
+export interface SpriteGeom {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * An ordinary tile's (or a giant's own ground plate's) box: `rect` drawn at
+ * its native size, offset within `origin`'s 400x600 source canvas by its
+ * own `spriteSourceSize` trim offset.
+ */
+export function tileSpriteBox(origin: { x: number; y: number }, rect: AtlasFrameRect): SpriteGeom {
+  return {
+    left: origin.x + rect.spriteSourceSize.x,
+    top: origin.y + rect.spriteSourceSize.y,
+    width: rect.frame.w,
+    height: rect.frame.h,
+  };
+}
+
+/**
+ * A giant top part's box: 1x terrain/buildings-static art (native width
+ * 200, height varies per part) rendered at 2x into `origin`'s 400x600
+ * source canvas, its bottom edge anchored to that canvas's own bottom
+ * (mirrors the game's own `giantCrop`: the part's extra height rises
+ * *above* the canvas rather than extending below it). `rect` may be the
+ * part's static frame or one frame of its `buildings-anim` clip — both
+ * share the same `sourceSize`/`spriteSourceSize` geometry (see this
+ * module's doc comment on giant clips), so this box never needs
+ * recomputing as a clip's frame index advances, only the sprite's
+ * background image/position does (`atlasBackgroundStyle`).
+ */
+export function giantTopPartBox(origin: { x: number; y: number }, rect: AtlasFrameRect): SpriteGeom {
+  const top = origin.y + 2 * (GIANT_PART_NATIVE_CANVAS_H - rect.sourceSize.h) + 2 * rect.spriteSourceSize.y;
+  return {
+    left: origin.x + 2 * rect.spriteSourceSize.x,
+    top,
+    width: 2 * rect.frame.w,
+    height: 2 * rect.frame.h,
+  };
 }
 
 export const GIANT_HEXES_FOR_TESTS = {

@@ -5,14 +5,18 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { atlasBackgroundStyle } from '../../lib/map/atlas';
+import { atlasBackgroundStyle, type AtlasBackgroundStyle } from '../../lib/map/atlas';
 import { isoTopPoints, isoGridPosition } from '../../lib/hex/geometry';
 import {
   buildIsland,
   resolveIslandFrame,
-  GIANT_PART_NATIVE_CANVAS_H,
+  resolveIslandClip,
+  giantTopPartBox,
+  tileSpriteBox,
   type IslandPlacement,
 } from '../../lib/docs/wastedIsland';
+import { clipFrameIndex, clipTimingOf } from '../../lib/map/clipPlayback';
+import { useAnimationClock } from '../../composables/useAnimationClock';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -49,30 +53,9 @@ interface ResolvedPlacement {
 function spriteBox(p: IslandPlacement, frameName: string): SpriteBox | null {
   const rect = resolveIslandFrame(frameName, p.category);
   if (!rect) return null;
-
-  if (p.giantTopPart) {
-    // 1x terrain/buildings-static art (native width 200, height varies per
-    // part) rendered at 2x into this island's showcase-pixel space, its
-    // bottom edge anchored to the bottom of the hex's normal 400x600 canvas
-    // (mirrors the game's own `giantCrop`: the part's extra height rises
-    // *above* the canvas rather than extending below it).
-    const sourceTop = p.y + 2 * (GIANT_PART_NATIVE_CANVAS_H - rect.sourceSize.h);
-    return {
-      left: p.x + 2 * rect.spriteSourceSize.x,
-      top: sourceTop + 2 * rect.spriteSourceSize.y,
-      width: 2 * rect.frame.w,
-      height: 2 * rect.frame.h,
-      style: atlasBackgroundStyle(rect),
-    };
-  }
-
-  return {
-    left: p.x + rect.spriteSourceSize.x,
-    top: p.y + rect.spriteSourceSize.y,
-    width: rect.frame.w,
-    height: rect.frame.h,
-    style: atlasBackgroundStyle(rect),
-  };
+  const origin = { x: p.x, y: p.y };
+  const geom = p.giantTopPart ? giantTopPartBox(origin, rect) : tileSpriteBox(origin, rect);
+  return { ...geom, style: atlasBackgroundStyle(rect) };
 }
 
 const resolved = computed<ResolvedPlacement[]>(() =>
@@ -82,6 +65,53 @@ const resolved = computed<ResolvedPlacement[]>(() =>
     wasted: spriteBox(placement, placement.wastedFrame),
   })),
 );
+
+// --- Animated giant top parts --------------------------------------------
+//
+// A giant top part (`giantTopPart: true`) whose frame name also names a
+// `buildings-anim` clip (see `resolveIslandClip`) plays that clip instead of
+// sitting on its static frame forever — the clip's frames share the exact
+// same `sourceSize`/`spriteSourceSize` geometry as the static frame (this
+// module's own giant-clip contract), so `resolved` above (the box) never
+// needs to change as the clip advances; only the sprite's background
+// image/position does. Split in two for that reason: `clipLookups` is
+// precomputed once per rotation change (keyed off `placements`, not off the
+// animation clock), and `clipStyles` is the one thing recomputed every tick.
+const now = useAnimationClock();
+
+interface ClipLookup {
+  living?: ReturnType<typeof resolveIslandClip>;
+  wasted?: ReturnType<typeof resolveIslandClip>;
+}
+
+const clipLookups = computed<Map<string, ClipLookup>>(() => {
+  const map = new Map<string, ClipLookup>();
+  for (const p of placements.value) {
+    if (!p.giantTopPart) continue;
+    const living = resolveIslandClip(p.livingFrame);
+    const wasted = resolveIslandClip(p.wastedFrame);
+    if (living || wasted) map.set(p.key, { living, wasted });
+  }
+  return map;
+});
+
+const clipStyles = computed<Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>>(() => {
+  const map = new Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>();
+  const elapsed = now.value;
+  for (const [key, lookup] of clipLookups.value) {
+    const entry: { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle } = {};
+    if (lookup.living)
+      entry.living = atlasBackgroundStyle(
+        lookup.living.frameRects[clipFrameIndex(clipTimingOf(lookup.living), elapsed)]!,
+      );
+    if (lookup.wasted)
+      entry.wasted = atlasBackgroundStyle(
+        lookup.wasted.frameRects[clipFrameIndex(clipTimingOf(lookup.wasted), elapsed)]!,
+      );
+    map.set(key, entry);
+  }
+  return map;
+});
 
 interface HexPoly {
   key: string;
@@ -168,10 +198,10 @@ function shiftedPolygonPoints(points: string): string {
     .join(' ');
 }
 
-function spriteStyle(box: SpriteBox, turned: boolean, delay: number) {
+function spriteStyle(box: SpriteBox, turned: boolean, delay: number, animatedStyle?: AtlasBackgroundStyle) {
   const s = shift(box);
   return {
-    ...box.style,
+    ...(animatedStyle ?? box.style),
     position: 'absolute' as const,
     left: `${s.left}px`,
     top: `${s.top}px`,
@@ -320,12 +350,26 @@ function togglePlay(): void {
           <div
             v-if="r.living"
             class="island-sprite"
-            :style="spriteStyle(r.living, stage < r.placement.turnsAt, r.placement.delay)"
+            :style="
+              spriteStyle(
+                r.living,
+                stage < r.placement.turnsAt,
+                r.placement.delay,
+                clipStyles.get(r.placement.key)?.living,
+              )
+            "
           />
           <div
             v-if="r.wasted"
             class="island-sprite"
-            :style="spriteStyle(r.wasted, stage >= r.placement.turnsAt, r.placement.delay)"
+            :style="
+              spriteStyle(
+                r.wasted,
+                stage >= r.placement.turnsAt,
+                r.placement.delay,
+                clipStyles.get(r.placement.key)?.wasted,
+              )
+            "
           />
         </template>
         <svg class="overlay" :width="bounds.width" :height="bounds.height">
