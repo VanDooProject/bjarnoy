@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -32,6 +33,9 @@ const PAGES: DocPage[] = [
   <div class="docs">
     <TopBar docked :title="$t('docs.hub.title')" caption="DOCS">
       <HudNav />
+      <template #drawer="{ close }">
+        <MobileHudDrawer @close="close" />
+      </template>
     </TopBar>
     <main class="body">
       <h1>{{ $t('docs.hub.title') }}</h1>

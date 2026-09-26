@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import WorldMapCanvas from '../components/map/WorldMapCanvas.vue';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
@@ -137,6 +138,9 @@ const ENGINEERING: EngineeringCard[] = [
   <div class="showcase">
     <TopBar docked :title="t('showcase.brand')" caption="SHOWCASE">
       <HudNav />
+      <template #drawer="{ close }">
+        <MobileHudDrawer @close="close" />
+      </template>
     </TopBar>
 
     <main class="body">

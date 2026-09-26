@@ -86,19 +86,28 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
     });
   }
 
-  test('the collapsed rail shows only the soonest-to-finish item per category, plus a +N more chip', async ({ page }) => {
+  test('the collapsed handle is a small edge tab showing countdowns per category', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
     await seedQueues(page);
 
-    const rail = page.locator('.queue-drawer-rail');
-    await expect(rail).toBeVisible();
-    // Two build orders queued, but only the soonest (the fast one) shows —
-    // its own build row, not the slower one, plus a "+1 more" chip.
-    await expect(rail.locator('.rail-row-name')).toHaveCount(2); // one build row, one train row
-    await expect(rail.locator('.rail-row').first().locator('.rail-row-more')).toHaveText('+1 more');
-    await expect(rail).not.toContainText('Farm');
-    await expect(rail).toContainText('Watchtower');
+    const handle = page.locator('.queue-drawer-handle');
+    await expect(handle).toBeVisible();
+    const box = (await handle.boundingBox())!;
+    expect(box.width).toBeLessThanOrEqual(56);
+    expect(box.height).toBeLessThanOrEqual(140);
+    expect(box.x).toBeLessThanOrEqual(1);
+
+    // 2 build orders seeded above ('fast' is the soonest, 50s) -> count
+    // chip "2" and the fast order's countdown.
+    const buildRow = handle.locator('.queue-drawer-handle-row.is-build');
+    await expect(buildRow.locator('.queue-drawer-handle-count')).toHaveText('2');
+    await expect(buildRow.locator('.queue-drawer-handle-time')).toHaveText(/^0:\d\d$/);
+
+    // 1 training order seeded above -> no count chip, but a countdown.
+    const trainRow = handle.locator('.queue-drawer-handle-row.is-train');
+    await expect(trainRow.locator('.queue-drawer-handle-count')).toHaveCount(0);
+    await expect(trainRow.locator('.queue-drawer-handle-time')).not.toHaveText('');
 
     // BuildQueuePanel/TrainingQueuePanel — the desktop panels QueueDrawer
     // replaces — are not mounted at this viewport width. (Other HUD panels
@@ -107,28 +116,49 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
     await expect(page.locator('.training-queue-panel')).toHaveCount(0);
   });
 
-  test('dragging the rail opens the drawer, and dragging it back closes it', async ({ page }) => {
+  test('the map stays tappable along the left edge above and below the handle', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
     await seedQueues(page);
 
-    const rail = page.locator('.queue-drawer-rail');
+    const handle = page.locator('.queue-drawer-handle');
+    const box = (await handle.boundingBox())!;
+
+    const above = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.tagName.toLowerCase(),
+      { x: 10, y: box.y - 40 },
+    );
+    const below = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.tagName.toLowerCase(),
+      { x: 10, y: box.y + box.height + 40 },
+    );
+
+    expect(above).toBe('canvas');
+    expect(below).toBe('canvas');
+  });
+
+  test('dragging the handle opens the drawer, and dragging it back closes it', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.found(page);
+    await seedQueues(page);
+
+    const handle = page.locator('.queue-drawer-handle');
     const body = page.locator('#queue-drawer-body');
     await expect(body).toHaveAttribute('aria-hidden', 'true');
 
-    let box = (await rail.boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + 40);
+    let box = (await handle.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 160, box.y + 40, { steps: 10 });
+    await page.mouse.move(box.x + box.width / 2 + 160, box.y + box.height / 2, { steps: 10 });
     await page.mouse.up();
 
     await expect(body).toHaveAttribute('aria-hidden', 'false');
     await expect(page.locator('.status-row-click').first()).toBeVisible();
 
-    box = (await rail.boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + 40);
+    box = (await handle.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 - 160, box.y + 40, { steps: 10 });
+    await page.mouse.move(box.x + box.width / 2 - 160, box.y + box.height / 2, { steps: 10 });
     await page.mouse.up();
 
     await expect(body).toHaveAttribute('aria-hidden', 'true');
@@ -150,7 +180,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
     // longhouse (the camera's resting position) that this can't happen.
     expect(Math.hypot(before.x - canvasCentre.x, before.y - canvasCentre.y)).toBeGreaterThan(80);
 
-    await page.locator('.queue-drawer-rail').click();
+    await page.locator('.queue-drawer-handle').click();
     const fastRow = page.locator('.status-row-click', { hasText: 'Watchtower' });
     await expect(fastRow).toBeVisible();
     await fastRow.click();

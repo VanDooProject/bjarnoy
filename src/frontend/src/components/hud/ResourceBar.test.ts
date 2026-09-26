@@ -8,17 +8,30 @@
 // appears (and only ever sits within the filled portion) when there is
 // actually something reserved.
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
 import ResourceBar from './ResourceBar.vue';
 import { useWorldStore } from '../../stores/world';
+import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
+import enCatalogue from '../../i18n/locales/en/catalogue.json';
 
 function mountResourceBar() {
   return mount(ResourceBar, {
-    global: { plugins: [createTestI18n({ hud: enHud })] },
+    global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
   });
+}
+
+function stubCompactMediaQuery(matches: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockReturnValue({
+      matches,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }),
+  );
 }
 
 describe('ResourceBar', () => {
@@ -81,6 +94,150 @@ describe('ResourceBar', () => {
 
     expect(left).toBeCloseTo(0, 5);
     expect(width).toBeCloseTo(5, 5); // clamped to the 50/1000 stock actually on hand
+    wrapper.unmount();
+  });
+});
+
+describe('ResourceBar (compact / mobile)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    stubCompactMediaQuery(true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    isHudDrawerOpen.value = false;
+  });
+
+  function setup() {
+    const world = useWorldStore();
+    world.hud.resources = { wood: 4965, stone: 2310, food: 6120, iron: 780 };
+    world.hud.storageCap = { wood: 12000, stone: 8000, food: 10000, iron: 4000 };
+    world.hud.rates = { wood: 60, stone: 45, food: 90, iron: 20 };
+    world.hud.reserved = { wood: 0, stone: 0, food: 0, iron: 0 };
+    return world;
+  }
+
+  it('renders one collapsed line per pill by default, showing stock', async () => {
+    setup();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    const pills = wrapper.findAll('.resource--compact');
+    expect(pills.length).toBeGreaterThan(0);
+    expect(pills[0].get('.value-compact').text()).toContain('4,965');
+    expect(pills[0].find('.fill-track').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('never renders the removed stage-dots indicator', async () => {
+    setup();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    expect(wrapper.find('.stage-dots').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('the cap stage shows the same "/cap" format as the expanded view, not a "max" label', async () => {
+    setup();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    const wood = wrapper.findAll('.resource--compact')[0];
+
+    await wood.trigger('click'); // rate
+    await wood.trigger('click'); // cap
+    expect(wood.get('.value-compact').text()).toContain('/12,000');
+    expect(wood.get('.value-compact').text()).not.toContain('max');
+    wrapper.unmount();
+  });
+
+  it('tapping any pill cycles ALL pills together through stock -> rate -> max -> stock', async () => {
+    setup();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    const [wood, stone] = wrapper.findAll('.resource--compact');
+
+    expect(wood.get('.value-compact').text()).toContain('4,965');
+    expect(stone.get('.value-compact').text()).toContain('2,310');
+
+    await wood.trigger('click');
+    expect(wood.get('.value-compact').text()).toContain('+60/h');
+    expect(stone.get('.value-compact').text()).toContain('+45/h'); // switched too, in sync
+
+    await wood.trigger('click');
+    expect(wood.get('.value-compact').text()).toContain('/12,000');
+    expect(stone.get('.value-compact').text()).toContain('/8,000');
+
+    // Tapping a *different* pill still advances the one shared stage.
+    await stone.trigger('click');
+    expect(wood.get('.value-compact').text()).toContain('4,965');
+    expect(stone.get('.value-compact').text()).toContain('2,310');
+    wrapper.unmount();
+  });
+
+  it('keeps the fill bar visible and identical across all three stages', async () => {
+    setup();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    const wood = wrapper.findAll('.resource--compact')[0];
+
+    const widthAt = () => wood.get('.fill').attributes('style');
+    const stockWidth = widthAt();
+
+    await wood.trigger('click'); // rate
+    expect(wood.find('.fill-track').exists()).toBe(true);
+    expect(widthAt()).toBe(stockWidth);
+
+    await wood.trigger('click'); // cap
+    expect(wood.find('.fill-track').exists()).toBe(true);
+    expect(widthAt()).toBe(stockWidth);
+    wrapper.unmount();
+  });
+
+  it('only shows the reserved hint in the stock stage', async () => {
+    const world = setup();
+    world.hud.reserved.wood = 100;
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    const wood = wrapper.findAll('.resource--compact')[0];
+
+    expect(wood.find('.reserved-hint').exists()).toBe(true);
+    await wood.trigger('click');
+    expect(wood.find('.reserved-hint').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('auto-reverts a peeked pill back to stock after 6s of no further tap', async () => {
+    vi.useFakeTimers();
+    setup();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    const wood = wrapper.findAll('.resource--compact')[0];
+
+    await wood.trigger('click');
+    expect(wood.get('.value-compact').text()).toContain('+60/h');
+
+    vi.advanceTimersByTime(6000);
+    await wrapper.vm.$nextTick();
+    expect(wood.get('.value-compact').text()).toContain('4,965');
+    wrapper.unmount();
+  });
+
+  it('switches to the full desktop-style stacked layout while the drawer is open, instead of the single-line cycle', async () => {
+    setup();
+    isHudDrawerOpen.value = true;
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    // The expanded branch reuses the desktop markup wholesale.
+    expect(wrapper.find('.resource--compact').exists()).toBe(false);
+    const wood = wrapper.findAll('.resource')[0];
+    expect(wood.get('.value').text()).toContain('4,965');
+    expect(wood.get('.value').text()).toContain('12,000'); // cap suffix
+    expect(wood.get('.rate').text()).toBe('+60/h');
+    expect(wood.find('.fill-track').exists()).toBe(true);
     wrapper.unmount();
   });
 });

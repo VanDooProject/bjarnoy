@@ -16,7 +16,11 @@
   },
   "errors": {
     "dispatchFailed": "Dispatch failed.",
-    "fieldOrderFailed": "Field order failed."
+    "fieldOrderFailed": "Field order failed.",
+    "selectAtLeastOneUnit": "Select at least one unit to send.",
+    "clickMapForDestination": "Click the map to set a destination first.",
+    "chooseSettlementFor": "Choose a settlement to {mission} first.",
+    "fieldOrderPremiumRequired": "Premium required to plot more than one stop — clear the extra stop, or upgrade."
   },
   "localeSwitcher": {
     "label": "Language",

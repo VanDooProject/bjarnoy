@@ -1192,7 +1192,7 @@ export const useWorldStore = defineStore('world', {
       const draft = this.fieldOrderDraft;
       if (!draft) return;
       if (draft.route.length >= 1 && !useAuthStore().isPremium) {
-        draft.error = 'Premium required to plot more than one stop — clear the extra stop, or upgrade.';
+        draft.error = i18n.global.t('common.errors.fieldOrderPremiumRequired');
         return;
       }
 
@@ -1228,7 +1228,7 @@ export const useWorldStore = defineStore('world', {
       if (!draft) return;
       const request = buildFieldOrderRequest(draft.route);
       if (!request) {
-        draft.error = 'Click the map to set a destination first.';
+        draft.error = i18n.global.t('common.errors.clickMapForDestination');
         return;
       }
       draft.submitting = true;
@@ -1262,6 +1262,24 @@ export const useWorldStore = defineStore('world', {
     },
     cancelDispatch() {
       this.dispatchDraft = null;
+    },
+    /**
+     * Mobile ring entry point (issue: mobile army dispatch): starts a fresh
+     * dispatch already aimed at `coord` — a Move destination, or an Attack/
+     * Support against whatever settlement owns that tile — instead of the
+     * blank draft `startDispatch` leaves for ArmyPanel's own tabs/target list
+     * to fill in. Units are still picked manually (no default selection);
+     * this only sets the mission and destination the tap already implied.
+     */
+    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support'; targetSettlementId?: string } = {}) {
+      this.startDispatch();
+      if (!this.dispatchDraft) return;
+      if (opts.mission && opts.targetSettlementId) {
+        this.dispatchDraft.mission = opts.mission;
+        this.setDispatchTarget(opts.targetSettlementId);
+      } else {
+        this.addWaypoint(coord);
+      }
     },
     /** Switching mission clears the plotted route/target — a move destination and an attack's/support's waypoint-only route aren't interchangeable, and a stale target settlement from a previous draft shouldn't silently carry over. */
     setDispatchMission(mission: 'move' | 'attack' | 'support') {
@@ -1404,13 +1422,13 @@ export const useWorldStore = defineStore('world', {
             : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
-          draft.error = 'Select at least one unit to send.';
+          draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
         } else if (draft.mission === 'move' && draft.route.length === 0) {
-          draft.error = 'Click the map to set a destination first.';
+          draft.error = i18n.global.t('common.errors.clickMapForDestination');
         } else if ((draft.mission === 'attack' || draft.mission === 'support') && !draft.targetSettlementId) {
-          draft.error = `Choose a settlement to ${draft.mission} first.`;
+          draft.error = i18n.global.t('common.errors.chooseSettlementFor', { mission: draft.mission });
         } else {
-          draft.error = 'Select at least one unit to send.';
+          draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
         }
         return;
       }

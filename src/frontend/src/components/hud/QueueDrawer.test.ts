@@ -4,10 +4,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import QueueDrawer from './QueueDrawer.vue';
 import { useWorldStore } from '../../stores/world';
-import type { BuildOrderResponse, TrainingOrderResponse } from '../../api/types';
+import type { ArmyResponse, BuildOrderResponse, TrainingOrderResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
+
+const { recallArmy } = vi.hoisted(() => ({ recallArmy: vi.fn() }));
+vi.mock('../../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/client')>();
+  return { ...actual, api: { ...actual.api, recallArmy } };
+});
 
 function mountDrawer(props: { open?: boolean } = {}) {
   return mount(QueueDrawer, {
@@ -45,9 +51,38 @@ function trainingOrder(overrides: Partial<TrainingOrderResponse> = {}): Training
   };
 }
 
+function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
+  return {
+    id: 'army-1',
+    settlementId: 'settlement-1',
+    mission: 'move',
+    targetSettlementId: null,
+    atHome: false,
+    supporting: false,
+    position: { q: 1, r: 1 },
+    provisions: 10,
+    totalSpeed: 4,
+    totalUpkeepPerHour: 2,
+    stacks: [{ unit: 'spearman', count: 10 }],
+    movement: {
+      departedAt: '2026-01-01T00:00:00Z',
+      path: [{ q: 0, r: 0 }, { q: 1, r: 1 }, { q: 2, r: 2 }],
+      cumulativeHours: [0, 1, 2],
+      arrivesAt: '2026-01-01T02:00:00Z',
+      returnPath: [],
+      returnCumulativeHours: [],
+      turnAroundAt: '2026-01-01T02:00:00Z',
+      returnArrivesAt: '2026-01-01T04:00:00Z',
+      isReturning: false,
+    },
+    ...overrides,
+  };
+}
+
 describe('QueueDrawer', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    recallArmy.mockReset().mockResolvedValue(undefined);
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
   });
@@ -57,59 +92,72 @@ describe('QueueDrawer', () => {
     expect(wrapper.find('.queue-drawer').exists()).toBe(false);
   });
 
-  it('shows only the soonest-to-finish build order on the collapsed rail, plus a +N more chip', () => {
+  it('shows one row per non-empty category with the soonest remaining time and a count chip', () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [
       buildOrder({ id: 'slow', completesInSeconds: 500, totalSeconds: 500, q: 1, r: 1 }),
       buildOrder({ id: 'fast', completesInSeconds: 50, totalSeconds: 50, q: 2, r: 2 }),
-      buildOrder({ id: 'medium', completesInSeconds: 200, totalSeconds: 200, q: 3, r: 3 }),
     ];
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder({ completesInSeconds: 20, totalSeconds: 100 })];
 
     const wrapper = mountDrawer();
-    const rail = wrapper.get('.queue-drawer-rail');
-    expect(rail.findAll('.rail-row-name')).toHaveLength(1);
-    expect(rail.get('.rail-row-time').text()).toBe('0:50');
-    expect(rail.get('.rail-row-more').text()).toBe('+2 more');
+    const rows = wrapper.findAll('.queue-drawer-handle-row');
+    expect(rows).toHaveLength(2);
+
+    const buildRow = rows.find((r) => r.classes('is-build'))!;
+    expect(buildRow.get('.queue-drawer-handle-time').text()).toBe('0:50');
+    expect(buildRow.get('.queue-drawer-handle-count').text()).toBe('2');
+
+    const trainRow = rows.find((r) => r.classes('is-train'))!;
+    expect(trainRow.get('.queue-drawer-handle-time').text()).toBe('0:20');
+    expect(trainRow.find('.queue-drawer-handle-count').exists()).toBe(false);
   });
 
-  it('falls back to the first waiting order when every build order is waiting', () => {
+  it('shows a muted dash and no progress bar when every build order is waiting', () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [
-      buildOrder({ id: 'w1', state: 'waiting', completesAtGameTime: null, completesInSeconds: null }),
-      buildOrder({ id: 'w2', state: 'waiting', completesAtGameTime: null, completesInSeconds: null }),
+      buildOrder({ id: 'waiting-1', state: 'waiting', completesAtGameTime: null, completesInSeconds: null }),
+      buildOrder({ id: 'waiting-2', state: 'waiting', completesAtGameTime: null, completesInSeconds: null }),
     ];
 
     const wrapper = mountDrawer();
-    const rail = wrapper.get('.queue-drawer-rail');
-    expect(rail.findAll('.rail-row-name')).toHaveLength(1);
-    expect(rail.text()).toContain('Waiting for a slot');
+    const buildRow = wrapper.get('.queue-drawer-handle-row.is-build');
+    expect(buildRow.get('.queue-drawer-handle-time').text()).toBe('—');
+    expect(buildRow.get('.queue-drawer-handle-time').classes()).toContain('is-muted');
+    expect(buildRow.find('.queue-drawer-handle-progress').exists()).toBe(false);
   });
 
-  it('omits a category row on the rail when that queue is empty', () => {
+  it('renders no rows (just the chevron) when only the garrison has entries', () => {
     const world = useWorldStore();
-    world.hud.trainingQueueFetchedAt = Date.now();
-    world.hud.trainingQueue = [trainingOrder()];
+    world.hud.garrison = [{ unit: 'spearman', count: 12 }];
 
     const wrapper = mountDrawer();
-    const rail = wrapper.get('.queue-drawer-rail');
-    expect(rail.findAll('.rail-row')).toHaveLength(1);
+    const handle = wrapper.get('.queue-drawer-handle');
+    expect(handle.findAll('.queue-drawer-handle-row')).toHaveLength(0);
+    expect(handle.find('.queue-drawer-chevron').exists()).toBe(true);
   });
 
-  // Regression: the rail used to keep rendering its collapsed mini-summary
-  // even while open, so it sat right next to the full expanded list and
-  // visually read as the drawer being "open twice".
-  it('hides the rail mini-summary once the drawer is open', () => {
+  it('the progress bar fill matches the soonest active order in each category', () => {
     const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [
+      // Waiting — excluded even though it would otherwise look "soonest".
+      buildOrder({ id: 'waiting', state: 'waiting', completesAtGameTime: null, completesInSeconds: null }),
+      buildOrder({ id: 'slow', completesInSeconds: 500, totalSeconds: 500, q: 1, r: 1 }),
+    ];
     world.hud.trainingQueueFetchedAt = Date.now();
-    world.hud.trainingQueue = [trainingOrder()];
+    // 80/100 done, 20s remaining.
+    world.hud.trainingQueue = [trainingOrder({ completesInSeconds: 20, totalSeconds: 100 })];
 
-    const wrapper = mountDrawer({ open: true });
-    expect(wrapper.find('.queue-drawer-rail-content').exists()).toBe(false);
+    const wrapper = mountDrawer();
+    const trainRow = wrapper.get('.queue-drawer-handle-row.is-train');
+    expect(trainRow.get('.queue-drawer-handle-progress-fill').attributes('style')).toContain('width: 80%');
   });
 
-  it('clicking the rail opens the drawer', async () => {
+  it('clicking the handle opens the drawer', async () => {
     const world = useWorldStore();
     world.hud.trainingQueueFetchedAt = Date.now();
     world.hud.trainingQueue = [trainingOrder()];
@@ -117,7 +165,7 @@ describe('QueueDrawer', () => {
     const wrapper = mountDrawer();
     expect(wrapper.get('.queue-drawer').classes()).not.toContain('is-open');
 
-    await wrapper.get('.queue-drawer-rail').trigger('click');
+    await wrapper.get('.queue-drawer-handle').trigger('click');
 
     expect(wrapper.emitted('update:open')).toEqual([[true]]);
   });
@@ -140,18 +188,18 @@ describe('QueueDrawer', () => {
     (el as unknown as { releasePointerCapture: () => void }).releasePointerCapture = vi.fn();
   }
 
-  it('dragging the rail past the open threshold opens the drawer', async () => {
+  it('dragging the handle past the open threshold opens the drawer', async () => {
     const world = useWorldStore();
     world.hud.trainingQueueFetchedAt = Date.now();
     world.hud.trainingQueue = [trainingOrder()];
 
     const wrapper = mountDrawer();
-    const rail = wrapper.get('.queue-drawer-rail').element as HTMLElement;
-    stubPointerCapture(rail);
+    const handle = wrapper.get('.queue-drawer-handle').element as HTMLElement;
+    stubPointerCapture(handle);
 
-    rail.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
-    rail.dispatchEvent(new PointerEvent('pointermove', { clientX: 150, clientY: 0, pointerId: 1 }));
-    rail.dispatchEvent(new PointerEvent('pointerup', { clientX: 150, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointermove', { clientX: 150, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerup', { clientX: 150, clientY: 0, pointerId: 1 }));
 
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([true]);
   });
@@ -162,12 +210,12 @@ describe('QueueDrawer', () => {
     world.hud.trainingQueue = [trainingOrder()];
 
     const wrapper = mountDrawer();
-    const rail = wrapper.get('.queue-drawer-rail').element as HTMLElement;
-    stubPointerCapture(rail);
+    const handle = wrapper.get('.queue-drawer-handle').element as HTMLElement;
+    stubPointerCapture(handle);
 
-    rail.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
-    rail.dispatchEvent(new PointerEvent('pointermove', { clientX: 30, clientY: 0, pointerId: 1 }));
-    rail.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointermove', { clientX: 30, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 0, pointerId: 1 }));
 
     expect(wrapper.emitted('update:open')).toBeUndefined();
   });
@@ -178,11 +226,11 @@ describe('QueueDrawer', () => {
     world.hud.trainingQueue = [trainingOrder()];
 
     const wrapper = mountDrawer();
-    const rail = wrapper.get('.queue-drawer-rail').element as HTMLElement;
-    stubPointerCapture(rail);
+    const handle = wrapper.get('.queue-drawer-handle').element as HTMLElement;
+    stubPointerCapture(handle);
 
-    rail.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
-    rail.dispatchEvent(new PointerEvent('pointerup', { clientX: 2, clientY: 1, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerup', { clientX: 2, clientY: 1, pointerId: 1 }));
 
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([true]);
   });
@@ -193,12 +241,12 @@ describe('QueueDrawer', () => {
     world.hud.trainingQueue = [trainingOrder()];
 
     const wrapper = mountDrawer();
-    const rail = wrapper.get('.queue-drawer-rail').element as HTMLElement;
-    stubPointerCapture(rail);
+    const handle = wrapper.get('.queue-drawer-handle').element as HTMLElement;
+    stubPointerCapture(handle);
 
-    rail.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
-    rail.dispatchEvent(new PointerEvent('pointermove', { clientX: 5, clientY: 60, pointerId: 1 }));
-    rail.dispatchEvent(new PointerEvent('pointerup', { clientX: 5, clientY: 60, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointermove', { clientX: 5, clientY: 60, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerup', { clientX: 5, clientY: 60, pointerId: 1 }));
 
     expect(wrapper.emitted('update:open')).toBeUndefined();
   });
@@ -242,5 +290,81 @@ describe('QueueDrawer', () => {
     const wrapper = mountDrawer({ open: true });
     expect(wrapper.text()).toContain('Garrison');
     expect(wrapper.text()).toContain('Guests');
+  });
+
+  // Issue: mobile army dispatch.
+  describe('Armies section', () => {
+    it('keeps the drawer mounted for armies alone, sorted by soonest ETA', () => {
+      const world = useWorldStore();
+      world.armies = [
+        army({ id: 'far', movement: { ...army().movement!, arrivesAt: '2026-01-01T05:00:00Z' } }),
+        army({ id: 'near', movement: { ...army().movement!, arrivesAt: '2026-01-01T01:00:00Z' } }),
+        army({ id: 'guest', supporting: true, movement: null }),
+      ];
+
+      const wrapper = mountDrawer({ open: true });
+      expect(wrapper.find('.queue-drawer').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Armies');
+
+      const etas = wrapper.findAll('.army-row .status-row-time').map((n) => n.text());
+      // near (1h out) sorts before far (5h out); the supporting army (no
+      // active leg, so no ETA) sorts last regardless.
+      expect(etas).toEqual(['1h 0m', '5h 0m', '—']);
+    });
+
+    it('adds an army row to the handle with the soonest arrival and a count chip', () => {
+      const world = useWorldStore();
+      world.armies = [
+        army({ id: 'far', movement: { ...army().movement!, arrivesAt: '2026-01-01T05:00:00Z' } }),
+        army({ id: 'near', movement: { ...army().movement!, arrivesAt: '2026-01-01T01:00:00Z' } }),
+      ];
+
+      const row = mountDrawer().get('.queue-drawer-handle-row.is-army');
+      expect(row.get('.queue-drawer-handle-time').text()).toBe('1h00');
+      expect(row.get('.queue-drawer-handle-count').text()).toBe('2');
+    });
+
+    it('shows a muted dash on the army handle row when every army is supporting', () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'guest', supporting: true, movement: null })];
+
+      const row = mountDrawer().get('.queue-drawer-handle-row.is-army');
+      expect(row.get('.queue-drawer-handle-time').text()).toBe('—');
+      expect(row.find('.queue-drawer-handle-progress').exists()).toBe(false);
+    });
+
+    it('Recall calls recallArmyLive', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+
+      const wrapper = mountDrawer({ open: true });
+      await wrapper.get('.army-row .recall').trigger('click');
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(recallArmy).toHaveBeenCalledWith('army-1', undefined);
+    });
+
+    it('a row tap closes the drawer and emits select-army', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+
+      const wrapper = mountDrawer({ open: true });
+      await wrapper.get('.army-row .status-row-click').trigger('click');
+
+      expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
+      expect(wrapper.emitted('update:open')).toEqual([[false]]);
+    });
+
+    it('build and training sections stay unaffected by the Armies section', () => {
+      const world = useWorldStore();
+      world.hud.queueFetchedAt = Date.now();
+      world.hud.queue = [buildOrder()];
+      world.armies = [army({ id: 'army-1' })];
+
+      const wrapper = mountDrawer({ open: true });
+      expect(wrapper.text()).toContain('Construction');
+      expect(wrapper.text()).toContain('Armies');
+    });
   });
 });

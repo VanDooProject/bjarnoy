@@ -8,6 +8,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import TradePanel from '../components/hud/TradePanel.vue';
@@ -31,6 +32,11 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
+import { useMediaQuery } from '../composables/useMediaQuery';
+import { hudBarHeightPx } from '../composables/hudBarHeight';
+import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { useHudPrefsStore } from '../stores/hudPrefs';
+import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
@@ -47,11 +53,26 @@ import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange, type PathContext } from '../lib/map/hexPath';
+import { routeProgressAt } from '../lib/units/armyProgress';
+import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const hudPrefs = useHudPrefsStore();
+
+// Mobile-only HUD bar: whether the collapsed bar (and its pull-down drawer)
+// is actually docked at the bottom edge right now — desktop and the default
+// 'top' preference both keep the bar (and every offset below) exactly where
+// it's always been. The bar's own height isn't always 64px on mobile
+// anymore (it grows once the drawer is open — see ResourceBar.vue's
+// isExpanded), so this reads the real, currently-measured height
+// (TopBar.vue's own ResizeObserver) rather than assuming a fixed number.
+const isCompactHud = useMediaQuery(HUD_COMPACT_QUERY);
+const hudBarAtBottom = computed(() => isCompactHud.value && hudPrefs.barPosition === 'bottom');
+const hudInsetTopPx = computed(() => (hudBarAtBottom.value ? 0 : hudBarHeightPx.value));
+const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? hudBarHeightPx.value : 0));
 const unitCatalogue = useUnitCatalogueStore();
 const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();
@@ -113,6 +134,28 @@ function onQueueSelect(coord: { q: number; r: number }) {
   }, 2200);
 }
 
+// QueueDrawer's Armies section (issue: mobile army dispatch): a row tap
+// selects the army (drawing its route, same as ArmyPanel's own row click)
+// and pans/flashes the map on its *live interpolated* position — the same
+// leg math armyOverlayData/HexMapRenderer already use (issue #94's
+// routeProgressAt), rather than the last hex it happened to reach, so a
+// march mid-leg doesn't flash a spot behind where the marker is drawn.
+function onArmySelect(armyId: string) {
+  world.selectArmy(armyId);
+  const army = world.armies.find((a) => a.id === armyId);
+  if (!army) return;
+  let coord: { q: number; r: number } = army.position;
+  if (army.movement) {
+    const { path, cumulativeHours, departedAt, arrivesAt, isReturning, returnPath, returnCumulativeHours, turnAroundAt, returnArrivesAt } =
+      army.movement;
+    const progress = isReturning
+      ? routeProgressAt(returnPath, returnCumulativeHours, Date.parse(turnAroundAt), Date.parse(returnArrivesAt), Date.now())
+      : routeProgressAt(path, cumulativeHours, Date.parse(departedAt), Date.parse(arrivesAt), Date.now());
+    if (progress) coord = progress.arrived || progress.t >= 0.5 ? progress.to : progress.from;
+  }
+  onQueueSelect(coord);
+}
+
 onMounted(async () => {
   // A direct load of either route (reload, deep link) arrives here with no
   // guarantee anything else has bootstrapped the world yet — restoreLiveSettlement
@@ -152,6 +195,9 @@ onUnmounted(() => {
 // not just the initial mount, since this view's own onMounted no longer
 // re-runs per route the way two separate views' did.
 watch(mode, (m) => {
+  // The ring renders in both modes now, so one left open would otherwise
+  // survive the switch, anchored to a hex in the other mode's framing.
+  closeRing();
   world.setWorldMapActive(m === 'world');
   void world.refreshWorldSettlements();
   const renderer = canvasRef.value?.renderer;
@@ -401,14 +447,16 @@ onUnmounted(() => stageObserver?.disconnect());
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
 // These are worst-case constants: every panel is treated as present. On
 // mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
-// collapsed rail (.queue-drawer-rail, 96px wide) pinned to the left edge —
-// the other desktop panels still render at their fixed positions there too
-// (out of scope for this change), so only the left edge changes.
-const ringBounds = computed(() =>
-  isMobile.value
-    ? { left: 112, top: 76, right: stage.value.w - 16, bottom: stage.value.h - 16 }
-    : { left: 268, top: 76, right: Math.max(420, stage.value.w - 348), bottom: stage.value.h - 16 },
-);
+// collapsed handle (.queue-drawer-handle, a 48px-wide tab) pinned to the left
+// edge, and the HUD bar can be docked at the bottom instead of the top (see
+// ArmyPanel.vue's `--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx`
+// above mirror the bar's real height into whichever edge it occupies now.
+const ringBounds = computed(() => ({
+  left: isMobile.value ? 64 : 268, // 48px handle + 16px gap
+  top: hudInsetTopPx.value + 12,
+  right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 348),
+  bottom: stage.value.h - (hudInsetBottomPx.value + 16),
+}));
 // The card gets its own, roomier area on purpose. What `ringBounds` leaves
 // over once every panel is reserved is about 308x404 at 1280x720 — too small
 // to hold the 200x222 card anywhere clear of the ring, so the card would end
@@ -416,9 +464,9 @@ const ringBounds = computed(() =>
 // harmful than one covering the menu.
 const ringCardBounds = computed(() => ({
   left: 16,
-  top: 76,
+  top: hudInsetTopPx.value + 12,
   right: stage.value.w - 16,
-  bottom: stage.value.h - 16,
+  bottom: stage.value.h - (hudInsetBottomPx.value + 16),
 }));
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
@@ -427,9 +475,37 @@ const ringCardBounds = computed(() => ({
 // lock out hover/wheel there for as long as a ring is showing. The mobile
 // queue drawer floats over the canvas the same way while open, so it shares
 // the same lock.
-const canvasInteractionLocked = computed(() => !!ringScreen.value || queueDrawerOpen.value);
+const canvasInteractionLocked = computed(
+  () => !!ringScreen.value || queueDrawerOpen.value || isHudDrawerOpen.value,
+);
 watch(canvasInteractionLocked, (locked) => {
   canvasRef.value?.renderer?.setInteractionLocked(locked);
+});
+
+// Mobile dispatch flow (issue: mobile army dispatch): whether a dispatch or
+// field-order draft is being composed right now — MobileDispatchSheet takes
+// over the bottom of the screen while one is, so QueueDrawer (which would
+// otherwise clash with it) hides, and the HUD pull-down drawer closes the
+// same way opening QueueDrawer already does above.
+const hasActiveDraft = computed(() => !!(world.dispatchDraft || world.fieldOrderDraft));
+watch(hasActiveDraft, (active) => {
+  if (active) {
+    queueDrawerOpen.value = false;
+    closeHudDrawer();
+  }
+});
+
+// Finding #12: the queue drawer and the mobile HUD pull-down drawer are two
+// separate floating sheets that can both open over the same canvas — only
+// one should ever be open at a time (opening either one is a strong enough
+// "I want to look at this now" signal that the other one being open too is
+// just visual clutter, on top of the z-index tie TopBar.vue's own comment
+// covers for the moment they'd otherwise overlap).
+watch(queueDrawerOpen, (open) => {
+  if (open) closeHudDrawer();
+});
+watch(isHudDrawerOpen, (open) => {
+  if (open) queueDrawerOpen.value = false;
 });
 
 // A mousedown on the ring's own backdrop (not a bubble) closes the ring and
@@ -576,20 +652,50 @@ const CATEGORY_COLORS: Record<string, string> = {
   water: 'var(--water)',
 };
 
+// Issue: mobile army dispatch. Every tile's ring gets a "send army" bubble —
+// what it's called and what it starts depends on who (if anyone) owns the
+// tile: another player's settlement reads "Attack" and targets it directly;
+// the player's own *other* settlement (multi-settlement accounts) reads
+// "Support"; anything else (own current settlement, unclaimed ground, open
+// water) is a plain Move with `route = [coord]`. Enabled on every viewport —
+// on desktop, starting a draft this way just pre-fills ArmyPanel's existing
+// dispatch form, same as picking a mission tab and a target there by hand.
+function sendArmyAction(tile: Tile): RingAction {
+  const hasUnits = world.hud.garrison.some((g) => g.count > 0);
+  const ownerSettlementId = tile.ownerId;
+  const ownerIsSelf = ownerSettlementId
+    ? world.model.getSettlement(ownerSettlementId)?.ownerId === player.id
+    : false;
+  let id: 'send-army' | 'attack' | 'support' = 'send-army';
+  let label = t('hud.ringMenu.actions.sendArmyHere');
+  if (ownerSettlementId && !ownerIsSelf) {
+    id = 'attack';
+    label = t('hud.ringMenu.actions.attack');
+  } else if (ownerSettlementId && ownerSettlementId !== world.selectedSettlementId) {
+    id = 'support';
+    label = t('hud.ringMenu.actions.support');
+  }
+  return {
+    id,
+    label,
+    disabled: !hasUnits,
+    hint: hasUnits ? undefined : t('hud.ringMenu.actions.noUnitsAtHome'),
+  };
+}
+
 const rootActions = computed<RingAction[]>(() => {
   const tile = selectedTile.value;
   if (!tile) return [];
+  // World zoom only offers the army action: BuildingModal/TrainingModal and
+  // the build fan only exist in the settlement template, so Build/Upgrade/
+  // Info bubbles here would open nothing.
+  if (mode.value === 'world') return [sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
-    return [
-      { id: 'info', label: t('hud.ringMenu.actions.info') },
-      {
-        id: 'attack',
-        label: t('hud.ringMenu.actions.attackRaid'),
-        disabled: true,
-        hint: t('hud.ringMenu.actions.combatNotImplemented'),
-      },
-    ];
+    // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
+    // is implemented now, via the same dispatch draft/sheet every other
+    // "send army" entry point uses.
+    return [{ id: 'info', label: t('hud.ringMenu.actions.info') }, sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
@@ -601,6 +707,7 @@ const rootActions = computed<RingAction[]>(() => {
         disabled: true,
         hint: t('hud.ringMenu.actions.noSettlersYet'),
       },
+      sendArmyAction(tile),
     ];
   }
   if (isMineTile.value && tile.buildingType) {
@@ -656,6 +763,7 @@ const rootActions = computed<RingAction[]>(() => {
     ) {
       actions.push({ id: 'train', label: t('hud.ringMenu.actions.trainUnits') });
     }
+    actions.push(sendArmyAction(tile));
     return actions;
   }
   if (isMineTile.value) {
@@ -678,9 +786,10 @@ const rootActions = computed<RingAction[]>(() => {
             ? undefined
             : t('hud.ringMenu.actions.openWater'),
       },
+      sendArmyAction(tile),
     ];
   }
-  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }];
+  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }, sendArmyAction(tile)];
 });
 
 function tileAt(q: number, r: number): Tile {
@@ -782,7 +891,7 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
 const ringCategories = computed<RingCategory[]>(() => {
   const tile = selectedTile.value;
   const coord = selectedCoord.value;
-  if (!tile || !coord) return [];
+  if (!tile || !coord || mode.value === 'world') return [];
   return categoriesFor(tile).map((category) => ({
     id: category.id,
     label: t(`hud.ringMenu.categories.${category.id}`),
@@ -840,15 +949,11 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     world.addFieldOrderWaypoint(coord);
     return;
   }
-  // World mode: same click-to-enter as the old WorldMapView.onHexClick
-  // (ignores which hex was clicked, always goes to the player's own
-  // settlement) — the zoom-driven transition is additional, not a
-  // replacement for it. None of the ring-menu logic below applies at world
-  // zoom; only a fleet's own draft (handled above) does.
-  if (mode.value === 'world') {
-    router.push('/settlement');
-    return;
-  }
+  // World mode used to click-to-enter the settlement unconditionally here —
+  // zoom is now the only way in (the zoom-driven transition above/pinch-zoom
+  // still does that); a plain tap opens the same ring menu settlement mode
+  // uses instead, so a fleet's target (open water the settlement view never
+  // shows) can be picked by tapping it, not just by search in ArmyPanel.
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
@@ -865,6 +970,17 @@ function onWaypointMove(index: number, coord: AxialCoord) {
     return;
   }
   world.moveWaypoint(index, coord);
+}
+
+// Mobile dispatch flow: tapping (not dragging) a draft pin removes it — see
+// HexMapRendererOptions.onWaypointTap's own comment for how a tap is told
+// apart from a drag.
+function onWaypointTap(index: number) {
+  if (world.fieldOrderDraft) {
+    world.removeFieldOrderWaypoint(index);
+    return;
+  }
+  world.removeWaypoint(index);
 }
 
 function closeRing() {
@@ -922,6 +1038,17 @@ async function onRingSelect(id: string) {
       if (world.selectedSettlementId && selectedCoord.value) {
         world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
         canvasRef.value?.renderer?.forceRebuild();
+      }
+      closeRing();
+      return;
+    case 'send-army':
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value);
+      closeRing();
+      return;
+    case 'attack':
+    case 'support':
+      if (selectedCoord.value && tile?.ownerId) {
+        world.startDispatchAt(selectedCoord.value, { mission: id, targetSettlementId: tile.ownerId });
       }
       closeRing();
       return;
@@ -1012,7 +1139,11 @@ async function upgrade() {
 </script>
 
 <template>
-  <div ref="stageRef" class="map-view">
+  <div
+    ref="stageRef"
+    class="map-view"
+    :style="{ '--hud-inset-top': hudInsetTopPx + 'px', '--hud-inset-bottom': hudInsetBottomPx + 'px' }"
+  >
     <SettlementCanvas
       v-if="world.selectedSettlementId"
       ref="canvasRef"
@@ -1024,6 +1155,7 @@ async function upgrade() {
       @hex-click="onHexClick"
       @hover="onHover"
       @waypoint-move="onWaypointMove"
+      @waypoint-tap="onWaypointTap"
       @zoom-mode-change="onZoomModeChange"
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
@@ -1043,14 +1175,17 @@ async function upgrade() {
          the camera starts — this scrim (matching Viking Realm.dc.html's own
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
-    <div class="hud-scrim" />
+    <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
     <TopBar :hide-title="mode === 'settlement'">
       <ResourceBar :ring-open="ringOpen" />
-      <HudNav />
+      <HudNav has-resource-bar />
+      <template #drawer="{ close }">
+        <MobileHudDrawer has-resource-bar @close="close" />
+      </template>
     </TopBar>
     <template v-if="mode === 'settlement'">
       <template v-if="isMobile">
-        <QueueDrawer v-model:open="queueDrawerOpen" @select="onQueueSelect" />
+        <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       </template>
       <template v-else>
         <BuildQueuePanel @select="onQueueSelect" />
@@ -1058,7 +1193,7 @@ async function upgrade() {
       </template>
       <ExpansionPanel />
       <TradePanel />
-      <ArmyPanel />
+      <ArmyPanel v-if="!isMobile" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
       <RingMenu
         v-if="selectedTile && ringScreen"
@@ -1098,9 +1233,29 @@ async function upgrade() {
            — a ship's whole journey happens on water the settlement view
            never shows. Everything else in the settlement-only template
            above (building ring menu, construction/training panels) stays
-           settlement-only; only the army/fleet panel is mode-agnostic. -->
-      <ArmyPanel />
+           settlement-only; only the army/fleet panel, the ring (mobile taps
+           no longer jump straight to /settlement — see onHexClick) and the
+           queue drawer (mobile fleets need to be tracked here too) are
+           mode-agnostic. -->
+      <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
+      <ArmyPanel v-if="!isMobile" />
+      <RingMenu
+        v-if="selectedTile && ringScreen"
+        :x="ringScreen.x"
+        :y="ringScreen.y"
+        :actions="rootActions"
+        :categories="ringCategories"
+        :terrain-label="ringTerrainLabel"
+        :coord-label="ringCoordLabel"
+        :bounds="ringBounds"
+        :card-bounds="ringCardBounds"
+        :stock="world.hud.resources"
+        @select="onRingSelect"
+        @close="closeRing"
+        @outside-pointer-down="onRingOutsidePointerDown"
+      />
     </template>
+    <MobileDispatchSheet v-if="isMobile && hasActiveDraft" />
   </div>
 </template>
 
@@ -1112,6 +1267,11 @@ async function upgrade() {
   /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
      viewport, as a progressive enhancement over the 100vh above. */
   height: 100dvh;
+  /* Without this, a vertical touch-drag on the mobile HUD bar can fall
+     through to the browser's own overscroll/pull-to-refresh handling,
+     cancelling the pointer capture the drag-to-open drawer gesture
+     (TopBar.vue's useHudDrawer) relies on. */
+  overscroll-behavior-y: none;
 }
 .hud-scrim {
   position: absolute;
@@ -1122,6 +1282,13 @@ async function upgrade() {
   z-index: 5;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
+}
+/* Mobile only: the collapsed bar can dock to the bottom edge instead (see
+   hudBarAtBottom above) — the readability scrim follows it there. */
+.hud-scrim--bottom {
+  top: auto;
+  bottom: 0;
+  background: linear-gradient(0deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
 }
 .fog-debug-stack {
   position: absolute;

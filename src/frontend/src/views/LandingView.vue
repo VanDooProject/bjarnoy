@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
@@ -45,6 +46,11 @@ import type { Terrain, Tile } from '../lib/map/types';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
+import { useMediaQuery } from '../composables/useMediaQuery';
+import { hudBarHeightPx } from '../composables/hudBarHeight';
+import { isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
+import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -354,15 +360,37 @@ const ringLaneSpots = ref<Record<string, { x: number; y: number }>>({});
 const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
 
+// Finding #12: mirrors MapView.vue's own hudInset*Px exactly — this view's
+// post-founding TopBar can dock to the bottom too (the same global
+// `hudPrefs.barPosition` preference), and QueueDrawer.vue now reads these
+// CSS custom properties to stay clear of the bar on either edge instead of
+// assuming it's always at the top.
+const isCompactHudLanding = useMediaQuery(HUD_COMPACT_QUERY);
+// The bar's *effective* edge (TopBar publishes it), not the raw preference:
+// the pre-founding bar has no drawer and always sits at the top, so a saved
+// 'bottom' preference must not move the intro text or overlays up under it.
+const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && isHudBarAtBottom.value);
+const hudInsetTopPxLanding = computed(() => (hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value));
+const hudInsetBottomPxLanding = computed(() => (hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0));
+
 watch(ringScreen, (screen) => {
   if (!screen) ringLaneSpots.value = {};
 });
-// Mirrors MapView.vue's own combined lock — the mobile queue drawer floats
-// over the canvas the same way the ring does while open.
+// Mirrors MapView.vue's own combined lock — the mobile queue drawer and the
+// HUD pull-down drawer (post-founding, HudNav's own) both float over the
+// canvas the same way the ring does while open.
 watch(
-  () => !!ringScreen.value || queueDrawerOpen.value,
+  () => !!ringScreen.value || queueDrawerOpen.value || isHudDrawerOpen.value,
   (locked) => canvasRef.value?.renderer?.setInteractionLocked(locked),
 );
+// Finding #12: same mutual exclusion as MapView.vue — see that view's own
+// comment.
+watch(queueDrawerOpen, (open) => {
+  if (open) closeHudDrawer();
+});
+watch(isHudDrawerOpen, (open) => {
+  if (open) queueDrawerOpen.value = false;
+});
 
 const ringActions = computed<RingAction[]>(() =>
   ONBOARDING_BUILD_RING.map((type) => {
@@ -781,7 +809,10 @@ watch(
 </script>
 
 <template>
-  <div class="landing">
+  <div
+    class="landing"
+    :style="{ '--hud-inset-top': hudInsetTopPxLanding + 'px', '--hud-inset-bottom': hudInsetBottomPxLanding + 'px' }"
+  >
     <SettlementCanvas
       v-if="player.hasFoundedSettlement ? world.selectedSettlementId : previewCoord"
       ref="canvasRef"
@@ -815,7 +846,16 @@ watch(
          switch on the same flag that gates everything else in this view. -->
     <TopBar v-if="player.hasFoundedSettlement">
       <HudNav />
+      <template #drawer="{ close }">
+        <MobileHudDrawer @close="close" />
+      </template>
     </TopBar>
+    <!-- Finding #9: no `#drawer` slot here on purpose — this pre-founding
+         bar has no HudNav (see the comment above) and must not get a grip
+         or an empty drawer. TopBar.vue's own `hasDrawerSlot` (useSlots)
+         gates the whole grip/drag/drawer trio on a `#drawer` slot actually
+         being provided, not on `docked`/route context, so simply not
+         passing one here is enough. -->
     <TopBar v-else title="Bjarnoy">
       <LocaleSwitcher />
       <ReturningPlayerMenu />
@@ -1022,7 +1062,7 @@ h1 {
   .hero {
     left: 20px;
     right: 20px;
-    top: calc(var(--hud-bar-h, 64px) + 16px);
+    top: calc(var(--hud-inset-top, 64px) + 16px);
     max-width: none;
   }
   h1 {
@@ -1049,7 +1089,7 @@ h1 {
      view's scope attribute) docks right above the footer rather than on
      top of it, so the sea name / reservation countdown stays readable. */
   .landing > .tray {
-    bottom: calc(44px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(44px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
 }
 /* Short-landscape phones (finding b/g companion): the checklist tray is

@@ -51,6 +51,9 @@ const emit = defineEmits<{
   // Issue #93: a draft waypoint pin was dragged onto another hex — see
   // HexMapRendererOptions.onWaypointMove.
   'waypoint-move': [index: number, coord: AxialCoord];
+  // A draft waypoint pin was tapped (grabbed and released without crossing
+  // into another hex) — see HexMapRendererOptions.onWaypointTap.
+  'waypoint-tap': [index: number];
   // Docs/design/zoom-transition.md: a wheel/pinch zoom crossed the enter- or
   // exit-threshold — see HexMapRendererOptions.onZoomModeChange.
   'zoom-mode-change': [mode: RenderMode];
@@ -73,6 +76,7 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
   onHoverChange: (info) => emit('hover', info),
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
+  onWaypointTap: (index) => emit('waypoint-tap', index),
   onZoomModeChange: (mode) => emit('zoom-mode-change', mode),
 });
 

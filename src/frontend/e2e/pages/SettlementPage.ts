@@ -1,6 +1,6 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { expect, type Locator, type Page } from '@playwright/test';
-import { captureCanvas, claimLandfall, foundSettlement, waitForMapReady } from '../helpers';
+import { captureCanvas, claimLandfall, foundSettlement, placeGuidedBuildings, waitForMapReady } from '../helpers';
 import { RingMenuComponent } from './RingMenuComponent';
 
 export interface HexCoord {
@@ -135,6 +135,11 @@ export class SettlementPage {
   /** Clicks the deterministic starter plot and waits for the settlement to exist. */
   async claimLandfall(): Promise<void> {
     await claimLandfall(this.page);
+  }
+
+  /** Places the two guided onboarding buildings, completing onboarding (the completion banner then shows). */
+  async placeGuidedBuildings(): Promise<void> {
+    await placeGuidedBuildings(this.page);
   }
 
   /** The canvas's on-screen box. Cached — the canvas fills the viewport and never moves. */
@@ -281,6 +286,23 @@ export class SettlementPage {
       world.model.getSettlement(world.selectedSettlementId).resources = r;
       world.syncHud();
     }, resources);
+  }
+
+  /**
+   * Overrides the settlement's real storage cap (`Settlement.capacity` —
+   * `WorldModel.storageCapForDisplay` prefers this over its own
+   * level-derived guess, see its own comment) — for pushing the HUD's cap
+   * readout to large numbers regardless of settlement level, e.g. to force
+   * ResourceBar's short "k"/"M" notation.
+   */
+  async setStorageCaps(caps: { wood: number; stone: number; food: number; iron: number }): Promise<void> {
+    await this.page.evaluate((c) => {
+      const world = (window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+      }).__demoWorld();
+      world.model.getSettlement(world.selectedSettlementId).capacity = c;
+      world.syncHud();
+    }, caps);
   }
 
   /** The HUD's current resource read-out. */

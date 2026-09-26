@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage } from './pages';
+import { RingMenuComponent } from './pages/RingMenuComponent';
 
 /**
  * docs/design/ship-movement.md §5: a fleet's waypoints/orders must work at
@@ -16,6 +17,14 @@ import { WorldMapPage } from './pages';
  * Same store-driven seeding + `__settlementRenderer().hexCenterScreen()`
  * click-point pattern as army-overlay.spec.ts (that file's own docstring
  * explains why: the overlay lives inside a WebGL canvas).
+ *
+ * Issue: mobile army dispatch (decision 2) — a plain world-map tap no
+ * longer navigates to `/settlement` at all, on any viewport. Zoom (wheel or
+ * pinch) is now the only way in; a tap with no draft in progress opens the
+ * same ring menu the settlement view uses instead, so a fleet's target
+ * (open water the settlement view never shows) can be picked by tapping it.
+ * The second test below used to assert the old click-to-enter behaviour;
+ * it now asserts the ring opens and the URL stays on `/world`.
  */
 
 type FleetOrdersWindow = Window & {
@@ -52,13 +61,18 @@ test.describe('fleet orders on the world map', { tag: '@g3' }, () => {
     expect(route).toEqual([target.at]);
   });
 
-  test('a click with no dispatch in progress still enters the settlement as before', async ({ page }) => {
+  test('a click with no dispatch in progress opens the ring instead of entering the settlement', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const world = await WorldMapPage.open(page);
     const centre = await world.centre();
+    const ring = new RingMenuComponent(page);
 
     await page.mouse.click(centre.x, centre.y);
 
-    await expect(page).toHaveURL(/\/settlement$/);
+    // Stayed on the world map — zoom is the only way into /settlement now.
+    await expect(page).toHaveURL(/\/world$/);
+    await expect(ring.bubbles.first()).toBeVisible();
+    await expect(ring.action('Send army here')).toBeVisible();
+    await expect(ring.bubbles).toHaveCount(1);
   });
 });

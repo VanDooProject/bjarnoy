@@ -163,6 +163,17 @@
   timed `git clone --depth 1 ...` to a scratch path, per its own
   anti-concurrency warnings), then copy `hextiles/`, `atlas/`, and
   `README.md` from that clone into `src/frontend/vendor/bg_assets_hextile/`.
+  That clone is **read-only for an agent**: the tile renders and atlases in
+  `bg_assets_hextile` are made by me, by hand, on my desktop (see the
+  3D_assets repo's AGENTS.md). Don't render, re-pack or push new art there,
+  and don't bump this repo's submodule pointer to art an agent built — if a
+  change needs new art, say which tiles and leave the render to me.
+  Use the commit the submodule pins (`git ls-tree HEAD
+  src/frontend/vendor/bg_assets_hextile`), not the clone's default branch:
+  the pinned commit can be newer than the default branch, and an older
+  snapshot makes tests that depend on the art (e.g. `wastedIsland.test.ts`'s
+  giant clips) fail for no reason in the code
+  (`git fetch --depth 1 origin <sha> && git checkout <sha>` in the clone).
   Do this before claiming frontend UI/rendering changes are unverified —
   `npx vite --port 5183` plus `scripts/screenshot-helpers/flow.mjs` (or a
   throwaway Playwright script) should actually render tile art and be

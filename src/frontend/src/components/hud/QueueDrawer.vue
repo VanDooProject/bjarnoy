@@ -3,12 +3,14 @@
 // narrow viewport there isn't room for two 240px status cards, so both
 // queues (plus the garrison/guests) live in one slide-out drawer instead.
 //
-// The collapsed rail deliberately does NOT show a slot count the way the
+// The collapsed handle deliberately does NOT show a slot count the way the
 // desktop panels do — with more than a handful of slots (premium accounts
 // can queue well past 3), a static "N / M" count stops being useful at a
-// glance. Instead it shows only the single soonest-to-finish item per
-// category, plus a "+N more" chip for the rest — see soonestBuild/
-// soonestTraining below.
+// glance. Instead it's a small 48px-wide edge tab showing, per non-empty
+// category (build then training), an icon, a count chip when more than one
+// order is queued, the soonest order's remaining time, and a thin progress
+// bar for that soonest order — see soonest()/buildHandleRow/
+// trainingHandleRow below.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
@@ -16,17 +18,20 @@ import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
 import {
   MAX_TRAINING_QUEUE_LENGTH,
+  formatCountdownShort,
   useBuildOrders,
   useTrainingOrders,
-  type BuildOrderRow,
-  type TrainingOrderRow,
 } from '../../composables/useQueueOrders';
+import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
+import axeIconUrl from '../../assets/icons/axe.svg?url';
+import swordIconUrl from '../../assets/icons/sword.svg?url';
+import flagIconUrl from '../../assets/icons/flag.svg?url';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const open = defineModel<boolean>('open', { default: false });
-const emit = defineEmits<{ select: [coord: { q: number; r: number }] }>();
+const emit = defineEmits<{ select: [coord: { q: number; r: number }]; 'select-army': [armyId: string] }>();
 
 const buildOrders = useBuildOrders();
 const trainingOrders = useTrainingOrders();
@@ -51,12 +56,72 @@ function soonest<T extends { remainingSeconds: number | null }>(pool: T[]): T | 
   return pool.reduce((best, r) => ((r.remainingSeconds ?? Infinity) < (best.remainingSeconds ?? Infinity) ? r : best));
 }
 
-const soonestBuild = computed<BuildOrderRow | null>(() => {
+interface HandleRow {
+  category: 'build' | 'train' | 'army';
+  icon: string;
+  count: number;
+  timeText: string;
+  progress: number;
+  done: boolean;
+  showProgress: boolean;
+}
+
+// Build's soonest row is the soonest *non-waiting* order (a waiting order
+// has no completion instant yet — see useQueueOrders.ts's own remarks).
+// When every build order is waiting, the row still shows (so the handle
+// reflects that something is queued) but with a muted "—" and no progress
+// bar rather than picking an arbitrary waiting order to imply progress that
+// doesn't exist.
+const buildHandleRow = computed<HandleRow | null>(() => {
+  if (!buildOrders.value.length) return null;
   const active = buildOrders.value.filter((o) => !o.waiting);
-  return soonest(active.length ? active : buildOrders.value);
+  const order = soonest(active);
+  return {
+    category: 'build',
+    icon: axeIconUrl,
+    count: buildOrders.value.length,
+    timeText: order ? formatCountdownShort(order.remainingSeconds ?? 0) : '—',
+    progress: order?.progress ?? 0,
+    done: order?.done ?? false,
+    showProgress: order !== null,
+  };
 });
 
-const soonestTraining = computed<TrainingOrderRow | null>(() => soonest(trainingOrders.value));
+const trainingHandleRow = computed<HandleRow | null>(() => {
+  if (!trainingOrders.value.length) return null;
+  const order = soonest(trainingOrders.value);
+  return {
+    category: 'train',
+    icon: swordIconUrl,
+    count: trainingOrders.value.length,
+    timeText: order?.remainingSeconds != null ? formatCountdownShort(order.remainingSeconds) : '—',
+    progress: order?.progress ?? 0,
+    done: order?.done ?? false,
+    showProgress: order?.remainingSeconds != null,
+  };
+});
+
+// Armies away from home: the soonest arrival (outbound or returning) across
+// them. Only supporting armies (no active leg) → muted "—", like a build
+// queue that's all waiting.
+const armyHandleRow = computed<HandleRow | null>(() => {
+  if (!sortedArmyRows.value.length) return null;
+  void world.hud.tick; // tick the countdown every second
+  const next = sortedArmyRows.value[0].etaMs !== null ? sortedArmyRows.value[0] : null;
+  return {
+    category: 'army',
+    icon: flagIconUrl,
+    count: sortedArmyRows.value.length,
+    timeText: next ? formatCountdownShort((next.etaMs! - Date.now()) / 1000) : '—',
+    progress: next?.progress ?? 0,
+    done: false,
+    showProgress: next !== null,
+  };
+});
+
+const handleRows = computed<HandleRow[]>(() =>
+  [buildHandleRow.value, trainingHandleRow.value, armyHandleRow.value].filter((r): r is HandleRow => r !== null),
+);
 
 const garrison = computed(() =>
   world.hud.garrison
@@ -83,8 +148,41 @@ const reservedTotal = computed(() => {
   return r.wood + r.stone + r.food + r.iron;
 });
 
+// Issue: mobile army dispatch — armies dispatched from this settlement,
+// listed between Training and Garrison (see the drawer template below).
+// Sorted soonest-ETA-first the same way as the queues above it; a
+// supporting army (no active ETA) sorts last.
+const armyRows = useArmyRows();
+const sortedArmyRows = computed(() => sortArmyRowsByEta(armyRows.value));
+const recallingId = ref<string | null>(null);
+async function recall(armyId: string) {
+  recallingId.value = armyId;
+  try {
+    await world.recallArmyLive(armyId);
+  } finally {
+    recallingId.value = null;
+  }
+}
+function beginFieldOrder(armyId: string) {
+  close();
+  world.startFieldOrder(armyId);
+}
+function selectArmy(armyId: string) {
+  close();
+  if (world.selectedArmyId === armyId) {
+    world.clearSelectedArmy();
+    return;
+  }
+  emit('select-army', armyId);
+}
+
 const hasAnything = computed(
-  () => buildOrders.value.length > 0 || trainingOrders.value.length > 0 || garrison.value.length > 0 || guests.value.length > 0,
+  () =>
+    buildOrders.value.length > 0
+    || trainingOrders.value.length > 0
+    || garrison.value.length > 0
+    || guests.value.length > 0
+    || armyRows.value.length > 0,
 );
 
 // The whole drawer (v-if="hasAnything" on the template root) unmounts the
@@ -107,9 +205,9 @@ function close() {
 }
 
 // Drag-to-open/close (issue: mobile queue sidebar). Matches the CSS's own
-// dimensions — see the `.queue-drawer`/`.queue-drawer-rail` rules below —
+// dimensions — see the `.queue-drawer`/`.queue-drawer-handle` rules below —
 // so the drag transform lines up with the resting transform exactly.
-const RAIL_W = 96;
+const HANDLE_W = 48;
 // A plain computed() here would cache window.innerWidth from whenever it
 // was first read and never update — a rotation/resize would then desync
 // the drag clamp/threshold math from the CSS transform, which recomputes
@@ -119,7 +217,7 @@ function onWindowResize() {
   viewportWidth.value = window.innerWidth;
 }
 const OPEN_W = computed(() => Math.min(viewportWidth.value * 0.86, 340));
-const TRAVEL = computed(() => OPEN_W.value - RAIL_W);
+const TRAVEL = computed(() => OPEN_W.value - HANDLE_W);
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -146,9 +244,9 @@ const rootStyle = computed(() => {
   return { transform: `translateX(${base + dragPx.value}px)` };
 });
 
-function onRailPointerDown(event: PointerEvent) {
-  const rail = event.currentTarget as HTMLElement;
-  rail.setPointerCapture(event.pointerId);
+function onHandlePointerDown(event: PointerEvent) {
+  const handle = event.currentTarget as HTMLElement;
+  handle.setPointerCapture(event.pointerId);
   dragState = {
     pointerId: event.pointerId,
     startX: event.clientX,
@@ -160,7 +258,7 @@ function onRailPointerDown(event: PointerEvent) {
   dragPx.value = 0;
 }
 
-function onRailPointerMove(event: PointerEvent) {
+function onHandlePointerMove(event: PointerEvent) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   const dx = event.clientX - dragState.startX;
   const dy = event.clientY - dragState.startY;
@@ -182,8 +280,8 @@ function onRailPointerMove(event: PointerEvent) {
 
 function settleDrag(event: PointerEvent) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
-  const rail = event.currentTarget as HTMLElement;
-  if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
+  const handle = event.currentTarget as HTMLElement;
+  if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
 
   const dx = event.clientX - dragState.startX;
   const dy = event.clientY - dragState.startY;
@@ -211,18 +309,18 @@ function settleDrag(event: PointerEvent) {
   }
 }
 
-function onRailPointerCancel(event: PointerEvent) {
+function onHandlePointerCancel(event: PointerEvent) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   dragState = null;
   dragPx.value = null;
 }
 
 // The pointerup tap path above already toggles `open` — this only handles
-// the keyboard-activated click (Enter/Space on the focused rail button),
+// the keyboard-activated click (Enter/Space on the focused handle button),
 // which fires with `detail === 0`. A touch/mouse-generated click always has
 // detail >= 1, so it's a no-op duplicate of the pointer path, not a second
 // toggle.
-function onRailClick(event: MouseEvent) {
+function onHandleClick(event: MouseEvent) {
   if (event.detail === 0) toggle();
 }
 
@@ -311,7 +409,48 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length }">
+          <template v-if="sortedArmyRows.length">
+            <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length }">
+              <span class="status-card-title">{{ t('hud.queueDrawer.armies') }}</span>
+              <span class="status-card-count">{{ sortedArmyRows.length }}</span>
+            </div>
+            <div v-for="row in sortedArmyRows" :key="row.id" class="status-row army-row" :class="{ 'is-selected': row.selected }">
+              <button type="button" class="status-row-click" @click="selectArmy(row.id)">
+                <div class="status-row-top">
+                  <span class="status-row-name">{{ row.composition }}</span>
+                  <span class="status-row-time">{{ row.eta ?? '—' }}</span>
+                </div>
+                <div v-if="row.progress !== null" class="status-progress">
+                  <div class="status-progress-fill" :style="{ width: `${Math.round(row.progress * 100)}%` }" />
+                </div>
+                <div class="status-subtext">
+                  {{ row.status }}<span v-if="row.mission" class="mission-tag"> · {{ row.mission }}</span>
+                </div>
+              </button>
+              <div class="army-row-actions">
+                <button
+                  v-if="row.canFieldOrder"
+                  type="button"
+                  class="cancel-button"
+                  :disabled="row.fieldOrderLocked"
+                  @click.stop="beginFieldOrder(row.id)"
+                >
+                  {{ row.fieldOrderLabel }}
+                </button>
+                <button
+                  v-if="row.canRecall"
+                  type="button"
+                  class="cancel-button recall"
+                  :disabled="recallingId === row.id"
+                  @click.stop="recall(row.id)"
+                >
+                  {{ recallingId === row.id ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length || sortedArmyRows.length }">
             <span class="status-card-title">{{ t('hud.trainingQueue.garrison') }}</span>
           </div>
           <div v-if="garrison.length" class="garrison-grid">
@@ -339,46 +478,28 @@ onUnmounted(() => {
 
       <button
         type="button"
-        class="queue-drawer-rail"
+        class="queue-drawer-handle"
         :aria-expanded="open"
         aria-controls="queue-drawer-body"
         :aria-label="open ? t('hud.queueDrawer.closeLabel') : t('hud.queueDrawer.openLabel')"
-        @pointerdown="onRailPointerDown"
-        @pointermove="onRailPointerMove"
+        @pointerdown="onHandlePointerDown"
+        @pointermove="onHandlePointerMove"
         @pointerup="settleDrag"
-        @pointercancel="onRailPointerCancel"
-        @click="onRailClick"
+        @pointercancel="onHandlePointerCancel"
+        @click="onHandleClick"
       >
-        <!-- The full list is already showing in .queue-drawer-panel right next
-             to this once open — rendering the rail's own mini summary too
-             would visually duplicate it (looked like the drawer was "open
-             twice"). Collapse to a bare drag/tap grip while open instead. -->
-        <div v-if="!open" class="queue-drawer-rail-content">
-          <div v-if="soonestBuild" class="rail-row">
-            <div class="rail-row-top">
-              <span class="rail-row-label">{{ t('hud.queueDrawer.buildLabel') }}</span>
-              <span v-if="buildOrders.length > 1" class="rail-row-more">{{ t('hud.queueDrawer.more', { count: buildOrders.length - 1 }) }}</span>
-            </div>
-            <div class="rail-row-name">{{ soonestBuild.name }}</div>
-            <div class="rail-row-bottom">
-              <span class="rail-row-time">{{ soonestBuild.remaining }}</span>
-            </div>
-            <div v-if="!soonestBuild.waiting" class="status-progress">
-              <div class="status-progress-fill" :class="{ 'is-done': soonestBuild.done }" :style="{ width: `${Math.round(soonestBuild.progress * 100)}%` }" />
-            </div>
-          </div>
-          <div v-if="soonestTraining" class="rail-row">
-            <div class="rail-row-top">
-              <span class="rail-row-label">{{ t('hud.queueDrawer.trainLabel') }}</span>
-              <span v-if="trainingOrders.length > 1" class="rail-row-more">{{ t('hud.queueDrawer.more', { count: trainingOrders.length - 1 }) }}</span>
-            </div>
-            <div class="rail-row-name">{{ soonestTraining.name }}</div>
-            <div class="rail-row-bottom">
-              <span class="rail-row-time">{{ soonestTraining.remaining }}</span>
-            </div>
-            <div class="status-progress">
-              <div class="status-progress-fill" :class="{ 'is-done': soonestTraining.done }" :style="{ width: `${Math.round(soonestTraining.progress * 100)}%` }" />
-            </div>
+        <div v-for="row in handleRows" :key="row.category" class="queue-drawer-handle-row" :class="`is-${row.category}`">
+          <span class="queue-drawer-handle-icon-wrap">
+            <img :src="row.icon" alt="" aria-hidden="true" class="queue-drawer-handle-icon" />
+            <span v-if="row.count > 1" class="queue-drawer-handle-count">{{ row.count }}</span>
+          </span>
+          <span class="queue-drawer-handle-time" :class="{ 'is-muted': !row.showProgress }">{{ row.timeText }}</span>
+          <div v-if="row.showProgress" class="queue-drawer-handle-progress">
+            <div
+              class="queue-drawer-handle-progress-fill"
+              :class="{ 'is-done': row.done }"
+              :style="{ width: `${Math.round(row.progress * 100)}%` }"
+            />
           </div>
         </div>
         <span class="queue-drawer-chevron" :class="{ 'is-open': open }" aria-hidden="true">{{ t('hud.queueDrawer.chevron') }}</span>
@@ -504,6 +625,24 @@ onUnmounted(() => {
   opacity: 0.5;
   cursor: default;
 }
+.army-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+.army-row.is-selected {
+  background: rgba(255, 197, 92, 0.08);
+}
+.mission-tag {
+  color: var(--gold);
+}
+.army-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.recall {
+  color: #e08a8a;
+}
 .garrison-grid,
 .guests-grid {
   display: flex;
@@ -562,13 +701,29 @@ onUnmounted(() => {
 .queue-drawer {
   position: fixed;
   left: 0;
-  top: 76px;
-  bottom: 0;
+  /* Finding #12: was a hardcoded `top: 76px` (TopBar's own 64px height plus
+     a 12px gap — see MapView.vue's ringBounds comment for that same
+     arithmetic) that never actually read `--hud-inset-top`/
+     `--hud-inset-bottom` (MapView.vue's root sets both, mirroring the bar's
+     *real*, current edge/height — see hudBarHeight.ts), so a bottom-docked
+     mobile bar left this drawer's top clearance wrong (still reserving a top
+     gap for a bar that had moved to the bottom) and its bottom edge sitting
+     underneath a bottom-docked bar rather than clear of it. `--hud-inset-top`
+     is 0 whenever the bar isn't at the top (desktop's own fallback here, 0,
+     matches its actual "no top HUD chrome" case exactly as well). */
+  top: calc(var(--hud-inset-top, 0px) + 12px);
+  bottom: var(--hud-inset-bottom, 0px);
   z-index: 38;
   display: flex;
+  align-items: stretch;
   width: min(86vw, 340px);
-  transform: translateX(calc(-1 * (min(86vw, 340px) - 96px)));
+  transform: translateX(calc(-1 * (min(86vw, 340px) - 48px)));
   transition: transform 180ms ease;
+  /* Most of this column's width, above/below the 80px-tall handle, is
+     transparent — without this the whole column would still swallow map
+     taps even while closed. .queue-drawer-panel and .queue-drawer-handle
+     below opt back in. */
+  pointer-events: none;
 }
 .queue-drawer.is-open {
   transform: translateX(0);
@@ -592,6 +747,7 @@ onUnmounted(() => {
   border: 1px solid var(--panel-border);
   border-left: none;
   overflow: hidden;
+  pointer-events: auto;
 }
 .queue-drawer-header {
   display: flex;
@@ -619,84 +775,92 @@ onUnmounted(() => {
   overscroll-behavior: contain;
   padding: 12px 15px 16px;
 }
-.queue-drawer-rail {
+.queue-drawer-handle {
   flex: none;
-  width: 96px;
+  align-self: center;
+  width: 48px;
+  min-height: 64px;
+  padding: 6px 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 10px 8px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: grab;
   touch-action: none;
-  /* Not while dragging (dragPx !== null skips the CSS transform entirely —
-     see rootStyle) or the width snap would fight the drag's own transform
-     each frame the same way the transition does (see .is-dragging above). */
-  transition: width 180ms ease;
+  pointer-events: auto;
 }
-.queue-drawer-rail:focus-visible {
+.queue-drawer-handle:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: -2px;
 }
-/* The full expanded list already shows everything the rail's own mini
-   summary would — see the template comment above .queue-drawer-rail-content
-   — so once open this is just a slim grip for dragging/tapping shut. */
-.queue-drawer.is-open .queue-drawer-rail {
-  width: 28px;
-  padding: 10px 2px;
-  justify-content: center;
-}
-.queue-drawer.is-dragging .queue-drawer-rail {
-  transition: none;
-}
-.queue-drawer-rail-content {
+.queue-drawer-handle-row {
+  flex: none;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 2px;
 }
-.rail-row-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 4px;
+.queue-drawer-handle-icon-wrap {
+  position: relative;
+  width: 14px;
+  height: 14px;
 }
-.rail-row-label {
-  font-size: 10px;
+.queue-drawer-handle-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.queue-drawer-handle-count {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 11px;
+  height: 11px;
+  padding: 0 2px;
+  border-radius: 6px;
+  background: var(--gold);
+  color: #1a1a1a;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
+  line-height: 11px;
+  text-align: center;
 }
-.rail-row-more {
-  font-size: 10px;
-  color: var(--muted);
-}
-.rail-row-name {
-  margin-top: 2px;
-  font-size: 12px;
+.queue-drawer-handle-time {
+  font-size: 11px;
   font-weight: 700;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rail-row-bottom {
-  margin-top: 2px;
-}
-.rail-row-time {
-  font-size: 12px;
-  font-weight: 600;
   color: var(--gold);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.queue-drawer-handle-time.is-muted {
+  color: var(--muted);
+}
+.queue-drawer-handle-progress {
+  flex: none;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.queue-drawer-handle-progress-fill {
+  height: 100%;
+  background: var(--gold);
+}
+.queue-drawer-handle-progress-fill.is-done {
+  background: #5ab0e6;
 }
 .queue-drawer-chevron {
   flex: none;
-  font-size: 18px;
+  margin-top: auto;
+  font-size: 14px;
+  line-height: 14px;
   color: var(--muted);
   transition: transform 180ms ease;
 }

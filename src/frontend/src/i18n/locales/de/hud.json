@@ -23,7 +23,13 @@
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserviert)",
-    "rate": "+{n}/h"
+    "rate": "{n}/h"
+  },
+  "drawer": {
+    "toggle": "Mehr anzeigen"
+  },
+  "realmPanel": {
+    "levelHexesShort": "Lv {level} · {count} Hexfelder"
   },
   "hoverTooltip": {
     "level": "STUFE {level}",
@@ -78,6 +84,10 @@
       "landHere": "Hier landen",
       "sendSettlers": "Siedler entsenden",
       "noSettlersYet": "Du hast noch keine verfügbaren Siedler",
+      "sendArmyHere": "Armee hierher entsenden",
+      "attack": "Angreifen",
+      "support": "Unterstützen",
+      "noUnitsAtHome": "Keine Einheiten daheim",
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "details": "Details",
@@ -128,12 +138,10 @@
   "queueDrawer": {
     "title": "Warteschlangen",
     "close": "✕",
-    "openLabel": "Bau- und Ausbildungswarteschlangen öffnen",
-    "closeLabel": "Bau- und Ausbildungswarteschlangen schließen",
-    "buildLabel": "Bau",
-    "trainLabel": "Ausbildung",
-    "more": "+{count} weitere",
-    "chevron": "›"
+    "openLabel": "Bau, Ausbildung & Armeen öffnen",
+    "closeLabel": "Bau, Ausbildung & Armeen schließen",
+    "chevron": "›",
+    "armies": "Armeen"
   },
   "buildingModal": {
     "close": "✕",
@@ -336,6 +344,22 @@
     "provisions": "Proviant",
     "dispatching": "Wird entsendet…",
     "confirmDispatch": "Entsendung bestätigen"
+  },
+  "dispatchSheet": {
+    "cancel": "Entsendung abbrechen",
+    "expand": "Entsendungsblatt ausklappen",
+    "collapse": "Entsendungsblatt einklappen",
+    "stopsSummary": "{count} {stopWord}",
+    "stopWord": "Stopp | Stopps",
+    "toTarget": "→ {name}",
+    "units": "Einheiten ({count})",
+    "stops": "Stopps ({count})",
+    "start": "Start",
+    "starting": "Wird gestartet…",
+    "fieldOrderTitle": "Marschbefehl",
+    "allButton": "Alle",
+    "decrement": "−",
+    "increment": "+"
   },
   "tradeReport": {
     "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"

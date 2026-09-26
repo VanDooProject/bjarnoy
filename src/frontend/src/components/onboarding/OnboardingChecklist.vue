@@ -177,7 +177,7 @@ function subtextFor(row: ChecklistRow): string {
    landscape phone (844x390) even though its width is well past 768px. */
 @media (max-width: 768px), (max-height: 500px) {
   .tray {
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
     padding: 10px 12px;
     width: calc(100vw - 24px);
   }
