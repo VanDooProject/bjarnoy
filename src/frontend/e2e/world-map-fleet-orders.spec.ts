@@ -73,5 +73,6 @@ test.describe('fleet orders on the world map', { tag: '@g3' }, () => {
     await expect(page).toHaveURL(/\/world$/);
     await expect(ring.bubbles.first()).toBeVisible();
     await expect(ring.action('Send army here')).toBeVisible();
+    await expect(ring.bubbles).toHaveCount(1);
   });
 });

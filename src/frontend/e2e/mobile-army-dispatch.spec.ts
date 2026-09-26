@@ -170,7 +170,9 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await page.mouse.click(centre.x, centre.y);
 
     await expect(page).toHaveURL(/\/world$/);
-    await expect(ring.bubbles.first()).toBeVisible();
+    // Only the army action: Build/Upgrade/Info open settlement-only modals.
+    await expect(ring.action('Send army here')).toBeVisible();
+    await expect(ring.bubbles).toHaveCount(1);
   });
 
   test('the sheet sits fully on screen above a bottom-docked HUD bar', async ({ page }) => {

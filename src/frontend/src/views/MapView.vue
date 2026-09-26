@@ -683,6 +683,10 @@ function sendArmyAction(tile: Tile): RingAction {
 const rootActions = computed<RingAction[]>(() => {
   const tile = selectedTile.value;
   if (!tile) return [];
+  // World zoom only offers the army action: BuildingModal/TrainingModal and
+  // the build fan only exist in the settlement template, so Build/Upgrade/
+  // Info bubbles here would open nothing.
+  if (mode.value === 'world') return [sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
@@ -884,7 +888,7 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
 const ringCategories = computed<RingCategory[]>(() => {
   const tile = selectedTile.value;
   const coord = selectedCoord.value;
-  if (!tile || !coord) return [];
+  if (!tile || !coord || mode.value === 'world') return [];
   return categoriesFor(tile).map((category) => ({
     id: category.id,
     label: t(`hud.ringMenu.categories.${category.id}`),
