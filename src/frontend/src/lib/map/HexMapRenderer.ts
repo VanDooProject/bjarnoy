@@ -3157,7 +3157,10 @@ export class HexMapRenderer {
         const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
         // Likewise, only a Spring's art actually branches on this.
         const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
-        const riverTextures = riverTexturesFor(textures, river, seaDirection, springShape);
+        // Only straight/bend/bend60 (and never a wasted/lava tile — see
+        // riverTexturesFor) actually draw a variant.
+        const riverVariant = river.wasted ? 'plain' : worldModel.riverVariantAt(c, river.shape);
+        const riverTextures = riverTexturesFor(textures, river, seaDirection, springShape, riverVariant);
         baseEntries.set(key, { texture: riverTextures.base, coord: c });
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;

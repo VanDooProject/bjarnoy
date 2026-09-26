@@ -940,6 +940,17 @@ public sealed record Settlement
     /// <see cref="BuildingDefinition.RequiresRiverShape"/> building (the
     /// Sawmill, built directly on a river tile) cares.
     /// </param>
+    /// <param name="riverVariantAt">
+    /// The river-art variant (<see cref="World.RiverVariant"/>) standing on
+    /// <paramref name="coord"/>'s own river tile, defaulting to
+    /// <see cref="World.RiverVariant.Plain"/> when there is no river there
+    /// at all (meaningless in that case — <paramref name="riverShapeAt"/>
+    /// being <see langword="null"/> already refuses any
+    /// <see cref="BuildingDefinition.RequiresRiverShape"/> building before
+    /// this is even checked). Only <see cref="BuildingDefinition.ExcludedRiverVariants"/>
+    /// cares — today just the Sawmill refusing a Bend60 hex's
+    /// <see cref="World.RiverVariant.Loop"/> variant.
+    /// </param>
     /// <param name="shrineGodsElsewhereOnIsland">
     /// Which gods already have a standing shrine somewhere on this
     /// settlement's island, at a hex other than <paramref name="coord"/> —
@@ -975,6 +986,7 @@ public sealed record Settlement
         int maxWaitingOrders = 0,
         int maxOrdersPerHex = DefaultMaxOrdersPerHex,
         RiverTileShape? riverShapeAt = null,
+        RiverVariant riverVariantAt = RiverVariant.Plain,
         IReadOnlySet<GodType>? shrineGodsElsewhereOnIsland = null,
         SoilType? islandSoil = null,
         World.IGiantIndex? giants = null)
@@ -1033,10 +1045,17 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }
 
-        if (definition.RequiresRiverShape is { } requiredShapes
-            && (riverShapeAt is not { } actualShape || !requiredShapes.Contains(actualShape)))
+        if (definition.RequiresRiverShape is { } requiredShapes)
         {
-            return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+            if (riverShapeAt is not { } actualShape || !requiredShapes.Contains(actualShape))
+            {
+                return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+            }
+
+            if (definition.ExcludedRiverVariants?.Contains(riverVariantAt) == true)
+            {
+                return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+            }
         }
 
         // Each of the four gods gets at most one shrine per island — raised

@@ -5,7 +5,7 @@
 // the whole map — memory is bounded by hexes actually visited.
 import { axialToOddQ, hexDistance, oddQToAxial, neighbors } from '../hex/coords';
 import { TILE_ORIENTATIONS } from './types';
-import type { IslandLabel, Terrain, Tile, TileOrientation } from './types';
+import type { IslandLabel, RiverTileShape, Terrain, Tile, TileOrientation } from './types';
 
 /**
  * Deterministic 2D hash in `[0, 1)` — the ECMAScript-integer-coercion-exact
@@ -574,6 +574,50 @@ export function springMountainShapeAt(q: number, r: number, world: WorldSeed): n
 export function soilAt(q: number, r: number, world: WorldSeed): 'wheat' | 'pumpkin' {
   const h = hash2(q, r, world.seed + 41);
   return h < 0.5 ? 'wheat' : 'pumpkin';
+}
+
+/**
+ * A river-art dressing for a `straight`/`bend`/`bend60` hex, on top of the
+ * shape itself — see `riverVariantAt`'s own doc comment for the weights and
+ * `textures.ts`'s `riverTexturesFor`, which is what actually draws one.
+ */
+export type RiverVariant = 'plain' | 'meander' | 'island' | 'loop';
+
+/**
+ * Salt for `riverVariantAt` — the next unused prime continuing the per-hex-
+ * property sequence this module already uses (`defaultOrientation` +29,
+ * `variantAt` +31, `springMountainShapeAt` +37, `soilAt` +41): far enough
+ * past that cluster, and past every noise-field salt this file also uses
+ * (11, 13, 17, 19, 23, 47, 53, 59, 61, 71, 101, 103, 200+lobe), that hash2's
+ * weak seed-mixing (see `WASTED_VARIANT_SALT`'s own doc comment) can't
+ * correlate this pick with a neighbouring one.
+ */
+const RIVER_VARIANT_SALT = 67;
+
+const RIVER_180_WEIGHTS = [0.4, 0.4, 0.2]; // plain, meander, island
+const RIVER_120_WEIGHTS = [0.4, 0.4, 0.2]; // plain, meander, island
+const RIVER_60_WEIGHTS = [0.85, 0.15]; // plain, loop
+
+/**
+ * Which river-art variant a `straight`/`bend`/`bend60` hex renders with —
+ * `'plain'` for every other shape (spring/confluence/mouth have no variant
+ * art). Mirrors the backend's `TerrainSampler.RiverVariantAt` exactly (same
+ * salt, same weights): straight and bend each roll plain/meander/island at
+ * 40/40/20, bend60 rolls plain/loop at 85/15. Pure and independent of
+ * whether `(q, r)` actually carries a river of this shape — the caller
+ * (river rendering, `riverBuildingAllowedHere`) already knows that from its
+ * own `RiverTile` lookup, the same shape every other `*At` helper in this
+ * file takes as a given.
+ */
+export function riverVariantAt(q: number, r: number, world: WorldSeed, shape: RiverTileShape): RiverVariant {
+  if (shape !== 'straight' && shape !== 'bend' && shape !== 'bend60') return 'plain';
+  const h = hash2(q, r, world.seed + RIVER_VARIANT_SALT);
+  if (shape === 'bend60') {
+    return weightedIndex(h, RIVER_60_WEIGHTS) === 0 ? 'plain' : 'loop';
+  }
+  const weights = shape === 'straight' ? RIVER_180_WEIGHTS : RIVER_120_WEIGHTS;
+  const index = weightedIndex(h, weights);
+  return index === 0 ? 'plain' : index === 1 ? 'meander' : 'island';
 }
 
 /**

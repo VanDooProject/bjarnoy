@@ -5,6 +5,7 @@
 // renders one.
 import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
+import type { RiverVariant } from './worldGenerator';
 
 const RESOURCE_KEYS: (keyof ResourceLine)[] = ['wood', 'stone', 'food', 'iron'];
 
@@ -44,10 +45,12 @@ export function longhouseLock(requiredLevel: number | undefined, currentLevel: n
  * The general rule: a river building may only stand where its art matches
  * the hex's river art (Sawmill on straight/bend/bend60, Crop Mill on
  * straight). River art variants (bend180_island/meander, bend120_island/
- * meander) count as their base shape; bend60_loop does not allow a Sawmill.
- * River art variants aren't drawn yet — a follow-up adds them; this is the
- * rule it must follow. See `BuildingCatalogue.cs`'s `SawmillRiverShapes`/
- * `CropMillRiverShapes`, which this set has to keep matching.
+ * meander) count as their base shape; `bend60_loop` does not allow a
+ * Sawmill (see `SAWMILL_EXCLUDED_VARIANTS` below) — its waterwheel reads
+ * from the bank of the plain hairpin channel, and the pack has no composite
+ * for the full-half-circle loop. See `BuildingCatalogue.cs`'s
+ * `SawmillRiverShapes`/`SawmillExcludedRiverVariants`/`CropMillRiverShapes`,
+ * which this set has to keep matching.
  */
 const RIVER_SHAPES_BY_TYPE: Partial<Record<string, ReadonlySet<string>>> = {
   sawmill: new Set(['straight', 'bend', 'bend60']),
@@ -55,23 +58,42 @@ const RIVER_SHAPES_BY_TYPE: Partial<Record<string, ReadonlySet<string>>> = {
 };
 
 /**
+ * The river-art variant(s) that disqualify an otherwise-matching shape —
+ * mirrors `BuildingCatalogue.cs`'s `SawmillExcludedRiverVariants`. Only the
+ * Sawmill has one: Straight/Bend's own variants (Meander/Island) have a
+ * matching Sawmill composite at every one of their shape's own
+ * orientations, so only Bend60's Loop is excluded.
+ */
+const EXCLUDED_VARIANTS_BY_TYPE: Partial<Record<string, ReadonlySet<RiverVariant>>> = {
+  sawmill: new Set<RiverVariant>(['loop']),
+};
+
+/**
  * Whether `type` can be placed on this specific Grass hex at all — Sawmill
  * and Crop Mill are built directly on a river tile
  * (`WorldModel.placeBuilding` mirrors `BuildingDefinition.RequiresRiverShape`),
  * and only some shapes have matching art (see `RIVER_SHAPES_BY_TYPE`) —
- * `riverShape` is this hex's own river tile's shape, if it has one. Unlike
- * `longhouseLock` (a progression gate the player can still work towards and
- * so is shown as a disabled, explained bubble), this is a fixed property of
- * the hex itself: a hex that will never grow a matching river should not
- * offer the bubble at all, so callers filter it out of the category rather
- * than rendering it locked. Every other buildable type has no such
- * requirement (Fisher Hut moved to the water category instead — see
- * `RingMenu`'s `WATER_CATEGORY` — since it's now built on coastal water
- * itself, exactly like Fishing Hut/Dockyard, with no separate check needed).
+ * `riverShape` is this hex's own river tile's shape, if it has one, and
+ * `riverVariant` its river-art variant (`'plain'` when omitted, matching
+ * the backend's default). Unlike `longhouseLock` (a progression gate the
+ * player can still work towards and so is shown as a disabled, explained
+ * bubble), this is a fixed property of the hex itself: a hex that will
+ * never grow a matching river should not offer the bubble at all, so
+ * callers filter it out of the category rather than rendering it locked.
+ * Every other buildable type has no such requirement (Fisher Hut moved to
+ * the water category instead — see `RingMenu`'s `WATER_CATEGORY` — since
+ * it's now built on coastal water itself, exactly like Fishing Hut/
+ * Dockyard, with no separate check needed).
  */
-export function riverBuildingAllowedHere(type: string, riverShape: string | undefined): boolean {
+export function riverBuildingAllowedHere(
+  type: string,
+  riverShape: string | undefined,
+  riverVariant: RiverVariant = 'plain',
+): boolean {
   const allowedShapes = RIVER_SHAPES_BY_TYPE[type];
-  return !allowedShapes || (riverShape !== undefined && allowedShapes.has(riverShape));
+  if (!allowedShapes) return true;
+  if (riverShape === undefined || !allowedShapes.has(riverShape)) return false;
+  return !EXCLUDED_VARIANTS_BY_TYPE[type]?.has(riverVariant);
 }
 
 /**

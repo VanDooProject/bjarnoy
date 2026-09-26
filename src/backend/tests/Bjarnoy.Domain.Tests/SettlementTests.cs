@@ -209,6 +209,8 @@ public class BuildingCatalogueTests
         Assert.DoesNotContain(RiverTileShape.Spring, definition.RequiresRiverShape);
         Assert.DoesNotContain(RiverTileShape.Confluence, definition.RequiresRiverShape);
         Assert.DoesNotContain(RiverTileShape.Mouth, definition.RequiresRiverShape);
+        Assert.NotNull(definition.ExcludedRiverVariants);
+        Assert.Equal(new HashSet<RiverVariant> { RiverVariant.Loop }, definition.ExcludedRiverVariants);
     }
 
     [Theory]
@@ -1732,6 +1734,82 @@ public class SettlementTests
             riverShapeAt: RiverTileShape.Straight);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_sawmill_is_refused_on_a_bend60_river_tile_showing_the_loop_variant()
+    {
+        // The Sawmill's Bend60 composite reads from the bank of the plain
+        // hairpin channel — it has no matching art for the full-half-circle
+        // Loop variant, so that one variant is refused even though Bend60
+        // itself is otherwise a valid Sawmill shape (see
+        // BuildingCatalogue.SawmillExcludedRiverVariants).
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: RiverTileShape.Bend60, riverVariantAt: RiverVariant.Loop);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_sawmill_may_be_built_on_a_plain_bend60_river_tile()
+    {
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: RiverTileShape.Bend60, riverVariantAt: RiverVariant.Plain);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Theory]
+    [InlineData(RiverTileShape.Straight, RiverVariant.Meander)]
+    [InlineData(RiverTileShape.Straight, RiverVariant.Island)]
+    [InlineData(RiverTileShape.Bend, RiverVariant.Meander)]
+    [InlineData(RiverTileShape.Bend, RiverVariant.Island)]
+    public void A_sawmill_may_be_built_on_a_straight_or_bend_river_tile_showing_a_meander_or_island_variant(
+        RiverTileShape shape, RiverVariant variant)
+    {
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: shape, riverVariantAt: variant);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Theory]
+    [InlineData(RiverVariant.Plain)]
+    [InlineData(RiverVariant.Meander)]
+    [InlineData(RiverVariant.Island)]
+    public void A_crop_mill_may_be_built_on_every_straight_river_variant(RiverVariant variant)
+    {
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: RiverTileShape.Straight, riverVariantAt: variant);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Theory]
+    [InlineData(RiverTileShape.Bend, RiverVariant.Meander)]
+    [InlineData(RiverTileShape.Bend60, RiverVariant.Plain)]
+    public void A_crop_mill_stays_refused_on_a_bend_or_bend60_river_tile_regardless_of_variant(
+        RiverTileShape shape, RiverVariant variant)
+    {
+        var settlement = FoundAtLonghouseLevel(10);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: shape, riverVariantAt: variant);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
     }
 
     [Fact]

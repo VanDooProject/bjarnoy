@@ -1061,6 +1061,9 @@ public sealed class SettlementService(
         var terrain = sampler.TerrainAt(coord);
         var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
+        // Only meaningful when there's a river shape to begin with — see
+        // Settlement.PlanBuild's riverVariantAt doc comment.
+        var riverVariantAt = riverShapeAt is { } shapeAt ? sampler.RiverVariantAt(coord, shapeAt) : RiverVariant.Plain;
 
         // Only worth a query for an actual shrine — every other building
         // type has no god, so PlanBuild's check is a no-op for it regardless
@@ -1082,6 +1085,7 @@ public sealed class SettlementService(
             settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
             maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
             riverShapeAt: riverShapeAt,
+            riverVariantAt: riverVariantAt,
             shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland,
             islandSoil: islandSoil,
             giants: buildGiants);

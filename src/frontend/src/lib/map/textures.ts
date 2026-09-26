@@ -40,6 +40,7 @@ import {
   type GiantTextureMap,
 } from './giantTiles';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
+import type { RiverVariant } from './worldGenerator';
 import {
   bendOrientationOf,
   confluenceOrientationOf,
@@ -220,11 +221,16 @@ export function giantArtFamilyFor(family: string, wasted: boolean): string {
   return (wasted && WASTED_GIANT_FAMILY[family]) || family;
 }
 
-/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. Spring is split into its two spring-capable mountain landforms (`springcorrie`/`springsaddleback`), and Confluence into its two junctions (`confluencenarrow`/`confluencewide`) rather than one fixed family each — see `riverArtFor`'s own comment. */
+/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. Spring is split into its two spring-capable mountain landforms (`springcorrie`/`springsaddleback`), and Confluence into its two junctions (`confluencenarrow`/`confluencewide`) rather than one fixed family each — see `riverArtFor`'s own comment. The five `..._meander`/`..._island`/`..._loop` entries are `straight`/`bend`/`bend60`'s own `RiverVariant` dressings (see `riverTexturesFor`'s `variant` parameter) — built on the same edge-crossing contract as their base shape, so they render at that same shape's orientation, just a different family lookup. */
 type RiverArtShape =
   | 'straight'
+  | 'straight_meander'
+  | 'straight_island'
   | 'bend'
+  | 'bend_meander'
+  | 'bend_island'
   | 'bend60'
+  | 'bend60_loop'
   | 'springcorrie'
   | 'springsaddleback'
   | 'confluencenarrow'
@@ -234,8 +240,17 @@ type RiverArtShape =
 // resolves to, the same reason riverArtFor below is exported.
 export const RIVER_FAMILY: Record<RiverArtShape, string> = {
   straight: 'rivertile',
+  // See RiverArtShape's own doc comment: these three pairs are straight/
+  // bend/bend60's own RiverVariant dressings, not new crossings — bend180
+  // is the straight crossing's art-pack name, bend120 the bend's (see
+  // docs/river-tiles.md's "How the tiles are named").
+  straight_meander: 'rivertile_bend180_meander',
+  straight_island: 'rivertile_bend180_island',
   bend: 'rivertile_bend',
+  bend_meander: 'rivertile_bend120_meander',
+  bend_island: 'rivertile_bend120_island',
   bend60: 'rivertile_bend60',
+  bend60_loop: 'rivertile_bend60_loop',
   // A spring rises out of a mountain cluster (see RiverGenerator's spring
   // placement), so its art is a spring bursting from a mountain landform —
   // the flat, undecorated `rivertile_spring` this used to point at was a
@@ -1160,18 +1175,42 @@ export function lavaSpringOrientationOf(riverSpringOrientation: TileOrientation)
 }
 
 /**
+ * The `RiverArtShape` a `straight`/`bend`/`bend60` tile's own `RiverVariant`
+ * resolves to (see `RiverArtShape`'s own doc comment) — `undefined` for
+ * `'plain'` or for a shape with no variant art (spring/confluence/mouth),
+ * i.e. whenever the caller should just keep drawing `shape` itself.
+ */
+const VARIANT_SHAPE: Partial<Record<RiverArtShape, Partial<Record<Exclude<RiverVariant, 'plain'>, RiverArtShape>>>> = {
+  straight: { meander: 'straight_meander', island: 'straight_island' },
+  bend: { meander: 'bend_meander', island: 'bend_island' },
+  bend60: { loop: 'bend60_loop' },
+};
+
+/**
  * A river tile's own base/top textures, overriding whatever the underlying
  * terrain would have drawn. `seaDirection` (only meaningful for a `Mouth`
  * tile — see `riverArtFor`) is the caller's own terrain lookup
  * (`WorldModel.seaFacingDirectionOf`), since a `RiverTile` carries none.
  * `springShape` (only meaningful for a `Spring` tile) is likewise the
  * caller's own lookup (`WorldModel.springShapeAt`) — see `riverArtFor`.
+ * `variant` (only meaningful for `straight`/`bend`/`bend60` — see
+ * `WorldModel.riverVariantAt`) dresses the tile with its
+ * meander/island/loop art at that same shape's own orientation, built on
+ * the same edge-crossing contract as the plain tile (see
+ * `docs/river-tiles.md`, "There are only three river shapes"). Falls back
+ * to the plain shape's own texture if the variant family's frame for this
+ * orientation hasn't loaded (the same graceful-degradation contract every
+ * other keyed lookup in this module has), and is never applied to a
+ * `river.wasted` tile at all — the vendored pack has no lava variant art
+ * (`docs/river-tiles.md`), so a wasted river always renders plain (or lava,
+ * below).
  */
 export function riverTexturesFor(
   textures: TileTextures,
   river: RiverTile,
   seaDirection: TileOrientation | null = null,
   springShape: 'corrie' | 'saddleback' = 'corrie',
+  variant: RiverVariant = 'plain',
 ): { base: Texture; top: Texture } {
   const { shape, orientation } = riverArtFor(river, seaDirection, springShape);
 
@@ -1191,6 +1230,17 @@ export function riverTexturesFor(
     const lavaBase = textures.lavaRiverBase[shape]?.[lavaOrientation];
     const lavaTop = textures.lavaRiverTop[shape]?.[lavaOrientation];
     if (lavaBase && lavaTop) return { base: lavaBase, top: lavaTop };
+  }
+
+  if (!river.wasted && variant !== 'plain') {
+    const variantShape = VARIANT_SHAPE[shape]?.[variant];
+    if (variantShape) {
+      const variantBase = textures.riverBase[variantShape][orientation];
+      const variantTop = textures.riverTop[variantShape][orientation];
+      if (variantBase !== Texture.EMPTY && variantTop !== Texture.EMPTY) {
+        return { base: variantBase, top: variantTop };
+      }
+    }
   }
 
   return { base: textures.riverBase[shape][orientation], top: textures.riverTop[shape][orientation] };
