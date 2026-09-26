@@ -38,6 +38,19 @@ describe('MobileDispatchSheet', () => {
     expect((start.element as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('the Units button counts selected units, not unit types', async () => {
+    const world = useWorldStore();
+    world.hud.garrison = [{ unit: 'spearman', count: 10 }, { unit: 'catapult', count: 2 }];
+    world.startDispatchAt({ q: 1, r: 1 });
+    world.setDispatchUnitCount('spearman', 3);
+    world.setDispatchUnitCount('catapult', 2);
+
+    const wrapper = mountSheet();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('button.grip').text()).toBe('Units (5)');
+  });
+
   it('disables Start with no units selected', async () => {
     const world = useWorldStore();
     world.hud.garrison = [{ unit: 'spearman', count: 10 }];

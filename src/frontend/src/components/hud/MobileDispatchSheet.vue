@@ -206,7 +206,7 @@ const undoDisabled = computed(() =>
 const middleButtonLabel = computed(() =>
   isFieldOrder.value
     ? t('hud.dispatchSheet.stops', { count: fieldOrderRouteLength.value })
-    : t('hud.dispatchSheet.units', { count: Object.values(draft.value?.unitCounts ?? {}).filter((c) => c > 0).length }),
+    : t('hud.dispatchSheet.units', { count: Object.values(draft.value?.unitCounts ?? {}).reduce((sum, c) => sum + Math.max(0, c), 0) }),
 );
 const startLabel = computed(() => {
   if (isFieldOrder.value) return fieldDraft.value?.submitting ? t('hud.dispatchSheet.starting') : t('hud.dispatchSheet.start');
@@ -440,8 +440,11 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
   font-size: 13px;
   cursor: pointer;
 }
+/* A half-transparent gold still read as a live button over the dark sheet,
+   so disabled drops the gold fill entirely. */
 .primary:disabled {
-  opacity: 0.5;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
   cursor: default;
 }
 .secondary {
