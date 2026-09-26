@@ -208,6 +208,66 @@ describe('classifyGiantClips', () => {
     expect(result.E.C).toBeDefined();
     expect(result.E.N).toBeDefined();
   });
+
+  // 3D_assets PR #92: an overlay giant clip's frames carry only the moving
+  // parts (see textures.test.ts's mirrored classifyFamilyClips coverage).
+  it('attaches the resolved rest texture for an overlay giant clip', () => {
+    const result = classifyGiantClips(
+      [
+        giantClip({
+          family: 'giantshrine',
+          orientation: 'SE',
+          giant_part: 'N',
+          frames: ['giantshrine_SE_level000_partN_f00'],
+          overlay: true,
+          rest: 'giantshrine_SE_level000_partN_rest',
+        }),
+      ],
+      resolveAll,
+    );
+
+    expect(result.SE.N).toEqual({
+      textures: ['giantshrine_SE_level000_partN_f00'],
+      fps: 4,
+      playback: 'loop',
+      rest: 'giantshrine_SE_level000_partN_rest',
+    });
+  });
+
+  it('drops an overlay giant clip whose rest frame does not resolve', () => {
+    const result = classifyGiantClips(
+      [
+        giantClip({
+          family: 'giantshrine',
+          orientation: 'SE',
+          giant_part: 'N',
+          frames: ['giantshrine_SE_level000_partN_f00'],
+          overlay: true,
+          rest: 'missing_rest',
+        }),
+      ],
+      (name) => (name === 'missing_rest' ? undefined : name),
+    );
+
+    expect(result.SE.N).toBeUndefined();
+  });
+
+  it('drops an overlay giant clip that names no rest frame at all', () => {
+    const result = classifyGiantClips(
+      [
+        giantClip({
+          family: 'giantshrine',
+          orientation: 'SE',
+          giant_part: 'N',
+          frames: ['giantshrine_SE_level000_partN_f00'],
+          overlay: true,
+        }),
+      ],
+      resolveAll,
+    );
+
+    expect(result.SE.N).toBeUndefined();
+  });
 });
 
 describe('giantFootprintOutline', () => {

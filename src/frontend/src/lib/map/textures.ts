@@ -30,7 +30,7 @@
 // its own doc comment and `textures.test.ts` — no Pixi/Texture dependency,
 // so it's exercised directly rather than only through a loaded atlas).
 import { Texture } from 'pixi.js';
-import { loadAtlasCategory, type AtlasClip, type LoadedAtlas } from './atlas';
+import { loadAtlasCategory, loadAtlasPackCategory, type AtlasClip, type AtlasPack, type LoadedAtlas } from './atlas';
 import {
   classifyGiantClips,
   classifyGiantFrames,
@@ -517,6 +517,17 @@ export interface TileAnimClip {
   textures: Texture[];
   fps: number;
   playback: 'loop' | 'pingpong';
+  /**
+   * The clip's rest image (the building/tile with its moving parts held
+   * still), present exactly when the source `AtlasClip.overlay` was true and
+   * its `rest` frame resolved — see `classifyFamilyClips`/`classifyGiantClips`.
+   * A caller that finds this set must draw it *underneath* `textures`' own
+   * frames (which carry only the moving parts) rather than in place of them,
+   * and must never draw both this and the plain static top texture at once
+   * (that doubles the building) — `HexMapRenderer`'s overlay sprite and
+   * `AnimatedBuildingSprite.vue`'s rest layer are the two real callers.
+   */
+  rest?: Texture;
 }
 
 /**
@@ -532,10 +543,10 @@ export interface TileAnimClip {
 export function classifyFamilyClips<T>(
   clips: AtlasClip[],
   resolveFrame: (name: string) => T | undefined,
-): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong' }>> {
-  const byOrientation = emptyOrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong' }>>(
-    () => new Map(),
-  );
+): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }>> {
+  const byOrientation = emptyOrientationMap<
+    Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }>
+  >(() => new Map());
   for (const clip of clips) {
     const match = ANIM_LEVEL_RE.exec(clip.name);
     if (!match) continue;
@@ -543,13 +554,40 @@ export function classifyFamilyClips<T>(
     if (!TILE_ORIENTATIONS.includes(orientation)) continue;
     const frameValues = clip.frames.map(resolveFrame);
     if (frameValues.some((v) => v === undefined)) continue;
+    // An overlay clip's frames are parts-only — without its rest image
+    // resolving too, drawing them alone would show a half-built building, so
+    // this drops the whole clip and falls back to the static top texture,
+    // same as any frame failing to resolve above.
+    let rest: T | undefined;
+    if (clip.overlay) {
+      if (!clip.rest) continue;
+      rest = resolveFrame(clip.rest);
+      if (rest === undefined) continue;
+    }
     byOrientation[orientation].set(Number(match[1]), {
       textures: frameValues as T[],
       fps: clip.fps,
       playback: clip.playback,
+      rest,
     });
   }
   return byOrientation;
+}
+
+/**
+ * Which texture belongs on a clip's own (base/rest) sprite vs. its overlay
+ * sprite (see `HexMapRenderer.ts`'s `TopAnimState.overlay`), for the frame at
+ * `frameIndex` — the pure decision at the heart of that bookkeeping, kept
+ * generic and side-effect-free so it's exercised directly here rather than
+ * only through a Pixi sprite harness (see `textures.test.ts`). An overlay
+ * clip (`clip.rest` set) always shows its rest image on `base` and the
+ * current frame on `overlay`; a legacy clip has no `overlay` at all — its
+ * current frame goes straight on `base`, same as before overlay clips
+ * existed.
+ */
+export function topAnimTextures<T>(clip: { textures: T[]; rest?: T }, frameIndex: number): { base: T; overlay?: T } {
+  if (clip.rest !== undefined) return { base: clip.rest, overlay: clip.textures[frameIndex] };
+  return { base: clip.textures[frameIndex]! };
 }
 
 export interface TileTextures {
@@ -706,9 +744,15 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
         const clipMap = classifyGiantClips(familyClips, (name) => animAtlas.textures[name]);
         const anims = mapOrientations(clipMap, (_o, parts) =>
           Object.fromEntries(
-            (Object.entries(parts) as [GiantPart, { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong' }][]).map(
-              ([part, clip]) => [part, { textures: clip.textures, fps: clip.fps, playback: clip.playback }],
-            ),
+            (
+              Object.entries(parts) as [
+                GiantPart,
+                { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong'; rest?: Texture },
+              ][]
+            ).map(([part, clip]) => [
+              part,
+              { textures: clip.textures, fps: clip.fps, playback: clip.playback, rest: clip.rest },
+            ]),
           ) as Partial<Record<GiantPart, TileAnimClip>>,
         );
         const hasAny = TILE_ORIENTATIONS.some((o) => Object.keys(anims[o]).length > 0);
@@ -762,7 +806,19 @@ function mergeKeyed<V>(a: Partial<Record<TextureKey, V>>, b: Partial<Record<Text
   return merged;
 }
 
-/** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the terrain atlas, so `a`'s copies win unconditionally. */
+/**
+ * Fills in a per-orientation array field from `b` wherever `a`'s own
+ * orientation is empty — used for `wastedCoastalBase` below: with atlas
+ * packs, `a` (the core terrain load) has none of it until the wasted pack
+ * (`b`, loaded later — see `loadPackAtlases`) resolves, so `a`'s copy can no
+ * longer be assumed to always already hold it the way it did before packs
+ * existed.
+ */
+function mergeOrientationArrays<T>(a: OrientationMap<T[]>, b: OrientationMap<T[]>): OrientationMap<T[]> {
+  return mapOrientations(a, (orientation, value) => (value.length > 0 ? value : b[orientation]));
+}
+
+/** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve, or the wasted pack once revealed) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the core terrain atlas, so `a`'s copies win unconditionally; the wasted-only fields (`wastedCoastalBase`, `lavaRiverBase`/`lavaRiverTop`) instead keep `a`'s entry where it has one and fall back to `b`'s, since they may not have resolved yet in `a` (the wasted pack loads separately from — and later than — the core terrain atlas). */
 export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTextures {
   return {
     base: mergeKeyed(a.base, b.base),
@@ -772,12 +828,9 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
     coastalBase: a.coastalBase,
     riverBase: a.riverBase,
     riverTop: a.riverTop,
-    // Like plain coastal water/rivers, the wasted-island terrain/lava-river
-    // art families live in the terrain atlas too, so these are pinned to
-    // `a` (the terrain-only load) the same way.
-    wastedCoastalBase: a.wastedCoastalBase,
-    lavaRiverBase: a.lavaRiverBase,
-    lavaRiverTop: a.lavaRiverTop,
+    wastedCoastalBase: mergeOrientationArrays(a.wastedCoastalBase, b.wastedCoastalBase),
+    lavaRiverBase: { ...b.lavaRiverBase, ...a.lavaRiverBase },
+    lavaRiverTop: { ...b.lavaRiverTop, ...a.lavaRiverTop },
     giants: { ...a.giants, ...b.giants },
     giantAnims: { ...a.giantAnims, ...b.giantAnims },
   };
@@ -809,6 +862,32 @@ export function loadBuildingAtlases(): Promise<TileTextures> {
     ]).then(([staticAtlas, animAtlas]) => buildTileTextures([staticAtlas], animAtlas));
   }
   return buildingLoading;
+}
+
+const packLoading = new Map<AtlasPack, Promise<TileTextures>>();
+/**
+ * One pack's own terrain/building atlases (`${pack}-terrain`,
+ * `${pack}-buildings-static`, `${pack}-buildings-anim`), built into a
+ * `TileTextures` the same shape `loadTerrainAtlas`/`loadBuildingAtlases`
+ * produce — merge it in with `mergeTileTextures` once the world reveals that
+ * pack (see `HexMapRenderer`'s wasted-reveal handling). Each category loads
+ * via `loadAtlasPackCategory`, which returns an empty, non-throwing
+ * `LoadedAtlas` for a category the pack has no pages for yet (the currently
+ * vendored atlas ships none at all) — so this never fails outright, it just
+ * contributes nothing until the pack's pages actually exist.
+ */
+export function loadPackAtlases(pack: AtlasPack): Promise<TileTextures> {
+  const cached = packLoading.get(pack);
+  if (cached) return cached;
+
+  const promise = Promise.all([
+    loadAtlasPackCategory(pack, 'terrain'),
+    loadAtlasPackCategory(pack, 'buildings-static'),
+    loadAtlasPackCategory(pack, 'buildings-anim'),
+  ]).then(([terrain, buildings, animAtlas]) => buildTileTextures([terrain, buildings], animAtlas));
+
+  packLoading.set(pack, promise);
+  return promise;
 }
 
 let combinedLoading: Promise<TileTextures> | null = null;

@@ -12,14 +12,20 @@ import {
   lavaSpringOrientationOf,
   mergeTileTextures,
   textureKeyFor,
+  topAnimTextures,
   RIVER_FAMILY,
   KEY_FAMILY,
   type FamilyFrame,
   type TileTextures,
 } from './textures';
-import { bendOrientationOf } from './types';
+import { bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
+
+/** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
+function emptyOrientationArrayMap(): Record<string, unknown[]> {
+  return Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, []]));
+}
 
 // classifyFamilyFrames turns one family's raw atlas frame names into the
 // base/baseIndexed/top shape TileTextures needs. Exercised here with plain
@@ -405,6 +411,93 @@ describe('classifyFamilyClips', () => {
       expect(result[orientation].size).toBe(0);
     }
   });
+
+  // 3D_assets PR #92: an overlay clip's frames carry only the moving parts —
+  // it must resolve its own `rest` image alongside its frames, or the whole
+  // clip is dropped (same "unresolved frame" degrade the plain-frame case
+  // already had), never drawn parts-only with no rest underneath it.
+  it('attaches the resolved rest texture for an overlay clip', () => {
+    const result = classifyFamilyClips(
+      [
+        clip({
+          name: 'sawmillriver_SE_level003',
+          orientation: 'SE',
+          frames: ['f00', 'f01'],
+          overlay: true,
+          rest: 'sawmillriver_SE_level003_rest',
+        }),
+      ],
+      resolveAll,
+    );
+
+    expect(result.SE.get(3)).toEqual({
+      textures: ['f00', 'f01'],
+      fps: 6,
+      playback: 'loop',
+      rest: 'sawmillriver_SE_level003_rest',
+    });
+  });
+
+  it('drops an overlay clip whose rest frame does not resolve', () => {
+    const result = classifyFamilyClips(
+      [
+        clip({
+          name: 'sawmillriver_SE_level003',
+          orientation: 'SE',
+          frames: ['f00'],
+          overlay: true,
+          rest: 'missing_rest',
+        }),
+      ],
+      (name) => (name === 'missing_rest' ? undefined : name),
+    );
+
+    expect(result.SE.get(3)).toBeUndefined();
+  });
+
+  it('drops an overlay clip that names no rest frame at all', () => {
+    const result = classifyFamilyClips(
+      [clip({ name: 'sawmillriver_SE_level003', orientation: 'SE', frames: ['f00'], overlay: true })],
+      resolveAll,
+    );
+
+    expect(result.SE.get(3)).toBeUndefined();
+  });
+
+  it('leaves a non-overlay clip unchanged — no rest field, unaffected by overlay support existing', () => {
+    const result = classifyFamilyClips(
+      [clip({ name: 'sawmillriver_SE_level003', orientation: 'SE', frames: ['f00', 'f01'] })],
+      resolveAll,
+    );
+
+    expect(result.SE.get(3)).toEqual({ textures: ['f00', 'f01'], fps: 6, playback: 'loop' });
+    expect(result.SE.get(3)?.rest).toBeUndefined();
+  });
+});
+
+// topAnimTextures is the pure decision HexMapRenderer.ts's pooled
+// base/overlay-sprite bookkeeping is built on (see its own doc comment) —
+// exercised directly here with plain strings, no Pixi/sprite pool involved.
+describe('topAnimTextures', () => {
+  it('puts the rest image on base and the current frame on overlay for an overlay clip', () => {
+    expect(topAnimTextures({ textures: ['f0', 'f1', 'f2'], rest: 'rest' }, 1)).toEqual({
+      base: 'rest',
+      overlay: 'f1',
+    });
+  });
+
+  it('puts the current frame straight on base, with no overlay, for a legacy clip (no rest)', () => {
+    expect(topAnimTextures({ textures: ['f0', 'f1', 'f2'] }, 1)).toEqual({ base: 'f1' });
+    expect(topAnimTextures({ textures: ['f0', 'f1', 'f2'] }, 1).overlay).toBeUndefined();
+  });
+
+  it("base never changes across frames for an overlay clip — only overlay does", () => {
+    const clipWithRest = { textures: ['f0', 'f1', 'f2'], rest: 'rest' };
+    expect(topAnimTextures(clipWithRest, 0).base).toBe('rest');
+    expect(topAnimTextures(clipWithRest, 2).base).toBe('rest');
+    expect(topAnimTextures(clipWithRest, 0).overlay).toBe('f0');
+    expect(topAnimTextures(clipWithRest, 2).overlay).toBe('f2');
+  });
 });
 
 // renumberTopVariants fixes a genuine gap in the vendored art pack: wasteland/
@@ -745,12 +838,79 @@ describe('mergeTileTextures terrain ownership', () => {
   it('keeps the terrain load\'s terrain families when a later load carries a partial copy', () => {
     const full = { E: ['plain', 'rocks', 'spikes'] } as unknown as never;
     const stale = { E: ['rocks'] } as unknown as never;
-    const a = { base: {}, baseIndexed: {}, top: { wasteland: full }, animTop: {}, giants: {}, giantAnims: {} } as unknown as TileTextures;
-    const b = { base: {}, baseIndexed: {}, top: { wasteland: stale, hut: stale }, animTop: {}, giants: {}, giantAnims: {} } as unknown as TileTextures;
+    const emptyWastedCoastalBase = emptyOrientationArrayMap();
+    const a = {
+      base: {},
+      baseIndexed: {},
+      top: { wasteland: full },
+      animTop: {},
+      wastedCoastalBase: emptyWastedCoastalBase,
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+    const b = {
+      base: {},
+      baseIndexed: {},
+      top: { wasteland: stale, hut: stale },
+      animTop: {},
+      wastedCoastalBase: emptyWastedCoastalBase,
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
 
     const merged = mergeTileTextures(a, b);
 
     expect(merged.top.wasteland).toBe(full);
     expect(merged.top.hut).toBe(stale);
+  });
+
+  // With atlas packs, the wasted-only fields (wastedCoastalBase,
+  // lavaRiverBase/lavaRiverTop) no longer always resolve as part of `a` (the
+  // core terrain load) the way they did before packs existed — the wasted
+  // pack loads separately, later, once the world reveals it (see
+  // loadPackAtlases). mergeTileTextures has to keep `a`'s copy where it has
+  // one (an already-revealed world reloading textures) and otherwise fall
+  // back to `b`'s (the wasted pack merged in after the fact).
+  it('keeps a\'s wasted fields when present, and falls back to b\'s when a has none yet', () => {
+    const baseFixture = () =>
+      ({ base: {}, baseIndexed: {}, top: {}, animTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
+
+    const populatedWastedCoastal = { ...emptyOrientationArrayMap(), E: ['blacksandcoast_E'] };
+    const a = {
+      ...baseFixture(),
+      wastedCoastalBase: emptyOrientationArrayMap(),
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+    } as unknown as TileTextures;
+    const b = {
+      ...baseFixture(),
+      wastedCoastalBase: populatedWastedCoastal,
+      lavaRiverBase: { straight: 'lava-base' },
+      lavaRiverTop: { straight: 'lava-top' },
+    } as unknown as TileTextures;
+
+    const merged = mergeTileTextures(a, b);
+
+    // a had nothing yet -> falls back to b's.
+    expect(merged.wastedCoastalBase.E).toEqual(['blacksandcoast_E']);
+    expect(merged.lavaRiverBase.straight).toBe('lava-base');
+    expect(merged.lavaRiverTop.straight).toBe('lava-top');
+
+    // Once a itself carries the wasted pack's data (e.g. after a later
+    // reload once both are loaded), a's own copy wins over b's.
+    const aWithWasted = {
+      ...baseFixture(),
+      wastedCoastalBase: { ...emptyOrientationArrayMap(), E: ['from-a'] },
+      lavaRiverBase: { straight: 'a-lava-base' },
+      lavaRiverTop: { straight: 'a-lava-top' },
+    } as unknown as TileTextures;
+    const merged2 = mergeTileTextures(aWithWasted, b);
+    expect(merged2.wastedCoastalBase.E).toEqual(['from-a']);
+    expect(merged2.lavaRiverBase.straight).toBe('a-lava-base');
+    expect(merged2.lavaRiverTop.straight).toBe('a-lava-top');
   });
 });
