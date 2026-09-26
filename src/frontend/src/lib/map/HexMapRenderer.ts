@@ -62,6 +62,7 @@ import {
   giantTopAnimFor,
   giantTopTextureFor,
   loadBuildingAtlases,
+  loadPackAtlases,
   loadTerrainAtlas,
   mergeTileTextures,
   riverTexturesFor,
@@ -1447,6 +1448,15 @@ export class HexMapRenderer {
   } | null = null;
 
   private textures: TileTextures | null = null;
+  /**
+   * Set once the wasted atlas pack's load has been kicked off (see
+   * `maybeLoadWastedPack`), so a load is requested at most once per instance
+   * — `rebuildAll` calls `maybeLoadWastedPack` on every rebuild (cheap: it's
+   * a single reference check once this is set), not just the first one
+   * after mount, so a reveal happening later in the session (the endboss
+   * triggering while the settlement view is already open) still picks it up.
+   */
+  private wastedPackLoading: Promise<void> | null = null;
 
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
@@ -2685,9 +2695,43 @@ export class HexMapRenderer {
     };
   }
 
+  /**
+   * Loads the wasted atlas pack (`${wasted}-terrain`/`${wasted}-buildings-*`
+   * — see `loadPackAtlases`) once the world reveals its wasted islands
+   * (`WorldModel.isWastedRevealed`), merging it into `this.textures` and
+   * triggering one more rebuild so wasted tiles pick up their real art
+   * instead of staying on whatever core-terrain fallback `baseTextureFor`
+   * drew for them until then. Settlement-only (world mode never draws tile
+   * art at all — see `WORLD_TERRAIN_FILL`) and a no-op once a load has
+   * already been kicked off, so calling it from every `rebuildAll` (to also
+   * catch the reveal happening *while* the map is already open, e.g. the
+   * endboss triggering mid-session) costs nothing beyond the first call.
+   *
+   * The frozen pack (`frozenIslesEnabled`, a world flag landing in a
+   * separate backend PR) plugs in here the same way once it exists — one
+   * more `if (worldModel.isFrozenRevealed() && !this.frozenPackLoading) ...`
+   * alongside this.
+   */
+  private maybeLoadWastedPack() {
+    if (this.options.mode !== 'settlement' || !this.textures) return;
+    if (this.wastedPackLoading) return;
+    if (!this.options.worldModel.isWastedRevealed()) return;
+
+    this.wastedPackLoading = loadPackAtlases('wasted')
+      .then((wasted) => {
+        if (this.destroyed || !this.textures) return;
+        this.textures = mergeTileTextures(this.textures, wasted);
+        this.rebuildAll();
+      })
+      .catch((err) => {
+        console.warn('Wasted atlas pack failed to load; wasted tiles stay on core terrain art', err);
+      });
+  }
+
   private rebuildAll() {
     if (!this.app) return;
     if (this.options.mode === 'settlement' && !this.textures) return;
+    this.maybeLoadWastedPack();
     this.lastBuiltCamera = { ...this.camera };
     const rebuildStart = performance.now();
     this.lastRebuildAtMs = rebuildStart;

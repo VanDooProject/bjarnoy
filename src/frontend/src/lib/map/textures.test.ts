@@ -14,9 +14,14 @@ import {
   type FamilyFrame,
   type TileTextures,
 } from './textures';
-import { bendOrientationOf } from './types';
+import { bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
+
+/** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
+function emptyOrientationArrayMap(): Record<string, unknown[]> {
+  return Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, []]));
+}
 
 // classifyFamilyFrames turns one family's raw atlas frame names into the
 // base/baseIndexed/top shape TileTextures needs. Exercised here with plain
@@ -606,12 +611,79 @@ describe('mergeTileTextures terrain ownership', () => {
   it('keeps the terrain load\'s terrain families when a later load carries a partial copy', () => {
     const full = { E: ['plain', 'rocks', 'spikes'] } as unknown as never;
     const stale = { E: ['rocks'] } as unknown as never;
-    const a = { base: {}, baseIndexed: {}, top: { wasteland: full }, animTop: {}, giants: {}, giantAnims: {} } as unknown as TileTextures;
-    const b = { base: {}, baseIndexed: {}, top: { wasteland: stale, hut: stale }, animTop: {}, giants: {}, giantAnims: {} } as unknown as TileTextures;
+    const emptyWastedCoastalBase = emptyOrientationArrayMap();
+    const a = {
+      base: {},
+      baseIndexed: {},
+      top: { wasteland: full },
+      animTop: {},
+      wastedCoastalBase: emptyWastedCoastalBase,
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+    const b = {
+      base: {},
+      baseIndexed: {},
+      top: { wasteland: stale, hut: stale },
+      animTop: {},
+      wastedCoastalBase: emptyWastedCoastalBase,
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
 
     const merged = mergeTileTextures(a, b);
 
     expect(merged.top.wasteland).toBe(full);
     expect(merged.top.hut).toBe(stale);
+  });
+
+  // With atlas packs, the wasted-only fields (wastedCoastalBase,
+  // lavaRiverBase/lavaRiverTop) no longer always resolve as part of `a` (the
+  // core terrain load) the way they did before packs existed — the wasted
+  // pack loads separately, later, once the world reveals it (see
+  // loadPackAtlases). mergeTileTextures has to keep `a`'s copy where it has
+  // one (an already-revealed world reloading textures) and otherwise fall
+  // back to `b`'s (the wasted pack merged in after the fact).
+  it('keeps a\'s wasted fields when present, and falls back to b\'s when a has none yet', () => {
+    const baseFixture = () =>
+      ({ base: {}, baseIndexed: {}, top: {}, animTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
+
+    const populatedWastedCoastal = { ...emptyOrientationArrayMap(), E: ['blacksandcoast_E'] };
+    const a = {
+      ...baseFixture(),
+      wastedCoastalBase: emptyOrientationArrayMap(),
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+    } as unknown as TileTextures;
+    const b = {
+      ...baseFixture(),
+      wastedCoastalBase: populatedWastedCoastal,
+      lavaRiverBase: { straight: 'lava-base' },
+      lavaRiverTop: { straight: 'lava-top' },
+    } as unknown as TileTextures;
+
+    const merged = mergeTileTextures(a, b);
+
+    // a had nothing yet -> falls back to b's.
+    expect(merged.wastedCoastalBase.E).toEqual(['blacksandcoast_E']);
+    expect(merged.lavaRiverBase.straight).toBe('lava-base');
+    expect(merged.lavaRiverTop.straight).toBe('lava-top');
+
+    // Once a itself carries the wasted pack's data (e.g. after a later
+    // reload once both are loaded), a's own copy wins over b's.
+    const aWithWasted = {
+      ...baseFixture(),
+      wastedCoastalBase: { ...emptyOrientationArrayMap(), E: ['from-a'] },
+      lavaRiverBase: { straight: 'a-lava-base' },
+      lavaRiverTop: { straight: 'a-lava-top' },
+    } as unknown as TileTextures;
+    const merged2 = mergeTileTextures(aWithWasted, b);
+    expect(merged2.wastedCoastalBase.E).toEqual(['from-a']);
+    expect(merged2.lavaRiverBase.straight).toBe('a-lava-base');
+    expect(merged2.lavaRiverTop.straight).toBe('a-lava-top');
   });
 });
