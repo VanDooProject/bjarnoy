@@ -590,8 +590,8 @@ async function confirmFieldOrderClick() {
   border-radius: 0;
 }
 /* Mobile-readiness audit: a 260px status card eats a big chunk of a phone
-   map. MapView's own QueueDrawer already pins a small 28x80 handle tab to
-   the left edge on mobile (see MapView.vue's ringBounds comment), so this
+   map. MapView's own QueueDrawer already pins a small 48px-wide handle tab
+   to the left edge on mobile (see MapView.vue's ringBounds comment), so this
    stays right-anchored rather than stretching edge-to-edge — that would
    overlap the handle and read worse than today. Instead:
    cap it to the viewport, shrink its vertical footprint, and clear the
