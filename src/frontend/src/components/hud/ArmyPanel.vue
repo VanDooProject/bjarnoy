@@ -19,16 +19,13 @@ import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
-  armyStatusLabel,
-  canFieldOrderArmy,
   classifyUnitSelection,
-  formatEta,
   hasCatapultSelected,
-  isFieldOrderMidMarch,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { buildingLabel } from '../../lib/units/battleReports';
+import { useArmyRows } from '../../composables/useArmyRows';
 
 const world = useWorldStore();
 const auth = useAuthStore();
@@ -195,43 +192,10 @@ async function confirm() {
 // A Supporting army's row (issue #40 phase 4, "armies abroad") shows
 // "Supporting <settlement name>" rather than the bare status, and still
 // offers Recall — same button, same endpoint, just no active Movement to
-// gate it on (see world.model.getSettlement for the name lookup).
-const armyRows = computed(() => {
-  void world.hud.tick; // reactive dependency so ETA countdowns tick every second
-  const now = Date.now();
-  return world.armies.map((army) => {
-    const composition = army.stacks
-      .filter((s) => s.count > 0)
-      .map((s) => `${s.count}× ${unitName(s.unit)}`)
-      .join(', ');
-    const targetName = army.targetSettlementId
-      ? world.model.getSettlement(army.targetSettlementId)?.name ?? null
-      : null;
-    const status = armyStatusLabel(army, army.supporting ? targetName : null);
-    const eta = army.movement
-      ? formatEta(army.movement.isReturning ? army.movement.returnArrivesAt : army.movement.arrivesAt, now)
-      : null;
-    const canRecall = !army.atHome && (army.supporting || (army.movement !== null && !army.movement.isReturning));
-    // Issue #156 phase 1: "Move on" once standing, "Append goal" while still
-    // travelling — Army.PlanFieldOrder's rule table has no free cell for the
-    // latter (see isFieldOrderMidMarch's own doc comment), so a non-premium
-    // account never gets past this button greyed-and-locked rather than
-    // finding out only after a doomed request.
-    const midMarch = isFieldOrderMidMarch(army, now);
-    return {
-      id: army.id,
-      composition: composition || '—',
-      status,
-      eta,
-      canRecall,
-      canFieldOrder: canFieldOrderArmy(army),
-      fieldOrderLocked: midMarch && !auth.isPremium,
-      fieldOrderLabel: midMarch ? t('hud.armyPanel.appendGoal') : t('hud.armyPanel.moveOn'),
-      selected: army.id === world.selectedArmyId,
-      mission: army.mission !== 'move' ? missionName(army.mission) : null,
-    };
-  });
-});
+// gate it on (see world.model.getSettlement for the name lookup). The row
+// derivation itself lives in useArmyRows (issue: mobile army dispatch),
+// shared with QueueDrawer's Armies section.
+const armyRows = useArmyRows();
 
 function toggleSelect(armyId: string) {
   if (world.selectedArmyId === armyId) {
@@ -588,20 +552,6 @@ async function confirmFieldOrderClick() {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: 0;
-}
-/* Mobile-readiness audit: a 260px status card eats a big chunk of a phone
-   map. MapView's own QueueDrawer already pins a small 48px-wide handle tab
-   to the left edge on mobile (see MapView.vue's ringBounds comment), so this
-   stays right-anchored rather than stretching edge-to-edge — that would
-   overlap the handle and read worse than today. Instead:
-   cap it to the viewport, shrink its vertical footprint, and clear the
-   home-indicator safe area. */
-@media (max-width: 768px) {
-  .status-card.army-panel {
-    max-width: calc(100vw - 24px);
-    max-height: 40vh;
-    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
-  }
 }
 .status-card-header {
   display: flex;

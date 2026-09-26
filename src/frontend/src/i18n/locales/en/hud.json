@@ -84,6 +84,10 @@
       "landHere": "Land here",
       "sendSettlers": "Send settlers",
       "noSettlersYet": "You have no settlers available yet",
+      "sendArmyHere": "Send army here",
+      "attack": "Attack",
+      "support": "Support",
+      "noUnitsAtHome": "No units at home",
       "upgrade": "Upgrade",
       "notEnough": "Needs {resources}",
       "details": "Details",
@@ -134,9 +138,10 @@
   "queueDrawer": {
     "title": "Queues",
     "close": "✕",
-    "openLabel": "Open build & training queues",
-    "closeLabel": "Close build & training queues",
-    "chevron": "›"
+    "openLabel": "Open build, training & armies",
+    "closeLabel": "Close build, training & armies",
+    "chevron": "›",
+    "armies": "Armies"
   },
   "buildingModal": {
     "close": "✕",
@@ -339,6 +344,22 @@
     "provisions": "Provisions",
     "dispatching": "Dispatching…",
     "confirmDispatch": "Confirm dispatch"
+  },
+  "dispatchSheet": {
+    "cancel": "Cancel dispatch",
+    "expand": "Expand dispatch sheet",
+    "collapse": "Collapse dispatch sheet",
+    "stopsSummary": "{count} {stopWord}",
+    "stopWord": "stop | stops",
+    "toTarget": "→ {name}",
+    "units": "Units ({count})",
+    "stops": "Stops ({count})",
+    "start": "Start",
+    "starting": "Starting…",
+    "fieldOrderTitle": "Field order",
+    "allButton": "All",
+    "decrement": "−",
+    "increment": "+"
   },
   "tradeReport": {
     "summary": "Gave {gaveAmount} {gave} for {gotAmount} {got}"

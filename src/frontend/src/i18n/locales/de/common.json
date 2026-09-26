@@ -16,7 +16,11 @@
   },
   "errors": {
     "dispatchFailed": "Entsendung fehlgeschlagen.",
-    "fieldOrderFailed": "Marschbefehl fehlgeschlagen."
+    "fieldOrderFailed": "Marschbefehl fehlgeschlagen.",
+    "selectAtLeastOneUnit": "Wähle mindestens eine Einheit zum Entsenden.",
+    "clickMapForDestination": "Klicke zuerst auf die Karte, um ein Ziel festzulegen.",
+    "chooseSettlementFor": "Wähle zuerst eine Siedlung zum {mission}.",
+    "fieldOrderPremiumRequired": "Premium erforderlich, um mehr als einen Stopp zu planen — entferne den zusätzlichen Stopp oder führe ein Upgrade durch."
   },
   "localeSwitcher": {
     "label": "Sprache",

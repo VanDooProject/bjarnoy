@@ -53,6 +53,8 @@ import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange, type PathContext } from '../lib/map/hexPath';
+import { routeProgressAt } from '../lib/units/armyProgress';
+import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -132,6 +134,28 @@ function onQueueSelect(coord: { q: number; r: number }) {
   }, 2200);
 }
 
+// QueueDrawer's Armies section (issue: mobile army dispatch): a row tap
+// selects the army (drawing its route, same as ArmyPanel's own row click)
+// and pans/flashes the map on its *live interpolated* position — the same
+// leg math armyOverlayData/HexMapRenderer already use (issue #94's
+// routeProgressAt), rather than the last hex it happened to reach, so a
+// march mid-leg doesn't flash a spot behind where the marker is drawn.
+function onArmySelect(armyId: string) {
+  world.selectArmy(armyId);
+  const army = world.armies.find((a) => a.id === armyId);
+  if (!army) return;
+  let coord: { q: number; r: number } = army.position;
+  if (army.movement) {
+    const { path, cumulativeHours, departedAt, arrivesAt, isReturning, returnPath, returnCumulativeHours, turnAroundAt, returnArrivesAt } =
+      army.movement;
+    const progress = isReturning
+      ? routeProgressAt(returnPath, returnCumulativeHours, Date.parse(turnAroundAt), Date.parse(returnArrivesAt), Date.now())
+      : routeProgressAt(path, cumulativeHours, Date.parse(departedAt), Date.parse(arrivesAt), Date.now());
+    if (progress) coord = progress.arrived || progress.t >= 0.5 ? progress.to : progress.from;
+  }
+  onQueueSelect(coord);
+}
+
 onMounted(async () => {
   // A direct load of either route (reload, deep link) arrives here with no
   // guarantee anything else has bootstrapped the world yet — restoreLiveSettlement
@@ -171,6 +195,9 @@ onUnmounted(() => {
 // not just the initial mount, since this view's own onMounted no longer
 // re-runs per route the way two separate views' did.
 watch(mode, (m) => {
+  // The ring renders in both modes now, so one left open would otherwise
+  // survive the switch, anchored to a hex in the other mode's framing.
+  closeRing();
   world.setWorldMapActive(m === 'world');
   void world.refreshWorldSettlements();
   const renderer = canvasRef.value?.renderer;
@@ -455,6 +482,19 @@ watch(canvasInteractionLocked, (locked) => {
   canvasRef.value?.renderer?.setInteractionLocked(locked);
 });
 
+// Mobile dispatch flow (issue: mobile army dispatch): whether a dispatch or
+// field-order draft is being composed right now — MobileDispatchSheet takes
+// over the bottom of the screen while one is, so QueueDrawer (which would
+// otherwise clash with it) hides, and the HUD pull-down drawer closes the
+// same way opening QueueDrawer already does above.
+const hasActiveDraft = computed(() => !!(world.dispatchDraft || world.fieldOrderDraft));
+watch(hasActiveDraft, (active) => {
+  if (active) {
+    queueDrawerOpen.value = false;
+    closeHudDrawer();
+  }
+});
+
 // Finding #12: the queue drawer and the mobile HUD pull-down drawer are two
 // separate floating sheets that can both open over the same canvas — only
 // one should ever be open at a time (opening either one is a strong enough
@@ -612,20 +652,50 @@ const CATEGORY_COLORS: Record<string, string> = {
   water: 'var(--water)',
 };
 
+// Issue: mobile army dispatch. Every tile's ring gets a "send army" bubble —
+// what it's called and what it starts depends on who (if anyone) owns the
+// tile: another player's settlement reads "Attack" and targets it directly;
+// the player's own *other* settlement (multi-settlement accounts) reads
+// "Support"; anything else (own current settlement, unclaimed ground, open
+// water) is a plain Move with `route = [coord]`. Enabled on every viewport —
+// on desktop, starting a draft this way just pre-fills ArmyPanel's existing
+// dispatch form, same as picking a mission tab and a target there by hand.
+function sendArmyAction(tile: Tile): RingAction {
+  const hasUnits = world.hud.garrison.some((g) => g.count > 0);
+  const ownerSettlementId = tile.ownerId;
+  const ownerIsSelf = ownerSettlementId
+    ? world.model.getSettlement(ownerSettlementId)?.ownerId === player.id
+    : false;
+  let id: 'send-army' | 'attack' | 'support' = 'send-army';
+  let label = t('hud.ringMenu.actions.sendArmyHere');
+  if (ownerSettlementId && !ownerIsSelf) {
+    id = 'attack';
+    label = t('hud.ringMenu.actions.attack');
+  } else if (ownerSettlementId && ownerSettlementId !== world.selectedSettlementId) {
+    id = 'support';
+    label = t('hud.ringMenu.actions.support');
+  }
+  return {
+    id,
+    label,
+    disabled: !hasUnits,
+    hint: hasUnits ? undefined : t('hud.ringMenu.actions.noUnitsAtHome'),
+  };
+}
+
 const rootActions = computed<RingAction[]>(() => {
   const tile = selectedTile.value;
   if (!tile) return [];
+  // World zoom only offers the army action: BuildingModal/TrainingModal and
+  // the build fan only exist in the settlement template, so Build/Upgrade/
+  // Info bubbles here would open nothing.
+  if (mode.value === 'world') return [sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
-    return [
-      { id: 'info', label: t('hud.ringMenu.actions.info') },
-      {
-        id: 'attack',
-        label: t('hud.ringMenu.actions.attackRaid'),
-        disabled: true,
-        hint: t('hud.ringMenu.actions.combatNotImplemented'),
-      },
-    ];
+    // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
+    // is implemented now, via the same dispatch draft/sheet every other
+    // "send army" entry point uses.
+    return [{ id: 'info', label: t('hud.ringMenu.actions.info') }, sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
@@ -637,6 +707,7 @@ const rootActions = computed<RingAction[]>(() => {
         disabled: true,
         hint: t('hud.ringMenu.actions.noSettlersYet'),
       },
+      sendArmyAction(tile),
     ];
   }
   if (isMineTile.value && tile.buildingType) {
@@ -692,6 +763,7 @@ const rootActions = computed<RingAction[]>(() => {
     ) {
       actions.push({ id: 'train', label: t('hud.ringMenu.actions.trainUnits') });
     }
+    actions.push(sendArmyAction(tile));
     return actions;
   }
   if (isMineTile.value) {
@@ -714,9 +786,10 @@ const rootActions = computed<RingAction[]>(() => {
             ? undefined
             : t('hud.ringMenu.actions.openWater'),
       },
+      sendArmyAction(tile),
     ];
   }
-  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }];
+  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }, sendArmyAction(tile)];
 });
 
 function tileAt(q: number, r: number): Tile {
@@ -818,7 +891,7 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
 const ringCategories = computed<RingCategory[]>(() => {
   const tile = selectedTile.value;
   const coord = selectedCoord.value;
-  if (!tile || !coord) return [];
+  if (!tile || !coord || mode.value === 'world') return [];
   return categoriesFor(tile).map((category) => ({
     id: category.id,
     label: t(`hud.ringMenu.categories.${category.id}`),
@@ -876,15 +949,11 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     world.addFieldOrderWaypoint(coord);
     return;
   }
-  // World mode: same click-to-enter as the old WorldMapView.onHexClick
-  // (ignores which hex was clicked, always goes to the player's own
-  // settlement) — the zoom-driven transition is additional, not a
-  // replacement for it. None of the ring-menu logic below applies at world
-  // zoom; only a fleet's own draft (handled above) does.
-  if (mode.value === 'world') {
-    router.push('/settlement');
-    return;
-  }
+  // World mode used to click-to-enter the settlement unconditionally here —
+  // zoom is now the only way in (the zoom-driven transition above/pinch-zoom
+  // still does that); a plain tap opens the same ring menu settlement mode
+  // uses instead, so a fleet's target (open water the settlement view never
+  // shows) can be picked by tapping it, not just by search in ArmyPanel.
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
@@ -901,6 +970,17 @@ function onWaypointMove(index: number, coord: AxialCoord) {
     return;
   }
   world.moveWaypoint(index, coord);
+}
+
+// Mobile dispatch flow: tapping (not dragging) a draft pin removes it — see
+// HexMapRendererOptions.onWaypointTap's own comment for how a tap is told
+// apart from a drag.
+function onWaypointTap(index: number) {
+  if (world.fieldOrderDraft) {
+    world.removeFieldOrderWaypoint(index);
+    return;
+  }
+  world.removeWaypoint(index);
 }
 
 function closeRing() {
@@ -958,6 +1038,17 @@ async function onRingSelect(id: string) {
       if (world.selectedSettlementId && selectedCoord.value) {
         world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
         canvasRef.value?.renderer?.forceRebuild();
+      }
+      closeRing();
+      return;
+    case 'send-army':
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value);
+      closeRing();
+      return;
+    case 'attack':
+    case 'support':
+      if (selectedCoord.value && tile?.ownerId) {
+        world.startDispatchAt(selectedCoord.value, { mission: id, targetSettlementId: tile.ownerId });
       }
       closeRing();
       return;
@@ -1064,6 +1155,7 @@ async function upgrade() {
       @hex-click="onHexClick"
       @hover="onHover"
       @waypoint-move="onWaypointMove"
+      @waypoint-tap="onWaypointTap"
       @zoom-mode-change="onZoomModeChange"
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
@@ -1093,7 +1185,7 @@ async function upgrade() {
     </TopBar>
     <template v-if="mode === 'settlement'">
       <template v-if="isMobile">
-        <QueueDrawer v-model:open="queueDrawerOpen" @select="onQueueSelect" />
+        <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       </template>
       <template v-else>
         <BuildQueuePanel @select="onQueueSelect" />
@@ -1101,7 +1193,7 @@ async function upgrade() {
       </template>
       <ExpansionPanel />
       <TradePanel />
-      <ArmyPanel />
+      <ArmyPanel v-if="!isMobile" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
       <RingMenu
         v-if="selectedTile && ringScreen"
@@ -1141,9 +1233,29 @@ async function upgrade() {
            — a ship's whole journey happens on water the settlement view
            never shows. Everything else in the settlement-only template
            above (building ring menu, construction/training panels) stays
-           settlement-only; only the army/fleet panel is mode-agnostic. -->
-      <ArmyPanel />
+           settlement-only; only the army/fleet panel, the ring (mobile taps
+           no longer jump straight to /settlement — see onHexClick) and the
+           queue drawer (mobile fleets need to be tracked here too) are
+           mode-agnostic. -->
+      <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
+      <ArmyPanel v-if="!isMobile" />
+      <RingMenu
+        v-if="selectedTile && ringScreen"
+        :x="ringScreen.x"
+        :y="ringScreen.y"
+        :actions="rootActions"
+        :categories="ringCategories"
+        :terrain-label="ringTerrainLabel"
+        :coord-label="ringCoordLabel"
+        :bounds="ringBounds"
+        :card-bounds="ringCardBounds"
+        :stock="world.hud.resources"
+        @select="onRingSelect"
+        @close="closeRing"
+        @outside-pointer-down="onRingOutsidePointerDown"
+      />
     </template>
+    <MobileDispatchSheet v-if="isMobile && hasActiveDraft" />
   </div>
 </template>
 

@@ -247,7 +247,7 @@ test.describe('mobile HUD bar', () => {
     }).toPass();
   });
 
-  test('a stored bottom docking preference lands the bar at the bottom edge, clear of ArmyPanel', async ({ page }) => {
+  test('a stored bottom docking preference lands the bar at the bottom edge', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await page.addInitScript(() => window.localStorage.setItem('bjarnoy.hudBarPosition', 'bottom'));
     await loginTestUser(page);
@@ -259,11 +259,11 @@ test.describe('mobile HUD bar', () => {
     const barBox = (await bar.boundingBox())!;
     expect(barBox.y).toBeGreaterThan(700); // near the bottom of an 844px-tall viewport
 
-    // RealmPanel was removed on main (zoom now drives settlement<->world
-    // switching); ArmyPanel is the panel that now sits bottom-right and must
-    // still clear a bottom-docked bar via the same --hud-inset-bottom.
-    const armyBox = (await page.locator('.army-panel.status-card').boundingBox())!;
-    expect(armyBox.y + armyBox.height).toBeLessThanOrEqual(barBox.y);
+    // ArmyPanel isn't mounted on phones any more; the bottom-anchored
+    // panel that must clear a bottom-docked bar is now MobileDispatchSheet —
+    // see mobile-army-dispatch.spec.ts's "sits fully on screen above a
+    // bottom-docked HUD bar".
+    await expect(page.locator('.army-panel')).toHaveCount(0);
   });
 
   // Owner's annotated screenshot: the chevron and the avatar/account trigger
