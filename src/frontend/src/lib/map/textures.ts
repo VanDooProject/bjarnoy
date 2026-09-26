@@ -425,6 +425,17 @@ export interface TileAnimClip {
   textures: Texture[];
   fps: number;
   playback: 'loop' | 'pingpong';
+  /**
+   * The clip's rest image (the building/tile with its moving parts held
+   * still), present exactly when the source `AtlasClip.overlay` was true and
+   * its `rest` frame resolved — see `classifyFamilyClips`/`classifyGiantClips`.
+   * A caller that finds this set must draw it *underneath* `textures`' own
+   * frames (which carry only the moving parts) rather than in place of them,
+   * and must never draw both this and the plain static top texture at once
+   * (that doubles the building) — `HexMapRenderer`'s overlay sprite and
+   * `AnimatedBuildingSprite.vue`'s rest layer are the two real callers.
+   */
+  rest?: Texture;
 }
 
 /**
@@ -440,10 +451,10 @@ export interface TileAnimClip {
 export function classifyFamilyClips<T>(
   clips: AtlasClip[],
   resolveFrame: (name: string) => T | undefined,
-): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong' }>> {
-  const byOrientation = emptyOrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong' }>>(
-    () => new Map(),
-  );
+): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }>> {
+  const byOrientation = emptyOrientationMap<
+    Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }>
+  >(() => new Map());
   for (const clip of clips) {
     const match = ANIM_LEVEL_RE.exec(clip.name);
     if (!match) continue;
@@ -451,13 +462,40 @@ export function classifyFamilyClips<T>(
     if (!TILE_ORIENTATIONS.includes(orientation)) continue;
     const frameValues = clip.frames.map(resolveFrame);
     if (frameValues.some((v) => v === undefined)) continue;
+    // An overlay clip's frames are parts-only — without its rest image
+    // resolving too, drawing them alone would show a half-built building, so
+    // this drops the whole clip and falls back to the static top texture,
+    // same as any frame failing to resolve above.
+    let rest: T | undefined;
+    if (clip.overlay) {
+      if (!clip.rest) continue;
+      rest = resolveFrame(clip.rest);
+      if (rest === undefined) continue;
+    }
     byOrientation[orientation].set(Number(match[1]), {
       textures: frameValues as T[],
       fps: clip.fps,
       playback: clip.playback,
+      rest,
     });
   }
   return byOrientation;
+}
+
+/**
+ * Which texture belongs on a clip's own (base/rest) sprite vs. its overlay
+ * sprite (see `HexMapRenderer.ts`'s `TopAnimState.overlay`), for the frame at
+ * `frameIndex` — the pure decision at the heart of that bookkeeping, kept
+ * generic and side-effect-free so it's exercised directly here rather than
+ * only through a Pixi sprite harness (see `textures.test.ts`). An overlay
+ * clip (`clip.rest` set) always shows its rest image on `base` and the
+ * current frame on `overlay`; a legacy clip has no `overlay` at all — its
+ * current frame goes straight on `base`, same as before overlay clips
+ * existed.
+ */
+export function topAnimTextures<T>(clip: { textures: T[]; rest?: T }, frameIndex: number): { base: T; overlay?: T } {
+  if (clip.rest !== undefined) return { base: clip.rest, overlay: clip.textures[frameIndex] };
+  return { base: clip.textures[frameIndex]! };
 }
 
 export interface TileTextures {
@@ -614,9 +652,15 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
         const clipMap = classifyGiantClips(familyClips, (name) => animAtlas.textures[name]);
         const anims = mapOrientations(clipMap, (_o, parts) =>
           Object.fromEntries(
-            (Object.entries(parts) as [GiantPart, { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong' }][]).map(
-              ([part, clip]) => [part, { textures: clip.textures, fps: clip.fps, playback: clip.playback }],
-            ),
+            (
+              Object.entries(parts) as [
+                GiantPart,
+                { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong'; rest?: Texture },
+              ][]
+            ).map(([part, clip]) => [
+              part,
+              { textures: clip.textures, fps: clip.fps, playback: clip.playback, rest: clip.rest },
+            ]),
           ) as Partial<Record<GiantPart, TileAnimClip>>,
         );
         const hasAny = TILE_ORIENTATIONS.some((o) => Object.keys(anims[o]).length > 0);

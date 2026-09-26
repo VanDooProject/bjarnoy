@@ -488,7 +488,9 @@ export function resolvesDirectly(name: string, category: string): boolean {
  * static frame, same graceful-degradation contract `resolveIslandFrame`
  * has.
  */
-export function resolveIslandClip(name: string): (AtlasClip & { frameRects: AtlasFrameRect[] }) | undefined {
+export function resolveIslandClip(
+  name: string,
+): (AtlasClip & { frameRects: AtlasFrameRect[]; restRect?: AtlasFrameRect }) | undefined {
   const direct = findAtlasClip('buildings-anim', name);
   if (direct) return direct;
   const seOriented = withOrientation(name);

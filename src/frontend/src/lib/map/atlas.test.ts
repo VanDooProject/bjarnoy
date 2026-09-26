@@ -168,15 +168,66 @@ describe('findClipIn', () => {
 
     expect(findClipIn(index, 'terrain', clip.name)).toBeUndefined();
   });
+
+  it('resolves an overlay clip\'s rest frame through the same category the clip was found in', () => {
+    const overlayClip = {
+      ...clip,
+      name: 'sawmillriver_SE_level003',
+      family: 'sawmillriver',
+      frames: ['sawmillriver_SE_level003_f00'],
+      overlay: true,
+      rest: 'sawmillriver_SE_level003_rest',
+    };
+    const index = indexOf({
+      '/atlas/terrain-0.json': manifest({}),
+      '/atlas/wasted-terrain-0.json': manifest(
+        {
+          sawmillriver_SE_level003_f00: {},
+          sawmillriver_SE_level003_rest: { frame: { x: 5, y: 5, w: 1, h: 1 } },
+        },
+        { [overlayClip.name]: overlayClip },
+      ),
+    });
+
+    const found = findClipIn(index, 'terrain', overlayClip.name);
+
+    expect(found?.restRect?.frame).toEqual({ x: 5, y: 5, w: 1, h: 1 });
+  });
+
+  it('leaves restRect undefined for a clip with no rest field (legacy, non-overlay clip)', () => {
+    const index = indexOf({
+      '/atlas/wasted-terrain-0.json': manifest({ wasteland_E_level000_f00: {} }, { [clip.name]: clip }),
+    });
+
+    const found = findClipIn(index, 'terrain', clip.name);
+
+    expect(found).toBeDefined();
+    expect(found?.restRect).toBeUndefined();
+  });
+
+  it('leaves restRect undefined when the named rest frame does not itself resolve', () => {
+    const overlayClip = {
+      ...clip,
+      overlay: true,
+      rest: 'missing_rest_frame',
+    };
+    const index = indexOf({
+      '/atlas/wasted-terrain-0.json': manifest({ wasteland_E_level000_f00: {} }, { [clip.name]: overlayClip }),
+    });
+
+    const found = findClipIn(index, 'terrain', clip.name);
+
+    expect(found?.restRect).toBeUndefined();
+  });
 });
 
 describe('loadAtlasPackCategory', () => {
-  it('resolves to an empty LoadedAtlas, without throwing, when the pack has no vendored pages yet', async () => {
-    // The currently vendored atlas (src/frontend/vendor/bg_assets_hextile)
-    // ships no pack pages at all, so this exercises the real (not
-    // synthetic) code path — loadAtlasCategory would throw for the same
-    // "zero pages" case; loadAtlasPackCategory must not.
-    const result = await loadAtlasPackCategory('wasted', 'terrain');
+  it('resolves to an empty LoadedAtlas, without throwing, when the pack has no vendored pages', async () => {
+    // A category no atlas ever ships, so this stays the real "zero pages"
+    // code path whatever art is vendored (a real pack page would reach
+    // Pixi's Assets.load, which needs a browser) — loadAtlasCategory throws
+    // for the same case; loadAtlasPackCategory must not.
+    const result = await loadAtlasPackCategory('wasted', 'no-such-category');
 
     expect(result).toEqual({ textures: {}, frameMeta: {}, clips: {} });
   });

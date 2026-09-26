@@ -43,6 +43,32 @@ export interface AtlasClip {
   parts: string[];
   /** Which part of a "giant tile" (see `giantTiles.ts`) this clip animates — `C` for the anchor hex, or a `GiantPart` screen direction for a covered neighbour. Absent for every non-giant clip. */
   giant_part?: string;
+  /**
+   * True when `frames` carry only the clip's moving parts (everything else
+   * transparent) rather than a full frame — 3D_assets PR #92's new render
+   * convention. An overlay clip must be drawn on top of its own `rest` image
+   * (the same building/tile with its moving parts held still, not
+   * transparent), never in place of it, and never alongside the plain static
+   * top texture (that would double the building). Absent/false for a clip
+   * whose frames are still full images, same as every clip in the previous
+   * render convention — those keep working exactly as before (frame replaces
+   * the top texture, no `rest` involved).
+   */
+  overlay?: boolean;
+  /**
+   * The rest image's own frame name, resolved through the same category
+   * search as `frames` (`findAtlasClip`'s `restRect`) — a normal frame in the
+   * same `buildings-anim`/`wasted-buildings-anim` pages, same trimmed/
+   * sourceSize conventions. Only meaningful when `overlay` is true.
+   */
+  rest?: string;
+  /**
+   * A billboard clip's per-orientation rest frame names (one clip covers
+   * every camera rotation, `orientation: "*"`) — keyed by `TileOrientation`.
+   * Not present in the currently vendored atlas (no billboard clip ships one
+   * yet); `rest` above is what every clip that exists today uses.
+   */
+  rest_by_camera?: Record<string, string>;
 }
 
 // Exported (only) so atlas.test.ts can build synthetic manifests for the
@@ -231,7 +257,11 @@ export function findClipIn(
   index: AtlasPageIndex,
   category: string,
   name: string,
-): (AtlasClip & { frameRects: AtlasFrameRect[] }) | undefined {
+  // Only meaningful for a (not yet vendored) billboard clip's
+  // `rest_by_camera` — every clip in the currently vendored atlas resolves
+  // its rest through the plain `rest` field regardless of this.
+  orientation?: string,
+): (AtlasClip & { frameRects: AtlasFrameRect[]; restRect?: AtlasFrameRect }) | undefined {
   for (const cat of categorySearchOrder(category)) {
     for (const { manifest } of pagesForIndex(index, cat)) {
       const clip = manifest.clips?.[name];
@@ -244,15 +274,21 @@ export function findClipIn(
       const frameRects = clip.frames
         .map((frameName) => findFrameIn(index, cat, frameName))
         .filter((f): f is AtlasFrameRect => f !== undefined);
-      return { ...clip, frameRects };
+      const restName = (orientation && clip.rest_by_camera?.[orientation]) ?? clip.rest;
+      const restRect = restName ? findFrameIn(index, cat, restName) : undefined;
+      return { ...clip, frameRects, restRect };
     }
   }
   return undefined;
 }
 
-/** Searches the core `category` first, then `${pack}-${category}` for every `AtlasPack` (see `categorySearchOrder`) — same fallback as `findAtlasFrame`. */
-export function findAtlasClip(category: string, name: string): (AtlasClip & { frameRects: AtlasFrameRect[] }) | undefined {
-  return findClipIn(REAL_INDEX, category, name);
+/** Searches the core `category` first, then `${pack}-${category}` for every `AtlasPack` (see `categorySearchOrder`) — same fallback as `findAtlasFrame`. `orientation` only matters for a billboard clip's `rest_by_camera` (see `findClipIn`). */
+export function findAtlasClip(
+  category: string,
+  name: string,
+  orientation?: string,
+): (AtlasClip & { frameRects: AtlasFrameRect[]; restRect?: AtlasFrameRect }) | undefined {
+  return findClipIn(REAL_INDEX, category, name, orientation);
 }
 
 /** The CSS `background-*` properties that render one `AtlasFrameRect` as a same-aspect-ratio element — shared by `AtlasSprite.vue` and anything laying out raw frames itself (e.g. the wasted-lands island), so the sprite math exists in exactly one place. */

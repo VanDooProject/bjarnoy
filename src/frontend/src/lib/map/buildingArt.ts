@@ -199,7 +199,7 @@ export function buildingArtByFamily(family: string, level: number): ArtRef | und
 export interface BuildingLayers {
   base?: AtlasFrameRect;
   top?: AtlasFrameRect;
-  clip?: AtlasClip & { frameRects: AtlasFrameRect[] };
+  clip?: AtlasClip & { frameRects: AtlasFrameRect[]; restRect?: AtlasFrameRect };
 }
 
 /** Same wire-type-to-family resolution `buildingArt` does, for a caller that wants the layered form instead of a flattened picture. Undefined for a single-level-art or unmapped type — those have no `buildings-static` base/top split to animate. */

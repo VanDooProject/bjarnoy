@@ -96,6 +96,23 @@ const clipLookups = computed<Map<string, ClipLookup>>(() => {
   return map;
 });
 
+// The clip's rest image (see `AtlasClip.overlay`'s own doc comment) — static
+// for as long as this rotation/hover state shows this clip (recomputed with
+// `clipLookups`, not per tick like `clipStyles`), drawn under the clip's own
+// current (parts-only) frame rather than in place of it. A placement whose
+// clip is a legacy (non-overlay) one, or has none at all, never enters this
+// map.
+const restStyles = computed<Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>>(() => {
+  const map = new Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>();
+  for (const [key, lookup] of clipLookups.value) {
+    const entry: { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle } = {};
+    if (lookup.living?.restRect) entry.living = atlasBackgroundStyle(lookup.living.restRect);
+    if (lookup.wasted?.restRect) entry.wasted = atlasBackgroundStyle(lookup.wasted.restRect);
+    if (entry.living || entry.wasted) map.set(key, entry);
+  }
+  return map;
+});
+
 const clipStyles = computed<Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>>(() => {
   const map = new Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>();
   const elapsed = now.value;
@@ -380,6 +397,13 @@ function togglePlay(): void {
       >
         <template v-for="r in resolved" :key="r.placement.key">
           <div
+            v-if="r.living && restStyles.get(r.placement.key)?.living"
+            class="island-sprite"
+            :style="
+              spriteStyle(r.living, stage < r.placement.turnsAt, r.placement.delay, restStyles.get(r.placement.key)!.living)
+            "
+          />
+          <div
             v-if="r.living"
             class="island-sprite"
             :style="
@@ -389,6 +413,13 @@ function togglePlay(): void {
                 r.placement.delay,
                 clipStyles.get(r.placement.key)?.living,
               )
+            "
+          />
+          <div
+            v-if="r.wasted && restStyles.get(r.placement.key)?.wasted"
+            class="island-sprite"
+            :style="
+              spriteStyle(r.wasted, stage >= r.placement.turnsAt, r.placement.delay, restStyles.get(r.placement.key)!.wasted)
             "
           />
           <div

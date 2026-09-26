@@ -10,6 +10,7 @@ import {
   lavaSpringOrientationOf,
   mergeTileTextures,
   textureKeyFor,
+  topAnimTextures,
   RIVER_FAMILY,
   type FamilyFrame,
   type TileTextures,
@@ -303,6 +304,93 @@ describe('classifyFamilyClips', () => {
     for (const orientation of ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const) {
       expect(result[orientation].size).toBe(0);
     }
+  });
+
+  // 3D_assets PR #92: an overlay clip's frames carry only the moving parts —
+  // it must resolve its own `rest` image alongside its frames, or the whole
+  // clip is dropped (same "unresolved frame" degrade the plain-frame case
+  // already had), never drawn parts-only with no rest underneath it.
+  it('attaches the resolved rest texture for an overlay clip', () => {
+    const result = classifyFamilyClips(
+      [
+        clip({
+          name: 'sawmillriver_SE_level003',
+          orientation: 'SE',
+          frames: ['f00', 'f01'],
+          overlay: true,
+          rest: 'sawmillriver_SE_level003_rest',
+        }),
+      ],
+      resolveAll,
+    );
+
+    expect(result.SE.get(3)).toEqual({
+      textures: ['f00', 'f01'],
+      fps: 6,
+      playback: 'loop',
+      rest: 'sawmillriver_SE_level003_rest',
+    });
+  });
+
+  it('drops an overlay clip whose rest frame does not resolve', () => {
+    const result = classifyFamilyClips(
+      [
+        clip({
+          name: 'sawmillriver_SE_level003',
+          orientation: 'SE',
+          frames: ['f00'],
+          overlay: true,
+          rest: 'missing_rest',
+        }),
+      ],
+      (name) => (name === 'missing_rest' ? undefined : name),
+    );
+
+    expect(result.SE.get(3)).toBeUndefined();
+  });
+
+  it('drops an overlay clip that names no rest frame at all', () => {
+    const result = classifyFamilyClips(
+      [clip({ name: 'sawmillriver_SE_level003', orientation: 'SE', frames: ['f00'], overlay: true })],
+      resolveAll,
+    );
+
+    expect(result.SE.get(3)).toBeUndefined();
+  });
+
+  it('leaves a non-overlay clip unchanged — no rest field, unaffected by overlay support existing', () => {
+    const result = classifyFamilyClips(
+      [clip({ name: 'sawmillriver_SE_level003', orientation: 'SE', frames: ['f00', 'f01'] })],
+      resolveAll,
+    );
+
+    expect(result.SE.get(3)).toEqual({ textures: ['f00', 'f01'], fps: 6, playback: 'loop' });
+    expect(result.SE.get(3)?.rest).toBeUndefined();
+  });
+});
+
+// topAnimTextures is the pure decision HexMapRenderer.ts's pooled
+// base/overlay-sprite bookkeeping is built on (see its own doc comment) —
+// exercised directly here with plain strings, no Pixi/sprite pool involved.
+describe('topAnimTextures', () => {
+  it('puts the rest image on base and the current frame on overlay for an overlay clip', () => {
+    expect(topAnimTextures({ textures: ['f0', 'f1', 'f2'], rest: 'rest' }, 1)).toEqual({
+      base: 'rest',
+      overlay: 'f1',
+    });
+  });
+
+  it('puts the current frame straight on base, with no overlay, for a legacy clip (no rest)', () => {
+    expect(topAnimTextures({ textures: ['f0', 'f1', 'f2'] }, 1)).toEqual({ base: 'f1' });
+    expect(topAnimTextures({ textures: ['f0', 'f1', 'f2'] }, 1).overlay).toBeUndefined();
+  });
+
+  it("base never changes across frames for an overlay clip — only overlay does", () => {
+    const clipWithRest = { textures: ['f0', 'f1', 'f2'], rest: 'rest' };
+    expect(topAnimTextures(clipWithRest, 0).base).toBe('rest');
+    expect(topAnimTextures(clipWithRest, 2).base).toBe('rest');
+    expect(topAnimTextures(clipWithRest, 0).overlay).toBe('f0');
+    expect(topAnimTextures(clipWithRest, 2).overlay).toBe('f2');
   });
 });
 
