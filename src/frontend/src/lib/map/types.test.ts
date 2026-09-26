@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bend60OrientationOf,
   bendOrientationOf,
   confluenceOrientationOf,
   confluenceWideOrientationOf,
@@ -7,6 +8,7 @@ import {
   springOrientationOf,
   straightOrientationOf,
   TILE_ORIENTATIONS,
+  type TileOrientation,
 } from './types';
 
 // All three functions below were derived from a from-scratch re-verification
@@ -51,6 +53,43 @@ describe('bendOrientationOf', () => {
     // no longer produces these, but the function should degrade gracefully
     // for any pre-existing persisted world that still has one.
     expect(bendOrientationOf('E', 'NE')).toBe('NE');
+  });
+});
+
+describe('bend60OrientationOf', () => {
+  // Pixel-measured from the vendored atlas (rivertile_bend60_<D>_base, and
+  // identically rivertile_bend60_loop): the polygon edges (isoTopPoints order)
+  // each file's water actually touches. Kept as literal data so this test
+  // checks the function against the art, not against its own formula.
+  const MEASURED_EDGES: Record<TileOrientation, [number, number]> = {
+    E: [0, 1],
+    NE: [1, 2],
+    NW: [2, 3],
+    W: [3, 4],
+    SW: [4, 5],
+    SE: [5, 0],
+  };
+  // Direction d's shared border is polygon edge (3 - d) mod 6 — self-inverse.
+  const directionOfEdge = (edge: number): TileOrientation => TILE_ORIENTATIONS[(3 - edge + 6) % 6];
+
+  it('picks, for every adjacent in/out pair in both flow directions, the file whose measured edges are exactly that pair', () => {
+    for (let d = 0; d < 6; d++) {
+      const a = TILE_ORIENTATIONS[d];
+      const b = TILE_ORIENTATIONS[(d + 1) % 6];
+      for (const [inDir, outDir] of [
+        [a, b],
+        [b, a],
+      ] as const) {
+        const file = bend60OrientationOf(inDir, outDir);
+        const touched = MEASURED_EDGES[file].map(directionOfEdge).sort();
+        expect(touched).toEqual([inDir, outDir].sort());
+      }
+    }
+  });
+
+  it('regression: NE -> NW resolves to file NE (it used to fall back to E and dead-end)', () => {
+    expect(bend60OrientationOf('NE', 'NW')).toBe('NE');
+    expect(bend60OrientationOf('NW', 'NE')).toBe('NE');
   });
 });
 

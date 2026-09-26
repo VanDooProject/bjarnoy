@@ -42,6 +42,7 @@ import {
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
+  bend60OrientationOf,
   bendOrientationOf,
   confluenceOrientationOf,
   confluenceWideOrientationOf,
@@ -1051,9 +1052,9 @@ export function topAnimFor(textures: TileTextures, tile: Tile, riverArt?: RiverA
  * `inDirections`/`outDirection` as a `TileOrientation` directly.
  *
  * `bend` is directional (`bendOrientationOf`); `bend60` — the sharper
- * 120°-off-straight turn, a separate art family from `bend` — is directional
- * the same way, reusing `bendOrientationOf` (it takes an in/out direction
- * pair, not an angle, so the same anchor logic applies); `spring` has only
+ * 120°-off-straight turn between two adjacent edges, a separate art family
+ * from `bend` — has its own rotation convention (`bend60OrientationOf`: its
+ * files touch edges `D`/`D+1`, not `bend`'s `D-1`/`D+1`); `spring` has only
  * an outflow (`springOrientationOf`) — which of its two art families
  * (`springcorrie`/`springsaddleback`) to use is the caller's own per-tile
  * lookup (`springShape`, mirroring the backend's
@@ -1097,7 +1098,7 @@ export function riverArtFor(
     return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
   }
   if (river.shape === 'bend60' && river.outDirection && river.inDirections[0]) {
-    return { shape: 'bend60', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
+    return { shape: 'bend60', orientation: bend60OrientationOf(river.inDirections[0], river.outDirection) };
   }
   if (river.shape === 'spring' && river.outDirection) {
     const shape = springShape === 'saddleback' ? 'springsaddleback' : 'springcorrie';
