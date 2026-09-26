@@ -6,9 +6,11 @@
 // The collapsed handle deliberately does NOT show a slot count the way the
 // desktop panels do — with more than a handful of slots (premium accounts
 // can queue well past 3), a static "N / M" count stops being useful at a
-// glance. Instead it's a small 28x80 edge tab showing a total-order count
-// badge plus a thin progress bar for whichever build/training order is
-// soonest to finish — see soonest() below.
+// glance. Instead it's a small 48px-wide edge tab showing, per non-empty
+// category (build then training), an icon, a count chip when more than one
+// order is queued, the soonest order's remaining time, and a thin progress
+// bar for that soonest order — see soonest()/buildHandleRow/
+// trainingHandleRow below.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
@@ -16,12 +18,14 @@ import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
 import {
   MAX_TRAINING_QUEUE_LENGTH,
+  formatCountdownShort,
   useBuildOrders,
   useTrainingOrders,
-  type BuildOrderRow,
-  type TrainingOrderRow,
 } from '../../composables/useQueueOrders';
 import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
+import axeIconUrl from '../../assets/icons/axe.svg?url';
+import swordIconUrl from '../../assets/icons/sword.svg?url';
+import flagIconUrl from '../../assets/icons/flag.svg?url';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -52,14 +56,72 @@ function soonest<T extends { remainingSeconds: number | null }>(pool: T[]): T | 
   return pool.reduce((best, r) => ((r.remainingSeconds ?? Infinity) < (best.remainingSeconds ?? Infinity) ? r : best));
 }
 
-// Single soonest-to-finish order across BOTH queues, for the handle's
-// progress bar — waiting build orders (no active progress yet) are excluded.
-const soonestActive = computed<BuildOrderRow | TrainingOrderRow | null>(() => {
-  const activeBuilds = buildOrders.value.filter((o) => !o.waiting);
-  return soonest([...activeBuilds, ...trainingOrders.value]);
+interface HandleRow {
+  category: 'build' | 'train' | 'army';
+  icon: string;
+  count: number;
+  timeText: string;
+  progress: number;
+  done: boolean;
+  showProgress: boolean;
+}
+
+// Build's soonest row is the soonest *non-waiting* order (a waiting order
+// has no completion instant yet — see useQueueOrders.ts's own remarks).
+// When every build order is waiting, the row still shows (so the handle
+// reflects that something is queued) but with a muted "—" and no progress
+// bar rather than picking an arbitrary waiting order to imply progress that
+// doesn't exist.
+const buildHandleRow = computed<HandleRow | null>(() => {
+  if (!buildOrders.value.length) return null;
+  const active = buildOrders.value.filter((o) => !o.waiting);
+  const order = soonest(active);
+  return {
+    category: 'build',
+    icon: axeIconUrl,
+    count: buildOrders.value.length,
+    timeText: order ? formatCountdownShort(order.remainingSeconds ?? 0) : '—',
+    progress: order?.progress ?? 0,
+    done: order?.done ?? false,
+    showProgress: order !== null,
+  };
 });
 
-const orderCount = computed(() => buildOrders.value.length + trainingOrders.value.length);
+const trainingHandleRow = computed<HandleRow | null>(() => {
+  if (!trainingOrders.value.length) return null;
+  const order = soonest(trainingOrders.value);
+  return {
+    category: 'train',
+    icon: swordIconUrl,
+    count: trainingOrders.value.length,
+    timeText: order?.remainingSeconds != null ? formatCountdownShort(order.remainingSeconds) : '—',
+    progress: order?.progress ?? 0,
+    done: order?.done ?? false,
+    showProgress: order?.remainingSeconds != null,
+  };
+});
+
+// Armies away from home: the soonest arrival (outbound or returning) across
+// them. Only supporting armies (no active leg) → muted "—", like a build
+// queue that's all waiting.
+const armyHandleRow = computed<HandleRow | null>(() => {
+  if (!sortedArmyRows.value.length) return null;
+  void world.hud.tick; // tick the countdown every second
+  const next = sortedArmyRows.value[0].etaMs !== null ? sortedArmyRows.value[0] : null;
+  return {
+    category: 'army',
+    icon: flagIconUrl,
+    count: sortedArmyRows.value.length,
+    timeText: next ? formatCountdownShort((next.etaMs! - Date.now()) / 1000) : '—',
+    progress: next?.progress ?? 0,
+    done: false,
+    showProgress: next !== null,
+  };
+});
+
+const handleRows = computed<HandleRow[]>(() =>
+  [buildHandleRow.value, trainingHandleRow.value, armyHandleRow.value].filter((r): r is HandleRow => r !== null),
+);
 
 const garrison = computed(() =>
   world.hud.garrison
@@ -145,7 +207,7 @@ function close() {
 // Drag-to-open/close (issue: mobile queue sidebar). Matches the CSS's own
 // dimensions — see the `.queue-drawer`/`.queue-drawer-handle` rules below —
 // so the drag transform lines up with the resting transform exactly.
-const HANDLE_W = 28;
+const HANDLE_W = 48;
 // A plain computed() here would cache window.innerWidth from whenever it
 // was first read and never update — a rotation/resize would then desync
 // the drag clamp/threshold math from the CSS transform, which recomputes
@@ -426,13 +488,19 @@ onUnmounted(() => {
         @pointercancel="onHandlePointerCancel"
         @click="onHandleClick"
       >
-        <span v-if="orderCount > 0" class="queue-drawer-badge">{{ orderCount }}</span>
-        <div v-if="soonestActive" class="queue-drawer-handle-progress">
-          <div
-            class="queue-drawer-handle-progress-fill"
-            :class="{ 'is-done': soonestActive.done }"
-            :style="{ height: `${Math.round(soonestActive.progress * 100)}%` }"
-          />
+        <div v-for="row in handleRows" :key="row.category" class="queue-drawer-handle-row" :class="`is-${row.category}`">
+          <span class="queue-drawer-handle-icon-wrap">
+            <img :src="row.icon" alt="" aria-hidden="true" class="queue-drawer-handle-icon" />
+            <span v-if="row.count > 1" class="queue-drawer-handle-count">{{ row.count }}</span>
+          </span>
+          <span class="queue-drawer-handle-time" :class="{ 'is-muted': !row.showProgress }">{{ row.timeText }}</span>
+          <div v-if="row.showProgress" class="queue-drawer-handle-progress">
+            <div
+              class="queue-drawer-handle-progress-fill"
+              :class="{ 'is-done': row.done }"
+              :style="{ width: `${Math.round(row.progress * 100)}%` }"
+            />
+          </div>
         </div>
         <span class="queue-drawer-chevron" :class="{ 'is-open': open }" aria-hidden="true">{{ t('hud.queueDrawer.chevron') }}</span>
       </button>
@@ -649,7 +717,7 @@ onUnmounted(() => {
   display: flex;
   align-items: stretch;
   width: min(86vw, 340px);
-  transform: translateX(calc(-1 * (min(86vw, 340px) - 28px)));
+  transform: translateX(calc(-1 * (min(86vw, 340px) - 48px)));
   transition: transform 180ms ease;
   /* Most of this column's width, above/below the 80px-tall handle, is
      transparent — without this the whole column would still swallow map
@@ -710,16 +778,13 @@ onUnmounted(() => {
 .queue-drawer-handle {
   flex: none;
   align-self: center;
-  width: 28px;
-  height: 80px;
-  /* Fixed height sized to its content: 16px badge + 28px progress bar +
-     14px chevron + two 4px gaps = 66px, plus 4px padding top and bottom. */
-  padding: 4px 0;
+  width: 48px;
+  min-height: 64px;
+  padding: 6px 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
+  gap: 6px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-left: none;
@@ -735,28 +800,57 @@ onUnmounted(() => {
   outline: 2px solid var(--gold);
   outline-offset: -2px;
 }
-.queue-drawer-badge {
+.queue-drawer-handle-row {
   flex: none;
-  min-width: 18px;
-  padding: 0 4px;
-  border-radius: 8px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.queue-drawer-handle-icon-wrap {
+  position: relative;
+  width: 14px;
+  height: 14px;
+}
+.queue-drawer-handle-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.queue-drawer-handle-count {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 11px;
+  height: 11px;
+  padding: 0 2px;
+  border-radius: 6px;
   background: var(--gold);
   color: #1a1a1a;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 11px;
+  text-align: center;
+}
+.queue-drawer-handle-time {
   font-size: 11px;
   font-weight: 700;
-  line-height: 16px;
-  text-align: center;
+  color: var(--gold);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.queue-drawer-handle-time.is-muted {
+  color: var(--muted);
 }
 .queue-drawer-handle-progress {
   flex: none;
-  width: 4px;
-  height: 28px;
-  display: flex;
-  align-items: flex-end;
+  width: 100%;
+  height: 2px;
   background: rgba(255, 255, 255, 0.1);
 }
 .queue-drawer-handle-progress-fill {
-  width: 100%;
+  height: 100%;
   background: var(--gold);
 }
 .queue-drawer-handle-progress-fill.is-done {
@@ -764,6 +858,7 @@ onUnmounted(() => {
 }
 .queue-drawer-chevron {
   flex: none;
+  margin-top: auto;
   font-size: 14px;
   line-height: 14px;
   color: var(--muted);

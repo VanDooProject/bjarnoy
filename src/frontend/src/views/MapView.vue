@@ -447,12 +447,12 @@ onUnmounted(() => stageObserver?.disconnect());
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
 // These are worst-case constants: every panel is treated as present. On
 // mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
-// collapsed handle (.queue-drawer-handle, a 28x80 tab) pinned to the left
+// collapsed handle (.queue-drawer-handle, a 48px-wide tab) pinned to the left
 // edge, and the HUD bar can be docked at the bottom instead of the top (see
 // ArmyPanel.vue's `--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx`
 // above mirror the bar's real height into whichever edge it occupies now.
 const ringBounds = computed(() => ({
-  left: isMobile.value ? 44 : 268, // 28px handle + 16px gap
+  left: isMobile.value ? 64 : 268, // 48px handle + 16px gap
   top: hudInsetTopPx.value + 12,
   right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 348),
   bottom: stage.value.h - (hudInsetBottomPx.value + 16),
