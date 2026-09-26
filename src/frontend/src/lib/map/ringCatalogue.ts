@@ -35,13 +35,22 @@ export function longhouseLock(requiredLevel: number | undefined, currentLevel: n
 
 /**
  * The river shapes each river-gated building's vendor art has a matching
- * composite for (`BuildingDefinition.RequiresRiverShape`) — Sawmill's
- * waterwheel reads from the bank on a Straight or Bend tile, Crop Mill's
- * stands directly in the current so only a Straight tile has its composite.
- * A type with no entry here has no river requirement at all.
+ * composite for (`BuildingDefinition.RequiresRiverShape`, mirrored here) —
+ * Sawmill's waterwheel reads from the bank on a Straight, gentler 60°-off
+ * Bend, or tight 60° Bend60 tile; Crop Mill's stands directly in the
+ * current so only a Straight tile has its composite. A type with no entry
+ * here has no river requirement at all.
+ *
+ * The general rule: a river building may only stand where its art matches
+ * the hex's river art (Sawmill on straight/bend/bend60, Crop Mill on
+ * straight). River art variants (bend180_island/meander, bend120_island/
+ * meander) count as their base shape; bend60_loop does not allow a Sawmill.
+ * River art variants aren't drawn yet — a follow-up adds them; this is the
+ * rule it must follow. See `BuildingCatalogue.cs`'s `SawmillRiverShapes`/
+ * `CropMillRiverShapes`, which this set has to keep matching.
  */
 const RIVER_SHAPES_BY_TYPE: Partial<Record<string, ReadonlySet<string>>> = {
-  sawmill: new Set(['straight', 'bend']),
+  sawmill: new Set(['straight', 'bend', 'bend60']),
   cropmill: new Set(['straight']),
 };
 

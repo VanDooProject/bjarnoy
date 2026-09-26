@@ -15,13 +15,30 @@ import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType
 
 describe('buildingArtByFamily', () => {
   it('resolves art for each of the sawmill families', () => {
-    for (const family of ['sawmill', 'sawmillriver', 'sawmillbend']) {
+    for (const family of ['sawmill', 'sawmillriver', 'sawmillbend', 'sawmillbend60']) {
       expect(buildingArtByFamily(family, 1)).toBeDefined();
     }
   });
 
+  // A Sawmill is never actually on plain ground (BuildingCatalogue.
+  // SawmillRiverShapes requires a river) — BUILDING_ART_FAMILIES.sawmill
+  // maps the wire type straight to the river family now, not the grass
+  // 'sawmill' family buildingArtByFamily('sawmill', ...) still resolves for
+  // the docs page's own variant picker (see ART_VARIANTS in
+  // TechTreeView.vue, which no longer offers that inland variant either).
   it('matches buildingArt(type) for the family that type maps to', () => {
-    expect(buildingArtByFamily('sawmill', 1)).toEqual(buildingArt('sawmill', 1));
+    expect(buildingArtByFamily('sawmillriver', 1)).toEqual(buildingArt('sawmill', 1));
+  });
+
+  // A Sawmill is never actually on plain ground — this asserts the wire
+  // type's own lookup (buildingArt, used by BuildingModal/tech-tree preview
+  // fallbacks) never resolves to the grass 'sawmill' family's art, even
+  // though that family still exists in the pack (still directly reachable
+  // via buildingArtByFamily('sawmill', ...) above, kept for now in case a
+  // future docs page still wants to show it explicitly).
+  it('never resolves the grass sawmill family through the wire type', () => {
+    const grassArt = buildingArtByFamily('sawmill', 1);
+    expect(buildingArt('sawmill', 1)).not.toEqual(grassArt);
   });
 
   it('returns undefined for a family with no art in the pack', () => {

@@ -64,6 +64,7 @@ import {
   loadBuildingAtlases,
   loadTerrainAtlas,
   mergeTileTextures,
+  riverBuildingArtFor,
   riverTexturesFor,
   textureKeyFor,
   topAnimFor,
@@ -3069,16 +3070,20 @@ export class HexMapRenderer {
         fogPerfStats.terrainDrawnCount++;
         continue;
       }
-      // A Sawmill is built directly on a river tile (WorldModel.placeBuilding
-      // only accepts a straight/bend one) — its sawmill+river composite art
-      // replaces the plain river art the `river` branch below would
-      // otherwise draw, so this has to be checked first.
-      if (river && tile.buildingType === 'sawmill') {
-        const sawmillVariant = worldModel.sawmillArtVariantOf(c);
-        baseEntries.set(key, { texture: baseTextureFor(textures, tile, sawmillVariant), coord: c });
-        const topTexture = topTextureFor(textures, tile, sawmillVariant);
+      // A Sawmill/Crop Mill is built directly on a river tile
+      // (WorldModel.placeBuilding mirrors BuildingCatalogue's
+      // RequiresRiverShape) — its building+river composite art replaces the
+      // plain river art the `river` branch below would otherwise draw, so
+      // this has to be checked first. riverBuildingArtFor resolves both the
+      // art family *and* orientation from the river tile itself, not
+      // tile.orientation's random per-hex hash, so the channel lines up
+      // with the neighbouring river tiles' own art.
+      const riverArt = river && tile.buildingType ? riverBuildingArtFor(tile.buildingType, river) : undefined;
+      if (riverArt) {
+        baseEntries.set(key, { texture: baseTextureFor(textures, tile, riverArt), coord: c });
+        const topTexture = topTextureFor(textures, tile, riverArt);
         if (topTexture) {
-          topEntries.set(key, { texture: topTexture, coord: c, anim: topAnimFor(textures, tile, sawmillVariant) });
+          topEntries.set(key, { texture: topTexture, coord: c, anim: topAnimFor(textures, tile, riverArt) });
         }
         fogPerfStats.terrainDrawnCount++;
         continue;

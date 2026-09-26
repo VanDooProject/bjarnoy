@@ -68,10 +68,14 @@ export const TILE_ART_TOPFACE_Y_FRAC = 140 / 200;
 /** Top-face height as a fraction of the tile width (92 / 200). */
 export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
 
-// 'sawmillriver'/'sawmillbend' aren't real `Tile['buildingType']` values —
-// a Sawmill's wire building type always stays 'sawmill' (see
-// `WorldModel.sawmillArtVariantOf`) — they're purely extra texture-lookup
-// keys for its two river-adjacent art families.
+// 'sawmillriver'/'sawmillbend'/'sawmillbend60' aren't real
+// `Tile['buildingType']` values — a Sawmill's wire building type always
+// stays 'sawmill' (see `riverBuildingArtFor`) — they're purely extra
+// texture-lookup keys for its river-adjacent art families (one per river
+// shape its vendor art has a composite for — straight, the gentler 60°-off
+// bend, and the tight 60° bend60. See `riverBuildingArtFor`'s own doc
+// comment for the rule that keeps a building's placement in sync with
+// which of these actually has art).
 // 'wasteland'/'deadforest'/'blacksand'/'wastedmountain' aren't real
 // `Terrain` values either — a wasted tile's wire terrain stays
 // 'grass'/'forest'/'sand'/'mountain' (see `Tile.wasted`) — they're purely the
@@ -82,6 +86,7 @@ export type TextureKey =
   | NonNullable<Tile['buildingType']>
   | 'sawmillriver'
   | 'sawmillbend'
+  | 'sawmillbend60'
   | 'wasteland'
   | 'deadforest'
   | 'blacksand'
@@ -89,8 +94,16 @@ export type TextureKey =
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
-/** The atlas source-render `family` name backing each `TextureKey` — the same string the old per-family `import.meta.glob` prefix used. A key with no rendered family (no art exists, e.g. Quarry) is simply absent here, and `baseTextureFor` already falls back to bare terrain for that case. */
-const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
+/**
+ * The atlas source-render `family` name backing each `TextureKey` — the
+ * same string the old per-family `import.meta.glob` prefix used. A key with
+ * no rendered family (no art exists, e.g. Quarry) is simply absent here,
+ * and `baseTextureFor` already falls back to bare terrain for that case.
+ * Exported (only) so textures.test.ts can guard that a `TextureKey` maps to
+ * the family its art actually ships under, the same reason `RIVER_FAMILY`
+ * is exported.
+ */
+export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   sea: 'watertile',
   sand: 'sandtile',
   mountain: 'mountaintile',
@@ -113,10 +126,6 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   archeryrange: 'archerybuilding',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
-  // Flat/inland sawmill only — 'sawmillriver'/'sawmillbend' are separate
-  // TextureKeys below, since (unlike this one) their base layer varies by
-  // level too.
-  sawmill: 'sawmill',
   // Shares FisherHut's leveled family now — the legacy 'fishinghutbuilding'
   // composite (still in the pack, no longer referenced) had no per-level
   // art at all. See buildingArt.ts's matching docs-page choice.
@@ -125,8 +134,23 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   tower: 'towerbuilding',
   dockyard: 'dockyard',
   fisherhut: 'fisherhut',
+  // A Sawmill is never actually on grass (the backend requires a river
+  // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
+  // deliberately no plain 'sawmill' entry here for the grass/inland family
+  // the pack still ships (still referenced by buildingArt.ts's old preview
+  // fallback before this fix): `textureKeyFor` never resolves to it, and no
+  // other code path should either — see textureKeyFor's own doc comment and
+  // textures.test.ts's "grass sawmill art is never used" guard.
   sawmillriver: 'sawmillriver',
   sawmillbend: 'sawmillbend',
+  sawmillbend60: 'sawmillbend60',
+  meadery: 'meadery',
+  townsquare: 'townsquare',
+  cropmill: 'cropmill',
+  smithy: 'smithy',
+  druidhut: 'druidhut',
+  cartworkshop: 'cartworkshop',
+  claybrickworks: 'claybrickworks',
   wasteland: 'wasteland',
   deadforest: 'deadforest',
   blacksand: 'blacksand',
@@ -263,6 +287,74 @@ const ORIENTATION_RE = /_(NE|NW|SW|SE|E|W)(?:_|$)/;
 const VARIANT_RE = /_variant(\d{3})(?:_base)?$/;
 /** A numbered building-level suffix, e.g. `_level004` (a top frame) or `_level004_base` (a leveled base frame — see `classifyFamilyFrames`). */
 const LEVEL_RE = /_level(\d{3})(?:_base)?$/;
+/**
+ * A lettered alternate-pass level frame, e.g. `cropmill_E_level004a` or
+ * `townsquare_E_level000b` (see `ANIM_LEVEL_RE`'s own comment for what
+ * these are — a construction sub-stage some families' vendor art carries
+ * alongside, or instead of, the canonical numbered rung, per that repo's
+ * `docs/level-splitting.md`, "a stage of it is not a level of its own").
+ * `LEVEL_RE` doesn't match these at all (no plain digit run right before
+ * the end/`_base`), so without `collapseLetteredLevels` below,
+ * `explicitIndexOf` would fall through to its `null` default and silently
+ * collide them onto index 0 alongside (or in place of) the real level's
+ * frame in `classifyFamilyFrames`.
+ */
+const LEVEL_LETTER_RE = /^(.+_level\d{3})([a-z])((?:_base)?)$/;
+/** The plain (unlettered) counterpart `LEVEL_LETTER_RE` groups a family's lettered passes against — matches `cropmill_E_level000`/`cropmill_E_level000_base`, not `..._level000a`. */
+const PLAIN_LEVEL_RE = /^(.+_level\d{3})((?:_base)?)$/;
+
+/**
+ * Collapses a family's lettered alternate-pass level frames down to one
+ * frame per level/orientation/layer, before `classifyFamilyFrames` ever
+ * sees them:
+ *
+ * - A level that also has a plain (unlettered) frame — e.g. cropmill's
+ *   `level000`/`level000a`, `level004`/`level004a` — keeps only the plain
+ *   one; the lettered pass is a genuine alternate (cropmill's `004a` is a
+ *   second-mill composition of the same level) that has no place in the
+ *   single-frame-per-level array `classifyFamilyFrames` builds.
+ * - A level that has *no* plain frame at all, only lettered ones — e.g.
+ *   townsquare's `level000a`/`level000b` (its own build script's level000
+ *   is authored as two construction sub-stages, with no combined
+ *   "level000" render) — keeps the alphabetically last lettered pass
+ *   (`level000b`) standing in for the plain frame: letter order is
+ *   construction order within that level, so the last pass is the closest
+ *   to that level's finished look, the one every other level's plain frame
+ *   represents.
+ *
+ * Frames with no level suffix at all (terrain composites, variant frames)
+ * pass through untouched.
+ */
+export function collapseLetteredLevels<T>(frames: FamilyFrame<T>[]): FamilyFrame<T>[] {
+  const untouched: FamilyFrame<T>[] = [];
+  const plainKeyed = new Map<string, FamilyFrame<T>>();
+  const letteredGroups = new Map<string, { letter: string; frame: FamilyFrame<T> }[]>();
+
+  for (const f of frames) {
+    const lettered = LEVEL_LETTER_RE.exec(f.name);
+    if (lettered) {
+      const key = lettered[1] + lettered[3];
+      const group = letteredGroups.get(key) ?? [];
+      group.push({ letter: lettered[2], frame: f });
+      letteredGroups.set(key, group);
+      continue;
+    }
+    const plain = PLAIN_LEVEL_RE.exec(f.name);
+    if (plain) {
+      plainKeyed.set(plain[1] + plain[2], f);
+      continue;
+    }
+    untouched.push(f);
+  }
+
+  const result = [...untouched, ...plainKeyed.values()];
+  for (const [key, group] of letteredGroups) {
+    if (plainKeyed.has(key)) continue; // the plain frame already won for this level
+    const last = [...group].sort((a, b) => a.letter.localeCompare(b.letter)).at(-1)!;
+    result.push({ name: key, layer: last.frame.layer, value: last.frame.value });
+  }
+  return result;
+}
 
 /**
  * A clip's plain numbered level, e.g. `cropmill_E_level003` — deliberately
@@ -541,7 +633,7 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
   const top: TileTextures['top'] = {};
   const animTop: TileTextures['animTop'] = {};
   for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
-    const frames = framesOfFamily(merged, family);
+    const frames = collapseLetteredLevels(framesOfFamily(merged, family));
     const classified = classifyFamilyFrames(GAPPY_VARIANT_FAMILIES.has(family) ? renumberTopVariants(frames) : frames);
     if (classified.base) base[key] = classified.base;
     if (classified.baseIndexed) baseIndexed[key] = classified.baseIndexed;
@@ -733,13 +825,23 @@ export function loadTileTextures(): Promise<TileTextures> {
 }
 
 /**
- * `sawmillVariant` overrides a Sawmill tile's texture key to one of its two
- * river-adjacent families — see `WorldModel.sawmillArtVariantOf`, which
- * derives it from the tile's neighbours (a Sawmill's own hex is never
- * itself a river tile — `HexMapRenderer.rebuildTerrain` renders a river
- * tile's own art instead of any building standing "on" it). Ignored for
- * every other building/terrain.
+ * `RiverArt` overrides both the texture key and the orientation a river-
+ * gated building (Sawmill, Crop Mill) renders with — see
+ * `riverBuildingArtFor`, which derives it from the river tile the building
+ * actually stands on (a Sawmill/Crop Mill's own hex *is* the river tile —
+ * unlike e.g. a Fishing Hut on the water, it isn't adjacent to one).
+ * Threading an explicit orientation override through here, rather than
+ * reading `tile.orientation`, is what keeps the building's channel lined up
+ * with its river neighbours: `tile.orientation` is `worldGenerator.ts`'s
+ * per-hex hash, unrelated to which way the river the building was built on
+ * actually flows (see `docs/design/river-generation.md` and this fix's own
+ * PR description). Ignored for every other building/terrain.
  */
+export interface RiverArt {
+  key: TextureKey;
+  orientation: TileOrientation;
+}
+
 /**
  * A wasted tile's green terrain, mapped to the wasted-island art family it
  * renders with instead — see `docs/design/river-generation.md`'s wasted-
@@ -755,8 +857,20 @@ const WASTED_TEXTURE_KEY: Partial<Record<Terrain, TextureKey>> = {
   mountain: 'wastedmountain',
 };
 
-export function textureKeyFor(tile: Tile, sawmillVariant?: 'sawmillriver' | 'sawmillbend'): TextureKey {
-  if (tile.buildingType === 'sawmill' && sawmillVariant) return sawmillVariant;
+/**
+ * A Sawmill is never actually on plain ground — placing one requires a
+ * river shape (`BuildingCatalogue.SawmillRiverShapes`) — so its wire
+ * building type never resolves to the flat/inland `sawmill` art family:
+ * absent a `riverArt` override (which the render path always supplies when
+ * it has the river tile in hand — see `riverBuildingArtFor`), this falls
+ * back to `sawmillriver` rather than the grass family, so a caller that
+ * forgets to pass one (or genuinely has no river tile to look up, e.g. a
+ * stale/malformed tile) still never shows the grass sawmill. See
+ * `textures.test.ts`'s "grass sawmill art is never used" guard.
+ */
+export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
+  if (riverArt) return riverArt.key;
+  if (tile.buildingType === 'sawmill') return 'sawmillriver';
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
   return tile.terrain;
@@ -777,12 +891,8 @@ function clampIndex(index: number, length: number): number {
  * layering on top of it, since the pack draws the hut with its own base
  * already included.
  */
-export function baseTextureFor(
-  textures: TileTextures,
-  tile: Tile,
-  sawmillVariant?: 'sawmillriver' | 'sawmillbend',
-): Texture {
-  const orientation = tile.orientation ?? 'SE';
+export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture {
+  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
     const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
@@ -797,7 +907,7 @@ export function baseTextureFor(
     const wastelandBase = textures.base.wasteland;
     if (wastelandBase) return wastelandBase[orientation];
   }
-  const key = textureKeyFor(tile, sawmillVariant);
+  const key = textureKeyFor(tile, riverArt);
   const indexed = textures.baseIndexed[key];
   if (indexed) {
     const arr = indexed[orientation];
@@ -811,13 +921,9 @@ export function baseTextureFor(
 }
 
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
-export function topTextureFor(
-  textures: TileTextures,
-  tile: Tile,
-  sawmillVariant?: 'sawmillriver' | 'sawmillbend',
-): Texture | undefined {
-  const key = textureKeyFor(tile, sawmillVariant);
-  const orientation = tile.orientation ?? 'SE';
+export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture | undefined {
+  const key = textureKeyFor(tile, riverArt);
+  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
   const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
@@ -831,13 +937,9 @@ export function topTextureFor(
  * identically to `topTextureFor` so the two always agree on which rung a
  * given tile is showing.
  */
-export function topAnimFor(
-  textures: TileTextures,
-  tile: Tile,
-  sawmillVariant?: 'sawmillriver' | 'sawmillbend',
-): TileAnimClip | undefined {
-  const key = textureKeyFor(tile, sawmillVariant);
-  const orientation = tile.orientation ?? 'SE';
+export function topAnimFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): TileAnimClip | undefined {
+  const key = textureKeyFor(tile, riverArt);
+  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
   const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
@@ -921,6 +1023,48 @@ export function riverArtFor(
 
   const direction = river.inDirections[0] ?? river.outDirection;
   return { shape: 'straight', orientation: direction ? straightOrientationOf(direction) : 'SE' };
+}
+
+/**
+ * A river-gated building's own art family/orientation, given the river tile
+ * it stands on — used instead of the tile's random `orientation` hash so a
+ * Sawmill/Crop Mill's channel lines up with its river neighbours (the same
+ * shape is what a real placement is built on, per `BuildingCatalogue`'s
+ * `SawmillRiverShapes`/`CropMillRiverShapes` and `ringCatalogue.ts`'s
+ * `RIVER_SHAPES_BY_TYPE` — see that map's own doc comment for the
+ * shape-matches-the-hex's-river-art rule this mirrors). `seaDirection`/
+ * `springShape` are never needed here: neither building is ever placed on a
+ * `mouth` or `spring` tile, the only shapes `riverArtFor` would otherwise
+ * need them for.
+ *
+ * Returns `undefined` for a river shape this building type has no matching
+ * art for (`riverBuildingAllowedHere` already keeps it from being placed
+ * there in the first place — this only defends the render path against a
+ * stale/malformed tile).
+ */
+export function riverBuildingArtFor(buildingType: string, river: RiverTile): RiverArt | undefined {
+  // Gated on the river tile's own wire shape, not the art-resolved shape
+  // riverArtFor returns below: a Mouth tile's art always resolves to
+  // 'straight' or 'bend' (mouthOrientationOf), but Mouth itself is never a
+  // valid Sawmill/Crop Mill placement (absent from both SawmillRiverShapes
+  // and CropMillRiverShapes) — checking the raw shape here keeps this in
+  // lockstep with riverBuildingAllowedHere instead of accidentally drawing
+  // river-building art on a shape it was never actually built on.
+  if (buildingType === 'sawmill') {
+    if (river.shape !== 'straight' && river.shape !== 'bend' && river.shape !== 'bend60') return undefined;
+  } else if (buildingType === 'cropmill') {
+    if (river.shape !== 'straight') return undefined;
+  } else {
+    return undefined;
+  }
+  const { shape, orientation } = riverArtFor(river, null);
+  if (buildingType === 'sawmill') {
+    if (shape === 'straight') return { key: 'sawmillriver', orientation };
+    if (shape === 'bend') return { key: 'sawmillbend', orientation };
+    if (shape === 'bend60') return { key: 'sawmillbend60', orientation };
+    return undefined;
+  }
+  return { key: 'cropmill', orientation };
 }
 
 /**

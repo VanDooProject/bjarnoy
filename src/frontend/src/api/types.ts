@@ -77,7 +77,7 @@ export interface TileCoordinate {
 export interface RiverTileResponse {
   q: number;
   r: number;
-  shape: 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth';
+  shape: 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth' | 'bend60';
   inDirections: string[];
   outDirection: string | null;
 }

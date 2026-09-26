@@ -47,9 +47,10 @@ describe('riverBuildingAllowedHere', () => {
     expect(riverBuildingAllowedHere('sawmill', undefined)).toBe(false);
   });
 
-  it('allows a sawmill on a straight or bend river hex', () => {
+  it('allows a sawmill on a straight, bend, or tight (bend60) river hex', () => {
     expect(riverBuildingAllowedHere('sawmill', 'straight')).toBe(true);
     expect(riverBuildingAllowedHere('sawmill', 'bend')).toBe(true);
+    expect(riverBuildingAllowedHere('sawmill', 'bend60')).toBe(true);
   });
 
   it('excludes a sawmill from a non-matching river shape', () => {
@@ -59,6 +60,7 @@ describe('riverBuildingAllowedHere', () => {
   it('only allows a crop mill on a straight river hex, unlike the sawmill', () => {
     expect(riverBuildingAllowedHere('cropmill', 'straight')).toBe(true);
     expect(riverBuildingAllowedHere('cropmill', 'bend')).toBe(false);
+    expect(riverBuildingAllowedHere('cropmill', 'bend60')).toBe(false);
     expect(riverBuildingAllowedHere('cropmill', undefined)).toBe(false);
   });
 

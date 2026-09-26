@@ -3,14 +3,17 @@ import {
   baseTextureFor,
   classifyFamilyClips,
   classifyFamilyFrames,
+  collapseLetteredLevels,
   giantArtFamilyFor,
   renumberTopVariants,
   riverArtFor,
+  riverBuildingArtFor,
   riverTexturesFor,
   lavaSpringOrientationOf,
   mergeTileTextures,
   textureKeyFor,
   RIVER_FAMILY,
+  KEY_FAMILY,
   type FamilyFrame,
   type TileTextures,
 } from './textures';
@@ -137,6 +140,109 @@ describe('riverArtFor', () => {
     expect(riverArtFor(tile, null, 'saddleback').shape).toBe('springsaddleback');
     // Defaults to corrie when the caller doesn't pass one.
     expect(riverArtFor(tile, null).shape).toBe('springcorrie');
+  });
+});
+
+describe('KEY_FAMILY new building families (map fix #1)', () => {
+  // These families' art already existed in the vendored pack and were
+  // already wired into buildingArt.ts's docs-page previews — only the
+  // world-map renderer's own lookup table was missing them, which drew
+  // every one of these buildings as bare terrain on the settlement map.
+  it('maps every land building added by this fix to its own art family', () => {
+    expect(KEY_FAMILY.meadery).toBe('meadery');
+    expect(KEY_FAMILY.townsquare).toBe('townsquare');
+    expect(KEY_FAMILY.cropmill).toBe('cropmill');
+    expect(KEY_FAMILY.smithy).toBe('smithy');
+    expect(KEY_FAMILY.druidhut).toBe('druidhut');
+    expect(KEY_FAMILY.cartworkshop).toBe('cartworkshop');
+    expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
+  });
+
+  it('quarry is deliberately left unmapped — its art depends on the mountain shape it is carved into', () => {
+    expect(KEY_FAMILY.quarry).toBeUndefined();
+  });
+
+  it('maps the new Bend60 sawmill composite to its own family', () => {
+    expect(KEY_FAMILY.sawmillbend60).toBe('sawmillbend60');
+  });
+
+  it('never maps the grass/inland sawmill family — see textureKeyFor/riverBuildingArtFor\'s "never grass" guard', () => {
+    expect(KEY_FAMILY.sawmill).toBeUndefined();
+    expect(Object.values(KEY_FAMILY)).not.toContain('sawmill');
+  });
+});
+
+describe('textureKeyFor: a Sawmill never resolves to the grass family', () => {
+  it('falls back to sawmillriver when no riverArt override is given at all', () => {
+    const tile: Tile = { q: 0, r: 0, terrain: 'grass', buildingType: 'sawmill' };
+    expect(textureKeyFor(tile)).toBe('sawmillriver');
+  });
+
+  it('uses whatever key a riverArt override supplies', () => {
+    const tile: Tile = { q: 0, r: 0, terrain: 'grass', buildingType: 'sawmill' };
+    expect(textureKeyFor(tile, { key: 'sawmillbend60', orientation: 'NE' })).toBe('sawmillbend60');
+  });
+});
+
+describe('riverBuildingArtFor', () => {
+  it('resolves a Sawmill on a straight river tile to sawmillriver, at the river art\'s own orientation', () => {
+    const river = riverTile('straight', 'W', null);
+    const result = riverBuildingArtFor('sawmill', river);
+    const expected = riverArtFor(river, null);
+
+    expect(result).toEqual({ key: 'sawmillriver', orientation: expected.orientation });
+  });
+
+  it('resolves a Sawmill on a (gentle) bend river tile to sawmillbend', () => {
+    const river = riverTile('bend', 'NW', 'SW');
+    const result = riverBuildingArtFor('sawmill', river);
+    const expected = riverArtFor(river, null);
+
+    expect(result).toEqual({ key: 'sawmillbend', orientation: expected.orientation });
+  });
+
+  it('resolves a Sawmill on a tight (bend60) river tile to sawmillbend60', () => {
+    const river = riverTile('bend60', 'E', 'NW');
+    const result = riverBuildingArtFor('sawmill', river);
+    const expected = riverArtFor(river, null);
+
+    expect(result).toEqual({ key: 'sawmillbend60', orientation: expected.orientation });
+  });
+
+  it('is independent of the tile\'s own random orientation hash — it never takes a Tile at all, only the RiverTile', () => {
+    // The whole point of this fix: a river building's channel is decided by
+    // the river tile it stands on (in/out directions), not
+    // worldGenerator.ts's per-hex orientationAt hash — riverBuildingArtFor's
+    // signature enforces that structurally (no Tile parameter to read
+    // .orientation off in the first place).
+    const river = riverTile('straight', 'W', null);
+    const result = riverBuildingArtFor('sawmill', river);
+    expect(result?.orientation).toBe(riverArtFor(river, null).orientation);
+  });
+
+  it('resolves a Crop Mill on a straight river tile to cropmill', () => {
+    const river = riverTile('straight', 'E', null);
+    const result = riverBuildingArtFor('cropmill', river);
+    const expected = riverArtFor(river, null);
+
+    expect(result).toEqual({ key: 'cropmill', orientation: expected.orientation });
+  });
+
+  it('refuses a Crop Mill on a bend river tile — its art has no bend composite (riverBuildingAllowedHere already keeps this from being placed)', () => {
+    const river = riverTile('bend', 'NW', 'SW');
+    expect(riverBuildingArtFor('cropmill', river)).toBeUndefined();
+  });
+
+  it('refuses a Sawmill on a shape with no matching art (spring/confluence/mouth)', () => {
+    for (const shape of ['spring', 'confluence', 'mouth'] as const) {
+      const river = riverTile(shape, 'E', 'W');
+      expect(riverBuildingArtFor('sawmill', river)).toBeUndefined();
+    }
+  });
+
+  it('is a no-op for every other building type', () => {
+    const river = riverTile('straight', 'E', null);
+    expect(riverBuildingArtFor('hut', river)).toBeUndefined();
   });
 });
 
@@ -345,6 +451,39 @@ describe('renumberTopVariants', () => {
     const classified = classifyFamilyFrames(renumberTopVariants(frames));
 
     expect(classified.top?.E).toEqual(['grasstile_E', 'grasstile_E_variant000', 'grasstile_E_variant001']);
+  });
+});
+
+describe('collapseLetteredLevels', () => {
+  it('drops a lettered alternate pass when the level also has a plain frame (cropmill_E_level004/level004a)', () => {
+    const frames = [
+      frame('cropmill_E_level004', 'top'),
+      frame('cropmill_E_level004a', 'top'),
+      frame('cropmill_E_level004_base', 'base'),
+      frame('cropmill_E_level004a_base', 'base'),
+    ];
+
+    const collapsed = collapseLetteredLevels(frames);
+
+    expect(collapsed.map((f) => f.name).sort()).toEqual(['cropmill_E_level004', 'cropmill_E_level004_base'].sort());
+  });
+
+  it('stands the last lettered pass in for a level with no plain frame at all (townsquare_E_level000a/000b)', () => {
+    const frames = [frame('townsquare_E_level000a', 'top'), frame('townsquare_E_level000b', 'top'), frame('townsquare_E_level001', 'top')];
+
+    const collapsed = collapseLetteredLevels(frames);
+    const classified = classifyFamilyFrames(collapsed);
+
+    // townsquare_E_level000b (the later, more-finished construction stage)
+    // wins over 000a, standing in for the level's plain frame.
+    expect(collapsed.find((f) => f.name === 'townsquare_E_level000')?.value).toBe('townsquare_E_level000b');
+    expect(classified.top?.E.length).toBe(2); // levels 000, 001 — contiguous, no missing-index throw
+  });
+
+  it('leaves ordinary frames (no level suffix at all) untouched', () => {
+    const frames = [frame('grasstile_E', 'top'), frame('grasstile_E_variant000', 'top')];
+
+    expect(collapseLetteredLevels(frames)).toEqual(frames);
   });
 });
 

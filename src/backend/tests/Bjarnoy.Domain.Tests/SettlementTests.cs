@@ -198,13 +198,13 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void The_sawmill_requires_its_own_hex_to_be_a_straight_or_bend_river_tile()
+    public void The_sawmill_requires_its_own_hex_to_be_a_straight_bend_or_bend60_river_tile()
     {
         var definition = BuildingCatalogue.Get(BuildingType.Sawmill, 1);
 
         Assert.NotNull(definition.RequiresRiverShape);
         Assert.Equal(
-            new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend },
+            new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend, RiverTileShape.Bend60 },
             definition.RequiresRiverShape);
         Assert.DoesNotContain(RiverTileShape.Spring, definition.RequiresRiverShape);
         Assert.DoesNotContain(RiverTileShape.Confluence, definition.RequiresRiverShape);
@@ -1677,9 +1677,9 @@ public class SettlementTests
     [InlineData(RiverTileShape.Mouth)]
     public void A_sawmill_is_refused_on_a_river_tile_whose_shape_has_no_sawmill_art(RiverTileShape shape)
     {
-        // Only Straight/Bend river tiles have a matching sawmill+river art
-        // composite — a Spring/Confluence/Mouth hex doesn't qualify even
-        // though it is a river tile.
+        // Only Straight/Bend/Bend60 river tiles have a matching sawmill+
+        // river art composite — a Spring/Confluence/Mouth hex doesn't
+        // qualify even though it is a river tile.
         var settlement = FoundAtLonghouseLevel(5);
 
         var decision = settlement.PlanBuild(
@@ -1692,13 +1692,44 @@ public class SettlementTests
     [Theory]
     [InlineData(RiverTileShape.Straight)]
     [InlineData(RiverTileShape.Bend)]
-    public void A_sawmill_may_be_built_on_a_straight_or_bend_river_tile(RiverTileShape shape)
+    [InlineData(RiverTileShape.Bend60)]
+    public void A_sawmill_may_be_built_on_a_straight_bend_or_bend60_river_tile(RiverTileShape shape)
     {
         var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
             riverShapeAt: shape);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Theory]
+    [InlineData(RiverTileShape.Bend)]
+    [InlineData(RiverTileShape.Bend60)]
+    public void A_crop_mill_is_refused_on_a_bend_or_bend60_river_tile_unlike_the_sawmill(RiverTileShape shape)
+    {
+        // Unlike the Sawmill (which has both a Bend and a Bend60 composite —
+        // see A_sawmill_may_be_built_on_a_straight_bend_or_bend60_river_tile
+        // above), the Crop Mill's vendor art only has a Straight-river
+        // composite: its waterwheel stands directly in the current.
+        var settlement = FoundAtLonghouseLevel(10);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: shape);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_crop_mill_may_be_built_on_a_straight_river_tile()
+    {
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: RiverTileShape.Straight);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }

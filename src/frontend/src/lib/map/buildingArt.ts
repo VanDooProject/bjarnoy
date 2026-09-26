@@ -52,11 +52,13 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // fisherman's-hut art (already used for the separate FisherHut building)
   // is the newer, better look, so both share the same family now.
   fishinghut: 'fisherhut',
-  // The preview card always shows the flat/inland family, regardless of
-  // where (or whether) the actual tile sits next to a river — see
-  // textures.ts's textureKeyFor/WorldModel.sawmillArtVariantOf for the
-  // adjacency-aware picker the world-map renderer uses instead.
-  sawmill: 'sawmill',
+  // A Sawmill is never actually on plain ground (placing one requires a
+  // river shape — BuildingCatalogue.SawmillRiverShapes), so the preview
+  // card shows its straight-river look — the same fallback `textures.ts`'s
+  // `textureKeyFor` uses when it has no river tile to look up. See
+  // `textures.ts`'s `riverBuildingArtFor` for the river-shape-aware picker
+  // the world-map renderer uses instead.
+  sawmill: 'sawmillriver',
   meadery: 'meadery',
   townsquare: 'townsquare',
   cropmill: 'cropmill',
@@ -75,7 +77,7 @@ const SINGLE_LEVEL_ART: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,dockyard,bigstoragehouse,barracks,fisherhut,sawmill,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 

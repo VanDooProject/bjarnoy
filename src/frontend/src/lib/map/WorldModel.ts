@@ -712,20 +712,6 @@ export class WorldModel {
   }
 
   /**
-   * Which of a Sawmill's two art families a Sawmill standing on `coord`
-   * should render with. A Sawmill is built directly on a river tile —
-   * `WorldModel.placeBuilding` only accepts a `straight`/`bend` shaped one,
-   * matching `BuildingDefinition.RequiresRiverShape` — so this reads that
-   * same hex's own river shape rather than scanning neighbours: `bend` ->
-   * `'sawmillbend'`, `straight` (or, defensively, anything else — the
-   * buildability gate means this shouldn't happen) -> `'sawmillriver'`.
-   */
-  sawmillArtVariantOf(coord: AxialCoord): 'sawmillriver' | 'sawmillbend' {
-    const river = this.getRiverTile(coord.q, coord.r);
-    return river?.shape === 'bend' ? 'sawmillbend' : 'sawmillriver';
-  }
-
-  /**
    * A cheap signature of everything the fog mask is baked from.
    *
    * Demo mode has no backend to fetch a mask from, so it bakes one locally on
@@ -1337,8 +1323,8 @@ export class WorldModel {
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes have a matching river-composite art (matches
     // BuildingDefinition.RequiresRiverShape, see riverBuildingAllowedHere).
-    // sawmillArtVariantOf reads this same own-hex river tile to pick which
-    // Sawmill composite to render; Crop Mill has only one (straight-only).
+    // textures.ts's riverBuildingArtFor reads this same own-hex river tile
+    // to pick which composite (and orientation) to render.
     if (type && !riverBuildingAllowedHere(type, this.getRiverTile(at.q, at.r)?.shape)) {
       return false;
     }
