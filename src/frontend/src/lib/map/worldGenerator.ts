@@ -279,6 +279,42 @@ export function wastedTerrainAt(q: number, r: number, world: WorldSeed): Terrain
   return rockiness > gen.forestRockiness ? 'forest' : 'grass';
 }
 
+/**
+ * How far into the nearest green island `(q, r)` sits, as a fraction of that
+ * island's radius: 0 at the centre, 1 at the shoreline, `null` at sea —
+ * mirrors the backend's `TerrainSampler.IslandDepthAt` exactly. Exported for
+ * `riverGenerator.ts`, which needs this (not just `terrainAt`'s coarser
+ * land/sea answer) to score a river step's uphill/downhill candidates the
+ * same way the backend's `RiverGenerator.BuildCandidates` does.
+ */
+export function islandDepthAt(q: number, r: number, world: WorldSeed): number | null {
+  const { col, row } = axialToOddQ({ q, r });
+  const island = closestIsland(col, row, world.seed, world.generation);
+  return island ? island.t : null;
+}
+
+/**
+ * `islandDepthAt`'s wasted-island counterpart — mirrors
+ * `TerrainSampler.WastedDepthAt` exactly (same seed offset, same
+ * `excludeGreenCells` gate against a wasted island's own cell grid
+ * overlapping a green island's own).
+ */
+export function wastedDepthAt(q: number, r: number, world: WorldSeed): number | null {
+  const { col, row } = axialToOddQ({ q, r });
+  const gen = world.generation;
+  const wastedSeed = world.seed + WASTED_SEED_OFFSET;
+  const island = closestIsland(
+    col,
+    row,
+    wastedSeed,
+    gen,
+    gen.islandChance * WASTED_ISLAND_CHANCE_FACTOR,
+    true,
+    world.seed,
+  );
+  return island ? island.t : null;
+}
+
 // Deterministic Norse-flavoured island names, mirroring the backend's
 // `Bjarnoy.Domain.World.IslandNames` (the stem/ending lists are copy-kept in
 // sync by eye, not shared code — demo mode has no access to backend code and

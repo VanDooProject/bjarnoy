@@ -15,13 +15,16 @@ import {
   DEFAULT_GENERATION,
   generateTile,
   hash2,
+  islandDepthAt,
   soilAt,
   springMountainShapeAt,
   terrainAt,
+  wastedDepthAt,
   wastedTerrainAt,
   wastedVariantAt,
   type WorldGenerationConstants,
 } from './worldGenerator';
+import { generateRivers } from './riverGenerator';
 import {
   emptyResources,
   TILE_ORIENTATIONS,
@@ -359,6 +362,21 @@ export class WorldModel {
     this.riverTiles = new Map(tiles.map((t) => [coordKey(t), t]));
   }
 
+  /**
+   * Demo mode's own river generation — adds `tiles` to whatever river tiles
+   * this model already knows about, rather than replacing them the way
+   * `setRiverTiles` (live mode, one fetch that carries every island at once)
+   * does. Demo mode instead discovers islands one at a time as the player
+   * lands or reveals a wasted landmass (see `placeGiantsForIsland`), so each
+   * island's rivers must be merged in as they're generated rather than
+   * clobbering the ones already placed for earlier islands.
+   */
+  private addRiverTiles(tiles: RiverTile[]) {
+    for (const tile of tiles) {
+      this.riverTiles.set(coordKey(tile), tile);
+    }
+  }
+
   getRiverTile(q: number, r: number): RiverTile | undefined {
     return this.riverTiles.get(coordKey({ q, r }));
   }
@@ -581,10 +599,10 @@ export class WorldModel {
    * wasted landmass found by flood-fill within `searchRadius` of `near`
    * (typically the player's own settlement/view — demo mode has no world-
    * wide island list to consult), runs the same wasted-mode giant
-   * placement live worlds get from `WorldGenerator`. Demo mode has no
-   * rivers, so there is no lava to place here — that side is verified by
-   * unit tests only (see WastedIslandGenerationTests.cs and the frontend's
-   * own textures tests). Idempotent per island the same way
+   * placement live worlds get from `WorldGenerator` — which, per
+   * `placeGiantsForIsland`'s own doc comment, also traces that island's
+   * lava streams (`allowConfluence: false`) the same way a live wasted
+   * island's rivers do. Idempotent per island the same way
    * `placeGiantsForIsland` already is; returns each discovered landmass's
    * first-visited hex, purely so a caller (or test) can see what was found.
    */
@@ -1432,6 +1450,15 @@ export class WorldModel {
    * smaller than `SmallIslandGiantThreshold`, so this often places nothing
    * at all — see `stores/world.ts`'s `foundStartingSettlement` for where
    * this is called and why it must run before `foundSettlement`).
+   *
+   * Also traces this island's rivers (`generateRivers`, mirroring the
+   * backend's own `RiverGenerator.Generate` call in `WorldGenerator.Generate`)
+   * before placing giants, and feeds the real river predicate into
+   * `placeGiants` instead of `() => false` — so demo-mode giants avoid
+   * rivers exactly like live mode's do. The traced tiles are merged into
+   * this model via `addRiverTiles` so the world map/settlement renderers,
+   * fog, water mask and river-adjacent building rules all pick them up the
+   * same way they already do for live mode's river tiles.
    */
   placeGiantsForIsland(near: AxialCoord, worldSeed: number, wasted = false): void {
     if (!this.isLand(near.q, near.r)) return;
@@ -1451,7 +1478,28 @@ export class WorldModel {
     this.giantPlacedIslands.add(islandKey);
 
     const islandIndex = Math.floor(hash2(lowest.q, lowest.r, worldSeed) * 1_000_000);
-    const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex, () => false, wasted);
+    const world = { seed: this.seed, generation: this.generation };
+    const depthAt = (c: AxialCoord) => (wasted ? wastedDepthAt(c.q, c.r, world) : islandDepthAt(c.q, c.r, world));
+    // Green mode's "touches the sea" check is the plain, non-wasted-reveal
+    // terrain layer — mirrors `RiverGenerator.Generate`'s own `sampler.IsLand`
+    // choice (never `this.isLand`, which folds in a revealed wasted layer
+    // `terrainAt` alone knows nothing about).
+    const globalIsLand = (c: AxialCoord) => terrainAt(c.q, c.r, world) !== 'sea';
+    const riverTiles = generateRivers(
+      islandTiles,
+      (c) => this.terrainOf(c.q, c.r),
+      depthAt,
+      globalIsLand,
+      worldSeed,
+      islandIndex,
+      wasted,
+      !wasted,
+    );
+    this.addRiverTiles(riverTiles);
+    const riverKeys = new Set(riverTiles.map((t) => coordKey(t)));
+    const isRiver = (c: AxialCoord) => riverKeys.has(coordKey(c));
+
+    const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex, isRiver, wasted);
     // `placeGiants` already enforced the real placement rules, so these go
     // through `setGiants` (like the server's giants in live mode), not
     // `placeGiant`: the latter's `canPlaceGiant` spike rule only accepts
