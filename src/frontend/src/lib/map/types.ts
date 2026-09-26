@@ -50,6 +50,29 @@ export function bendOrientationOf(inDirection: TileOrientation, outDirection: Ti
 }
 
 /**
+ * The `bend60` family (the tight turn between two *adjacent* edges — also its
+ * `bend60_loop` variant and `lavastream_bend60`) is one fixed curve,
+ * camera-rotated six ways, like `bend`'s — but it is not `bend`'s rotation
+ * convention: pixel-measured, file index `D` touches polygon edges `D` and
+ * `D+1`, not `D-1`/`D+1`. Through the self-inverse edge formula above those
+ * are directions `{ (2-D) mod 6, (3-D) mod 6 }` — an adjacent pair whose
+ * lower member `anchor` (the one the other is `+1` from) gives
+ * `D = (2 - anchor) mod 6`, i.e. `bendFileIndexFor(anchor)` again, only with
+ * a `+1` anchor test instead of `bendOrientationOf`'s `+2`. Order-independent:
+ * the curve is the same whichever way the water runs.
+ *
+ * Reusing `bendOrientationOf` here (as this used to) never matched its `+2`
+ * test for an adjacent pair and fell back to `outDirection` as the anchor —
+ * right for one flow direction, the wrong file for the other.
+ */
+export function bend60OrientationOf(inDirection: TileOrientation, outDirection: TileOrientation): TileOrientation {
+  const inIndex = TILE_ORIENTATIONS.indexOf(inDirection);
+  const outIndex = TILE_ORIENTATIONS.indexOf(outDirection);
+  const anchor = (inIndex + 1) % 6 === outIndex ? inIndex : outIndex;
+  return TILE_ORIENTATIONS[bendFileIndexFor(anchor)];
+}
+
+/**
  * The `spring` family's pond touches exactly one edge (its only outflow) —
  * pixel-verified to be file index `D`'s edge `D-1`, the same rotation
  * convention `bendFileIndexFor` uses but resolved for a single direction
