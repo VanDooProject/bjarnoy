@@ -50,6 +50,7 @@ import {
 } from '../lib/map/buildingEconomy';
 import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
+import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange, type PathContext } from '../lib/map/hexPath';
@@ -864,6 +865,13 @@ function riverShapeAt(coord: AxialCoord): string | undefined {
   return world.model.getRiverTile(coord.q, coord.r)?.shape;
 }
 
+// Only meaningful once riverShapeAt(coord) has a shape at all — see
+// riverBuildingAllowedHere's own riverVariant parameter.
+function riverVariantAt(coord: AxialCoord): RiverVariant | undefined {
+  const river = world.model.getRiverTile(coord.q, coord.r);
+  return river ? world.model.riverVariantAt(coord, river.shape) : undefined;
+}
+
 // PumpkinFarm is only offered on a Pumpkin-soil island — mirrors
 // WorldModel.placeBuilding's own check, same "filter out of the category
 // rather than render locked" reasoning riverShapeAt above uses, since this
@@ -897,7 +905,7 @@ const ringCategories = computed<RingCategory[]>(() => {
     label: t(`hud.ringMenu.categories.${category.id}`),
     color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
     buildings: category.buildings
-      .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord)))
+      .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord), riverVariantAt(coord)))
       .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
       .map((b) => ringBuildingFor(b.type, coord)),
   }));

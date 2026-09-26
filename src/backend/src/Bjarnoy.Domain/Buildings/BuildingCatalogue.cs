@@ -160,7 +160,12 @@ public static class BuildingCatalogue
             // Totals(IEnumerable{PlacedBuilding}, Func{HexCoord,Terrain}?).
             BuildingType.Sawmill =>
                 Producer(type, level, Grass, ResourceAmounts.Zero)
-                    with { RequiresRiverShape = SawmillRiverShapes, RequiredLonghouseLevel = 10 },
+                    with
+                    {
+                        RequiresRiverShape = SawmillRiverShapes,
+                        ExcludedRiverVariants = SawmillExcludedRiverVariants,
+                        RequiredLonghouseLevel = 10,
+                    },
             // No production of its own yet — its mead is meant for a future
             // morale-boost mechanic (see BuildingType.Smithy's own note on
             // its retired Iron production), buildable now so it has a place
@@ -518,14 +523,29 @@ public static class BuildingCatalogue
     /// art: Sawmill on Straight/the gentler 60°-off Bend/the tight 60°
     /// Bend60, Crop Mill on Straight only. River art variants
     /// (bend180_island/meander, bend120_island/meander) count as their base
-    /// shape; bend60_loop does not allow a Sawmill. (River art variants
-    /// aren't drawn yet — a follow-up adds them; this is the rule it must
-    /// follow.) See <see cref="BuildingDefinition.RequiresRiverShape"/> and
-    /// the frontend's <c>ringCatalogue.ts</c> <c>RIVER_SHAPES_BY_TYPE</c>,
-    /// which mirrors this same rule for the placement UI.
+    /// shape; bend60_loop does not allow a Sawmill — see
+    /// <see cref="SawmillExcludedRiverVariants"/>. See
+    /// <see cref="BuildingDefinition.RequiresRiverShape"/>/
+    /// <see cref="BuildingDefinition.ExcludedRiverVariants"/> and the
+    /// frontend's <c>ringCatalogue.ts</c> <c>RIVER_SHAPES_BY_TYPE</c>/
+    /// <c>riverBuildingAllowedHere</c>, which mirror this same rule for the
+    /// placement UI.
     /// </summary>
     private static readonly IReadOnlySet<RiverTileShape> SawmillRiverShapes =
         new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend, RiverTileShape.Bend60 };
+
+    /// <summary>
+    /// The Sawmill's waterwheel reads from the bank of a plain Bend60
+    /// hairpin — the vendor art has no composite for
+    /// <see cref="RiverVariant.Loop"/>'s full-half-circle channel, so a
+    /// Bend60 hex showing that variant is refused even though
+    /// <see cref="RiverTileShape.Bend60"/> itself is in
+    /// <see cref="SawmillRiverShapes"/>. Straight/Bend's own variants
+    /// (Meander/Island) have a matching Sawmill composite at every one of
+    /// their shape's own orientations, so only Loop is excluded here.
+    /// </summary>
+    private static readonly IReadOnlySet<RiverVariant> SawmillExcludedRiverVariants =
+        new HashSet<RiverVariant> { RiverVariant.Loop };
 
     /// <summary>
     /// Unlike the Sawmill, the Crop Mill's vendor art only has a Straight-

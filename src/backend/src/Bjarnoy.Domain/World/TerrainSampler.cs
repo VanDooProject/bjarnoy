@@ -568,4 +568,72 @@ public sealed class TerrainSampler
         var index = (int)(hash * count);
         return index >= count ? count - 1 : index;
     }
+
+    /// <summary>
+    /// Salt for <see cref="RiverVariantAt"/> — the next unused prime
+    /// continuing the per-hex-property sequence this class already uses
+    /// (<see cref="DefaultOrientation"/> +29, <see cref="VariantAt"/> +31,
+    /// <see cref="SpringMountainShapeAt"/> +37, <see cref="SoilAt"/> +41):
+    /// far enough past that cluster, and past <c>RiverGenerator</c>'s own
+    /// per-island noise salts, that <see cref="ValueNoise.Hash2"/>'s weak
+    /// seed-mixing (see <c>WASTED_VARIANT_SALT</c>'s doc comment on the
+    /// frontend, <c>worldGenerator.ts</c>) can't correlate this pick with a
+    /// neighbouring one.
+    /// </summary>
+    private const int RiverVariantSalt = 67;
+
+    private static readonly double[] River180Weights = { 0.4, 0.4, 0.2 };
+    private static readonly double[] River120Weights = { 0.4, 0.4, 0.2 };
+    private static readonly double[] River60Weights = { 0.85, 0.15 };
+
+    /// <summary>
+    /// Picks an index from <paramref name="weights"/> (assumed to sum to
+    /// ~1) using a <c>[0, 1)</c> roll <paramref name="hash"/> — mirrors the
+    /// frontend's <c>weightedIndex</c> exactly.
+    /// </summary>
+    private static int WeightedIndex(double hash, double[] weights)
+    {
+        double acc = 0;
+        for (var i = 0; i < weights.Length; i++)
+        {
+            acc += weights[i];
+            if (hash < acc)
+            {
+                return i;
+            }
+        }
+
+        return weights.Length - 1;
+    }
+
+    /// <summary>
+    /// Which river-art variant a <see cref="RiverTileShape.Straight"/>/
+    /// <see cref="RiverTileShape.Bend"/>/<see cref="RiverTileShape.Bend60"/>
+    /// hex renders with — <see cref="RiverVariant.Plain"/> for every other
+    /// shape, since Spring/Confluence/Mouth have no variant art. Mirrors the
+    /// frontend's <c>riverVariantAt</c> exactly (same salt, same weights):
+    /// Straight and Bend each roll plain/meander/island at 40/40/20, Bend60
+    /// rolls plain/loop at 85/15.
+    /// </summary>
+    public RiverVariant RiverVariantAt(HexCoord coord, RiverTileShape shape)
+    {
+        if (shape != RiverTileShape.Straight && shape != RiverTileShape.Bend && shape != RiverTileShape.Bend60)
+        {
+            return RiverVariant.Plain;
+        }
+
+        var hash = ValueNoise.Hash2(coord.Q, coord.R, _options.Seed + RiverVariantSalt);
+        if (shape == RiverTileShape.Bend60)
+        {
+            return WeightedIndex(hash, River60Weights) == 0 ? RiverVariant.Plain : RiverVariant.Loop;
+        }
+
+        var weights = shape == RiverTileShape.Straight ? River180Weights : River120Weights;
+        return WeightedIndex(hash, weights) switch
+        {
+            0 => RiverVariant.Plain,
+            1 => RiverVariant.Meander,
+            _ => RiverVariant.Island,
+        };
+    }
 }
