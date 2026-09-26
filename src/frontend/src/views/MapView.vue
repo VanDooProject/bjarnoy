@@ -195,6 +195,9 @@ onUnmounted(() => {
 // not just the initial mount, since this view's own onMounted no longer
 // re-runs per route the way two separate views' did.
 watch(mode, (m) => {
+  // The ring renders in both modes now, so one left open would otherwise
+  // survive the switch, anchored to a hex in the other mode's framing.
+  closeRing();
   world.setWorldMapActive(m === 'world');
   void world.refreshWorldSettlements();
   const renderer = canvasRef.value?.renderer;

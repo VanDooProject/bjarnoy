@@ -3,7 +3,7 @@ import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
-import { layoutOverflow } from './helpers';
+import { layoutOverflow, loginTestUser, waitForMapReady } from './helpers';
 
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
@@ -36,22 +36,16 @@ async function seedGarrison(page: Page) {
 }
 
 /**
- * Zooms out past the exit-to-settlement threshold (zoom-transition.spec.ts's
- * own pattern) to reach `/world` — the mouse has to sit over the canvas
- * first, or the wheel events land on the fixed HUD chrome above it instead
- * and nothing ever zooms. Used here instead of `WorldMapPage.open()`'s own
- * `gotoWorldMap` (a HudNav "World map" click): that link lives inside the
- * mobile pull-down drawer, not the compact bar itself, and this suite's
- * point is that a phone reaches /world by zoom, not a nav click anyway.
+ * Reaches `/world` the way a phone player does without a pinch: the pull-down
+ * drawer's "World map" link (HudNav itself isn't in the compact bar, so
+ * `gotoWorldMap`'s `.hud-nav` click doesn't apply here). The link only shows
+ * for a logged-in player, so callers log in before founding.
  */
-async function zoomOutToWorld(page: Page, centre: { x: number; y: number }) {
-  await page.mouse.move(centre.x, centre.y);
-  for (let i = 0; i < 90; i++) {
-    await page.mouse.wheel(0, 120);
-    await page.waitForTimeout(15);
-    if (page.url().includes('/world')) break;
-  }
-  await expect(page).toHaveURL(/\/world$/, { timeout: 10_000 });
+async function gotoWorldViaDrawer(page: Page) {
+  await page.locator('.hud-grip').click();
+  await page.locator('.hud-drawer .drawer-links button', { hasText: 'World map' }).click();
+  await page.waitForURL('**/world');
+  await waitForMapReady(page);
 }
 
 test.describe('mobile army dispatch', { tag: '@g3' }, () => {
@@ -59,10 +53,11 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
   test('ArmyPanel is not mounted at phone width, in either mode', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    const settlement = await SettlementPage.found(page);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
     await expect(page.locator('.army-panel')).toHaveCount(0);
 
-    await zoomOutToWorld(page, await settlement.canvasCentre());
+    await gotoWorldViaDrawer(page);
     await expect(page.locator('.army-panel')).toHaveCount(0);
   });
 
@@ -162,11 +157,12 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
   test('world mode: a tap opens the ring and stays on /world', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
     const settlement = await SettlementPage.found(page);
     const ring = new RingMenuComponent(page);
     const centre = await settlement.canvasCentre();
 
-    await zoomOutToWorld(page, centre);
+    await gotoWorldViaDrawer(page);
     await page.mouse.click(centre.x, centre.y);
 
     await expect(page).toHaveURL(/\/world$/);
