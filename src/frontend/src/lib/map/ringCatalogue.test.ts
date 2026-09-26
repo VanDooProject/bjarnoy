@@ -57,6 +57,25 @@ describe('riverBuildingAllowedHere', () => {
     expect(riverBuildingAllowedHere('sawmill', 'confluence')).toBe(false);
   });
 
+  it('allows a sawmill on a straight/bend meander or island variant', () => {
+    expect(riverBuildingAllowedHere('sawmill', 'straight', 'meander')).toBe(true);
+    expect(riverBuildingAllowedHere('sawmill', 'straight', 'island')).toBe(true);
+    expect(riverBuildingAllowedHere('sawmill', 'bend', 'meander')).toBe(true);
+    expect(riverBuildingAllowedHere('sawmill', 'bend', 'island')).toBe(true);
+  });
+
+  it('allows a sawmill on a plain bend60 hex but excludes the loop variant', () => {
+    expect(riverBuildingAllowedHere('sawmill', 'bend60', 'plain')).toBe(true);
+    expect(riverBuildingAllowedHere('sawmill', 'bend60')).toBe(true); // default variant is 'plain'
+    expect(riverBuildingAllowedHere('sawmill', 'bend60', 'loop')).toBe(false);
+  });
+
+  it('allows a crop mill on every straight river variant', () => {
+    expect(riverBuildingAllowedHere('cropmill', 'straight', 'plain')).toBe(true);
+    expect(riverBuildingAllowedHere('cropmill', 'straight', 'meander')).toBe(true);
+    expect(riverBuildingAllowedHere('cropmill', 'straight', 'island')).toBe(true);
+  });
+
   it('only allows a crop mill on a straight river hex, unlike the sawmill', () => {
     expect(riverBuildingAllowedHere('cropmill', 'straight')).toBe(true);
     expect(riverBuildingAllowedHere('cropmill', 'bend')).toBe(false);

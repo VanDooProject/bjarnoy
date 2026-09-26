@@ -92,6 +92,22 @@ public sealed record BuildingDefinition
     public IReadOnlySet<RiverTileShape>? RequiresRiverShape { get; init; }
 
     /// <summary>
+    /// Alongside <see cref="RequiresRiverShape"/>: a river-art variant
+    /// (<see cref="World.RiverVariant"/>) this building's hex must NOT be
+    /// showing, even though its shape otherwise qualifies — <see
+    /// langword="null"/> (the default) excludes nothing. The Sawmill's
+    /// rule: its Bend60 composite reads from the bank of the plain hairpin
+    /// channel, and has no matching art for the <see
+    /// cref="World.RiverVariant.Loop"/> variant's full-half-circle loop, so
+    /// that one variant is refused even though <see
+    /// cref="RiverTileShape.Bend60"/> itself is in <see
+    /// cref="RequiresRiverShape"/>. Checked in <see
+    /// cref="Settlement.PlanBuild"/> only once the shape itself has already
+    /// matched.
+    /// </summary>
+    public IReadOnlySet<RiverVariant>? ExcludedRiverVariants { get; init; }
+
+    /// <summary>
     /// Longhouse level required before this may be built, so the anchor gates
     /// the settlement's growth (MECHANICS.md §2).
     /// </summary>

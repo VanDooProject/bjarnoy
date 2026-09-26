@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Texture } from 'pixi.js';
 import {
   baseTextureFor,
   classifyFamilyClips,
@@ -630,8 +631,13 @@ describe('baseTextureFor wasted mountain/giant base', () => {
       animTop: {},
       riverBase: {
         straight: orientationMap('r' as unknown as never),
+        straight_meander: orientationMap('r' as unknown as never),
+        straight_island: orientationMap('r' as unknown as never),
         bend: orientationMap('r' as unknown as never),
+        bend_meander: orientationMap('r' as unknown as never),
+        bend_island: orientationMap('r' as unknown as never),
         bend60: orientationMap('r' as unknown as never),
+        bend60_loop: orientationMap('r' as unknown as never),
         springcorrie: orientationMap('r' as unknown as never),
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
@@ -639,8 +645,13 @@ describe('baseTextureFor wasted mountain/giant base', () => {
       },
       riverTop: {
         straight: orientationMap('r' as unknown as never),
+        straight_meander: orientationMap('r' as unknown as never),
+        straight_island: orientationMap('r' as unknown as never),
         bend: orientationMap('r' as unknown as never),
+        bend_meander: orientationMap('r' as unknown as never),
+        bend_island: orientationMap('r' as unknown as never),
         bend60: orientationMap('r' as unknown as never),
+        bend60_loop: orientationMap('r' as unknown as never),
         springcorrie: orientationMap('r' as unknown as never),
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
@@ -731,8 +742,13 @@ describe('riverTexturesFor lava-island shapes', () => {
       animTop: {},
       riverBase: {
         straight: orientationMap('plain-river-base' as unknown as never),
+        straight_meander: orientationMap('plain-river-base' as unknown as never),
+        straight_island: orientationMap('plain-river-base' as unknown as never),
         bend: orientationMap('plain-river-base' as unknown as never),
+        bend_meander: orientationMap('plain-river-base' as unknown as never),
+        bend_island: orientationMap('plain-river-base' as unknown as never),
         bend60: orientationMap('plain-river-base' as unknown as never),
+        bend60_loop: orientationMap('plain-river-base' as unknown as never),
         springcorrie: orientationMap('plain-spring-base' as unknown as never),
         springsaddleback: orientationMap('plain-spring-base' as unknown as never),
         confluencenarrow: orientationMap('plain-river-base' as unknown as never),
@@ -740,8 +756,13 @@ describe('riverTexturesFor lava-island shapes', () => {
       },
       riverTop: {
         straight: orientationMap('plain-river-top' as unknown as never),
+        straight_meander: orientationMap('plain-river-top' as unknown as never),
+        straight_island: orientationMap('plain-river-top' as unknown as never),
         bend: orientationMap('plain-river-top' as unknown as never),
+        bend_meander: orientationMap('plain-river-top' as unknown as never),
+        bend_island: orientationMap('plain-river-top' as unknown as never),
         bend60: orientationMap('plain-river-top' as unknown as never),
+        bend60_loop: orientationMap('plain-river-top' as unknown as never),
         springcorrie: orientationMap('plain-spring-top' as unknown as never),
         springsaddleback: orientationMap('plain-spring-top' as unknown as never),
         confluencenarrow: orientationMap('plain-river-top' as unknown as never),
@@ -815,6 +836,113 @@ describe('riverTexturesFor lava-island shapes', () => {
     const result = riverTexturesFor(textures, river);
 
     expect(result.base).toBe('plain-river-base');
+  });
+});
+
+// riverTexturesFor's river-art variant dressing (meander/island/loop) —
+// same hand-rolled TileTextures fixture pattern as the lava-island describe
+// above, but real Texture.EMPTY sentinels so the "no frames loaded" fallback
+// path can be exercised for real (a plain placeholder string would never
+// compare equal to it).
+describe('riverTexturesFor river-art variants', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+
+  function fixture(): TileTextures {
+    return {
+      base: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      riverBase: {
+        straight: orientationMap('plain-base' as unknown as never),
+        straight_meander: orientationMap('meander-base' as unknown as never),
+        straight_island: orientationMap('island-base' as unknown as never),
+        bend: orientationMap('plain-bend-base' as unknown as never),
+        bend_meander: orientationMap('bend-meander-base' as unknown as never),
+        bend_island: orientationMap(Texture.EMPTY as unknown as never), // never loaded — falls back
+        bend60: orientationMap('plain-bend60-base' as unknown as never),
+        bend60_loop: orientationMap('loop-base' as unknown as never),
+        springcorrie: orientationMap('r' as unknown as never),
+        springsaddleback: orientationMap('r' as unknown as never),
+        confluencenarrow: orientationMap('r' as unknown as never),
+        confluencewide: orientationMap('r' as unknown as never),
+      },
+      riverTop: {
+        straight: orientationMap('plain-top' as unknown as never),
+        straight_meander: orientationMap('meander-top' as unknown as never),
+        straight_island: orientationMap('island-top' as unknown as never),
+        bend: orientationMap('plain-bend-top' as unknown as never),
+        bend_meander: orientationMap('bend-meander-top' as unknown as never),
+        bend_island: orientationMap(Texture.EMPTY as unknown as never),
+        bend60: orientationMap('plain-bend60-top' as unknown as never),
+        bend60_loop: orientationMap('loop-top' as unknown as never),
+        springcorrie: orientationMap('r' as unknown as never),
+        springsaddleback: orientationMap('r' as unknown as never),
+        confluencenarrow: orientationMap('r' as unknown as never),
+        confluencewide: orientationMap('r' as unknown as never),
+      },
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    };
+  }
+
+  const straight = { q: 0, r: 0, shape: 'straight' as const, inDirections: ['W' as const], outDirection: 'E' as const };
+  const bend = { q: 0, r: 0, shape: 'bend' as const, inDirections: ['W' as const], outDirection: 'NE' as const };
+  const bend60 = { q: 0, r: 0, shape: 'bend60' as const, inDirections: ['W' as const], outDirection: 'SW' as const };
+
+  it('draws the plain family when the variant is plain', () => {
+    const result = riverTexturesFor(fixture(), straight, null, 'corrie', 'plain');
+    expect(result.base).toBe('plain-base');
+    expect(result.top).toBe('plain-top');
+  });
+
+  it('draws the meander family for a straight tile', () => {
+    const result = riverTexturesFor(fixture(), straight, null, 'corrie', 'meander');
+    expect(result.base).toBe('meander-base');
+    expect(result.top).toBe('meander-top');
+  });
+
+  it('draws the island family for a straight tile', () => {
+    const result = riverTexturesFor(fixture(), straight, null, 'corrie', 'island');
+    expect(result.base).toBe('island-base');
+    expect(result.top).toBe('island-top');
+  });
+
+  it('draws the meander family for a bend tile', () => {
+    const result = riverTexturesFor(fixture(), bend, null, 'corrie', 'meander');
+    expect(result.base).toBe('bend-meander-base');
+    expect(result.top).toBe('bend-meander-top');
+  });
+
+  it('falls back to the plain bend family when the island variant has no frames loaded', () => {
+    const result = riverTexturesFor(fixture(), bend, null, 'corrie', 'island');
+    expect(result.base).toBe('plain-bend-base');
+    expect(result.top).toBe('plain-bend-top');
+  });
+
+  it('draws the loop family for a bend60 tile', () => {
+    const result = riverTexturesFor(fixture(), bend60, null, 'corrie', 'loop');
+    expect(result.base).toBe('loop-base');
+    expect(result.top).toBe('loop-top');
+  });
+
+  it('bend60 has no meander/island variant, so an unexpected variant value falls back to plain', () => {
+    const result = riverTexturesFor(fixture(), bend60, null, 'corrie', 'meander');
+    expect(result.base).toBe('plain-bend60-base');
+    expect(result.top).toBe('plain-bend60-top');
+  });
+
+  it('never applies a variant to a wasted river tile, even when one is passed', () => {
+    const result = riverTexturesFor(fixture(), { ...straight, wasted: true }, null, 'corrie', 'meander');
+    expect(result.base).toBe('plain-base');
+    expect(result.top).toBe('plain-top');
   });
 });
 

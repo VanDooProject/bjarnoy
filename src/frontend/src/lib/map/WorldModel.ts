@@ -16,12 +16,14 @@ import {
   generateTile,
   hash2,
   islandDepthAt,
+  riverVariantAt,
   soilAt,
   springMountainShapeAt,
   terrainAt,
   wastedDepthAt,
   wastedTerrainAt,
   wastedVariantAt,
+  type RiverVariant,
   type WorldGenerationConstants,
 } from './worldGenerator';
 import { generateRivers } from './riverGenerator';
@@ -33,6 +35,7 @@ import {
   type ResourceKind,
   type Resources,
   type RiverTile,
+  type RiverTileShape,
   type Terrain,
   type Settlement,
   type Tile,
@@ -700,6 +703,20 @@ export class WorldModel {
   }
 
   /**
+   * Which river-art variant a `straight`/`bend`/`bend60` river hex at
+   * `coord` renders as — mirrors the backend's
+   * `TerrainSampler.RiverVariantAt` exactly (via `worldGenerator.ts`'s own
+   * `riverVariantAt`), so a live-mode river tile and the demo world's own
+   * client-side generation pick the same variant for the same coordinate/
+   * seed/shape. Pure, like `springShapeAt`/`soilAtIslandCentre` — the
+   * caller (river rendering, `placeBuilding`) already knows `shape` from
+   * its own `RiverTile` lookup.
+   */
+  riverVariantAt(coord: AxialCoord, shape: RiverTileShape): RiverVariant {
+    return riverVariantAt(coord.q, coord.r, { seed: this.seed, generation: this.generation }, shape);
+  }
+
+  /**
    * Which crop `settlementId`'s own island grows, resolved from its stored
    * `islandId` against `listIslands()` — or `undefined` if either is
    * unknown (a demo settlement founded with no island id; see
@@ -1321,11 +1338,14 @@ export class WorldModel {
     if (isWaterOnlyBuilding ? !tile.isCoastalWater : tile.terrain === 'sea') return false;
     if (tile.buildingType) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
-    // certain shapes have a matching river-composite art (matches
-    // BuildingDefinition.RequiresRiverShape, see riverBuildingAllowedHere).
-    // textures.ts's riverBuildingArtFor reads this same own-hex river tile
-    // to pick which composite (and orientation) to render.
-    if (type && !riverBuildingAllowedHere(type, this.getRiverTile(at.q, at.r)?.shape)) {
+    // certain shapes (and, for the Sawmill, only some variants — see
+    // ringCatalogue.ts's EXCLUDED_VARIANTS_BY_TYPE) have a matching river-
+    // composite art (matches BuildingDefinition.RequiresRiverShape/
+    // ExcludedRiverVariants, see riverBuildingAllowedHere). textures.ts's
+    // riverBuildingArtFor reads this same own-hex river tile to pick which
+    // composite (and orientation) to render.
+    const riverAtHex = this.getRiverTile(at.q, at.r);
+    if (type && !riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined)) {
       return false;
     }
     // PumpkinFarm is only buildable on a Pumpkin-soil island (matches

@@ -33,6 +33,33 @@ public enum RiverTileShape
 }
 
 /// <summary>
+/// A river-art dressing for a <see cref="RiverTileShape.Straight"/>,
+/// <see cref="RiverTileShape.Bend"/> or <see cref="RiverTileShape.Bend60"/>
+/// hex, on top of the shape itself — see <see cref="TerrainSampler.RiverVariantAt"/>
+/// and the frontend's mirroring <c>riverVariantAt</c>
+/// (<c>src/frontend/src/lib/map/worldGenerator.ts</c>). Every other shape
+/// (Spring/Confluence/Mouth) and every wasted/lava river tile only ever
+/// resolves to <see cref="Plain"/> — the vendored art has no variant cuts for
+/// them. Not persisted (unlike <see cref="RiverTileShape"/>): it is re-derived
+/// from the hex's coordinate and shape the same way orientation/terrain
+/// variants are, never stored on a <see cref="RiverTile"/> record.
+/// </summary>
+public enum RiverVariant
+{
+    /// <summary>The plain, undecorated channel — every shape's fallback.</summary>
+    Plain,
+
+    /// <summary>A wandering, S-curved channel — <see cref="RiverTileShape.Straight"/>/<see cref="RiverTileShape.Bend"/> only.</summary>
+    Meander,
+
+    /// <summary>A channel that splits around a mid-stream island — <see cref="RiverTileShape.Straight"/>/<see cref="RiverTileShape.Bend"/> only.</summary>
+    Island,
+
+    /// <summary>A full-half-circle loop — <see cref="RiverTileShape.Bend60"/> only.</summary>
+    Loop,
+}
+
+/// <summary>
 /// A single hex of a generated river. <see cref="InDirections"/> holds one
 /// entry for every shape but <see cref="RiverTileShape.Spring"/> (none) and
 /// <see cref="RiverTileShape.Confluence"/> (exactly two); <see cref="OutDirection"/>
