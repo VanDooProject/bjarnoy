@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   attentionPulseFrame,
   hoverSubjectFor,
+  isWaypointTap,
   landfallBurstFrames,
   plotRippleFrames,
   previewFitZoom,
   previewIslandBounds,
   terrainTitleFor,
+  waypointGrabRadiusPx,
   worldLayerOrder,
 } from './HexMapRenderer';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
@@ -474,5 +476,43 @@ describe('attentionPulseFrame', () => {
     expect(mid).toBeGreaterThan(quarter);
     expect(mid).toBeCloseTo(1);
     expect(threeQuarters).toBeLessThan(mid);
+  });
+});
+
+// Issue: mobile army dispatch. `onPointerDown`/`onPointerUp` themselves need
+// a mounted canvas/Pixi Application this test environment can't provide (see
+// this file's own opening comment on why `terrainTitleFor`/`worldLayerOrder`
+// are extracted pure functions instead) — the tap-vs-drag decision and the
+// touch/mouse grab-radius split are pulled out the same way, so they're
+// covered directly.
+describe('isWaypointTap', () => {
+  it('is a tap when the pin never left its hex and barely moved', () => {
+    expect(isWaypointTap('1,2', '1,2', 0)).toBe(true);
+    expect(isWaypointTap('1,2', '1,2', 3)).toBe(true); // under DRAG_CLICK_SLOP_PX
+  });
+
+  it('is not a tap once the pointer moved past the click-slop budget, even over the same hex', () => {
+    expect(isWaypointTap('1,2', '1,2', 20)).toBe(false);
+  });
+
+  it('is not a tap once the pin has been dragged onto a different hex', () => {
+    expect(isWaypointTap('1,2', '3,4', 0)).toBe(false);
+    // A drag that ends back over the start hex still isn't a tap — it moved
+    // (the pin was placed hex-by-hex via onWaypointMove along the way) even
+    // though lastCoordKey and startCoordKey can coincidentally match again
+    // once released past the slop budget.
+    expect(isWaypointTap('1,2', '1,2', 50)).toBe(false);
+  });
+});
+
+describe('waypointGrabRadiusPx', () => {
+  it('gives a touch pointer a bigger grab radius than a mouse/pen one', () => {
+    const touch = waypointGrabRadiusPx('touch');
+    const mouse = waypointGrabRadiusPx('mouse');
+    expect(touch).toBeGreaterThan(mouse);
+  });
+
+  it('falls back to the mouse radius for an unset pointerType (the hover-cursor hit-test call)', () => {
+    expect(waypointGrabRadiusPx(undefined)).toBe(waypointGrabRadiusPx('mouse'));
   });
 });

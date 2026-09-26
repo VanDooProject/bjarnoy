@@ -212,6 +212,52 @@ describe('useWorldStore waypoint editing', () => {
   });
 });
 
+// Issue: mobile army dispatch — the ring's "Send army here"/"Attack"/
+// "Support" bubble starts a draft already aimed at the tapped tile, instead
+// of the blank one `startDispatch` leaves for ArmyPanel's own tabs/target
+// list to fill in.
+describe('useWorldStore startDispatchAt', () => {
+  it('starts a Move draft with the tapped coord as its route', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 3, r: -2 });
+
+    expect(store.dispatchDraft?.mission).toBe('move');
+    expect(store.dispatchDraft?.route).toEqual([{ q: 3, r: -2 }]);
+    expect(store.dispatchDraft?.targetSettlementId).toBeNull();
+  });
+
+  it('starts an Attack draft against the tile owner, with no route waypoint added', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
+
+    expect(store.dispatchDraft?.mission).toBe('attack');
+    expect(store.dispatchDraft?.targetSettlementId).toBe('enemy-1');
+    expect(store.dispatchDraft?.route).toEqual([]);
+  });
+
+  it('starts a Support draft the same way for the player\'s own other settlement', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 0, r: 0 }, { mission: 'support', targetSettlementId: 'own-other-1' });
+
+    expect(store.dispatchDraft?.mission).toBe('support');
+    expect(store.dispatchDraft?.targetSettlementId).toBe('own-other-1');
+  });
+
+  it('cancels an in-progress field order draft, mutually exclusive with dispatch', async () => {
+    const store = await loadStoreModule(true);
+    store.startFieldOrder('army-1');
+    expect(store.fieldOrderDraft).not.toBeNull();
+
+    store.startDispatchAt({ q: 1, r: 1 });
+
+    expect(store.fieldOrderDraft).toBeNull();
+    expect(store.dispatchDraft).not.toBeNull();
+  });
+});
+
 // The premium-gating UX fix (docs/design/premium-gating-ux.md): a standing
 // army's first click is the free "move on" destination — Army.PlanFieldOrder
 // never charges premium for that one case — but a second click turns it into

@@ -1179,6 +1179,25 @@ const WAYPOINT_GRAB_RADIUS_PX = 16;
 // Touch-only bump (see draftWaypointAt) — a fingertip is much wider than a
 // mouse cursor's hotspot.
 const WAYPOINT_GRAB_RADIUS_PX_TOUCH = 24;
+
+/** The grab radius (screen px) a pointerdown hit-tests a draft waypoint pin against — bigger for a touch pointer than a mouse (see `WAYPOINT_GRAB_RADIUS_PX_TOUCH`'s own comment). Exported for a direct unit test of the touch/mouse split, without needing a mounted renderer. */
+export function waypointGrabRadiusPx(pointerType: string | undefined): number {
+  return pointerType === 'touch' ? WAYPOINT_GRAB_RADIUS_PX_TOUCH : WAYPOINT_GRAB_RADIUS_PX;
+}
+
+/**
+ * Whether releasing a grabbed draft-waypoint pin counts as a tap (fires
+ * `onWaypointTap`) rather than a drag (already applied hex-by-hex via
+ * `onWaypointMove`, and must not also remove the pin on release). A tap is a
+ * pin that never crossed into a different hex and whose pointer barely
+ * moved — same slop budget a map click gets (`DRAG_CLICK_SLOP_PX`). Pulled
+ * out of `onPointerUp` as a pure function so the tap/drag split is testable
+ * without a mounted renderer (canvas/Pixi), the same reasoning
+ * `terrainTitleFor`/`worldLayerOrder` above are extracted for.
+ */
+export function isWaypointTap(startCoordKey: string, lastCoordKey: string, movedPx: number): boolean {
+  return lastCoordKey === startCoordKey && movedPx < DRAG_CLICK_SLOP_PX;
+}
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
@@ -2053,7 +2072,7 @@ export class HexMapRenderer {
     // one so tapping a pin to remove it (or starting a drag) is reliable,
     // while mouse behaviour (and hover-cursor hit-testing, which never
     // passes a pointerType) stays exactly as before.
-    let bestDistance = pointerType === 'touch' ? WAYPOINT_GRAB_RADIUS_PX_TOUCH : WAYPOINT_GRAB_RADIUS_PX;
+    let bestDistance = waypointGrabRadiusPx(pointerType);
     waypoints.forEach((c, i) => {
       const p = this.hexCenterScreen(c);
       const distance = Math.hypot(p.x - screen.x, p.y - screen.y);
@@ -2190,11 +2209,7 @@ export class HexMapRenderer {
       const { index, lastCoordKey, startCoordKey, startScreen } = this.waypointDrag;
       const screen = this.pointerScreen(e);
       const moved = screen ? Math.hypot(screen.x - startScreen.x, screen.y - startScreen.y) : 0;
-      // A tap: the pin never crossed into a different hex, and the finger/
-      // cursor barely moved — same slop budget a map click gets. Anything
-      // more decisive is a real drag, already applied hex-by-hex via
-      // onWaypointMove, and releasing it here must not also remove the pin.
-      const wasTap = lastCoordKey === startCoordKey && moved < DRAG_CLICK_SLOP_PX;
+      const wasTap = isWaypointTap(startCoordKey, lastCoordKey, moved);
       this.waypointDrag = null;
       this.setCursor('');
       if (wasTap) this.options.onWaypointTap?.(index);
