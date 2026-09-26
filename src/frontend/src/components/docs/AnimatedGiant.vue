@@ -48,6 +48,15 @@ interface PartLayout {
   top: { box: SpriteGeom; style: AtlasBackgroundStyle } | null;
   /** `buildings-anim` clip for this part's top, when one exists — resolved once per family/orientation, not per animation tick. */
   clip: ReturnType<typeof resolveIslandClip>;
+  /**
+   * The clip's rest image (see `AtlasClip.overlay`'s own doc comment),
+   * pre-styled — static for as long as this part's clip plays, drawn under
+   * the clip's own (parts-only) current frame rather than in place of it.
+   * `null` for a part with no clip, or with a legacy (non-overlay) one —
+   * same shape/box as `top` itself, since a clip's rest frame shares its
+   * static frame's exact geometry.
+   */
+  rest: AtlasBackgroundStyle | null;
 }
 
 // Precomputed off `family`/`plateFamily`/`orientation` (which camera pill is
@@ -78,13 +87,16 @@ const layout = computed<PartLayout[]>(() => {
         }
       : null;
 
+    const clip = resolveIslandClip(topName);
+
     out.push({
       part,
       depth: g.y,
       x: g.x,
       plate,
       top,
-      clip: resolveIslandClip(topName),
+      clip,
+      rest: clip?.restRect ? atlasBackgroundStyle(clip.restRect) : null,
     });
   }
   // Same painter's-algorithm order as buildIsland: depth, then x, then a
@@ -199,6 +211,11 @@ const scale = computed(() => {
           v-if="entry.plate"
           class="giant-sprite"
           :style="{ ...entry.plate.style, ...positionStyle(entry.plate.box) }"
+        />
+        <div
+          v-if="entry.rest && entry.top"
+          class="giant-sprite"
+          :style="{ ...entry.rest, ...positionStyle(entry.top.box) }"
         />
         <div
           v-if="entry.top"

@@ -68,6 +68,7 @@ import {
   riverTexturesFor,
   textureKeyFor,
   topAnimFor,
+  topAnimTextures,
   topTextureFor,
   type TileAnimClip,
   type TileTextures,
@@ -419,6 +420,17 @@ interface TopAnimState {
   elapsedMs: number;
   /** Ping-pong direction; unused (and harmless) for a looping clip. */
   dir: 1 | -1;
+  /**
+   * A second sprite drawn directly above `sprite` for an overlay clip
+   * (`clip.rest` set): `sprite` shows the clip's rest image (the static
+   * building with its parts held still) and never changes texture again
+   * while this clip plays, while `overlay` cycles through `clip.textures`
+   * (parts-only frames) on top of it. Absent for a legacy, non-overlay clip,
+   * where `sprite` itself still cycles through full frames exactly as
+   * before. Pooled in `topOverlayPool`, same as `terrainTop`'s own sprites
+   * pool through `SpriteLayer`.
+   */
+  overlay?: Sprite;
 }
 
 export interface HexMapRendererOptions {
@@ -1243,6 +1255,12 @@ export class HexMapRenderer {
   // survives *between* rebuilds, so a looping clip doesn't reset its phase
   // every time the camera merely moves.
   private topAnimState = new Map<string, TopAnimState>();
+  // Pooled overlay sprites for an overlay clip's parts-only frames (see
+  // `TopAnimState.overlay`) — a sibling pool to `terrainTop.pool`, kept
+  // separate because these sprites aren't `terrainTop.active`'s own entries
+  // (one hex's top layer can have both a base/rest sprite *and* an overlay
+  // sprite alive at once).
+  private topOverlayPool: Sprite[] = [];
   private terrainFlat = new Graphics();
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
@@ -3362,6 +3380,23 @@ export class HexMapRenderer {
       sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET + cropOffsetY);
       sprite.zIndex = isoDepthKey(coord);
       if (isNew) layer.container.addChild(sprite);
+
+      // An overlay clip's second sprite (see `TopAnimState.overlay`) rides
+      // along at the exact same box as its own base/rest sprite, sorted
+      // directly above it — isoDepthKey returns integers spaced 1 apart (see
+      // its own doc comment), so +0.5 always lands strictly between this
+      // hex's own key and the next one's, never colliding with another
+      // hex's sprite either way.
+      if (isTopLayer) {
+        const overlay = this.topAnimState.get(key)?.overlay;
+        if (overlay) {
+          overlay.width = sprite.width;
+          overlay.height = sprite.height;
+          overlay.position.copyFrom(sprite.position);
+          overlay.zIndex = sprite.zIndex + 0.5;
+          if (!overlay.parent) layer.container.addChild(overlay);
+        }
+      }
     }
 
     for (const [key, sprite] of layer.active) {
@@ -3369,9 +3404,19 @@ export class HexMapRenderer {
       layer.container.removeChild(sprite);
       layer.pool.push(sprite);
       layer.active.delete(key);
-      if (isTopLayer) this.topAnimState.delete(key);
+      if (isTopLayer) this.releaseTopAnim(key);
     }
     layer.container.sortChildren();
+  }
+
+  /** Drops `key`'s `topAnimState` entry (if any), returning its overlay sprite (if any) to `topOverlayPool` first. */
+  private releaseTopAnim(key: string) {
+    const existing = this.topAnimState.get(key);
+    if (existing?.overlay) {
+      this.terrainTop.container.removeChild(existing.overlay);
+      this.topOverlayPool.push(existing.overlay);
+    }
+    this.topAnimState.delete(key);
   }
 
   /**
@@ -3379,22 +3424,41 @@ export class HexMapRenderer {
    * rebuild says it should be showing. A rebuild runs far more often than a
    * clip's own frame rate (every camera pan/zoom, vs. a handful of fps), so
    * the common case — same clip as last rebuild, or still no clip at all —
-   * must leave `topAnimState`/the sprite's current frame alone rather than
+   * must leave `topAnimState`/the sprites' current frames alone rather than
    * resetting playback to frame 0 every time the camera merely moves.
+   *
+   * An overlay clip (`anim.rest` set — see `TileAnimClip`'s own doc comment)
+   * needs a second sprite: `sprite` (the hex's ordinary top sprite) shows the
+   * rest image and never changes again while this clip plays, while a pooled
+   * `overlay` sprite cycles through the clip's parts-only frames on top of it
+   * (`advanceTopAnimations` targets whichever sprite is the right one). A
+   * legacy, non-overlay clip needs no second sprite at all — `sprite` itself
+   * still cycles through full frames exactly as before.
    */
   private syncTopAnim(key: string, sprite: Sprite, anim: TileAnimClip | undefined, staticTexture: Texture) {
     const existing = this.topAnimState.get(key);
     if (!anim) {
-      if (existing) this.topAnimState.delete(key);
+      if (existing) this.releaseTopAnim(key);
       sprite.texture = staticTexture;
       return;
     }
     if (existing && existing.clip === anim) {
       existing.sprite = sprite;
+      if (anim.rest) sprite.texture = anim.rest;
       return;
     }
-    this.topAnimState.set(key, { clip: anim, sprite, frame: 0, elapsedMs: 0, dir: 1 });
-    sprite.texture = anim.textures[0]!;
+    // A new clip replaces whatever this hex's top was showing before —
+    // release any overlay sprite the previous clip (if any) was using
+    // before allocating this one's own.
+    if (existing?.overlay) {
+      this.terrainTop.container.removeChild(existing.overlay);
+      this.topOverlayPool.push(existing.overlay);
+    }
+    const overlay = anim.rest !== undefined ? (this.topOverlayPool.pop() ?? new Sprite()) : undefined;
+    const initial = topAnimTextures(anim, 0);
+    sprite.texture = initial.base;
+    if (overlay) overlay.texture = initial.overlay!;
+    this.topAnimState.set(key, { clip: anim, sprite, frame: 0, elapsedMs: 0, dir: 1, overlay });
   }
 
   /** Advances every active top-layer clip by `deltaMs` of playback, called once per app tick regardless of whether a rebuild ran this frame. */
@@ -3420,7 +3484,13 @@ export class HexMapRenderer {
           state.frame = (state.frame + 1) % state.clip.textures.length;
         }
       }
-      if (advanced) state.sprite.texture = state.clip.textures[state.frame]!;
+      if (advanced) {
+        const texture = state.clip.textures[state.frame]!;
+        // The rest sprite (`state.sprite`) never changes texture again once
+        // an overlay sprite exists — only the overlay cycles.
+        if (state.overlay) state.overlay.texture = texture;
+        else state.sprite.texture = texture;
+      }
     }
   }
 

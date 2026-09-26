@@ -38,6 +38,18 @@ function layerStyle(rect: AtlasFrameRect) {
 
 const baseStyle = computed(() => (props.layers.base ? layerStyle(props.layers.base) : null));
 
+// The clip's rest image (the building with its moving parts held still) —
+// only present for an "overlay" clip (3D_assets PR #92: its frames carry only
+// the moving parts, everything else transparent). Static for as long as this
+// exact clip plays, drawn *underneath* the frame layer below rather than
+// swapped with it — the two together make the whole building, same as the
+// old full-frame clips made it in one image. A legacy clip has no `restRect`
+// at all, so this stays null and the top layer alone plays, unchanged.
+const restStyle = computed(() => {
+  const clip = props.layers.clip;
+  return clip?.restRect ? layerStyle(clip.restRect) : null;
+});
+
 // Elapsed playback time, in ms since this clip (re)started — fed to
 // `clipFrameIndex` (clipPlayback.ts), which owns the loop/pingpong/pause
 // math itself so it isn't duplicated per clip player (see that module and
@@ -78,6 +90,7 @@ onBeforeUnmount(stopAnimation);
 <template>
   <div class="animated-building" role="img" :style="{ aspectRatio: `${canvasSize.w} / ${canvasSize.h}` }">
     <div v-if="baseStyle" class="layer" :style="baseStyle" />
+    <div v-if="restStyle" class="layer" :style="restStyle" />
     <div v-if="topStyle" class="layer" :style="topStyle" />
   </div>
 </template>

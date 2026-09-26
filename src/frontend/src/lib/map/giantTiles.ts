@@ -113,6 +113,10 @@ export interface GiantFamilyClip {
   frames: string[];
   fps: number;
   playback: 'loop' | 'pingpong';
+  /** See `AtlasClip.overlay` — a giant clip whose frames carry only its moving parts, to be drawn over `rest`. */
+  overlay?: boolean;
+  /** See `AtlasClip.rest` — only meaningful when `overlay` is true. */
+  rest?: string;
 }
 
 /**
@@ -133,8 +137,8 @@ export interface GiantFamilyClip {
 export function classifyGiantClips<T>(
   clips: GiantFamilyClip[],
   resolveFrame: (name: string) => T | undefined,
-): GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong' }> {
-  const result = {} as GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong' }>;
+): GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }> {
+  const result = {} as GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }>;
   for (const orientation of TILE_ORIENTATIONS) result[orientation] = {};
   for (const clip of clips) {
     const orientation = clip.orientation as TileOrientation;
@@ -142,7 +146,17 @@ export function classifyGiantClips<T>(
     if (!clip.giant_part || !isGiantPart(clip.giant_part)) continue;
     const frameValues = clip.frames.map(resolveFrame);
     if (frameValues.some((v) => v === undefined)) continue;
-    result[orientation][clip.giant_part] = { textures: frameValues as T[], fps: clip.fps, playback: clip.playback };
+    // An overlay clip's frames are parts-only — without its rest image
+    // resolving too, drawing them alone would show a half-built giant, so
+    // this drops the whole clip and falls back to the static frame, same as
+    // any frame failing to resolve above.
+    let rest: T | undefined;
+    if (clip.overlay) {
+      if (!clip.rest) continue;
+      rest = resolveFrame(clip.rest);
+      if (rest === undefined) continue;
+    }
+    result[orientation][clip.giant_part] = { textures: frameValues as T[], fps: clip.fps, playback: clip.playback, rest };
   }
   return result;
 }
