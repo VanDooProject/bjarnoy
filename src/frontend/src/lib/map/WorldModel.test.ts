@@ -432,51 +432,15 @@ describe('WorldModel longhouse placement', () => {
 });
 
 // A minimal RiverTile, filling in only the shape this test cares about —
-// setRiverTiles/sawmillArtVariantOf never look at inDirections/outDirection.
+// setRiverTiles never looks at inDirections/outDirection.
 function riverTile(at: AxialCoord, shape: RiverTile['shape']): RiverTile {
   return { q: at.q, r: at.r, shape, inDirections: [], outDirection: null };
 }
 
-describe('WorldModel.sawmillArtVariantOf', () => {
-  // A Sawmill is built directly on a river tile (placeBuilding only accepts
-  // a straight/bend one), so this reads that same hex's own river shape —
-  // not a neighbour's.
-  it('falls back to the riverside family when its own hex has no river at all (a Sawmill is never actually placed here, but the query has to answer something)', () => {
-    const model = new WorldModel(20260825);
-    expect(model.sawmillArtVariantOf({ q: 0, r: 0 })).toBe('sawmillriver');
-  });
-
-  it('is the riverside family on a straight river tile', () => {
-    const model = new WorldModel(20260825);
-    const at = { q: 0, r: 0 };
-    model.setRiverTiles([riverTile(at, 'straight')]);
-    expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
-  });
-
-  it('is the bend family on a bend river tile', () => {
-    const model = new WorldModel(20260825);
-    const at = { q: 0, r: 0 };
-    model.setRiverTiles([riverTile(at, 'bend')]);
-    expect(model.sawmillArtVariantOf(at)).toBe('sawmillbend');
-  });
-
-  it('ignores a river tile on a neighbouring hex — only its own hex counts', () => {
-    const model = new WorldModel(20260825);
-    const at = { q: 0, r: 0 };
-    model.setRiverTiles([riverTile(neighbors(at)[0], 'bend')]);
-    expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
-  });
-
-  it.each(['spring', 'confluence', 'mouth', 'bend60'] as const)(
-    'falls back to the riverside family on a %s river tile — no dedicated art exists for it (also not a valid Sawmill placement to begin with)',
-    (shape) => {
-      const model = new WorldModel(20260825);
-      const at = { q: 0, r: 0 };
-      model.setRiverTiles([riverTile(at, shape)]);
-      expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
-    },
-  );
-});
+// Which art family/orientation a Sawmill/Crop Mill renders with is
+// textures.ts's riverBuildingArtFor now (a pure function, unit-tested there
+// against real in/out directions) — WorldModel no longer has its own
+// sawmillArtVariantOf query for it.
 
 describe('WorldModel.seaFacingDirectionOf', () => {
   it('finds the real sea neighbour of a coastal tile', () => {

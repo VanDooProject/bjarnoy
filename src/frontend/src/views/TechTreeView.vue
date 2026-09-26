@@ -118,16 +118,21 @@ function resetThumb(type: string) {
 
 /**
  * Building types with more than one art family — e.g. the Sawmill looks
- * different inland vs. next to a river or a river bend (see this page's
- * `docs.techTree.lore.sawmill` string and `textures.ts`'s `TextureKey`).
- * Only types listed here get a variant picker; everything else keeps the
- * single family `buildingArt` already resolves from the wire type.
+ * different on a straight river tile vs. a gentle bend vs. a tight 60° bend
+ * (see this page's `docs.techTree.lore.sawmill` string and `textures.ts`'s
+ * `TextureKey`). A Sawmill is never on plain ground — placing one requires
+ * a river shape (`BuildingCatalogue.SawmillRiverShapes`) — so there is
+ * deliberately no `sawmill`/inland entry here; see `buildingArt.ts`'s
+ * `BUILDING_ART_FAMILIES.sawmill` for why its default preview (with no
+ * variant picked) is `sawmillriver`, not the grass family. Only types
+ * listed here get a variant picker; everything else keeps the single
+ * family `buildingArt` already resolves from the wire type.
  */
 const ART_VARIANTS: Partial<Record<string, { id: string; family: string; labelKey: string }[]>> = {
   sawmill: [
-    { id: 'inland', family: 'sawmill', labelKey: 'docs.techTree.sawmillVariants.inland' },
     { id: 'river', family: 'sawmillriver', labelKey: 'docs.techTree.sawmillVariants.river' },
     { id: 'bend', family: 'sawmillbend', labelKey: 'docs.techTree.sawmillVariants.bend' },
+    { id: 'bend60', family: 'sawmillbend60', labelKey: 'docs.techTree.sawmillVariants.bend60' },
   ],
   // The two mountain landforms the pack carves a quarry into.
   quarry: [

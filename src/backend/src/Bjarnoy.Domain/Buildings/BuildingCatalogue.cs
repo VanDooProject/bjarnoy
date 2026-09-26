@@ -513,11 +513,25 @@ public static class BuildingCatalogue
         RequiredLonghouseLevel = 1 + ((level - 1) / 2),
     };
 
-    /// <summary>The only two river shapes the Sawmill's vendor art has a dedicated composite for — see <see cref="BuildingDefinition.RequiresRiverShape"/>.</summary>
+    /// <summary>
+    /// A river building may only stand where its art matches the hex's river
+    /// art: Sawmill on Straight/the gentler 60°-off Bend/the tight 60°
+    /// Bend60, Crop Mill on Straight only. River art variants
+    /// (bend180_island/meander, bend120_island/meander) count as their base
+    /// shape; bend60_loop does not allow a Sawmill. (River art variants
+    /// aren't drawn yet — a follow-up adds them; this is the rule it must
+    /// follow.) See <see cref="BuildingDefinition.RequiresRiverShape"/> and
+    /// the frontend's <c>ringCatalogue.ts</c> <c>RIVER_SHAPES_BY_TYPE</c>,
+    /// which mirrors this same rule for the placement UI.
+    /// </summary>
     private static readonly IReadOnlySet<RiverTileShape> SawmillRiverShapes =
-        new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend };
+        new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend, RiverTileShape.Bend60 };
 
-    /// <summary>Unlike the Sawmill, the Crop Mill's vendor art only has a Straight-river composite — its waterwheel stands directly in the current.</summary>
+    /// <summary>
+    /// Unlike the Sawmill, the Crop Mill's vendor art only has a Straight-
+    /// river composite — its waterwheel stands directly in the current. See
+    /// <see cref="SawmillRiverShapes"/>'s doc comment for the general rule.
+    /// </summary>
     private static readonly IReadOnlySet<RiverTileShape> CropMillRiverShapes =
         new HashSet<RiverTileShape> { RiverTileShape.Straight };
 

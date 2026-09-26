@@ -61,9 +61,9 @@
     },
     "artVariant": "Aussehen:",
     "sawmillVariants": {
-      "inland": "Landeinwärts",
       "river": "Fluss",
-      "bend": "Flussbiegung"
+      "bend": "Flussbiegung",
+      "bend60": "Enge Flussbiegung"
     },
     "quarryVariants": {
       "corrie": "Kar",
@@ -96,7 +96,7 @@
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras, die sowohl das Langhaus als auch das eigene Lagerhaus dieser Siedlung auf Stufe 10 benötigt.",
       "barracks": "Bildet die Kernlinie der Landarmee aus — Thralls, Speerkämpfer, Axtkämpfer und Berserker — auf Gras oder Sand an der Grenze, anstelle des Langhauses. Der Schießplatz bildet den Rest des Truppenspektrums aus (Bogenschützen, Katapulte); beide bilden nie dieselbe Einheit aus.",
       "fisherhut": "Ein zweiter Steg für den Tisch, der Grasland wie ein Bauernhof bewirtschaftet statt der Untiefen.",
-      "sawmill": "Verarbeitet Holz auf Gras, neben einem benachbarten Holzfäller — sein Aussehen ändert sich, wenn es neben einem Fluss oder einer Flussbiegung gebaut wird. Kein eigenes Holz: stattdessen steigert es jeden Holzfäller im Umkreis seiner Stufe (mit steigender Stufe wachsen Reichweite und Bonus).",
+      "sawmill": "Verarbeitet Holz direkt auf einer geraden, sanft gebogenen oder eng gebogenen Flusskachel — ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Kein eigenes Holz: stattdessen steigert es jeden Holzfäller im Umkreis seiner Stufe (mit steigender Stufe wachsen Reichweite und Bonus).",
       "meadery": "Hält Bienen auf Gras hinter einem Bauernhof der Stufe 5 — Bienenkörbe, eine Honigpresse und ein Metkeller. Noch ohne eigene Wirkung: der Met ist für einen künftigen Moralbonus gedacht.",
       "townsquare": "Der eigene Marktplatz des Dorfes auf Gras — noch ohne eigene Wirkung, aber eine künftige Voraussetzung oder ein künftiger Bonus.",
       "cropmill": "Mahlt das Getreide eines ausgebauten Bauernhofs auf einer geraden Flusskachel — ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Keine eigene Nahrung: stattdessen steigert sie jeden Bauernhof im Umkreis ihrer Stufe (mit steigender Stufe wachsen Reichweite und Bonus) — nicht die Kürbisfarm, eine andere Feldfrucht, die eine Mühle nicht mahlt.",

@@ -61,9 +61,9 @@
     },
     "artVariant": "Look:",
     "sawmillVariants": {
-      "inland": "Inland",
       "river": "River",
-      "bend": "River bend"
+      "bend": "River bend",
+      "bend60": "Tight river bend"
     },
     "quarryVariants": {
       "corrie": "Corrie",
@@ -96,7 +96,7 @@
       "greatstorehouse": "A late-game storage tier on grass, needing both the longhouse and this settlement's own storage house at level 10.",
       "barracks": "Trains the land army's core line on grass or sand at the border — thralls, spearmen, axemen and berserkers — in place of the longhouse. Archery Range trains the rest of the roster (bowmen, catapults); the two never train the same unit.",
       "fisherhut": "A second dock for the table, working grassland like a farm rather than the shallows.",
-      "sawmill": "Refines timber on grass, alongside a neighbouring Lumberjack — its look changes when built next to a river or a river bend. No Wood of its own: it boosts every Lumberjack within its level's range instead (a wider range and a bigger boost at higher levels).",
+      "sawmill": "Refines timber standing directly on a straight, gentle-bend, or tight-bend river tile — a waterwheel turning with the current, same as Crop Mill's. No Wood of its own: it boosts every Lumberjack within its level's range instead (a wider range and a bigger boost at higher levels).",
       "meadery": "Keeps bees on grass behind a level-5 Farm — skeps, a honey press and a mead cellar. No effect of its own yet: the mead is meant for a future morale boost.",
       "townsquare": "The village's own market square on grass — no effect of its own yet, but a future prerequisite or boost.",
       "cropmill": "Grinds a maxed Farm's grain on a straight river tile — a millstone under the open sky, its waterwheel turning with the current. No Food of its own: it boosts every Farm within its level's range instead (a wider range and a bigger boost at higher levels) — not Pumpkin Farm, a different crop a mill doesn't grind.",
