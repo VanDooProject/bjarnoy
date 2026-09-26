@@ -24,8 +24,19 @@ interface DemoWindow {
   };
 }
 
-function demoWorld(page: Page) {
-  return page.evaluate(() => (window as unknown as DemoWindow).__demoWorld());
+/**
+ * The draft/selection fields these tests read, as a plain JSON copy. Returning
+ * the Pinia store itself makes Playwright serialize its whole reactive graph,
+ * which fails ("object reference chain is too long") once the model holds
+ * enough tiles.
+ */
+function demoWorld(page: Page): Promise<{ dispatchDraft: any; selectedArmyId: string | null }> {
+  return page.evaluate(() => {
+    const world = (window as unknown as DemoWindow).__demoWorld();
+    return JSON.parse(
+      JSON.stringify({ dispatchDraft: world.dispatchDraft ?? null, selectedArmyId: world.selectedArmyId ?? null }),
+    );
+  });
 }
 
 async function seedGarrison(page: Page) {
