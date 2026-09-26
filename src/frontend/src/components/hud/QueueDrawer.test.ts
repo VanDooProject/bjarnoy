@@ -57,7 +57,7 @@ describe('QueueDrawer', () => {
     expect(wrapper.find('.queue-drawer').exists()).toBe(false);
   });
 
-  it('shows a badge with the total build+training order count', () => {
+  it('shows one row per non-empty category with the soonest remaining time and a count chip', () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [
@@ -65,23 +65,47 @@ describe('QueueDrawer', () => {
       buildOrder({ id: 'fast', completesInSeconds: 50, totalSeconds: 50, q: 2, r: 2 }),
     ];
     world.hud.trainingQueueFetchedAt = Date.now();
-    world.hud.trainingQueue = [trainingOrder()];
+    world.hud.trainingQueue = [trainingOrder({ completesInSeconds: 20, totalSeconds: 100 })];
 
     const wrapper = mountDrawer();
-    const handle = wrapper.get('.queue-drawer-handle');
-    expect(handle.get('.queue-drawer-badge').text()).toBe('3');
+    const rows = wrapper.findAll('.queue-drawer-handle-row');
+    expect(rows).toHaveLength(2);
+
+    const buildRow = rows.find((r) => r.classes('is-build'))!;
+    expect(buildRow.get('.queue-drawer-handle-time').text()).toBe('0:50');
+    expect(buildRow.get('.queue-drawer-handle-count').text()).toBe('2');
+
+    const trainRow = rows.find((r) => r.classes('is-train'))!;
+    expect(trainRow.get('.queue-drawer-handle-time').text()).toBe('0:20');
+    expect(trainRow.find('.queue-drawer-handle-count').exists()).toBe(false);
   });
 
-  it('omits the badge when only the garrison has entries', () => {
+  it('shows a muted dash and no progress bar when every build order is waiting', () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [
+      buildOrder({ id: 'waiting-1', state: 'waiting', completesAtGameTime: null, completesInSeconds: null }),
+      buildOrder({ id: 'waiting-2', state: 'waiting', completesAtGameTime: null, completesInSeconds: null }),
+    ];
+
+    const wrapper = mountDrawer();
+    const buildRow = wrapper.get('.queue-drawer-handle-row.is-build');
+    expect(buildRow.get('.queue-drawer-handle-time').text()).toBe('—');
+    expect(buildRow.get('.queue-drawer-handle-time').classes()).toContain('is-muted');
+    expect(buildRow.find('.queue-drawer-handle-progress').exists()).toBe(false);
+  });
+
+  it('renders no rows (just the chevron) when only the garrison has entries', () => {
     const world = useWorldStore();
     world.hud.garrison = [{ unit: 'spearman', count: 12 }];
 
     const wrapper = mountDrawer();
     const handle = wrapper.get('.queue-drawer-handle');
-    expect(handle.find('.queue-drawer-badge').exists()).toBe(false);
+    expect(handle.findAll('.queue-drawer-handle-row')).toHaveLength(0);
+    expect(handle.find('.queue-drawer-chevron').exists()).toBe(true);
   });
 
-  it('the progress bar fill matches the soonest active order across both queues', () => {
+  it('the progress bar fill matches the soonest active order in each category', () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [
@@ -90,21 +114,12 @@ describe('QueueDrawer', () => {
       buildOrder({ id: 'slow', completesInSeconds: 500, totalSeconds: 500, q: 1, r: 1 }),
     ];
     world.hud.trainingQueueFetchedAt = Date.now();
-    // Soonest active order overall: 80/100 done, 20s remaining.
+    // 80/100 done, 20s remaining.
     world.hud.trainingQueue = [trainingOrder({ completesInSeconds: 20, totalSeconds: 100 })];
 
     const wrapper = mountDrawer();
-    const handle = wrapper.get('.queue-drawer-handle');
-    expect(handle.get('.queue-drawer-handle-progress-fill').attributes('style')).toContain('height: 80%');
-  });
-
-  it('renders no progress bar when nothing is active', () => {
-    const world = useWorldStore();
-    world.hud.garrison = [{ unit: 'spearman', count: 12 }];
-
-    const wrapper = mountDrawer();
-    const handle = wrapper.get('.queue-drawer-handle');
-    expect(handle.find('.queue-drawer-handle-progress').exists()).toBe(false);
+    const trainRow = wrapper.get('.queue-drawer-handle-row.is-train');
+    expect(trainRow.get('.queue-drawer-handle-progress-fill').attributes('style')).toContain('width: 80%');
   });
 
   it('clicking the handle opens the drawer', async () => {

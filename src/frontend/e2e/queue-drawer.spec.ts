@@ -86,7 +86,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
     });
   }
 
-  test('the collapsed handle is a small edge tab with a count badge', async ({ page }) => {
+  test('the collapsed handle is a small edge tab showing countdowns per category', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
     await seedQueues(page);
@@ -94,11 +94,20 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
     const handle = page.locator('.queue-drawer-handle');
     await expect(handle).toBeVisible();
     const box = (await handle.boundingBox())!;
-    expect(box.width).toBeLessThanOrEqual(32);
-    expect(box.height).toBeLessThanOrEqual(96);
+    expect(box.width).toBeLessThanOrEqual(56);
+    expect(box.height).toBeLessThanOrEqual(140);
     expect(box.x).toBeLessThanOrEqual(1);
-    // 2 build orders + 1 training order seeded above.
-    await expect(handle.locator('.queue-drawer-badge')).toHaveText('3');
+
+    // 2 build orders seeded above ('fast' is the soonest, 50s) -> count
+    // chip "2" and the fast order's countdown.
+    const buildRow = handle.locator('.queue-drawer-handle-row.is-build');
+    await expect(buildRow.locator('.queue-drawer-handle-count')).toHaveText('2');
+    await expect(buildRow.locator('.queue-drawer-handle-time')).toHaveText(/^0:\d\d$/);
+
+    // 1 training order seeded above -> no count chip, but a countdown.
+    const trainRow = handle.locator('.queue-drawer-handle-row.is-train');
+    await expect(trainRow.locator('.queue-drawer-handle-count')).toHaveCount(0);
+    await expect(trainRow.locator('.queue-drawer-handle-time')).not.toHaveText('');
 
     // BuildQueuePanel/TrainingQueuePanel — the desktop panels QueueDrawer
     // replaces — are not mounted at this viewport width. (Other HUD panels

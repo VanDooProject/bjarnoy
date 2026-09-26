@@ -8,7 +8,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';
-import { formatCountdown, useBuildOrders, useTrainingOrders } from './useQueueOrders';
+import { formatCountdown, formatCountdownShort, useBuildOrders, useTrainingOrders } from './useQueueOrders';
 import { useWorldStore } from '../stores/world';
 import type { BuildOrderResponse, TrainingOrderResponse } from '../api/types';
 import { createTestI18n } from '../test/i18n';
@@ -68,6 +68,28 @@ describe('formatCountdown', () => {
 
   it('includes the hour segment at or above an hour', () => {
     expect(formatCountdown(3665)).toBe('1:01:05');
+  });
+});
+
+describe('formatCountdownShort', () => {
+  it('renders under an hour as m:ss', () => {
+    expect(formatCountdownShort(50)).toBe('0:50');
+    expect(formatCountdownShort(724)).toBe('12:04');
+  });
+
+  it('renders at or above an hour as HhMM, dropping seconds', () => {
+    expect(formatCountdownShort(3600)).toBe('1h00');
+    expect(formatCountdownShort(3900)).toBe('1h05');
+    expect(formatCountdownShort(49200)).toBe('13h40');
+  });
+
+  it('renders at or above a day as DdHH', () => {
+    expect(formatCountdownShort(86400 + 2 * 3600)).toBe('1d02');
+    expect(formatCountdownShort(9 * 86400 + 23 * 3600)).toBe('9d23');
+  });
+
+  it('clamps negative input to zero', () => {
+    expect(formatCountdownShort(-5)).toBe('0:00');
   });
 });
 
