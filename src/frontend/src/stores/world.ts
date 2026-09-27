@@ -28,7 +28,7 @@ import {
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
 import { WorldModel } from '../lib/map/WorldModel';
-import { fogPerfStats } from '../lib/map/HexMapRenderer';
+import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
 import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
