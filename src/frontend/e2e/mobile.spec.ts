@@ -31,6 +31,51 @@ async function expectNothingOffscreen(page: Page, where: string): Promise<void> 
   expect(offscreen, `${where}: interactive elements outside the viewport`).toEqual([]);
 }
 
+/** Whether the preview plot's own screen point hits the canvas, not an overlay on top of it. */
+async function plotHitsCanvas(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const renderer = (
+      window as unknown as {
+        __settlementRenderer: () => {
+          previewCenter?: { q: number; r: number };
+          hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
+        };
+      }
+    ).__settlementRenderer();
+    const canvas = document.querySelector('canvas')!;
+    const box = canvas.getBoundingClientRect();
+    const plot = renderer.hexCenterScreen(renderer.previewCenter!);
+    return document.elementFromPoint(box.x + plot.x, box.y + plot.y) === canvas;
+  });
+}
+
+async function expectNoOverlap(a: Locator, b: Locator, what: string): Promise<void> {
+  const boxA = (await a.boundingBox())!;
+  const boxB = (await b.boundingBox())!;
+  const overlaps =
+    boxA.x < boxB.x + boxB.width &&
+    boxB.x < boxA.x + boxA.width &&
+    boxA.y < boxB.y + boxB.height &&
+    boxB.y < boxA.y + boxA.height;
+  expect(overlaps, what).toBe(false);
+}
+
+/**
+ * The minimal phone hero (title + one-line facts) must leave the preview
+ * island's "click this plot" chip and the demo-mode badge uncovered — the
+ * full desktop hero ran into both on a phone.
+ */
+async function expectHeroClear(page: Page): Promise<void> {
+  const settlement = await SettlementPage.openLanding(page);
+  const hero = page.locator('.hero--founding');
+  await expect(hero).toBeVisible();
+  await expect(hero.locator('.lede')).toBeHidden();
+  await expectNoOverlap(hero, settlement.guidancePointer.locator('.chip'), 'hero covers the "click this plot" chip');
+  const badge = page.locator('.demo-badge');
+  if (await badge.isVisible()) await expectNoOverlap(hero, badge, 'hero covers the demo badge');
+  await expectInsideViewport(page, hero);
+}
+
 test.describe('phone layout', { tag: '@g1' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
@@ -48,6 +93,11 @@ test.describe('phone layout', { tag: '@g1' }, () => {
     const heading = page.getByRole('heading', { level: 1 });
     await expect(heading).toBeVisible();
     expect((await heading.boundingBox())!.x).toBeGreaterThanOrEqual(12);
+  });
+
+  test('the minimal landing hero leaves the plot chip and demo badge uncovered', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await expectHeroClear(page);
   });
 
   test('onboarding overlays stay on screen before and after landfall', async ({ page }) => {
@@ -69,6 +119,11 @@ test.describe('phone layout', { tag: '@g1' }, () => {
 test.describe('phone layout, landscape', { tag: '@g1' }, () => {
   test.use({ viewport: PHONE_LANDSCAPE, hasTouch: true, isMobile: true });
 
+  test('the minimal landing hero leaves the plot chip and demo badge uncovered', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await expectHeroClear(page);
+  });
+
   test('the onboarding checklist leaves the landing plot tappable', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await page.goto('/');
@@ -76,23 +131,32 @@ test.describe('phone layout, landscape', { tag: '@g1' }, () => {
 
     // The plot's own screen point must hit the canvas, not an overlay sitting
     // on top of it — otherwise the founding tap silently does nothing.
-    const hitsCanvas = await page.evaluate(() => {
-      const renderer = (
-        window as unknown as {
-          __settlementRenderer: () => {
-            previewCenter?: { q: number; r: number };
-            hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
-          };
-        }
-      ).__settlementRenderer();
-      const canvas = document.querySelector('canvas')!;
-      const box = canvas.getBoundingClientRect();
-      const plot = renderer.hexCenterScreen(renderer.previewCenter!);
-      return document.elementFromPoint(box.x + plot.x, box.y + plot.y) === canvas;
-    });
+    const hitsCanvas = await plotHitsCanvas(page);
     expect(hitsCanvas).toBe(true);
 
     await claimLandfall(page);
     await expect(page.getByTestId('onboarding-checklist')).toContainText('Step 2 of 3');
+  });
+});
+
+test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
+  test.use({ viewport: { width: 320, height: 568 }, hasTouch: true, isMobile: true });
+
+  // The founding tap used to miss at this width (the onboarding overlays
+  // sat over the plot); the plot's own screen point must reach the canvas
+  // and a tap there must found the settlement.
+  test('the founding tap reaches the plot and founds the settlement', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    const hitsCanvas = await plotHitsCanvas(page);
+    expect(hitsCanvas).toBe(true);
+
+    await settlement.claimLandfall();
+    await expect(settlement.checklist).toContainText('Step 2 of 3');
+  });
+
+  test('the minimal landing hero leaves the plot chip and demo badge uncovered', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await expectHeroClear(page);
   });
 });
