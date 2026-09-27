@@ -875,7 +875,7 @@ watch(
       <h1>{{ t('landing.hero.notOpenTitle') }}</h1>
       <p class="lede">{{ joinBlockedMessage }}</p>
     </div>
-    <div v-else-if="!player.hasFoundedSettlement" class="hero">
+    <div v-else-if="!player.hasFoundedSettlement" class="hero hero--founding">
       <div class="eyebrow">{{ t('landing.hero.eyebrow') }}</div>
       <h1>{{ t('landing.hero.title') }}</h1>
       <p class="lede">
@@ -901,8 +901,8 @@ watch(
              (every visible string must come from i18n) doesn't flag it. -->
         <span class="signup-facts-sep" aria-hidden="true"></span>
         <span>{{ t('landing.hero.nothingToInstall') }}</span>
-        <span class="signup-facts-sep" aria-hidden="true"></span>
-        <span>{{ t('landing.hero.leavesInOneClick') }}</span>
+        <span class="signup-facts-sep signup-facts-third" aria-hidden="true"></span>
+        <span class="signup-facts-third">{{ t('landing.hero.leavesInOneClick') }}</span>
       </p>
       <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
       <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
@@ -1062,7 +1062,8 @@ h1 {
   .hero {
     left: 20px;
     right: 20px;
-    top: calc(var(--hud-inset-top, 64px) + 16px);
+    /* Clears the demo-mode badge that tucks just under the bar. */
+    top: calc(var(--hud-inset-top, 64px) + 36px);
     max-width: none;
   }
   h1 {
@@ -1073,10 +1074,27 @@ h1 {
     font-size: 14px;
     margin-top: 8px;
   }
+  /* Minimal founding hero on phones: the eyebrow and the lede paragraph
+     pushed the copy down into the preview island (and, at 320px, under
+     the "click this plot" chip). The chip and the checklist tray already
+     say what to do, so a phone keeps just the title and the one-line
+     facts. The join-blocked hero keeps its lede — there it's the message. */
+  .hero--founding .eyebrow,
+  .hero--founding .lede {
+    display: none;
+  }
+  .hero--founding h1 {
+    font-size: 22px;
+    margin-top: 0;
+  }
   .signup-facts {
     font-size: 12px;
-    margin-top: 10px;
+    margin-top: 6px;
     gap: 6px;
+  }
+  .hero--founding .signup-facts {
+    flex-wrap: nowrap;
+    white-space: nowrap;
   }
   .footer {
     left: 16px;
@@ -1092,6 +1110,13 @@ h1 {
     bottom: calc(44px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
 }
+/* The facts line stays on one row on phones; below 360px the third fact
+   no longer fits, so it drops rather than wrapping behind a dangling "|". */
+@media (max-width: 359px) {
+  .hero--founding .signup-facts-third {
+    display: none;
+  }
+}
 /* Short-landscape phones (finding b/g companion): the checklist tray is
    docked bottom-right there (OnboardingChecklist.vue) and the footer would
    still collide with it along the bottom edge — the checklist carries the
@@ -1100,6 +1125,26 @@ h1 {
 @media (max-height: 500px) {
   .footer {
     display: none;
+  }
+  /* Short landscape phones get the same minimal founding hero, kept to a
+     narrow left column so it stays clear of the island on the right. */
+  .hero--founding {
+    left: 20px;
+    top: calc(var(--hud-inset-top, 64px) + 20px);
+    max-width: 280px;
+  }
+  .hero--founding .eyebrow,
+  .hero--founding .lede {
+    display: none;
+  }
+  .hero--founding h1 {
+    font-size: 22px;
+    margin-top: 0;
+  }
+  .hero--founding .signup-facts {
+    font-size: 12px;
+    margin-top: 6px;
+    gap: 6px;
   }
 }
 </style>
