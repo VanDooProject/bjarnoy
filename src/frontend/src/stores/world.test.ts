@@ -107,6 +107,28 @@ async function loadStoreModule(demoMode: boolean) {
   return store;
 }
 
+// Regression guard for a timeout flake: this store once imported
+// HexMapRenderer just for the `fogPerfStats` record, which dragged Pixi,
+// textures.ts, atlas.ts and every eagerly imported atlas manifest into the
+// store's module graph — the first (cold) `loadStoreModule` took ~4s on its
+// own and blew the 5s test timeout under a full parallel run. The store has
+// no business loading the renderer; keep it that way.
+describe('useWorldStore module graph', () => {
+  it('does not load pixi.js (the renderer) just by importing the store', async () => {
+    let pixiLoaded = false;
+    vi.doMock('pixi.js', () => {
+      pixiLoaded = true;
+      return {};
+    });
+    try {
+      await loadStoreModule(true);
+      expect(pixiLoaded).toBe(false);
+    } finally {
+      vi.doUnmock('pixi.js');
+    }
+  });
+});
+
 describe('useWorldStore refreshArmies (guest armies)', () => {
   it('fetches guest armies alongside the owner-side army list', async () => {
     getSettlementArmies.mockReset().mockResolvedValue([]);
