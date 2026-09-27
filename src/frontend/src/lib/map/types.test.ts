@@ -94,16 +94,22 @@ describe('bend60OrientationOf', () => {
 });
 
 describe('springOrientationOf', () => {
-  it('matches the pixel-measured rivertile_spring_E pairing (outDirection E -> file SW)', () => {
-    expect(springOrientationOf('E')).toBe('SW');
+  // Pixel-measured from the vendored atlas: the one polygon edge
+  // (isoTopPoints order) each spring file's outflow touches — identical for
+  // mountaintile_corrie_spring, _saddleback_spring, _glacier_spring and
+  // mountaintile_volcano_lavaspring(_flows). Literal data, so this checks the
+  // function against the art rather than against its own formula.
+  const MEASURED_OUTFLOW_EDGE: Record<TileOrientation, number> = { E: 1, NE: 2, NW: 3, W: 4, SW: 5, SE: 0 };
+  const directionOfEdge = (edge: number): TileOrientation => TILE_ORIENTATIONS[(3 - edge + 6) % 6];
+
+  it('picks, for every outflow direction, the file whose measured outflow edge is that direction', () => {
+    for (const out of TILE_ORIENTATIONS) {
+      expect(directionOfEdge(MEASURED_OUTFLOW_EDGE[springOrientationOf(out)])).toBe(out);
+    }
   });
 
-  it('is consistent across every orientation index', () => {
-    for (let i = 0; i < TILE_ORIENTATIONS.length; i++) {
-      const out = TILE_ORIENTATIONS[i];
-      const expected = TILE_ORIENTATIONS[(4 - i + 6) % 6];
-      expect(springOrientationOf(out)).toBe(expected);
-    }
+  it('regression: a spring draining SW uses file SW (it used to pick E and drain NW)', () => {
+    expect(springOrientationOf('SW')).toBe('SW');
   });
 });
 

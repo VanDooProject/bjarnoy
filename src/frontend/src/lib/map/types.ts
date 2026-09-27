@@ -73,15 +73,24 @@ export function bend60OrientationOf(inDirection: TileOrientation, outDirection: 
 }
 
 /**
- * The `spring` family's pond touches exactly one edge (its only outflow) —
- * pixel-verified to be file index `D`'s edge `D-1`, the same rotation
- * convention `bendFileIndexFor` uses but resolved for a single direction
- * instead of a pair: `edgeOf`'s inverse of `D-1` is `(4-D) mod 6`, so the
- * file a given `outDirection` needs is `D = (4 - outIndex) mod 6`.
+ * A spring tile's art — the mountain spring families the game draws
+ * (`mountaintile_corrie_spring`, `mountaintile_saddleback_spring`, the frozen
+ * `mountaintile_glacier_spring` and the wasted
+ * `mountaintile_volcano_lavaspring(_flows)`) — has exactly one outflow edge.
+ * Pixel-measured on all of them: file index `D` drains over polygon edge
+ * `D+1`. Through the self-inverse edge formula that edge is direction
+ * `(2-D) mod 6`, so the file a given `outDirection` needs is
+ * `D = (2 - outIndex) mod 6`.
+ *
+ * (This used to be `(4 - outIndex)`, measured on the flat placeholder
+ * `rivertile_spring`, whose outflow is edge `D-1` — two edges round from the
+ * mountain springs that replaced it, so every water spring drained out the
+ * wrong side; the lava spring only looked right because it carried its own
+ * two-step correction on top.)
  */
 export function springOrientationOf(outDirection: TileOrientation): TileOrientation {
   const outIndex = TILE_ORIENTATIONS.indexOf(outDirection);
-  return TILE_ORIENTATIONS[(4 - outIndex + 6) % 6];
+  return TILE_ORIENTATIONS[(2 - outIndex + 6) % 6];
 }
 
 /**

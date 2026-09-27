@@ -10,7 +10,6 @@ import {
   riverArtFor,
   riverBuildingArtFor,
   riverTexturesFor,
-  lavaSpringOrientationOf,
   mergeTileTextures,
   textureKeyFor,
   topAnimTextures,
@@ -940,18 +939,6 @@ describe('riverTexturesFor river-art variants', () => {
     const result = riverTexturesFor(fixture(), { ...straight, wasted: true }, null, 'corrie', 'meander');
     expect(result.base).toBe('plain-base');
     expect(result.top).toBe('plain-top');
-  });
-});
-
-describe('lavaSpringOrientationOf', () => {
-  // The lava-spring render drains two hex edges clockwise of the river-spring
-  // render at the same label (_E: river spring out the lower-left edge, lava
-  // spring out the top), so its label steps two places back.
-  it('steps the river-spring orientation two places back', () => {
-    expect(lavaSpringOrientationOf('E')).toBe('SW');
-    expect(lavaSpringOrientationOf('NE')).toBe('SE');
-    expect(lavaSpringOrientationOf('NW')).toBe('E');
-    expect(lavaSpringOrientationOf('SE')).toBe('W');
   });
 });
 

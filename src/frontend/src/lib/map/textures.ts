@@ -1163,19 +1163,6 @@ export function riverBuildingArtFor(buildingType: string, river: RiverTile): Riv
 }
 
 /**
- * The lava-spring art (`mountaintile_volcano_lavaspring_flows`) was rendered
- * with its outflow two hex edges clockwise of `rivertile_spring`'s at the same
- * orientation label (e.g. `_E`: the river spring drains out the lower-left
- * edge, the lava spring out the top). So the orientation `springOrientationOf`
- * picks for the river art is stepped two places back through
- * `TILE_ORIENTATIONS` to put the lava tongue on the edge the stream leaves by.
- */
-export function lavaSpringOrientationOf(riverSpringOrientation: TileOrientation): TileOrientation {
-  const i = TILE_ORIENTATIONS.indexOf(riverSpringOrientation);
-  return TILE_ORIENTATIONS[(i + TILE_ORIENTATIONS.length - 2) % TILE_ORIENTATIONS.length];
-}
-
-/**
  * The `RiverArtShape` a `straight`/`bend`/`bend60` tile's own `RiverVariant`
  * resolves to (see `RiverArtShape`'s own doc comment) — `undefined` for
  * `'plain'` or for a shape with no variant art (spring/confluence/mouth),
@@ -1221,15 +1208,16 @@ export function riverTexturesFor(
   // occur on lava (RiverGenerator's allowConfluence: false) and mouth
   // deliberately keeps the plain river art (no dedicated lava mouth asset),
   // so every other shape falls through to the ordinary lookup below even on
-  // a wasted island.
+  // a wasted island. The lava families share their water counterparts'
+  // rotation convention (the lava spring drains over edge D+1 like the
+  // mountain springs — see springOrientationOf), so the same orientation
+  // applies unchanged.
   if (
     river.wasted &&
     (shape === 'straight' || shape === 'bend' || shape === 'bend60' || shape === 'springcorrie' || shape === 'springsaddleback')
   ) {
-    const lavaOrientation =
-      shape === 'springcorrie' || shape === 'springsaddleback' ? lavaSpringOrientationOf(orientation) : orientation;
-    const lavaBase = textures.lavaRiverBase[shape]?.[lavaOrientation];
-    const lavaTop = textures.lavaRiverTop[shape]?.[lavaOrientation];
+    const lavaBase = textures.lavaRiverBase[shape]?.[orientation];
+    const lavaTop = textures.lavaRiverTop[shape]?.[orientation];
     if (lavaBase && lavaTop) return { base: lavaBase, top: lavaTop };
   }
 
