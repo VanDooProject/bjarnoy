@@ -42,6 +42,7 @@ import {
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
+  bend60OrientationOf,
   bendOrientationOf,
   confluenceOrientationOf,
   confluenceWideOrientationOf,
@@ -1051,9 +1052,9 @@ export function topAnimFor(textures: TileTextures, tile: Tile, riverArt?: RiverA
  * `inDirections`/`outDirection` as a `TileOrientation` directly.
  *
  * `bend` is directional (`bendOrientationOf`); `bend60` — the sharper
- * 120°-off-straight turn, a separate art family from `bend` — is directional
- * the same way, reusing `bendOrientationOf` (it takes an in/out direction
- * pair, not an angle, so the same anchor logic applies); `spring` has only
+ * 120°-off-straight turn between two adjacent edges, a separate art family
+ * from `bend` — has its own rotation convention (`bend60OrientationOf`: its
+ * files touch edges `D`/`D+1`, not `bend`'s `D-1`/`D+1`); `spring` has only
  * an outflow (`springOrientationOf`) — which of its two art families
  * (`springcorrie`/`springsaddleback`) to use is the caller's own per-tile
  * lookup (`springShape`, mirroring the backend's
@@ -1097,7 +1098,7 @@ export function riverArtFor(
     return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
   }
   if (river.shape === 'bend60' && river.outDirection && river.inDirections[0]) {
-    return { shape: 'bend60', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
+    return { shape: 'bend60', orientation: bend60OrientationOf(river.inDirections[0], river.outDirection) };
   }
   if (river.shape === 'spring' && river.outDirection) {
     const shape = springShape === 'saddleback' ? 'springsaddleback' : 'springcorrie';
@@ -1162,19 +1163,6 @@ export function riverBuildingArtFor(buildingType: string, river: RiverTile): Riv
 }
 
 /**
- * The lava-spring art (`mountaintile_volcano_lavaspring_flows`) was rendered
- * with its outflow two hex edges clockwise of `rivertile_spring`'s at the same
- * orientation label (e.g. `_E`: the river spring drains out the lower-left
- * edge, the lava spring out the top). So the orientation `springOrientationOf`
- * picks for the river art is stepped two places back through
- * `TILE_ORIENTATIONS` to put the lava tongue on the edge the stream leaves by.
- */
-export function lavaSpringOrientationOf(riverSpringOrientation: TileOrientation): TileOrientation {
-  const i = TILE_ORIENTATIONS.indexOf(riverSpringOrientation);
-  return TILE_ORIENTATIONS[(i + TILE_ORIENTATIONS.length - 2) % TILE_ORIENTATIONS.length];
-}
-
-/**
  * The `RiverArtShape` a `straight`/`bend`/`bend60` tile's own `RiverVariant`
  * resolves to (see `RiverArtShape`'s own doc comment) — `undefined` for
  * `'plain'` or for a shape with no variant art (spring/confluence/mouth),
@@ -1220,15 +1208,16 @@ export function riverTexturesFor(
   // occur on lava (RiverGenerator's allowConfluence: false) and mouth
   // deliberately keeps the plain river art (no dedicated lava mouth asset),
   // so every other shape falls through to the ordinary lookup below even on
-  // a wasted island.
+  // a wasted island. The lava families share their water counterparts'
+  // rotation convention (the lava spring drains over edge D+1 like the
+  // mountain springs — see springOrientationOf), so the same orientation
+  // applies unchanged.
   if (
     river.wasted &&
     (shape === 'straight' || shape === 'bend' || shape === 'bend60' || shape === 'springcorrie' || shape === 'springsaddleback')
   ) {
-    const lavaOrientation =
-      shape === 'springcorrie' || shape === 'springsaddleback' ? lavaSpringOrientationOf(orientation) : orientation;
-    const lavaBase = textures.lavaRiverBase[shape]?.[lavaOrientation];
-    const lavaTop = textures.lavaRiverTop[shape]?.[lavaOrientation];
+    const lavaBase = textures.lavaRiverBase[shape]?.[orientation];
+    const lavaTop = textures.lavaRiverTop[shape]?.[orientation];
     if (lavaBase && lavaTop) return { base: lavaBase, top: lavaTop };
   }
 

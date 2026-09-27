@@ -10,7 +10,6 @@ import {
   riverArtFor,
   riverBuildingArtFor,
   riverTexturesFor,
-  lavaSpringOrientationOf,
   mergeTileTextures,
   textureKeyFor,
   topAnimTextures,
@@ -19,7 +18,7 @@ import {
   type FamilyFrame,
   type TileTextures,
 } from './textures';
-import { bendOrientationOf, TILE_ORIENTATIONS } from './types';
+import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
 
@@ -74,19 +73,16 @@ function resolveAll(name: string): string | undefined {
 }
 
 describe('riverArtFor', () => {
-  it('resolves a Bend60 tile to the bend60 family, oriented the same way a Bend tile would be', () => {
-    // bend60 reuses bendOrientationOf (the same in/out-pair anchor logic
-    // bend itself uses) — see riverArtFor's doc comment for why: it's a
-    // directional bend either way, the vendor pack just shipped a distinct
-    // art family for its sharper interior angle.
-    const result = riverArtFor(riverTile('bend60', 'E', 'NW'), null);
+  it('resolves a Bend60 tile (adjacent edges) to the bend60 family through bend60OrientationOf, the same file for either flow direction', () => {
+    const forward = riverArtFor(riverTile('bend60', 'NE', 'NW'), null);
+    const backward = riverArtFor(riverTile('bend60', 'NW', 'NE'), null);
 
-    expect(result.shape).toBe('bend60');
-    expect(result.orientation).toBe(bendOrientationOf('E', 'NW'));
+    expect(forward).toEqual({ shape: 'bend60', orientation: bend60OrientationOf('NE', 'NW') });
+    expect(backward.orientation).toBe(forward.orientation);
   });
 
   it('does not resolve a Bend60 tile to the plain bend family', () => {
-    const result = riverArtFor(riverTile('bend60', 'E', 'NW'), null);
+    const result = riverArtFor(riverTile('bend60', 'NE', 'NW'), null);
 
     expect(result.shape).not.toBe('bend');
   });
@@ -209,7 +205,7 @@ describe('riverBuildingArtFor', () => {
   });
 
   it('resolves a Sawmill on a tight (bend60) river tile to sawmillbend60', () => {
-    const river = riverTile('bend60', 'E', 'NW');
+    const river = riverTile('bend60', 'NE', 'NW');
     const result = riverBuildingArtFor('sawmill', river);
     const expected = riverArtFor(river, null);
 
@@ -943,18 +939,6 @@ describe('riverTexturesFor river-art variants', () => {
     const result = riverTexturesFor(fixture(), { ...straight, wasted: true }, null, 'corrie', 'meander');
     expect(result.base).toBe('plain-base');
     expect(result.top).toBe('plain-top');
-  });
-});
-
-describe('lavaSpringOrientationOf', () => {
-  // The lava-spring render drains two hex edges clockwise of the river-spring
-  // render at the same label (_E: river spring out the lower-left edge, lava
-  // spring out the top), so its label steps two places back.
-  it('steps the river-spring orientation two places back', () => {
-    expect(lavaSpringOrientationOf('E')).toBe('SW');
-    expect(lavaSpringOrientationOf('NE')).toBe('SE');
-    expect(lavaSpringOrientationOf('NW')).toBe('E');
-    expect(lavaSpringOrientationOf('SE')).toBe('W');
   });
 });
 
