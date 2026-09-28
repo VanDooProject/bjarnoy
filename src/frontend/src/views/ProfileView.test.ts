@@ -294,17 +294,17 @@ describe('ProfileView', () => {
       expect(wrapper.text()).not.toContain('Graphics');
     });
 
-    it('selecting a radio persists the setting to localStorage', async () => {
+    it('choosing an option persists the setting to localStorage', async () => {
       getProfileByName.mockResolvedValue(profile());
       ownProfileAuth();
 
       const wrapper = mountProfileView();
       await flushPromises();
 
-      const onRadio = wrapper
-        .findAll('input[type="radio"]')
-        .find((input) => (input.element as HTMLInputElement).value === 'on')!;
-      await onRadio.setValue(true);
+      const onButton = wrapper
+        .findAll('.animation-preferences button')
+        .find((button) => button.text() === 'On')!;
+      await onButton.trigger('click');
 
       expect(animationPreference.setting).toBe('on');
       expect(localStorage.getItem('bjarnoy.animations')).toBe('on');

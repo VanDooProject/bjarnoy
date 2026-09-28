@@ -270,7 +270,8 @@ function joinedDate(iso: string): string {
   font-size: 18px;
   font-weight: 600;
 }
-.hud-preferences {
+.hud-preferences,
+.animation-preferences {
   margin: 0 0 24px;
 }
 .bio-head {

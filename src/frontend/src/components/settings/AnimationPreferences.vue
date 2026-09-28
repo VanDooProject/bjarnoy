@@ -2,11 +2,9 @@
 // The map's `buildings-anim` clip-art setting (lib/perf/animationPreference.ts)
 // — a per-device graphics preference, so it lives on the player's own
 // profile next to HudPreferences.vue rather than a HUD-adjacent quick menu.
-// Real radio inputs (not HudPreferences' segmented-button toggle) since
-// there are three named, mutually exclusive choices rather than a two-way
-// toggle, and the live status line below needs to read naturally as
-// describing "the current choice", which a labelled radio group does for
-// free via its own semantics.
+// Same segmented control as HudPreferences.vue directly above it, so the two
+// settings on the page read as one set; the status line under it says what
+// the current choice actually resolves to right now.
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { animationPreference, type AnimationSetting } from '../../lib/perf/animationPreference';
@@ -37,17 +35,18 @@ const statusText = computed(() => t(`profile.graphics.status.${STATUS_KEY[animat
   <section class="animation-preferences">
     <h2>{{ t('profile.graphics.title') }}</h2>
     <p class="hint">{{ t('profile.graphics.hint') }}</p>
-    <div class="setting-row" role="radiogroup" :aria-label="t('profile.graphics.animations')">
-      <label v-for="setting in SETTINGS" :key="setting" class="option">
-        <input
-          type="radio"
-          name="animation-setting"
-          :value="setting"
-          :checked="animationPreference.setting === setting"
-          @change="animationPreference.setting = setting"
-        />
+    <div class="setting-toggle" role="group" :aria-label="t('profile.graphics.animations')">
+      <button
+        v-for="setting in SETTINGS"
+        :key="setting"
+        type="button"
+        class="option"
+        :class="{ active: animationPreference.setting === setting }"
+        :aria-pressed="animationPreference.setting === setting"
+        @click="animationPreference.setting = setting"
+      >
         {{ t(`profile.graphics.${setting}`) }}
-      </label>
+      </button>
     </div>
     <p class="status muted">{{ statusText }}</p>
   </section>
@@ -62,18 +61,30 @@ const statusText = computed(() => t(`profile.graphics.status.${STATUS_KEY[animat
   font-size: 13px;
   color: var(--muted);
 }
-.setting-row {
+.setting-toggle {
   display: flex;
-  gap: 16px;
+  gap: 4px;
 }
 .option {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  cursor: pointer;
+  font-family: inherit;
+}
+.option:hover {
+  color: var(--text);
+  border-color: var(--gold);
+}
+.option.active {
+  color: #20160a;
+  background: var(--gold);
+  border-color: var(--gold);
 }
 .status {
   margin: 8px 0 0;
