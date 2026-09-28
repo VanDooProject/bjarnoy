@@ -20,6 +20,28 @@ test('landing page is the village view, not a marketing page in front of it', { 
   await expect(page).toHaveURL(/\/settlement$/);
 });
 
+// While the terrain art is still loading there is no plot on screen yet, so
+// the "Click this plot" pointer waits for the map instead of pointing at an
+// empty canvas behind the loading overlay.
+test('landing page holds the guided pointer back until the map has loaded', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  let releaseTerrain!: () => void;
+  const terrainHeld = new Promise<void>((resolve) => (releaseTerrain = resolve));
+  await page.route(/\/terrain-\d+[^/]*\.webp/, async (route: Route) => {
+    await terrainHeld;
+    await route.continue();
+  });
+  await page.goto('/');
+
+  const settlement = new SettlementPage(page);
+  await expect(page.getByRole('status').filter({ hasText: 'Loading map' })).toBeVisible();
+  await expect(settlement.guidancePointer).toHaveCount(0);
+
+  releaseTerrain();
+  await expect(settlement.guidancePointer).toBeVisible();
+  await expect(settlement.guidancePointer).toContainText('Click this plot');
+});
+
 // Design handoff "2a" frame 1/1b: before founding, the animated pointer and
 // the checklist are already on screen, aimed at the one thing to do.
 test('landing page shows the guided pointer and a step-1 checklist before founding', { tag: '@g3' }, async ({ page }) => {
@@ -258,6 +280,27 @@ test('founding a settlement swaps the pre-founding header for the real in-game n
   await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Leaderboards', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
+});
+
+// Mobile tutorial focus (owner decision): the header-hiding and
+// checklist-vs-ring behaviour is phone-only (HUD_COMPACT_QUERY, max-width
+// 768px) — desktop keeps both the header and the checklist on screen
+// throughout, including while the ring is open, at this suite's default
+// 1280x800 desktop viewport.
+test('desktop keeps the header and the onboarding checklist visible throughout, including while the ring is open', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  const settlement = await SettlementPage.openLanding(page);
+  await settlement.claimLandfall();
+
+  await expect(page.locator('.hud-bar')).toBeVisible();
+  await expect(settlement.checklist).toBeVisible();
+
+  const target = await settlement.findHex({ terrain: 'grass' });
+  await settlement.clickHex(target);
+  await settlement.ring.waitForOpen();
+
+  await expect(page.locator('.hud-bar')).toBeVisible();
+  await expect(settlement.checklist).toBeVisible();
 });
 
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {

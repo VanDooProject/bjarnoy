@@ -2,6 +2,13 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { resolveAuthGuard } from './authGuard';
 import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
+// Not lazy-loaded like the other views below: App.vue's ProfileModal.vue
+// statically imports this same component (the profile routes render as a
+// modal over the background route now, not through <router-view> — see
+// App.vue's own comment), so it's always in the main bundle regardless of
+// what this router route does. Pointing the route at the same static import
+// avoids Vite's "ineffective dynamic import" warning for no benefit.
+import ProfileView from '../views/ProfileView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -55,14 +62,14 @@ export const router = createRouter({
       // Own profile — needs a logged-in user to know whose it is.
       path: '/profile',
       name: 'own-profile',
-      component: () => import('../views/ProfileView.vue'),
+      component: ProfileView,
       meta: { requiresAuth: true },
     },
     {
       // Another player's public profile, by username.
       path: '/profile/:userName',
       name: 'profile',
-      component: () => import('../views/ProfileView.vue'),
+      component: ProfileView,
     },
     {
       path: '/leaderboards',

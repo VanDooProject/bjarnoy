@@ -125,8 +125,24 @@ test.describe('mobile HUD bar', () => {
 
   test('tapping any collapsed pill cycles ALL pills together, fill bar always visible', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    // Fake the clock once the settlement is up, so ResourceBar.vue's own
+    // 6s auto-revert timer (`AUTO_REVERT_MS`, see `cycle()`) can never
+    // silently fire between two of this test's own taps/assertions on a
+    // slow run and flip a later assertion's stage out from under it — this
+    // test asserts the *tap-driven* cycle, not the timer, which gets its
+    // own dedicated test below. Real time still flows normally through
+    // login/navigation/founding; only pauses after `pauseAt` below. Pausing
+    // at a Node-side `Date.now()` (rather than reading the page's own) plus
+    // a generous 60s buffer avoids a "cannot fast-forward to the past"
+    // race: the fake clock keeps pace with real elapsed time while running,
+    // so a timestamp captured moments earlier can already be behind it by
+    // the time `pauseAt` actually resolves, especially under CI/sandbox
+    // load. A 60s jump is free here — no timer is pending yet (nothing has
+    // been tapped), so nothing fires during it.
+    await page.clock.install();
     await loginTestUser(page);
     await SettlementPage.found(page);
+    await page.clock.pauseAt(Date.now() + 60_000);
 
     const pills = page.locator(`${REAL_BAR} .resource--compact`);
     await expect(pills.first()).toBeVisible();
@@ -153,6 +169,35 @@ test.describe('mobile HUD bar', () => {
     await expect(wood.locator('.fill-track')).toBeVisible();
 
     await wood.click();
+    await expect(wood.locator('.value-compact')).not.toContainText('/h');
+    await expect(wood.locator('.value-compact')).not.toContainText('/');
+  });
+
+  test('collapsed pills return to stock after 6s without a tap', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    // Same fake-clock approach as the cycling test above (see its comment
+    // for why `pauseAt` uses a Node-side timestamp): real time through
+    // founding, then paused so the 6s auto-revert timer only ever advances
+    // under this test's own explicit control, never wall-clock speed.
+    await page.clock.install();
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+    await page.clock.pauseAt(Date.now() + 60_000);
+
+    const wood = page.locator(`${REAL_BAR} .resource--compact`).nth(0);
+    await expect(wood.locator('.value-compact')).not.toContainText('/h');
+
+    await wood.click();
+    await expect(wood.locator('.value-compact')).toContainText('/h');
+
+    // A tap within the 6s window keeps the shared stage — at 5s elapsed
+    // (still short of AUTO_REVERT_MS) it must still read the rate.
+    await page.clock.fastForward(5000);
+    await expect(wood.locator('.value-compact')).toContainText('/h');
+
+    // Past the full 6s without another tap, the shared stage reverts to
+    // stock on its own (ResourceBar.vue's `cycle()`/`revertTimer`).
+    await page.clock.fastForward(1500);
     await expect(wood.locator('.value-compact')).not.toContainText('/h');
     await expect(wood.locator('.value-compact')).not.toContainText('/');
   });
@@ -729,4 +774,49 @@ test('bottom docking clears the QueueDrawer handle', async ({ page }) => {
   const barBox = (await bar.boundingBox())!;
   const handleBox = (await handle.boundingBox())!;
   expect(handleBox.y + handleBox.height).toBeLessThanOrEqual(barBox.y);
+});
+
+// Group F: on a short phone the drawer's natural content height (the
+// ProfileNudge account section, at the very bottom of MobileHudDrawer's
+// content) can exceed the space actually available below the bar — the
+// drawer used to open at its full, uncapped height regardless, putting its
+// bottom off-screen with nothing to scroll it into view. `.hud-drawer-scroll`
+// (see TopBar.vue) fixes that: the drawer is capped to the available space
+// and its content becomes scrollable.
+test('a short phone can scroll the open drawer down to reach the profile nudge', async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  // Anonymous — no loginTestUser — same as the "anonymous shows the
+  // log-in entry" test above: showProfileNudge (MobileHudDrawer.vue) is
+  // gated on `!auth.isAuthenticated`. Same pre-existing-bug reason as the
+  // narrower-phone-width loop above (see its own `[BUG]` comment just above
+  // it): found at the ambient (wider) viewport first, then resize down —
+  // SettlementPage.found's landfall click itself doesn't work yet at a
+  // 320px-wide viewport, which is unrelated to this fix.
+  await SettlementPage.found(page);
+  await page.setViewportSize({ width: 320, height: 568 });
+
+  // Demo mode's player store already has `onboardingComplete: true` once
+  // founding completes (see the store's own `founded()` action) — the
+  // profile nudge (showProfileNudge in MobileHudDrawer.vue) needs nothing
+  // further set up here; the anonymous, no-nickname founding above already
+  // satisfies its other conditions too.
+  await page.locator('.hud-grip').click();
+  const nudge = page.locator('.hud-drawer [data-testid="profile-nudge"]');
+  await expect(nudge).toBeVisible();
+
+  // The drawer itself must never hang off the bottom of the viewport — it's
+  // capped, not clipped-and-unreachable.
+  const drawerBox = (await page.locator('.hud-drawer').boundingBox())!;
+  await expect(async () => {
+    expect(drawerBox.y + drawerBox.height).toBeLessThanOrEqual(568);
+  }).toPass();
+
+  // The "Later" button sits at the very bottom of the drawer's content,
+  // past what a 320x568 viewport shows without scrolling — Playwright's
+  // `.click()` auto-scrolls its target into view first, so a successful
+  // click here is itself proof the drawer is actually reachable/scrollable,
+  // not just present in the (clipped) DOM.
+  const later = page.locator('.hud-drawer [data-testid="profile-nudge-later"]');
+  await later.click();
+  await expect(nudge).toHaveCount(0);
 });

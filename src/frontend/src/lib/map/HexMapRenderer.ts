@@ -34,7 +34,7 @@
 // its whole tile, props included.
 import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexesInRadius, neighbors } from '../hex/coords';
+import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -61,7 +61,10 @@ import {
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
+  loadAnimAtlases,
   loadBuildingAtlases,
+  loadLevel1Atlases,
+  loadPackAnimAtlases,
   loadPackAtlases,
   loadTerrainAtlas,
   mergeTileTextures,
@@ -71,12 +74,15 @@ import {
   topAnimFor,
   topAnimTextures,
   topTextureFor,
+  unloadAnimAtlases,
+  unloadPackAnimAtlases,
   type TileAnimClip,
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
+import { animationPreference } from '../perf/animationPreference';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -395,6 +401,19 @@ export interface HexMapRendererOptions {
    * branch of `onPointerMove`, and `previewFitZoom`.
    */
   lockCamera?: boolean;
+  /**
+   * Only meaningful alongside `lockCamera`: lets the page itself scroll
+   * under a wheel/touch gesture over the canvas instead of the renderer
+   * eating it for camera zoom/pan (which `lockCamera` already disables
+   * anyway — see `zoomBy`'s own doc comment). The landing page's locked
+   * preview is a small island beside hero copy with no reason to block page
+   * scroll; the Wasted Lands docs page's own locked island sits inline in a
+   * scrolling article and needs the opposite of `SettlementCanvas.vue`'s
+   * `touch-action: none` (its host sets `touch-action: pan-y` instead) —
+   * this is that same intent on the renderer's own wheel/touch handlers,
+   * which don't otherwise know or care about the host's CSS.
+   */
+  allowPageScroll?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -422,6 +441,15 @@ export interface HexMapRendererOptions {
    * keep the URL in sync), not anything about the map itself.
    */
   onZoomModeChange?: (mode: RenderMode) => void;
+  /**
+   * Fired on every tile-art loading-state transition (see `MapLoadState`) —
+   * `MapLoadingIndicator.vue`'s data source, via `useHexMapRenderer`'s own
+   * `loadState` ref. Fired once synchronously from inside `mount()` before
+   * `mount()`'s own returned `Promise` settles (so a caller that reads
+   * `renderer.value` only after `await r.mount()` still sees an up-to-date
+   * state, never a stale `undefined`).
+   */
+  onLoadState?: (state: MapLoadState) => void;
 }
 
 /**
@@ -544,6 +572,8 @@ export type HoverSubject =
 export interface HoverInfo {
   screenX: number;
   screenY: number;
+  /** The hex this hover is over — e.g. the Wasted Lands docs page's renderer-driven island (WastedIsland.vue) needs the coordinate itself, not just the tooltip's rendered subject/stats, to look up its own caption text. */
+  coord: AxialCoord;
   subject: HoverSubject;
   // Present whenever the tile belongs to a settlement (building or claimed
   // terrain); absent for unclaimed ground.
@@ -665,6 +695,26 @@ export function attentionPulseFrame(nowMs: number, startedAtMs: number): number 
   const t = nowMs - startedAtMs;
   if (t < 0 || t >= ATTENTION_PULSE_DURATION_MS) return 0;
   return Math.sin((t / ATTENTION_PULSE_DURATION_MS) * Math.PI);
+}
+
+/**
+ * A delayed fade's alpha at `elapsedMs` into it — the pure timing math
+ * behind `forceRebuild`'s opt-in per-tile cross-fade (`syncSpriteLayer`'s
+ * ghost/fade-in bookkeeping, advanced from `advanceTransitionFades`).
+ * `'out'` is a ghost (an old texture standing in for a hex whose sprite just
+ * swapped or was removed): full alpha until `delayMs`, then 1→0 over
+ * `durationMs`. `'in'` is the opposite (the hex's own new sprite catching
+ * up): 0 until `delayMs`, then 0→1. Returns `undefined` once the fade is
+ * fully finished (rather than clamping to its resting alpha) so the caller
+ * can tell "still animating, happens to be at the boundary value" from
+ * "done — remove/finalize this" without a separate elapsed-vs-total check
+ * of its own.
+ */
+export function fadeAlphaAt(elapsedMs: number, delayMs: number, durationMs: number, direction: 'in' | 'out'): number | undefined {
+  const t = elapsedMs - delayMs;
+  if (t <= 0) return direction === 'in' ? 0 : 1;
+  if (t >= durationMs) return undefined;
+  return direction === 'in' ? t / durationMs : 1 - t / durationMs;
 }
 
 // One tile-art size for both views — see the module comment above.
@@ -1114,6 +1164,23 @@ export function waypointGrabRadiusPx(pointerType: string | undefined): number {
 export function isWaypointTap(startCoordKey: string, lastCoordKey: string, movedPx: number): boolean {
   return lastCoordKey === startCoordKey && movedPx < DRAG_CLICK_SLOP_PX;
 }
+
+/**
+ * The largest per-tick delta `advanceTopAnimations` is ever fed, in ms —
+ * `onTick` runs this over `app.ticker.deltaMS` before handing it to
+ * animation playback. Pixi's own ticker already caps `deltaMS` at 100 ms
+ * (its default `minFPS` of 10) on ordinary long frames, but pausing the
+ * ticker outright on `visibilitychange` (see mount()/destroy()) rather than
+ * just leaving it running in a backgrounded tab is worth an explicit,
+ * tested clamp here too: it stops a building clip from silently jumping
+ * several frames on the very first tick after a tab comes back, regardless
+ * of whether Pixi's own internal cap is present, tuned differently, or
+ * changed in a future Pixi version.
+ */
+export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
+  return Math.min(deltaMs, maxMs);
+}
+
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
@@ -1171,6 +1238,162 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
     : ['terrainBase', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
+/**
+ * mount()'s tile-art loading progression, surfaced via
+ * `HexMapRendererOptions.onLoadState` for a loading indicator to draw
+ * (`MapLoadingIndicator.vue`):
+ * - `'terrain'`: nothing is drawable yet — the small terrain atlas (+ marker
+ *   icons) is still loading.
+ * - `'buildings'`: terrain is drawn, but building art (the much larger
+ *   `buildings-static` atlas) is still loading — settlement tiles show
+ *   ground only until it resolves.
+ * - `'ready'`: everything mount() waits on has settled (building art is
+ *   best-effort — a failed load still reaches `'ready'`, same as mount()'s
+ *   own `.catch`, since the map stays usable terrain-only).
+ *
+ * `syncAnimationAtlases`' animation atlases (PR #314) are NOT part of this —
+ * they're optional extras loaded separately, after the map is already
+ * usable, and never gate any of these phases.
+ *
+ * World mode never draws tile art at all (`WORLD_TERRAIN_FILL`), so it goes
+ * straight to `'ready'` once mount() runs — see `startTextureLoad` — even
+ * though the same terrain/building atlases still load in the background
+ * there too, for a later zoom-driven switch into settlement mode.
+ */
+export type MapLoadPhase = 'terrain' | 'buildings' | 'ready';
+
+export interface MapLoadState {
+  phase: MapLoadPhase;
+  /**
+   * Best-effort fraction (0-1) of the current phase's atlas pages loaded, when
+   * known (see `loadProgressFraction`) — undefined once the phase has no
+   * meaningful progress to report (e.g. `'ready'`, or a category with zero
+   * pages). A consumer with no `progress` should show an indeterminate
+   * animation rather than a stalled/empty bar.
+   */
+  progress?: number;
+}
+
+/** `MapLoadState` for a mode that never shows a loading indicator (`'ready'`, no `progress`) — shared so every place that needs it (settlement mode's terminal state, world mode's only state, the composable's own initial ref) uses the exact same object shape. */
+export const READY_LOAD_STATE: MapLoadState = { phase: 'ready' };
+
+/** `loaded`/`total` (as `atlas.ts`'s `AtlasPageProgress` reports them) as a 0-1 fraction, or undefined when `total` is 0 (a category with no vendored pages) — the only place `MapLoadState.progress` is computed. */
+export function loadProgressFraction(loaded: number, total: number): number | undefined {
+  return total > 0 ? loaded / total : undefined;
+}
+
+/**
+ * The dependencies `startTextureLoad` needs, injected so it's testable in
+ * node without a real canvas/Pixi `Application` — `mount()` wires these to
+ * the renderer's real loaders/state; `HexMapRenderer.test.ts` wires them to
+ * fakes and asserts the emitted `MapLoadState` sequence.
+ */
+export interface TextureLoadDeps {
+  mode: RenderMode;
+  loadTerrain: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
+  loadIcons: () => Promise<MarkerIcons | null>;
+  /**
+   * Optional first building stage: every building's level-1 art plus the
+   * shared bases (`buildings-level1`, see textures.ts's `loadLevel1Atlases`),
+   * merged and drawn before `loadBuildings` so each building shows *some*
+   * real art (its level-1 rung) as soon as that small atlas lands. Resolves
+   * empty on an atlas packed before the split. A failure is logged and the
+   * full building stage still runs.
+   */
+  loadLevel1?: () => Promise<TileTextures>;
+  loadBuildings: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
+  merge: (base: TileTextures, buildings: TileTextures) => TileTextures;
+  isDestroyed: () => boolean;
+  getTextures: () => TileTextures | null;
+  setTextures: (textures: TileTextures) => void;
+  setIcons: (icons: MarkerIcons | null) => void;
+  rebuildAll: () => void;
+  emit: (state: MapLoadState) => void;
+}
+
+export interface TextureLoadHandles {
+  /**
+   * Resolves once terrain (+ marker icons) are loaded and assigned — exactly
+   * what `mount()` awaits for a `'settlement'`-mode mount (see mount()'s own
+   * doc comment on why only the small atlas is awaited there), so awaiting
+   * this preserves e2e's `data-map-ready` timing unchanged. Rejects iff
+   * `loadTerrain` itself rejects — mount() has nothing to draw without it.
+   */
+  terrainReady: Promise<void>;
+  /**
+   * Resolves once the whole sequence — including the best-effort building
+   * art load/merge/`rebuildAll` — is done. Nothing in `mount()` awaits this
+   * directly (that would delay `data-map-ready` on building art, which
+   * mount() has never waited on); it exists purely to drive the
+   * `'buildings'` -> `'ready'` emissions and the merge side effect in the
+   * background. Never rejects (a `loadBuildings` failure is caught and
+   * logged, matching `mount()`'s original `.catch`).
+   */
+  done: Promise<void>;
+}
+
+/**
+ * mount()'s texture-load orchestration (terrain+icons, then building art),
+ * extracted out of `mount()` so its `MapLoadState` emissions — `'terrain'`
+ * -> `'buildings'` -> `'ready'` in settlement mode, `'ready'` only in every
+ * other mode — are unit-testable in node (see `TextureLoadDeps`). Returns
+ * two independently-awaitable handles rather than one combined promise
+ * specifically so `mount()`'s settlement-mode `await` can keep resolving the
+ * instant terrain is ready, without also waiting on (or narrating a delay
+ * for) building art — see `TextureLoadHandles`'s own doc comments.
+ */
+export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
+  const settlement = deps.mode === 'settlement';
+  deps.emit(settlement ? { phase: 'terrain' } : READY_LOAD_STATE);
+
+  const terrainReady = (async () => {
+    const [textures, icons] = await Promise.all([
+      deps.loadTerrain((loaded, total) => {
+        if (settlement) deps.emit({ phase: 'terrain', progress: loadProgressFraction(loaded, total) });
+      }),
+      deps.loadIcons(),
+    ]);
+    if (deps.isDestroyed()) return;
+    deps.setTextures(textures);
+    deps.setIcons(icons);
+  })();
+
+  const done = (async () => {
+    try {
+      await terrainReady;
+    } catch {
+      return; // Already handled by whoever awaits terrainReady directly; nothing more to narrate.
+    }
+    if (settlement) deps.emit({ phase: 'buildings' });
+    if (deps.loadLevel1) {
+      try {
+        const level1 = await deps.loadLevel1();
+        const base = deps.getTextures();
+        if (deps.isDestroyed() || !base) return;
+        deps.setTextures(deps.merge(base, level1));
+        deps.rebuildAll();
+      } catch (err) {
+        console.warn('Level-1 building atlas failed to load; the full building atlas still loads', err);
+      }
+    }
+    try {
+      const buildings = await deps.loadBuildings((loaded, total) => {
+        if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total) });
+      });
+      const base = deps.getTextures();
+      if (deps.isDestroyed() || !base) return;
+      deps.setTextures(deps.merge(base, buildings));
+      deps.rebuildAll();
+    } catch (err) {
+      console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
+    } finally {
+      if (settlement) deps.emit(READY_LOAD_STATE);
+    }
+  })();
+
+  return { terrainReady, done };
+}
+
 /** How long an army marker takes to ease across when its leg is replaced (recall/turn-around) — see `armyPoints`. */
 const ARMY_RESYNC_MS = 450;
 
@@ -1192,6 +1415,43 @@ export class HexMapRenderer {
   // (one hex's top layer can have both a base/rest sprite *and* an overlay
   // sprite alive at once).
   private topOverlayPool: Sprite[] = [];
+  /**
+   * Set by `forceRebuild({ transition })` right before the one `rebuildAll`
+   * it triggers, and cleared right after — `syncSpriteLayer` (both layers,
+   * within that single rebuild) reads it to decide whether a hex's texture
+   * swap should cross-fade instead of snapping. `null` outside that window
+   * means every other rebuild (camera pan/zoom, a debug-flag flip, ...)
+   * behaves exactly as before this existed. See `forceRebuild`'s own doc
+   * comment for why this lives on the instance rather than being threaded
+   * through as a parameter: `rebuildAll` calls into `rebuildTerrain` calls
+   * into `syncSpriteLayer` through several more layers of "just rebuild
+   * everything" plumbing that has no other reason to know about a
+   * transition at all.
+   */
+  private pendingTransition: { durationMs: number; delayMs?: (coord: AxialCoord) => number } | null = null;
+  /**
+   * Old-texture "ghost" sprites spawned by a transitioned `syncSpriteLayer`
+   * for a hex whose sprite is changing texture or being removed — see
+   * `spawnTransitionGhost`. Advanced once a tick (`advanceTransitionFades`,
+   * called from `onTick` alongside `advanceTopAnimations`) independently of
+   * whether a rebuild ran that frame, the same reason clip playback is.
+   * Always fresh `Sprite` instances (one per swap), so no pooling/dedupe
+   * concern the way `fadeIns` below has.
+   */
+  private transitionGhosts: { sprite: Sprite; container: Container; delayMs: number; durationMs: number; elapsedMs: number }[] =
+    [];
+  /**
+   * A transitioned `syncSpriteLayer`'s top-layer fade-INs — unlike a ghost,
+   * this is the hex's own live, reused/pooled sprite (its new texture is
+   * already showing; only its alpha ramps 0→1), so it's keyed by that
+   * sprite object rather than appended, so a second rebuild's fade-in for
+   * the same still-fading sprite replaces the first instead of fighting it,
+   * and so a sprite recycled back into `layer.pool` mid-fade (see
+   * `syncSpriteLayer`'s removal loop) can have its entry dropped rather
+   * than going on to animate whatever hex that pooled sprite gets reused
+   * for next.
+   */
+  private fadeIns = new Map<Sprite, { delayMs: number; durationMs: number; elapsedMs: number }>();
   private terrainFlat = new Graphics();
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
@@ -1369,6 +1629,12 @@ export class HexMapRenderer {
   } | null = null;
 
   private textures: TileTextures | null = null;
+  // The state last passed to `options.onLoadState` (see `MapLoadState`) —
+  // reset to the correct initial value in the constructor body once
+  // `this.options` is actually assigned (a 'settlement' mount starts at
+  // 'terrain'; every other mode never narrates a loading state at all — see
+  // `startTextureLoad` — so it starts, and stays, at 'ready').
+  private loadState: MapLoadState = READY_LOAD_STATE;
   /**
    * Set once the wasted atlas pack's load has been kicked off (see
    * `maybeLoadWastedPack`), so a load is requested at most once per instance
@@ -1378,6 +1644,31 @@ export class HexMapRenderer {
    * triggering while the settlement view is already open) still picks it up.
    */
   private wastedPackLoading: Promise<void> | null = null;
+  /**
+   * Set once the frozen atlas pack's load has been kicked off — same
+   * once-per-instance guard as `wastedPackLoading`, see `maybeLoadFrozenPack`.
+   */
+  private frozenPackLoading: Promise<void> | null = null;
+
+  /**
+   * Whether `buildings-anim` art should be loaded/drawn — set from outside
+   * via `setAnimationsEnabled` (see `useHexMapRenderer`'s wiring to
+   * `animationPreference.effective`), synced onto `this.textures`/
+   * `topAnimState` by `syncAnimationAtlases` (called from every `rebuildAll`,
+   * same pattern as `maybeLoadWastedPack`). `animCoreReady`/`wastedAnimReady`
+   * track which anim atlases are actually merged in right now, so
+   * `syncAnimationAtlases` only loads/unloads each one once per toggle.
+   */
+  private animationsEnabled = false;
+  private animCoreReady = false;
+  private wastedAnimReady = false;
+  /**
+   * Bumped on every disable. A load kicked off under an older generation
+   * merges nothing when it resolves: off -> on while the first load is still
+   * in flight would otherwise merge that first load's textures, which the
+   * disable in between has already queued for `Assets.unload`.
+   */
+  private animGeneration = 0;
 
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
@@ -1445,6 +1736,12 @@ export class HexMapRenderer {
       options.mode === 'settlement'
         ? this.settlementCameraOrigin()
         : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+    this.loadState = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
+  }
+
+  /** Current `MapLoadState` (see `mount()`/`startTextureLoad`) — also delivered to `options.onLoadState` on every transition. `useHexMapRenderer`'s own `loadState` ref mirrors this via that callback. */
+  getLoadState(): MapLoadState {
+    return this.loadState;
   }
 
   // Shifts the world-space centre left by `biasX` of the viewport (in world
@@ -1623,6 +1920,7 @@ export class HexMapRenderer {
     // compatibility click, see RingMenu.vue's onBuildingTouchStart) removes
     // the ghost click at the source instead of trying to ignore it later.
     canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
 
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large) building atlas at all —
@@ -1646,37 +1944,50 @@ export class HexMapRenderer {
     // never awaits this (rebuildAll's settlement branch is the only thing
     // gated on `this.textures`), so starting the load here costs nothing on
     // the world map's own critical path.
-    const textureLoad = (async () => {
-      const [textures, icons] = await Promise.all([
-        loadTerrainAtlas(),
-        // The whole map failing to mount because a marker icon didn't
-        // decode would be a wildly disproportionate outcome — the overlay
-        // draws plain vector shapes when `icons` is null (see
-        // drawArmyOverlay), so a failure here costs the icon art and
-        // nothing else. Reported as a warning rather than swallowed, and
-        // `lastArmyOverlayFrame().iconsReady` says so too.
+    // Orchestration (and the terrain -> buildings -> ready MapLoadState
+    // narration for the settlement-mode branch below) lives in
+    // `startTextureLoad`, extracted out of mount() so it's unit-testable
+    // without a canvas/Pixi Application — see its own doc comment.
+    const { terrainReady, done } = startTextureLoad({
+      mode: this.options.mode,
+      loadTerrain: (onProgress) => loadTerrainAtlas(onProgress),
+      // The whole map failing to mount because a marker icon didn't decode
+      // would be a wildly disproportionate outcome — the overlay draws
+      // plain vector shapes when `icons` is null (see drawArmyOverlay), so a
+      // failure here costs the icon art and nothing else. Reported as a
+      // warning rather than swallowed, and `lastArmyOverlayFrame().iconsReady`
+      // says so too.
+      loadIcons: () =>
         loadMarkerIcons().catch((err) => {
           console.warn('Map marker icons failed to load; falling back to plain shapes', err);
           return null;
         }),
-      ]);
-      if (this.destroyed) return;
-      this.textures = textures;
-      this.icons = icons;
-
-      loadBuildingAtlases()
-        .then((buildings) => {
-          if (this.destroyed || !this.textures) return;
-          this.textures = mergeTileTextures(this.textures, buildings);
-          this.rebuildAll();
-        })
-        .catch((err) => {
-          console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
-        });
-    })();
+      loadLevel1: () => loadLevel1Atlases(),
+      loadBuildings: (onProgress) => loadBuildingAtlases(onProgress),
+      merge: mergeTileTextures,
+      isDestroyed: () => this.destroyed,
+      getTextures: () => this.textures,
+      setTextures: (textures) => {
+        this.textures = textures;
+      },
+      setIcons: (icons) => {
+        this.icons = icons;
+      },
+      rebuildAll: () => this.rebuildAll(),
+      emit: (state) => {
+        this.loadState = state;
+        this.options.onLoadState?.(state);
+      },
+    });
+    // `done`'s own rejection path is only reachable via `terrainReady`
+    // rejecting first (see `startTextureLoad`), which is already observed
+    // (and reported) below by whichever branch awaits/attaches to
+    // `terrainReady` directly — this is only to avoid a second, unhandled
+    // "rejection" warning for the same failure.
+    done.catch(() => {});
 
     if (this.options.mode === 'settlement') {
-      await textureLoad;
+      await terrainReady;
     } else {
       this.textures = null;
       // A failure here only ever costs the ability to *later* switch into
@@ -1684,7 +1995,7 @@ export class HexMapRenderer {
       // guard keeps that safe) — world mode's own draw path never touches
       // `this.textures`, so there is nothing to fall back to besides not
       // throwing an unhandled rejection off a fire-and-forget background load.
-      textureLoad
+      terrainReady
         .then(() => {
           if (!this.destroyed) this.rebuildAll();
         })
@@ -1744,7 +2055,16 @@ export class HexMapRenderer {
 
   private onTick = () => {
     this.options.worldModel.tick();
-    this.advanceTopAnimations(this.app!.ticker.deltaMS);
+    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    // Feeds the 'auto' animation governor (animationPreference.ts) — in both
+    // modes, not just settlement: the governor is measuring this device's
+    // general Pixi frame rate (worldModel.tick, fog, markers, the camera
+    // transform), not specifically building-clip cost, so a world-map
+    // session still warms up a useful measurement rather than starting from
+    // zero the moment the player first opens a settlement. Dropped while the
+    // tab is hidden by animationPreference.feedFrame itself.
+    animationPreference.feedFrame(performance.now(), this.app!.ticker.deltaMS);
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -1928,7 +2248,28 @@ export class HexMapRenderer {
     }
   }
 
+  /**
+   * A backgrounded tab still runs Pixi's `requestAnimationFrame`-driven
+   * ticker (rAF just gets throttled by the browser, not stopped), so
+   * building clips, the marker layer's fade and worldModel.tick() kept
+   * doing real work for a tab nobody could see. Stopping the ticker
+   * outright on `document.hidden` (mount()/destroy() add/remove this) and
+   * restarting it on return removes that cost entirely rather than just
+   * slowing it down — deliberately keyed off tab visibility, not window
+   * focus/blur: an unfocused-but-visible tab (e.g. a second monitor) must
+   * keep animating normally.
+   */
+  private onVisibilityChange = () => {
+    if (!this.app) return;
+    if (document.hidden) {
+      this.app.ticker.stop();
+    } else {
+      this.app.ticker.start();
+    }
+  };
+
   private onTouchStart = (e: TouchEvent) => {
+    if (this.options.allowPageScroll) return;
     e.preventDefault();
   };
 
@@ -2331,6 +2672,7 @@ export class HexMapRenderer {
       return {
         screenX: screen.x,
         screenY: screen.y,
+        coord: { q: tile.q, r: tile.r },
         subject,
         owner: ownerInfo,
         stats,
@@ -2344,6 +2686,7 @@ export class HexMapRenderer {
     return {
       screenX: screen.x,
       screenY: screen.y,
+      coord: { q: tile.q, r: tile.r },
       subject,
       owner: ownerInfo,
     };
@@ -2367,6 +2710,7 @@ export class HexMapRenderer {
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
   private onWheel = (e: WheelEvent) => {
+    if (this.options.allowPageScroll) return;
     e.preventDefault();
     if (this.interactionLocked) return;
     const canvas = this.app?.canvas;
@@ -2628,10 +2972,8 @@ export class HexMapRenderer {
    * catch the reveal happening *while* the map is already open, e.g. the
    * endboss triggering mid-session) costs nothing beyond the first call.
    *
-   * The frozen pack (`frozenIslesEnabled`, a world flag landing in a
-   * separate backend PR) plugs in here the same way once it exists — one
-   * more `if (worldModel.isFrozenRevealed() && !this.frozenPackLoading) ...`
-   * alongside this.
+   * The frozen pack (`frozenIslesEnabled`, a world flag) plugs in the same
+   * way right below — `maybeLoadFrozenPack`.
    */
   private maybeLoadWastedPack() {
     if (this.options.mode !== 'settlement' || !this.textures) return;
@@ -2649,10 +2991,135 @@ export class HexMapRenderer {
       });
   }
 
+  /**
+   * Turns `buildings-anim` art on/off, per the `animationPreference`
+   * singleton (see `useHexMapRenderer`'s wiring). Just records the wanted
+   * state and defers the actual load/unload to `syncAnimationAtlases`
+   * (already run from every `rebuildAll`) so it applies once `this.textures`
+   * exists and covers a later mode switch into settlement or wasted-pack
+   * reveal the same way `maybeLoadWastedPack` does — rather than duplicating
+   * those readiness checks here.
+   */
+  setAnimationsEnabled(enabled: boolean) {
+    if (this.animationsEnabled === enabled) return;
+    this.animationsEnabled = enabled;
+    // rebuildAll() itself calls syncAnimationAtlases() (see below) — routing
+    // through it here too, rather than calling that directly, is what makes
+    // a toggle that arrives before this.textures exists yet safe: this is a
+    // no-op then (same early-out rebuildAll always has), and the *later*
+    // rebuildAll once texture loading finishes picks up the flag change.
+    this.rebuildAll();
+  }
+
+  /**
+   * Loads or releases `buildings-anim`/`wasted-buildings-anim` (see
+   * `textures.ts`'s `loadAnimAtlases`/`loadPackAnimAtlases` and their
+   * `unload*` counterparts) to match `this.animationsEnabled`. World mode
+   * never draws tile art at all (`WORLD_TERRAIN_FILL`), so this is a no-op
+   * there — same guard `maybeLoadWastedPack` uses.
+   *
+   * Disabling merely drops `animTop` from `this.textures` and rebuilds:
+   * `topAnimFor` then resolves undefined for every tile, and the ordinary
+   * per-tile draw path's own `syncTopAnim` call (see its doc comment) is
+   * what actually puts each sprite back on its static texture and returns
+   * any pooled overlay sprite — there is no separate cleanup to do here.
+   * The atlas unload itself only has to happen after that rebuild has run
+   * (enqueued via `rebuildAll`'s caller), never before, or a still-drawing
+   * sprite would be pointing at an already-destroyed texture.
+   */
+  private syncAnimationAtlases() {
+    if (this.options.mode !== 'settlement' || !this.textures) return;
+
+    if (this.animationsEnabled) {
+      const generation = this.animGeneration;
+      if (!this.animCoreReady) {
+        this.animCoreReady = true;
+        loadAnimAtlases()
+          .then((anim) => {
+            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+            this.textures = mergeTileTextures(this.textures, anim);
+            this.rebuildAll();
+          })
+          .catch((err) => {
+            this.animCoreReady = false;
+            console.warn('Animation atlas failed to load; buildings stay on static art', err);
+          });
+      }
+      if (!this.wastedAnimReady && this.options.worldModel.isWastedRevealed()) {
+        this.wastedAnimReady = true;
+        loadPackAnimAtlases('wasted')
+          .then((anim) => {
+            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+            this.textures = mergeTileTextures(this.textures, anim);
+            this.rebuildAll();
+          })
+          .catch((err) => {
+            this.wastedAnimReady = false;
+            console.warn('Wasted animation atlas failed to load; wasted buildings stay on static art', err);
+          });
+      }
+      return;
+    }
+
+    if (this.animCoreReady || this.wastedAnimReady) {
+      this.animCoreReady = false;
+      this.wastedAnimReady = false;
+      this.animGeneration++;
+      this.textures = { ...this.textures, animTop: {} };
+      // The rebuild below only re-syncs the top sprites it actually redraws
+      // (a deep-fog-only viewport redraws none), so drop every clip's
+      // playback state here: `advanceTopAnimations` must never assign one of
+      // the anim textures about to be unloaded to a sprite again.
+      // A released sprite goes blank until that rebuild hands it its static
+      // texture — never left on a frame that is about to be destroyed.
+      for (const [key, state] of [...this.topAnimState]) {
+        state.sprite.texture = Texture.EMPTY;
+        this.releaseTopAnim(key);
+      }
+      // The next rebuildAll (this method's own callers already trigger one)
+      // re-syncs every currently-animated sprite back to static via
+      // syncTopAnim before this releases the atlas's GPU memory below —
+      // queued as a microtask so it runs after that synchronous rebuild.
+      Promise.resolve().then(() => {
+        unloadAnimAtlases();
+        unloadPackAnimAtlases('wasted');
+      });
+    }
+  }
+
+  /**
+   * Loads the frozen atlas pack's static art (`frozen-terrain`/
+   * `frozen-buildings-static` — see `loadPackAtlases`; the pack ships no
+   * animation pages yet, so `syncAnimationAtlases` has nothing to add for
+   * it) once the world has the frozen isles flag on
+   * (`WorldModel.isFrozenEnabled`), merging it into `this.textures` — same
+   * shape as `maybeLoadWastedPack`, just gated on the admin flag instead of
+   * the endboss reveal. Frozen isle generation itself is not implemented
+   * yet, so this only makes the `frozen-*` art available; no tile actually
+   * uses it until that generation exists.
+   */
+  private maybeLoadFrozenPack() {
+    if (this.options.mode !== 'settlement' || !this.textures) return;
+    if (this.frozenPackLoading) return;
+    if (!this.options.worldModel.isFrozenEnabled()) return;
+
+    this.frozenPackLoading = loadPackAtlases('frozen')
+      .then((frozen) => {
+        if (this.destroyed || !this.textures) return;
+        this.textures = mergeTileTextures(this.textures, frozen);
+        this.rebuildAll();
+      })
+      .catch((err) => {
+        console.warn('Frozen atlas pack failed to load', err);
+      });
+  }
+
   private rebuildAll() {
     if (!this.app) return;
     if (this.options.mode === 'settlement' && !this.textures) return;
     this.maybeLoadWastedPack();
+    this.maybeLoadFrozenPack();
+    this.syncAnimationAtlases();
     this.lastBuiltCamera = { ...this.camera };
     const rebuildStart = performance.now();
     this.lastRebuildAtMs = rebuildStart;
@@ -3321,11 +3788,26 @@ export class HexMapRenderer {
     >,
   ) {
     const isTopLayer = layer === this.terrainTop;
+    const transition = this.pendingTransition;
     for (const [key, { texture, coord, crop, anim }] of entries) {
       let sprite = layer.active.get(key);
       const isNew = !sprite;
+      // Snapshot this hex's *previous* frame — texture, box, overlay — before
+      // any of it gets overwritten below, so a transitioned rebuild can spawn
+      // a ghost of exactly what used to be here. Cheap to always capture
+      // (a few field reads) even when no transition is pending, rather than
+      // threading an extra "do we need this" branch through the update logic
+      // that follows.
+      const prevTexture = sprite?.texture;
+      const prevBox = sprite ? { x: sprite.position.x, y: sprite.position.y, width: sprite.width, height: sprite.height, zIndex: sprite.zIndex } : undefined;
+      const prevOverlay = isTopLayer ? this.topAnimState.get(key)?.overlay : undefined;
+      const prevOverlayBox = prevOverlay
+        ? { texture: prevOverlay.texture, x: prevOverlay.position.x, y: prevOverlay.position.y, width: prevOverlay.width, height: prevOverlay.height, zIndex: prevOverlay.zIndex }
+        : undefined;
+
       if (!sprite) {
         sprite = layer.pool.pop() ?? new Sprite();
+        sprite.alpha = 1; // A pooled sprite may have been mid-fade when it was last returned (see the removal loop below) — always come back opaque.
         layer.active.set(key, sprite);
       }
       if (isTopLayer) {
@@ -3347,8 +3829,9 @@ export class HexMapRenderer {
       // its own doc comment), so +0.5 always lands strictly between this
       // hex's own key and the next one's, never colliding with another
       // hex's sprite either way.
+      let overlay: Sprite | undefined;
       if (isTopLayer) {
-        const overlay = this.topAnimState.get(key)?.overlay;
+        overlay = this.topAnimState.get(key)?.overlay;
         if (overlay) {
           overlay.width = sprite.width;
           overlay.height = sprite.height;
@@ -3357,16 +3840,152 @@ export class HexMapRenderer {
           if (!overlay.parent) layer.container.addChild(overlay);
         }
       }
+
+      if (transition && transition.durationMs > 0) {
+        const delayMs = transition.delayMs?.(coord) ?? 0;
+        const textureChanged = !isNew && prevTexture !== sprite.texture;
+        if ((isNew || textureChanged) && isTopLayer) {
+          // Base-layer sprites stay fully opaque throughout — the ghost
+          // above them (spawned below, when this is a change rather than a
+          // brand-new hex) is what covers their swap. Only the top layer,
+          // which draws over the ghost, needs its own new/changed sprite to
+          // fade in rather than pop in at full opacity.
+          sprite.alpha = 0;
+          this.fadeIns.set(sprite, { delayMs, durationMs: transition.durationMs, elapsedMs: 0 });
+        }
+        if (textureChanged && prevTexture && prevBox) {
+          this.spawnTransitionGhost(layer.container, prevTexture, prevBox, delayMs, transition.durationMs);
+        }
+        // The overlay is its own sprite with its own texture lifecycle
+        // (syncTopAnim only ever touches it on a *new* clip, never on a
+        // continuing one — see that method's own doc comment), so "did it
+        // change" is read off its texture rather than reusing textureChanged
+        // above, which only tracks the hex's main sprite.
+        if (prevOverlayBox && (!overlay || overlay.texture !== prevOverlayBox.texture)) {
+          this.spawnTransitionGhost(layer.container, prevOverlayBox.texture, prevOverlayBox, delayMs, transition.durationMs);
+        }
+      }
     }
 
     for (const [key, sprite] of layer.active) {
       if (entries.has(key)) continue;
+      if (transition && transition.durationMs > 0) {
+        const delayMs = transition.delayMs?.(this.coordOfKey(key)) ?? 0;
+        this.spawnTransitionGhost(
+          layer.container,
+          sprite.texture,
+          { x: sprite.position.x, y: sprite.position.y, width: sprite.width, height: sprite.height, zIndex: sprite.zIndex },
+          delayMs,
+          transition.durationMs,
+        );
+        const overlay = isTopLayer ? this.topAnimState.get(key)?.overlay : undefined;
+        if (overlay) {
+          this.spawnTransitionGhost(
+            layer.container,
+            overlay.texture,
+            { x: overlay.position.x, y: overlay.position.y, width: overlay.width, height: overlay.height, zIndex: overlay.zIndex },
+            delayMs,
+            transition.durationMs,
+          );
+        }
+      }
       layer.container.removeChild(sprite);
       layer.pool.push(sprite);
       layer.active.delete(key);
+      this.fadeIns.delete(sprite);
+      sprite.alpha = 1;
       if (isTopLayer) this.releaseTopAnim(key);
     }
     layer.container.sortChildren();
+  }
+
+  /** `layer.active`'s own coordinate keys are `coordKey`'s string form — used only by `syncSpriteLayer`'s removal loop to recover a coordinate for `transition.delayMs`, which every other call site already has as a real `AxialCoord`. */
+  private coordOfKey(key: string): AxialCoord {
+    return parseKey(key);
+  }
+
+  /**
+   * Spawns a temporary sprite showing `texture` at `box`'s exact position/
+   * size/zIndex (offset +0.25, so it sits just above whatever hex sprite
+   * used to be there — `isoDepthKey`'s own doc comment: integers spaced 1
+   * apart, so this never collides with a different hex's sprite), full
+   * alpha until `delayMs` elapses, then fading to 0 over `durationMs` before
+   * being removed and destroyed. Never destroys `texture` itself — it's a
+   * shared atlas texture, not owned by this sprite (`Sprite.destroy`'s
+   * default already leaves it alone, but see `advanceTransitionFades` for
+   * where that destroy call actually happens).
+   */
+  private spawnTransitionGhost(
+    container: Container,
+    texture: Texture,
+    box: { x: number; y: number; width: number; height: number; zIndex: number },
+    delayMs: number,
+    durationMs: number,
+  ) {
+    const ghost = new Sprite(texture);
+    ghost.position.set(box.x, box.y);
+    ghost.width = box.width;
+    ghost.height = box.height;
+    ghost.zIndex = box.zIndex + 0.25;
+    ghost.alpha = 1;
+    container.addChild(ghost);
+    this.transitionGhosts.push({ sprite: ghost, container, delayMs, durationMs, elapsedMs: 0 });
+  }
+
+  /**
+   * Advances every in-flight transition ghost/fade-in by `deltaMs` — called
+   * once per app tick (`onTick`, alongside `advanceTopAnimations`)
+   * regardless of whether a rebuild ran this frame, the same reason clip
+   * playback is. A ghost past its own delay+duration is removed from its
+   * container and destroyed (its texture is a shared atlas texture, left
+   * alone by `Sprite.destroy()`'s own default); a completed fade-in just
+   * snaps to alpha 1 and drops its bookkeeping entry.
+   */
+  private advanceTransitionFades(deltaMs: number) {
+    if (this.transitionGhosts.length > 0) {
+      const remaining: typeof this.transitionGhosts = [];
+      for (const g of this.transitionGhosts) {
+        g.elapsedMs += deltaMs;
+        const alpha = fadeAlphaAt(g.elapsedMs, g.delayMs, g.durationMs, 'out');
+        if (alpha === undefined) {
+          g.container.removeChild(g.sprite);
+          g.sprite.destroy();
+          continue;
+        }
+        g.sprite.alpha = alpha;
+        remaining.push(g);
+      }
+      this.transitionGhosts = remaining;
+    }
+    if (this.fadeIns.size > 0) {
+      for (const [sprite, f] of this.fadeIns) {
+        f.elapsedMs += deltaMs;
+        const alpha = fadeAlphaAt(f.elapsedMs, f.delayMs, f.durationMs, 'in');
+        if (alpha === undefined) {
+          sprite.alpha = 1;
+          this.fadeIns.delete(sprite);
+          continue;
+        }
+        sprite.alpha = alpha;
+      }
+    }
+  }
+
+  /**
+   * Immediately finishes (snap-removes/snaps to alpha 1) every in-flight
+   * transition ghost/fade-in — `forceRebuild` calls this before starting a
+   * *new* transition, so an interrupted cross-fade never leaves a stale
+   * ghost sprite behind or a ghost/fade-in still driven by a delay/duration
+   * pair from a rebuild that's no longer the current one.
+   */
+  private finishPendingTransitionFades() {
+    for (const g of this.transitionGhosts) {
+      g.container.removeChild(g.sprite);
+      g.sprite.destroy();
+    }
+    this.transitionGhosts = [];
+    for (const sprite of this.fadeIns.keys()) sprite.alpha = 1;
+    this.fadeIns.clear();
   }
 
   /** Drops `key`'s `topAnimState` entry (if any), returning its overlay sprite (if any) to `topOverlayPool` first. */
@@ -3874,9 +4493,26 @@ export class HexMapRenderer {
    * threshold (see scheduleCull), so something that changes rendering
    * without moving the camera (e.g. FogDebugPanel flipping a fogDebugFlags
    * toggle) has no other way to make the change visible immediately.
+   *
+   * `transition`, when given, makes the rebuild this call triggers
+   * cross-fade each hex's texture swap instead of snapping it — see
+   * `pendingTransition`/`syncSpriteLayer`'s own doc comments for the actual
+   * ghost/fade-in mechanics. It's a one-shot: set right before `rebuildAll`
+   * and cleared right after, so it only ever applies to *this* rebuild, not
+   * whatever pan/zoom-driven rebuild happens to run next. This is
+   * deliberately generic (any caller can ask for a cross-fade, with any
+   * per-coordinate delay curve) rather than named after its first user —
+   * the Wasted Lands docs page's blight slider today, plausibly an in-game
+   * blight-spreading animation later.
    */
-  forceRebuild() {
+  forceRebuild(opts?: { transition?: { durationMs: number; delayMs?: (coord: AxialCoord) => number } }) {
     if (!this.app) return;
+    // An interrupted transition (this rebuild's own transition, or a plain
+    // rebuild landing mid-fade) must never leave a stale ghost driven by a
+    // delay/duration pair from a rebuild that's no longer the current one —
+    // finish whatever was in flight before (maybe) starting a new one.
+    this.finishPendingTransitionFades();
+    this.pendingTransition = opts?.transition && opts.transition.durationMs > 0 ? opts.transition : null;
     // The water mask is normally only re-baked when the viewport leaves the
     // region it covers (rebuildAll), since terrain is deterministic from the
     // seed and a hex never stops being land. A *forced* rebuild is the one
@@ -3887,6 +4523,7 @@ export class HexMapRenderer {
     this.waterMaskRegionBuilt = null;
     this.maskBaker.discardPending();
     this.rebuildAll();
+    this.pendingTransition = null;
   }
 
   /**
@@ -4403,6 +5040,7 @@ export class HexMapRenderer {
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     canvas?.removeEventListener('touchstart', this.onTouchStart);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();

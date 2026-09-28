@@ -273,6 +273,14 @@ export class WorldModel {
    * a stale sea answer for a now-revealed hex.
    */
   private wastedRevealed = false;
+  /**
+   * Whether this world has the frozen isles admin flag on (see the
+   * backend's `WorldEntity.FrozenIslesEnabled`). A simple field with no
+   * terrain effect — frozen isle generation is not implemented yet, so
+   * this only tells the renderer whether to load the frozen art pack (see
+   * `HexMapRenderer.maybeLoadFrozenPack`).
+   */
+  private frozenEnabled = false;
   private settlements = new Map<string, Settlement>();
   /** Trade carts in transit — see `CartShipment`'s own doc comment. */
   private cartShipments = new Map<string, CartShipment>();
@@ -594,6 +602,15 @@ export class WorldModel {
 
   isWastedRevealed(): boolean {
     return this.wastedRevealed;
+  }
+
+  /** Sets whether this world has the frozen isles flag on — see `frozenEnabled`'s doc comment. */
+  setFrozenEnabled(enabled: boolean) {
+    this.frozenEnabled = enabled;
+  }
+
+  isFrozenEnabled(): boolean {
+    return this.frozenEnabled;
   }
 
   /**

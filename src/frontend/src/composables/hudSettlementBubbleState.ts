@@ -12,6 +12,13 @@ import { ref } from 'vue';
 // sharing its row.
 export const isSettlementBubbleShown = ref(false);
 
+// That bubble's own row height below the bar (6px top/bottom padding + its
+// ~20px content, plus a small gap). DemoModeBadge.vue stacks under it, and
+// GuidancePointer.vue keeps its label chip clear of it.
+export const SETTLEMENT_BUBBLE_ROW_PX = 40;
+// The compact (phone) demo-mode badge's own row: ~17px pill plus a gap.
+export const DEMO_BADGE_ROW_PX = 24;
+
 // A page's own bar can dock at the bottom, or it might not be a
 // drag/docking-aware bar at all (a docked docs page, or the pre-founding
 // landing's bar) — those always sit at the top regardless of the raw
@@ -21,3 +28,16 @@ export const isSettlementBubbleShown = ref(false);
 // on a page whose bar was actually still pinned at the top — overlapping it.
 // TopBar.vue writes the *effective* answer here instead.
 export const isHudBarAtBottom = ref(false);
+
+// Mobile tutorial focus: LandingView.vue unmounts its founded-branch TopBar
+// entirely (not just hides it) for the phone-width duration of the guided
+// build steps — see that view's own `hideBarForTutorial`. TopBar's own
+// `onBeforeUnmount` already resets `hudBarHeightPx` back to its 64px
+// default, not to 0, so DemoModeBadge.vue reading that value alone would
+// still park itself 64px down (as if a bar of default height were still
+// there) instead of at the screen's own top edge. This is TopBar's own
+// "am I mounted at all right now" signal, the same shared-singleton pattern
+// as `isHudBarAtBottom` above, so DemoModeBadge.vue can tell "no bar" apart
+// from "a bar, currently the default height" and fall back to the bare top
+// edge instead.
+export const isHudBarMounted = ref(false);

@@ -49,6 +49,30 @@ async function plotHitsCanvas(page: Page): Promise<boolean> {
   });
 }
 
+/**
+ * Opens the ring menu on the guided hex GuidancePointer.vue is currently
+ * aiming at (design handoff "2a" frame 2, right after landfall — the pointer
+ * follows the camera via `useMapAnchor`, which writes the hex's screen point
+ * into `--anchor-x`/`--anchor-y` on `[data-testid="guidance-pointer"]`) and
+ * waits for frame 3's "This one fits {terrain}" chip, the case the chip's
+ * placement bug was found on. Reads the anchor vars rather than re-deriving
+ * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
+ * (camera + arrowTipOffset) is exactly where the click needs to land.
+ */
+async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
+  const pointer = settlement.guidancePointer;
+  await expect
+    .poll(async () => (await pointer.getAttribute('style')) ?? '', { message: 'guidance pointer never got an anchor point' })
+    .toMatch(/--anchor-x: -?\d/);
+  const style = (await pointer.getAttribute('style'))!;
+  const x = Number(style.match(/--anchor-x: (-?[\d.]+)px/)![1]);
+  const y = Number(style.match(/--anchor-y: (-?[\d.]+)px/)![1]);
+  const box = await settlement.canvasBox();
+  await settlement.page.mouse.click(box.x + x, box.y + y);
+  await settlement.ring.waitForOpen();
+  await expect(pointer.locator('.chip')).toContainText('fits');
+}
+
 async function expectNoOverlap(a: Locator, b: Locator, what: string): Promise<void> {
   const boxA = (await a.boundingBox())!;
   const boxB = (await b.boundingBox())!;
@@ -74,6 +98,40 @@ async function expectHeroClear(page: Page): Promise<void> {
   const badge = page.locator('.demo-badge');
   if (await badge.isVisible()) await expectNoOverlap(hero, badge, 'hero covers the demo badge');
   await expectInsideViewport(page, hero);
+}
+
+/**
+ * Where `top` and `under` overlap on screen, the element actually hit there
+ * must belong to `top` — i.e. `top` really paints above `under`, not just
+ * sits next to it. Fails if they don't overlap at all, so the test can't
+ * pass vacuously after a layout change moves them apart.
+ */
+async function expectPaintsAbove(top: Locator, under: Locator, what: string): Promise<void> {
+  const a = (await top.boundingBox())!;
+  const b = (await under.boundingBox())!;
+  const left = Math.max(a.x, b.x);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const upper = Math.max(a.y, b.y);
+  const lower = Math.min(a.y + a.height, b.y + b.height);
+  expect(right > left && lower > upper, `${what}: the two don't overlap, nothing to check`).toBe(true);
+  // The HUD bar and its popovers are `pointer-events: none` (only real
+  // controls take taps), and elementFromPoint skips such elements. Paint
+  // order doesn't depend on pointer-events, so switch hit-testing on for
+  // just these two while asking which one is on top.
+  const underHandle = await under.elementHandle();
+  const hitInsideTop = await top.evaluate(
+    (el, args) => {
+      const other = args.under as HTMLElement;
+      const saved = [(el as HTMLElement).style.pointerEvents, other.style.pointerEvents];
+      (el as HTMLElement).style.pointerEvents = 'auto';
+      other.style.pointerEvents = 'auto';
+      const hit = document.elementFromPoint(args.x, args.y);
+      [(el as HTMLElement).style.pointerEvents, other.style.pointerEvents] = saved;
+      return el.contains(hit);
+    },
+    { x: (left + right) / 2, y: (upper + lower) / 2, under: underHandle },
+  );
+  expect(hitInsideTop, what).toBe(true);
 }
 
 test.describe('phone layout', { tag: '@g1' }, () => {
@@ -158,5 +216,138 @@ test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
   test('the minimal landing hero leaves the plot chip and demo badge uncovered', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await expectHeroClear(page);
+  });
+
+  // guidance-chip-edge: at 320px the chip used to sit to the side of the
+  // arrow (CSS `chipSide`) and ran off the right edge of the viewport once
+  // the ring opened frame 3's "This one fits {terrain}" chip near the screen
+  // edge.
+  test('the guidance chip stays fully on screen once the ring opens', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await openRingOnGuidedHex(settlement);
+    await expectInsideViewport(page, settlement.guidancePointer.locator('.chip'));
+  });
+});
+
+test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
+  test.use({ viewport: { width: 667, height: 375 }, hasTouch: true, isMobile: true });
+
+  // guidance-chip-edge: this short-but-wide viewport is where "centred
+  // above the arrow" (the old mobile CSS fallback) pushed the chip up under
+  // the HUD bar, off the top of the screen entirely.
+  test('the guidance chip stays fully on screen and clear of the HUD bar once the ring opens', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await openRingOnGuidedHex(settlement);
+    const chip = settlement.guidancePointer.locator('.chip');
+    await expectInsideViewport(page, chip);
+    const chipBox = (await chip.boundingBox())!;
+    const hudBar = page.locator('.hud-bar');
+    if (await hudBar.isVisible()) {
+      const hudBarBox = (await hudBar.boundingBox())!;
+      expect(chipBox.y).toBeGreaterThanOrEqual(hudBarBox.y + hudBarBox.height - 1);
+    }
+    // The settlement bubble and demo badge stack in rows under the bar here;
+    // the chip must not end up behind them either.
+    for (const [selector, what] of [
+      ['.settlement-bubble', 'chip covered by the settlement bubble'],
+      ['.demo-badge', 'chip covered by the demo badge'],
+    ] as const) {
+      const overlay = page.locator(selector);
+      if (await overlay.isVisible()) await expectNoOverlap(chip, overlay, what);
+    }
+  });
+});
+
+// Mobile tutorial focus (owner decision): on phones, once a settlement is
+// founded the top HUD bar (and the settlement-name bubble/pull-down drawer
+// it carries) is unmounted entirely for as long as the guided build steps
+// are running, so nothing else on screen competes with the tutorial — it
+// reappears the moment onboarding completes. The progress checklist itself
+// also steps aside while the ring menu is open, since the two would
+// otherwise fight for the same strip of screen near the bottom.
+test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  test('hides the header for the guided build steps and brings it back on completion', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+
+    // Before founding: the pre-founding bar (locale switcher + "I already
+    // have a realm") is untouched by this feature.
+    await expect(page.locator('.hud-bar')).toBeVisible();
+
+    await settlement.claimLandfall();
+
+    // Once founded, the header (and everything it carries) is gone, not
+    // merely hidden — both must be truly absent from the DOM.
+    await expect(page.locator('.hud-bar')).toHaveCount(0);
+    await expect(page.locator('.settlement-bubble')).toHaveCount(0);
+
+    const badge = page.locator('.demo-badge');
+    if (await badge.isVisible()) {
+      const badgeBox = (await badge.boundingBox())!;
+      expect(badgeBox.y, 'demo badge should sit near the top edge, not a stale bar offset').toBeLessThan(40);
+      // The landfall banner reserves the badge's row instead of sliding up
+      // underneath it now that there's no bar between them.
+      await expect(settlement.banner).toBeVisible();
+      await expectNoOverlap(settlement.banner, badge, 'demo badge covers the landfall banner');
+    }
+
+    // Opening the ring on a guided hex hides the progress checklist so it
+    // doesn't fight the ring for the same strip of screen.
+    const target = await settlement.findHex({ terrain: 'grass' });
+    await settlement.clickHex(target);
+    await settlement.ring.waitForOpen();
+    await expect(settlement.checklist).toHaveCount(0);
+
+    // Closing the ring (Escape) brings the checklist straight back.
+    await page.keyboard.press('Escape');
+    await expect(settlement.checklist).toBeVisible();
+
+    // Completing onboarding brings the header back.
+    await settlement.placeGuidedBuildings();
+    await expect(page.locator('.hud-bar')).toBeVisible();
+  });
+});
+
+// z-layering: the phone settlement bubble and demo badge are fixed layers
+// outside the HUD bar. They used to sit at z 41 / 1000 and painted over the
+// bar's own popovers (ProfileNudge) and over the open queue drawer.
+test.describe('phone overlay layering', { tag: '@g1' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  test('the profile nudge paints above the settlement bubble and the demo badge', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await settlement.placeGuidedBuildings();
+    await expect(settlement.profileNudge).toBeVisible();
+
+    await expectPaintsAbove(settlement.profileNudge, page.locator('.settlement-bubble'), 'settlement bubble paints over the profile nudge');
+    const badge = page.locator('.demo-badge');
+    if (await badge.isVisible()) {
+      await expectPaintsAbove(settlement.profileNudge, badge, 'demo badge paints over the profile nudge');
+    }
+  });
+
+  test('the open queue drawer paints above the settlement bubble', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.found(page);
+    // Any queued order mounts the drawer (see queue-drawer.spec.ts's seed).
+    await page.evaluate(() => {
+      const world = (window as unknown as { __demoWorld: () => any }).__demoWorld();
+      world.hud.garrison = [{ unit: 'spearman', count: 5 }];
+      world.hud.tick += 1;
+      world.syncHud();
+    });
+    await page.locator('.queue-drawer-handle').click();
+    const panel = page.locator('.queue-drawer-panel');
+    await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
+
+    await expectPaintsAbove(panel, page.locator('.settlement-bubble'), 'settlement bubble paints over the open queue drawer');
   });
 });

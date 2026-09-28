@@ -117,6 +117,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var listed = Assert.Single(worlds, w => w.Id == world.Id);
         Assert.Equal(1.0, listed.SpeedFactor);
         Assert.False(listed.JoinsClosed);
+        Assert.False(listed.FrozenIslesEnabled);
         Assert.Equal("running", listed.RunState);
 
         var stored = await ReadWorldStateAsync(world.Id);
@@ -140,6 +141,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
                 SpeedFactor = 2.0,
                 StartsAt = Optional<DateTimeOffset?>.Of(startsAt),
                 JoinsClosed = true,
+                FrozenIslesEnabled = true,
                 EndbossAt = Optional<DateTimeOffset?>.Of(endbossAt)
             },
             Ct);
@@ -150,6 +152,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Equal(2.0, updated.SpeedFactor);
         Assert.Equal(startsAt, updated.StartsAt);
         Assert.True(updated.JoinsClosed);
+        Assert.True(updated.FrozenIslesEnabled);
         Assert.Equal(endbossAt, updated.EndbossAt);
 
         // A field omitted from the next PATCH must be left as-is.
@@ -162,6 +165,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Equal(3.0, afterSecond.SpeedFactor);
         Assert.Equal(startsAt, afterSecond.StartsAt);
         Assert.True(afterSecond.JoinsClosed);
+        Assert.True(afterSecond.FrozenIslesEnabled);
         Assert.Equal(endbossAt, afterSecond.EndbossAt);
 
         // Explicit null clears a previously-set nullable field.
@@ -394,6 +398,29 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         // Out of scope for #27, but must not regress: joins stay open.
         await FoundSettlementAsync(client, world);
+    }
+
+    [Fact]
+    public async Task Frozen_isles_enabled_is_exposed_on_the_public_world_endpoint()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+
+        var beforeEnable = await client.GetFromJsonAsync<WorldResponse>(
+            $"/api/v1/worlds/{world.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.False(beforeEnable!.FrozenIslesEnabled);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest { FrozenIslesEnabled = true },
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var afterEnable = await client.GetFromJsonAsync<WorldResponse>(
+            $"/api/v1/worlds/{world.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(afterEnable!.FrozenIslesEnabled);
     }
 
     // ---- Seed preview and reseed (issue #133) ----

@@ -315,4 +315,29 @@ describe('RingMenu', () => {
     await wrapper.setProps({ x: 600, y: 420 });
     expect(labels(wrapper)).toEqual(['Details', 'Build']);
   });
+
+  // The top HUD bar takes its own clicks (none reach the backdrop behind it),
+  // so a press on it has to close the ring by itself — without emitting
+  // `outsidePointerDown`, which would start a map drag.
+  it('closes on a press anywhere on the top HUD bar, and only there', () => {
+    const bar = document.createElement('header');
+    bar.className = 'hud-bar';
+    const inBar = document.createElement('span');
+    bar.appendChild(inBar);
+    const elsewhere = document.createElement('div');
+    document.body.append(bar, elsewhere);
+    const wrapper = ring();
+
+    elsewhere.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(wrapper.emitted('close')).toBeUndefined();
+
+    inBar.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(wrapper.emitted('outsidePointerDown')).toBeUndefined();
+
+    wrapper.unmount();
+    inBar.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    bar.remove();
+    elsewhere.remove();
+  });
 });

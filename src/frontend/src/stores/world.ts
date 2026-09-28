@@ -426,6 +426,7 @@ export const useWorldStore = defineStore('world', {
       localStorage.setItem('bjarnoy.worldId', world.id);
       this.model = markRaw(new WorldModel(world.seed, world.generation));
       this.model.setWastedRevealed(world.endbossTriggered);
+      this.model.setFrozenEnabled(world.frozenIslesEnabled);
       try {
         this.islands = await api.getIslands(world.id);
       } catch (err) {

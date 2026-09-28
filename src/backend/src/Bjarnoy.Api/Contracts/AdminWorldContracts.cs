@@ -14,6 +14,7 @@ public sealed record AdminWorldResponse(
     double SpeedFactor,
     DateTimeOffset? StartsAt,
     bool JoinsClosed,
+    bool FrozenIslesEnabled,
     DateTimeOffset? EndbossAt,
     DateTimeOffset? EndbossTriggeredAt,
     string RunState,
@@ -35,6 +36,7 @@ public sealed record AdminWorldResponse(
             world.SpeedFactor,
             world.StartsAt,
             world.JoinsClosed,
+            world.FrozenIslesEnabled,
             world.EndbossAt,
             world.EndbossTriggeredAt,
             world.RunState.ToString().ToLowerInvariant(),
@@ -144,6 +146,9 @@ public sealed record UpdateWorldSettingsRequest
 
     /// <summary>Omit to leave unchanged.</summary>
     public bool? JoinsClosed { get; init; }
+
+    /// <summary>Omit to leave unchanged.</summary>
+    public bool? FrozenIslesEnabled { get; init; }
 
     /// <summary>
     /// Omit to leave unchanged; send explicit <c>null</c> to cancel a scheduled

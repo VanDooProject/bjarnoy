@@ -17,7 +17,12 @@ import { useI18n } from 'vue-i18n';
 import { DEMO_MODE } from '../config';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { isHudDrawerOpen } from '../composables/hudDrawerOpenState';
-import { isHudBarAtBottom, isSettlementBubbleShown } from '../composables/hudSettlementBubbleState';
+import {
+  isHudBarAtBottom,
+  isHudBarMounted,
+  isSettlementBubbleShown,
+  SETTLEMENT_BUBBLE_ROW_PX,
+} from '../composables/hudSettlementBubbleState';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import type { MessageSchema } from '../i18n/schema';
@@ -29,8 +34,8 @@ const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 // border-box) instead of a separate hardcoded 64 that could silently drift
 // from the real bar. Finding #13: when the settlement bubble is also
 // showing in the same corner, this drops onto its own row below it —
-// `BUBBLE_ROW_PX` is that row's own real height (6px top/bottom padding +
-// its ~20px content) plus a small gap, so the two never overlap.
+// `SETTLEMENT_BUBBLE_ROW_PX` is that row's own real height, so the two
+// never overlap.
 //
 // Extra fix (found while screenshotting #13): reads `isHudBarAtBottom`
 // (TopBar.vue's own *effective* "am I actually rendered at the bottom edge"
@@ -39,10 +44,18 @@ const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 // always sits at the top regardless of that stored preference, so reading
 // it directly could park this badge at `top: 8px` right on top of a bar
 // that was, in fact, still up there.
-const BUBBLE_ROW_PX = 40;
 const badgeStyle = computed(() => {
   if (!isCompact.value) return undefined;
-  const stack = isSettlementBubbleShown.value ? BUBBLE_ROW_PX : 0;
+  const stack = isSettlementBubbleShown.value ? SETTLEMENT_BUBBLE_ROW_PX : 0;
+  // Mobile tutorial focus: LandingView.vue's founded-branch bar unmounts
+  // entirely during the phone-width guided build steps — `hudBarHeightPx`
+  // then resets to its 64px *default* (TopBar.vue's own onBeforeUnmount),
+  // not to 0, since a bar that's simply drag-collapsed and one that's fully
+  // absent both leave that ref alone otherwise. Without checking
+  // `isHudBarMounted` this badge would park itself 64px down, as if a
+  // default-height bar were still there, instead of near the actual top
+  // edge — see hudSettlementBubbleState.ts's own comment.
+  if (!isHudBarMounted.value) return { top: `${8 + stack}px` };
   return isHudBarAtBottom.value
     ? { top: `${8 + stack}px` }
     : { top: `${hudBarHeightPx.value + 8 + stack}px` };
@@ -83,6 +96,11 @@ const showBadge = computed(() => DEMO_MODE && !(isCompact.value && isHudDrawerOp
    of spanning the top of the screen and covering it. Stays centered like
    the desktop rule above. */
 .demo-badge--compact {
+  /* Phones: the badge sits in its own row under the bar rather than on top
+     of it, so it only needs to clear the map overlays — same layer as the
+     settlement bubble (TopBar.vue), under the queue drawer, the HUD drawer
+     and the bar's own popovers (the base 1000 painted over all of them). */
+  z-index: 36;
   padding: 3px 10px;
   font-size: 10px;
   border-radius: 999px;

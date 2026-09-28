@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileView from './ProfileView.vue';
 import type { ProfileResponse } from '../api/types';
+import { animationPreference } from '../lib/perf/animationPreference';
 import { useAuthStore } from '../stores/auth';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { createTestI18n } from '../test/i18n';
 import enProfile from '../i18n/locales/en/profile.json';
 
-function mountProfileView() {
+function mountProfileView(options: { attachTo?: HTMLElement } = {}) {
   return mount(ProfileView, {
+    ...options,
     global: { plugins: [createTestI18n({ profile: enProfile })] },
   });
 }
@@ -41,6 +43,11 @@ vi.mock('vue-router', async (importOriginal) => {
 
 const ASCII_ART = '  /\\_/\\\n ( o.o )\n  > ^ <';
 
+/** Switches to the own-profile's Settings tab. */
+async function openSettings(wrapper: ReturnType<typeof mountProfileView>) {
+  await wrapper.findAll('[role="tab"]').find((b) => b.text() === 'Settings')!.trigger('click');
+}
+
 function profile(overrides: Partial<ProfileResponse> = {}): ProfileResponse {
   return {
     id: 'user-1',
@@ -57,7 +64,23 @@ beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
   routeParams.userName = 'ragnar';
+  localStorage.removeItem('bjarnoy.animations');
+  animationPreference.setting = 'auto';
 });
+
+function ownProfileAuth() {
+  const auth = useAuthStore();
+  auth.user = {
+    id: 'user-1',
+    userName: 'ragnar',
+    role: 'player',
+    status: 'active',
+    displayName: null,
+    isPremium: false,
+    preferredLocale: null,
+  };
+  return auth;
+}
 
 describe('ProfileView', () => {
   it('renders the bio verbatim in a pre block, with joined date and settlement count', async () => {
@@ -179,6 +202,7 @@ describe('ProfileView', () => {
 
       const wrapper = mountProfileView();
       await flushPromises();
+      await openSettings(wrapper);
 
       expect(wrapper.text()).toContain('HUD bar');
     });
@@ -226,6 +250,7 @@ describe('ProfileView', () => {
 
       const wrapper = mountProfileView();
       await flushPromises();
+      await openSettings(wrapper);
 
       const bottomButton = wrapper.findAll('button').find((b) => b.text() === 'Bottom')!;
       await bottomButton.trigger('click');
@@ -233,6 +258,171 @@ describe('ProfileView', () => {
       const hudPrefs = useHudPrefsStore();
       expect(hudPrefs.barPosition).toBe('bottom');
       expect(bottomButton.attributes('aria-pressed')).toBe('true');
+    });
+  });
+
+  describe('settings tab', () => {
+    it('keeps the settings off the Profile tab until the Settings tab is selected', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.find('[role="tablist"]').exists()).toBe(true);
+      expect(wrapper.text()).not.toContain('Map animations');
+
+      await openSettings(wrapper);
+
+      const panel = wrapper.find('[role="tabpanel"]');
+      expect(panel.exists()).toBe(true);
+      expect(panel.text()).toContain('Map animations');
+      expect(panel.text()).toContain('Bar position');
+    });
+
+    it('labels each button group with what it sets', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView({ attachTo: document.body });
+      await flushPromises();
+      await openSettings(wrapper);
+
+      const names = wrapper
+        .findAll('[role="group"]')
+        .map((group) => document.getElementById(group.attributes('aria-labelledby')!)?.textContent);
+      expect(names).toEqual(['Bar position', 'Map animations']);
+      wrapper.unmount();
+    });
+
+    it('switches back to the Profile tab (bio, no settings) when reselected', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      await openSettings(wrapper);
+      expect(wrapper.text()).toContain('Map animations');
+
+      await wrapper.findAll('[role="tab"]').find((b) => b.text() === 'Profile')!.trigger('click');
+      expect(wrapper.text()).not.toContain('Map animations');
+      expect(wrapper.find('pre.bio').exists()).toBe(true);
+    });
+
+    it("has no Settings tab, or any tabs at all, on someone else's profile", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      const auth = useAuthStore();
+      auth.user = {
+        id: 'user-2',
+        userName: 'floki',
+        role: 'player',
+        status: 'active',
+        displayName: null,
+        isPremium: false,
+        preferredLocale: null,
+      };
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+      expect(wrapper.findAll('button').some((b) => b.text() === 'Settings')).toBe(false);
+    });
+  });
+
+  describe('graphics (animation) preferences', () => {
+    afterEach(() => {
+      // Restore the plain getter this suite overrides for the
+      // reduced-motion case below — see its own comment.
+      Object.defineProperty(animationPreference, 'reducedMotion', {
+        get() {
+          return false;
+        },
+        configurable: true,
+      });
+    });
+
+    it("shows the Graphics section on the player's own profile", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      expect(wrapper.text()).toContain('Graphics');
+    });
+
+    it("hides the Graphics section on someone else's profile", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      const auth = useAuthStore();
+      auth.user = {
+        id: 'user-2',
+        userName: 'floki',
+        role: 'player',
+        status: 'active',
+        displayName: null,
+        isPremium: false,
+        preferredLocale: null,
+      };
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('Graphics');
+    });
+
+    it('choosing an option persists the setting to localStorage', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      const onButton = wrapper
+        .findAll('.animation-preferences button')
+        .find((button) => button.text() === 'On')!;
+      await onButton.trigger('click');
+
+      expect(animationPreference.setting).toBe('on');
+      expect(localStorage.getItem('bjarnoy.animations')).toBe('on');
+      expect(wrapper.text()).toContain('On (this device)');
+    });
+
+    it("shows the 'measuring' status for auto before the fps governor has decided", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      expect(wrapper.text()).toContain('measuring frame rate');
+    });
+
+    it('shows the reduced-motion status when auto and the system asks for reduced motion', async () => {
+      // animationPreference.reducedMotion is normally seeded once from
+      // matchMedia at module load and updated only by its own 'change'
+      // listener (see animationPreference.ts) — overriding the getter
+      // directly is the simplest way to exercise the resolution table's
+      // reduced-motion branch from a component test without needing the
+      // real matchMedia wiring to have fired in this test's favour.
+      Object.defineProperty(animationPreference, 'reducedMotion', {
+        get() {
+          return true;
+        },
+        configurable: true,
+      });
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      expect(wrapper.text()).toContain('reduced motion');
     });
   });
 });

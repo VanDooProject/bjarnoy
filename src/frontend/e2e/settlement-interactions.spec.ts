@@ -256,4 +256,29 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     const after = await settlement.screenshot();
     expect(Buffer.compare(before, after)).not.toBe(0);
   });
+
+  // The top HUD bar is an opaque strip over the map: a click anywhere on it
+  // that misses a nav link by a few pixels used to fall straight through to
+  // the canvas (TopBar.vue's `.hud-bar` was `pointer-events: none`) and
+  // select/open whatever hex sat under the bar. Sweep the whole bar and
+  // require every point to hit the bar itself or something inside it —
+  // never the canvas.
+  test('clicks anywhere on the top HUD bar stay in the bar and never reach the map', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.found(page);
+
+    const bar = page.locator('.hud-bar');
+    const barBox = (await bar.boundingBox())!;
+    const misses = await page.evaluate(({ x, y, width, height }) => {
+      const out: string[] = [];
+      for (const fy of [0.2, 0.5, 0.8]) {
+        for (let px = x + 2; px < x + width - 2; px += 16) {
+          const hit = document.elementFromPoint(px, y + height * fy);
+          if (!hit?.closest('.hud-bar')) out.push(`${Math.round(px)},${Math.round(y + height * fy)} -> ${hit?.tagName}.${hit?.className}`);
+        }
+      }
+      return out;
+    }, barBox);
+    expect(misses).toEqual([]);
+  });
 });
