@@ -1413,6 +1413,13 @@ export class HexMapRenderer {
   private animationsEnabled = false;
   private animCoreReady = false;
   private wastedAnimReady = false;
+  /**
+   * Bumped on every disable. A load kicked off under an older generation
+   * merges nothing when it resolves: off -> on while the first load is still
+   * in flight would otherwise merge that first load's textures, which the
+   * disable in between has already queued for `Assets.unload`.
+   */
+  private animGeneration = 0;
 
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
@@ -2753,11 +2760,12 @@ export class HexMapRenderer {
     if (this.options.mode !== 'settlement' || !this.textures) return;
 
     if (this.animationsEnabled) {
+      const generation = this.animGeneration;
       if (!this.animCoreReady) {
         this.animCoreReady = true;
         loadAnimAtlases()
           .then((anim) => {
-            if (this.destroyed || !this.textures || !this.animationsEnabled) return;
+            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
             this.textures = mergeTileTextures(this.textures, anim);
             this.rebuildAll();
           })
@@ -2770,7 +2778,7 @@ export class HexMapRenderer {
         this.wastedAnimReady = true;
         loadPackAnimAtlases('wasted')
           .then((anim) => {
-            if (this.destroyed || !this.textures || !this.animationsEnabled) return;
+            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
             this.textures = mergeTileTextures(this.textures, anim);
             this.rebuildAll();
           })
@@ -2785,7 +2793,18 @@ export class HexMapRenderer {
     if (this.animCoreReady || this.wastedAnimReady) {
       this.animCoreReady = false;
       this.wastedAnimReady = false;
+      this.animGeneration++;
       this.textures = { ...this.textures, animTop: {} };
+      // The rebuild below only re-syncs the top sprites it actually redraws
+      // (a deep-fog-only viewport redraws none), so drop every clip's
+      // playback state here: `advanceTopAnimations` must never assign one of
+      // the anim textures about to be unloaded to a sprite again.
+      // A released sprite goes blank until that rebuild hands it its static
+      // texture — never left on a frame that is about to be destroyed.
+      for (const [key, state] of [...this.topAnimState]) {
+        state.sprite.texture = Texture.EMPTY;
+        this.releaseTopAnim(key);
+      }
       // The next rebuildAll (this method's own callers already trigger one)
       // re-syncs every currently-animated sprite back to static via
       // syncTopAnim before this releases the atlas's GPU memory below —
