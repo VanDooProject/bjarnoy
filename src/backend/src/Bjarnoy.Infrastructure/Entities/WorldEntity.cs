@@ -123,6 +123,15 @@ public class WorldEntity
     /// <summary>Admin stop-join toggle. Existing players are unaffected.</summary>
     public bool JoinsClosed { get; set; }
 
+    /// <summary>
+    /// Opt-in per world for the frozen isles; when enabled, frozen isles will
+    /// spawn in the far north of the world and carry plenty of ground
+    /// treasures — that generation is not implemented yet, today the flag
+    /// only tells clients to load the frozen art pack (<c>frozen-*</c> atlas
+    /// pages).
+    /// </summary>
+    public bool FrozenIslesEnabled { get; set; }
+
     /// <summary>Joins remain allowed; the endboss fires at this instant. Null means none scheduled.</summary>
     public DateTimeOffset? EndbossAt { get; set; }
 
