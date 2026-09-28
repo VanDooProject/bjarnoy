@@ -322,12 +322,26 @@ export function atlasBackgroundStyle(rect: AtlasFrameRect): AtlasBackgroundStyle
 
 const cache = new Map<string, Promise<LoadedAtlas>>();
 
+/**
+ * Called after each page of a category finishes loading — `loaded` counts
+ * from 1, `total` is the category's page count known up front (`pages.length`,
+ * fixed before the loop starts) — a best-effort progress signal for
+ * HexMapRenderer's loading-state overlay (see `MapLoadState.progress`).
+ * Sequential (one `Assets.load` at a time, same as before this was added),
+ * so this is exact, not an estimate.
+ */
+export type AtlasPageProgress = (loaded: number, total: number) => void;
+
 /** Loads and parses every page already discovered for one category (see `pagesFor`), merging them into a single frame/clip lookup. Shared by `loadAtlasCategory`/`loadAtlasPackCategory` — the only difference between them is what happens when `pages` is empty. */
-async function loadPages(pages: { manifest: AtlasManifest; webpUrl: string }[]): Promise<LoadedAtlas> {
+async function loadPages(
+  pages: { manifest: AtlasManifest; webpUrl: string }[],
+  onPage?: AtlasPageProgress,
+): Promise<LoadedAtlas> {
   const textures: Record<string, Texture> = {};
   const frameMeta: Record<string, AtlasFrameMeta> = {};
   const clips: Record<string, AtlasClip> = {};
 
+  let loaded = 0;
   for (const { manifest, webpUrl } of pages) {
     const pageTexture = await Assets.load<Texture>(webpUrl);
     const sheet = new Spritesheet(pageTexture, manifest);
@@ -337,13 +351,25 @@ async function loadPages(pages: { manifest: AtlasManifest; webpUrl: string }[]):
       if (frame.bjarnoy) frameMeta[name] = frame.bjarnoy;
     }
     Object.assign(clips, manifest.clips ?? {});
+    onPage?.(++loaded, pages.length);
   }
 
   return { textures, frameMeta, clips };
 }
 
-/** Loads and parses every page of one atlas category, merging them into a single frame/clip lookup. Throws if the category has no vendored pages at all — for a core category (`terrain`, `buildings-static`, ...) that's a real error, unlike a pack category (see `loadAtlasPackCategory`). */
-export function loadAtlasCategory(category: string): Promise<LoadedAtlas> {
+/**
+ * Loads and parses every page of one atlas category, merging them into a
+ * single frame/clip lookup. Throws if the category has no vendored pages at
+ * all — for a core category (`terrain`, `buildings-static`, ...) that's a
+ * real error, unlike a pack category (see `loadAtlasPackCategory`).
+ *
+ * `onPage`, when given, is only actually invoked the first time this
+ * category is loaded — a later call while the category is already cached
+ * (in flight or resolved) returns the same `Promise` without replaying
+ * progress, same as it returns the same `LoadedAtlas` without replaying the
+ * page loads themselves.
+ */
+export function loadAtlasCategory(category: string, onPage?: AtlasPageProgress): Promise<LoadedAtlas> {
   const cached = cache.get(category);
   if (cached) return cached;
 
@@ -352,7 +378,7 @@ export function loadAtlasCategory(category: string): Promise<LoadedAtlas> {
     if (pages.length === 0) {
       throw new Error(`atlas.ts: no vendored pages found for atlas category "${category}"`);
     }
-    return loadPages(pages);
+    return loadPages(pages, onPage);
   })();
 
   cache.set(category, promise);
