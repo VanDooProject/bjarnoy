@@ -65,7 +65,7 @@ function open(id: string) {
 // "up" from the list). Goes back in history when the previous entry really
 // is the list (an in-app "open a report" navigation), otherwise replaces
 // with the list location instead of leaving a stray detail entry in
-// history — same reasoning as ModalShell.vue's own close().
+// history — same reasoning as RouteModal.vue's own close().
 function backToList() {
   const state = router.options.history.state as { back?: unknown };
   if (state.back === '/reports') {
@@ -145,7 +145,7 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
 // Exposed to ReportsModal.vue for the modal's title: the mobile header bar
 // (list title, or a short label for whichever detail is open) and the
 // mobile chevron's target (isDetail decides whether it goes to backToList()
-// or falls through to ModalShell's own close()).
+// or falls through to RouteModal's own close()).
 const isDetail = computed(() => detailItem.value !== null);
 const detailTitle = computed(() => {
   if (detail.value) return missionLabel(detail.value.mission);
@@ -268,7 +268,7 @@ defineExpose({ detailTitle, isDetail, backToList });
 </template>
 
 <style scoped>
-/* Content padding suits a dialog (ModalShell.vue supplies the backdrop,
+/* Content padding suits a dialog (RouteModal.vue supplies the backdrop,
    panel and its own scrolling) — no page-height/background rules here
    anymore, unlike when this was a standalone route. */
 .reports-view {

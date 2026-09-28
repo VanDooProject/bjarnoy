@@ -31,7 +31,7 @@ import { useWorldStore } from '../../stores/world';
 import { useLogout } from '../../composables/useLogout';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { profileLocation } from '../../lib/profileRoute';
-import { reportsLocation } from '../../lib/modalRoute';
+import { modalLocation } from '../../lib/modalRoute';
 import type { MessageSchema } from '../../i18n/schema';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -48,8 +48,13 @@ const world = useWorldStore();
 const { logout } = useLogout();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-function go(location: RouteLocationRaw) {
-  router.push(location);
+function go(path: string) {
+  router.push(path);
+  emit('close');
+}
+
+function goToModal(path: string) {
+  router.push(modalLocation(router, path));
   emit('close');
 }
 
@@ -108,7 +113,7 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
     >
       {{ t('hud.nav.worldMap') }}
     </button>
-    <button v-if="auth.isAuthenticated" class="link" :class="{ active: route.name === 'leaderboards' }" @click="go('/leaderboards')">
+    <button v-if="auth.isAuthenticated" class="link" :class="{ active: route.name === 'leaderboards' }" @click="goToModal('/leaderboards')">
       {{ t('hud.nav.leaderboards') }}
     </button>
     <button
@@ -119,11 +124,11 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
     >
       {{ t('hud.nav.messages') }}
     </button>
-    <button class="link" :class="{ active: String(route.name).startsWith('report') }" @click="go(reportsLocation(router))">
+    <button class="link" :class="{ active: String(route.name).startsWith('report') }" @click="goToModal('/reports')">
       {{ t('hud.nav.reports') }}
       <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
     </button>
-    <button class="link" :class="{ active: route.name === 'guild' }" @click="go('/guild')">
+    <button class="link" :class="{ active: route.name === 'guild' }" @click="goToModal('/guild')">
       {{ t('hud.nav.alliance') }}
     </button>
     <button class="link" :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }" @click="go('/docs')">

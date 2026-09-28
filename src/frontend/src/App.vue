@@ -4,6 +4,8 @@ import { loadRouteLocation, useRoute, useRouter, type RouteLocationNormalizedLoa
 import AccountRestrictedBanner from './components/AccountRestrictedBanner.vue';
 import DemoModeBadge from './components/DemoModeBadge.vue';
 import ProfileModal from './components/profile/ProfileModal.vue';
+import LeaderboardModal from './components/leaderboard/LeaderboardModal.vue';
+import GuildModal from './components/guild/GuildModal.vue';
 import ReportsModal from './components/reports/ReportsModal.vue';
 import { useActivityHeartbeat } from './composables/useActivityHeartbeat';
 import { isModalRouteName } from './lib/modalRoute';
@@ -17,21 +19,37 @@ useActivityHeartbeat();
 const route = useRoute();
 const router = useRouter();
 
-// The modal routes (own-profile/profile, reports/report-detail) render as a
-// modal over whatever page was showing before — see lib/modalRoute.ts and
-// ProfileModal.vue/ReportsModal.vue. Every other route renders through
-// <router-view> exactly as before.
+// The modal routes (own-profile/profile/leaderboards/guild/reports/
+// report-detail) render as a modal over whatever page was showing before —
+// see lib/modalRoute.ts and each modal component (ProfileModal.vue/
+// LeaderboardModal.vue/GuildModal.vue/ReportsModal.vue). Every other route renders through <router-view> exactly
+// as before.
 const isModalRoute = computed(() => isModalRouteName(route.name));
-const isProfileRoute = computed(() => route.name === 'own-profile' || route.name === 'profile');
-const isReportsRoute = computed(() => route.name === 'reports' || route.name === 'report-detail');
 
-// The page to keep showing underneath the modal. `modalLocation()` (via
-// profileLocation()/reportsLocation()) stashes the caller's own full path in
-// `history.state.backgroundView` when it opens a modal — read that back
-// here. A direct load, a reload, or a new tab opened from a link (no in-app
-// navigation, so no stashed state) has nothing to go back to, so it falls
-// back to the settlement view, per the spec ("newly opened tabs via link
-// have settlement in the back").
+// Which modal component to render for the current modal route.
+const ModalComponent = computed(() => {
+  switch (route.name) {
+    case 'own-profile':
+    case 'profile':
+      return ProfileModal;
+    case 'leaderboards':
+      return LeaderboardModal;
+    case 'guild':
+      return GuildModal;
+    case 'reports':
+    case 'report-detail':
+      return ReportsModal;
+    default:
+      return null;
+  }
+});
+
+// The page to keep showing underneath the open modal. `modalLocation()`
+// stashes the caller's own full path in `history.state.backgroundView` when
+// it opens a modal route — read that back here. A direct load, a reload, or
+// a new tab opened from a link (no in-app navigation, so no stashed state)
+// has nothing to go back to, so it falls back to the settlement view, per
+// the spec ("newly opened tabs via link have settlement in the back").
 //
 // This must stay a *single* `<router-view>` element whose `route` prop
 // merely changes value, never a `v-if`/`v-else` pair of separate
@@ -50,7 +68,7 @@ function backgroundLocation() {
 
 // A route's lazy `component: () => import(...)` is only swapped for the
 // loaded component once a real navigation to it has run. `resolve()` does
-// no loading, so on a direct load of a modal URL the '/settlement'
+// no loading, so on a direct load of a modal-route URL the '/settlement'
 // background still holds the bare loader function — and <router-view>
 // would render that function's Promise as text. `loadRouteLocation` loads
 // it first. A background we navigated away from is already loaded, and is
@@ -92,6 +110,5 @@ watch(
   <DemoModeBadge />
   <!-- Nothing behind the modal until a directly-loaded background has loaded. -->
   <router-view v-if="!isModalRoute || backgroundRoute" :route="isModalRoute ? backgroundRoute! : undefined" />
-  <ProfileModal v-if="isProfileRoute" />
-  <ReportsModal v-if="isReportsRoute" />
+  <component :is="ModalComponent" v-if="ModalComponent" />
 </template>

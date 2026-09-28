@@ -9,6 +9,7 @@ import { usePlayerStore } from '../../stores/player';
 import { createTestI18n } from '../../test/i18n';
 import enReports from '../../i18n/locales/en/reports.json';
 import enHud from '../../i18n/locales/en/hud.json';
+import enProfile from '../../i18n/locales/en/profile.json';
 
 // Exercises the real reports list/detail content rather than the demo-mode
 // hint — the vitest config otherwise defaults DEMO_MODE to true the same
@@ -66,7 +67,7 @@ function testRouter(): Router {
 
 async function mountModal(router: Router) {
   const wrapper = mount(ReportsModal, {
-    global: { plugins: [router, createTestI18n({ reports: enReports, hud: enHud })] },
+    global: { plugins: [router, createTestI18n({ reports: enReports, hud: enHud, profile: enProfile })] },
   });
   await flushPromises();
   return wrapper;

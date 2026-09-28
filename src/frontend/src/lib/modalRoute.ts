@@ -1,34 +1,32 @@
 import type { Router, RouteLocationRaw } from 'vue-router';
 
 /**
- * Every route name that renders as a modal over a background route (see
- * App.vue's own comment on the pattern) rather than through the single
- * `<router-view>` directly. `profileLocation`/`reportsLocation` below stash
- * `history.state.backgroundView` when navigating *to* one of these, and the
- * "already on a modal route" branch of `modalLocation` reuses that stashed
- * background instead of stacking a modal behind another modal — this list
- * is what tells that branch which routes count as "a modal route" in the
- * first place, so any future modal route (e.g. a settings-only deep link)
- * just adds its name here.
+ * Every route that renders as a modal over whatever page was showing before
+ * — see App.vue's background-route pattern and RouteModal.vue's dialog
+ * chrome. `own-profile`/`profile` were the first (ProfileModal.vue);
+ * `leaderboards`/`guild` and the battle-reports inbox (`reports`/
+ * `report-detail`) reuse the exact same pattern instead of rendering as
+ * full pages through `<router-view>`.
  */
-export const MODAL_ROUTE_NAMES = ['own-profile', 'profile', 'reports', 'report-detail'] as const;
+export const MODAL_ROUTE_NAMES = ['own-profile', 'profile', 'leaderboards', 'guild', 'reports', 'report-detail'] as const;
 
-export function isModalRouteName(name: unknown): boolean {
-  return MODAL_ROUTE_NAMES.includes(name as (typeof MODAL_ROUTE_NAMES)[number]);
+export type ModalRouteName = (typeof MODAL_ROUTE_NAMES)[number];
+
+export function isModalRouteName(name: unknown): name is ModalRouteName {
+  return typeof name === 'string' && (MODAL_ROUTE_NAMES as readonly string[]).includes(name);
 }
 
 /**
  * Builds the `RouteLocationRaw` for opening `path` as a modal over whatever
  * page is currently showing (see App.vue's background-route pattern). The
  * current route's full path is stashed in `history.state.backgroundView` so
- * App.vue knows what to keep rendering underneath, and the modal's own
- * ModalShell.vue knows what to return to on close.
+ * App.vue knows what to keep rendering underneath, and the modal component
+ * knows what to return to on close.
  *
- * If the caller is already on *any* modal route (own-profile/profile,
- * reports/report-detail), that route's own `backgroundView` is reused
- * instead of stashing the modal route itself — otherwise a modal-to-modal
- * navigation (profile → reports, or reports list → detail) would stack a
- * modal behind another modal once the first one closes.
+ * If the caller is already on any modal route, that route's own
+ * `backgroundView` is reused instead of stashing the modal route itself —
+ * otherwise a modal-to-modal navigation (e.g. profile -> leaderboards)
+ * would stack a modal behind another modal once the first one closes.
  */
 export function modalLocation(router: Router, path: string): RouteLocationRaw {
   const current = router.currentRoute.value;
@@ -50,7 +48,12 @@ export function modalLocation(router: Router, path: string): RouteLocationRaw {
   };
 }
 
-/** The reports inbox (list, or a specific report's detail), as a modal location — see `modalLocation`. */
+/**
+ * The reports inbox (the list, or one report's detail) as a modal location
+ * — see `modalLocation`. List -> detail and back stay on modal routes, so
+ * they keep the original background rather than stacking the list behind
+ * the detail.
+ */
 export function reportsLocation(router: Router, reportId?: string): RouteLocationRaw {
   return modalLocation(router, reportId ? `/reports/${reportId}` : '/reports');
 }

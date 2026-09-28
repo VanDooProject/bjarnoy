@@ -1,32 +1,29 @@
 <script setup lang="ts">
-// Shared dialog chrome for every "route as a modal over the current page"
-// screen (see App.vue's own comment on the background-route pattern, and
-// lib/modalRoute.ts): backdrop, desktop close (×) button, mobile fullscreen
-// header (back chevron + title), Escape handling, focus-on-mount, and the
-// close() navigation itself. Extracted out of profile/ProfileModal.vue (the
-// first modal built on this pattern) once reports/ReportsModal.vue needed
-// the exact same chrome — callers only ever differ in what goes in the
-// default slot and, on mobile, what the chevron does and what title it
-// shows.
+// Reusable dialog chrome for every modal-route page (see lib/modalRoute.ts
+// and App.vue's own comment on the background-route pattern this sits on
+// top of): backdrop, close/back button, desktop vs. mobile layout, focus
+// handling, and the close() = history-back-if-we-came-from-a-backgroundView-
+// else-replace logic. Originally ProfileModal.vue's own template/script;
+// extracted so LeaderboardModal.vue/GuildModal.vue can reuse the exact same
+// chrome instead of copy-pasting it. The caller supplies the actual content
+// via the default slot and a `title` (used verbatim on mobile's header bar,
+// and as the panel's aria-label).
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { useMediaQuery } from '../composables/useMediaQuery';
-import { MOBILE_MODAL_QUERY } from '../lib/breakpoints';
-import type { MessageSchema } from '../i18n/schema';
+import { useMediaQuery } from '../../composables/useMediaQuery';
+import { MOBILE_MODAL_QUERY } from '../../lib/breakpoints';
+import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
-  /** Shown in the mobile header bar only — desktop has no title, just the floating ×. */
   title: string;
-  /** `aria-labelledby` for the dialog, when the caller has an element id to point it at. */
-  labelledby?: string;
-  /** `data-testid` for the panel element, for e2e/component tests that need to find it. */
+  /** `data-testid` for the panel, for e2e tests that need to find a specific modal. */
   testid?: string;
   /**
-   * What the mobile chevron does. Defaults to `close()` (same as the
-   * desktop × and Escape) — a caller with its own "go up one level" step
-   * (e.g. ReportsModal.vue's detail → list) overrides this instead of
-   * closing straight through to the background route.
+   * What mobile's back chevron does. Defaults to `close()`, same as the
+   * desktop × and Escape — a modal with its own "up one level" step (e.g.
+   * ReportsModal.vue's detail -> list) overrides it instead of closing
+   * straight through to the background route.
    */
   onBack?: () => void;
 }>();
@@ -43,7 +40,7 @@ const panelEl = ref<HTMLElement | null>(null);
 // state.back matches it), going back lands exactly where the player was,
 // scroll position and all. Otherwise (direct load, reload, a link opened in
 // a new tab) there is nothing to go "back" to, so replace with the
-// background view instead of leaving a stray modal entry in history.
+// background view instead of leaving a stray modal-route entry in history.
 function close() {
   // Via the router's own history object, not the global `window.history` —
   // works the same way against a `createMemoryHistory` router in tests. See
@@ -57,28 +54,29 @@ function close() {
   }
 }
 
-const handleBack = computed(() => props.onBack ?? close);
+defineExpose({ close });
 
 // Focus the dialog on open, both for a11y (focus moves into the modal, same
 // as any other dialog in this app) and so a bare Escape press — with focus
-// not sitting inside a nested dialog of the caller's own — reaches this
+// not sitting inside some nested dialog the content renders — reaches this
 // panel's own keydown handler below rather than doing nothing.
 onMounted(() => {
   void nextTick(() => panelEl.value?.focus());
 });
 
-// A caller's own nested dialog (e.g. ProfileView's report dialog) owns its
-// own Escape handling (`@keydown.esc.stop`) and, being the deeper element,
-// runs first and stops the event from bubbling here while it's open — so
-// this only ever fires when no such nested dialog is open. Escape always
-// closes the whole modal, even on mobile where the chevron itself only goes
-// up one level (detail → list) — Escape is a "get me out" gesture, not a
-// "go back one step" one.
+// A nested dialog the slotted content renders (e.g. ProfileView's report
+// dialog) owns its own Escape handling (`@keydown.esc.stop`) and, being the
+// deeper element, runs first and stops the event from bubbling here while
+// it's open — so this only ever fires when no such nested dialog is open.
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') close();
 }
 
-defineExpose({ close });
+const handleBack = computed(() => props.onBack ?? close);
+
+const backLabel = computed(() => t('profile.back'));
+const backChevron = computed(() => t('profile.backChevron'));
+const closeLabel = computed(() => t('profile.close'));
 </script>
 
 <template>
@@ -89,18 +87,18 @@ defineExpose({ close });
       :class="{ 'modal-panel--mobile': isMobile }"
       role="dialog"
       aria-modal="true"
-      :aria-labelledby="labelledby"
-      :data-testid="testid"
+      :aria-label="props.title || undefined"
+      :data-testid="props.testid"
       tabindex="-1"
       @keydown="onKeydown"
     >
       <div v-if="isMobile" class="mobile-header">
-        <button type="button" class="back-button" :aria-label="t('common.modal.back')" @click="handleBack">
-          <span aria-hidden="true">{{ t('common.modal.backChevron') }}</span>
+        <button type="button" class="back-button" :aria-label="backLabel" @click="handleBack">
+          <span aria-hidden="true">{{ backChevron }}</span>
         </button>
-        <span class="mobile-title">{{ title }}</span>
+        <span class="mobile-title">{{ props.title }}</span>
       </div>
-      <button v-else type="button" class="close-button" :aria-label="t('common.modal.close')" @click="close">
+      <button v-else type="button" class="close-button" :aria-label="closeLabel" @click="close">
         <span aria-hidden="true">×</span>
       </button>
       <div class="modal-content">
@@ -115,9 +113,9 @@ defineExpose({ close });
   position: fixed;
   inset: 0;
   /* Above the HUD bar (40), its drawer (39) and the anchored account/
-     returning-player menus (50) — opening a modal from any of those should
-     sit on top of them all. A nested dialog of the caller's own (e.g.
-     ProfileView's report dialog) goes above this again. */
+     returning-player menus (50) — opening any modal-route page from any of
+     those should sit on top of them all. A nested dialog the content
+     renders (e.g. ProfileView's report dialog) goes above this again. */
   z-index: 60;
   background: rgba(0, 0, 0, 0.55);
   display: flex;

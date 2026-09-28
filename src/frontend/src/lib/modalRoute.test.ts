@@ -1,7 +1,6 @@
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it } from 'vitest';
-import { isModalRouteName, reportsLocation } from './modalRoute';
-import { profileLocation } from './profileRoute';
+import { isModalRouteName, modalLocation, reportsLocation } from './modalRoute';
 
 function testRouter() {
   return createRouter({
@@ -10,6 +9,8 @@ function testRouter() {
       { path: '/settlement', name: 'settlement', component: { template: '<div />' } },
       { path: '/profile', name: 'own-profile', component: { template: '<div />' } },
       { path: '/profile/:userName', name: 'profile', component: { template: '<div />' } },
+      { path: '/leaderboards', name: 'leaderboards', component: { template: '<div />' } },
+      { path: '/guild', name: 'guild', component: { template: '<div />' } },
       { path: '/reports', name: 'reports', component: { template: '<div />' } },
       { path: '/reports/:reportId', name: 'report-detail', component: { template: '<div />' } },
     ],
@@ -17,17 +18,60 @@ function testRouter() {
 }
 
 describe('isModalRouteName', () => {
-  it('recognizes every modal route name', () => {
+  it('is true for every modal route name', () => {
     expect(isModalRouteName('own-profile')).toBe(true);
     expect(isModalRouteName('profile')).toBe(true);
+    expect(isModalRouteName('leaderboards')).toBe(true);
+    expect(isModalRouteName('guild')).toBe(true);
     expect(isModalRouteName('reports')).toBe(true);
     expect(isModalRouteName('report-detail')).toBe(true);
   });
 
-  it('rejects background routes and non-string names', () => {
+  it('is false for a non-modal route name, undefined, or null', () => {
     expect(isModalRouteName('settlement')).toBe(false);
     expect(isModalRouteName(undefined)).toBe(false);
     expect(isModalRouteName(null)).toBe(false);
+  });
+});
+
+describe('modalLocation', () => {
+  it("stashes the caller's current path as the background view", async () => {
+    const router = testRouter();
+    await router.push('/settlement');
+
+    expect(modalLocation(router, '/leaderboards')).toEqual({
+      path: '/leaderboards',
+      state: { backgroundView: '/settlement' },
+    });
+  });
+
+  it('reuses the existing backgroundView instead of stacking a modal behind a modal (profile -> leaderboards)', async () => {
+    const router = testRouter();
+    await router.push('/settlement');
+    await router.push({ path: '/profile', state: { backgroundView: '/settlement' } });
+
+    expect(modalLocation(router, '/leaderboards')).toEqual({
+      path: '/leaderboards',
+      state: { backgroundView: '/settlement' },
+    });
+  });
+
+  it('reuses the existing backgroundView instead of stacking a modal behind a modal (leaderboards -> guild)', async () => {
+    const router = testRouter();
+    await router.push('/settlement');
+    await router.push({ path: '/leaderboards', state: { backgroundView: '/settlement' } });
+
+    expect(modalLocation(router, '/guild')).toEqual({
+      path: '/guild',
+      state: { backgroundView: '/settlement' },
+    });
+  });
+
+  it('has no state when opened from a modal route with no backgroundView of its own (direct load)', async () => {
+    const router = testRouter();
+    await router.push('/leaderboards');
+
+    expect(modalLocation(router, '/guild')).toEqual({ path: '/guild', state: undefined });
   });
 });
 
@@ -65,26 +109,5 @@ describe('reportsLocation', () => {
     await router.push('/reports/report-1');
 
     expect(reportsLocation(router)).toEqual({ path: '/reports', state: undefined });
-  });
-});
-
-describe('cross-modal backgroundView reuse', () => {
-  it('profile → reports keeps the original background rather than the profile route', async () => {
-    const router = testRouter();
-    await router.push('/settlement');
-    await router.push({ path: '/profile', state: { backgroundView: '/settlement' } });
-
-    expect(reportsLocation(router)).toEqual({ path: '/reports', state: { backgroundView: '/settlement' } });
-  });
-
-  it('reports → profile keeps the original background rather than the reports route', async () => {
-    const router = testRouter();
-    await router.push('/settlement');
-    await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
-
-    expect(profileLocation(router, 'floki')).toEqual({
-      path: '/profile/floki',
-      state: { backgroundView: '/settlement' },
-    });
   });
 });

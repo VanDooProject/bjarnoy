@@ -4,11 +4,11 @@
 // the background-route pattern this sits on top of, and profile/
 // ProfileModal.vue for the sibling this mirrors. ReportsView.vue keeps all
 // of the actual reports logic (data loading, the kind filter, the list/
-// detail split); this component only wires it into ModalShell.vue's shared
+// detail split); this component only wires it into RouteModal.vue's shared
 // dialog chrome.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import ModalShell from '../ModalShell.vue';
+import RouteModal from '../modal/RouteModal.vue';
 import ReportsView from '../../views/ReportsView.vue';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -24,13 +24,13 @@ const modalTitle = computed(() => reportsViewRef.value?.detailTitle ?? t('report
 // On a detail, the mobile chevron goes up one level to the list
 // (ReportsView's own backToList — it knows whether that's `router.back()`
 // or a `replace`). On the list itself there's nowhere "up" to go, so it
-// falls through to ModalShell's default: close the whole modal, same as
+// falls through to RouteModal's default: close the whole modal, same as
 // the desktop × button.
 const handleBack = computed(() => (reportsViewRef.value?.isDetail ? reportsViewRef.value.backToList : undefined));
 </script>
 
 <template>
-  <ModalShell :title="modalTitle" testid="reports-modal" :on-back="handleBack">
+  <RouteModal :title="modalTitle" testid="reports-modal" :on-back="handleBack">
     <ReportsView ref="reportsViewRef" />
-  </ModalShell>
+  </RouteModal>
 </template>

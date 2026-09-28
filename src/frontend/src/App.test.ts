@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
-// The background-route pattern (App.vue + lib/modalRoute.ts + components/
-// profile/ProfileModal.vue + components/reports/ReportsModal.vue): opening
-// a profile or the reports inbox pushes a modal route, but the page that was
-// showing before keeps rendering underneath, through the very same
-// <router-view> element — never a second, separately-mounted one — so a
-// persistent renderer (MapView's Pixi canvas in real use) survives the
-// modal opening and closing. AccountRestrictedBanner/DemoModeBadge/
-// ProfileModal/ReportsModal are stubbed out here: this file is only about
+// The background-route pattern (App.vue + lib/profileRoute.ts + components/
+// profile/ProfileModal.vue): opening a profile pushes the own-profile/
+// profile route, but the page that was showing before keeps rendering
+// underneath, through the very same <router-view> element — never a second,
+// separately-mounted one — so a persistent renderer (MapView's Pixi canvas
+// in real use) survives the modal opening and closing. AccountRestrictedBanner/
+// DemoModeBadge/ProfileModal are stubbed out here: this file is only about
 // which route <router-view> renders and whether it remounts, not about
 // those components' own content.
 import { createPinia, setActivePinia } from 'pinia';
@@ -32,6 +31,8 @@ function testRouter(initialPath = '/settlement', { lazySettlement = false } = {}
       { path: '/world', name: 'world', component: WorldStub },
       { path: '/profile', name: 'own-profile', component: WorldStub },
       { path: '/profile/:userName', name: 'profile', component: WorldStub },
+      { path: '/leaderboards', name: 'leaderboards', component: WorldStub },
+      { path: '/guild', name: 'guild', component: WorldStub },
       { path: '/reports', name: 'reports', component: WorldStub },
       { path: '/reports/:reportId', name: 'report-detail', component: WorldStub },
     ],
@@ -44,7 +45,14 @@ function mountApp(router: ReturnType<typeof testRouter>) {
   return mount(App, {
     global: {
       plugins: [router],
-      stubs: { AccountRestrictedBanner: true, DemoModeBadge: true, ProfileModal: true, ReportsModal: true },
+      stubs: {
+        AccountRestrictedBanner: true,
+        DemoModeBadge: true,
+        ProfileModal: true,
+        LeaderboardModal: true,
+        GuildModal: true,
+        ReportsModal: true,
+      },
     },
   });
 }
@@ -89,32 +97,6 @@ describe('App background-route pattern', () => {
     expect(settlementMounted).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the background view mounted, unremounted, while the reports modal opens and closes', async () => {
-    const router = testRouter('/settlement');
-    await router.isReady();
-    const wrapper = mountApp(router);
-    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
-    expect(settlementMounted).toHaveBeenCalledTimes(1);
-
-    // Same navigation reportsLocation() would produce for an in-app "open
-    // reports" click from /settlement.
-    await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
-    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(true);
-    expect(wrapper.findComponent({ name: 'ProfileModal' }).exists()).toBe(false);
-    // The critical assertion: still the same instance, not a fresh mount.
-    expect(settlementMounted).toHaveBeenCalledTimes(1);
-
-    await router.push('/settlement');
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
-    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(false);
-    expect(settlementMounted).toHaveBeenCalledTimes(1);
-  });
-
   it('renders the settlement view behind a directly-loaded profile route (no backgroundView state)', async () => {
     const router = testRouter('/profile/floki');
     await router.isReady();
@@ -136,5 +118,86 @@ describe('App background-route pattern', () => {
     expect(wrapper.text()).not.toContain('[object Promise]');
     expect(wrapper.find('.settlement-stub').exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'ProfileModal' }).exists()).toBe(true);
+  });
+
+  it('renders leaderboards as a modal over the background view, keeping it mounted', async () => {
+    const router = testRouter('/settlement');
+    await router.isReady();
+    const wrapper = mountApp(router);
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+
+    await router.push({ path: '/leaderboards', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'GuildModal' }).exists()).toBe(false);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+
+    await router.push('/settlement');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(false);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders guild as a modal over the background view', async () => {
+    const router = testRouter('/settlement');
+    await router.isReady();
+    const wrapper = mountApp(router);
+
+    await router.push({ path: '/guild', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'GuildModal' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'ProfileModal' }).exists()).toBe(false);
+  });
+
+  it('renders the settlement view behind a directly-loaded leaderboards route (no backgroundView state)', async () => {
+    const router = testRouter('/leaderboards');
+    await router.isReady();
+    const wrapper = mountApp(router);
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(true);
+  });
+
+  it('renders reports as a modal over the background view, keeping it mounted from list to detail', async () => {
+    const router = testRouter('/settlement');
+    await router.isReady();
+    const wrapper = mountApp(router);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+
+    await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(true);
+
+    // List -> detail stays on a modal route, with the same background.
+    await router.push({ path: '/reports/report-1', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(true);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+
+    await router.push('/settlement');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(false);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the settlement view behind a directly-loaded report detail (no backgroundView state)', async () => {
+    const router = testRouter('/reports/report-1');
+    await router.isReady();
+    const wrapper = mountApp(router);
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(true);
   });
 });

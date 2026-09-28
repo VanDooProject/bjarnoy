@@ -11,6 +11,9 @@
     "profile": "Profil",
     "settings": "Einstellungen"
   },
+  "back": "Zurück",
+  "backChevron": "‹",
+  "close": "Schließen",
   "hudBar": {
     "title": "HUD-Leiste",
     "hint": "Gilt nur auf kleinen Bildschirmen.",

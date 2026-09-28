@@ -100,7 +100,7 @@ async function gotoLeaderboards(page: Page) {
 }
 
 test.describe('leaderboards', { tag: '@g2' }, () => {
-  test('is reachable via the HUD nav link from the world map', async ({ page }) => {
+  test('is reachable via the HUD nav link from the world map, opening as a modal over the map', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     // landing-page-defects.md L1 means HudNav itself is no longer mounted
     // pre-founding at all, so founding first is the lightest way to reach
@@ -112,7 +112,20 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     await SettlementPage.found(page);
     await page.getByRole('button', { name: 'Leaderboards' }).click();
     await page.waitForURL('**/leaderboards');
-    await expect(page.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
+
+    // Owner decision: leaderboards opens as a modal over whatever page was
+    // showing before (App.vue's modal-route pattern, lib/modalRoute.ts),
+    // exactly like the profile modal — not a full-page navigation.
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
+    // The settlement map underneath is still mounted, not swapped out.
+    await expect(page.locator('canvas')).toBeVisible();
+
+    // Closing returns to a bare /settlement with no modal left behind.
+    await dialog.locator('.close-button').click();
+    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
   test('shows the no-live-world hint when no world has been joined', async ({ page }) => {

@@ -2,14 +2,19 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { resolveAuthGuard } from './authGuard';
 import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
-// Not lazy-loaded like the other views below: App.vue's ProfileModal.vue/
-// ReportsModal.vue statically import these same components (the profile and
-// reports routes render as a modal over the background route now, not
-// through <router-view> — see App.vue's own comment), so they're always in
-// the main bundle regardless of what these router routes do. Pointing the
-// routes at the same static imports avoids Vite's "ineffective dynamic
-// import" warning for no benefit.
+// Not lazy-loaded like the other views below: App.vue's ProfileModal.vue
+// statically imports this same component (the profile routes render as a
+// modal over the background route now, not through <router-view> — see
+// App.vue's own comment), so it's always in the main bundle regardless of
+// what this router route does. Pointing the route at the same static import
+// avoids Vite's "ineffective dynamic import" warning for no benefit.
 import ProfileView from '../views/ProfileView.vue';
+// Same reasoning as ProfileView above: LeaderboardModal.vue/GuildModal.vue
+// (App.vue's modal-route pattern) statically import these same components,
+// so pointing the routes at the same static imports avoids Vite's
+// "ineffective dynamic import" warning for no benefit.
+import LeaderboardView from '../views/LeaderboardView.vue';
+import GuildView from '../views/GuildView.vue';
 import ReportsView from '../views/ReportsView.vue';
 
 export const router = createRouter({
@@ -76,19 +81,17 @@ export const router = createRouter({
     {
       path: '/leaderboards',
       name: 'leaderboards',
-      component: () => import('../views/LeaderboardView.vue'),
+      component: LeaderboardView,
     },
     {
       path: '/guild',
       name: 'guild',
-      component: () => import('../views/GuildView.vue'),
+      component: GuildView,
     },
     {
       // Issue #40 phase 3: battle-reports inbox, and the same view's detail
       // mode when a report id is in the URL (so a report can be deep-linked/
-      // shared, e.g. from a future notification) — see ReportsView.vue. Now
-      // rendered as a modal over the background route (ReportsModal.vue),
-      // same as profile above.
+      // shared, e.g. from a future notification) — see ReportsView.vue.
       path: '/reports',
       name: 'reports',
       component: ReportsView,

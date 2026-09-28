@@ -2,6 +2,11 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it } from 'vitest';
 import { profileLocation } from './profileRoute';
 
+// profileLocation() is a thin wrapper around modalLocation() (see
+// modalRoute.test.ts for the shared backgroundView-stashing/no-stacking
+// behaviour) — these tests only cover the profile-specific path shape it
+// adds on top: own profile vs. `/profile/:userName`.
+
 function testRouter() {
   return createRouter({
     history: createMemoryHistory(),
@@ -14,14 +19,14 @@ function testRouter() {
 }
 
 describe('profileLocation', () => {
-  it("stashes the caller's current path as the background view, for its own profile", async () => {
+  it("builds '/profile' with the caller's current path stashed as the background view", async () => {
     const router = testRouter();
     await router.push('/settlement');
 
     expect(profileLocation(router)).toEqual({ path: '/profile', state: { backgroundView: '/settlement' } });
   });
 
-  it("stashes the caller's current path as the background view, for someone else's profile", async () => {
+  it("builds '/profile/:userName' for someone else's profile", async () => {
     const router = testRouter();
     await router.push('/settlement');
 
