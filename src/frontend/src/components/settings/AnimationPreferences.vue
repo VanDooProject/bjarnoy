@@ -33,9 +33,10 @@ const statusText = computed(() => t(`profile.graphics.status.${STATUS_KEY[animat
 
 <template>
   <section class="animation-preferences">
-    <h2>{{ t('profile.graphics.title') }}</h2>
+    <h3>{{ t('profile.graphics.title') }}</h3>
     <p class="hint">{{ t('profile.graphics.hint') }}</p>
-    <div class="setting-toggle" role="group" :aria-label="t('profile.graphics.animations')">
+    <p id="map-animations-label" class="field-label">{{ t('profile.graphics.animations') }}</p>
+    <div class="setting-toggle" role="group" aria-labelledby="map-animations-label">
       <button
         v-for="setting in SETTINGS"
         :key="setting"
@@ -53,13 +54,19 @@ const statusText = computed(() => t(`profile.graphics.status.${STATUS_KEY[animat
 </template>
 
 <style scoped>
-.animation-preferences h2 {
+.animation-preferences h3 {
   margin: 0 0 4px;
+  font-size: 16px;
 }
 .hint {
   margin: 0 0 10px;
   font-size: 13px;
   color: var(--muted);
+}
+.field-label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
 }
 .setting-toggle {
   display: flex;

@@ -16,9 +16,10 @@ const POSITIONS: HudBarPosition[] = ['top', 'bottom'];
 
 <template>
   <section class="hud-preferences">
-    <h2>{{ t('profile.hudBar.title') }}</h2>
+    <h3>{{ t('profile.hudBar.title') }}</h3>
     <p class="hint">{{ t('profile.hudBar.hint') }}</p>
-    <div class="position-toggle" role="group" :aria-label="t('profile.hudBar.position')">
+    <p id="hud-bar-position-label" class="field-label">{{ t('profile.hudBar.position') }}</p>
+    <div class="position-toggle" role="group" aria-labelledby="hud-bar-position-label">
       <button
         v-for="position in POSITIONS"
         :key="position"
@@ -35,13 +36,19 @@ const POSITIONS: HudBarPosition[] = ['top', 'bottom'];
 </template>
 
 <style scoped>
-.hud-preferences h2 {
+.hud-preferences h3 {
   margin: 0 0 4px;
+  font-size: 16px;
 }
 .hint {
   margin: 0 0 10px;
   font-size: 13px;
   color: var(--muted);
+}
+.field-label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
 }
 .position-toggle {
   display: flex;
