@@ -175,6 +175,24 @@ watch(
 );
 onBeforeUnmount(() => drawerObserver?.disconnect());
 
+// The drawer's natural content height (measured above) can exceed the
+// actual space below the bar on a short phone — a tall ProfileNudge account
+// section, say — which used to open the drawer at its full natural height
+// regardless, putting its bottom off-screen with no way to scroll to it
+// (nothing here made `.hud-drawer` a scroll container). Capping the drawer
+// at whatever room is actually available fixes that; `.hud-drawer-scroll`
+// below (with `overflow-y: auto`) is what then lets you reach the rest.
+// This same capped value feeds the resting-open offset, the drag clamp AND
+// the backdrop opacity fraction (via `useHudDrawer`/`backdropStyle` below)
+// so all three agree on what "fully open" means.
+const windowInnerHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 0);
+function onWindowResize() { windowInnerHeight.value = window.innerHeight; }
+onMounted(() => window.addEventListener('resize', onWindowResize));
+onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize));
+const availableDrawerHeight = computed(() =>
+  Math.max(0, Math.min(drawerHeight.value, windowInnerHeight.value - hudBarHeightPx.value)),
+);
+
 // The bar itself is no longer always exactly 64px tall on mobile — once the
 // drawer is open, ResourceBar's pills switch to their expanded (desktop-style
 // stacked) rendering, which is taller. Measure the real height so the drawer
@@ -210,7 +228,8 @@ onBeforeUnmount(() => {
   hudBarHeightPx.value = DEFAULT_HUD_BAR_HEIGHT;
 });
 
-const drawer = useHudDrawer(barPosition, drawerHeight);
+const drawerScrollRef = ref<HTMLElement | null>(null);
+const drawer = useHudDrawer(barPosition, availableDrawerHeight, () => drawerScrollRef.value);
 // Finding #12: hands this instance's own `close` to the shared singleton so
 // MapView/LandingView's mutual-exclusion watch (opening the queue drawer
 // should close this one) can reach it — see hudDrawerOpenState.ts's own
@@ -300,7 +319,7 @@ const drawerStyle = computed(() => ({
   [barPosition.value === 'top' ? 'top' : 'bottom']: `${hudBarHeightPx.value}px`,
 }));
 const backdropStyle = computed(() => {
-  const openFraction = drawerHeight.value > 0 ? Math.min(1, drawer.currentOffset() / drawerHeight.value) : 0;
+  const openFraction = availableDrawerHeight.value > 0 ? Math.min(1, drawer.currentOffset() / availableDrawerHeight.value) : 0;
   return {
     opacity: openFraction * 0.6,
     pointerEvents: openFraction > 0 ? ('auto' as const) : ('none' as const),
@@ -438,14 +457,25 @@ const backdropStyle = computed(() => {
          the 8px arm threshold keeps a plain tap on a nav link/resource row
          inside from being mistaken for a drag, exactly as it does on the
          collapsed bar's own resource pills. -->
-    <div
-      :id="drawerContentId"
-      ref="drawerContentRef"
-      class="hud-drawer-content"
-      :inert="!drawer.isOpen.value"
-      :aria-hidden="!drawer.isOpen.value"
-    >
-      <slot name="drawer" :close="drawer.close" :is-open="drawer.isOpen.value" />
+    <!-- Scroll container between the (overflow: hidden, capped-height)
+         `.hud-drawer` and its content: lets a drawer whose natural content
+         is taller than the available space actually be scrolled to, both
+         by wheel/programmatic scrollIntoView (native, for free) and by
+         touch (driven in JS from useHudDrawer's own gesture — see
+         `drawerScrollRef`/onBarPointerMove above and its own comment on
+         `scrollEl`). Not the ResizeObserver's own target — that stays on
+         `.hud-drawer-content` so its contentRect keeps reporting the
+         content's natural (unclipped) height, not this wrapper's capped one. -->
+    <div ref="drawerScrollRef" class="hud-drawer-scroll">
+      <div
+        :id="drawerContentId"
+        ref="drawerContentRef"
+        class="hud-drawer-content"
+        :inert="!drawer.isOpen.value"
+        :aria-hidden="!drawer.isOpen.value"
+      >
+        <slot name="drawer" :close="drawer.close" :is-open="drawer.isOpen.value" />
+      </div>
     </div>
   </div>
 </template>
@@ -780,10 +810,44 @@ const backdropStyle = computed(() => {
   border-bottom: none;
   border-top: 1px solid var(--panel-border);
   box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.35);
+}
+.hud-drawer-scroll {
+  /* Always exactly the drawer's own (capped, possibly mid-drag) height —
+     `.hud-drawer`'s `overflow: hidden` stays the outer clip, this is what
+     actually scrolls. Plain top-anchored `scrollTop` semantics (0 = start)
+     regardless of docking edge on purpose — `column-reverse` (used directly
+     on `.hud-drawer` before this scroll wrapper existed, purely to anchor a
+     shorter-than-available bottom-docked drawer's content against the bar)
+     would flip what `scrollTop` even means in a standards-compliant
+     browser, which useHudDrawer's touch-scroll math (`splitDrawerDragDelta`)
+     assumes is the same for both edges. `overscroll-behavior: contain`
+     keeps an already-at-the-end wheel/touch scroll from bubbling into a
+     page scroll behind it. */
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.hud-drawer--bottom .hud-drawer-scroll {
+  /* A flex column (not `column-reverse`, which would flip `scrollTop`
+     semantics — see the comment above) so `.hud-drawer-content`'s own
+     `margin-top: auto` below can push it. */
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
 }
 .hud-drawer-content {
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.hud-drawer--bottom .hud-drawer-content {
+  /* Restores the bottom-docked drawer's own anchoring — the content used to
+     sit flush against the bar (the edge nearest it, screen bottom) rather
+     than the drawer's top, via `column-reverse` directly on `.hud-drawer`
+     before the scroll wrapper above existed. `margin-top: auto` reproduces
+     that for a shorter-than-available drawer (mid-drag, or resting open
+     with room to spare) while staying scrollable once the content actually
+     overflows: unlike `justify-content: flex-end` on the scroll container
+     (which pushes overflowing content's own start past the scrollable
+     area's top, making it unreachable), a margin on the content itself only
+     ever collapses to 0 once there's no spare space left to push through. */
+  margin-top: auto;
 }
 </style>
