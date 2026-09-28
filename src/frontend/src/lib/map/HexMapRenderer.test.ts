@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   attentionPulseFrame,
+  fadeAlphaAt,
   hoverSubjectFor,
   isWaypointTap,
   landfallBurstFrames,
@@ -476,6 +477,39 @@ describe('attentionPulseFrame', () => {
     expect(mid).toBeGreaterThan(quarter);
     expect(mid).toBeCloseTo(1);
     expect(threeQuarters).toBeLessThan(mid);
+  });
+});
+
+// forceRebuild's opt-in per-tile cross-fade (`syncSpriteLayer`'s ghost/
+// fade-in bookkeeping) — the actual sprite/Pixi side needs a mounted
+// canvas/Application this test environment can't provide (see the mobile
+// army dispatch comment just below), but the timing math itself doesn't.
+describe('fadeAlphaAt', () => {
+  it('an "out" fade (a ghost) is full alpha until the delay, then 1 -> 0 over the duration', () => {
+    expect(fadeAlphaAt(0, 100, 200, 'out')).toBe(1);
+    expect(fadeAlphaAt(100, 100, 200, 'out')).toBe(1);
+    expect(fadeAlphaAt(150, 100, 200, 'out')).toBeCloseTo(0.75);
+    expect(fadeAlphaAt(200, 100, 200, 'out')).toBeCloseTo(0.5);
+    expect(fadeAlphaAt(300, 100, 200, 'out')).toBeUndefined();
+  });
+
+  it('an "in" fade (the new sprite) is 0 until the delay, then 0 -> 1 over the duration', () => {
+    expect(fadeAlphaAt(0, 100, 200, 'in')).toBe(0);
+    expect(fadeAlphaAt(100, 100, 200, 'in')).toBe(0);
+    expect(fadeAlphaAt(150, 100, 200, 'in')).toBeCloseTo(0.25);
+    expect(fadeAlphaAt(200, 100, 200, 'in')).toBeCloseTo(0.5);
+    expect(fadeAlphaAt(300, 100, 200, 'in')).toBeUndefined();
+  });
+
+  it('a zero delay starts the fade immediately', () => {
+    expect(fadeAlphaAt(0, 0, 100, 'out')).toBe(1);
+    expect(fadeAlphaAt(50, 0, 100, 'out')).toBeCloseTo(0.5);
+    expect(fadeAlphaAt(100, 0, 100, 'out')).toBeUndefined();
+  });
+
+  it('is undefined (done) the instant elapsed time reaches delay + duration, not just past it', () => {
+    expect(fadeAlphaAt(300, 100, 200, 'out')).toBeUndefined();
+    expect(fadeAlphaAt(299.999, 100, 200, 'out')).toBeGreaterThan(0);
   });
 });
 

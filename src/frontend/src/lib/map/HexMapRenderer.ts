@@ -34,7 +34,7 @@
 // its whole tile, props included.
 import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexesInRadius, neighbors } from '../hex/coords';
+import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -395,6 +395,19 @@ export interface HexMapRendererOptions {
    * branch of `onPointerMove`, and `previewFitZoom`.
    */
   lockCamera?: boolean;
+  /**
+   * Only meaningful alongside `lockCamera`: lets the page itself scroll
+   * under a wheel/touch gesture over the canvas instead of the renderer
+   * eating it for camera zoom/pan (which `lockCamera` already disables
+   * anyway — see `zoomBy`'s own doc comment). The landing page's locked
+   * preview is a small island beside hero copy with no reason to block page
+   * scroll; the Wasted Lands docs page's own locked island sits inline in a
+   * scrolling article and needs the opposite of `SettlementCanvas.vue`'s
+   * `touch-action: none` (its host sets `touch-action: pan-y` instead) —
+   * this is that same intent on the renderer's own wheel/touch handlers,
+   * which don't otherwise know or care about the host's CSS.
+   */
+  allowPageScroll?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -544,6 +557,8 @@ export type HoverSubject =
 export interface HoverInfo {
   screenX: number;
   screenY: number;
+  /** The hex this hover is over — e.g. the Wasted Lands docs page's renderer-driven island (WastedIsland.vue) needs the coordinate itself, not just the tooltip's rendered subject/stats, to look up its own caption text. */
+  coord: AxialCoord;
   subject: HoverSubject;
   // Present whenever the tile belongs to a settlement (building or claimed
   // terrain); absent for unclaimed ground.
@@ -665,6 +680,26 @@ export function attentionPulseFrame(nowMs: number, startedAtMs: number): number 
   const t = nowMs - startedAtMs;
   if (t < 0 || t >= ATTENTION_PULSE_DURATION_MS) return 0;
   return Math.sin((t / ATTENTION_PULSE_DURATION_MS) * Math.PI);
+}
+
+/**
+ * A delayed fade's alpha at `elapsedMs` into it — the pure timing math
+ * behind `forceRebuild`'s opt-in per-tile cross-fade (`syncSpriteLayer`'s
+ * ghost/fade-in bookkeeping, advanced from `advanceTransitionFades`).
+ * `'out'` is a ghost (an old texture standing in for a hex whose sprite just
+ * swapped or was removed): full alpha until `delayMs`, then 1→0 over
+ * `durationMs`. `'in'` is the opposite (the hex's own new sprite catching
+ * up): 0 until `delayMs`, then 0→1. Returns `undefined` once the fade is
+ * fully finished (rather than clamping to its resting alpha) so the caller
+ * can tell "still animating, happens to be at the boundary value" from
+ * "done — remove/finalize this" without a separate elapsed-vs-total check
+ * of its own.
+ */
+export function fadeAlphaAt(elapsedMs: number, delayMs: number, durationMs: number, direction: 'in' | 'out'): number | undefined {
+  const t = elapsedMs - delayMs;
+  if (t <= 0) return direction === 'in' ? 0 : 1;
+  if (t >= durationMs) return undefined;
+  return direction === 'in' ? t / durationMs : 1 - t / durationMs;
 }
 
 // One tile-art size for both views — see the module comment above.
@@ -1192,6 +1227,43 @@ export class HexMapRenderer {
   // (one hex's top layer can have both a base/rest sprite *and* an overlay
   // sprite alive at once).
   private topOverlayPool: Sprite[] = [];
+  /**
+   * Set by `forceRebuild({ transition })` right before the one `rebuildAll`
+   * it triggers, and cleared right after — `syncSpriteLayer` (both layers,
+   * within that single rebuild) reads it to decide whether a hex's texture
+   * swap should cross-fade instead of snapping. `null` outside that window
+   * means every other rebuild (camera pan/zoom, a debug-flag flip, ...)
+   * behaves exactly as before this existed. See `forceRebuild`'s own doc
+   * comment for why this lives on the instance rather than being threaded
+   * through as a parameter: `rebuildAll` calls into `rebuildTerrain` calls
+   * into `syncSpriteLayer` through several more layers of "just rebuild
+   * everything" plumbing that has no other reason to know about a
+   * transition at all.
+   */
+  private pendingTransition: { durationMs: number; delayMs?: (coord: AxialCoord) => number } | null = null;
+  /**
+   * Old-texture "ghost" sprites spawned by a transitioned `syncSpriteLayer`
+   * for a hex whose sprite is changing texture or being removed — see
+   * `spawnTransitionGhost`. Advanced once a tick (`advanceTransitionFades`,
+   * called from `onTick` alongside `advanceTopAnimations`) independently of
+   * whether a rebuild ran that frame, the same reason clip playback is.
+   * Always fresh `Sprite` instances (one per swap), so no pooling/dedupe
+   * concern the way `fadeIns` below has.
+   */
+  private transitionGhosts: { sprite: Sprite; container: Container; delayMs: number; durationMs: number; elapsedMs: number }[] =
+    [];
+  /**
+   * A transitioned `syncSpriteLayer`'s top-layer fade-INs — unlike a ghost,
+   * this is the hex's own live, reused/pooled sprite (its new texture is
+   * already showing; only its alpha ramps 0→1), so it's keyed by that
+   * sprite object rather than appended, so a second rebuild's fade-in for
+   * the same still-fading sprite replaces the first instead of fighting it,
+   * and so a sprite recycled back into `layer.pool` mid-fade (see
+   * `syncSpriteLayer`'s removal loop) can have its entry dropped rather
+   * than going on to animate whatever hex that pooled sprite gets reused
+   * for next.
+   */
+  private fadeIns = new Map<Sprite, { delayMs: number; durationMs: number; elapsedMs: number }>();
   private terrainFlat = new Graphics();
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
@@ -1745,6 +1817,7 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.advanceTopAnimations(this.app!.ticker.deltaMS);
+    this.advanceTransitionFades(this.app!.ticker.deltaMS);
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -1929,6 +2002,7 @@ export class HexMapRenderer {
   }
 
   private onTouchStart = (e: TouchEvent) => {
+    if (this.options.allowPageScroll) return;
     e.preventDefault();
   };
 
@@ -2331,6 +2405,7 @@ export class HexMapRenderer {
       return {
         screenX: screen.x,
         screenY: screen.y,
+        coord: { q: tile.q, r: tile.r },
         subject,
         owner: ownerInfo,
         stats,
@@ -2344,6 +2419,7 @@ export class HexMapRenderer {
     return {
       screenX: screen.x,
       screenY: screen.y,
+      coord: { q: tile.q, r: tile.r },
       subject,
       owner: ownerInfo,
     };
@@ -2367,6 +2443,7 @@ export class HexMapRenderer {
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
   private onWheel = (e: WheelEvent) => {
+    if (this.options.allowPageScroll) return;
     e.preventDefault();
     if (this.interactionLocked) return;
     const canvas = this.app?.canvas;
@@ -3321,11 +3398,26 @@ export class HexMapRenderer {
     >,
   ) {
     const isTopLayer = layer === this.terrainTop;
+    const transition = this.pendingTransition;
     for (const [key, { texture, coord, crop, anim }] of entries) {
       let sprite = layer.active.get(key);
       const isNew = !sprite;
+      // Snapshot this hex's *previous* frame — texture, box, overlay — before
+      // any of it gets overwritten below, so a transitioned rebuild can spawn
+      // a ghost of exactly what used to be here. Cheap to always capture
+      // (a few field reads) even when no transition is pending, rather than
+      // threading an extra "do we need this" branch through the update logic
+      // that follows.
+      const prevTexture = sprite?.texture;
+      const prevBox = sprite ? { x: sprite.position.x, y: sprite.position.y, width: sprite.width, height: sprite.height, zIndex: sprite.zIndex } : undefined;
+      const prevOverlay = isTopLayer ? this.topAnimState.get(key)?.overlay : undefined;
+      const prevOverlayBox = prevOverlay
+        ? { texture: prevOverlay.texture, x: prevOverlay.position.x, y: prevOverlay.position.y, width: prevOverlay.width, height: prevOverlay.height, zIndex: prevOverlay.zIndex }
+        : undefined;
+
       if (!sprite) {
         sprite = layer.pool.pop() ?? new Sprite();
+        sprite.alpha = 1; // A pooled sprite may have been mid-fade when it was last returned (see the removal loop below) — always come back opaque.
         layer.active.set(key, sprite);
       }
       if (isTopLayer) {
@@ -3347,8 +3439,9 @@ export class HexMapRenderer {
       // its own doc comment), so +0.5 always lands strictly between this
       // hex's own key and the next one's, never colliding with another
       // hex's sprite either way.
+      let overlay: Sprite | undefined;
       if (isTopLayer) {
-        const overlay = this.topAnimState.get(key)?.overlay;
+        overlay = this.topAnimState.get(key)?.overlay;
         if (overlay) {
           overlay.width = sprite.width;
           overlay.height = sprite.height;
@@ -3357,16 +3450,152 @@ export class HexMapRenderer {
           if (!overlay.parent) layer.container.addChild(overlay);
         }
       }
+
+      if (transition && transition.durationMs > 0) {
+        const delayMs = transition.delayMs?.(coord) ?? 0;
+        const textureChanged = !isNew && prevTexture !== sprite.texture;
+        if ((isNew || textureChanged) && isTopLayer) {
+          // Base-layer sprites stay fully opaque throughout — the ghost
+          // above them (spawned below, when this is a change rather than a
+          // brand-new hex) is what covers their swap. Only the top layer,
+          // which draws over the ghost, needs its own new/changed sprite to
+          // fade in rather than pop in at full opacity.
+          sprite.alpha = 0;
+          this.fadeIns.set(sprite, { delayMs, durationMs: transition.durationMs, elapsedMs: 0 });
+        }
+        if (textureChanged && prevTexture && prevBox) {
+          this.spawnTransitionGhost(layer.container, prevTexture, prevBox, delayMs, transition.durationMs);
+        }
+        // The overlay is its own sprite with its own texture lifecycle
+        // (syncTopAnim only ever touches it on a *new* clip, never on a
+        // continuing one — see that method's own doc comment), so "did it
+        // change" is read off its texture rather than reusing textureChanged
+        // above, which only tracks the hex's main sprite.
+        if (prevOverlayBox && (!overlay || overlay.texture !== prevOverlayBox.texture)) {
+          this.spawnTransitionGhost(layer.container, prevOverlayBox.texture, prevOverlayBox, delayMs, transition.durationMs);
+        }
+      }
     }
 
     for (const [key, sprite] of layer.active) {
       if (entries.has(key)) continue;
+      if (transition && transition.durationMs > 0) {
+        const delayMs = transition.delayMs?.(this.coordOfKey(key)) ?? 0;
+        this.spawnTransitionGhost(
+          layer.container,
+          sprite.texture,
+          { x: sprite.position.x, y: sprite.position.y, width: sprite.width, height: sprite.height, zIndex: sprite.zIndex },
+          delayMs,
+          transition.durationMs,
+        );
+        const overlay = isTopLayer ? this.topAnimState.get(key)?.overlay : undefined;
+        if (overlay) {
+          this.spawnTransitionGhost(
+            layer.container,
+            overlay.texture,
+            { x: overlay.position.x, y: overlay.position.y, width: overlay.width, height: overlay.height, zIndex: overlay.zIndex },
+            delayMs,
+            transition.durationMs,
+          );
+        }
+      }
       layer.container.removeChild(sprite);
       layer.pool.push(sprite);
       layer.active.delete(key);
+      this.fadeIns.delete(sprite);
+      sprite.alpha = 1;
       if (isTopLayer) this.releaseTopAnim(key);
     }
     layer.container.sortChildren();
+  }
+
+  /** `layer.active`'s own coordinate keys are `coordKey`'s string form — used only by `syncSpriteLayer`'s removal loop to recover a coordinate for `transition.delayMs`, which every other call site already has as a real `AxialCoord`. */
+  private coordOfKey(key: string): AxialCoord {
+    return parseKey(key);
+  }
+
+  /**
+   * Spawns a temporary sprite showing `texture` at `box`'s exact position/
+   * size/zIndex (offset +0.25, so it sits just above whatever hex sprite
+   * used to be there — `isoDepthKey`'s own doc comment: integers spaced 1
+   * apart, so this never collides with a different hex's sprite), full
+   * alpha until `delayMs` elapses, then fading to 0 over `durationMs` before
+   * being removed and destroyed. Never destroys `texture` itself — it's a
+   * shared atlas texture, not owned by this sprite (`Sprite.destroy`'s
+   * default already leaves it alone, but see `advanceTransitionFades` for
+   * where that destroy call actually happens).
+   */
+  private spawnTransitionGhost(
+    container: Container,
+    texture: Texture,
+    box: { x: number; y: number; width: number; height: number; zIndex: number },
+    delayMs: number,
+    durationMs: number,
+  ) {
+    const ghost = new Sprite(texture);
+    ghost.position.set(box.x, box.y);
+    ghost.width = box.width;
+    ghost.height = box.height;
+    ghost.zIndex = box.zIndex + 0.25;
+    ghost.alpha = 1;
+    container.addChild(ghost);
+    this.transitionGhosts.push({ sprite: ghost, container, delayMs, durationMs, elapsedMs: 0 });
+  }
+
+  /**
+   * Advances every in-flight transition ghost/fade-in by `deltaMs` — called
+   * once per app tick (`onTick`, alongside `advanceTopAnimations`)
+   * regardless of whether a rebuild ran this frame, the same reason clip
+   * playback is. A ghost past its own delay+duration is removed from its
+   * container and destroyed (its texture is a shared atlas texture, left
+   * alone by `Sprite.destroy()`'s own default); a completed fade-in just
+   * snaps to alpha 1 and drops its bookkeeping entry.
+   */
+  private advanceTransitionFades(deltaMs: number) {
+    if (this.transitionGhosts.length > 0) {
+      const remaining: typeof this.transitionGhosts = [];
+      for (const g of this.transitionGhosts) {
+        g.elapsedMs += deltaMs;
+        const alpha = fadeAlphaAt(g.elapsedMs, g.delayMs, g.durationMs, 'out');
+        if (alpha === undefined) {
+          g.container.removeChild(g.sprite);
+          g.sprite.destroy();
+          continue;
+        }
+        g.sprite.alpha = alpha;
+        remaining.push(g);
+      }
+      this.transitionGhosts = remaining;
+    }
+    if (this.fadeIns.size > 0) {
+      for (const [sprite, f] of this.fadeIns) {
+        f.elapsedMs += deltaMs;
+        const alpha = fadeAlphaAt(f.elapsedMs, f.delayMs, f.durationMs, 'in');
+        if (alpha === undefined) {
+          sprite.alpha = 1;
+          this.fadeIns.delete(sprite);
+          continue;
+        }
+        sprite.alpha = alpha;
+      }
+    }
+  }
+
+  /**
+   * Immediately finishes (snap-removes/snaps to alpha 1) every in-flight
+   * transition ghost/fade-in — `forceRebuild` calls this before starting a
+   * *new* transition, so an interrupted cross-fade never leaves a stale
+   * ghost sprite behind or a ghost/fade-in still driven by a delay/duration
+   * pair from a rebuild that's no longer the current one.
+   */
+  private finishPendingTransitionFades() {
+    for (const g of this.transitionGhosts) {
+      g.container.removeChild(g.sprite);
+      g.sprite.destroy();
+    }
+    this.transitionGhosts = [];
+    for (const sprite of this.fadeIns.keys()) sprite.alpha = 1;
+    this.fadeIns.clear();
   }
 
   /** Drops `key`'s `topAnimState` entry (if any), returning its overlay sprite (if any) to `topOverlayPool` first. */
@@ -3874,9 +4103,26 @@ export class HexMapRenderer {
    * threshold (see scheduleCull), so something that changes rendering
    * without moving the camera (e.g. FogDebugPanel flipping a fogDebugFlags
    * toggle) has no other way to make the change visible immediately.
+   *
+   * `transition`, when given, makes the rebuild this call triggers
+   * cross-fade each hex's texture swap instead of snapping it — see
+   * `pendingTransition`/`syncSpriteLayer`'s own doc comments for the actual
+   * ghost/fade-in mechanics. It's a one-shot: set right before `rebuildAll`
+   * and cleared right after, so it only ever applies to *this* rebuild, not
+   * whatever pan/zoom-driven rebuild happens to run next. This is
+   * deliberately generic (any caller can ask for a cross-fade, with any
+   * per-coordinate delay curve) rather than named after its first user —
+   * the Wasted Lands docs page's blight slider today, plausibly an in-game
+   * blight-spreading animation later.
    */
-  forceRebuild() {
+  forceRebuild(opts?: { transition?: { durationMs: number; delayMs?: (coord: AxialCoord) => number } }) {
     if (!this.app) return;
+    // An interrupted transition (this rebuild's own transition, or a plain
+    // rebuild landing mid-fade) must never leave a stale ghost driven by a
+    // delay/duration pair from a rebuild that's no longer the current one —
+    // finish whatever was in flight before (maybe) starting a new one.
+    this.finishPendingTransitionFades();
+    this.pendingTransition = opts?.transition && opts.transition.durationMs > 0 ? opts.transition : null;
     // The water mask is normally only re-baked when the viewport leaves the
     // region it covers (rebuildAll), since terrain is deterministic from the
     // seed and a hex never stops being land. A *forced* rebuild is the one
@@ -3887,6 +4133,7 @@ export class HexMapRenderer {
     this.waterMaskRegionBuilt = null;
     this.maskBaker.discardPending();
     this.rebuildAll();
+    this.pendingTransition = null;
   }
 
   /**
