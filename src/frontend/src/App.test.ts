@@ -9,7 +9,7 @@
 // which route <router-view> renders and whether it remounts, not about
 // those components' own content.
 import { createPinia, setActivePinia } from 'pinia';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
@@ -22,11 +22,12 @@ const SettlementStub = {
 };
 const WorldStub = { name: 'WorldStub', template: '<div class="world-stub" />' };
 
-function testRouter(initialPath = '/settlement') {
+function testRouter(initialPath = '/settlement', { lazySettlement = false } = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/settlement', name: 'settlement', component: SettlementStub },
+      // The real router loads MapView lazily; `lazySettlement` mirrors that.
+      { path: '/settlement', name: 'settlement', component: lazySettlement ? () => Promise.resolve(SettlementStub) : SettlementStub },
       { path: '/world', name: 'world', component: WorldStub },
       { path: '/profile', name: 'own-profile', component: WorldStub },
       { path: '/profile/:userName', name: 'profile', component: WorldStub },
@@ -90,6 +91,20 @@ describe('App background-route pattern', () => {
     await router.isReady();
     const wrapper = mountApp(router);
 
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ProfileModal' }).exists()).toBe(true);
+  });
+
+  it('loads a lazy settlement route before rendering it behind a directly-loaded profile', async () => {
+    // Regression: resolve() leaves a lazy route's `() => import()` loader in
+    // place, and <router-view> rendered its Promise as the text
+    // "[object Promise]" behind the modal.
+    const router = testRouter('/profile/floki', { lazySettlement: true });
+    await router.isReady();
+    const wrapper = mountApp(router);
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('[object Promise]');
     expect(wrapper.find('.settlement-stub').exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'ProfileModal' }).exists()).toBe(true);
   });

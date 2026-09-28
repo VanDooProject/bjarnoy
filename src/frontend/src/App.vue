@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useRoute, useRouter, type RouteLocationNormalizedLoaded } from 'vue-router';
+import { computed, shallowRef, watch } from 'vue';
+import { loadRouteLocation, useRoute, useRouter, type RouteLocationNormalizedLoaded } from 'vue-router';
 import AccountRestrictedBanner from './components/AccountRestrictedBanner.vue';
 import DemoModeBadge from './components/DemoModeBadge.vue';
 import ProfileModal from './components/profile/ProfileModal.vue';
@@ -33,27 +33,58 @@ const isProfileRoute = computed(() => route.name === 'own-profile' || route.name
 // swapping which element is in the template (rather than just which route a
 // prop points a stable element at) would remount it every time the modal
 // opens or closes. See App.test.ts for the regression this guards.
-const backgroundRoute = computed(() => {
-  // Read reactively via `route.fullPath` so this recomputes on every
-  // navigation, including ones that only change history state (pushing the
-  // profile route itself doesn't change any other route's own fullPath).
-  void route.fullPath;
+function backgroundLocation() {
   // Via the router's own history object, not the global `window.history` —
   // works the same way against a `createMemoryHistory` router in tests. See
   // lib/profileRoute.ts's own comment.
   const state = router.options.history.state as { backgroundView?: unknown };
   const backgroundView = typeof state.backgroundView === 'string' ? state.backgroundView : null;
-  // `resolve()`'s return type allows an unmatched `name: null` in general,
-  // but every path this ever resolves (a stashed backgroundView, or the
-  // '/settlement' fallback) is a real, named route — `<router-view>`'s own
-  // `route` prop just wants the narrower, already-matched shape.
-  return router.resolve(backgroundView ?? '/settlement') as RouteLocationNormalizedLoaded;
-});
+  return router.resolve(backgroundView ?? '/settlement');
+}
+
+// A route's lazy `component: () => import(...)` is only swapped for the
+// loaded component once a real navigation to it has run. `resolve()` does
+// no loading, so on a direct load of a profile URL the '/settlement'
+// background still holds the bare loader function — and <router-view>
+// would render that function's Promise as text. `loadRouteLocation` loads
+// it first. A background we navigated away from is already loaded, and is
+// taken synchronously: waiting even one tick would briefly point the
+// <router-view> at the profile route itself and remount the page under it.
+function isLoaded(location: RouteLocationNormalizedLoaded | ReturnType<typeof router.resolve>) {
+  return location.matched.every((record) =>
+    Object.values(record.components ?? {}).every((component) => typeof component !== 'function'),
+  );
+}
+
+const backgroundRoute = shallowRef<RouteLocationNormalizedLoaded | null>(null);
+watch(
+  // Re-read on every navigation, including ones that only change history
+  // state (pushing the profile route itself doesn't change any other
+  // route's own fullPath).
+  () => route.fullPath,
+  () => {
+    if (!isProfileRoute.value) return;
+    const location = backgroundLocation();
+    if (isLoaded(location)) {
+      // `resolve()`'s return type allows an unmatched `name: null` in
+      // general, but every path this ever resolves (a stashed
+      // backgroundView, or the '/settlement' fallback) is a real, named
+      // route — `<router-view>`'s own `route` prop wants the matched shape.
+      backgroundRoute.value = location as RouteLocationNormalizedLoaded;
+      return;
+    }
+    void loadRouteLocation(location).then((loaded) => {
+      if (isProfileRoute.value) backgroundRoute.value = loaded;
+    });
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <AccountRestrictedBanner />
   <DemoModeBadge />
-  <router-view :route="isProfileRoute ? backgroundRoute : undefined" />
+  <!-- Nothing behind the modal until a directly-loaded background has loaded. -->
+  <router-view v-if="!isProfileRoute || backgroundRoute" :route="isProfileRoute ? backgroundRoute! : undefined" />
   <ProfileModal v-if="isProfileRoute" />
 </template>
