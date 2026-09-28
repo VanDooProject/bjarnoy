@@ -61,7 +61,9 @@ import {
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
+  loadAnimAtlases,
   loadBuildingAtlases,
+  loadPackAnimAtlases,
   loadPackAtlases,
   loadTerrainAtlas,
   mergeTileTextures,
@@ -71,12 +73,15 @@ import {
   topAnimFor,
   topAnimTextures,
   topTextureFor,
+  unloadAnimAtlases,
+  unloadPackAnimAtlases,
   type TileAnimClip,
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
+import { animationPreference } from '../perf/animationPreference';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -1149,6 +1154,23 @@ export function waypointGrabRadiusPx(pointerType: string | undefined): number {
 export function isWaypointTap(startCoordKey: string, lastCoordKey: string, movedPx: number): boolean {
   return lastCoordKey === startCoordKey && movedPx < DRAG_CLICK_SLOP_PX;
 }
+
+/**
+ * The largest per-tick delta `advanceTopAnimations` is ever fed, in ms —
+ * `onTick` runs this over `app.ticker.deltaMS` before handing it to
+ * animation playback. Pixi's own ticker already caps `deltaMS` at 100 ms
+ * (its default `minFPS` of 10) on ordinary long frames, but pausing the
+ * ticker outright on `visibilitychange` (see mount()/destroy()) rather than
+ * just leaving it running in a backgrounded tab is worth an explicit,
+ * tested clamp here too: it stops a building clip from silently jumping
+ * several frames on the very first tick after a tab comes back, regardless
+ * of whether Pixi's own internal cap is present, tuned differently, or
+ * changed in a future Pixi version.
+ */
+export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
+  return Math.min(deltaMs, maxMs);
+}
+
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
@@ -1450,6 +1472,31 @@ export class HexMapRenderer {
    * triggering while the settlement view is already open) still picks it up.
    */
   private wastedPackLoading: Promise<void> | null = null;
+  /**
+   * Set once the frozen atlas pack's load has been kicked off — same
+   * once-per-instance guard as `wastedPackLoading`, see `maybeLoadFrozenPack`.
+   */
+  private frozenPackLoading: Promise<void> | null = null;
+
+  /**
+   * Whether `buildings-anim` art should be loaded/drawn — set from outside
+   * via `setAnimationsEnabled` (see `useHexMapRenderer`'s wiring to
+   * `animationPreference.effective`), synced onto `this.textures`/
+   * `topAnimState` by `syncAnimationAtlases` (called from every `rebuildAll`,
+   * same pattern as `maybeLoadWastedPack`). `animCoreReady`/`wastedAnimReady`
+   * track which anim atlases are actually merged in right now, so
+   * `syncAnimationAtlases` only loads/unloads each one once per toggle.
+   */
+  private animationsEnabled = false;
+  private animCoreReady = false;
+  private wastedAnimReady = false;
+  /**
+   * Bumped on every disable. A load kicked off under an older generation
+   * merges nothing when it resolves: off -> on while the first load is still
+   * in flight would otherwise merge that first load's textures, which the
+   * disable in between has already queued for `Assets.unload`.
+   */
+  private animGeneration = 0;
 
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
@@ -1695,6 +1742,7 @@ export class HexMapRenderer {
     // compatibility click, see RingMenu.vue's onBuildingTouchStart) removes
     // the ghost click at the source instead of trying to ignore it later.
     canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
 
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large) building atlas at all —
@@ -1816,8 +1864,16 @@ export class HexMapRenderer {
 
   private onTick = () => {
     this.options.worldModel.tick();
-    this.advanceTopAnimations(this.app!.ticker.deltaMS);
-    this.advanceTransitionFades(this.app!.ticker.deltaMS);
+    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    // Feeds the 'auto' animation governor (animationPreference.ts) — in both
+    // modes, not just settlement: the governor is measuring this device's
+    // general Pixi frame rate (worldModel.tick, fog, markers, the camera
+    // transform), not specifically building-clip cost, so a world-map
+    // session still warms up a useful measurement rather than starting from
+    // zero the moment the player first opens a settlement. Dropped while the
+    // tab is hidden by animationPreference.feedFrame itself.
+    animationPreference.feedFrame(performance.now(), this.app!.ticker.deltaMS);
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -2000,6 +2056,26 @@ export class HexMapRenderer {
       }
     }
   }
+
+  /**
+   * A backgrounded tab still runs Pixi's `requestAnimationFrame`-driven
+   * ticker (rAF just gets throttled by the browser, not stopped), so
+   * building clips, the marker layer's fade and worldModel.tick() kept
+   * doing real work for a tab nobody could see. Stopping the ticker
+   * outright on `document.hidden` (mount()/destroy() add/remove this) and
+   * restarting it on return removes that cost entirely rather than just
+   * slowing it down — deliberately keyed off tab visibility, not window
+   * focus/blur: an unfocused-but-visible tab (e.g. a second monitor) must
+   * keep animating normally.
+   */
+  private onVisibilityChange = () => {
+    if (!this.app) return;
+    if (document.hidden) {
+      this.app.ticker.stop();
+    } else {
+      this.app.ticker.start();
+    }
+  };
 
   private onTouchStart = (e: TouchEvent) => {
     if (this.options.allowPageScroll) return;
@@ -2705,10 +2781,8 @@ export class HexMapRenderer {
    * catch the reveal happening *while* the map is already open, e.g. the
    * endboss triggering mid-session) costs nothing beyond the first call.
    *
-   * The frozen pack (`frozenIslesEnabled`, a world flag landing in a
-   * separate backend PR) plugs in here the same way once it exists — one
-   * more `if (worldModel.isFrozenRevealed() && !this.frozenPackLoading) ...`
-   * alongside this.
+   * The frozen pack (`frozenIslesEnabled`, a world flag) plugs in the same
+   * way right below — `maybeLoadFrozenPack`.
    */
   private maybeLoadWastedPack() {
     if (this.options.mode !== 'settlement' || !this.textures) return;
@@ -2726,10 +2800,135 @@ export class HexMapRenderer {
       });
   }
 
+  /**
+   * Turns `buildings-anim` art on/off, per the `animationPreference`
+   * singleton (see `useHexMapRenderer`'s wiring). Just records the wanted
+   * state and defers the actual load/unload to `syncAnimationAtlases`
+   * (already run from every `rebuildAll`) so it applies once `this.textures`
+   * exists and covers a later mode switch into settlement or wasted-pack
+   * reveal the same way `maybeLoadWastedPack` does — rather than duplicating
+   * those readiness checks here.
+   */
+  setAnimationsEnabled(enabled: boolean) {
+    if (this.animationsEnabled === enabled) return;
+    this.animationsEnabled = enabled;
+    // rebuildAll() itself calls syncAnimationAtlases() (see below) — routing
+    // through it here too, rather than calling that directly, is what makes
+    // a toggle that arrives before this.textures exists yet safe: this is a
+    // no-op then (same early-out rebuildAll always has), and the *later*
+    // rebuildAll once texture loading finishes picks up the flag change.
+    this.rebuildAll();
+  }
+
+  /**
+   * Loads or releases `buildings-anim`/`wasted-buildings-anim` (see
+   * `textures.ts`'s `loadAnimAtlases`/`loadPackAnimAtlases` and their
+   * `unload*` counterparts) to match `this.animationsEnabled`. World mode
+   * never draws tile art at all (`WORLD_TERRAIN_FILL`), so this is a no-op
+   * there — same guard `maybeLoadWastedPack` uses.
+   *
+   * Disabling merely drops `animTop` from `this.textures` and rebuilds:
+   * `topAnimFor` then resolves undefined for every tile, and the ordinary
+   * per-tile draw path's own `syncTopAnim` call (see its doc comment) is
+   * what actually puts each sprite back on its static texture and returns
+   * any pooled overlay sprite — there is no separate cleanup to do here.
+   * The atlas unload itself only has to happen after that rebuild has run
+   * (enqueued via `rebuildAll`'s caller), never before, or a still-drawing
+   * sprite would be pointing at an already-destroyed texture.
+   */
+  private syncAnimationAtlases() {
+    if (this.options.mode !== 'settlement' || !this.textures) return;
+
+    if (this.animationsEnabled) {
+      const generation = this.animGeneration;
+      if (!this.animCoreReady) {
+        this.animCoreReady = true;
+        loadAnimAtlases()
+          .then((anim) => {
+            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+            this.textures = mergeTileTextures(this.textures, anim);
+            this.rebuildAll();
+          })
+          .catch((err) => {
+            this.animCoreReady = false;
+            console.warn('Animation atlas failed to load; buildings stay on static art', err);
+          });
+      }
+      if (!this.wastedAnimReady && this.options.worldModel.isWastedRevealed()) {
+        this.wastedAnimReady = true;
+        loadPackAnimAtlases('wasted')
+          .then((anim) => {
+            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+            this.textures = mergeTileTextures(this.textures, anim);
+            this.rebuildAll();
+          })
+          .catch((err) => {
+            this.wastedAnimReady = false;
+            console.warn('Wasted animation atlas failed to load; wasted buildings stay on static art', err);
+          });
+      }
+      return;
+    }
+
+    if (this.animCoreReady || this.wastedAnimReady) {
+      this.animCoreReady = false;
+      this.wastedAnimReady = false;
+      this.animGeneration++;
+      this.textures = { ...this.textures, animTop: {} };
+      // The rebuild below only re-syncs the top sprites it actually redraws
+      // (a deep-fog-only viewport redraws none), so drop every clip's
+      // playback state here: `advanceTopAnimations` must never assign one of
+      // the anim textures about to be unloaded to a sprite again.
+      // A released sprite goes blank until that rebuild hands it its static
+      // texture — never left on a frame that is about to be destroyed.
+      for (const [key, state] of [...this.topAnimState]) {
+        state.sprite.texture = Texture.EMPTY;
+        this.releaseTopAnim(key);
+      }
+      // The next rebuildAll (this method's own callers already trigger one)
+      // re-syncs every currently-animated sprite back to static via
+      // syncTopAnim before this releases the atlas's GPU memory below —
+      // queued as a microtask so it runs after that synchronous rebuild.
+      Promise.resolve().then(() => {
+        unloadAnimAtlases();
+        unloadPackAnimAtlases('wasted');
+      });
+    }
+  }
+
+  /**
+   * Loads the frozen atlas pack's static art (`frozen-terrain`/
+   * `frozen-buildings-static` — see `loadPackAtlases`; the pack ships no
+   * animation pages yet, so `syncAnimationAtlases` has nothing to add for
+   * it) once the world has the frozen isles flag on
+   * (`WorldModel.isFrozenEnabled`), merging it into `this.textures` — same
+   * shape as `maybeLoadWastedPack`, just gated on the admin flag instead of
+   * the endboss reveal. Frozen isle generation itself is not implemented
+   * yet, so this only makes the `frozen-*` art available; no tile actually
+   * uses it until that generation exists.
+   */
+  private maybeLoadFrozenPack() {
+    if (this.options.mode !== 'settlement' || !this.textures) return;
+    if (this.frozenPackLoading) return;
+    if (!this.options.worldModel.isFrozenEnabled()) return;
+
+    this.frozenPackLoading = loadPackAtlases('frozen')
+      .then((frozen) => {
+        if (this.destroyed || !this.textures) return;
+        this.textures = mergeTileTextures(this.textures, frozen);
+        this.rebuildAll();
+      })
+      .catch((err) => {
+        console.warn('Frozen atlas pack failed to load', err);
+      });
+  }
+
   private rebuildAll() {
     if (!this.app) return;
     if (this.options.mode === 'settlement' && !this.textures) return;
     this.maybeLoadWastedPack();
+    this.maybeLoadFrozenPack();
+    this.syncAnimationAtlases();
     this.lastBuiltCamera = { ...this.camera };
     const rebuildStart = performance.now();
     this.lastRebuildAtMs = rebuildStart;
@@ -4650,6 +4849,7 @@ export class HexMapRenderer {
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     canvas?.removeEventListener('touchstart', this.onTouchStart);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();

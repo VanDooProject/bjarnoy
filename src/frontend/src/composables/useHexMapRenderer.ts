@@ -1,5 +1,6 @@
-import { onBeforeUnmount, onMounted, shallowRef, type Ref } from 'vue';
+import { onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue';
 import { HexMapRenderer, type HexMapRendererOptions } from '../lib/map/HexMapRenderer';
+import { animationPreference } from '../lib/perf/animationPreference';
 
 /**
  * Mounts a HexMapRenderer on a <canvas> ref. Deliberately exposes almost
@@ -36,6 +37,7 @@ export function useHexMapRenderer(
 ) {
   const renderer = shallowRef<HexMapRenderer | null>(null);
   let resizeObserver: ResizeObserver | null = null;
+  let stopAnimationWatch: (() => void) | null = null;
 
   onMounted(async () => {
     const canvas = canvasRef.value;
@@ -45,6 +47,13 @@ export function useHexMapRenderer(
     const { width, height } = await waitForRealSize(container);
     await r.mount(canvas, Math.max(1, width), Math.max(1, height));
     renderer.value = r;
+    // `immediate: true` applies whatever animationPreference already
+    // resolved to (most commonly 'measuring'/off, on a fresh mount) right
+    // away, rather than leaving the renderer's own `animationsEnabled`
+    // default until the preference happens to change for some other reason.
+    stopAnimationWatch = watch(() => animationPreference.effective, (enabled) => r.setAnimationsEnabled(enabled), {
+      immediate: true,
+    });
     // Real lifecycle signal for "the renderer is mounted and has drawn its
     // first frame" — e.g. e2e tests wait on this instead of a guessed
     // timeout, since there's otherwise nothing in the DOM to observe. Not a
@@ -63,6 +72,7 @@ export function useHexMapRenderer(
 
   onBeforeUnmount(() => {
     resizeObserver?.disconnect();
+    stopAnimationWatch?.();
     renderer.value?.destroy();
     renderer.value = null;
     delete containerRef.value?.dataset.mapReady;

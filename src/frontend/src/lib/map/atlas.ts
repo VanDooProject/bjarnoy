@@ -384,3 +384,37 @@ export function loadAtlasPackCategory(pack: AtlasPack, category: string): Promis
   cache.set(key, promise);
   return promise;
 }
+
+/**
+ * Frees a loaded category's decoded GPU textures and drops it from the
+ * internal `cache`, so a later `loadAtlasCategory`/`loadAtlasPackCategory`
+ * call reloads and re-decodes it from scratch instead of replaying the same
+ * (now-destroyed) `Promise`. Used by `textures.ts`'s anim-atlas loaders when
+ * animations are turned off: dropping JS references to a `LoadedAtlas`
+ * alone would still leave its pages' decoded pixels resident on the GPU —
+ * only `Assets.unload` on the page's own URL actually releases that.
+ *
+ * Never throws, and a caller never needs to track which categories are
+ * actually resident to safely call this: a category that was never loaded,
+ * never resolved, or has no vendored pages at all (see
+ * `loadAtlasPackCategory`'s "no pages" case) is simply a no-op.
+ */
+export async function unloadAtlasCategory(category: string): Promise<void> {
+  const cached = cache.get(category);
+  cache.delete(category);
+  if (!cached) return;
+
+  try {
+    await cached;
+  } catch {
+    return; // Never resolved — nothing was actually loaded onto the GPU.
+  }
+
+  const urls = pagesFor(category).map((p) => p.webpUrl);
+  if (urls.length === 0) return;
+  try {
+    await Assets.unload(urls);
+  } catch (err) {
+    console.warn(`atlas.ts: failed to unload atlas category "${category}"`, err);
+  }
+}

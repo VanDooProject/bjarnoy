@@ -847,6 +847,7 @@ describe('useWorldStore newestWorld', () => {
       joinableReason: 'None',
       startsAt: null,
       endbossTriggered: false,
+      frozenIslesEnabled: false,
       speedFactor: 1,
       generation: {},
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
@@ -908,6 +909,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       joinableReason: 'None',
       startsAt: null,
       endbossTriggered: false,
+      frozenIslesEnabled: false,
       speedFactor: 1,
       generation: {},
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
@@ -951,6 +953,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       joinableReason: 'None',
       startsAt: null,
       endbossTriggered: false,
+      frozenIslesEnabled: false,
       speedFactor: 1,
       generation: {},
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
@@ -958,6 +961,47 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     getIslands.mockReset().mockRejectedValue(new Error('network error'));
 
     await expect(store.bootstrapLiveWorld()).rejects.toThrow('network error');
+  });
+
+  it('propagates frozenIslesEnabled onto the world model', async () => {
+    const store = await loadStoreModule(false);
+
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
+        startsAt: null,
+      },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: true,
+      speedFactor: 1,
+      generation: {},
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.model?.isFrozenEnabled()).toBe(true);
   });
 });
 
@@ -1139,6 +1183,7 @@ describe('useWorldStore fetchFogMask', () => {
       joinableReason: 'None',
       startsAt: null,
       endbossTriggered: false,
+      frozenIslesEnabled: false,
       speedFactor: 1,
       generation: {},
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
@@ -1283,6 +1328,7 @@ describe('useWorldStore joinWorld', () => {
       joinableReason: 'None',
       startsAt: null,
       endbossTriggered: false,
+      frozenIslesEnabled: false,
       speedFactor: 1,
       generation: {},
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
