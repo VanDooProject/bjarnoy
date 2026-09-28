@@ -440,6 +440,15 @@ export interface HexMapRendererOptions {
    * keep the URL in sync), not anything about the map itself.
    */
   onZoomModeChange?: (mode: RenderMode) => void;
+  /**
+   * Fired on every tile-art loading-state transition (see `MapLoadState`) —
+   * `MapLoadingIndicator.vue`'s data source, via `useHexMapRenderer`'s own
+   * `loadState` ref. Fired once synchronously from inside `mount()` before
+   * `mount()`'s own returned `Promise` settles (so a caller that reads
+   * `renderer.value` only after `await r.mount()` still sees an up-to-date
+   * state, never a stale `undefined`).
+   */
+  onLoadState?: (state: MapLoadState) => void;
 }
 
 /**
@@ -1228,6 +1237,142 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
     : ['terrainBase', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
+/**
+ * mount()'s tile-art loading progression, surfaced via
+ * `HexMapRendererOptions.onLoadState` for a loading indicator to draw
+ * (`MapLoadingIndicator.vue`):
+ * - `'terrain'`: nothing is drawable yet — the small terrain atlas (+ marker
+ *   icons) is still loading.
+ * - `'buildings'`: terrain is drawn, but building art (the much larger
+ *   `buildings-static` atlas) is still loading — settlement tiles show
+ *   ground only until it resolves.
+ * - `'ready'`: everything mount() waits on has settled (building art is
+ *   best-effort — a failed load still reaches `'ready'`, same as mount()'s
+ *   own `.catch`, since the map stays usable terrain-only).
+ *
+ * `syncAnimationAtlases`' animation atlases (PR #314) are NOT part of this —
+ * they're optional extras loaded separately, after the map is already
+ * usable, and never gate any of these phases.
+ *
+ * World mode never draws tile art at all (`WORLD_TERRAIN_FILL`), so it goes
+ * straight to `'ready'` once mount() runs — see `startTextureLoad` — even
+ * though the same terrain/building atlases still load in the background
+ * there too, for a later zoom-driven switch into settlement mode.
+ */
+export type MapLoadPhase = 'terrain' | 'buildings' | 'ready';
+
+export interface MapLoadState {
+  phase: MapLoadPhase;
+  /**
+   * Best-effort fraction (0-1) of the current phase's atlas pages loaded, when
+   * known (see `loadProgressFraction`) — undefined once the phase has no
+   * meaningful progress to report (e.g. `'ready'`, or a category with zero
+   * pages). A consumer with no `progress` should show an indeterminate
+   * animation rather than a stalled/empty bar.
+   */
+  progress?: number;
+}
+
+/** `MapLoadState` for a mode that never shows a loading indicator (`'ready'`, no `progress`) — shared so every place that needs it (settlement mode's terminal state, world mode's only state, the composable's own initial ref) uses the exact same object shape. */
+export const READY_LOAD_STATE: MapLoadState = { phase: 'ready' };
+
+/** `loaded`/`total` (as `atlas.ts`'s `AtlasPageProgress` reports them) as a 0-1 fraction, or undefined when `total` is 0 (a category with no vendored pages) — the only place `MapLoadState.progress` is computed. */
+export function loadProgressFraction(loaded: number, total: number): number | undefined {
+  return total > 0 ? loaded / total : undefined;
+}
+
+/**
+ * The dependencies `startTextureLoad` needs, injected so it's testable in
+ * node without a real canvas/Pixi `Application` — `mount()` wires these to
+ * the renderer's real loaders/state; `HexMapRenderer.test.ts` wires them to
+ * fakes and asserts the emitted `MapLoadState` sequence.
+ */
+export interface TextureLoadDeps {
+  mode: RenderMode;
+  loadTerrain: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
+  loadIcons: () => Promise<MarkerIcons | null>;
+  loadBuildings: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
+  merge: (base: TileTextures, buildings: TileTextures) => TileTextures;
+  isDestroyed: () => boolean;
+  getTextures: () => TileTextures | null;
+  setTextures: (textures: TileTextures) => void;
+  setIcons: (icons: MarkerIcons | null) => void;
+  rebuildAll: () => void;
+  emit: (state: MapLoadState) => void;
+}
+
+export interface TextureLoadHandles {
+  /**
+   * Resolves once terrain (+ marker icons) are loaded and assigned — exactly
+   * what `mount()` awaits for a `'settlement'`-mode mount (see mount()'s own
+   * doc comment on why only the small atlas is awaited there), so awaiting
+   * this preserves e2e's `data-map-ready` timing unchanged. Rejects iff
+   * `loadTerrain` itself rejects — mount() has nothing to draw without it.
+   */
+  terrainReady: Promise<void>;
+  /**
+   * Resolves once the whole sequence — including the best-effort building
+   * art load/merge/`rebuildAll` — is done. Nothing in `mount()` awaits this
+   * directly (that would delay `data-map-ready` on building art, which
+   * mount() has never waited on); it exists purely to drive the
+   * `'buildings'` -> `'ready'` emissions and the merge side effect in the
+   * background. Never rejects (a `loadBuildings` failure is caught and
+   * logged, matching `mount()`'s original `.catch`).
+   */
+  done: Promise<void>;
+}
+
+/**
+ * mount()'s texture-load orchestration (terrain+icons, then building art),
+ * extracted out of `mount()` so its `MapLoadState` emissions — `'terrain'`
+ * -> `'buildings'` -> `'ready'` in settlement mode, `'ready'` only in every
+ * other mode — are unit-testable in node (see `TextureLoadDeps`). Returns
+ * two independently-awaitable handles rather than one combined promise
+ * specifically so `mount()`'s settlement-mode `await` can keep resolving the
+ * instant terrain is ready, without also waiting on (or narrating a delay
+ * for) building art — see `TextureLoadHandles`'s own doc comments.
+ */
+export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
+  const settlement = deps.mode === 'settlement';
+  deps.emit(settlement ? { phase: 'terrain' } : READY_LOAD_STATE);
+
+  const terrainReady = (async () => {
+    const [textures, icons] = await Promise.all([
+      deps.loadTerrain((loaded, total) => {
+        if (settlement) deps.emit({ phase: 'terrain', progress: loadProgressFraction(loaded, total) });
+      }),
+      deps.loadIcons(),
+    ]);
+    if (deps.isDestroyed()) return;
+    deps.setTextures(textures);
+    deps.setIcons(icons);
+  })();
+
+  const done = (async () => {
+    try {
+      await terrainReady;
+    } catch {
+      return; // Already handled by whoever awaits terrainReady directly; nothing more to narrate.
+    }
+    if (settlement) deps.emit({ phase: 'buildings' });
+    try {
+      const buildings = await deps.loadBuildings((loaded, total) => {
+        if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total) });
+      });
+      const base = deps.getTextures();
+      if (deps.isDestroyed() || !base) return;
+      deps.setTextures(deps.merge(base, buildings));
+      deps.rebuildAll();
+    } catch (err) {
+      console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
+    } finally {
+      if (settlement) deps.emit(READY_LOAD_STATE);
+    }
+  })();
+
+  return { terrainReady, done };
+}
+
 /** How long an army marker takes to ease across when its leg is replaced (recall/turn-around) — see `armyPoints`. */
 const ARMY_RESYNC_MS = 450;
 
@@ -1463,6 +1608,12 @@ export class HexMapRenderer {
   } | null = null;
 
   private textures: TileTextures | null = null;
+  // The state last passed to `options.onLoadState` (see `MapLoadState`) —
+  // reset to the correct initial value in the constructor body once
+  // `this.options` is actually assigned (a 'settlement' mount starts at
+  // 'terrain'; every other mode never narrates a loading state at all — see
+  // `startTextureLoad` — so it starts, and stays, at 'ready').
+  private loadState: MapLoadState = READY_LOAD_STATE;
   /**
    * Set once the wasted atlas pack's load has been kicked off (see
    * `maybeLoadWastedPack`), so a load is requested at most once per instance
@@ -1564,6 +1715,12 @@ export class HexMapRenderer {
       options.mode === 'settlement'
         ? this.settlementCameraOrigin()
         : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+    this.loadState = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
+  }
+
+  /** Current `MapLoadState` (see `mount()`/`startTextureLoad`) — also delivered to `options.onLoadState` on every transition. `useHexMapRenderer`'s own `loadState` ref mirrors this via that callback. */
+  getLoadState(): MapLoadState {
+    return this.loadState;
   }
 
   // Shifts the world-space centre left by `biasX` of the viewport (in world
@@ -1766,37 +1923,49 @@ export class HexMapRenderer {
     // never awaits this (rebuildAll's settlement branch is the only thing
     // gated on `this.textures`), so starting the load here costs nothing on
     // the world map's own critical path.
-    const textureLoad = (async () => {
-      const [textures, icons] = await Promise.all([
-        loadTerrainAtlas(),
-        // The whole map failing to mount because a marker icon didn't
-        // decode would be a wildly disproportionate outcome — the overlay
-        // draws plain vector shapes when `icons` is null (see
-        // drawArmyOverlay), so a failure here costs the icon art and
-        // nothing else. Reported as a warning rather than swallowed, and
-        // `lastArmyOverlayFrame().iconsReady` says so too.
+    // Orchestration (and the terrain -> buildings -> ready MapLoadState
+    // narration for the settlement-mode branch below) lives in
+    // `startTextureLoad`, extracted out of mount() so it's unit-testable
+    // without a canvas/Pixi Application — see its own doc comment.
+    const { terrainReady, done } = startTextureLoad({
+      mode: this.options.mode,
+      loadTerrain: (onProgress) => loadTerrainAtlas(onProgress),
+      // The whole map failing to mount because a marker icon didn't decode
+      // would be a wildly disproportionate outcome — the overlay draws
+      // plain vector shapes when `icons` is null (see drawArmyOverlay), so a
+      // failure here costs the icon art and nothing else. Reported as a
+      // warning rather than swallowed, and `lastArmyOverlayFrame().iconsReady`
+      // says so too.
+      loadIcons: () =>
         loadMarkerIcons().catch((err) => {
           console.warn('Map marker icons failed to load; falling back to plain shapes', err);
           return null;
         }),
-      ]);
-      if (this.destroyed) return;
-      this.textures = textures;
-      this.icons = icons;
-
-      loadBuildingAtlases()
-        .then((buildings) => {
-          if (this.destroyed || !this.textures) return;
-          this.textures = mergeTileTextures(this.textures, buildings);
-          this.rebuildAll();
-        })
-        .catch((err) => {
-          console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
-        });
-    })();
+      loadBuildings: (onProgress) => loadBuildingAtlases(onProgress),
+      merge: mergeTileTextures,
+      isDestroyed: () => this.destroyed,
+      getTextures: () => this.textures,
+      setTextures: (textures) => {
+        this.textures = textures;
+      },
+      setIcons: (icons) => {
+        this.icons = icons;
+      },
+      rebuildAll: () => this.rebuildAll(),
+      emit: (state) => {
+        this.loadState = state;
+        this.options.onLoadState?.(state);
+      },
+    });
+    // `done`'s own rejection path is only reachable via `terrainReady`
+    // rejecting first (see `startTextureLoad`), which is already observed
+    // (and reported) below by whichever branch awaits/attaches to
+    // `terrainReady` directly — this is only to avoid a second, unhandled
+    // "rejection" warning for the same failure.
+    done.catch(() => {});
 
     if (this.options.mode === 'settlement') {
-      await textureLoad;
+      await terrainReady;
     } else {
       this.textures = null;
       // A failure here only ever costs the ability to *later* switch into
@@ -1804,7 +1973,7 @@ export class HexMapRenderer {
       // guard keeps that safe) — world mode's own draw path never touches
       // `this.textures`, so there is nothing to fall back to besides not
       // throwing an unhandled rejection off a fire-and-forget background load.
-      textureLoad
+      terrainReady
         .then(() => {
           if (!this.destroyed) this.rebuildAll();
         })

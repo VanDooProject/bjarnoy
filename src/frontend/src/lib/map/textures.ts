@@ -36,6 +36,7 @@ import {
   unloadAtlasCategory,
   type AtlasClip,
   type AtlasPack,
+  type AtlasPageProgress,
   type LoadedAtlas,
 } from './atlas';
 import {
@@ -865,10 +866,15 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
 }
 
 let terrainLoading: Promise<TileTextures> | null = null;
-/** The small `terrain` atlas alone — enough for the landing page / world map background, and for `HexMapRenderer` to draw terrain-only settlement tiles before building art resolves. */
-export function loadTerrainAtlas(): Promise<TileTextures> {
+/**
+ * The small `terrain` atlas alone — enough for the landing page / world map
+ * background, and for `HexMapRenderer` to draw terrain-only settlement tiles
+ * before building art resolves. `onPage`, like `loadAtlasCategory`'s own, is
+ * only invoked on the first (uncached) call.
+ */
+export function loadTerrainAtlas(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!terrainLoading) {
-    terrainLoading = loadAtlasCategory('terrain').then((atlas) => buildTileTextures([atlas]));
+    terrainLoading = loadAtlasCategory('terrain', onPage).then((atlas) => buildTileTextures([atlas]));
   }
   return terrainLoading;
 }
@@ -888,9 +894,9 @@ let buildingLoading: Promise<TileTextures> | null = null;
  * animation art at all. That's the ~319 MB of decoded GPU/RAM the split
  * exists to make optional (see `animationPreference.ts`).
  */
-export function loadBuildingAtlases(): Promise<TileTextures> {
+export function loadBuildingAtlases(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!buildingLoading) {
-    buildingLoading = loadAtlasCategory('buildings-static').then((atlas) => buildTileTextures([atlas]));
+    buildingLoading = loadAtlasCategory('buildings-static', onPage).then((atlas) => buildTileTextures([atlas]));
   }
   return buildingLoading;
 }
