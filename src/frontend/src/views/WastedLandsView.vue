@@ -39,22 +39,15 @@ const volcanoCamera = ref<TileOrientation>('SE');
 const utgardFrame = computed(() => showcase(`giantutgard_${utgardCamera.value}_level000`));
 const volcanoFrame = computed(() => showcase(`giantvolcano_wasted_${volcanoCamera.value}_level000`));
 
-// A card's hover-to-animate composite only replaces the static showcase
-// frame when its wasted top-part family actually has `buildings-anim`
-// clips for the selected camera — today just the volcano
-// (`giantvolcano_wasted`); the wasted Utgard ruin (`giantutgard`) has none,
-// so its card never swaps and never becomes focusable. Derived from the
-// atlas itself rather than hardcoded per card, so a future art drop picks
-// this up automatically. Also off entirely under reduced motion, where the
-// static showcase frame is the only thing that ever shows.
-const reducedMotion =
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    : false;
-const utgardHasAnim = computed(() => !reducedMotion && giantFamilyHasClip('giantutgard', utgardCamera.value));
-const volcanoHasAnim = computed(() => !reducedMotion && giantFamilyHasClip('giantvolcano_wasted', volcanoCamera.value));
-const utgardHovered = ref(false);
-const volcanoHovered = ref(false);
+// A card's animated composite only replaces the static showcase frame when
+// its wasted top-part family actually has `buildings-anim` clips for the
+// selected camera — today just the volcano (`giantvolcano_wasted`); the
+// wasted Utgard ruin (`giantutgard`) has none, so its card stays a plain
+// frame. Derived from the atlas itself rather than hardcoded per card, so a
+// future art drop picks this up automatically. Loops continuously, the way
+// the same clips play on the in-game map.
+const utgardHasAnim = computed(() => giantFamilyHasClip('giantutgard', utgardCamera.value));
+const volcanoHasAnim = computed(() => giantFamilyHasClip('giantvolcano_wasted', volcanoCamera.value));
 
 // --- Living/wasted pairs -------------------------------------------------
 
@@ -197,16 +190,9 @@ const wallFrame = computed(() => {
         <div class="giant-card">
           <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>
           <p>{{ $t('docs.wastedLands.utgard.body') }}</p>
-          <div
-            class="giant-box"
-            :tabindex="utgardHasAnim ? 0 : undefined"
-            @mouseenter="utgardHovered = true"
-            @mouseleave="utgardHovered = false"
-            @focus="utgardHovered = true"
-            @blur="utgardHovered = false"
-          >
+          <div class="giant-box">
             <AnimatedGiant
-              v-if="utgardHasAnim && utgardHovered"
+              v-if="utgardHasAnim"
               family="giantutgard"
               top-category="buildings-static"
               plate-family="wasteland"
@@ -232,16 +218,9 @@ const wallFrame = computed(() => {
         <div class="giant-card">
           <h2>{{ $t('docs.wastedLands.volcano.heading') }}</h2>
           <p>{{ $t('docs.wastedLands.volcano.body') }}</p>
-          <div
-            class="giant-box"
-            :tabindex="volcanoHasAnim ? 0 : undefined"
-            @mouseenter="volcanoHovered = true"
-            @mouseleave="volcanoHovered = false"
-            @focus="volcanoHovered = true"
-            @blur="volcanoHovered = false"
-          >
+          <div class="giant-box">
             <AnimatedGiant
-              v-if="volcanoHasAnim && volcanoHovered"
+              v-if="volcanoHasAnim"
               family="giantvolcano_wasted"
               top-category="terrain"
               plate-family="wasteland"
@@ -570,16 +549,6 @@ h2 {
   overflow: hidden;
   margin-bottom: 10px;
   position: relative;
-}
-/* Only a card whose giant has `buildings-anim` clips gets a tabindex at
-   all (see `utgardHasAnim`/`volcanoHasAnim`), so this only ever shows on
-   the one that can actually animate on hover/focus. */
-.giant-box[tabindex] {
-  cursor: pointer;
-}
-.giant-box[tabindex]:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: -2px;
 }
 .defences-section {
   margin-top: 32px;

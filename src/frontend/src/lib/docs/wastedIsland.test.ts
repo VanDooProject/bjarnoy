@@ -8,7 +8,16 @@
 // a tall tile in front of Utgard" rule must hold for every one of the six
 // rotations the page's rotate buttons can reach.
 import { describe, expect, it } from 'vitest';
-import { buildIsland, resolvesDirectly, resolveIslandClip, giantFamilyHasClip } from './wastedIsland';
+import {
+  buildIsland,
+  resolvesDirectly,
+  resolveIslandClip,
+  resolveIslandFrame,
+  giantFamilyHasClip,
+  giantClipBoxes,
+  giantTopPartBox,
+  GIANT_PART_NATIVE_CANVAS_H,
+} from './wastedIsland';
 import { coordKey, hexDistance } from '../hex/coords';
 import { GIANT_NEIGHBOR_PARTS, type GiantPart } from '../map/giantTiles';
 
@@ -236,5 +245,34 @@ describe('giant top-part clips', () => {
     expect(giantFamilyHasClip('giantvolcano_wasted', 'SE')).toBe(true);
     expect(giantFamilyHasClip('giantutgard', 'SE')).toBe(false);
     expect(giantFamilyHasClip('giantmountain', 'SE')).toBe(false);
+  });
+
+  // Regression: clip frames used to be drawn into the static frame's box,
+  // but each frame is trimmed on its own — the wasted volcano's centre frames
+  // are ~255px tall against a 393px static frame, so the lava/smoke got
+  // stretched down over the cone ("the middle of the volcano looks too low").
+  it('gives every clip frame its own untrimmed-canvas box instead of the static frame\'s', () => {
+    const centre = placements0.find((p) => p.kind === 'volcano' && p.layer === 'top' && p.wastedFrame.endsWith('partC'))!;
+    const clip = resolveIslandClip(centre.wastedFrame)!;
+    const staticRect = resolveIslandFrame(centre.wastedFrame, centre.category)!;
+    const origin = { x: centre.x, y: centre.y };
+    const staticBox = giantTopPartBox(origin, staticRect);
+    const boxes = giantClipBoxes(origin, clip);
+
+    expect(boxes.frames).toHaveLength(clip.frameRects.length);
+    clip.frameRects.forEach((rect, i) => {
+      const box = boxes.frames[i]!;
+      // Drawn at the part's 2x scale without stretching...
+      expect(box.width).toBe(2 * rect.frame.w);
+      expect(box.height).toBe(2 * rect.frame.h);
+      // ...at the spot its own trim puts it on the part's canvas, which
+      // shares its bottom edge with the static frame's canvas.
+      const canvasTop = staticBox.top - 2 * staticRect.spriteSourceSize.y;
+      expect(box.top - canvasTop).toBe(2 * rect.spriteSourceSize.y);
+      expect(2 * (GIANT_PART_NATIVE_CANVAS_H - rect.sourceSize.h)).toBe(2 * (GIANT_PART_NATIVE_CANVAS_H - staticRect.sourceSize.h));
+    });
+    // The case that broke: at least one frame is trimmed differently from
+    // the static frame, so reusing its box would have stretched it.
+    expect(boxes.frames.some((b) => b.height !== staticBox.height || b.top !== staticBox.top)).toBe(true);
   });
 });
