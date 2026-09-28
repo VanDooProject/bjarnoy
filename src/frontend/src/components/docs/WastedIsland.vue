@@ -5,7 +5,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { atlasBackgroundStyle, type AtlasBackgroundStyle } from '../../lib/map/atlas';
+import { atlasBackgroundStyle } from '../../lib/map/atlas';
 import { isoTopPoints, isoGridPosition, hexUnionOutline } from '../../lib/hex/geometry';
 import type { AxialCoord } from '../../lib/hex/coords';
 import {
@@ -13,6 +13,7 @@ import {
   resolveIslandFrame,
   resolveIslandClip,
   giantTopPartBox,
+  giantClipBoxes,
   tileSpriteBox,
   type IslandPlacement,
 } from '../../lib/docs/wastedIsland';
@@ -71,62 +72,51 @@ const resolved = computed<ResolvedPlacement[]>(() =>
 //
 // A giant top part (`giantTopPart: true`) whose frame name also names a
 // `buildings-anim` clip (see `resolveIslandClip`) plays that clip instead of
-// sitting on its static frame forever — the clip's frames share the exact
-// same `sourceSize`/`spriteSourceSize` geometry as the static frame (this
-// module's own giant-clip contract), so `resolved` above (the box) never
-// needs to change as the clip advances; only the sprite's background
-// image/position does. Split in two for that reason: `clipLookups` is
-// precomputed once per rotation change (keyed off `placements`, not off the
-// animation clock), and `clipStyles` is the one thing recomputed every tick.
+// sitting on its static frame forever. Every clip frame (and the clip's rest
+// image) is trimmed on its own, so each gets its own box (`giantClipBoxes`)
+// rather than borrowing the static frame's — see that helper for why. Split
+// in two: `clipLookups` resolves every frame's box and style once per
+// rotation change (keyed off `placements`, not off the animation clock), and
+// `clipFrames` just picks the current one every tick.
 const now = useAnimationClock();
 
-interface ClipLookup {
-  living?: ReturnType<typeof resolveIslandClip>;
-  wasted?: ReturnType<typeof resolveIslandClip>;
+interface AnimatedClip {
+  timing: ReturnType<typeof clipTimingOf>;
+  frames: SpriteBox[];
+  /** The clip's rest image (see `AtlasClip.overlay`'s own doc comment), drawn under the clip's current (parts-only) frame rather than in place of it. Absent for a legacy (non-overlay) clip. */
+  rest?: SpriteBox;
 }
 
-const clipLookups = computed<Map<string, ClipLookup>>(() => {
-  const map = new Map<string, ClipLookup>();
+function animatedClip(p: IslandPlacement, frameName: string): AnimatedClip | undefined {
+  const clip = resolveIslandClip(frameName);
+  if (!clip || clip.frameRects.length === 0) return undefined;
+  const boxes = giantClipBoxes({ x: p.x, y: p.y }, clip);
+  return {
+    timing: clipTimingOf(clip),
+    frames: clip.frameRects.map((rect, i) => ({ ...boxes.frames[i]!, style: atlasBackgroundStyle(rect) })),
+    rest: clip.restRect && boxes.rest ? { ...boxes.rest, style: atlasBackgroundStyle(clip.restRect) } : undefined,
+  };
+}
+
+const clipLookups = computed<Map<string, { living?: AnimatedClip; wasted?: AnimatedClip }>>(() => {
+  const map = new Map<string, { living?: AnimatedClip; wasted?: AnimatedClip }>();
   for (const p of placements.value) {
     if (!p.giantTopPart) continue;
-    const living = resolveIslandClip(p.livingFrame);
-    const wasted = resolveIslandClip(p.wastedFrame);
+    const living = animatedClip(p, p.livingFrame);
+    const wasted = animatedClip(p, p.wastedFrame);
     if (living || wasted) map.set(p.key, { living, wasted });
   }
   return map;
 });
 
-// The clip's rest image (see `AtlasClip.overlay`'s own doc comment) — static
-// for as long as this rotation/hover state shows this clip (recomputed with
-// `clipLookups`, not per tick like `clipStyles`), drawn under the clip's own
-// current (parts-only) frame rather than in place of it. A placement whose
-// clip is a legacy (non-overlay) one, or has none at all, never enters this
-// map.
-const restStyles = computed<Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>>(() => {
-  const map = new Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>();
-  for (const [key, lookup] of clipLookups.value) {
-    const entry: { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle } = {};
-    if (lookup.living?.restRect) entry.living = atlasBackgroundStyle(lookup.living.restRect);
-    if (lookup.wasted?.restRect) entry.wasted = atlasBackgroundStyle(lookup.wasted.restRect);
-    if (entry.living || entry.wasted) map.set(key, entry);
-  }
-  return map;
-});
-
-const clipStyles = computed<Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>>(() => {
-  const map = new Map<string, { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle }>();
+const clipFrames = computed<Map<string, { living?: SpriteBox; wasted?: SpriteBox }>>(() => {
+  const map = new Map<string, { living?: SpriteBox; wasted?: SpriteBox }>();
   const elapsed = now.value;
   for (const [key, lookup] of clipLookups.value) {
-    const entry: { living?: AtlasBackgroundStyle; wasted?: AtlasBackgroundStyle } = {};
-    if (lookup.living)
-      entry.living = atlasBackgroundStyle(
-        lookup.living.frameRects[clipFrameIndex(clipTimingOf(lookup.living), elapsed)]!,
-      );
-    if (lookup.wasted)
-      entry.wasted = atlasBackgroundStyle(
-        lookup.wasted.frameRects[clipFrameIndex(clipTimingOf(lookup.wasted), elapsed)]!,
-      );
-    map.set(key, entry);
+    map.set(key, {
+      living: lookup.living?.frames[clipFrameIndex(lookup.living.timing, elapsed)],
+      wasted: lookup.wasted?.frames[clipFrameIndex(lookup.wasted.timing, elapsed)],
+    });
   }
   return map;
 });
@@ -211,6 +201,15 @@ const bounds = computed(() => {
       grow(r.wasted.left + r.wasted.width, r.wasted.top + r.wasted.height);
     }
   }
+  for (const lookup of clipLookups.value.values()) {
+    for (const clip of [lookup.living, lookup.wasted]) {
+      if (!clip) continue;
+      for (const box of clip.rest ? [...clip.frames, clip.rest] : clip.frames) {
+        grow(box.left, box.top);
+        grow(box.left + box.width, box.top + box.height);
+      }
+    }
+  }
   for (const poly of hexPolygons.value) {
     for (const pair of poly.points.split(' ')) {
       const [x, y] = pair.split(',').map(Number);
@@ -247,10 +246,10 @@ function shiftedPolygonPoints(points: string): string {
     .join(' ');
 }
 
-function spriteStyle(box: SpriteBox, turned: boolean, delay: number, animatedStyle?: AtlasBackgroundStyle) {
+function spriteStyle(box: SpriteBox, turned: boolean, delay: number) {
   const s = shift(box);
   return {
-    ...(animatedStyle ?? box.style),
+    ...box.style,
     position: 'absolute' as const,
     left: `${s.left}px`,
     top: `${s.top}px`,
@@ -397,10 +396,10 @@ function togglePlay(): void {
       >
         <template v-for="r in resolved" :key="r.placement.key">
           <div
-            v-if="r.living && restStyles.get(r.placement.key)?.living"
+            v-if="r.living && clipLookups.get(r.placement.key)?.living?.rest"
             class="island-sprite"
             :style="
-              spriteStyle(r.living, stage < r.placement.turnsAt, r.placement.delay, restStyles.get(r.placement.key)!.living)
+              spriteStyle(clipLookups.get(r.placement.key)!.living!.rest!, stage < r.placement.turnsAt, r.placement.delay)
             "
           />
           <div
@@ -408,18 +407,17 @@ function togglePlay(): void {
             class="island-sprite"
             :style="
               spriteStyle(
-                r.living,
+                clipFrames.get(r.placement.key)?.living ?? r.living,
                 stage < r.placement.turnsAt,
                 r.placement.delay,
-                clipStyles.get(r.placement.key)?.living,
               )
             "
           />
           <div
-            v-if="r.wasted && restStyles.get(r.placement.key)?.wasted"
+            v-if="r.wasted && clipLookups.get(r.placement.key)?.wasted?.rest"
             class="island-sprite"
             :style="
-              spriteStyle(r.wasted, stage >= r.placement.turnsAt, r.placement.delay, restStyles.get(r.placement.key)!.wasted)
+              spriteStyle(clipLookups.get(r.placement.key)!.wasted!.rest!, stage >= r.placement.turnsAt, r.placement.delay)
             "
           />
           <div
@@ -427,10 +425,9 @@ function togglePlay(): void {
             class="island-sprite"
             :style="
               spriteStyle(
-                r.wasted,
+                clipFrames.get(r.placement.key)?.wasted ?? r.wasted,
                 stage >= r.placement.turnsAt,
                 r.placement.delay,
-                clipStyles.get(r.placement.key)?.wasted,
               )
             "
           />

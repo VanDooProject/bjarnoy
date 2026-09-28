@@ -531,11 +531,10 @@ export function tileSpriteBox(origin: { x: number; y: number }, rect: AtlasFrame
  * source canvas, its bottom edge anchored to that canvas's own bottom
  * (mirrors the game's own `giantCrop`: the part's extra height rises
  * *above* the canvas rather than extending below it). `rect` may be the
- * part's static frame or one frame of its `buildings-anim` clip — both
- * share the same `sourceSize`/`spriteSourceSize` geometry (see this
- * module's doc comment on giant clips), so this box never needs
- * recomputing as a clip's frame index advances, only the sprite's
- * background image/position does (`atlasBackgroundStyle`).
+ * part's static frame, one frame of its `buildings-anim` clip, or the
+ * clip's rest image — each is trimmed on its own (a clip frame's
+ * `spriteSourceSize` routinely differs from its static frame's and from
+ * its sibling frames'), so each needs its own box — see `giantClipBoxes`.
  */
 export function giantTopPartBox(origin: { x: number; y: number }, rect: AtlasFrameRect): SpriteGeom {
   const top = origin.y + 2 * (GIANT_PART_NATIVE_CANVAS_H - rect.sourceSize.h) + 2 * rect.spriteSourceSize.y;
@@ -551,3 +550,21 @@ export const GIANT_HEXES_FOR_TESTS = {
   utgard: UTGARD_HEXES,
   volcano: VOLCANO_HEXES,
 };
+
+/**
+ * Per-frame boxes for a giant top part's clip, anchored at `origin` the same
+ * way as its static frame (`giantTopPartBox`). Each frame, and the rest
+ * image, gets its own box from its own trim rect — the game's Pixi sprites
+ * do the same through each texture's trim/orig, so drawing a frame into the
+ * static frame's box instead stretches it (the wasted volcano's centre
+ * frames are ~255px tall against a 393px static frame).
+ */
+export function giantClipBoxes(
+  origin: { x: number; y: number },
+  clip: { frameRects: AtlasFrameRect[]; restRect?: AtlasFrameRect },
+): { frames: SpriteGeom[]; rest?: SpriteGeom } {
+  return {
+    frames: clip.frameRects.map((rect) => giantTopPartBox(origin, rect)),
+    rest: clip.restRect ? giantTopPartBox(origin, clip.restRect) : undefined,
+  };
+}
