@@ -125,8 +125,24 @@ test.describe('mobile HUD bar', () => {
 
   test('tapping any collapsed pill cycles ALL pills together, fill bar always visible', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    // Fake the clock once the settlement is up, so ResourceBar.vue's own
+    // 6s auto-revert timer (`AUTO_REVERT_MS`, see `cycle()`) can never
+    // silently fire between two of this test's own taps/assertions on a
+    // slow run and flip a later assertion's stage out from under it — this
+    // test asserts the *tap-driven* cycle, not the timer, which gets its
+    // own dedicated test below. Real time still flows normally through
+    // login/navigation/founding; only pauses after `pauseAt` below. Pausing
+    // at a Node-side `Date.now()` (rather than reading the page's own) plus
+    // a generous 60s buffer avoids a "cannot fast-forward to the past"
+    // race: the fake clock keeps pace with real elapsed time while running,
+    // so a timestamp captured moments earlier can already be behind it by
+    // the time `pauseAt` actually resolves, especially under CI/sandbox
+    // load. A 60s jump is free here — no timer is pending yet (nothing has
+    // been tapped), so nothing fires during it.
+    await page.clock.install();
     await loginTestUser(page);
     await SettlementPage.found(page);
+    await page.clock.pauseAt(Date.now() + 60_000);
 
     const pills = page.locator(`${REAL_BAR} .resource--compact`);
     await expect(pills.first()).toBeVisible();
@@ -153,6 +169,35 @@ test.describe('mobile HUD bar', () => {
     await expect(wood.locator('.fill-track')).toBeVisible();
 
     await wood.click();
+    await expect(wood.locator('.value-compact')).not.toContainText('/h');
+    await expect(wood.locator('.value-compact')).not.toContainText('/');
+  });
+
+  test('collapsed pills return to stock after 6s without a tap', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    // Same fake-clock approach as the cycling test above (see its comment
+    // for why `pauseAt` uses a Node-side timestamp): real time through
+    // founding, then paused so the 6s auto-revert timer only ever advances
+    // under this test's own explicit control, never wall-clock speed.
+    await page.clock.install();
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+    await page.clock.pauseAt(Date.now() + 60_000);
+
+    const wood = page.locator(`${REAL_BAR} .resource--compact`).nth(0);
+    await expect(wood.locator('.value-compact')).not.toContainText('/h');
+
+    await wood.click();
+    await expect(wood.locator('.value-compact')).toContainText('/h');
+
+    // A tap within the 6s window keeps the shared stage — at 5s elapsed
+    // (still short of AUTO_REVERT_MS) it must still read the rate.
+    await page.clock.fastForward(5000);
+    await expect(wood.locator('.value-compact')).toContainText('/h');
+
+    // Past the full 6s without another tap, the shared stage reverts to
+    // stock on its own (ResourceBar.vue's `cycle()`/`revertTimer`).
+    await page.clock.fastForward(1500);
     await expect(wood.locator('.value-compact')).not.toContainText('/h');
     await expect(wood.locator('.value-compact')).not.toContainText('/');
   });
