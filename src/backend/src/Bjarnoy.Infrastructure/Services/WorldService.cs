@@ -536,6 +536,7 @@ public sealed class WorldService(
         bool hasStartsAt,
         DateTimeOffset? startsAt,
         bool? joinsClosed,
+        bool? frozenIslesEnabled,
         bool hasEndbossAt,
         DateTimeOffset? endbossAt,
         CancellationToken cancellationToken = default)
@@ -561,6 +562,11 @@ public sealed class WorldService(
         if (joinsClosed is { } closed)
         {
             world.JoinsClosed = closed;
+        }
+
+        if (frozenIslesEnabled is { } frozenIsles)
+        {
+            world.FrozenIslesEnabled = frozenIsles;
         }
 
         if (hasEndbossAt)

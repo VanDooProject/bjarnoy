@@ -22,6 +22,7 @@
     "players": "Players",
     "joinable": "Joinable",
     "endboss": "Endboss",
+    "frozenIsles": "Frozen isles",
     "seed": "Seed"
   },
   "joins": {
@@ -33,10 +34,15 @@
     "scheduled": "Scheduled",
     "none": "—"
   },
+  "frozenIsles": {
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
   "fields": {
     "speedFactor": "Speed factor",
     "startsAt": "Starts at",
     "closedToNewPlayers": "Closed to new players",
+    "frozenIslesEnabled": "Frozen isles enabled",
     "endbossAt": "Endboss at"
   },
   "speedFactorTooLow": "Speed factor must be greater than 0.",
