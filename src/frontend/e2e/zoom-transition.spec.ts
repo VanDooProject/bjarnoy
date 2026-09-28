@@ -143,8 +143,10 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
 
     // Navigate away from both map routes entirely — the renderer must tear
     // down, not just sit hidden (see useHexMapRenderer's onBeforeUnmount).
-    await clickNav(page, 'Reports');
-    await expect(page).toHaveURL(/\/reports/);
+    // Docs, not a modal route (reports/leaderboards/guild/profile): those
+    // open over the map and deliberately keep it mounted underneath.
+    await clickNav(page, 'Docs');
+    await expect(page).toHaveURL(/\/docs/);
     await page.waitForTimeout(300);
     await expect(page.locator('canvas')).toHaveCount(0);
   });
