@@ -43,9 +43,9 @@ vi.mock('vue-router', async (importOriginal) => {
 
 const ASCII_ART = '  /\\_/\\\n ( o.o )\n  > ^ <';
 
-/** Opens the own-profile settings modal (SettingsDialog.vue) via its header button. */
+/** Switches to the own-profile's Settings tab. */
 async function openSettings(wrapper: ReturnType<typeof mountProfileView>) {
-  await wrapper.findAll('button').find((b) => b.text() === 'Settings')!.trigger('click');
+  await wrapper.findAll('[role="tab"]').find((b) => b.text() === 'Settings')!.trigger('click');
 }
 
 function profile(overrides: Partial<ProfileResponse> = {}): ProfileResponse {
@@ -261,23 +261,23 @@ describe('ProfileView', () => {
     });
   });
 
-  describe('settings modal', () => {
-    it('keeps the settings off the profile page until the Settings button opens them', async () => {
+  describe('settings tab', () => {
+    it('keeps the settings off the Profile tab until the Settings tab is selected', async () => {
       getProfileByName.mockResolvedValue(profile());
       ownProfileAuth();
 
       const wrapper = mountProfileView();
       await flushPromises();
 
-      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+      expect(wrapper.find('[role="tablist"]').exists()).toBe(true);
       expect(wrapper.text()).not.toContain('Map animations');
 
       await openSettings(wrapper);
 
-      const dialog = wrapper.find('[role="dialog"]');
-      expect(dialog.exists()).toBe(true);
-      expect(dialog.text()).toContain('Map animations');
-      expect(dialog.text()).toContain('Bar position');
+      const panel = wrapper.find('[role="tabpanel"]');
+      expect(panel.exists()).toBe(true);
+      expect(panel.text()).toContain('Map animations');
+      expect(panel.text()).toContain('Bar position');
     });
 
     it('labels each button group with what it sets', async () => {
@@ -295,7 +295,7 @@ describe('ProfileView', () => {
       wrapper.unmount();
     });
 
-    it('closes on the Close button and on Escape', async () => {
+    it('switches back to the Profile tab (bio, no settings) when reselected', async () => {
       getProfileByName.mockResolvedValue(profile());
       ownProfileAuth();
 
@@ -303,19 +303,14 @@ describe('ProfileView', () => {
       await flushPromises();
 
       await openSettings(wrapper);
-      await wrapper
-        .findAll('[role="dialog"] button')
-        .find((b) => b.text() === 'Close')!
-        .trigger('click');
-      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+      expect(wrapper.text()).toContain('Map animations');
 
-      await openSettings(wrapper);
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-      await flushPromises();
-      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+      await wrapper.findAll('[role="tab"]').find((b) => b.text() === 'Profile')!.trigger('click');
+      expect(wrapper.text()).not.toContain('Map animations');
+      expect(wrapper.find('pre.bio').exists()).toBe(true);
     });
 
-    it("has no Settings button on someone else's profile", async () => {
+    it("has no Settings tab, or any tabs at all, on someone else's profile", async () => {
       getProfileByName.mockResolvedValue(profile());
       const auth = useAuthStore();
       auth.user = {
@@ -331,6 +326,7 @@ describe('ProfileView', () => {
       const wrapper = mountProfileView();
       await flushPromises();
 
+      expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
       expect(wrapper.findAll('button').some((b) => b.text() === 'Settings')).toBe(false);
     });
   });

@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../api/client';
 import type { ProfileResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
-import SettingsDialog from '../components/settings/SettingsDialog.vue';
+import HudPreferences from '../components/settings/HudPreferences.vue';
+import AnimationPreferences from '../components/settings/AnimationPreferences.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -50,11 +51,16 @@ async function load() {
 
 watch(targetUserName, load, { immediate: true });
 
-// --- Own-bio editing ---
+// ProfileModal.vue reads this to show the profile's name in its mobile
+// header bar, without fetching the profile a second time itself.
+defineExpose({ profile });
 
-// The viewer's own per-device settings live in a modal (SettingsDialog.vue),
-// opened from the header — the profile page itself is what others see.
-const settingsOpen = ref(false);
+// --- Tabs (own profile only): Profile / Settings ---
+
+type ProfileTab = 'profile' | 'settings';
+const activeTab = ref<ProfileTab>('profile');
+
+// --- Own-bio editing ---
 
 const editingBio = ref(false);
 const bioDraft = ref('');
@@ -97,11 +103,18 @@ const reportDone = ref(false);
 
 const canReport = computed(() => auth.isAuthenticated && !isOwnProfile.value);
 
+// Focused on open so an Escape press reaches this dialog's own keydown
+// handler (below, in the template) rather than the profile modal's — see
+// ProfileModal.vue's own comment on why that ordering closes only the
+// report dialog, not the whole profile modal, while it's open.
+const reportDialogEl = ref<HTMLElement | null>(null);
+
 function openReport() {
   reportReason.value = '';
   reportNote.value = '';
   reportError.value = null;
   reportOpen.value = true;
+  void nextTick(() => reportDialogEl.value?.focus());
 }
 
 async function sendReport() {
@@ -139,7 +152,7 @@ function joinedDate(iso: string): string {
     <template v-else-if="profile">
       <header class="head">
         <div>
-          <h1>{{ profile.displayName || profile.userName }}</h1>
+          <h1 id="profile-modal-name">{{ profile.displayName || profile.userName }}</h1>
           <p v-if="profile.displayName" class="muted">{{ `@${profile.userName}` }}</p>
         </div>
         <div class="head-actions">
@@ -150,63 +163,98 @@ function joinedDate(iso: string): string {
             {{ $t('profile.report') }}
           </button>
           <span v-if="reportDone" class="muted">{{ $t('profile.reportSent') }}</span>
-          <button v-if="isOwnProfile" class="secondary" @click="settingsOpen = true">
-            {{ $t('profile.settings.open') }}
-          </button>
         </div>
       </header>
 
-      <dl class="facts">
-        <div>
-          <dt>{{ $t('profile.joined') }}</dt>
-          <dd>{{ joinedDate(profile.createdAt) }}</dd>
-        </div>
-        <div>
-          <dt>{{ $t('profile.settlements') }}</dt>
-          <dd>{{ profile.settlementCount }}</dd>
-        </div>
-      </dl>
+      <!-- Tabs: only the viewer's own profile has a Settings tab (the
+           viewer's own per-device HUD/graphics preferences) — someone
+           else's profile is just what it always was, no tabs at all. -->
+      <div v-if="isOwnProfile" class="tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          class="tab"
+          :class="{ active: activeTab === 'profile' }"
+          :aria-selected="activeTab === 'profile'"
+          @click="activeTab = 'profile'"
+        >
+          {{ $t('profile.tabs.profile') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="tab"
+          :class="{ active: activeTab === 'settings' }"
+          :aria-selected="activeTab === 'settings'"
+          @click="activeTab = 'settings'"
+        >
+          {{ $t('profile.tabs.settings') }}
+        </button>
+      </div>
 
-      <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
+      <div v-if="!isOwnProfile || activeTab === 'profile'" role="tabpanel">
+        <dl class="facts">
+          <div>
+            <dt>{{ $t('profile.joined') }}</dt>
+            <dd>{{ joinedDate(profile.createdAt) }}</dd>
+          </div>
+          <div>
+            <dt>{{ $t('profile.settlements') }}</dt>
+            <dd>{{ profile.settlementCount }}</dd>
+          </div>
+        </dl>
 
-      <section class="bio-section">
-        <div class="bio-head">
-          <h2>{{ $t('profile.bio.title') }}</h2>
-          <button v-if="isOwnProfile && !editingBio" class="secondary" @click="startEditBio">
-            {{ profile.bio ? $t('profile.bio.edit') : $t('profile.bio.add') }}
-          </button>
-        </div>
-
-        <template v-if="editingBio">
-          <!--
-            The bio is plain text with significant whitespace (ASCII art).
-            It is rendered below through Vue's escaped interpolation only —
-            never v-html — so nothing in it can become markup.
-          -->
-          <textarea
-            v-model="bioDraft"
-            class="bio-editor"
-            rows="10"
-            :maxlength="BIO_MAX"
-            spellcheck="false"
-            :placeholder="$t('profile.bio.placeholder')"
-          ></textarea>
-          <p class="muted counter">{{ bioDraft.length }} / {{ BIO_MAX }}</p>
-          <p v-if="bioError" class="error">{{ bioError }}</p>
-          <div class="row">
-            <button :disabled="bioSaving" @click="saveBio">{{ $t('common.buttons.save') }}</button>
-            <button class="secondary" :disabled="bioSaving" @click="editingBio = false">
-              {{ $t('common.buttons.cancel') }}
+        <section class="bio-section">
+          <div class="bio-head">
+            <h2>{{ $t('profile.bio.title') }}</h2>
+            <button v-if="isOwnProfile && !editingBio" class="secondary" @click="startEditBio">
+              {{ profile.bio ? $t('profile.bio.edit') : $t('profile.bio.add') }}
             </button>
           </div>
-        </template>
 
-        <pre v-else-if="profile.bio" class="bio">{{ profile.bio }}</pre>
-        <p v-else class="muted">{{ $t('profile.bio.empty') }}</p>
-      </section>
+          <template v-if="editingBio">
+            <!--
+              The bio is plain text with significant whitespace (ASCII art).
+              It is rendered below through Vue's escaped interpolation only —
+              never v-html — so nothing in it can become markup.
+            -->
+            <textarea
+              v-model="bioDraft"
+              class="bio-editor"
+              rows="10"
+              :maxlength="BIO_MAX"
+              spellcheck="false"
+              :placeholder="$t('profile.bio.placeholder')"
+            ></textarea>
+            <p class="muted counter">{{ bioDraft.length }} / {{ BIO_MAX }}</p>
+            <p v-if="bioError" class="error">{{ bioError }}</p>
+            <div class="row">
+              <button :disabled="bioSaving" @click="saveBio">{{ $t('common.buttons.save') }}</button>
+              <button class="secondary" :disabled="bioSaving" @click="editingBio = false">
+                {{ $t('common.buttons.cancel') }}
+              </button>
+            </div>
+          </template>
+
+          <pre v-else-if="profile.bio" class="bio">{{ profile.bio }}</pre>
+          <p v-else class="muted">{{ $t('profile.bio.empty') }}</p>
+        </section>
+      </div>
+
+      <div v-else class="settings-tab" role="tabpanel">
+        <HudPreferences />
+        <AnimationPreferences />
+      </div>
 
       <div v-if="reportOpen" class="report-backdrop" @click.self="reportOpen = false">
-        <div class="report-dialog" role="dialog" :aria-label="$t('profile.reportDialog.ariaLabel')">
+        <div
+          ref="reportDialogEl"
+          class="report-dialog"
+          role="dialog"
+          tabindex="-1"
+          :aria-label="$t('profile.reportDialog.ariaLabel')"
+          @keydown.esc.stop="reportOpen = false"
+        >
           <h2>{{ $t('profile.reportDialog.title', { userName: profile.userName }) }}</h2>
           <p class="muted">{{ $t('profile.reportDialog.hint') }}</p>
           <label>
@@ -258,6 +306,36 @@ function joinedDate(iso: string): string {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 16px;
+}
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 8px 4px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+.settings-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 .facts {
   display: flex;
@@ -335,7 +413,9 @@ function joinedDate(iso: string): string {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  z-index: 50;
+  /* Above ProfileModal.vue's own backdrop (z-index 60) — the report dialog
+     opens on top of the profile modal, not behind it. */
+  z-index: 70;
 }
 .report-dialog {
   background: var(--panel-bg);
@@ -347,6 +427,7 @@ function joinedDate(iso: string): string {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  outline: none;
 }
 .report-dialog h2 {
   margin: 0;

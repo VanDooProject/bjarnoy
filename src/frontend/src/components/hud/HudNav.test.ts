@@ -250,6 +250,9 @@ describe('HudNav account menu', () => {
     await flushPromises();
 
     expect(router.currentRoute.value.path).toBe('/profile');
+    // profileLocation() stashes where we came from, so ProfileModal.vue can
+    // return there on close — see lib/profileRoute.ts.
+    expect((router.options.history.state as { backgroundView?: unknown }).backgroundView).toBe('/settlement');
     // Navigating away closes the menu, same as ReturningPlayerMenu's panel.
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
   });

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { ReportResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { profileLocation } from '../../lib/profileRoute';
 
+const router = useRouter();
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const SOURCE_LABELS = computed<Record<string, string>>(() => ({
@@ -128,7 +131,7 @@ async function resolve(report: ReportResponse, outcome: string) {
             <td>{{ SOURCE_LABELS[report.sourceType] ?? report.sourceType }}</td>
             <td>
               <!-- Straight to the user row moderation already lives on. -->
-              <router-link :to="`/profile/${report.reportedUserName}`">
+              <router-link :to="profileLocation(router, report.reportedUserName)">
                 {{ report.reportedUserName }}
               </router-link>
             </td>
