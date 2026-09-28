@@ -130,8 +130,14 @@ jobs:
 
           echo "::group::the frontend is served by the backend"
           # The SPA shell, and a client-side route falling back to it.
-          curl -fsS http://localhost:8080/ | grep -q '<div id="app">'
-          curl -fsS http://localhost:8080/settlement | grep -q '<div id="app">'
+          # Responses are saved before grepping them throughout: under
+          # pipefail, `curl | grep -q` fails whenever grep finds its match and
+          # exits before curl has written the whole body (curl exit 23), so a
+          # large enough bundle turns a match into a failure.
+          curl -fsS http://localhost:8080/ -o /tmp/index.html
+          grep -q '<div id="app">' /tmp/index.html
+          curl -fsS http://localhost:8080/settlement -o /tmp/settlement.html
+          grep -q '<div id="app">' /tmp/settlement.html
           # A hashed asset referenced by index.html must actually resolve, which
           # is what proves wwwroot made it into the publish manifest rather than
           # being copied in after it.
@@ -151,7 +157,8 @@ jobs:
           # and Rollup drops it, so the string never reaches the bundle.
           live=0
           for asset in $(curl -fsS http://localhost:8080/ | grep -o '/assets/[^"]*\.js' | sort -u); do
-            if curl -fsS "http://localhost:8080$asset" | grep -q 'bjarnoy.settlementId'; then
+            curl -fsS "http://localhost:8080$asset" -o /tmp/asset.js
+            if grep -q 'bjarnoy.settlementId' /tmp/asset.js; then
               live=1
               echo "live-mode bundle: $asset"
               break
@@ -198,7 +205,8 @@ jobs:
           echo
           # No islands would mean generation silently produced an empty sea.
           python3 -c 'import json,sys; sys.exit(0 if json.load(open("/tmp/world.json"))["islandCount"] > 0 else 1)'
-          curl -fsS 'http://localhost:8080/api/v1/worlds' | grep -q 'smoke-test-world'
+          curl -fsS 'http://localhost:8080/api/v1/worlds' -o /tmp/worlds.json
+          grep -q 'smoke-test-world' /tmp/worlds.json
           echo "::endgroup::"
 
           echo "::group::the fog mask renders (SkiaSharp's native library loads)"

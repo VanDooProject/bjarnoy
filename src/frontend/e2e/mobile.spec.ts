@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { claimLandfall, layoutOverflow, waitForMapReady } from './helpers';
+import { claimLandfall, layoutOverflow, loginTestUser, waitForMapReady } from './helpers';
 
 // Mobile-readiness audit: every one of these was a real defect at phone width
 // — the onboarding checklist's third card and the guidance chip clipped past
@@ -139,14 +139,25 @@ test.describe('phone layout', { tag: '@g1' }, () => {
 
   test('static pages fit a phone viewport with every control on screen', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    for (const path of ['/login', '/register', '/worlds', '/leaderboards', '/guild', '/reports', '/impressum']) {
+    // '/leaderboards' and '/guild' render as a modal over the settlement
+    // background now (App.vue's modal-route pattern, lib/modalRoute.ts) —
+    // covered separately below (modal-routes.spec.ts-style checks) rather
+    // than in this plain-page sweep.
+    for (const path of ['/login', '/register', '/worlds', '/reports', '/impressum']) {
       await page.goto(path);
       await page.waitForLoadState('networkidle');
       await expectNothingOffscreen(page, path);
     }
   });
 
-  test('the leaderboards page keeps a side gutter instead of running into the screen edge', async ({ page }) => {
+  test('a directly-loaded leaderboards modal fits a phone viewport with every control on screen', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/leaderboards');
+    await page.waitForLoadState('networkidle');
+    await expectNothingOffscreen(page, '/leaderboards');
+  });
+
+  test('the leaderboards modal keeps a side gutter instead of running its heading into the screen edge', async ({ page }) => {
     await page.goto('/leaderboards');
     const heading = page.getByRole('heading', { level: 1 });
     await expect(heading).toBeVisible();
@@ -349,5 +360,61 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
 
     await expectPaintsAbove(panel, page.locator('.settlement-bubble'), 'settlement bubble paints over the open queue drawer');
+  });
+});
+
+// Leaderboards/guild-as-modal (owner decision): both open as a modal over
+// whatever page is currently showing, exactly like the profile modal — see
+// App.vue's modal-route pattern and lib/modalRoute.ts.
+test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  test('opening Leaderboards from the drawer shows the modal over the map, and closing returns to a bare /settlement', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    // Leaderboards is gated on auth.isAuthenticated (HudNav.vue) — see
+    // leaderboard.spec.ts's own "is reachable via the HUD nav link" test.
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    await page.locator('.hud-grip').click();
+    await page.getByRole('button', { name: 'Leaderboards' }).click();
+    await expect(page).toHaveURL(/\/leaderboards$/);
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
+    // The map underneath is still there, not unmounted/remounted.
+    await expect(page.locator('canvas')).toBeVisible();
+
+    await page.locator('.back-button').click();
+    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('opening Guild from the drawer shows the modal over the map, and closing returns to a bare /settlement', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.found(page);
+
+    await page.locator('.hud-grip').click();
+    await page.getByRole('button', { name: 'Alliance' }).click();
+    await expect(page).toHaveURL(/\/guild$/);
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Guild', exact: true })).toBeVisible();
+    await expect(page.locator('canvas')).toBeVisible();
+
+    await page.locator('.back-button').click();
+    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('a direct load of /leaderboards shows the modal over the settlement fallback background', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/leaderboards');
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
   });
 });
