@@ -14,6 +14,23 @@
     "top": "Top",
     "bottom": "Bottom"
   },
+  "graphics": {
+    "title": "Graphics",
+    "hint": "Applies on this device only.",
+    "animations": "Map animations",
+    "auto": "Auto",
+    "on": "On",
+    "off": "Off",
+    "status": {
+      "forcedOn": "On (this device)",
+      "forcedOff": "Off (this device)",
+      "reducedMotion": "Off — your system asks for reduced motion",
+      "saveData": "Off — data saver is on",
+      "measuring": "Auto — measuring frame rate…",
+      "autoOn": "Auto — on",
+      "autoOffSlow": "Auto — off, frame rate dropped below 30 fps"
+    }
+  },
   "bio": {
     "title": "Bio",
     "edit": "Edit bio",
