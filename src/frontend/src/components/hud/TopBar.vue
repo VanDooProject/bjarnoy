@@ -23,7 +23,7 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useHudDrawer } from '../../composables/useHudDrawer';
 import { isHudDrawerOpen, setHudDrawerCloseFn } from '../../composables/hudDrawerOpenState';
-import { isHudBarAtBottom, isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
+import { isHudBarAtBottom, isHudBarMounted, isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { hudBarHeightPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
@@ -57,6 +57,16 @@ const world = useWorldStore();
 const hudPrefs = useHudPrefsStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const slots = useSlots();
+
+// Mobile tutorial focus: LandingView.vue's founded-branch bar unmounts
+// entirely (not just hides) while the phone-width guided build steps run —
+// see that view's own `hideBarForTutorial`. DemoModeBadge.vue needs to tell
+// that apart from "a bar is mounted, currently at its default 64px height"
+// (this component's own `hudBarHeightPx` onBeforeUnmount reset below) so it
+// can fall back to the bare screen edge instead of a stale bar offset — see
+// hudSettlementBubbleState.ts's own comment on `isHudBarMounted`.
+onMounted(() => { isHudBarMounted.value = true; });
+onBeforeUnmount(() => { isHudBarMounted.value = false; });
 
 const settlementName = computed(() => props.title || world.hud.settlementName || null);
 

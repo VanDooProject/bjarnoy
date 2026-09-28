@@ -260,6 +260,27 @@ test('founding a settlement swaps the pre-founding header for the real in-game n
   await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
 });
 
+// Mobile tutorial focus (owner decision): the header-hiding and
+// checklist-vs-ring behaviour is phone-only (HUD_COMPACT_QUERY, max-width
+// 768px) — desktop keeps both the header and the checklist on screen
+// throughout, including while the ring is open, at this suite's default
+// 1280x800 desktop viewport.
+test('desktop keeps the header and the onboarding checklist visible throughout, including while the ring is open', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  const settlement = await SettlementPage.openLanding(page);
+  await settlement.claimLandfall();
+
+  await expect(page.locator('.hud-bar')).toBeVisible();
+  await expect(settlement.checklist).toBeVisible();
+
+  const target = await settlement.findHex({ terrain: 'grass' });
+  await settlement.clickHex(target);
+  await settlement.ring.waitForOpen();
+
+  await expect(page.locator('.hud-bar')).toBeVisible();
+  await expect(settlement.checklist).toBeVisible();
+});
+
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {
   await page.goto('/impressum');
   await expect(page.getByRole('heading', { name: 'Impressum' })).toBeVisible();
