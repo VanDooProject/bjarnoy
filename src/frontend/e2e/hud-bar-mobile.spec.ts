@@ -378,8 +378,15 @@ test.describe('mobile HUD bar', () => {
   // itself is exercised below with seeded large numbers at 320px.
   test('at 390px the default numbers stay in full notation in every stage', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    // Same fake-clock approach as the cycling test above (see its comment):
+    // this test taps rate -> cap and asserts the cap stage, so ResourceBar's
+    // 6s auto-revert must not be able to fire between the two taps on a slow
+    // run (reproduced under parallel load: the second tap landed on a
+    // reverted stock stage and read "+60/h" instead of "/3,000").
+    await page.clock.install();
     await loginTestUser(page);
     await SettlementPage.found(page);
+    await page.clock.pauseAt(Date.now() + 60_000);
 
     const row = page.locator(REAL_BAR);
     const wood = page.locator(`${REAL_BAR} .resource--compact`).nth(0);
@@ -462,6 +469,7 @@ for (const width of [375, 320]) {
 test.describe('mobile HUD bar short notation', () => {
   test('seeding very large resources forces short "k"/"M" notation at 320px, and the row still fits on one line', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.clock.install();
     await loginTestUser(page);
     const settlement = await SettlementPage.found(page);
     await settlement.setStorageCaps({ wood: 36_000_000, stone: 20_000_000, food: 40_000_000, iron: 10_000_000 });
@@ -476,6 +484,10 @@ test.describe('mobile HUD bar short notation', () => {
     await expectFillTracksMatchNumbers(page);
     await expectSingleRow(page);
 
+    // Paused only now, after the seeded values have reached the HUD, so the
+    // two taps below can't straddle ResourceBar's 6s auto-revert — same
+    // reason as the cycling test's fake clock above.
+    await page.clock.pauseAt(Date.now() + 60_000);
     await pills.first().click(); // rate
     await pills.first().click(); // cap
     await expect(pills.first().locator('.value-compact')).toContainText(/\/[\d.,]+[kM]/);
