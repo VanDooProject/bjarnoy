@@ -31,6 +31,8 @@ function testRouter(initialPath = '/settlement', { lazySettlement = false } = {}
       { path: '/world', name: 'world', component: WorldStub },
       { path: '/profile', name: 'own-profile', component: WorldStub },
       { path: '/profile/:userName', name: 'profile', component: WorldStub },
+      { path: '/leaderboards', name: 'leaderboards', component: WorldStub },
+      { path: '/guild', name: 'guild', component: WorldStub },
     ],
   });
   router.push(initialPath);
@@ -41,7 +43,13 @@ function mountApp(router: ReturnType<typeof testRouter>) {
   return mount(App, {
     global: {
       plugins: [router],
-      stubs: { AccountRestrictedBanner: true, DemoModeBadge: true, ProfileModal: true },
+      stubs: {
+        AccountRestrictedBanner: true,
+        DemoModeBadge: true,
+        ProfileModal: true,
+        LeaderboardModal: true,
+        GuildModal: true,
+      },
     },
   });
 }
@@ -107,5 +115,50 @@ describe('App background-route pattern', () => {
     expect(wrapper.text()).not.toContain('[object Promise]');
     expect(wrapper.find('.settlement-stub').exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'ProfileModal' }).exists()).toBe(true);
+  });
+
+  it('renders leaderboards as a modal over the background view, keeping it mounted', async () => {
+    const router = testRouter('/settlement');
+    await router.isReady();
+    const wrapper = mountApp(router);
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+
+    await router.push({ path: '/leaderboards', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'GuildModal' }).exists()).toBe(false);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+
+    await router.push('/settlement');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(false);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders guild as a modal over the background view', async () => {
+    const router = testRouter('/settlement');
+    await router.isReady();
+    const wrapper = mountApp(router);
+
+    await router.push({ path: '/guild', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'GuildModal' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'ProfileModal' }).exists()).toBe(false);
+  });
+
+  it('renders the settlement view behind a directly-loaded leaderboards route (no backgroundView state)', async () => {
+    const router = testRouter('/leaderboards');
+    await router.isReady();
+    const wrapper = mountApp(router);
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(true);
   });
 });

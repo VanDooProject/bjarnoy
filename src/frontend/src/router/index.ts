@@ -9,6 +9,12 @@ import { usePlayerStore } from '../stores/player';
 // what this router route does. Pointing the route at the same static import
 // avoids Vite's "ineffective dynamic import" warning for no benefit.
 import ProfileView from '../views/ProfileView.vue';
+// Same reasoning as ProfileView above: LeaderboardModal.vue/GuildModal.vue
+// (App.vue's modal-route pattern) statically import these same components,
+// so pointing the routes at the same static imports avoids Vite's
+// "ineffective dynamic import" warning for no benefit.
+import LeaderboardView from '../views/LeaderboardView.vue';
+import GuildView from '../views/GuildView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -74,12 +80,12 @@ export const router = createRouter({
     {
       path: '/leaderboards',
       name: 'leaderboards',
-      component: () => import('../views/LeaderboardView.vue'),
+      component: LeaderboardView,
     },
     {
       path: '/guild',
       name: 'guild',
-      component: () => import('../views/GuildView.vue'),
+      component: GuildView,
     },
     {
       // Issue #40 phase 3: battle-reports inbox, and the same view's detail

@@ -13,6 +13,7 @@ import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { useLogout } from '../../composables/useLogout';
 import { profileLocation } from '../../lib/profileRoute';
+import { modalLocation } from '../../lib/modalRoute';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -172,7 +173,7 @@ watch(() => route.fullPath, closeAccountMenu);
       v-if="auth.isAuthenticated"
       class="link"
       :class="{ active: route.name === 'leaderboards' }"
-      @click="router.push('/leaderboards')"
+      @click="router.push(modalLocation(router, '/leaderboards'))"
     >
       {{ t('hud.nav.leaderboards') }}
     </button>
@@ -192,7 +193,11 @@ watch(() => route.fullPath, closeAccountMenu);
       {{ t('hud.nav.reports') }}
       <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
     </button>
-    <button class="link" :class="{ active: route.name === 'guild' }" @click="router.push('/guild')">
+    <button
+      class="link"
+      :class="{ active: route.name === 'guild' }"
+      @click="router.push(modalLocation(router, '/guild'))"
+    >
       {{ t('hud.nav.alliance') }}
     </button>
     <button
