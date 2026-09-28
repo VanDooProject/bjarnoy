@@ -358,11 +358,17 @@ public class ReportsModalTests
     /// <c>LoginView</c>/a JWT, which a plain anonymous player never uses
     /// either (see this class's own remarks).
     /// </summary>
-    private static string BuildLoginInitScript(string ownerId, string settlementId) => $$"""
-        () => {
-          localStorage.setItem('bjarnoy.playerId', {{System.Text.Json.JsonSerializer.Serialize(ownerId)}});
-          localStorage.setItem('bjarnoy.settlementId', {{System.Text.Json.JsonSerializer.Serialize(settlementId)}});
-          localStorage.setItem('bjarnoy.onboardingComplete', '1');
-        }
+    /// <remarks>
+    /// Plain statements, not a <c>() => { ... }</c> function: Playwright .NET's
+    /// <c>AddInitScriptAsync(string)</c> evaluates the string as script source
+    /// (unlike the JS API, which also accepts a function and calls it), so a
+    /// bare arrow function would only be defined, never run — the keys would
+    /// never be set and the router would bounce <c>/settlement</c> to the
+    /// landing page, where the in-game HUD (and its Reports link) never shows.
+    /// </remarks>
+    private static string BuildLoginInitScript(string ownerId, string settlementId) => $"""
+        localStorage.setItem('bjarnoy.playerId', {System.Text.Json.JsonSerializer.Serialize(ownerId)});
+        localStorage.setItem('bjarnoy.settlementId', {System.Text.Json.JsonSerializer.Serialize(settlementId)});
+        localStorage.setItem('bjarnoy.onboardingComplete', '1');
         """;
 }
