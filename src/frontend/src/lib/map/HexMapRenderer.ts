@@ -63,6 +63,7 @@ import {
   giantTopTextureFor,
   loadAnimAtlases,
   loadBuildingAtlases,
+  loadLevel1Atlases,
   loadPackAnimAtlases,
   loadPackAtlases,
   loadTerrainAtlas,
@@ -1712,14 +1713,36 @@ export class HexMapRenderer {
       this.textures = textures;
       this.icons = icons;
 
-      loadBuildingAtlases()
-        .then((buildings) => {
+      // Staged in two: `buildings-level1` first (small — every building's
+      // shared base plus its level-1 art; see `loadLevel1Atlases`'s own doc
+      // comment), merged and rebuilt so buildings render with *some* real
+      // art at every level (their level-1 rung, via `pickIndexedEntry`'s
+      // fallback walk) as soon as it resolves, rather than waiting on the
+      // much larger `buildings-static` atlas for a first building paint.
+      // `buildings-static` then merges in second, upgrading every building
+      // to its exact level's art. On the older, currently vendored atlas
+      // (no `buildings-level1` split) the first stage resolves to nothing
+      // and this reduces to the original single-stage load.
+      loadLevel1Atlases()
+        .then((level1) => {
           if (this.destroyed || !this.textures) return;
-          this.textures = mergeTileTextures(this.textures, buildings);
+          this.textures = mergeTileTextures(this.textures, level1);
           this.rebuildAll();
         })
         .catch((err) => {
-          console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
+          console.warn('Level-1 building atlas failed to load; settlement tiles stay terrain-only for now', err);
+        })
+        .finally(() => {
+          if (this.destroyed) return;
+          loadBuildingAtlases()
+            .then((buildings) => {
+              if (this.destroyed || !this.textures) return;
+              this.textures = mergeTileTextures(this.textures, buildings);
+              this.rebuildAll();
+            })
+            .catch((err) => {
+              console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
+            });
         });
     })();
 
