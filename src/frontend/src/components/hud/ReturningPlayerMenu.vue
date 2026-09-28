@@ -23,7 +23,17 @@ import WorldList from './WorldList.vue';
 import { useWorldStore } from '../../stores/world';
 import type { MessageSchema } from '../../i18n/schema';
 
-withDefaults(defineProps<{ nudging?: boolean }>(), { nudging: false });
+// `unclaimedRealm`: the player already founded a realm but hasn't named a
+// jarl (registered) yet — for them "I already have a realm" as the headline
+// reads wrong, since the realm they have is the one on screen. The trigger
+// then leads with "Name your jarl" (same /register route as ProfileNudge's
+// CTA, so it stays reachable after that nudge is dismissed with "Later"),
+// with logging into an existing realm demoted to the sub-line and the
+// second row of the panel.
+withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean }>(), {
+  nudging: false,
+  unclaimedRealm: false,
+});
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const route = useRoute();
@@ -98,8 +108,14 @@ watch(() => route.fullPath, close);
       @click="toggle"
     >
       <span class="trigger-text">
-        <span class="trigger-main">{{ t('hud.returningPlayer.trigger') }}</span>
-        <span class="trigger-sub">{{ t('hud.returningPlayer.triggerSub') }}</span>
+        <template v-if="unclaimedRealm">
+          <span class="trigger-main">{{ t('hud.returningPlayer.nameJarlTrigger') }}</span>
+          <span class="trigger-sub">{{ t('hud.returningPlayer.nameJarlTriggerSub') }}</span>
+        </template>
+        <template v-else>
+          <span class="trigger-main">{{ t('hud.returningPlayer.trigger') }}</span>
+          <span class="trigger-sub">{{ t('hud.returningPlayer.triggerSub') }}</span>
+        </template>
       </span>
       <!-- Decorative, not copy — a CSS-generated glyph (below) rather than
            raw template text, so @intlify/vue-i18n/no-raw-text (every visible
@@ -110,6 +126,16 @@ watch(() => route.fullPath, close);
     </button>
     <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
       <div class="notch" />
+      <button
+        v-if="unclaimedRealm"
+        type="button"
+        role="menuitem"
+        class="row name-jarl-row"
+        data-testid="returning-player-name-jarl"
+        @click="go('/register')"
+      >
+        {{ t('hud.returningPlayer.nameJarlTrigger') }}
+      </button>
       <button
         type="button"
         role="menuitem"
@@ -272,6 +298,9 @@ watch(() => route.fullPath, close);
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
+}
+.name-jarl-row {
+  color: var(--gold);
 }
 .row:hover {
   background: rgba(255, 255, 255, 0.06);

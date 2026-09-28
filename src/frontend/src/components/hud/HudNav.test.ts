@@ -301,3 +301,38 @@ describe('HudNav account menu', () => {
     Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
   });
 });
+
+// After "Later" on the nudge, the top-right trigger must not fall back to
+// "I already have a realm" — the player's realm is the one on screen, what
+// they lack is a jarl (account), so the trigger keeps leading with that.
+describe('HudNav unclaimed-realm trigger label', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it('reads "Name your jarl" once the nudge is dismissed with "Later"', async () => {
+    const player = usePlayerStore();
+    foundAndOnboarded(player);
+    const wrapper = await mountHudNav();
+    await wrapper.find('[data-testid="profile-nudge-later"]').trigger('click');
+    const trigger = wrapper.find('[data-testid="returning-player-trigger"]');
+    expect(wrapper.find('[data-testid="profile-nudge"]').exists()).toBe(false);
+    expect(trigger.text()).toContain('Name your jarl');
+    expect(trigger.text()).toContain('or I already have a realm');
+  });
+
+  it('keeps "I already have a realm" before founding', async () => {
+    const wrapper = await mountHudNav();
+    const trigger = wrapper.find('[data-testid="returning-player-trigger"]');
+    expect(trigger.text()).toContain('I already have a realm');
+    expect(trigger.text()).not.toContain('Name your jarl');
+  });
+
+  it('keeps "I already have a realm" once a nickname is set', async () => {
+    const player = usePlayerStore();
+    foundAndOnboarded(player);
+    player.nickname = 'Ragnar';
+    const wrapper = await mountHudNav();
+    expect(wrapper.find('[data-testid="returning-player-trigger"]').text()).not.toContain('Name your jarl');
+  });
+});
