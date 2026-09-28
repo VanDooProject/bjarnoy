@@ -38,10 +38,12 @@ test('register creates an account, claims the local settlement id, and logs in',
     });
   });
 
-  // Redirect target set to /leaderboards (a route with no map/canvas
-  // rendering, unlike the default '/') so this test stays about the
-  // register flow's own request/response wiring rather than incidentally
-  // depending on the HexMapRenderer/vendor texture pack that '/' pulls in.
+  // Redirect target set to /leaderboards. Leaderboards now opens as a
+  // modal over whatever page was showing before (App.vue's modal-route
+  // pattern), so this does still mount the settlement-fallback
+  // HexMapRenderer underneath (same as the default '/') — but the
+  // assertions below are all about the register flow's own request/
+  // response wiring and the modal's URL, not the map underneath it.
   await page.goto('/register?redirect=%2Fleaderboards');
   await page.getByLabel('Username').fill('newjarl');
   await page.getByLabel('Password', { exact: true }).fill('correct horse battery');

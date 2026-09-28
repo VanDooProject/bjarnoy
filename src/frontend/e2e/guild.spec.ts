@@ -2,7 +2,7 @@ import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
-test('the Alliance nav link opens the guild view', { tag: '@g2' }, async ({ page }) => {
+test('the Alliance nav link opens the guild view as a modal over the map', { tag: '@g2' }, async ({ page }) => {
   // landing-page-defects.md L1: Alliance is a multiplayer surface with
   // nothing in it for a visitor who hasn't founded anything, so it's no
   // longer offered on the pre-founding landing header — found first, the
@@ -11,7 +11,20 @@ test('the Alliance nav link opens the guild view', { tag: '@g2' }, async ({ page
   await SettlementPage.found(page);
   await page.getByRole('button', { name: 'Alliance' }).click();
   await expect(page).toHaveURL(/\/guild$/);
-  await expect(page.getByRole('heading', { name: 'Guild', exact: true })).toBeVisible();
+
+  // Owner decision: guild opens as a modal over whatever page was showing
+  // before (App.vue's modal-route pattern, lib/modalRoute.ts), exactly like
+  // the profile modal — not a full-page navigation.
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Guild', exact: true })).toBeVisible();
+  // The settlement map underneath is still mounted, not swapped out.
+  await expect(page.locator('canvas')).toBeVisible();
+
+  // Closing returns to a bare /settlement with no modal left behind.
+  await dialog.locator('.close-button').click();
+  await expect(page).toHaveURL(/\/settlement$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('demo mode has no live world, so the guild view shows its hint instead of erroring', { tag: '@g2' }, async ({ page }) => {
