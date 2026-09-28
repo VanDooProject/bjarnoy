@@ -17,6 +17,7 @@ interface Draft {
   speedFactor: string;
   startsAt: string;
   joinsClosed: boolean;
+  frozenIslesEnabled: boolean;
   endbossAt: string;
   graceMinutes: string;
   saving: boolean;
@@ -30,6 +31,7 @@ function draftFor(world: AdminWorldResponse): Draft {
     speedFactor: String(world.speedFactor),
     startsAt: toLocalInput(world.startsAt),
     joinsClosed: world.joinsClosed,
+    frozenIslesEnabled: world.frozenIslesEnabled,
     endbossAt: toLocalInput(world.endbossAt),
     graceMinutes: '0',
     saving: false,
@@ -134,6 +136,7 @@ async function saveSettings(world: AdminWorldResponse) {
       speedFactor,
       startsAt: fromLocalInput(draft.startsAt),
       joinsClosed: draft.joinsClosed,
+      frozenIslesEnabled: draft.frozenIslesEnabled,
       endbossAt: fromLocalInput(draft.endbossAt),
     });
     applyUpdated(updated);
@@ -214,6 +217,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <th>{{ $t('adminWorlds.columns.players') }}</th>
           <th>{{ $t('adminWorlds.columns.joinable') }}</th>
           <th>{{ $t('adminWorlds.columns.endboss') }}</th>
+          <th>{{ $t('adminWorlds.columns.frozenIsles') }}</th>
           <th>{{ $t('adminWorlds.columns.seed') }}</th>
         </tr>
       </thead>
@@ -225,6 +229,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <td>{{ world.playerCount }} / {{ world.maxPlayers }}</td>
           <td>{{ world.joinsClosed ? $t('adminWorlds.joins.closed') : $t('adminWorlds.joins.open') }}</td>
           <td>{{ world.endbossTriggeredAt ? $t('adminWorlds.endbossStatus.triggered') : world.endbossAt ? $t('adminWorlds.endbossStatus.scheduled') : $t('adminWorlds.endbossStatus.none') }}</td>
+          <td>{{ world.frozenIslesEnabled ? $t('adminWorlds.frozenIsles.enabled') : $t('adminWorlds.frozenIsles.disabled') }}</td>
           <td>{{ world.seed }}</td>
         </tr>
       </tbody>
@@ -248,6 +253,9 @@ async function setRunState(world: AdminWorldResponse, action: string) {
 
         <label :for="`closed-${world.id}`">{{ $t('adminWorlds.fields.closedToNewPlayers') }}</label>
         <input :id="`closed-${world.id}`" v-model="drafts[world.id].joinsClosed" type="checkbox" />
+
+        <label :for="`frozen-${world.id}`">{{ $t('adminWorlds.fields.frozenIslesEnabled') }}</label>
+        <input :id="`frozen-${world.id}`" v-model="drafts[world.id].frozenIslesEnabled" type="checkbox" />
 
         <label :for="`endboss-${world.id}`">{{ $t('adminWorlds.fields.endbossAt') }}</label>
         <input :id="`endboss-${world.id}`" v-model="drafts[world.id].endbossAt" type="datetime-local" />
