@@ -61,7 +61,9 @@ import {
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
+  loadAnimAtlases,
   loadBuildingAtlases,
+  loadPackAnimAtlases,
   loadPackAtlases,
   loadTerrainAtlas,
   mergeTileTextures,
@@ -71,12 +73,15 @@ import {
   topAnimFor,
   topAnimTextures,
   topTextureFor,
+  unloadAnimAtlases,
+  unloadPackAnimAtlases,
   type TileAnimClip,
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
+import { animationPreference } from '../perf/animationPreference';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -1396,6 +1401,19 @@ export class HexMapRenderer {
    */
   private wastedPackLoading: Promise<void> | null = null;
 
+  /**
+   * Whether `buildings-anim` art should be loaded/drawn — set from outside
+   * via `setAnimationsEnabled` (see `useHexMapRenderer`'s wiring to
+   * `animationPreference.effective`), synced onto `this.textures`/
+   * `topAnimState` by `syncAnimationAtlases` (called from every `rebuildAll`,
+   * same pattern as `maybeLoadWastedPack`). `animCoreReady`/`wastedAnimReady`
+   * track which anim atlases are actually merged in right now, so
+   * `syncAnimationAtlases` only loads/unloads each one once per toggle.
+   */
+  private animationsEnabled = false;
+  private animCoreReady = false;
+  private wastedAnimReady = false;
+
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
   private lastBuiltCamera: Camera | null = null;
@@ -1763,6 +1781,14 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    // Feeds the 'auto' animation governor (animationPreference.ts) — in both
+    // modes, not just settlement: the governor is measuring this device's
+    // general Pixi frame rate (worldModel.tick, fog, markers, the camera
+    // transform), not specifically building-clip cost, so a world-map
+    // session still warms up a useful measurement rather than starting from
+    // zero the moment the player first opens a settlement. Dropped while the
+    // tab is hidden by animationPreference.feedFrame itself.
+    animationPreference.feedFrame(performance.now(), this.app!.ticker.deltaMS);
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -2687,10 +2713,95 @@ export class HexMapRenderer {
       });
   }
 
+  /**
+   * Turns `buildings-anim` art on/off, per the `animationPreference`
+   * singleton (see `useHexMapRenderer`'s wiring). Just records the wanted
+   * state and defers the actual load/unload to `syncAnimationAtlases`
+   * (already run from every `rebuildAll`) so it applies once `this.textures`
+   * exists and covers a later mode switch into settlement or wasted-pack
+   * reveal the same way `maybeLoadWastedPack` does — rather than duplicating
+   * those readiness checks here.
+   */
+  setAnimationsEnabled(enabled: boolean) {
+    if (this.animationsEnabled === enabled) return;
+    this.animationsEnabled = enabled;
+    // rebuildAll() itself calls syncAnimationAtlases() (see below) — routing
+    // through it here too, rather than calling that directly, is what makes
+    // a toggle that arrives before this.textures exists yet safe: this is a
+    // no-op then (same early-out rebuildAll always has), and the *later*
+    // rebuildAll once texture loading finishes picks up the flag change.
+    this.rebuildAll();
+  }
+
+  /**
+   * Loads or releases `buildings-anim`/`wasted-buildings-anim` (see
+   * `textures.ts`'s `loadAnimAtlases`/`loadPackAnimAtlases` and their
+   * `unload*` counterparts) to match `this.animationsEnabled`. World mode
+   * never draws tile art at all (`WORLD_TERRAIN_FILL`), so this is a no-op
+   * there — same guard `maybeLoadWastedPack` uses.
+   *
+   * Disabling merely drops `animTop` from `this.textures` and rebuilds:
+   * `topAnimFor` then resolves undefined for every tile, and the ordinary
+   * per-tile draw path's own `syncTopAnim` call (see its doc comment) is
+   * what actually puts each sprite back on its static texture and returns
+   * any pooled overlay sprite — there is no separate cleanup to do here.
+   * The atlas unload itself only has to happen after that rebuild has run
+   * (enqueued via `rebuildAll`'s caller), never before, or a still-drawing
+   * sprite would be pointing at an already-destroyed texture.
+   */
+  private syncAnimationAtlases() {
+    if (this.options.mode !== 'settlement' || !this.textures) return;
+
+    if (this.animationsEnabled) {
+      if (!this.animCoreReady) {
+        this.animCoreReady = true;
+        loadAnimAtlases()
+          .then((anim) => {
+            if (this.destroyed || !this.textures || !this.animationsEnabled) return;
+            this.textures = mergeTileTextures(this.textures, anim);
+            this.rebuildAll();
+          })
+          .catch((err) => {
+            this.animCoreReady = false;
+            console.warn('Animation atlas failed to load; buildings stay on static art', err);
+          });
+      }
+      if (!this.wastedAnimReady && this.options.worldModel.isWastedRevealed()) {
+        this.wastedAnimReady = true;
+        loadPackAnimAtlases('wasted')
+          .then((anim) => {
+            if (this.destroyed || !this.textures || !this.animationsEnabled) return;
+            this.textures = mergeTileTextures(this.textures, anim);
+            this.rebuildAll();
+          })
+          .catch((err) => {
+            this.wastedAnimReady = false;
+            console.warn('Wasted animation atlas failed to load; wasted buildings stay on static art', err);
+          });
+      }
+      return;
+    }
+
+    if (this.animCoreReady || this.wastedAnimReady) {
+      this.animCoreReady = false;
+      this.wastedAnimReady = false;
+      this.textures = { ...this.textures, animTop: {} };
+      // The next rebuildAll (this method's own callers already trigger one)
+      // re-syncs every currently-animated sprite back to static via
+      // syncTopAnim before this releases the atlas's GPU memory below —
+      // queued as a microtask so it runs after that synchronous rebuild.
+      Promise.resolve().then(() => {
+        unloadAnimAtlases();
+        unloadPackAnimAtlases('wasted');
+      });
+    }
+  }
+
   private rebuildAll() {
     if (!this.app) return;
     if (this.options.mode === 'settlement' && !this.textures) return;
     this.maybeLoadWastedPack();
+    this.syncAnimationAtlases();
     this.lastBuiltCamera = { ...this.camera };
     const rebuildStart = performance.now();
     this.lastRebuildAtMs = rebuildStart;
