@@ -96,6 +96,11 @@ const showBadge = computed(() => DEMO_MODE && !(isCompact.value && isHudDrawerOp
    of spanning the top of the screen and covering it. Stays centered like
    the desktop rule above. */
 .demo-badge--compact {
+  /* Phones: the badge sits in its own row under the bar rather than on top
+     of it, so it only needs to clear the map overlays — same layer as the
+     settlement bubble (TopBar.vue), under the queue drawer, the HUD drawer
+     and the bar's own popovers (the base 1000 painted over all of them). */
+  z-index: 36;
   padding: 3px 10px;
   font-size: 10px;
   border-radius: 999px;

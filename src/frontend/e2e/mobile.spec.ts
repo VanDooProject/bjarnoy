@@ -100,6 +100,40 @@ async function expectHeroClear(page: Page): Promise<void> {
   await expectInsideViewport(page, hero);
 }
 
+/**
+ * Where `top` and `under` overlap on screen, the element actually hit there
+ * must belong to `top` — i.e. `top` really paints above `under`, not just
+ * sits next to it. Fails if they don't overlap at all, so the test can't
+ * pass vacuously after a layout change moves them apart.
+ */
+async function expectPaintsAbove(top: Locator, under: Locator, what: string): Promise<void> {
+  const a = (await top.boundingBox())!;
+  const b = (await under.boundingBox())!;
+  const left = Math.max(a.x, b.x);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const upper = Math.max(a.y, b.y);
+  const lower = Math.min(a.y + a.height, b.y + b.height);
+  expect(right > left && lower > upper, `${what}: the two don't overlap, nothing to check`).toBe(true);
+  // The HUD bar and its popovers are `pointer-events: none` (only real
+  // controls take taps), and elementFromPoint skips such elements. Paint
+  // order doesn't depend on pointer-events, so switch hit-testing on for
+  // just these two while asking which one is on top.
+  const underHandle = await under.elementHandle();
+  const hitInsideTop = await top.evaluate(
+    (el, args) => {
+      const other = args.under as HTMLElement;
+      const saved = [(el as HTMLElement).style.pointerEvents, other.style.pointerEvents];
+      (el as HTMLElement).style.pointerEvents = 'auto';
+      other.style.pointerEvents = 'auto';
+      const hit = document.elementFromPoint(args.x, args.y);
+      [(el as HTMLElement).style.pointerEvents, other.style.pointerEvents] = saved;
+      return el.contains(hit);
+    },
+    { x: (left + right) / 2, y: (upper + lower) / 2, under: underHandle },
+  );
+  expect(hitInsideTop, what).toBe(true);
+}
+
 test.describe('phone layout', { tag: '@g1' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
@@ -277,5 +311,43 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
     // Completing onboarding brings the header back.
     await settlement.placeGuidedBuildings();
     await expect(page.locator('.hud-bar')).toBeVisible();
+  });
+});
+
+// z-layering: the phone settlement bubble and demo badge are fixed layers
+// outside the HUD bar. They used to sit at z 41 / 1000 and painted over the
+// bar's own popovers (ProfileNudge) and over the open queue drawer.
+test.describe('phone overlay layering', { tag: '@g1' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  test('the profile nudge paints above the settlement bubble and the demo badge', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await settlement.placeGuidedBuildings();
+    await expect(settlement.profileNudge).toBeVisible();
+
+    await expectPaintsAbove(settlement.profileNudge, page.locator('.settlement-bubble'), 'settlement bubble paints over the profile nudge');
+    const badge = page.locator('.demo-badge');
+    if (await badge.isVisible()) {
+      await expectPaintsAbove(settlement.profileNudge, badge, 'demo badge paints over the profile nudge');
+    }
+  });
+
+  test('the open queue drawer paints above the settlement bubble', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.found(page);
+    // Any queued order mounts the drawer (see queue-drawer.spec.ts's seed).
+    await page.evaluate(() => {
+      const world = (window as unknown as { __demoWorld: () => any }).__demoWorld();
+      world.hud.garrison = [{ unit: 'spearman', count: 5 }];
+      world.hud.tick += 1;
+      world.syncHud();
+    });
+    await page.locator('.queue-drawer-handle').click();
+    const panel = page.locator('.queue-drawer-panel');
+    await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
+
+    await expectPaintsAbove(panel, page.locator('.settlement-bubble'), 'settlement bubble paints over the open queue drawer');
   });
 });
