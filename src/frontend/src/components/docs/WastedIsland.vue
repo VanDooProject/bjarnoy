@@ -546,10 +546,16 @@ function togglePlay(): void {
   pointer-events: all;
   cursor: pointer;
 }
+/* The in-game map's own hover highlight (HexMapRenderer.ts's HOVER_FILL /
+   HOVER_STROKE): a white wash at 28% under a pale-cream 4px stroke. The
+   game's stroke is 4 world units at TILE_W 168; this island is drawn at
+   TILE_W 400, hence 4 * 400 / 168. */
 .hover-outline {
-  fill: transparent;
-  stroke: var(--gold);
-  stroke-width: 2px;
+  fill: #ffffff;
+  fill-opacity: 0.28;
+  stroke: #ffe9c2;
+  stroke-width: 9.5px;
+  stroke-linejoin: round;
   pointer-events: none;
 }
 .caption {
