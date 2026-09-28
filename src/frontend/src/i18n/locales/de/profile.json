@@ -14,6 +14,23 @@
     "top": "Oben",
     "bottom": "Unten"
   },
+  "graphics": {
+    "title": "Grafik",
+    "hint": "Gilt nur auf diesem Gerät.",
+    "animations": "Kartenanimationen",
+    "auto": "Automatisch",
+    "on": "An",
+    "off": "Aus",
+    "status": {
+      "forcedOn": "An (auf diesem Gerät)",
+      "forcedOff": "Aus (auf diesem Gerät)",
+      "reducedMotion": "Aus — dein System wünscht reduzierte Bewegung",
+      "saveData": "Aus — Datensparmodus ist aktiv",
+      "measuring": "Automatisch — Bildrate wird gemessen…",
+      "autoOn": "Automatisch — an",
+      "autoOffSlow": "Automatisch — aus, Bildrate unter 30 fps gefallen"
+    }
+  },
   "bio": {
     "title": "Bio",
     "edit": "Bio bearbeiten",

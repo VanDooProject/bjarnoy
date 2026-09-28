@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileView from './ProfileView.vue';
 import type { ProfileResponse } from '../api/types';
+import { animationPreference } from '../lib/perf/animationPreference';
 import { useAuthStore } from '../stores/auth';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { createTestI18n } from '../test/i18n';
@@ -57,7 +58,23 @@ beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
   routeParams.userName = 'ragnar';
+  localStorage.removeItem('bjarnoy.animations');
+  animationPreference.setting = 'auto';
 });
+
+function ownProfileAuth() {
+  const auth = useAuthStore();
+  auth.user = {
+    id: 'user-1',
+    userName: 'ragnar',
+    role: 'player',
+    status: 'active',
+    displayName: null,
+    isPremium: false,
+    preferredLocale: null,
+  };
+  return auth;
+}
 
 describe('ProfileView', () => {
   it('renders the bio verbatim in a pre block, with joined date and settlement count', async () => {
@@ -233,6 +250,97 @@ describe('ProfileView', () => {
       const hudPrefs = useHudPrefsStore();
       expect(hudPrefs.barPosition).toBe('bottom');
       expect(bottomButton.attributes('aria-pressed')).toBe('true');
+    });
+  });
+
+  describe('graphics (animation) preferences', () => {
+    afterEach(() => {
+      // Restore the plain getter this suite overrides for the
+      // reduced-motion case below — see its own comment.
+      Object.defineProperty(animationPreference, 'reducedMotion', {
+        get() {
+          return false;
+        },
+        configurable: true,
+      });
+    });
+
+    it("shows the Graphics section on the player's own profile", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Graphics');
+    });
+
+    it("hides the Graphics section on someone else's profile", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      const auth = useAuthStore();
+      auth.user = {
+        id: 'user-2',
+        userName: 'floki',
+        role: 'player',
+        status: 'active',
+        displayName: null,
+        isPremium: false,
+        preferredLocale: null,
+      };
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('Graphics');
+    });
+
+    it('selecting a radio persists the setting to localStorage', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      const onRadio = wrapper
+        .findAll('input[type="radio"]')
+        .find((input) => (input.element as HTMLInputElement).value === 'on')!;
+      await onRadio.setValue(true);
+
+      expect(animationPreference.setting).toBe('on');
+      expect(localStorage.getItem('bjarnoy.animations')).toBe('on');
+      expect(wrapper.text()).toContain('On (this device)');
+    });
+
+    it("shows the 'measuring' status for auto before the fps governor has decided", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('measuring frame rate');
+    });
+
+    it('shows the reduced-motion status when auto and the system asks for reduced motion', async () => {
+      // animationPreference.reducedMotion is normally seeded once from
+      // matchMedia at module load and updated only by its own 'change'
+      // listener (see animationPreference.ts) — overriding the getter
+      // directly is the simplest way to exercise the resolution table's
+      // reduced-motion branch from a component test without needing the
+      // real matchMedia wiring to have fired in this test's favour.
+      Object.defineProperty(animationPreference, 'reducedMotion', {
+        get() {
+          return true;
+        },
+        configurable: true,
+      });
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('reduced motion');
     });
   });
 });

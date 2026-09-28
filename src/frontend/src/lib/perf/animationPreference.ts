@@ -244,8 +244,13 @@ export const animationPreference = {
   get governorState(): GovernorState {
     return state.governorState;
   },
+  // Reads through this object's own getters (`this.reducedMotion`, not
+  // `state.reducedMotion` directly) so a test can override one of them with
+  // `Object.defineProperty` on `animationPreference` itself — e.g. to check
+  // the profile UI's reduced-motion status line — without this module
+  // exporting its private `state` just to make that possible.
   get resolution(): AnimationResolution {
-    return resolveAnimationState(state.setting, { reducedMotion: state.reducedMotion, saveData: state.saveData }, state.governorState);
+    return resolveAnimationState(this.setting, { reducedMotion: this.reducedMotion, saveData: this.saveData }, this.governorState);
   },
   get effective(): boolean {
     return this.resolution.effective;

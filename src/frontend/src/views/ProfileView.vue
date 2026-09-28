@@ -7,6 +7,7 @@ import type { ProfileResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
 import HudPreferences from '../components/settings/HudPreferences.vue';
+import AnimationPreferences from '../components/settings/AnimationPreferences.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -161,6 +162,7 @@ function joinedDate(iso: string): string {
       </dl>
 
       <HudPreferences v-if="isOwnProfile" />
+      <AnimationPreferences v-if="isOwnProfile" />
 
       <section class="bio-section">
         <div class="bio-head">
