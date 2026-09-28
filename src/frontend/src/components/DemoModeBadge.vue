@@ -17,7 +17,12 @@ import { useI18n } from 'vue-i18n';
 import { DEMO_MODE } from '../config';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { isHudDrawerOpen } from '../composables/hudDrawerOpenState';
-import { isHudBarAtBottom, isSettlementBubbleShown, SETTLEMENT_BUBBLE_ROW_PX } from '../composables/hudSettlementBubbleState';
+import {
+  isHudBarAtBottom,
+  isHudBarMounted,
+  isSettlementBubbleShown,
+  SETTLEMENT_BUBBLE_ROW_PX,
+} from '../composables/hudSettlementBubbleState';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import type { MessageSchema } from '../i18n/schema';
@@ -42,6 +47,15 @@ const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 const badgeStyle = computed(() => {
   if (!isCompact.value) return undefined;
   const stack = isSettlementBubbleShown.value ? SETTLEMENT_BUBBLE_ROW_PX : 0;
+  // Mobile tutorial focus: LandingView.vue's founded-branch bar unmounts
+  // entirely during the phone-width guided build steps — `hudBarHeightPx`
+  // then resets to its 64px *default* (TopBar.vue's own onBeforeUnmount),
+  // not to 0, since a bar that's simply drag-collapsed and one that's fully
+  // absent both leave that ref alone otherwise. Without checking
+  // `isHudBarMounted` this badge would park itself 64px down, as if a
+  // default-height bar were still there, instead of near the actual top
+  // edge — see hudSettlementBubbleState.ts's own comment.
+  if (!isHudBarMounted.value) return { top: `${8 + stack}px` };
   return isHudBarAtBottom.value
     ? { top: `${8 + stack}px` }
     : { top: `${hudBarHeightPx.value + 8 + stack}px` };

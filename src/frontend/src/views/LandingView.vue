@@ -48,7 +48,7 @@ import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
-import { isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
+import { DEMO_BADGE_ROW_PX, isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
@@ -366,12 +366,36 @@ const queueDrawerOpen = ref(false);
 // CSS custom properties to stay clear of the bar on either edge instead of
 // assuming it's always at the top.
 const isCompactHudLanding = useMediaQuery(HUD_COMPACT_QUERY);
+// Mobile tutorial focus (owner decision): on phones, once a settlement is
+// founded the guided build steps are the whole show — the top HUD bar (and
+// everything it carries: the settlement-name bubble, the pull-down drawer)
+// is unmounted entirely rather than merely hidden, so nothing else on
+// screen competes with the tutorial. It comes back the moment onboarding
+// finishes (`guidance.complete`), when the completion banner hands off to
+// the full game. Desktop, and the pre-founding hero/"I already have a
+// realm" bar, are unaffected — this only ever swaps the *founded*-branch
+// TopBar below.
+const hideBarForTutorial = computed(
+  () => isCompactHudLanding.value && player.hasFoundedSettlement && !guidance.value.complete,
+);
 // The bar's *effective* edge (TopBar publishes it), not the raw preference:
 // the pre-founding bar has no drawer and always sits at the top, so a saved
 // 'bottom' preference must not move the intro text or overlays up under it.
 const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && isHudBarAtBottom.value);
-const hudInsetTopPxLanding = computed(() => (hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value));
-const hudInsetBottomPxLanding = computed(() => (hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0));
+// While the bar is unmounted for the tutorial there is no bar height to
+// clear at all — `hudBarHeightPx` resets to its 64px *default* (not 0) when
+// TopBar unmounts (see its own onBeforeUnmount), so this can't just rely on
+// that ref alone without re-introducing a stale 64px gap under nothing.
+const hudInsetTopPxLanding = computed(() =>
+  hideBarForTutorial.value || hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value,
+);
+const hudInsetBottomPxLanding = computed(() =>
+  !hideBarForTutorial.value && hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0,
+);
+// With the bar unmounted for the tutorial, the demo badge drops to the top
+// edge (DemoModeBadge.vue) — the landfall banner below reserves its row
+// rather than sliding up underneath it.
+const overlayRowTopPx = computed(() => (DEMO_MODE && hideBarForTutorial.value ? DEMO_BADGE_ROW_PX : 0));
 
 watch(ringScreen, (screen) => {
   if (!screen) ringLaneSpots.value = {};
@@ -811,7 +835,11 @@ watch(
 <template>
   <div
     class="landing"
-    :style="{ '--hud-inset-top': hudInsetTopPxLanding + 'px', '--hud-inset-bottom': hudInsetBottomPxLanding + 'px' }"
+    :style="{
+      '--hud-inset-top': hudInsetTopPxLanding + 'px',
+      '--hud-inset-bottom': hudInsetBottomPxLanding + 'px',
+      '--overlay-row-top': overlayRowTopPx + 'px',
+    }"
   >
     <SettlementCanvas
       v-if="player.hasFoundedSettlement ? world.selectedSettlementId : previewCoord"
@@ -844,7 +872,13 @@ watch(
          view flips into settlement mode in place (see foundHere below, no
          route change) and the in-game nav becomes correct again — hence the
          switch on the same flag that gates everything else in this view. -->
-    <TopBar v-if="player.hasFoundedSettlement">
+    <!-- Mobile tutorial focus: unmounted (not just hidden) on phones for as
+         long as the guided build steps are running — see
+         `hideBarForTutorial`'s own comment above. Unmounting also runs
+         TopBar's own onBeforeUnmount, which clears every singleton it owns
+         (the settlement bubble, the HUD drawer's open state, its own
+         measured height) rather than leaving any of them stuck mid-tutorial. -->
+    <TopBar v-if="player.hasFoundedSettlement && !hideBarForTutorial">
       <HudNav />
       <template #drawer="{ close }">
         <MobileHudDrawer @close="close" />
@@ -855,8 +889,14 @@ watch(
          or an empty drawer. TopBar.vue's own `hasDrawerSlot` (useSlots)
          gates the whole grip/drag/drawer trio on a `#drawer` slot actually
          being provided, not on `docked`/route context, so simply not
-         passing one here is enough. -->
-    <TopBar v-else title="Bjarnoy">
+         passing one here is enough.
+         Mobile tutorial focus: `v-else` alone would render THIS bar (the
+         pre-founding one, "Bjarnoy" + locale switcher) whenever the founded
+         branch's `v-if` above is false for ANY reason — including
+         `hideBarForTutorial`, which is exactly the state that must render no
+         bar at all. `v-else-if="!player.hasFoundedSettlement"` keeps this
+         branch scoped to its own original condition. -->
+    <TopBar v-else-if="!player.hasFoundedSettlement" title="Bjarnoy">
       <LocaleSwitcher />
       <ReturningPlayerMenu />
     </TopBar>
@@ -925,8 +965,13 @@ watch(
          entirely since there's nothing left to check off. -->
     <OnboardingBanner v-if="showLandfallBanner" variant="landfall" />
     <OnboardingBanner v-if="guidance.complete" variant="complete" @continue="onContinueToSettlement" />
+    <!-- Mobile tutorial focus (owner decision): on phones, the progress tray
+         and the open ring menu would otherwise both fight for the same
+         strip of screen near the bottom — the tray steps aside while the
+         ring is open and reappears the moment it closes. Desktop has room
+         for both at once and keeps showing it. -->
     <OnboardingChecklist
-      v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate"
+      v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
       :guidance="guidance"
       :has-founded="player.hasFoundedSettlement"
     />

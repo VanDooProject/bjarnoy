@@ -12,6 +12,7 @@ import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { useLogout } from '../../composables/useLogout';
+import { profileLocation } from '../../lib/profileRoute';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -109,7 +110,7 @@ function closeAccountMenu() {
 }
 function goToProfile() {
   closeAccountMenu();
-  router.push('/profile');
+  router.push(profileLocation(router));
 }
 async function onLogoutClick() {
   closeAccountMenu();

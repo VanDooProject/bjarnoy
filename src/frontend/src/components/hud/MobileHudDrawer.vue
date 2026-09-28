@@ -30,6 +30,7 @@ import { useReportsStore } from '../../stores/reports';
 import { useWorldStore } from '../../stores/world';
 import { useLogout } from '../../composables/useLogout';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
+import { profileLocation } from '../../lib/profileRoute';
 import type { MessageSchema } from '../../i18n/schema';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -52,7 +53,8 @@ function go(path: string) {
 }
 
 function goToProfile() {
-  go('/profile');
+  router.push(profileLocation(router));
+  emit('close');
 }
 async function onLogoutClick() {
   emit('close');
