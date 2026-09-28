@@ -658,6 +658,47 @@ describe('startTextureLoad', () => {
     ]);
   });
 
+  it('merges and draws the level-1 building art before the full building atlas, and still loads the rest if level 1 fails', async () => {
+    const events: string[] = [];
+    const LEVEL1 = { stage: 'level1' } as unknown as TileTextures;
+    const FULL = { stage: 'full' } as unknown as TileTextures;
+    let current: TileTextures = FAKE_TEXTURES;
+    const run = (loadLevel1: () => Promise<TileTextures>) =>
+      startTextureLoad(
+        fakeDeps({
+          mode: 'settlement',
+          loadLevel1,
+          loadBuildings: async () => {
+            events.push('load full');
+            return FULL;
+          },
+          getTextures: () => current,
+          merge: (_base, added) => {
+            events.push(`merge ${(added as unknown as { stage: string }).stage}`);
+            return added;
+          },
+          setTextures: (t) => {
+            current = t;
+          },
+          rebuildAll: () => events.push('rebuild'),
+        }),
+      ).done;
+
+    await run(async () => {
+      events.push('load level1');
+      return LEVEL1;
+    });
+    expect(events).toEqual(['load level1', 'merge level1', 'rebuild', 'load full', 'merge full', 'rebuild']);
+
+    events.length = 0;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await run(async () => {
+      throw new Error('level-1 pages missing');
+    });
+    expect(events).toEqual(['load full', 'merge full', 'rebuild']);
+    warn.mockRestore();
+  });
+
   it('goes straight to ready in world mode, even though the same terrain/building loads still run in the background', async () => {
     const states: MapLoadState[] = [];
     let terrainCalled = false;

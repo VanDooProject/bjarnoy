@@ -63,6 +63,7 @@ import {
   giantTopTextureFor,
   loadAnimAtlases,
   loadBuildingAtlases,
+  loadLevel1Atlases,
   loadPackAnimAtlases,
   loadPackAtlases,
   loadTerrainAtlas,
@@ -1291,6 +1292,15 @@ export interface TextureLoadDeps {
   mode: RenderMode;
   loadTerrain: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
   loadIcons: () => Promise<MarkerIcons | null>;
+  /**
+   * Optional first building stage: every building's level-1 art plus the
+   * shared bases (`buildings-level1`, see textures.ts's `loadLevel1Atlases`),
+   * merged and drawn before `loadBuildings` so each building shows *some*
+   * real art (its level-1 rung) as soon as that small atlas lands. Resolves
+   * empty on an atlas packed before the split. A failure is logged and the
+   * full building stage still runs.
+   */
+  loadLevel1?: () => Promise<TileTextures>;
   loadBuildings: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
   merge: (base: TileTextures, buildings: TileTextures) => TileTextures;
   isDestroyed: () => boolean;
@@ -1355,6 +1365,17 @@ export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
       return; // Already handled by whoever awaits terrainReady directly; nothing more to narrate.
     }
     if (settlement) deps.emit({ phase: 'buildings' });
+    if (deps.loadLevel1) {
+      try {
+        const level1 = await deps.loadLevel1();
+        const base = deps.getTextures();
+        if (deps.isDestroyed() || !base) return;
+        deps.setTextures(deps.merge(base, level1));
+        deps.rebuildAll();
+      } catch (err) {
+        console.warn('Level-1 building atlas failed to load; the full building atlas still loads', err);
+      }
+    }
     try {
       const buildings = await deps.loadBuildings((loaded, total) => {
         if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total) });
@@ -1941,6 +1962,7 @@ export class HexMapRenderer {
           console.warn('Map marker icons failed to load; falling back to plain shapes', err);
           return null;
         }),
+      loadLevel1: () => loadLevel1Atlases(),
       loadBuildings: (onProgress) => loadBuildingAtlases(onProgress),
       merge: mergeTileTextures,
       isDestroyed: () => this.destroyed,

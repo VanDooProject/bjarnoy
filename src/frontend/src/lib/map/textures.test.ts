@@ -12,7 +12,9 @@ import {
   riverTexturesFor,
   mergeTileTextures,
   textureKeyFor,
+  topAnimFor,
   topAnimTextures,
+  topTextureFor,
   RIVER_FAMILY,
   KEY_FAMILY,
   type FamilyFrame,
@@ -331,6 +333,44 @@ describe('classifyFamilyFrames', () => {
         frame('vikinghut_SE_level002', 'top'),
       ]),
     ).toThrow(/missing index 1/);
+  });
+
+  // `sparse: true` is the buildings-level1/buildings-static split's own
+  // opt-in — a family's frames are genuinely incomplete while only one of
+  // the two atlases has loaded (see buildTileTextures's own `sparse`
+  // parameter), which is not the same thing as a broken render pass.
+  describe('sparse mode', () => {
+    it('does not throw when only a single, non-zero index is present (the buildings-level1-only case)', () => {
+      const result = classifyFamilyFrames([frame('vikinghut_SE_level001', 'top')], { sparse: true });
+
+      expect(result.top?.SE).toEqual([undefined, 'vikinghut_SE_level001']);
+    });
+
+    it('does not throw for a genuine middle gap either, leaving a hole instead (the buildings-static-only case, missing level1)', () => {
+      const result = classifyFamilyFrames(
+        [
+          frame('vikinghut_SE_level000', 'top'),
+          frame('vikinghut_SE_level002', 'top'),
+          frame('vikinghut_SE_level003', 'top'),
+        ],
+        { sparse: true },
+      );
+
+      expect(result.top?.SE).toEqual(['vikinghut_SE_level000', undefined, 'vikinghut_SE_level002', 'vikinghut_SE_level003']);
+    });
+
+    it('defaults to strict (throwing) when the option is omitted, unchanged from before sparse mode existed', () => {
+      expect(() => classifyFamilyFrames([frame('vikinghut_SE_level001', 'top')])).toThrow(/missing index 0/);
+    });
+
+    it('still returns a fully dense array unchanged when the input has no gap at all', () => {
+      const result = classifyFamilyFrames(
+        [frame('vikinghut_SE_level000', 'top'), frame('vikinghut_SE_level001', 'top')],
+        { sparse: true },
+      );
+
+      expect(result.top?.SE).toEqual(['vikinghut_SE_level000', 'vikinghut_SE_level001']);
+    });
   });
 });
 
@@ -1048,5 +1088,121 @@ describe('mergeTileTextures terrain ownership', () => {
     expect(merged2.wastedCoastalBase.E).toEqual(['from-a']);
     expect(merged2.lavaRiverBase.straight).toBe('a-lava-base');
     expect(merged2.lavaRiverTop.straight).toBe('a-lava-top');
+  });
+});
+
+// The buildings-level1/buildings-static split (see HexMapRenderer's staged
+// merge and textures.ts's loadLevel1Atlases/loadBuildingAtlases): while only
+// buildings-level1 has loaded, a building's `top`/`baseIndexed` arrays are
+// sparse (holes left by classifyFamilyFrames' `sparse` mode) — topTextureFor/
+// baseTextureFor/topAnimFor have to walk across those holes via
+// pickIndexed(Entry) rather than assume a dense array, same as
+// mergeTileTextures merging two such sparse builds back together
+// element-wise (mergeIndexedArray/mergeKeyedArrays) rather than one whole
+// array replacing the other.
+describe('level-1-first loading: sparse top/baseIndexed arrays', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+
+  function emptyTileTextures(): TileTextures {
+    return {
+      base: {},
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      riverBase: {} as TileTextures['riverBase'],
+      riverTop: {} as TileTextures['riverTop'],
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+  }
+
+  function huntTile(level: number): Tile {
+    return { q: 0, r: 0, terrain: 'grass', orientation: 'SE', buildingType: 'hut', buildingLevel: level };
+  }
+
+  it('resolves to level-1 art for every requested level while only level 1 is loaded', () => {
+    const textures = emptyTileTextures();
+    // Only index 1 loaded — a hole at 0, nothing past 1 either (the shape
+    // classifyFamilyFrames({sparse: true}) produces from a buildings-level1-
+    // only atlas — see its own "sparse mode" tests above).
+    textures.top.hut = orientationMap([undefined, 'hut-level1-top'] as unknown as never);
+
+    expect(topTextureFor(textures, huntTile(0))).toBe('hut-level1-top');
+    expect(topTextureFor(textures, huntTile(1))).toBe('hut-level1-top');
+    expect(topTextureFor(textures, huntTile(3))).toBe('hut-level1-top');
+  });
+
+  it('resolves exact levels once buildings-static has merged in (dense array)', () => {
+    const textures = emptyTileTextures();
+    textures.top.hut = orientationMap(['hut-level0', 'hut-level1', 'hut-level2', 'hut-level3'] as unknown as never);
+
+    expect(topTextureFor(textures, huntTile(0))).toBe('hut-level0');
+    expect(topTextureFor(textures, huntTile(1))).toBe('hut-level1');
+    expect(topTextureFor(textures, huntTile(2))).toBe('hut-level2');
+    expect(topTextureFor(textures, huntTile(3))).toBe('hut-level3');
+  });
+
+  it('still walks down to the richest known rung for a level past the family\'s authored max', () => {
+    const textures = emptyTileTextures();
+    textures.top.hut = orientationMap(['hut-level0', 'hut-level1', 'hut-level2', 'hut-level3'] as unknown as never);
+
+    expect(topTextureFor(textures, huntTile(10))).toBe('hut-level3');
+  });
+
+  it('merging a level-1-only build with a static-only build fills the holes without losing level 1', () => {
+    const level1Only = emptyTileTextures();
+    level1Only.top.hut = orientationMap([undefined, 'hut-level1'] as unknown as never);
+
+    const staticOnly = emptyTileTextures();
+    // buildings-static alone is missing level 1 by design (it lives in
+    // buildings-level1 instead) — a real gap in the middle, tolerated by
+    // sparse mode, not the fully-dense shape a non-split atlas produces.
+    staticOnly.top.hut = orientationMap(['hut-level0', undefined, 'hut-level2', 'hut-level3'] as unknown as never);
+
+    const merged = mergeTileTextures(level1Only, staticOnly);
+
+    expect(merged.top.hut?.SE).toEqual(['hut-level0', 'hut-level1', 'hut-level2', 'hut-level3']);
+    // And the merged, now-dense array resolves every level exactly.
+    expect(topTextureFor(merged, huntTile(0))).toBe('hut-level0');
+    expect(topTextureFor(merged, huntTile(1))).toBe('hut-level1');
+    expect(topTextureFor(merged, huntTile(2))).toBe('hut-level2');
+    expect(topTextureFor(merged, huntTile(3))).toBe('hut-level3');
+  });
+
+  it('merging the other way round (static loaded first) still keeps level 1', () => {
+    const staticOnly = emptyTileTextures();
+    staticOnly.top.hut = orientationMap(['hut-level0', undefined, 'hut-level2'] as unknown as never);
+    const level1Only = emptyTileTextures();
+    level1Only.top.hut = orientationMap([undefined, 'hut-level1'] as unknown as never);
+
+    const merged = mergeTileTextures(staticOnly, level1Only);
+
+    expect(merged.top.hut?.SE).toEqual(['hut-level0', 'hut-level1', 'hut-level2']);
+  });
+
+  it('baseIndexed resolves the same way (a leveled base, e.g. fisherhut)', () => {
+    const textures = emptyTileTextures();
+    textures.baseIndexed.fisherhut = orientationMap([undefined, 'fisherhut-base-1'] as unknown as never);
+    const tile: Tile = { q: 0, r: 0, terrain: 'sea', orientation: 'SE', buildingType: 'fisherhut', buildingLevel: 3 };
+
+    expect(baseTextureFor(textures, tile)).toBe('fisherhut-base-1');
+  });
+
+  it('topAnimFor resolves the same rung topTextureFor picked, not a plain clamp', () => {
+    const textures = emptyTileTextures();
+    textures.top.hut = orientationMap([undefined, 'hut-level1-top'] as unknown as never);
+    textures.animTop.hut = orientationMap([undefined, { textures: ['f0'], fps: 6, playback: 'loop' }] as unknown as never);
+
+    // Requesting level 0 (a hole) resolves to index 1's texture — topAnimFor
+    // must read animTop's index 1 too, not animTop[0] (undefined) or throw.
+    expect(topTextureFor(textures, huntTile(0))).toBe('hut-level1-top');
+    expect(topAnimFor(textures, huntTile(0))).toEqual({ textures: ['f0'], fps: 6, playback: 'loop' });
   });
 });
