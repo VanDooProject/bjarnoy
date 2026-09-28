@@ -467,11 +467,19 @@ const backdropStyle = computed(() => {
   background: linear-gradient(180deg, rgba(6, 12, 16, 0.94), rgba(6, 12, 16, 0.82));
   border-bottom: 1px solid var(--panel-border);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  /* The bar spans the full canvas width, but only its own content (nav
-     buttons) should intercept clicks — the map behind it stays interactive
-     everywhere else, matching the old corner-logo behaviour. */
-  pointer-events: none;
+  /* An opaque strip across the top of the map: a click anywhere on it —
+     not only on a nav button — belongs to the bar and must never reach the
+     canvas behind it (it used to be `pointer-events: none`, from when the
+     header was just a corner logo, so a click that missed a link by a few
+     pixels selected/opened whatever hex happened to be under the bar).
+     Anything that hangs *below* the bar sets its own pointer-events:
+     ProfileNudge opts out (its text must not eat map clicks), the dropdown
+     panels (HudNav's account menu, ReturningPlayerMenu's `.menu`) opt in. */
+  pointer-events: auto;
 }
+/* Still needed although the bar itself takes clicks now: ProfileNudge sets
+   `pointer-events: none` on its floating panel, and its buttons inherit
+   that unless something opts them back in. */
 .hud-bar-right :deep(button) {
   pointer-events: auto;
 }
