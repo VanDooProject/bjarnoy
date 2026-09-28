@@ -26,5 +26,10 @@
     "label": "Language",
     "en": "English",
     "de": "Deutsch"
+  },
+  "modal": {
+    "back": "Back",
+    "backChevron": "‹",
+    "close": "Close"
   }
 }

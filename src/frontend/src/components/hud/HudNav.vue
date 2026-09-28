@@ -13,6 +13,7 @@ import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { useLogout } from '../../composables/useLogout';
 import { profileLocation } from '../../lib/profileRoute';
+import { reportsLocation } from '../../lib/modalRoute';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -187,7 +188,7 @@ watch(() => route.fullPath, closeAccountMenu);
     <button
       class="link reports-link"
       :class="{ active: String(route.name).startsWith('report') }"
-      @click="router.push('/reports')"
+      @click="router.push(reportsLocation(router))"
     >
       {{ t('hud.nav.reports') }}
       <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>

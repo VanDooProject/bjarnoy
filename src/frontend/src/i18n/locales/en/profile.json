@@ -11,9 +11,6 @@
     "profile": "Profile",
     "settings": "Settings"
   },
-  "back": "Back",
-  "backChevron": "‹",
-  "close": "Close",
   "hudBar": {
     "title": "HUD bar",
     "hint": "Applies on small screens only.",

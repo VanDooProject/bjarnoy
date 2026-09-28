@@ -31,6 +31,7 @@ import { useWorldStore } from '../../stores/world';
 import { useLogout } from '../../composables/useLogout';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { profileLocation } from '../../lib/profileRoute';
+import { reportsLocation } from '../../lib/modalRoute';
 import type { MessageSchema } from '../../i18n/schema';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -47,8 +48,8 @@ const world = useWorldStore();
 const { logout } = useLogout();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-function go(path: string) {
-  router.push(path);
+function go(location: RouteLocationRaw) {
+  router.push(location);
   emit('close');
 }
 
@@ -118,7 +119,7 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
     >
       {{ t('hud.nav.messages') }}
     </button>
-    <button class="link" :class="{ active: String(route.name).startsWith('report') }" @click="go('/reports')">
+    <button class="link" :class="{ active: String(route.name).startsWith('report') }" @click="go(reportsLocation(router))">
       {{ t('hud.nav.reports') }}
       <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
     </button>

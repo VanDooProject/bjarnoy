@@ -1,5 +1,4 @@
 {
-  "backToSettlement": "← Back",
   "backToList": "← Reports",
   "demoModeHint": "Reports require the live backend and aren't wired up in demo mode.",
   "noSettlement": "Found a settlement first to have any reports.",
