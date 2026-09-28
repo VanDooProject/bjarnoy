@@ -12,7 +12,14 @@
 // "along the shaft's own axis" at any angle — no per-angle keyframe needed.
 // The label chip is deliberately kept outside that rotated/bobbing frame
 // (upright, positioned to the side) so it stays legible instead of tilting
-// and drifting with the arrow.
+// and drifting with the arrow. Its actual on-screen spot is no longer pure
+// CSS, though: a requestAnimationFrame loop below measures the arrow's real
+// box and the viewport/HUD-bar safe area every frame and calls
+// guidanceChipPlacement.ts's `placeChip` to keep the chip fully on screen —
+// see that module's own header for the phone-width bugs the CSS-only
+// version had. The CSS below is only the pre-measurement fallback (first
+// paint, before the first rAF tick lands) and the last resort if JS never
+// gets a non-zero chip size (e.g. display:none somewhere upstream).
 // Two anchor modes: a hex (`coord`+`renderer`, following the camera via
 // useMapAnchor — frames 1/1b/2/4) or a fixed screen point (`screen`, the
 // ring menu's own bubble spot for frame 3's "this one fits {terrain}" —
@@ -28,10 +35,12 @@
 // to BOTH anchor modes identically: the centre-vs-tip mismatch is a
 // property of the arrow's own geometry, not of what supplies the anchor
 // point, so the hex-anchored and screen-anchored cases need the same fix.
-import { computed, ref, watchEffect } from 'vue';
+import { computed, onUnmounted, ref, watchEffect } from 'vue';
 import type { AxialCoord } from '../../lib/hex/coords';
 import { useMapAnchor, type MapAnchorRenderer } from '../../composables/useMapAnchor';
+import { useMediaQuery } from '../../composables/useMediaQuery';
 import { arrowTipOffset, HEX_TARGET_RADIUS_PX } from '../../lib/map/guidanceArrowGeometry';
+import { placeChip, type ChipSide } from '../../lib/map/guidanceChipPlacement';
 
 const props = withDefaults(
   defineProps<{
@@ -75,6 +84,80 @@ watchEffect(() => {
 // so a plain computed — recalculated on prop change, not per animation
 // frame — is the right cost here.
 const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius));
+
+// Keeps the label chip fully on screen, clear of the HUD bar, instead of the
+// old CSS-only placement (side of the arrow on desktop, centred above it on
+// mobile) which had no idea where the viewport edges or the HUD bar actually
+// were — see guidanceChipPlacement.ts's header for the two phone-width bugs
+// that CSS-only approach produced. `.rotate`'s box (not `.bob`'s, which bobs
+// every frame) is used as the arrow's box: `.bob` sits inside `.rotate` and
+// its animation would otherwise make the chip jitter with the bob.
+const chipEl = ref<HTMLElement | null>(null);
+const rotateEl = ref<HTMLElement | null>(null);
+const shiftEl = ref<HTMLElement | null>(null);
+// `chipSide` is desktop-only; below 768px "above" reads better regardless of
+// the prop, matching the old media query's intent (see the CSS comment).
+const isMobile = useMediaQuery('(max-width: 768px)');
+
+function insetPx(styles: CSSStyleDeclaration, name: string): number {
+  const value = parseFloat(styles.getPropertyValue(name));
+  return Number.isFinite(value) ? value : 0;
+}
+
+let lastLeft: string | null = null;
+let lastTop: string | null = null;
+
+let frame = requestAnimationFrame(tick);
+function tick() {
+  frame = requestAnimationFrame(tick);
+  const chip = chipEl.value;
+  const rotate = rotateEl.value;
+  const shift = shiftEl.value;
+  const anchor = anchorEl.value;
+  if (!chip || !rotate || !shift || !anchor) return;
+  const width = chip.offsetWidth;
+  const height = chip.offsetHeight;
+  // Zero-sized — not actually laid out yet (async canvas mount, or jsdom in
+  // unit tests, which never runs layout at all). Leave the CSS fallback in
+  // place rather than placing a phantom zero-size box.
+  if (width === 0 || height === 0) return;
+
+  const arrowRect = rotate.getBoundingClientRect();
+  const anchorStyles = getComputedStyle(anchor);
+  const safe = {
+    left: 8,
+    top: insetPx(anchorStyles, '--hud-inset-top') + 8,
+    right: window.innerWidth - 8,
+    bottom: window.innerHeight - insetPx(anchorStyles, '--hud-inset-bottom') - 8,
+  };
+  const prefer: ChipSide = isMobile.value ? 'above' : props.chipSide;
+  const placement = placeChip(
+    { left: arrowRect.left, top: arrowRect.top, right: arrowRect.right, bottom: arrowRect.bottom },
+    { width, height },
+    safe,
+    prefer,
+  );
+
+  // `.chip` is `position: absolute` inside `.shift`, which carries a
+  // `translate()` — any transform makes an element the containing block for
+  // its absolutely-positioned descendants, so `.shift`'s own (transformed)
+  // box, not `.anchor`'s, is what the chip's `left`/`top` are relative to.
+  const shiftRect = shift.getBoundingClientRect();
+  const left = `${placement.x - shiftRect.left}px`;
+  const top = `${placement.y - shiftRect.top}px`;
+  if (left !== lastLeft) {
+    chip.style.left = left;
+    lastLeft = left;
+  }
+  if (top !== lastTop) {
+    chip.style.top = top;
+    lastTop = top;
+  }
+  chip.style.right = 'auto';
+  chip.style.bottom = 'auto';
+  chip.style.transform = 'none';
+}
+onUnmounted(() => cancelAnimationFrame(frame));
 </script>
 
 <template>
@@ -90,8 +173,8 @@ const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius)
          anchor point — see guidanceArrowGeometry.ts. `.rotate` keeps only
          the rotation, so the bob keyframe nested inside it still reads as
          "along the shaft" (see the header comment above). -->
-    <div class="shift">
-      <div class="rotate">
+    <div ref="shiftEl" class="shift">
+      <div ref="rotateEl" class="rotate">
         <div class="bob">
           <svg width="110" height="110" viewBox="0 0 150 150" class="arrow-svg">
             <rect x="60" y="14" width="30" height="66" rx="9" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
@@ -99,7 +182,7 @@ const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius)
           </svg>
         </div>
       </div>
-      <div class="chip" :class="chipSide">{{ label }}</div>
+      <div ref="chipEl" class="chip" :class="chipSide">{{ label }}</div>
     </div>
   </div>
 </template>
@@ -174,16 +257,21 @@ const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius)
   left: calc(100% + 14px);
 }
 
-/* Mobile-readiness audit (finding d): the chip sat to the LEFT of the arrow
-   with nowrap uppercase text ("NOW BUILD HERE" / "THIS ONE FITS GRASSLAND"),
-   which on a narrow screen ran clean off the left edge. Centring it above
-   the arrow instead keeps it inside the viewport regardless of where the
-   arrow itself lands horizontally. The arrow's own rendered size (110px, via
-   `width`/`height` on `.arrow-svg`) is left untouched here: `arrowTipOffset`
-   (guidanceArrowGeometry.ts) derives its shift from `ARROW_RENDERED_SIZE`,
-   so shrinking the rendered box without re-deriving that offset would land
-   the tip off-target — correctness of the tip position matters more than
-   the arrow's on-screen size. */
+/* Mobile-readiness audit (finding d) — history, not current behaviour: the
+   chip sat to the LEFT of the arrow with nowrap uppercase text ("NOW BUILD
+   HERE" / "THIS ONE FITS GRASSLAND"), which on a narrow screen ran clean off
+   the left edge, and centring it above the arrow (the original fix here)
+   still ran off-screen at other phone sizes (a wide-but-short landscape
+   viewport put "above" under the HUD bar). The rAF loop in the script block
+   now places the chip for real every frame; what's left below is only the
+   pre-measurement fallback (first paint) and the smaller/tighter type this
+   media query already gave the chip on narrow screens, which is still worth
+   keeping regardless of which side JS ends up choosing. The arrow's own
+   rendered size (110px, via `width`/`height` on `.arrow-svg`) is left
+   untouched here: `arrowTipOffset` (guidanceArrowGeometry.ts) derives its
+   shift from `ARROW_RENDERED_SIZE`, so shrinking the rendered box without
+   re-deriving that offset would land the tip off-target — correctness of
+   the tip position matters more than the arrow's on-screen size. */
 @media (max-width: 768px) {
   .chip.left,
   .chip.right {
