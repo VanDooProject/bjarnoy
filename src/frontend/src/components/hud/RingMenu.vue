@@ -153,11 +153,22 @@ function onWindowKeydown(e: KeyboardEvent) {
   if (path.value.length) goUp();
   else emit('close');
 }
+// The top HUD bar sits above this ring's backdrop (TopBar.vue's z-index 40
+// vs. the backdrop's 30, so header buttons keep working while a ring is
+// open) and takes every click on it itself — none reach the backdrop or the
+// map. A press anywhere on the bar is still an "outside" press for the ring,
+// though, so close it — just not via `outsidePointerDown`, which would also
+// start a map drag from a gesture that never touched the map.
+function onWindowPointerDown(e: PointerEvent) {
+  if ((e.target as Element | null)?.closest?.('.hud-bar')) emit('close');
+}
 onMounted(() => {
   window.addEventListener('resize', onResize);
   window.addEventListener('keydown', onWindowKeydown);
+  window.addEventListener('pointerdown', onWindowPointerDown, true);
 });
 onUnmounted(() => {
+  window.removeEventListener('pointerdown', onWindowPointerDown, true);
   window.removeEventListener('resize', onResize);
   window.removeEventListener('keydown', onWindowKeydown);
 });
