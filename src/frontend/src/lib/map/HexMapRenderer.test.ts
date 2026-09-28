@@ -1,19 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   attentionPulseFrame,
   clampAnimationDeltaMs,
+  fadeAlphaAt,
   hoverSubjectFor,
   isWaypointTap,
   landfallBurstFrames,
+  loadProgressFraction,
   plotRippleFrames,
   previewFitZoom,
   previewIslandBounds,
+  READY_LOAD_STATE,
+  startTextureLoad,
   terrainTitleFor,
   waypointGrabRadiusPx,
   worldLayerOrder,
+  type MapLoadState,
+  type TextureLoadDeps,
 } from './HexMapRenderer';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
+import type { TileTextures } from './textures';
 import { hexesInRadius, type AxialCoord } from '../hex/coords';
 
 // Regression coverage for a reported bug: a river mouth's hover tooltip
@@ -496,6 +503,39 @@ describe('attentionPulseFrame', () => {
   });
 });
 
+// forceRebuild's opt-in per-tile cross-fade (`syncSpriteLayer`'s ghost/
+// fade-in bookkeeping) — the actual sprite/Pixi side needs a mounted
+// canvas/Application this test environment can't provide (see the mobile
+// army dispatch comment just below), but the timing math itself doesn't.
+describe('fadeAlphaAt', () => {
+  it('an "out" fade (a ghost) is full alpha until the delay, then 1 -> 0 over the duration', () => {
+    expect(fadeAlphaAt(0, 100, 200, 'out')).toBe(1);
+    expect(fadeAlphaAt(100, 100, 200, 'out')).toBe(1);
+    expect(fadeAlphaAt(150, 100, 200, 'out')).toBeCloseTo(0.75);
+    expect(fadeAlphaAt(200, 100, 200, 'out')).toBeCloseTo(0.5);
+    expect(fadeAlphaAt(300, 100, 200, 'out')).toBeUndefined();
+  });
+
+  it('an "in" fade (the new sprite) is 0 until the delay, then 0 -> 1 over the duration', () => {
+    expect(fadeAlphaAt(0, 100, 200, 'in')).toBe(0);
+    expect(fadeAlphaAt(100, 100, 200, 'in')).toBe(0);
+    expect(fadeAlphaAt(150, 100, 200, 'in')).toBeCloseTo(0.25);
+    expect(fadeAlphaAt(200, 100, 200, 'in')).toBeCloseTo(0.5);
+    expect(fadeAlphaAt(300, 100, 200, 'in')).toBeUndefined();
+  });
+
+  it('a zero delay starts the fade immediately', () => {
+    expect(fadeAlphaAt(0, 0, 100, 'out')).toBe(1);
+    expect(fadeAlphaAt(50, 0, 100, 'out')).toBeCloseTo(0.5);
+    expect(fadeAlphaAt(100, 0, 100, 'out')).toBeUndefined();
+  });
+
+  it('is undefined (done) the instant elapsed time reaches delay + duration, not just past it', () => {
+    expect(fadeAlphaAt(300, 100, 200, 'out')).toBeUndefined();
+    expect(fadeAlphaAt(299.999, 100, 200, 'out')).toBeGreaterThan(0);
+  });
+});
+
 // Issue: mobile army dispatch. `onPointerDown`/`onPointerUp` themselves need
 // a mounted canvas/Pixi Application this test environment can't provide (see
 // this file's own opening comment on why `terrainTitleFor`/`worldLayerOrder`
@@ -531,5 +571,194 @@ describe('waypointGrabRadiusPx', () => {
 
   it('falls back to the mouse radius for an unset pointerType (the hover-cursor hit-test call)', () => {
     expect(waypointGrabRadiusPx(undefined)).toBe(waypointGrabRadiusPx('mouse'));
+  });
+});
+
+describe('loadProgressFraction', () => {
+  it('computes a 0-1 fraction of pages loaded', () => {
+    expect(loadProgressFraction(1, 4)).toBe(0.25);
+    expect(loadProgressFraction(4, 4)).toBe(1);
+  });
+
+  it('is undefined when the category has no pages at all to report progress against', () => {
+    expect(loadProgressFraction(0, 0)).toBeUndefined();
+  });
+});
+
+// mount() itself needs a real canvas/Pixi Application this test environment
+// can't provide — startTextureLoad is mount()'s texture-load orchestration
+// (terrain+icons, then building art) extracted into a plain, injectable
+// function precisely so its MapLoadState narration is checkable here, with
+// fake loaders standing in for loadTerrainAtlas/loadMarkerIcons/
+// loadBuildingAtlases.
+describe('startTextureLoad', () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  const FAKE_TEXTURES = {} as TileTextures;
+
+  function fakeDeps(overrides: Partial<TextureLoadDeps> & Pick<TextureLoadDeps, 'mode'>): TextureLoadDeps {
+    return {
+      loadTerrain: async () => FAKE_TEXTURES,
+      loadIcons: async () => null,
+      loadBuildings: async () => FAKE_TEXTURES,
+      merge: (base) => base,
+      isDestroyed: () => false,
+      getTextures: () => FAKE_TEXTURES,
+      setTextures: () => {},
+      setIcons: () => {},
+      rebuildAll: () => {},
+      emit: () => {},
+      ...overrides,
+    };
+  }
+
+  it("emits 'terrain' -> 'buildings' -> 'ready' in settlement mode, with each phase's own progress", async () => {
+    const states: MapLoadState[] = [];
+    const terrainGate = deferred<TileTextures>();
+    const buildingsGate = deferred<TileTextures>();
+    const deps = fakeDeps({
+      mode: 'settlement',
+      loadTerrain: async (onProgress) => {
+        onProgress(1, 2);
+        onProgress(2, 2);
+        return terrainGate.promise;
+      },
+      loadBuildings: async (onProgress) => {
+        onProgress(1, 3);
+        return buildingsGate.promise;
+      },
+      emit: (state) => states.push(state),
+    });
+
+    const { terrainReady, done } = startTextureLoad(deps);
+    // Terrain's own load hasn't resolved yet — 'buildings' must not appear
+    // before it does.
+    expect(states).toEqual([{ phase: 'terrain' }, { phase: 'terrain', progress: 0.5 }, { phase: 'terrain', progress: 1 }]);
+
+    terrainGate.resolve(FAKE_TEXTURES);
+    await terrainReady;
+
+    buildingsGate.resolve(FAKE_TEXTURES);
+    await done;
+    expect(states).toEqual([
+      { phase: 'terrain' },
+      { phase: 'terrain', progress: 0.5 },
+      { phase: 'terrain', progress: 1 },
+      { phase: 'buildings' },
+      { phase: 'buildings', progress: 1 / 3 },
+      READY_LOAD_STATE,
+    ]);
+  });
+
+  it('merges and draws the level-1 building art before the full building atlas, and still loads the rest if level 1 fails', async () => {
+    const events: string[] = [];
+    const LEVEL1 = { stage: 'level1' } as unknown as TileTextures;
+    const FULL = { stage: 'full' } as unknown as TileTextures;
+    let current: TileTextures = FAKE_TEXTURES;
+    const run = (loadLevel1: () => Promise<TileTextures>) =>
+      startTextureLoad(
+        fakeDeps({
+          mode: 'settlement',
+          loadLevel1,
+          loadBuildings: async () => {
+            events.push('load full');
+            return FULL;
+          },
+          getTextures: () => current,
+          merge: (_base, added) => {
+            events.push(`merge ${(added as unknown as { stage: string }).stage}`);
+            return added;
+          },
+          setTextures: (t) => {
+            current = t;
+          },
+          rebuildAll: () => events.push('rebuild'),
+        }),
+      ).done;
+
+    await run(async () => {
+      events.push('load level1');
+      return LEVEL1;
+    });
+    expect(events).toEqual(['load level1', 'merge level1', 'rebuild', 'load full', 'merge full', 'rebuild']);
+
+    events.length = 0;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await run(async () => {
+      throw new Error('level-1 pages missing');
+    });
+    expect(events).toEqual(['load full', 'merge full', 'rebuild']);
+    warn.mockRestore();
+  });
+
+  it('goes straight to ready in world mode, even though the same terrain/building loads still run in the background', async () => {
+    const states: MapLoadState[] = [];
+    let terrainCalled = false;
+    let buildingsCalled = false;
+    const deps = fakeDeps({
+      mode: 'world',
+      loadTerrain: async (onProgress) => {
+        terrainCalled = true;
+        onProgress(1, 1); // world mode must never narrate this as a state.
+        return FAKE_TEXTURES;
+      },
+      loadBuildings: async () => {
+        buildingsCalled = true;
+        return FAKE_TEXTURES;
+      },
+      emit: (state) => states.push(state),
+    });
+
+    const { terrainReady, done } = startTextureLoad(deps);
+    // Emitted synchronously, before either load has even resolved.
+    expect(states).toEqual([READY_LOAD_STATE]);
+
+    await terrainReady;
+    await done;
+    expect(states).toEqual([READY_LOAD_STATE]); // still just the one emission
+    expect(terrainCalled).toBe(true);
+    expect(buildingsCalled).toBe(true);
+  });
+
+  it('still reaches ready when the building-art load fails — best-effort, the map stays usable terrain-only', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const states: MapLoadState[] = [];
+    const deps = fakeDeps({
+      mode: 'settlement',
+      loadBuildings: async () => {
+        throw new Error('buildings atlas boom');
+      },
+      emit: (state) => states.push(state),
+    });
+
+    const { done } = startTextureLoad(deps);
+    await done;
+    expect(states.at(-1)).toEqual(READY_LOAD_STATE);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('propagates a terrain-load rejection through terrainReady, and never narrates buildings/ready', async () => {
+    const states: MapLoadState[] = [];
+    const deps = fakeDeps({
+      mode: 'settlement',
+      loadTerrain: async () => {
+        throw new Error('terrain atlas boom');
+      },
+      emit: (state) => states.push(state),
+    });
+
+    const { terrainReady, done } = startTextureLoad(deps);
+    await expect(terrainReady).rejects.toThrow('terrain atlas boom');
+    await done; // never itself throws — the failure is only ever observed via terrainReady.
+    expect(states).toEqual([{ phase: 'terrain' }]);
   });
 });

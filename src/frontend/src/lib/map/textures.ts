@@ -37,6 +37,7 @@ import {
   unloadAtlasCategory,
   type AtlasClip,
   type AtlasPack,
+  type AtlasPageProgress,
   type LoadedAtlas,
 } from './atlas';
 import {
@@ -100,7 +101,8 @@ export type TextureKey =
   | 'wasteland'
   | 'deadforest'
   | 'blacksand'
-  | 'wastedmountain';
+  | 'wastedmountain'
+  | 'taintedwater';
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
@@ -165,6 +167,10 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   deadforest: 'deadforest',
   blacksand: 'blacksand',
   wastedmountain: 'mountaintile_jagged',
+  // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
+  // own doc comment for why this key exists at all despite `WorldModel`
+  // itself never producing a wasted open-sea tile today.
+  taintedwater: 'taintedwater',
 };
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
@@ -945,10 +951,15 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
 }
 
 let terrainLoading: Promise<TileTextures> | null = null;
-/** The small `terrain` atlas alone — enough for the landing page / world map background, and for `HexMapRenderer` to draw terrain-only settlement tiles before building art resolves. */
-export function loadTerrainAtlas(): Promise<TileTextures> {
+/**
+ * The small `terrain` atlas alone — enough for the landing page / world map
+ * background, and for `HexMapRenderer` to draw terrain-only settlement tiles
+ * before building art resolves. `onPage`, like `loadAtlasCategory`'s own, is
+ * only invoked on the first (uncached) call.
+ */
+export function loadTerrainAtlas(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!terrainLoading) {
-    terrainLoading = loadAtlasCategory('terrain').then((atlas) => buildTileTextures([atlas]));
+    terrainLoading = loadAtlasCategory('terrain', onPage).then((atlas) => buildTileTextures([atlas]));
   }
   return terrainLoading;
 }
@@ -1004,9 +1015,11 @@ let buildingLoading: Promise<TileTextures> | null = null;
  * already has every index, so `sparse: true` is a no-op there — nothing to
  * leave a hole for.
  */
-export function loadBuildingAtlases(): Promise<TileTextures> {
+export function loadBuildingAtlases(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!buildingLoading) {
-    buildingLoading = loadAtlasCategory('buildings-static').then((atlas) => buildTileTextures([atlas], undefined, { sparse: true }));
+    buildingLoading = loadAtlasCategory('buildings-static', onPage).then((atlas) =>
+      buildTileTextures([atlas], undefined, { sparse: true }),
+    );
   }
   return buildingLoading;
 }
@@ -1171,14 +1184,27 @@ export interface RiverArt {
  * renders with instead — see `docs/design/river-generation.md`'s wasted-
  * island section and `WorldModel.setWastedRevealed`. A wasted mountain is
  * the ashen `mountaintile_jagged` (the plain `mountaintile` art, base and
- * top, carries a green grass skirt). Open sea (not coastal) stays plain sea
- * either way.
+ * top, carries a green grass skirt).
+ *
+ * `sea` maps to `taintedwater` here purely so `baseTextureFor`'s own
+ * "no dedicated wasted family, sit on wasteland" fallback (below) doesn't
+ * fire for it — the vendored wasted pack does ship a proper open-water
+ * family. This never actually changes in-game rendering today:
+ * `WorldModel.getTile` only ever sets `Tile.wasted` on wasted *land*, and on
+ * coastal water bordering it (`isCoastalWater`, its own `WASTED_COASTAL_FAMILY`
+ * lookup in `baseTextureFor`, unrelated to this map) — never on open,
+ * non-coastal sea, so a live/demo-mode wasted open-sea tile can't occur. The
+ * one real caller is the Wasted Lands docs page's `StaticWorldModel`
+ * (`src/lib/docs/wastedIsland.ts`'s `buildIslandTiles`), whose hand-built
+ * island *does* mark its open-water ring wasted once the blight reaches it —
+ * see `textures.test.ts`'s "wasted open sea resolves taintedwater" guard.
  */
 const WASTED_TEXTURE_KEY: Partial<Record<Terrain, TextureKey>> = {
   grass: 'wasteland',
   forest: 'deadforest',
   sand: 'blacksand',
   mountain: 'wastedmountain',
+  sea: 'taintedwater',
 };
 
 /**

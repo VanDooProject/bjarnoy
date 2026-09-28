@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../api/client';
 import type { MessageResponse, ProfileResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
+import { profileLocation } from '../lib/profileRoute';
 
 const route = useRoute();
+const router = useRouter();
 const auth = useAuthStore();
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -17,6 +19,12 @@ const otherProfile = ref<ProfileResponse | null>(null);
 const messages = ref<MessageResponse[]>([]);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
+
+// Opens the other player's profile as a modal over this conversation — see
+// lib/profileRoute.ts's own comment.
+const otherProfileLink = computed(() =>
+  otherProfile.value ? profileLocation(router, otherProfile.value.userName) : null,
+);
 
 // Oldest-first for display — the API returns newest-first for paging.
 const orderedMessages = computed(() => [...messages.value].reverse());
@@ -122,7 +130,7 @@ function readStatus(message: MessageResponse): string | null {
 
     <template v-else>
       <header class="head">
-        <router-link v-if="otherProfile" class="who" :to="`/profile/${otherProfile.userName}`">
+        <router-link v-if="otherProfile && otherProfileLink" class="who" :to="otherProfileLink">
           {{ otherProfile.displayName || otherProfile.userName }}
         </router-link>
         <router-link to="/messages" class="back">{{ $t('messages.conversation.backToMessages') }}</router-link>

@@ -1,5 +1,5 @@
 import { onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue';
-import { HexMapRenderer, type HexMapRendererOptions } from '../lib/map/HexMapRenderer';
+import { HexMapRenderer, READY_LOAD_STATE, type HexMapRendererOptions, type MapLoadState } from '../lib/map/HexMapRenderer';
 import { animationPreference } from '../lib/perf/animationPreference';
 
 /**
@@ -36,6 +36,10 @@ export function useHexMapRenderer(
   options: HexMapRendererOptions,
 ) {
   const renderer = shallowRef<HexMapRenderer | null>(null);
+  // `MapLoadingIndicator.vue`'s data source — 'ready' (no loader) until a
+  // 'settlement'-mode mount says otherwise, since a 'world'-mode mount never
+  // narrates a loading state at all (see HexMapRenderer's `startTextureLoad`).
+  const loadState = shallowRef<MapLoadState>(options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE);
   let resizeObserver: ResizeObserver | null = null;
   let stopAnimationWatch: (() => void) | null = null;
 
@@ -43,7 +47,13 @@ export function useHexMapRenderer(
     const canvas = canvasRef.value;
     const container = containerRef.value;
     if (!canvas || !container) return;
-    const r = new HexMapRenderer(options);
+    const r = new HexMapRenderer({
+      ...options,
+      onLoadState: (state) => {
+        loadState.value = state;
+        options.onLoadState?.(state);
+      },
+    });
     const { width, height } = await waitForRealSize(container);
     await r.mount(canvas, Math.max(1, width), Math.max(1, height));
     renderer.value = r;
@@ -78,5 +88,5 @@ export function useHexMapRenderer(
     delete containerRef.value?.dataset.mapReady;
   });
 
-  return { renderer };
+  return { renderer, loadState };
 }
