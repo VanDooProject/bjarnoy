@@ -24,6 +24,26 @@ export interface AtlasFrameMeta {
   layer: 'base' | 'top' | 'composite';
 }
 
+/**
+ * A `meta.bjarnoy.aliases` entry — a frame name that isn't actually packed
+ * on this page at all, but should resolve to another category's real frame
+ * instead (e.g. a building-family's shared "grass_E_base" ground alias
+ * pointing at `terrain`'s own `grasstile_E_base`, so the packer doesn't have
+ * to duplicate terrain art into every building category that stands on
+ * plain ground). `findFrameIn` resolves this synchronously (terrain's pages
+ * are eagerly imported same as every other category); `loadPages` resolves
+ * it into a live Pixi `Texture` by loading `category` (already cached once
+ * terrain has loaded) and copying its `frame`'s texture across. Not present
+ * in the currently vendored atlas — every lookup degrades to "no aliases",
+ * same as a missing pack page.
+ */
+export interface AtlasAliasEntry {
+  category: string;
+  frame: string;
+  family: string;
+  layer: 'base' | 'top' | 'composite';
+}
+
 export interface AtlasClip {
   name: string;
   family: string;
@@ -95,6 +115,8 @@ export interface AtlasManifest {
       category: string;
       sourceHash: string;
       tile: { w: number; h: number; topFaceY: number; topFaceH: number };
+      /** See `AtlasAliasEntry`'s own doc comment — keyed by the alias frame's own name. */
+      aliases?: Record<string, AtlasAliasEntry>;
     };
   };
   animations?: Record<string, string[]>;
@@ -175,15 +197,36 @@ function pagesFor(category: string): { manifest: AtlasManifest; webpUrl: string 
 }
 
 /**
+ * `buildings-static` (and `${pack}-buildings-static`) is split across two
+ * categories on the newer atlas: `buildings-level1` carries every levelless
+ * building frame (shared bases, levelless tops) plus every `_level001*`
+ * frame, `buildings-static` keeps the rest (`_level000*`, `_level002*`+) —
+ * see `textures.ts`'s `loadLevel1Atlases`/`loadBuildingAtlases`. Any lookup
+ * of a "building static" frame by category (`findAtlasFrame`,
+ * `buildingArt.ts`) has to search both, `buildings-level1` first (it's
+ * loaded first — see `HexMapRenderer`'s staged merge), one place doing that
+ * so it isn't sprinkled as ad hoc string lists at each call site. The older,
+ * currently vendored atlas ships no `buildings-level1` pages at all, so this
+ * is a harmless no-op there — `pagesForIndex` simply finds nothing for it.
+ */
+function withBuildingLevel1(category: string): readonly string[] {
+  if (!category.endsWith('buildings-static')) return [category];
+  const prefix = category.slice(0, -'buildings-static'.length);
+  return [`${prefix}buildings-level1`, category];
+}
+
+/**
  * The categories `findAtlasFrame`/`findAtlasClip` search, in order: the
  * plain core category first, then every pack's variant of it
- * (`${pack}-${category}`). A category with no pack variant at all (e.g.
- * `showcase`, which isn't split by pack) simply never matches those extra
- * entries — harmless, not an error.
+ * (`${pack}-${category}`) — each of those further expanded to also search
+ * its `buildings-level1` counterpart first (see `withBuildingLevel1`). A
+ * category with no pack variant at all (e.g. `showcase`, which isn't split
+ * by pack) simply never matches those extra entries — harmless, not an
+ * error.
  */
 // Exported (only) so atlas.test.ts can check the search order directly.
 export function categorySearchOrder(category: string): readonly string[] {
-  return [category, ...ATLAS_PACKS.map((pack) => `${pack}-${category}`)];
+  return [category, ...ATLAS_PACKS.map((pack) => `${pack}-${category}`)].flatMap(withBuildingLevel1);
 }
 
 export interface LoadedAtlas {
@@ -233,6 +276,19 @@ export function findFrameIn(index: AtlasPageIndex, category: string, name: strin
           spriteSourceSize: frame.spriteSourceSize,
           sourceSize: frame.sourceSize,
         };
+      }
+      // Not a real frame on this page — but this page's own manifest may
+      // declare it as an alias of a frame packed elsewhere (see
+      // `AtlasAliasEntry`). Resolved by a fresh `findFrameIn` against the
+      // alias's own category (never `cat` again — an alias always points at
+      // a *different*, already-loaded category, terrain today), so a target
+      // category with its own pack fallback still works. A target that
+      // doesn't resolve either (a bad/missing alias) simply falls through to
+      // "not found", same as any other unresolved frame.
+      const alias = manifest.meta.bjarnoy?.aliases?.[name];
+      if (alias) {
+        const resolved = findFrameIn(index, alias.category, alias.frame);
+        if (resolved) return resolved;
       }
     }
   }
@@ -322,12 +378,41 @@ export function atlasBackgroundStyle(rect: AtlasFrameRect): AtlasBackgroundStyle
 
 const cache = new Map<string, Promise<LoadedAtlas>>();
 
-/** Loads and parses every page already discovered for one category (see `pagesFor`), merging them into a single frame/clip lookup. Shared by `loadAtlasCategory`/`loadAtlasPackCategory` — the only difference between them is what happens when `pages` is empty. */
-async function loadPages(pages: { manifest: AtlasManifest; webpUrl: string }[]): Promise<LoadedAtlas> {
+/**
+ * Called after each page of a category finishes loading — `loaded` counts
+ * from 1, `total` is the category's page count known up front (`pages.length`,
+ * fixed before the loop starts) — a best-effort progress signal for
+ * HexMapRenderer's loading-state overlay (see `MapLoadState.progress`).
+ * Sequential (one `Assets.load` at a time, same as before this was added),
+ * so this is exact, not an estimate.
+ */
+export type AtlasPageProgress = (loaded: number, total: number) => void;
+
+/**
+ * Loads and parses every page already discovered for one category (see
+ * `pagesFor`), merging them into a single frame/clip lookup. Shared by
+ * `loadAtlasCategory`/`loadAtlasPackCategory`/`loadOptionalAtlasCategory` —
+ * the only difference between them is what happens when `pages` is empty.
+ *
+ * A page's own `meta.bjarnoy.aliases` (see `AtlasAliasEntry`) are resolved
+ * only after every page has parsed — each alias just copies an already-
+ * loaded frame's live `Texture` across from its target category (loading
+ * that category too, via `loadAtlasCategory`, if it somehow isn't resident
+ * yet; terrain — the only target today — always is by the time a building
+ * category's aliases are read). A target that doesn't resolve (missing
+ * category or frame — a bad/stale alias) just warns and drops that one
+ * alias, same graceful-degradation contract as every other lookup here.
+ */
+async function loadPages(
+  pages: { manifest: AtlasManifest; webpUrl: string }[],
+  onPage?: AtlasPageProgress,
+): Promise<LoadedAtlas> {
   const textures: Record<string, Texture> = {};
   const frameMeta: Record<string, AtlasFrameMeta> = {};
   const clips: Record<string, AtlasClip> = {};
+  const aliases: Record<string, AtlasAliasEntry> = {};
 
+  let loaded = 0;
   for (const { manifest, webpUrl } of pages) {
     const pageTexture = await Assets.load<Texture>(webpUrl);
     const sheet = new Spritesheet(pageTexture, manifest);
@@ -337,13 +422,57 @@ async function loadPages(pages: { manifest: AtlasManifest; webpUrl: string }[]):
       if (frame.bjarnoy) frameMeta[name] = frame.bjarnoy;
     }
     Object.assign(clips, manifest.clips ?? {});
+    Object.assign(aliases, manifest.meta.bjarnoy?.aliases ?? {});
+    onPage?.(++loaded, pages.length);
+  }
+
+  for (const [name, alias] of Object.entries(aliases)) {
+    try {
+      const target = await loadAtlasCategory(alias.category);
+      const texture = target.textures[alias.frame];
+      if (!texture) {
+        console.warn(`atlas.ts: alias "${name}" points at unknown frame "${alias.frame}" in category "${alias.category}"`);
+        continue;
+      }
+      textures[name] = texture;
+      frameMeta[name] = { family: alias.family, layer: alias.layer };
+    } catch (err) {
+      console.warn(`atlas.ts: alias "${name}" points at unavailable category "${alias.category}"`, err);
+    }
   }
 
   return { textures, frameMeta, clips };
 }
 
-/** Loads and parses every page of one atlas category, merging them into a single frame/clip lookup. Throws if the category has no vendored pages at all — for a core category (`terrain`, `buildings-static`, ...) that's a real error, unlike a pack category (see `loadAtlasPackCategory`). */
-export function loadAtlasCategory(category: string): Promise<LoadedAtlas> {
+function loadCategoryOrEmpty(key: string, onPage?: AtlasPageProgress): Promise<LoadedAtlas> {
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const promise = (async () => {
+    const pages = pagesFor(key);
+    if (pages.length === 0) {
+      return { textures: {}, frameMeta: {}, clips: {} };
+    }
+    return loadPages(pages, onPage);
+  })();
+
+  cache.set(key, promise);
+  return promise;
+}
+
+/**
+ * Loads and parses every page of one atlas category, merging them into a
+ * single frame/clip lookup. Throws if the category has no vendored pages at
+ * all — for a core category (`terrain`, `buildings-static`, ...) that's a
+ * real error, unlike a pack category (see `loadAtlasPackCategory`).
+ *
+ * `onPage`, when given, is only actually invoked the first time this
+ * category is loaded — a later call while the category is already cached
+ * (in flight or resolved) returns the same `Promise` without replaying
+ * progress, same as it returns the same `LoadedAtlas` without replaying the
+ * page loads themselves.
+ */
+export function loadAtlasCategory(category: string, onPage?: AtlasPageProgress): Promise<LoadedAtlas> {
   const cached = cache.get(category);
   if (cached) return cached;
 
@@ -352,7 +481,7 @@ export function loadAtlasCategory(category: string): Promise<LoadedAtlas> {
     if (pages.length === 0) {
       throw new Error(`atlas.ts: no vendored pages found for atlas category "${category}"`);
     }
-    return loadPages(pages);
+    return loadPages(pages, onPage);
   })();
 
   cache.set(category, promise);
@@ -369,18 +498,53 @@ export function loadAtlasCategory(category: string): Promise<LoadedAtlas> {
  * draw" rather than fail the whole load.
  */
 export function loadAtlasPackCategory(pack: AtlasPack, category: string): Promise<LoadedAtlas> {
-  const key = `${pack}-${category}`;
-  const cached = cache.get(key);
-  if (cached) return cached;
+  return loadCategoryOrEmpty(`${pack}-${category}`);
+}
 
-  const promise = (async () => {
-    const pages = pagesFor(key);
-    if (pages.length === 0) {
-      return { textures: {}, frameMeta: {}, clips: {} };
-    }
-    return loadPages(pages);
-  })();
+/**
+ * Loads a *core* (non-pack) category that may not exist at all yet — same
+ * empty-if-missing degradation as `loadAtlasPackCategory`, but for a plain
+ * category name rather than a `${pack}-${category}` one. Used for
+ * `buildings-level1` (see `textures.ts`'s `loadLevel1Atlases`): the older,
+ * currently vendored atlas has no such category at all (every building
+ * frame still lives in `buildings-static`), which must degrade to "nothing
+ * to draw yet" rather than the hard failure `loadAtlasCategory` gives a
+ * genuinely-missing core category.
+ */
+export function loadOptionalAtlasCategory(category: string): Promise<LoadedAtlas> {
+  return loadCategoryOrEmpty(category);
+}
 
-  cache.set(key, promise);
-  return promise;
+/**
+ * Frees a loaded category's decoded GPU textures and drops it from the
+ * internal `cache`, so a later `loadAtlasCategory`/`loadAtlasPackCategory`
+ * call reloads and re-decodes it from scratch instead of replaying the same
+ * (now-destroyed) `Promise`. Used by `textures.ts`'s anim-atlas loaders when
+ * animations are turned off: dropping JS references to a `LoadedAtlas`
+ * alone would still leave its pages' decoded pixels resident on the GPU —
+ * only `Assets.unload` on the page's own URL actually releases that.
+ *
+ * Never throws, and a caller never needs to track which categories are
+ * actually resident to safely call this: a category that was never loaded,
+ * never resolved, or has no vendored pages at all (see
+ * `loadAtlasPackCategory`'s "no pages" case) is simply a no-op.
+ */
+export async function unloadAtlasCategory(category: string): Promise<void> {
+  const cached = cache.get(category);
+  cache.delete(category);
+  if (!cached) return;
+
+  try {
+    await cached;
+  } catch {
+    return; // Never resolved — nothing was actually loaded onto the GPU.
+  }
+
+  const urls = pagesFor(category).map((p) => p.webpUrl);
+  if (urls.length === 0) return;
+  try {
+    await Assets.unload(urls);
+  } catch (err) {
+    console.warn(`atlas.ts: failed to unload atlas category "${category}"`, err);
+  }
 }

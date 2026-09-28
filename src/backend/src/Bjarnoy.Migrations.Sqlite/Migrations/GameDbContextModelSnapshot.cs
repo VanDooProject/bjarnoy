@@ -1420,6 +1420,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("ForestRockiness")
                         .HasColumnType("REAL");
 
+                    b.Property<bool>("FrozenIslesEnabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<double>("IslandBendiness")
                         .HasColumnType("REAL");
 

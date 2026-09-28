@@ -16,6 +16,7 @@ export interface WorldResponse {
   joinableReason: string;
   startsAt: string | null;
   endbossTriggered: boolean;
+  frozenIslesEnabled: boolean;
   speedFactor: number;
   generation: WorldGenerationResponse;
   movement: WorldMovementResponse;
@@ -466,6 +467,7 @@ export interface AdminWorldResponse {
   speedFactor: number;
   startsAt: string | null;
   joinsClosed: boolean;
+  frozenIslesEnabled: boolean;
   endbossAt: string | null;
   endbossTriggeredAt: string | null;
   runState: string;
@@ -535,6 +537,7 @@ export interface UpdateWorldSettingsRequest {
   speedFactor?: number;
   startsAt?: string | null;
   joinsClosed?: boolean;
+  frozenIslesEnabled?: boolean;
   endbossAt?: string | null;
 }
 

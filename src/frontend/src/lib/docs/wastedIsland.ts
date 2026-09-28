@@ -5,21 +5,31 @@
 // (wastedIsland.test.ts).
 //
 // The island lives on the same axial lattice as the real game
-// (src/lib/hex/coords.ts, src/lib/hex/geometry.ts) and reuses the `showcase`
-// atlas category's pre-composited, high-res frames (src/lib/map/atlas.ts) —
-// the same source the docs' other art thumbnails use — for every ordinary
-// land tile. A giant (the Utgard/volcano flowers) is the one exception: it
-// draws exactly like the in-game map does — 7 normal `showcase` ground
-// plates (one per covered hex, draw layer "base") plus 7 per-hex top parts
-// from the runtime's own `buildings-static`/`terrain` atlas categories (draw
-// layer "top", see `giantTiles.ts`) — rather than one pre-composited
-// `showcase` giant frame, whose own raised ground plates' dirt side skirts
-// would otherwise paint over the neighbouring island hexes.
+// (src/lib/hex/coords.ts, src/lib/hex/geometry.ts). Its one real classifier,
+// `classifyIsland`, is shared by two very different consumers:
+//
+//   - `buildIslandTiles` turns it into a plain `Tile[]` (src/lib/map/types.ts)
+//     for `StaticWorldModel`, so the docs page can hand it straight to the
+//     real `HexMapRenderer` — the same terrain/orientation/variant/giant
+//     lookups (`textures.ts`, `giantTiles.ts`) an actual in-game island uses,
+//     rather than a second, hand-maintained rendering of the same data. This
+//     is what `WastedIsland.vue` actually draws.
+//   - `buildIsland` is the older hand-positioned-DOM-sprite rendering this
+//     replaced — kept test-only (wastedIsland.test.ts) as a from-first-
+//     principles regression check that every frame name it derives (living
+//     and wasted, ordinary tile and giant part alike) still resolves in the
+//     vendored atlas, independent of whichever renderer actually draws the
+//     page. It reuses the `showcase` atlas category's pre-composited,
+//     high-res frames (src/lib/map/atlas.ts) for every ordinary land tile,
+//     and for a giant, 7 `showcase` ground plates (draw layer "base") plus 7
+//     per-hex top parts from `buildings-static`/`terrain` (draw layer "top",
+//     see `giantTiles.ts`) — see its own doc comment for why a giant is
+//     drawn per-hex rather than as one pre-composited frame.
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import { isoGridPosition } from '../hex/geometry';
 import { findAtlasClip, findAtlasFrame, type AtlasClip, type AtlasFrameRect } from '../map/atlas';
-import { giantCoverage, GIANT_PARTS } from '../map/giantTiles';
-import { TILE_ORIENTATIONS, type TileOrientation } from '../map/types';
+import { giantCoverage, giantCrop, GIANT_PARTS } from '../map/giantTiles';
+import { TILE_ORIENTATIONS, type Tile, type TileOrientation } from '../map/types';
 
 /** One island hex's terrain family, or one of the two giants. */
 export type IslandKind = 'grass' | 'forest' | 'mountain' | 'sand' | 'coast' | 'sea' | 'utgard' | 'volcano';
@@ -150,6 +160,19 @@ interface IslandHexRecord {
   livingSuffix: string;
   wastedPrefix: string;
   wastedSuffix: string;
+  /**
+   * The array index the renderer's own texture lookup expects for this
+   * hex's living art (`textures.ts`'s `baseTextureFor`/`topTextureFor`
+   * index into `TileTextures.coastalBase`/`.top[key]` by `Tile.variant`) —
+   * derived from the exact same hash `livingArt` used to build
+   * `livingPrefix`/`livingSuffix`'s `_variantNNN` suffix, so the DOM-era
+   * frame name and the renderer-era `Tile.variant` can never drift apart.
+   * See `livingArt`'s own doc comment for why the hash value already *is*
+   * the array index, no further translation needed.
+   */
+  livingVariantIndex: number;
+  /** `livingVariantIndex`'s wasted-state counterpart — see `wastedArt`. */
+  wastedVariantIndex: number;
   baseOrientIndex: number;
   turnsAt: number;
   delay: number;
@@ -219,17 +242,19 @@ function classifyIsland(): IslandHexRecord[] {
 
     const turnsAt = isLand ? 2 : kind === 'coast' ? 3 : 4;
 
-    const [livingPrefix, livingSuffix] = livingArt(kind, c);
-    const [wastedPrefix, wastedSuffix] = wastedArt(kind, c);
+    const living = livingArt(kind, c);
+    const wasted = wastedArt(kind, c);
 
     records.push({
       q: c.q,
       r: c.r,
       kind,
-      livingPrefix,
-      livingSuffix,
-      wastedPrefix,
-      wastedSuffix,
+      livingPrefix: living.prefix,
+      livingSuffix: living.suffix,
+      livingVariantIndex: living.index,
+      wastedPrefix: wasted.prefix,
+      wastedSuffix: wasted.suffix,
+      wastedVariantIndex: wasted.index,
       baseOrientIndex: hashInt(c.q, c.r, SALT.orientation, 6),
       turnsAt,
       delay: hashFloat(c.q, c.r, SALT.delay),
@@ -240,53 +265,79 @@ function classifyIsland(): IslandHexRecord[] {
   return records;
 }
 
-/** `[framePrefix, frameSuffix]` for a living hex's frame name (orientation slots between them): `${prefix}_<O>${suffix}`. */
-function livingArt(kind: IslandHexRecord['kind'], c: AxialCoord): [string, string] {
+/**
+ * A hex's living-state frame name pieces (`${prefix}_<O>${suffix}`, the
+ * orientation slotting between them), plus the numeric `index` that same
+ * hash resolves to.
+ *
+ * `index` is deliberately not just "whatever the suffix says" re-parsed
+ * back out — it's the exact value handed to `hashInt`, which
+ * `textures.ts`'s own numbering convention (`explicitIndexOf`, see its doc
+ * comment) already makes equal to the art pack's own array index: a plain
+ * unsuffixed frame is index 0, and `_variantNNN` is index `NNN + 1` — so
+ * `index === 0` here always means "no suffix" and `index === n` always
+ * means `_variant${n - 1}`, for every one of this function's cases. That
+ * identity is what lets `buildIslandTiles` (the renderer-driven path) use
+ * `index` directly as `Tile.variant` and still land on the exact same
+ * frame `buildIsland` (the older DOM path, driven by the suffix string
+ * instead) would have drawn — one hash, two consumers, instead of the
+ * frame-name and the variant-index risking drifting apart if each derived
+ * its own answer from a re-rolled hash.
+ */
+function livingArt(kind: IslandHexRecord['kind'], c: AxialCoord): { prefix: string; suffix: string; index: number } {
   switch (kind) {
     case 'grass': {
       const n = hashInt(c.q, c.r, SALT.livingVariant, 4); // '', variant000..002
-      return ['grasstile', n === 0 ? '' : `_variant${String(n - 1).padStart(3, '0')}`];
+      return { prefix: 'grasstile', suffix: n === 0 ? '' : `_variant${String(n - 1).padStart(3, '0')}`, index: n };
     }
     case 'forest': {
       const n = hashInt(c.q, c.r, SALT.livingVariant, 3); // '', variant000..001
-      return ['foresttile', n === 0 ? '' : `_variant${String(n - 1).padStart(3, '0')}`];
+      return { prefix: 'foresttile', suffix: n === 0 ? '' : `_variant${String(n - 1).padStart(3, '0')}`, index: n };
     }
     case 'sand':
-      return ['sandtile', ''];
+      return { prefix: 'sandtile', suffix: '', index: 0 };
     case 'mountain':
-      return ['mountaintile', '_level000'];
+      // Fixed at `_level000` — `mountaintile`'s only rung, so the index a
+      // level-suffixed family (`explicitIndexOf`'s `LEVEL_RE` branch) reads
+      // is always 0 too, same as the unsuffixed families above.
+      return { prefix: 'mountaintile', suffix: '_level000', index: 0 };
     case 'coast': {
       const n = hashInt(c.q, c.r, SALT.livingVariant, 3); // '', variant000..001
-      return ['coastalwatertile', n === 0 ? '' : `_variant${String(n - 1).padStart(3, '0')}`];
+      return { prefix: 'coastalwatertile', suffix: n === 0 ? '' : `_variant${String(n - 1).padStart(3, '0')}`, index: n };
     }
     case 'sea':
-      return ['watertile', ''];
+      return { prefix: 'watertile', suffix: '', index: 0 };
   }
 }
 
 /** Same shape as `livingArt`, for the wasted counterpart. */
-function wastedArt(kind: IslandHexRecord['kind'], c: AxialCoord): [string, string] {
+function wastedArt(kind: IslandHexRecord['kind'], c: AxialCoord): { prefix: string; suffix: string; index: number } {
   switch (kind) {
     case 'grass': {
       const n = hashInt(c.q, c.r, SALT.wastedVariant, 6); // '', variant001..005
-      return ['wasteland', n === 0 ? '' : `_variant${String(n).padStart(3, '0')}`];
+      return { prefix: 'wasteland', suffix: n === 0 ? '' : `_variant${String(n).padStart(3, '0')}`, index: n };
     }
     case 'forest': {
       const n = hashInt(c.q, c.r, SALT.wastedVariant, 2); // '', variant001
-      return ['deadforest', n === 0 ? '' : '_variant001'];
+      return { prefix: 'deadforest', suffix: n === 0 ? '' : '_variant001', index: n };
     }
     case 'sand': {
       const n = hashInt(c.q, c.r, SALT.wastedVariant, 2); // '', variant001
-      return ['blacksand', n === 0 ? '' : '_variant001'];
+      return { prefix: 'blacksand', suffix: n === 0 ? '' : '_variant001', index: n };
     }
     case 'mountain':
-      return ['mountaintile_jagged', '_level000'];
+      return { prefix: 'mountaintile_jagged', suffix: '_level000', index: 0 };
     case 'coast': {
       const n = hashInt(c.q, c.r, SALT.wastedVariant, 4); // '', variant000..002
-      return ['blacksandcoast', n === 0 ? '' : `_variant${String(n - 1).padStart(3, '0')}`];
+      return { prefix: 'blacksandcoast', suffix: n === 0 ? '' : `_variant${String(n - 1).padStart(3, '0')}`, index: n };
     }
     case 'sea':
-      return ['taintedwater', ''];
+      // Open (non-coastal) water bordering a wasted island renders as
+      // `taintedwater` — see `textures.ts`'s `WASTED_TEXTURE_KEY.sea` for
+      // the renderer-side mapping this frame name mirrors. `taintedwater`
+      // has exactly one frame per orientation (no `_variantNNN` at all), so
+      // index is always 0, same as its living `watertile` counterpart.
+      return { prefix: 'taintedwater', suffix: '', index: 0 };
   }
 }
 
@@ -359,6 +410,146 @@ export function buildIsland(rotation: number): IslandPlacement[] {
 // Depth tie-break needs a placement's own (single) hex's x.
 function positionOf(p: IslandPlacement): { x: number } {
   return isoGridPosition(p.hexes[0]!, TILE_W, TOP_FACE_H);
+}
+
+/**
+ * Exposed only for wastedIsland.test.ts: the raw per-hex classification
+ * `buildIsland`/`buildIslandTiles` both build on, so a test can check
+ * `buildIslandTiles`'s `Tile.variant` directly against the index it was
+ * derived from (`record.livingVariantIndex`/`wastedVariantIndex`) instead of
+ * reverse-parsing a resolved frame name's suffix — which, per
+ * `livingArt`/`wastedArt`'s own doc comment, isn't even one consistent
+ * convention across families (a gappy wasted family's `_variantNNN` numbers
+ * from 1, not 0).
+ */
+export function islandHexRecordsForTests(): readonly IslandHexRecord[] {
+  return classifyIsland();
+}
+
+// ---------------------------------------------------------------------------
+// Tile[] for the real HexMapRenderer (WastedIsland.vue) — a fixed hand-built
+// world for `StaticWorldModel`, replacing `buildIsland`'s own hand-positioned
+// DOM sprites. Reuses exactly the same classification (`classifyIsland`) and
+// giant placement (`giantCoverage`) `buildIsland` does, so the two can never
+// disagree about which hex is which kind or which giant covers what — only
+// how each hex gets *drawn* differs (the renderer's textures.ts lookups
+// instead of a resolved atlas frame positioned by hand).
+// ---------------------------------------------------------------------------
+
+/** One giant's placement, independent of rotation — mirrors `giantPlacements`'s own two call sites in `buildIsland` (kept as a small table here rather than a third near-duplicate function, since a `Tile`'s giant field needs less than a DOM placement does: no top-part frame name/category, no ground-plate placement). */
+const GIANT_DEFS: readonly {
+  kind: 'utgard' | 'volcano';
+  center: AxialCoord;
+  livingFamily: NonNullable<Tile['giant']>['family'];
+  wastedFamily: NonNullable<Tile['giant']>['family'];
+  turnsAt: number;
+}[] = [
+  { kind: 'utgard', center: ORIGIN, livingFamily: 'giantshrine', wastedFamily: 'giantutgard', turnsAt: 1 },
+  { kind: 'volcano', center: VOLCANO_CENTER, livingFamily: 'giantmountain', wastedFamily: 'giantvolcano', turnsAt: 2 },
+];
+
+/**
+ * `buildIslandTiles`'s per-hex bookkeeping that isn't itself a `Tile` field —
+ * the caption identity (`kind`/`turnsAt`) and cross-fade stagger (`delay`) a
+ * hovered/rebuilding hex needs. Cached per rotation (`classifyIsland` and
+ * `giantCoverage` are already pure/cheap, but `WastedIsland.vue` calls
+ * `islandHexInfo`/`delayFraction` once per hover-move and once per rebuilt
+ * hex respectively, and re-deriving the whole island's rotation from scratch
+ * on every mouse move would be needless work for data that only actually
+ * changes when the rotate buttons are clicked).
+ */
+interface RotatedHexInfo {
+  kind: IslandKind;
+  turnsAt: number;
+  delay: number;
+}
+
+const rotatedInfoCache = new Map<number, Map<string, RotatedHexInfo>>();
+
+function rotatedInfoFor(rotation: number): Map<string, RotatedHexInfo> {
+  const cached = rotatedInfoCache.get(rotation);
+  if (cached) return cached;
+
+  const map = new Map<string, RotatedHexInfo>();
+  for (const record of classifyIsland()) {
+    const rotated = rotateAxial({ q: record.q, r: record.r }, rotation);
+    map.set(coordKey(rotated), { kind: record.kind, turnsAt: record.turnsAt, delay: record.delay });
+  }
+  for (const def of GIANT_DEFS) {
+    const rotatedCenter = rotateAxial(def.center, rotation);
+    for (const { coord } of giantCoverage(rotatedCenter)) {
+      map.set(coordKey(coord), { kind: def.kind, turnsAt: def.turnsAt, delay: 0 });
+    }
+  }
+  rotatedInfoCache.set(rotation, map);
+  return map;
+}
+
+/** The (rotated) hovered hex's caption identity — `kind`/`turnsAt` are exactly what `WastedIsland.vue`'s old `tileNameKey`/`captionText` needed from an `IslandPlacement`, now looked up by coordinate instead of read off a DOM placement object. `undefined` for a coordinate outside the island (open water past the crop, or between rebuilds). */
+export function islandHexInfo(rotation: number, coord: AxialCoord): { kind: IslandKind; turnsAt: number } | undefined {
+  const info = rotatedInfoFor(rotation).get(coordKey(coord));
+  return info ? { kind: info.kind, turnsAt: info.turnsAt } : undefined;
+}
+
+/** This (rotated) hex's per-hex cross-fade stagger, 0..1 — 0 for a giant hex (its 14 old DOM placements always carried `delay: 0` too) or a coordinate outside the island. */
+export function delayFraction(rotation: number, coord: AxialCoord): number {
+  return rotatedInfoFor(rotation).get(coordKey(coord))?.delay ?? 0;
+}
+
+/**
+ * The island as a fixed `Tile[]` for `StaticWorldModel` — everything
+ * `HexMapRenderer` needs to draw it exactly like an in-game island: terrain,
+ * orientation, the living/wasted art variant index (`Tile.variant` — see
+ * `livingArt`/`wastedArt`'s own doc comment for why the same hash already
+ * gives the renderer's own array index), and, for the two giants, `Tile.giant`.
+ *
+ * `stage` decides `Tile.wasted` per hex (`stage >= record.turnsAt`), so
+ * calling this again after the blight slider moves rebuilds the whole
+ * island's wasted/living split in one pass — `WastedIsland.vue` feeds the
+ * result straight into `StaticWorldModel.setTiles` and then
+ * `HexMapRenderer.forceRebuild`.
+ *
+ * Every water hex renders as open sea (`taintedwater` once wasted — see
+ * `wastedArt`'s `'sea'` case) except the ring the docs' own classification
+ * already calls `'coast'`, which renders as `isCoastalWater` (coastalwater/
+ * blacksandcoast) — same water/coast split the real game's own
+ * `WorldModel.getTile` draws, just fixed by hand here instead of derived
+ * from a seed.
+ */
+export function buildIslandTiles(rotation: number, stage: number): Tile[] {
+  const tiles: Tile[] = [];
+
+  for (const record of classifyIsland()) {
+    const rotated = rotateAxial({ q: record.q, r: record.r }, rotation);
+    const wasted = stage >= record.turnsAt;
+    tiles.push({
+      q: rotated.q,
+      r: rotated.r,
+      terrain: record.kind === 'coast' ? 'sea' : record.kind,
+      isCoastalWater: record.kind === 'coast' ? true : undefined,
+      wasted,
+      orientation: orientationAt(record.baseOrientIndex, rotation),
+      variant: wasted ? record.wastedVariantIndex : record.livingVariantIndex,
+    });
+  }
+
+  for (const def of GIANT_DEFS) {
+    const rotatedCenter = rotateAxial(def.center, rotation);
+    const orientation = orientationAt(5, rotation); // giants render at a fixed base camera ('SE') — mirrors giantPlacements.
+    const wasted = stage >= def.turnsAt;
+    for (const { coord, part } of giantCoverage(rotatedCenter)) {
+      tiles.push({
+        q: coord.q,
+        r: coord.r,
+        terrain: 'grass',
+        wasted,
+        orientation,
+        giant: { family: wasted ? def.wastedFamily : def.livingFamily, anchor: rotatedCenter, part, orientation },
+      });
+    }
+  }
+
+  return tiles;
 }
 
 /**
@@ -528,17 +719,21 @@ export function tileSpriteBox(origin: { x: number; y: number }, rect: AtlasFrame
 /**
  * A giant top part's box: 1x terrain/buildings-static art (native width
  * 200, height varies per part) rendered at 2x into `origin`'s 400x600
- * source canvas, its bottom edge anchored to that canvas's own bottom
- * (mirrors the game's own `giantCrop`: the part's extra height rises
- * *above* the canvas rather than extending below it). `rect` may be the
- * part's static frame or one frame of its `buildings-anim` clip — both
- * share the same `sourceSize`/`spriteSourceSize` geometry (see this
- * module's doc comment on giant clips), so this box never needs
- * recomputing as a clip's frame index advances, only the sprite's
- * background image/position does (`atlasBackgroundStyle`).
+ * source canvas, its bottom edge anchored to that canvas's own bottom.
+ * The vertical placement is computed through `giantCrop` (giantTiles.ts) —
+ * the renderer's own "how much does this part's extra height push it up"
+ * formula, `nativeY` — rather than this module's own arithmetic, so the
+ * docs' DOM cards and the real in-game renderer can never quietly drift
+ * onto two different answers for the same question (`giantTiles.test.ts`'s
+ * pixel-derived checks on `giantCrop` cover the formula itself; this only
+ * has to reuse it). `rect` may be the part's static frame, one frame of its
+ * `buildings-anim` clip, or the clip's rest image — each is trimmed on its
+ * own (a clip frame's `spriteSourceSize` routinely differs from its static
+ * frame's and from its sibling frames'), so each needs its own box — see
+ * `giantClipBoxes`.
  */
 export function giantTopPartBox(origin: { x: number; y: number }, rect: AtlasFrameRect): SpriteGeom {
-  const top = origin.y + 2 * (GIANT_PART_NATIVE_CANVAS_H - rect.sourceSize.h) + 2 * rect.spriteSourceSize.y;
+  const top = origin.y + 2 * giantCrop(rect.sourceSize.h).nativeY + 2 * rect.spriteSourceSize.y;
   return {
     left: origin.x + 2 * rect.spriteSourceSize.x,
     top,
@@ -547,7 +742,21 @@ export function giantTopPartBox(origin: { x: number; y: number }, rect: AtlasFra
   };
 }
 
-export const GIANT_HEXES_FOR_TESTS = {
-  utgard: UTGARD_HEXES,
-  volcano: VOLCANO_HEXES,
-};
+
+/**
+ * Per-frame boxes for a giant top part's clip, anchored at `origin` the same
+ * way as its static frame (`giantTopPartBox`). Each frame, and the rest
+ * image, gets its own box from its own trim rect — the game's Pixi sprites
+ * do the same through each texture's trim/orig, so drawing a frame into the
+ * static frame's box instead stretches it (the wasted volcano's centre
+ * frames are ~255px tall against a 393px static frame).
+ */
+export function giantClipBoxes(
+  origin: { x: number; y: number },
+  clip: { frameRects: AtlasFrameRect[]; restRect?: AtlasFrameRect },
+): { frames: SpriteGeom[]; rest?: SpriteGeom } {
+  return {
+    frames: clip.frameRects.map((rect) => giantTopPartBox(origin, rect)),
+    rest: clip.restRect ? giantTopPartBox(origin, clip.restRect) : undefined,
+  };
+}

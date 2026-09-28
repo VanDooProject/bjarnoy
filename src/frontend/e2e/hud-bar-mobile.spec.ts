@@ -775,3 +775,48 @@ test('bottom docking clears the QueueDrawer handle', async ({ page }) => {
   const handleBox = (await handle.boundingBox())!;
   expect(handleBox.y + handleBox.height).toBeLessThanOrEqual(barBox.y);
 });
+
+// Group F: on a short phone the drawer's natural content height (the
+// ProfileNudge account section, at the very bottom of MobileHudDrawer's
+// content) can exceed the space actually available below the bar — the
+// drawer used to open at its full, uncapped height regardless, putting its
+// bottom off-screen with nothing to scroll it into view. `.hud-drawer-scroll`
+// (see TopBar.vue) fixes that: the drawer is capped to the available space
+// and its content becomes scrollable.
+test('a short phone can scroll the open drawer down to reach the profile nudge', async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  // Anonymous — no loginTestUser — same as the "anonymous shows the
+  // log-in entry" test above: showProfileNudge (MobileHudDrawer.vue) is
+  // gated on `!auth.isAuthenticated`. Same pre-existing-bug reason as the
+  // narrower-phone-width loop above (see its own `[BUG]` comment just above
+  // it): found at the ambient (wider) viewport first, then resize down —
+  // SettlementPage.found's landfall click itself doesn't work yet at a
+  // 320px-wide viewport, which is unrelated to this fix.
+  await SettlementPage.found(page);
+  await page.setViewportSize({ width: 320, height: 568 });
+
+  // Demo mode's player store already has `onboardingComplete: true` once
+  // founding completes (see the store's own `founded()` action) — the
+  // profile nudge (showProfileNudge in MobileHudDrawer.vue) needs nothing
+  // further set up here; the anonymous, no-nickname founding above already
+  // satisfies its other conditions too.
+  await page.locator('.hud-grip').click();
+  const nudge = page.locator('.hud-drawer [data-testid="profile-nudge"]');
+  await expect(nudge).toBeVisible();
+
+  // The drawer itself must never hang off the bottom of the viewport — it's
+  // capped, not clipped-and-unreachable.
+  const drawerBox = (await page.locator('.hud-drawer').boundingBox())!;
+  await expect(async () => {
+    expect(drawerBox.y + drawerBox.height).toBeLessThanOrEqual(568);
+  }).toPass();
+
+  // The "Later" button sits at the very bottom of the drawer's content,
+  // past what a 320x568 viewport shows without scrolling — Playwright's
+  // `.click()` auto-scrolls its target into view first, so a successful
+  // click here is itself proof the drawer is actually reachable/scrollable,
+  // not just present in the (clipped) DOM.
+  const later = page.locator('.hud-drawer [data-testid="profile-nudge-later"]');
+  await later.click();
+  await expect(nudge).toHaveCount(0);
+});

@@ -1246,3 +1246,16 @@ describe('WorldModel wasted-island reveal', () => {
     expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('forest');
   });
 });
+
+describe('WorldModel frozen isles flag', () => {
+  it('defaults to disabled and tracks setFrozenEnabled', () => {
+    const model = new WorldModel(1);
+    expect(model.isFrozenEnabled()).toBe(false);
+
+    model.setFrozenEnabled(true);
+    expect(model.isFrozenEnabled()).toBe(true);
+
+    model.setFrozenEnabled(false);
+    expect(model.isFrozenEnabled()).toBe(false);
+  });
+});

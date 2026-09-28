@@ -5,11 +5,10 @@
 // doc comment for why a giant is 14 separate per-hex sprites rather than one
 // pre-composited `showcase` frame), rendered on its own rather than as part
 // of an island, with any `buildings-anim` clip a top part has playing
-// instead of sitting on its static frame. Only mounted while a card is
-// hovered/focused — see WastedLandsView.vue's own `giantFamilyHasClip` gate,
-// which decides whether a family gets this treatment at all (today just the
-// wasted volcano; the wasted Utgard ruin has no clips and stays a plain
-// `<AtlasSprite>`).
+// instead of sitting on its static frame. WastedLandsView.vue's own
+// `giantFamilyHasClip` gate decides whether a family gets this treatment at
+// all (today just the wasted volcano; the wasted Utgard ruin has no clips
+// and stays a plain `<AtlasSprite>`).
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { isoGridPosition } from '../../lib/hex/geometry';
 import { atlasBackgroundStyle, type AtlasBackgroundStyle } from '../../lib/map/atlas';
@@ -20,6 +19,7 @@ import {
   resolveIslandClip,
   tileSpriteBox,
   giantTopPartBox,
+  giantClipBoxes,
   TOP_FACE_Y,
   type SpriteGeom,
 } from '../../lib/docs/wastedIsland';
@@ -46,24 +46,24 @@ interface PartLayout {
   x: number;
   plate: { box: SpriteGeom; style: AtlasBackgroundStyle } | null;
   top: { box: SpriteGeom; style: AtlasBackgroundStyle } | null;
-  /** `buildings-anim` clip for this part's top, when one exists — resolved once per family/orientation, not per animation tick. */
-  clip: ReturnType<typeof resolveIslandClip>;
   /**
-   * The clip's rest image (see `AtlasClip.overlay`'s own doc comment),
-   * pre-styled — static for as long as this part's clip plays, drawn under
-   * the clip's own (parts-only) current frame rather than in place of it.
-   * `null` for a part with no clip, or with a legacy (non-overlay) one —
-   * same shape/box as `top` itself, since a clip's rest frame shares its
-   * static frame's exact geometry.
+   * This part's `buildings-anim` clip, when one exists — resolved once per
+   * family/orientation, not per animation tick. Every frame and the rest
+   * image carry their own box: each is trimmed on its own, so none of them
+   * can borrow `top`'s (see `giantClipBoxes`).
    */
-  rest: AtlasBackgroundStyle | null;
+  clip: {
+    timing: ReturnType<typeof clipTimingOf>;
+    frames: { box: SpriteGeom; style: AtlasBackgroundStyle }[];
+    /** The clip's rest image (see `AtlasClip.overlay`'s own doc comment), drawn under the clip's current (parts-only) frame rather than in place of it. `null` for a legacy (non-overlay) clip. */
+    rest: { box: SpriteGeom; style: AtlasBackgroundStyle } | null;
+  } | null;
 }
 
 // Precomputed off `family`/`plateFamily`/`orientation` (which camera pill is
 // selected) — not off the animation clock. Mirrors WastedIsland.vue's own
-// `resolved`/`clipLookups` split for the same reason: the clip's frames
-// share their static frame's exact geometry, so only the background image
-// needs to change per tick, not the box.
+// `resolved`/`clipLookups` split: every clip frame's box and style is
+// resolved here once, and the per-tick step only picks the current one.
 const layout = computed<PartLayout[]>(() => {
   const out: PartLayout[] = [];
   for (const { coord, part } of giantCoverage(ANCHOR)) {
@@ -87,7 +87,19 @@ const layout = computed<PartLayout[]>(() => {
         }
       : null;
 
-    const clip = resolveIslandClip(topName);
+    const resolvedClip = resolveIslandClip(topName);
+    let clip: PartLayout['clip'] = null;
+    if (resolvedClip && resolvedClip.frameRects.length > 0) {
+      const boxes = giantClipBoxes(origin, resolvedClip);
+      clip = {
+        timing: clipTimingOf(resolvedClip),
+        frames: resolvedClip.frameRects.map((rect, i) => ({ box: boxes.frames[i]!, style: atlasBackgroundStyle(rect) })),
+        rest:
+          resolvedClip.restRect && boxes.rest
+            ? { box: boxes.rest, style: atlasBackgroundStyle(resolvedClip.restRect) }
+            : null,
+      };
+    }
 
     out.push({
       part,
@@ -96,7 +108,6 @@ const layout = computed<PartLayout[]>(() => {
       plate,
       top,
       clip,
-      rest: clip?.restRect ? atlasBackgroundStyle(clip.restRect) : null,
     });
   }
   // Same painter's-algorithm order as buildIsland: depth, then x, then a
@@ -108,19 +119,18 @@ const layout = computed<PartLayout[]>(() => {
 
 const now = useAnimationClock();
 
-const topStyles = computed<Map<GiantPart, AtlasBackgroundStyle>>(() => {
-  const map = new Map<GiantPart, AtlasBackgroundStyle>();
+const topSprites = computed<Map<GiantPart, { box: SpriteGeom; style: AtlasBackgroundStyle }>>(() => {
+  const map = new Map<GiantPart, { box: SpriteGeom; style: AtlasBackgroundStyle }>();
   const elapsed = now.value;
   for (const entry of layout.value) {
     if (!entry.clip) continue;
-    const idx = clipFrameIndex(clipTimingOf(entry.clip), elapsed);
-    map.set(entry.part, atlasBackgroundStyle(entry.clip.frameRects[idx]!));
+    map.set(entry.part, entry.clip.frames[clipFrameIndex(entry.clip.timing, elapsed)]!);
   }
   return map;
 });
 
-function topStyleFor(entry: PartLayout): AtlasBackgroundStyle | undefined {
-  return topStyles.value.get(entry.part) ?? entry.top?.style;
+function topSpriteFor(entry: PartLayout): { box: SpriteGeom; style: AtlasBackgroundStyle } | null {
+  return topSprites.value.get(entry.part) ?? entry.top;
 }
 
 // --- Bounds + contain-fit scale -------------------------------------------
@@ -137,7 +147,8 @@ const bounds = computed(() => {
     if (y > maxY) maxY = y;
   };
   for (const entry of layout.value) {
-    for (const box of [entry.plate?.box, entry.top?.box]) {
+    const clipBoxes = entry.clip ? [...entry.clip.frames.map((f) => f.box), entry.clip.rest?.box] : [];
+    for (const box of [entry.plate?.box, entry.top?.box, ...clipBoxes]) {
       if (!box) continue;
       grow(box.left, box.top);
       grow(box.left + box.width, box.top + box.height);
@@ -213,14 +224,14 @@ const scale = computed(() => {
           :style="{ ...entry.plate.style, ...positionStyle(entry.plate.box) }"
         />
         <div
-          v-if="entry.rest && entry.top"
+          v-if="entry.clip?.rest"
           class="giant-sprite"
-          :style="{ ...entry.rest, ...positionStyle(entry.top.box) }"
+          :style="{ ...entry.clip.rest.style, ...positionStyle(entry.clip.rest.box) }"
         />
         <div
-          v-if="entry.top"
+          v-if="topSpriteFor(entry)"
           class="giant-sprite"
-          :style="{ ...topStyleFor(entry), ...positionStyle(entry.top.box) }"
+          :style="{ ...topSpriteFor(entry)!.style, ...positionStyle(topSpriteFor(entry)!.box) }"
         />
       </template>
     </div>

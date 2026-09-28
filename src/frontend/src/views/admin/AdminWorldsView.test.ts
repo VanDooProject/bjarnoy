@@ -34,6 +34,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     speedFactor: 1,
     startsAt: null,
     joinsClosed: false,
+    frozenIslesEnabled: false,
     endbossAt: null,
     endbossTriggeredAt: null,
     runState: 'running',
@@ -159,6 +160,23 @@ describe('AdminWorldsView', () => {
 
     expect(adminCreateWorld).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Alfheim', seed: undefined }),
+    );
+  });
+
+  it('saves the frozen isles flag alongside the other settings', async () => {
+    const wrapper = await mountView();
+    adminUpdateWorldSettings.mockResolvedValue(world({ frozenIslesEnabled: true }));
+
+    const checkbox = wrapper.find('input#frozen-world-1');
+    expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+    await checkbox.setValue(true);
+
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).toHaveBeenCalledWith(
+      'world-1',
+      expect.objectContaining({ frozenIslesEnabled: true }),
     );
   });
 

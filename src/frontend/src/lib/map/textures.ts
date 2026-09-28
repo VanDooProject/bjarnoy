@@ -30,7 +30,16 @@
 // its own doc comment and `textures.test.ts` — no Pixi/Texture dependency,
 // so it's exercised directly rather than only through a loaded atlas).
 import { Texture } from 'pixi.js';
-import { loadAtlasCategory, loadAtlasPackCategory, type AtlasClip, type AtlasPack, type LoadedAtlas } from './atlas';
+import {
+  loadAtlasCategory,
+  loadAtlasPackCategory,
+  loadOptionalAtlasCategory,
+  unloadAtlasCategory,
+  type AtlasClip,
+  type AtlasPack,
+  type AtlasPageProgress,
+  type LoadedAtlas,
+} from './atlas';
 import {
   classifyGiantClips,
   classifyGiantFrames,
@@ -92,7 +101,8 @@ export type TextureKey =
   | 'wasteland'
   | 'deadforest'
   | 'blacksand'
-  | 'wastedmountain';
+  | 'wastedmountain'
+  | 'taintedwater';
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
@@ -157,6 +167,10 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   deadforest: 'deadforest',
   blacksand: 'blacksand',
   wastedmountain: 'mountaintile_jagged',
+  // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
+  // own doc comment for why this key exists at all despite `WorldModel`
+  // itself never producing a wasted open-sea tile today.
+  taintedwater: 'taintedwater',
 };
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
@@ -481,8 +495,25 @@ export interface ClassifiedFamily<T> {
  * sawmillriver, sawmillbend) render a different base per level too — this
  * shows up simply as more than one distinct index turning up for some
  * orientation's base frames, with no family-specific rule needed either way.
+ *
+ * `sparse` (default `false`, the original contract): a genuinely broken
+ * render pass leaves a hole in the middle of a level/variant sequence (e.g.
+ * `level000`+`level002` with no `level001`), and the default, strict mode
+ * throws on exactly that — real production bug, not something to silently
+ * tolerate. Pass `sparse: true` only for a frame set that is *known* to be
+ * an incomplete, in-progress load rather than the final art (see
+ * `buildTileTextures`'s own `sparse` parameter): the `buildings-level1`
+ * atlas alone only ever carries index 1 (nothing at index 0), and the
+ * `buildings-static` atlas alone is missing index 1 by design (that frame
+ * lives in `buildings-level1` instead) — both are real, expected states on
+ * the newer split atlas, not bugs. In `sparse` mode a missing index is left
+ * as `undefined` (the array's length is `maxIndex + 1`, not `entries.size`)
+ * rather than thrown on; callers of `TileTextures.top`/`baseIndexed` walk
+ * across those holes themselves (see `pickIndexed`) rather than assuming
+ * every slot is filled.
  */
-export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[]): ClassifiedFamily<T> {
+export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[], opts?: { sparse?: boolean }): ClassifiedFamily<T> {
+  const sparse = opts?.sparse ?? false;
   const baseByOrientation = emptyOrientationMap<Map<number, T>>(() => new Map());
   const topByOrientation = emptyOrientationMap<Map<number, T>>(() => new Map());
 
@@ -496,9 +527,11 @@ export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[]): ClassifiedFam
     const result = {} as OrientationMap<T[]>;
     for (const orientation of TILE_ORIENTATIONS) {
       const entries = byOrientation[orientation];
-      result[orientation] = Array.from({ length: entries.size }, (_, i) => {
+      const length = sparse ? (entries.size === 0 ? 0 : Math.max(...entries.keys()) + 1) : entries.size;
+      result[orientation] = Array.from({ length }, (_, i) => {
         const value = entries.get(i);
         if (value === undefined) {
+          if (sparse) return undefined as unknown as T;
           throw new Error(`textures.ts: frame set is missing index ${i} for orientation ${orientation}`);
         }
         return value;
@@ -673,8 +706,23 @@ function framesOfFamily(atlas: LoadedAtlas, family: string): FamilyFrame<Texture
  * animation frames it has no way to tell apart — corrupting the static
  * `top`/`base` index it builds. Reading `animAtlas.clips` on its own instead
  * sidesteps that entirely.
+ *
+ * `sparse` (default `false`): passed straight through to
+ * `classifyFamilyFrames` for every *building* key (never a terrain key —
+ * terrain families aren't split across `buildings-level1`/`buildings-static`
+ * at all, so a real gap there is still always a bug). Set this when
+ * `atlases` is known to be an incomplete slice of a building's full frame
+ * set — `loadLevel1Atlases`/`loadBuildingAtlases` each build from exactly
+ * one of the two categories a building's frames are now split across, so
+ * each one alone is missing the other's rungs by design, not by accident.
+ * Every other loader (`loadTileTextures`, `loadPackAtlases`, ...) merges
+ * `buildings-level1` and `buildings-static` into the same `atlases` array
+ * *before* this runs, so their combined frame pool has no real gaps and
+ * strict (`sparse: false`) classification still catches a genuinely broken
+ * render pass.
  */
-function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): TileTextures {
+function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts?: { sparse?: boolean }): TileTextures {
+  const sparse = opts?.sparse ?? false;
   const merged: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
   for (const atlas of atlases) {
     Object.assign(merged.textures, atlas.textures);
@@ -688,7 +736,10 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
   const animTop: TileTextures['animTop'] = {};
   for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
     const frames = collapseLetteredLevels(framesOfFamily(merged, family));
-    const classified = classifyFamilyFrames(GAPPY_VARIANT_FAMILIES.has(family) ? renumberTopVariants(frames) : frames);
+    const keySparse = sparse && !TERRAIN_TEXTURE_KEYS.has(key);
+    const classified = classifyFamilyFrames(GAPPY_VARIANT_FAMILIES.has(family) ? renumberTopVariants(frames) : frames, {
+      sparse: keySparse,
+    });
     if (classified.base) base[key] = classified.base;
     if (classified.baseIndexed) baseIndexed[key] = classified.baseIndexed;
     if (classified.top) top[key] = classified.top;
@@ -823,6 +874,53 @@ function mergeKeyed<V>(a: Partial<Record<TextureKey, V>>, b: Partial<Record<Text
 }
 
 /**
+ * Merges one orientation's per-level array element-wise, `a`'s entry
+ * winning at every index it has one for — used for `top`/`baseIndexed`
+ * below, whose arrays can now be genuinely sparse (see
+ * `classifyFamilyFrames`'s `sparse` option): `loadLevel1Atlases` (level 1
+ * only) and `loadBuildingAtlases` (everything else) each resolve with holes
+ * at the other's rungs, and a later load merging in must fill those holes
+ * rather than replacing the whole array — a plain `a ?? b` per key would let
+ * `loadBuildingAtlases`'s array (present, but still missing level 1) wipe
+ * out level 1's own entry entirely once it resolves after `loadLevel1Atlases`.
+ */
+function mergeIndexedArray<T>(a: (T | undefined)[] | undefined, b: (T | undefined)[] | undefined): (T | undefined)[] | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const length = Math.max(a.length, b.length);
+  const result: (T | undefined)[] = new Array(length);
+  for (let i = 0; i < length; i++) {
+    result[i] = a[i] ?? b[i];
+  }
+  return result;
+}
+
+/** `mergeKeyed`'s per-key merge, but element-wise on each orientation's array via `mergeIndexedArray` — see that function's own doc comment for why `top`/`baseIndexed` need this instead of a whole-array `mergeKeyed`. */
+function mergeKeyedArrays<T>(
+  a: Partial<Record<TextureKey, OrientationMap<T[]>>>,
+  b: Partial<Record<TextureKey, OrientationMap<T[]>>>,
+): Partial<Record<TextureKey, OrientationMap<T[]>>> {
+  const keys = new Set<TextureKey>([...(Object.keys(a) as TextureKey[]), ...(Object.keys(b) as TextureKey[])]);
+  const merged: Partial<Record<TextureKey, OrientationMap<T[]>>> = {};
+  for (const key of keys) {
+    if (TERRAIN_TEXTURE_KEYS.has(key) && a[key] !== undefined) {
+      merged[key] = a[key];
+      continue;
+    }
+    const av = a[key];
+    const bv = b[key];
+    if (!av) {
+      merged[key] = bv;
+    } else if (!bv) {
+      merged[key] = av;
+    } else {
+      merged[key] = mapOrientations(av, (orientation, arr) => mergeIndexedArray(arr, bv[orientation]) as T[]);
+    }
+  }
+  return merged;
+}
+
+/**
  * Fills in a per-orientation array field from `b` wherever `a`'s own
  * orientation is empty — used for `wastedCoastalBase` below: with atlas
  * packs, `a` (the core terrain load) has none of it until the wasted pack
@@ -838,8 +936,8 @@ function mergeOrientationArrays<T>(a: OrientationMap<T[]>, b: OrientationMap<T[]
 export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTextures {
   return {
     base: mergeKeyed(a.base, b.base),
-    baseIndexed: mergeKeyed(a.baseIndexed, b.baseIndexed),
-    top: mergeKeyed(a.top, b.top),
+    baseIndexed: mergeKeyedArrays(a.baseIndexed, b.baseIndexed),
+    top: mergeKeyedArrays(a.top, b.top),
     animTop: mergeKeyed(a.animTop, b.animTop),
     coastalBase: a.coastalBase,
     riverBase: a.riverBase,
@@ -853,44 +951,150 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
 }
 
 let terrainLoading: Promise<TileTextures> | null = null;
-/** The small `terrain` atlas alone — enough for the landing page / world map background, and for `HexMapRenderer` to draw terrain-only settlement tiles before building art resolves. */
-export function loadTerrainAtlas(): Promise<TileTextures> {
+/**
+ * The small `terrain` atlas alone — enough for the landing page / world map
+ * background, and for `HexMapRenderer` to draw terrain-only settlement tiles
+ * before building art resolves. `onPage`, like `loadAtlasCategory`'s own, is
+ * only invoked on the first (uncached) call.
+ */
+export function loadTerrainAtlas(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!terrainLoading) {
-    terrainLoading = loadAtlasCategory('terrain').then((atlas) => buildTileTextures([atlas]));
+    terrainLoading = loadAtlasCategory('terrain', onPage).then((atlas) => buildTileTextures([atlas]));
   }
   return terrainLoading;
 }
 
+let level1Loading: Promise<TileTextures> | null = null;
+/**
+ * The `buildings-level1` atlas alone — every levelless building frame
+ * (shared bases, levelless tops) plus every `_level001*` frame (see
+ * `atlas.ts`'s `withBuildingLevel1`'s own doc comment). Loaded via
+ * `loadOptionalAtlasCategory` rather than `loadAtlasCategory`: the older,
+ * currently vendored atlas has no `buildings-level1` pages at all (every
+ * building frame still lives in `buildings-static`), which must resolve to
+ * "nothing yet" rather than fail the whole map load the way a genuinely
+ * missing *core* category would.
+ *
+ * Built with `sparse: true` — this atlas alone only ever has index 1 for a
+ * family's `top`/`baseIndexed` arrays (nothing at index 0, or at 2/3+
+ * either), which is by design here, not a broken render pass (see
+ * `buildTileTextures`'s own `sparse` parameter). `HexMapRenderer` merges
+ * this in *first*, so buildings render with their level-1 art immediately —
+ * whatever their real level — while the larger `buildings-static` atlas is
+ * still loading (see `pickIndexedEntry`'s walk).
+ */
+export function loadLevel1Atlases(): Promise<TileTextures> {
+  if (!level1Loading) {
+    level1Loading = loadOptionalAtlasCategory('buildings-level1').then((atlas) =>
+      buildTileTextures([atlas], undefined, { sparse: true }),
+    );
+  }
+  return level1Loading;
+}
+
 let buildingLoading: Promise<TileTextures> | null = null;
 /**
- * The (much larger) `buildings-static` atlas, plus `buildings-anim`'s clips
- * layered on top as `animTop` (see `buildTileTextures`'s own remarks on why
- * that atlas is kept separate rather than merged into the static one). Its
- * `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those only
- * ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures` rather
- * than using this result standalone.
+ * The (much larger) `buildings-static` atlas alone — no `buildings-anim`.
+ * Its `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those
+ * only ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures`
+ * rather than using this result standalone.
+ *
+ * `buildings-anim` used to load unconditionally alongside this (see
+ * `loadAnimAtlases` below for why it's now separate and conditional): every
+ * `buildings-anim`/`wasted-buildings-anim-*` clip also has a static frame
+ * in this atlas, so the map renders correctly — `topAnimFor` just returns
+ * undefined and the static texture draws instead — without ever loading
+ * animation art at all. That's the ~319 MB of decoded GPU/RAM the split
+ * exists to make optional (see `animationPreference.ts`).
+ *
+ * Built with `sparse: true` for the same reason `loadLevel1Atlases` is: on
+ * the newer split atlas, `buildings-static` alone is missing every family's
+ * index 1 by design (that frame lives in `buildings-level1` instead, loaded
+ * separately and merged in via `mergeTileTextures` — see `HexMapRenderer`).
+ * On the older, currently vendored atlas (no split at all) this atlas
+ * already has every index, so `sparse: true` is a no-op there — nothing to
+ * leave a hole for.
  */
-export function loadBuildingAtlases(): Promise<TileTextures> {
+export function loadBuildingAtlases(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!buildingLoading) {
-    buildingLoading = Promise.all([
-      loadAtlasCategory('buildings-static'),
-      loadAtlasCategory('buildings-anim'),
-    ]).then(([staticAtlas, animAtlas]) => buildTileTextures([staticAtlas], animAtlas));
+    buildingLoading = loadAtlasCategory('buildings-static', onPage).then((atlas) =>
+      buildTileTextures([atlas], undefined, { sparse: true }),
+    );
   }
   return buildingLoading;
 }
 
+let animLoading: Promise<TileTextures> | null = null;
+/**
+ * `buildings-anim`'s clips, as a `TileTextures` carrying `animTop` (plus the
+ * `base`/`top`/`baseIndexed` `buildTileTextures` derives from
+ * `buildings-static`/`buildings-level1` along the way — harmless, already-
+ * loaded duplicates of what `loadBuildingAtlases`/`loadLevel1Atlases`
+ * produced, and simplest to just re-merge via `mergeTileTextures` rather
+ * than hand-building a sparser shape). Loaded only while
+ * `animationPreference.effective` is true (see
+ * `HexMapRenderer.setAnimationsEnabled`) — this is the ~319 MB piece that
+ * staying off entirely means never paying for.
+ *
+ * `buildings-level1` is merged into the same `buildTileTextures` call as
+ * `buildings-static` here (rather than loaded and merged separately, the
+ * way `HexMapRenderer` stages the plain static load) — both are folded into
+ * one frame pool *before* classification runs, so it has no real gaps and
+ * can use strict (non-`sparse`) classification, same as `loadTileTextures`.
+ *
+ * `loadAtlasCategory('buildings-static')` here reuses atlas.ts's own
+ * per-category cache — by the time animations turn on, `loadBuildingAtlases`
+ * has almost always already resolved it, so this only actually loads
+ * `buildings-anim`'s own pages (`buildings-level1` likewise, via
+ * `loadLevel1Atlases`'s own cache).
+ */
+export function loadAnimAtlases(): Promise<TileTextures> {
+  if (!animLoading) {
+    animLoading = Promise.all([
+      loadAtlasCategory('buildings-static'),
+      loadOptionalAtlasCategory('buildings-level1'),
+      loadAtlasCategory('buildings-anim'),
+    ]).then(([staticAtlas, level1Atlas, animAtlas]) => buildTileTextures([staticAtlas, level1Atlas], animAtlas));
+  }
+  return animLoading;
+}
+
+/**
+ * Releases `buildings-anim`'s decoded GPU textures (see
+ * `atlas.ts`'s `unloadAtlasCategory`) and drops this module's own memoised
+ * promise, so a later `loadAnimAtlases` call actually reloads rather than
+ * replaying a reference to now-destroyed textures. The caller (
+ * `HexMapRenderer.setAnimationsEnabled`) is responsible for first pointing
+ * every sprite that was showing an anim texture back at its static one
+ * (`releaseTopAnim`/`syncTopAnim`) — this only frees the GPU memory, it
+ * doesn't touch anything still drawing with it.
+ */
+export function unloadAnimAtlases(): void {
+  animLoading = null;
+  void unloadAtlasCategory('buildings-anim');
+}
+
 const packLoading = new Map<AtlasPack, Promise<TileTextures>>();
 /**
- * One pack's own terrain/building atlases (`${pack}-terrain`,
- * `${pack}-buildings-static`, `${pack}-buildings-anim`), built into a
- * `TileTextures` the same shape `loadTerrainAtlas`/`loadBuildingAtlases`
- * produce — merge it in with `mergeTileTextures` once the world reveals that
- * pack (see `HexMapRenderer`'s wasted-reveal handling). Each category loads
- * via `loadAtlasPackCategory`, which returns an empty, non-throwing
+ * One pack's own terrain/building-static/building-level1 atlases
+ * (`${pack}-terrain`, `${pack}-buildings-static`, `${pack}-buildings-level1`)
+ * — no `${pack}-buildings-anim`, same static-only split as
+ * `loadBuildingAtlases` vs. `loadAnimAtlases` above, see `loadPackAnimAtlases`
+ * for the animated half. Built into a `TileTextures` the same shape
+ * `loadTerrainAtlas`/`loadBuildingAtlases` produce — merge it in with
+ * `mergeTileTextures` once the world reveals that pack (see
+ * `HexMapRenderer`'s wasted-reveal handling). Each category loads via
+ * `loadAtlasPackCategory`, which returns an empty, non-throwing
  * `LoadedAtlas` for a category the pack has no pages for yet (the currently
- * vendored atlas ships none at all) — so this never fails outright, it just
- * contributes nothing until the pack's pages actually exist.
+ * vendored atlas ships neither pack pages nor any `buildings-level1` split
+ * at all) — so this never fails outright, it just contributes nothing until
+ * the pack's pages actually exist.
+ *
+ * `buildings-static` and `buildings-level1` are merged into the same
+ * `buildTileTextures` call (not loaded/merged separately the way
+ * `HexMapRenderer` stages the plain, unpacked buildings) — both folded into
+ * one frame pool before classification runs, so strict (non-`sparse`)
+ * classification is safe here, same reasoning as `loadTileTextures`.
  */
 export function loadPackAtlases(pack: AtlasPack): Promise<TileTextures> {
   const cached = packLoading.get(pack);
@@ -899,22 +1103,60 @@ export function loadPackAtlases(pack: AtlasPack): Promise<TileTextures> {
   const promise = Promise.all([
     loadAtlasPackCategory(pack, 'terrain'),
     loadAtlasPackCategory(pack, 'buildings-static'),
-    loadAtlasPackCategory(pack, 'buildings-anim'),
-  ]).then(([terrain, buildings, animAtlas]) => buildTileTextures([terrain, buildings], animAtlas));
+    loadAtlasPackCategory(pack, 'buildings-level1'),
+  ]).then(([terrain, buildings, level1]) => buildTileTextures([terrain, buildings, level1]));
 
   packLoading.set(pack, promise);
   return promise;
 }
 
+const packAnimLoading = new Map<AtlasPack, Promise<TileTextures>>();
+/**
+ * `${pack}-buildings-anim`'s clips — the pack half of `loadAnimAtlases`,
+ * loaded only once that pack is both revealed (`maybeLoadWastedPack`) and
+ * animations are enabled. Reuses `loadAtlasPackCategory`'s own per-key cache
+ * for `terrain`/`buildings-static`/`buildings-level1`, so — same as
+ * `loadAnimAtlases` — calling this after `loadPackAtlases(pack)` has already
+ * resolved only actually loads the pack's `buildings-anim` pages.
+ */
+export function loadPackAnimAtlases(pack: AtlasPack): Promise<TileTextures> {
+  const cached = packAnimLoading.get(pack);
+  if (cached) return cached;
+
+  const promise = Promise.all([
+    loadAtlasPackCategory(pack, 'terrain'),
+    loadAtlasPackCategory(pack, 'buildings-static'),
+    loadAtlasPackCategory(pack, 'buildings-level1'),
+    loadAtlasPackCategory(pack, 'buildings-anim'),
+  ]).then(([terrain, buildings, level1, animAtlas]) => buildTileTextures([terrain, buildings, level1], animAtlas));
+
+  packAnimLoading.set(pack, promise);
+  return promise;
+}
+
+/** The pack-scoped mirror of `unloadAnimAtlases` — see its own doc comment. */
+export function unloadPackAnimAtlases(pack: AtlasPack): void {
+  packAnimLoading.delete(pack);
+  void unloadAtlasCategory(`${pack}-buildings-anim`);
+}
+
 let combinedLoading: Promise<TileTextures> | null = null;
-/** All three atlases, merged. Existing callers that don't need staged loading keep using this. */
+/**
+ * All four atlases (terrain, `buildings-static`, `buildings-level1`,
+ * `buildings-anim`), merged. Existing callers that don't need staged loading
+ * keep using this — `buildings-level1`/`buildings-static` merge into the
+ * same `buildTileTextures` call, same reasoning as `loadAnimAtlases`/
+ * `loadPackAtlases`: one complete frame pool, so strict classification is
+ * safe.
+ */
 export function loadTileTextures(): Promise<TileTextures> {
   if (!combinedLoading) {
     combinedLoading = Promise.all([
       loadAtlasCategory('terrain'),
       loadAtlasCategory('buildings-static'),
+      loadOptionalAtlasCategory('buildings-level1'),
       loadAtlasCategory('buildings-anim'),
-    ]).then(([terrain, buildings, animAtlas]) => buildTileTextures([terrain, buildings], animAtlas));
+    ]).then(([terrain, buildings, level1, animAtlas]) => buildTileTextures([terrain, buildings, level1], animAtlas));
   }
   return combinedLoading;
 }
@@ -942,14 +1184,27 @@ export interface RiverArt {
  * renders with instead — see `docs/design/river-generation.md`'s wasted-
  * island section and `WorldModel.setWastedRevealed`. A wasted mountain is
  * the ashen `mountaintile_jagged` (the plain `mountaintile` art, base and
- * top, carries a green grass skirt). Open sea (not coastal) stays plain sea
- * either way.
+ * top, carries a green grass skirt).
+ *
+ * `sea` maps to `taintedwater` here purely so `baseTextureFor`'s own
+ * "no dedicated wasted family, sit on wasteland" fallback (below) doesn't
+ * fire for it — the vendored wasted pack does ship a proper open-water
+ * family. This never actually changes in-game rendering today:
+ * `WorldModel.getTile` only ever sets `Tile.wasted` on wasted *land*, and on
+ * coastal water bordering it (`isCoastalWater`, its own `WASTED_COASTAL_FAMILY`
+ * lookup in `baseTextureFor`, unrelated to this map) — never on open,
+ * non-coastal sea, so a live/demo-mode wasted open-sea tile can't occur. The
+ * one real caller is the Wasted Lands docs page's `StaticWorldModel`
+ * (`src/lib/docs/wastedIsland.ts`'s `buildIslandTiles`), whose hand-built
+ * island *does* mark its open-water ring wasted once the blight reaches it —
+ * see `textures.test.ts`'s "wasted open sea resolves taintedwater" guard.
  */
 const WASTED_TEXTURE_KEY: Partial<Record<Terrain, TextureKey>> = {
   grass: 'wasteland',
   forest: 'deadforest',
   sand: 'blacksand',
   mountain: 'wastedmountain',
+  sea: 'taintedwater',
 };
 
 /**
@@ -975,6 +1230,46 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
 function clampIndex(index: number, length: number): number {
   if (length <= 0) return 0;
   return Math.min(Math.max(index, 0), length - 1);
+}
+
+/**
+ * Picks the entry at `index` in a *possibly sparse* per-level array (see
+ * `classifyFamilyFrames`'s `sparse` option and `buildTileTextures`'s own
+ * `sparse` parameter), returning both the value and the index it actually
+ * came from — a caller with a second array indexed the same way (`topTextureFor`
+ * next to `topAnimFor`'s `animTop`) needs that real index to read the
+ * matching slot out of it, not just the value.
+ *
+ * Three rungs, in order:
+ * 1. Exact: `arr[index]` if it's loaded.
+ * 2. Walk down from `index - 1` to `0` — the original clamp-to-richest-known
+ *    fallback (`clampIndex`) generalized to a sparse array: for a fully
+ *    dense array (the normal, fully-loaded case) this reduces to exactly
+ *    that clamp, since walking down from an out-of-range `index` lands on
+ *    the last real entry immediately.
+ * 3. Walk up from `index + 1` — reached only when nothing at or below
+ *    `index` is loaded, which happens exactly while only the `buildings-level1`
+ *    atlas has loaded (see `loadLevel1Atlases`): index 0 (and everything
+ *    below whatever level was requested) is empty, but index 1 is not, so
+ *    this naturally lands on it — "every building renders its level-1 art
+ *    whatever its level" falls out of this walk rather than needing its own
+ *    special case.
+ */
+function pickIndexedEntry<T>(arr: (T | undefined)[] | undefined, index: number): { value: T; index: number } | undefined {
+  if (!arr) return undefined;
+  if (arr[index] !== undefined) return { value: arr[index] as T, index };
+  for (let i = index - 1; i >= 0; i--) {
+    if (arr[i] !== undefined) return { value: arr[i] as T, index: i };
+  }
+  for (let i = index + 1; i < arr.length; i++) {
+    if (arr[i] !== undefined) return { value: arr[i] as T, index: i };
+  }
+  return undefined;
+}
+
+/** `pickIndexedEntry`, for a caller that only needs the value (most callers — `topAnimFor` is the one that also needs the resolved index). */
+function pickIndexed<T>(arr: (T | undefined)[] | undefined, index: number): T | undefined {
+  return pickIndexedEntry(arr, index)?.value;
 }
 
 /**
@@ -1005,12 +1300,15 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   const key = textureKeyFor(tile, riverArt);
   const indexed = textures.baseIndexed[key];
   if (indexed) {
-    const arr = indexed[orientation];
-    return arr[clampIndex(tile.buildingLevel ?? 1, arr.length)];
+    const picked = pickIndexed(indexed[orientation], tile.buildingLevel ?? 1);
+    if (picked !== undefined) return picked;
   }
   // A building with no art of its own in the pack (e.g. Lumberjack/Quarry —
   // see the module doc comment above) renders as its bare terrain instead of
   // throwing; BuildingModal.vue's own `art` computed falls back the same way.
+  // Also reached while `indexed` exists but every one of its rungs is still
+  // a hole (only `buildings-level1` loaded, and this particular family's
+  // level 1 base frame hasn't resolved either) — same graceful degradation.
   const base = textures.base[key] ?? textures.base[tile.terrain];
   return base![orientation];
 }
@@ -1022,7 +1320,7 @@ export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: Riv
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
   const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
-  return arr[clampIndex(index, arr.length)];
+  return pickIndexed(arr, index);
 }
 
 /**
@@ -1038,7 +1336,14 @@ export function topAnimFor(textures: TileTextures, tile: Tile, riverArt?: RiverA
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
   const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
-  return textures.animTop[key]?.[orientation]?.[clampIndex(index, arr.length)];
+  // Resolved through the same `pickIndexedEntry` walk as `topTextureFor`
+  // (not a plain `clampIndex`) so the two always agree on which rung is
+  // actually showing — including while only `buildings-level1` has loaded
+  // and every requested level resolves to index 1's art (see
+  // `pickIndexedEntry`'s own doc comment).
+  const resolved = pickIndexedEntry(arr, index);
+  if (!resolved) return undefined;
+  return textures.animTop[key]?.[orientation]?.[resolved.index];
 }
 
 /**

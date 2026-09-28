@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
+import MapLoadingIndicator from './MapLoadingIndicator.vue';
 import type { WorldModel } from '../../lib/map/WorldModel';
 import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
@@ -62,7 +63,7 @@ const emit = defineEmits<{
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer } = useHexMapRenderer(canvas, container, {
+const { renderer, loadState } = useHexMapRenderer(canvas, container, {
   mode: props.mode ?? 'settlement',
   worldModel: props.worldModel,
   playerId: props.playerId,
@@ -83,12 +84,13 @@ const { renderer } = useHexMapRenderer(canvas, container, {
 // FogDebugPanel (SettlementView.vue, ?debug=1) needs to force a rebuild
 // after flipping a fogDebugFlags toggle — nothing else would make the
 // change visible until the next real camera pan/zoom.
-defineExpose({ renderer });
+defineExpose({ renderer, loadState });
 </script>
 
 <template>
   <div ref="container" class="map-container" :style="background ? { background } : undefined">
     <canvas ref="canvas" />
+    <MapLoadingIndicator :state="loadState" />
   </div>
 </template>
 

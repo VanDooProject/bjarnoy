@@ -7,12 +7,36 @@
   "reportSent": "Report sent — thank you.",
   "joined": "Joined",
   "settlements": "Settlements",
+  "tabs": {
+    "profile": "Profile",
+    "settings": "Settings"
+  },
+  "back": "Back",
+  "backChevron": "‹",
+  "close": "Close",
   "hudBar": {
     "title": "HUD bar",
     "hint": "Applies on small screens only.",
     "position": "Bar position",
     "top": "Top",
     "bottom": "Bottom"
+  },
+  "graphics": {
+    "title": "Graphics",
+    "hint": "Applies on this device only.",
+    "animations": "Map animations",
+    "auto": "Auto",
+    "on": "On",
+    "off": "Off",
+    "status": {
+      "forcedOn": "On (this device)",
+      "forcedOff": "Off (this device)",
+      "reducedMotion": "Off — your system asks for reduced motion",
+      "saveData": "Off — data saver is on",
+      "measuring": "Auto — measuring frame rate…",
+      "autoOn": "Auto — on",
+      "autoOffSlow": "Auto — off, frame rate dropped below 30 fps"
+    }
   },
   "bio": {
     "title": "Bio",

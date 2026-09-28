@@ -5,7 +5,9 @@ import {
   findClipIn,
   findFrameIn,
   loadAtlasPackCategory,
+  loadOptionalAtlasCategory,
   pagesForIndex,
+  unloadAtlasCategory,
   type AtlasManifest,
   type AtlasPageIndex,
 } from './atlas';
@@ -52,6 +54,21 @@ describe('ATLAS_PACKS / categorySearchOrder', () => {
 
   it('searches the core category first, then each pack variant', () => {
     expect(categorySearchOrder('terrain')).toEqual(['terrain', 'wasted-terrain', 'frozen-terrain']);
+  });
+
+  it('searches buildings-level1 immediately before buildings-static, for the core category and every pack', () => {
+    expect(categorySearchOrder('buildings-static')).toEqual([
+      'buildings-level1',
+      'buildings-static',
+      'wasted-buildings-level1',
+      'wasted-buildings-static',
+      'frozen-buildings-level1',
+      'frozen-buildings-static',
+    ]);
+  });
+
+  it('leaves a non-buildings-static category (e.g. buildings-anim) unaffected by the level1 split', () => {
+    expect(categorySearchOrder('buildings-anim')).toEqual(['buildings-anim', 'wasted-buildings-anim', 'frozen-buildings-anim']);
   });
 });
 
@@ -125,6 +142,68 @@ describe('findFrameIn', () => {
 
     expect(findFrameIn(index, 'showcase', 'hut_SE_level000')).toBeDefined();
     expect(findFrameIn(index, 'showcase', 'missing')).toBeUndefined();
+  });
+
+  it('also finds a frame parked in buildings-level1 when searching buildings-static (old atlas has no such page at all)', () => {
+    const index = indexOf({
+      '/atlas/buildings-level1-0.json': manifest({ archerybuilding_SE_level001: { frame: { x: 1, y: 1, w: 1, h: 1 } } }),
+      '/atlas/buildings-static-0.json': manifest({ archerybuilding_SE_level000: {} }),
+    });
+
+    expect(findFrameIn(index, 'buildings-static', 'archerybuilding_SE_level001')?.frame).toEqual({ x: 1, y: 1, w: 1, h: 1 });
+    expect(findFrameIn(index, 'buildings-static', 'archerybuilding_SE_level000')?.frame).toEqual({ x: 0, y: 0, w: 10, h: 10 });
+  });
+
+  it('resolves a bjarnoy.aliases entry to the target frame in the target category', () => {
+    const index = indexOf({
+      '/atlas/terrain-0.json': manifest({ grasstile_E_base: { frame: { x: 7, y: 7, w: 2, h: 2 } } }),
+      '/atlas/buildings-level1-0.json': {
+        ...manifest({ archerybuilding_SE_base: {} }),
+        meta: {
+          image: 'page.webp',
+          size: { w: 100, h: 100 },
+          scale: '1',
+          bjarnoy: {
+            atlasVersion: 1,
+            category: 'buildings-level1',
+            sourceHash: 'x',
+            tile: { w: 200, h: 300, topFaceY: 140, topFaceH: 92 },
+            aliases: {
+              archerybuilding_SE_ground_alias: { category: 'terrain', frame: 'grasstile_E_base', family: 'grasstile', layer: 'base' },
+            },
+          },
+        },
+      },
+    });
+
+    const found = findFrameIn(index, 'buildings-static', 'archerybuilding_SE_ground_alias');
+
+    expect(found?.frame).toEqual({ x: 7, y: 7, w: 2, h: 2 });
+  });
+
+  it('returns undefined for an alias whose target frame does not exist', () => {
+    const index = indexOf({
+      '/atlas/terrain-0.json': manifest({ grasstile_E_base: {} }),
+      '/atlas/buildings-level1-0.json': {
+        ...manifest({}),
+        meta: {
+          image: 'page.webp',
+          size: { w: 100, h: 100 },
+          scale: '1',
+          bjarnoy: {
+            atlasVersion: 1,
+            category: 'buildings-level1',
+            sourceHash: 'x',
+            tile: { w: 200, h: 300, topFaceY: 140, topFaceH: 92 },
+            aliases: {
+              broken_alias: { category: 'terrain', frame: 'no_such_frame', family: 'grasstile', layer: 'base' },
+            },
+          },
+        },
+      },
+    });
+
+    expect(findFrameIn(index, 'buildings-static', 'broken_alias')).toBeUndefined();
   });
 });
 
@@ -230,5 +309,32 @@ describe('loadAtlasPackCategory', () => {
     const result = await loadAtlasPackCategory('wasted', 'no-such-category');
 
     expect(result).toEqual({ textures: {}, frameMeta: {}, clips: {} });
+  });
+});
+
+describe('loadOptionalAtlasCategory', () => {
+  it('resolves to an empty LoadedAtlas, without throwing, for a core category with no vendored pages (e.g. buildings-level1 on the older atlas)', async () => {
+    const result = await loadOptionalAtlasCategory('no-such-core-category');
+
+    expect(result).toEqual({ textures: {}, frameMeta: {}, clips: {} });
+  });
+});
+
+describe('unloadAtlasCategory', () => {
+  it('is a no-op for a category that was never loaded', async () => {
+    await expect(unloadAtlasCategory('never-loaded-category')).resolves.toBeUndefined();
+  });
+
+  it('is a no-op for a loaded-but-empty pack category (no vendored pages, so no real Assets.unload call)', async () => {
+    await loadAtlasPackCategory('wasted', 'no-such-category-2');
+    await expect(unloadAtlasCategory('wasted-no-such-category-2')).resolves.toBeUndefined();
+    // Dropped from the cache regardless — a later load re-resolves rather
+    // than replaying a stale reference (verified indirectly: loading again
+    // still resolves cleanly rather than throwing on a torn-down promise).
+    await expect(loadAtlasPackCategory('wasted', 'no-such-category-2')).resolves.toEqual({
+      textures: {},
+      frameMeta: {},
+      clips: {},
+    });
   });
 });

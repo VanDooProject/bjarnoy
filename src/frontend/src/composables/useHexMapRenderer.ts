@@ -1,5 +1,6 @@
-import { onBeforeUnmount, onMounted, shallowRef, type Ref } from 'vue';
-import { HexMapRenderer, type HexMapRendererOptions } from '../lib/map/HexMapRenderer';
+import { onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue';
+import { HexMapRenderer, READY_LOAD_STATE, type HexMapRendererOptions, type MapLoadState } from '../lib/map/HexMapRenderer';
+import { animationPreference } from '../lib/perf/animationPreference';
 
 /**
  * Mounts a HexMapRenderer on a <canvas> ref. Deliberately exposes almost
@@ -35,16 +36,34 @@ export function useHexMapRenderer(
   options: HexMapRendererOptions,
 ) {
   const renderer = shallowRef<HexMapRenderer | null>(null);
+  // `MapLoadingIndicator.vue`'s data source — 'ready' (no loader) until a
+  // 'settlement'-mode mount says otherwise, since a 'world'-mode mount never
+  // narrates a loading state at all (see HexMapRenderer's `startTextureLoad`).
+  const loadState = shallowRef<MapLoadState>(options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE);
   let resizeObserver: ResizeObserver | null = null;
+  let stopAnimationWatch: (() => void) | null = null;
 
   onMounted(async () => {
     const canvas = canvasRef.value;
     const container = containerRef.value;
     if (!canvas || !container) return;
-    const r = new HexMapRenderer(options);
+    const r = new HexMapRenderer({
+      ...options,
+      onLoadState: (state) => {
+        loadState.value = state;
+        options.onLoadState?.(state);
+      },
+    });
     const { width, height } = await waitForRealSize(container);
     await r.mount(canvas, Math.max(1, width), Math.max(1, height));
     renderer.value = r;
+    // `immediate: true` applies whatever animationPreference already
+    // resolved to (most commonly 'measuring'/off, on a fresh mount) right
+    // away, rather than leaving the renderer's own `animationsEnabled`
+    // default until the preference happens to change for some other reason.
+    stopAnimationWatch = watch(() => animationPreference.effective, (enabled) => r.setAnimationsEnabled(enabled), {
+      immediate: true,
+    });
     // Real lifecycle signal for "the renderer is mounted and has drawn its
     // first frame" — e.g. e2e tests wait on this instead of a guessed
     // timeout, since there's otherwise nothing in the DOM to observe. Not a
@@ -63,10 +82,11 @@ export function useHexMapRenderer(
 
   onBeforeUnmount(() => {
     resizeObserver?.disconnect();
+    stopAnimationWatch?.();
     renderer.value?.destroy();
     renderer.value = null;
     delete containerRef.value?.dataset.mapReady;
   });
 
-  return { renderer };
+  return { renderer, loadState };
 }
