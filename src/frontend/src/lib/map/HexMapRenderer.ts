@@ -1114,6 +1114,23 @@ export function waypointGrabRadiusPx(pointerType: string | undefined): number {
 export function isWaypointTap(startCoordKey: string, lastCoordKey: string, movedPx: number): boolean {
   return lastCoordKey === startCoordKey && movedPx < DRAG_CLICK_SLOP_PX;
 }
+
+/**
+ * The largest per-tick delta `advanceTopAnimations` is ever fed, in ms —
+ * `onTick` runs this over `app.ticker.deltaMS` before handing it to
+ * animation playback. Pixi's own ticker already caps `deltaMS` at 100 ms
+ * (its default `minFPS` of 10) on ordinary long frames, but pausing the
+ * ticker outright on `visibilitychange` (see mount()/destroy()) rather than
+ * just leaving it running in a backgrounded tab is worth an explicit,
+ * tested clamp here too: it stops a building clip from silently jumping
+ * several frames on the very first tick after a tab comes back, regardless
+ * of whether Pixi's own internal cap is present, tuned differently, or
+ * changed in a future Pixi version.
+ */
+export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
+  return Math.min(deltaMs, maxMs);
+}
+
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
@@ -1623,6 +1640,7 @@ export class HexMapRenderer {
     // compatibility click, see RingMenu.vue's onBuildingTouchStart) removes
     // the ghost click at the source instead of trying to ignore it later.
     canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
 
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large) building atlas at all —
@@ -1744,7 +1762,7 @@ export class HexMapRenderer {
 
   private onTick = () => {
     this.options.worldModel.tick();
-    this.advanceTopAnimations(this.app!.ticker.deltaMS);
+    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -1927,6 +1945,26 @@ export class HexMapRenderer {
       }
     }
   }
+
+  /**
+   * A backgrounded tab still runs Pixi's `requestAnimationFrame`-driven
+   * ticker (rAF just gets throttled by the browser, not stopped), so
+   * building clips, the marker layer's fade and worldModel.tick() kept
+   * doing real work for a tab nobody could see. Stopping the ticker
+   * outright on `document.hidden` (mount()/destroy() add/remove this) and
+   * restarting it on return removes that cost entirely rather than just
+   * slowing it down — deliberately keyed off tab visibility, not window
+   * focus/blur: an unfocused-but-visible tab (e.g. a second monitor) must
+   * keep animating normally.
+   */
+  private onVisibilityChange = () => {
+    if (!this.app) return;
+    if (document.hidden) {
+      this.app.ticker.stop();
+    } else {
+      this.app.ticker.start();
+    }
+  };
 
   private onTouchStart = (e: TouchEvent) => {
     e.preventDefault();
@@ -4403,6 +4441,7 @@ export class HexMapRenderer {
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     canvas?.removeEventListener('touchstart', this.onTouchStart);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();
