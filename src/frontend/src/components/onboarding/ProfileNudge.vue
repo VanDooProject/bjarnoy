@@ -160,6 +160,14 @@ function nameYourJarl() {
   width: auto;
   margin-top: 10px;
   animation: none;
+  /* The floating variant's `pointer-events: none` (see `.nudge` above)
+     relies on TopBar's `.hud-bar-right :deep(button)` to re-enable its
+     buttons — the drawer isn't under `.hud-bar-right`, so there both
+     "Name your jarl" and "Later" silently ignored taps (they fell through
+     to `.drawer-account`). In normal flow inside the drawer nothing sits
+     underneath to protect, so this panel just takes pointer events.
+     Covered by e2e/onboarding-happy-path.spec.ts's phone runs. */
+  pointer-events: auto;
 }
 .nudge.in-drawer .notch {
   display: none;

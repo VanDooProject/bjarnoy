@@ -384,6 +384,12 @@ console errors.
 
 ## Answering "is there a happy-path integration/e2e test?"
 
+> **Current state:** the happy path tests are now listed in
+> [`docs/test-happy-path.md`](../test-happy-path.md) —
+> `onboarding-happy-path.spec.ts` (demo mode, three screen sizes) and
+> `OnboardingHappyPathTests.cs` (real backend). The rest of this section is
+> the analysis as it stood when this plan was written.
+
 **Yes, and it passes — which is itself part of the problem.**
 
 - Demo mode (`VITE_DEMO_MODE` default true):
