@@ -84,7 +84,7 @@ const { renderer, loadState } = useHexMapRenderer(canvas, container, {
 // FogDebugPanel (SettlementView.vue, ?debug=1) needs to force a rebuild
 // after flipping a fogDebugFlags toggle — nothing else would make the
 // change visible until the next real camera pan/zoom.
-defineExpose({ renderer });
+defineExpose({ renderer, loadState });
 </script>
 
 <template>

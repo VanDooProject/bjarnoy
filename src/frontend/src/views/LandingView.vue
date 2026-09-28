@@ -511,6 +511,11 @@ const showLandfallBanner = computed(
 // screen. `mode: 'hex'` follows the camera via GuidancePointer's own
 // useMapAnchor; `mode: 'screen'` is the ring-open case, a fixed point since
 // opening the ring already locks camera drag.
+// The plot the pointer aims at isn't on screen until the terrain atlas has
+// loaded (MapLoadingIndicator's centred overlay covers that phase) — an arrow
+// and "Click this plot" over an empty canvas point at nothing.
+const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') !== 'terrain');
+
 const pointerTarget = computed(() => {
   if (joinBlocked.value) return null;
   // Player logout/login gate: ReturningLoginPanel replaces the founding
@@ -909,7 +914,7 @@ watch(
     </div>
 
     <GuidancePointer
-      v-if="pointerTarget"
+      v-if="pointerTarget && mapDrawn"
       :coord="pointerTarget.mode === 'hex' ? pointerTarget.coord : undefined"
       :renderer="pointerTarget.mode === 'hex' ? canvasRef?.renderer : undefined"
       :screen="pointerTarget.mode === 'screen' ? pointerTarget.screen : undefined"

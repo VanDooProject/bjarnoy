@@ -20,6 +20,28 @@ test('landing page is the village view, not a marketing page in front of it', { 
   await expect(page).toHaveURL(/\/settlement$/);
 });
 
+// While the terrain art is still loading there is no plot on screen yet, so
+// the "Click this plot" pointer waits for the map instead of pointing at an
+// empty canvas behind the loading overlay.
+test('landing page holds the guided pointer back until the map has loaded', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  let releaseTerrain!: () => void;
+  const terrainHeld = new Promise<void>((resolve) => (releaseTerrain = resolve));
+  await page.route(/\/terrain-\d+[^/]*\.webp/, async (route: Route) => {
+    await terrainHeld;
+    await route.continue();
+  });
+  await page.goto('/');
+
+  const settlement = new SettlementPage(page);
+  await expect(page.getByRole('status').filter({ hasText: 'Loading map' })).toBeVisible();
+  await expect(settlement.guidancePointer).toHaveCount(0);
+
+  releaseTerrain();
+  await expect(settlement.guidancePointer).toBeVisible();
+  await expect(settlement.guidancePointer).toContainText('Click this plot');
+});
+
 // Design handoff "2a" frame 1/1b: before founding, the animated pointer and
 // the checklist are already on screen, aimed at the one thing to do.
 test('landing page shows the guided pointer and a step-1 checklist before founding', { tag: '@g3' }, async ({ page }) => {
