@@ -34,7 +34,7 @@ describe('MapLoadingIndicator', () => {
     stubReducedMotion(false);
     const wrapper = mountIndicator({ phase: 'terrain' });
     expect(wrapper.find('.overlay').exists()).toBe(true);
-    expect(wrapper.find('.corner').exists()).toBe(false);
+    expect(wrapper.find('.top-bar').exists()).toBe(false);
     expect(wrapper.text()).toContain(enHud.mapLoading.terrain);
     expect(wrapper.find('[role="status"]').attributes('aria-live')).toBe('polite');
     wrapper.unmount();
@@ -52,10 +52,10 @@ describe('MapLoadingIndicator', () => {
     withoutProgress.unmount();
   });
 
-  it("shows the small corner indicator with the buildings label in the 'buildings' phase, not the centred overlay", () => {
+  it("shows the thin top-edge bar with the buildings label in the 'buildings' phase, not the centred overlay", () => {
     stubReducedMotion(false);
     const wrapper = mountIndicator({ phase: 'buildings' });
-    expect(wrapper.find('.corner').exists()).toBe(true);
+    expect(wrapper.find('.top-bar').exists()).toBe(true);
     expect(wrapper.find('.overlay').exists()).toBe(false);
     expect(wrapper.text()).toContain(enHud.mapLoading.buildings);
     wrapper.unmount();
@@ -76,10 +76,10 @@ describe('MapLoadingIndicator', () => {
 
     await wrapper.setProps({ state: { phase: 'ready' } });
     // Still mounted, but fading — and still showing the last real phase's
-    // content (the corner indicator), not a blank 'ready' template.
+    // content (the top-edge bar), not a blank 'ready' template.
     const el = wrapper.get('.map-loading');
     expect(el.classes()).toContain('map-loading--hiding');
-    expect(wrapper.find('.corner').exists()).toBe(true);
+    expect(wrapper.find('.top-bar').exists()).toBe(true);
 
     vi.advanceTimersByTime(250);
     await wrapper.vm.$nextTick();

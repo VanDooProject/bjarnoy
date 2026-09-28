@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // HexMapRenderer.mount()'s tile-art loading state (see MapLoadState in
 // HexMapRenderer.ts), surfaced as a small UI: a centred overlay while
-// nothing is drawable yet ('terrain'), a corner indicator while terrain is
-// up but building art is still loading ('buildings'), and nothing once
+// nothing is drawable yet ('terrain'), a thin sweeping bar along the map's
+// top edge while terrain is up but building art is still loading ('buildings'), and nothing once
 // everything has settled ('ready') — after a short fade so the transition
 // doesn't just snap away. World-mode mounts never reach 'terrain'/
 // 'buildings' at all (see startTextureLoad), so this renders nothing for
@@ -85,11 +85,9 @@ onUnmounted(clearFadeTimer);
         <div class="progress-fill" :style="{ width: `${Math.round(state.progress * 100)}%` }" />
       </div>
     </div>
-    <div v-else class="corner">
-      <svg class="hex hex--spin hex--small" viewBox="0 0 100 100" aria-hidden="true">
-        <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
-      </svg>
-      <span class="label">{{ t('hud.mapLoading.buildings') }}</span>
+    <div v-else class="top-bar">
+      <div class="top-bar-sweep" aria-hidden="true" />
+      <span class="visually-hidden">{{ t('hud.mapLoading.buildings') }}</span>
     </div>
   </div>
 </template>
@@ -126,28 +124,52 @@ onUnmounted(clearFadeTimer);
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
-/* Bottom-left — MapView/LandingView keep BuildQueuePanel (top-left),
-   TrainingQueuePanel (top-right) and ArmyPanel (bottom-right) elsewhere, so
-   this corner is the one free of other HUD chrome in both views. Matches
-   ArmyPanel.vue's own --hud-inset-bottom handling for the mobile docked
-   bottom bar. */
-.corner {
+/* A thin sweeping line along the map's top edge rather than a chip in a
+   corner: every corner of the map is already taken by some view's HUD
+   (queue panels, the army panel, the landing page's onboarding card on a
+   phone), while the top edge of the canvas is free in all of them. The
+   label is kept for screen readers only. */
+.top-bar {
   position: absolute;
-  left: 16px;
-  bottom: calc(16px + var(--hud-inset-bottom, 0px));
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
+  /* The canvas runs full-bleed under the HUD header, so the top edge that
+     is actually visible starts below it — same inset (and 64px fallback)
+     OnboardingBanner.vue uses. */
+  top: var(--hud-inset-top, 64px);
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
 }
-.corner .label {
-  color: #fdf6e8;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+.top-bar-sweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+  background: var(--gold);
+  animation: map-loading-sweep 1.2s ease-in-out infinite;
+}
+@keyframes map-loading-sweep {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}
+.map-loading--reduced .top-bar-sweep {
+  animation: none;
+  left: 0;
+  width: 100%;
+  opacity: 0.6;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .hex {
@@ -158,16 +180,8 @@ onUnmounted(clearFadeTimer);
   stroke-width: 6;
   stroke-linejoin: round;
 }
-.hex--small {
-  width: 20px;
-  height: 20px;
-}
 .hex--pulse {
   animation: map-loading-pulse 1.6s ease-in-out infinite;
-  transform-origin: center;
-}
-.hex--spin {
-  animation: map-loading-spin 1.4s linear infinite;
   transform-origin: center;
 }
 @keyframes map-loading-pulse {
@@ -181,13 +195,7 @@ onUnmounted(clearFadeTimer);
     transform: scale(1);
   }
 }
-@keyframes map-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.map-loading--reduced .hex--pulse,
-.map-loading--reduced .hex--spin {
+.map-loading--reduced .hex--pulse {
   animation: none;
   opacity: 1;
   transform: none;
@@ -207,7 +215,7 @@ onUnmounted(clearFadeTimer);
 
 @media (prefers-reduced-motion: reduce) {
   .hex--pulse,
-  .hex--spin {
+  .top-bar-sweep {
     animation: none;
     opacity: 1;
     transform: none;
