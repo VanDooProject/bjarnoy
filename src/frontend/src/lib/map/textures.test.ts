@@ -588,9 +588,13 @@ describe('textureKeyFor wasted-island mapping', () => {
     expect(textureKeyFor(wastedTile('sand'))).toBe('blacksand');
   });
 
-  it('maps a wasted mountain to the jagged ash mountain and keeps (non-coastal) sea plain', () => {
+  it('maps a wasted mountain to the jagged ash mountain and wasted open sea to taintedwater', () => {
     expect(textureKeyFor(wastedTile('mountain'))).toBe('wastedmountain');
-    expect(textureKeyFor(wastedTile('sea'))).toBe('sea');
+    // WorldModel.getTile never actually produces this combination (it only
+    // ever sets Tile.wasted on wasted land, or on coastal water bordering
+    // it — see WASTED_TEXTURE_KEY's own doc comment); the docs page's
+    // StaticWorldModel (buildIslandTiles) is the one real caller that does.
+    expect(textureKeyFor(wastedTile('sea'))).toBe('taintedwater');
   });
 
   it('does not remap an unwasted tile', () => {
@@ -619,6 +623,8 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         grass: orientationMap('green-grass-base' as unknown as never),
         wasteland: orientationMap('wasteland-base' as unknown as never),
         wastedmountain: orientationMap('jagged-mountain-base' as unknown as never),
+        sea: orientationMap('green-sea-base' as unknown as never),
+        taintedwater: orientationMap('taintedwater-base' as unknown as never),
       },
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
@@ -698,6 +704,24 @@ describe('baseTextureFor wasted mountain/giant base', () => {
     const tile: Tile = { q: 0, r: 0, terrain: 'mountain', wasted: true, orientation: 'E' };
 
     expect(baseTextureFor(textures, tile)).toBe('green-mountain-base');
+  });
+
+  // WASTED_TEXTURE_KEY.sea's own doc comment: WorldModel.getTile never
+  // actually produces a wasted, non-coastal sea tile — this exercises the
+  // one real caller that does, the docs page's StaticWorldModel
+  // (wastedIsland.ts's buildIslandTiles).
+  it('uses the taintedwater base for a wasted, non-coastal open sea tile', () => {
+    const textures = fixture();
+    const tile: Tile = { q: 0, r: 0, terrain: 'sea', wasted: true, orientation: 'NE' };
+
+    expect(baseTextureFor(textures, tile)).toBe('taintedwater-base');
+  });
+
+  it('keeps the plain sea base for an unwasted open sea tile', () => {
+    const textures = fixture();
+    const tile: Tile = { q: 0, r: 0, terrain: 'sea', wasted: false, orientation: 'NE' };
+
+    expect(baseTextureFor(textures, tile)).toBe('green-sea-base');
   });
 });
 
