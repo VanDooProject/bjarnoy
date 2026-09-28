@@ -85,14 +85,18 @@ const initials = computed(() => {
 // screen), for as long as the player stays anonymous and hasn't dismissed
 // it. HudNav is mounted on both the landing page and the settlement view,
 // so this follows the player there too until they act on it.
-const showProfileNudge = computed(
+// A founded, onboarded realm with no jarl (account) behind it yet — the
+// nudge below shows for exactly these players until dismissed, and
+// ReturningPlayerMenu relabels its trigger to "Name your jarl" for them for
+// good (including after "Later"), so registering stays one click away.
+const unclaimedRealm = computed(
   () =>
     player.hasFoundedSettlement &&
     player.onboardingComplete &&
     !auth.isAuthenticated &&
-    !player.nickname &&
-    !player.profileNudgeDismissed,
+    !player.nickname,
 );
+const showProfileNudge = computed(() => unclaimedRealm.value && !player.profileNudgeDismissed);
 
 // Player logout/login gate: the authenticated avatar is now a small account
 // dropdown (Profile / Log out) rather than a direct link to /profile,
@@ -235,7 +239,7 @@ watch(() => route.fullPath, closeAccountMenu);
         </button>
       </div>
     </div>
-    <ReturningPlayerMenu v-else :nudging="showProfileNudge">
+    <ReturningPlayerMenu v-else :nudging="showProfileNudge" :unclaimed-realm="unclaimedRealm">
       <template #nudge>
         <ProfileNudge v-if="showProfileNudge" />
       </template>

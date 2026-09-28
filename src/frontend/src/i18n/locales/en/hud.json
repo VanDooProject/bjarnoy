@@ -14,7 +14,9 @@
   "returningPlayer": {
     "trigger": "I already have a realm",
     "triggerSub": "or want to join another world",
-    "logIn": "Log in"
+    "logIn": "Log in",
+    "nameJarlTrigger": "Name your jarl",
+    "nameJarlTriggerSub": "or I already have a realm"
   },
   "accountMenu": {
     "profile": "Profile",

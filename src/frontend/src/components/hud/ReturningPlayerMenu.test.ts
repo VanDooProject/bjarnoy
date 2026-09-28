@@ -34,15 +34,17 @@ function testRouter() {
     routes: [
       { path: '/', name: 'landing', component: { template: '<div />' } },
       { path: '/login', name: 'login', component: { template: '<div />' } },
+      { path: '/register', name: 'register', component: { template: '<div />' } },
     ],
   });
 }
 
-async function mountMenu() {
+async function mountMenu(props: { unclaimedRealm?: boolean } = {}) {
   const router = testRouter();
   await router.push('/');
   await router.isReady();
   const wrapper = mount(ReturningPlayerMenu, {
+    props,
     global: { plugins: [router, createTestI18n({ hud: enHud, worlds: enWorlds })] },
   });
   return { wrapper, router };
@@ -113,5 +115,30 @@ describe('ReturningPlayerMenu login link world linkage', () => {
     // still proof the list itself, not a menu row pointing at /worlds, is
     // what's rendered inside the panel.
     expect(wrapper.text()).toContain('No worlds are open to join right now.');
+  });
+});
+
+describe('ReturningPlayerMenu unclaimed realm', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    listJoinableWorlds.mockReset().mockResolvedValue([]);
+    getWorldMembership.mockReset();
+  });
+
+  it('leads the panel with a "Name your jarl" row that routes to /register, above "Log in"', async () => {
+    const { wrapper, router } = await mountMenu({ unclaimedRealm: true });
+    await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+    const rows = wrapper.findAll('[role="menuitem"]');
+    expect(rows[0].attributes('data-testid')).toBe('returning-player-name-jarl');
+    expect(rows[1].attributes('data-testid')).toBe('returning-player-login');
+    await rows[0].trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/register');
+  });
+
+  it('has no "Name your jarl" row otherwise', async () => {
+    const { wrapper } = await mountMenu();
+    await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+    expect(wrapper.find('[data-testid="returning-player-name-jarl"]').exists()).toBe(false);
   });
 });

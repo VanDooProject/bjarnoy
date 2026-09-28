@@ -14,7 +14,9 @@
   "returningPlayer": {
     "trigger": "Ich habe schon ein Reich",
     "triggerSub": "oder möchte einer anderen Welt beitreten",
-    "logIn": "Anmelden"
+    "logIn": "Anmelden",
+    "nameJarlTrigger": "Jarl benennen",
+    "nameJarlTriggerSub": "oder ich habe schon ein Reich"
   },
   "accountMenu": {
     "profile": "Profil",

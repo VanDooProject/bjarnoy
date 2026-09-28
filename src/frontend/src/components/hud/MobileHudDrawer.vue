@@ -77,15 +77,15 @@ function goToLogin() {
 // Same gate as HudNav.vue's own `showProfileNudge` — duplicated rather than
 // imported for the same "second, mobile-only surface" reason as everything
 // else in this file (see its own top-of-file comment).
-const showProfileNudge = computed(
+const unclaimedRealm = computed(
   () =>
     props.hasResourceBar &&
     player.hasFoundedSettlement &&
     player.onboardingComplete &&
     !auth.isAuthenticated &&
-    !player.nickname &&
-    !player.profileNudgeDismissed,
+    !player.nickname,
 );
+const showProfileNudge = computed(() => unclaimedRealm.value && !player.profileNudgeDismissed);
 // hudDrawerPendingState.ts: TopBar.vue's own grip handle reads this to show
 // an attention dot once the nudge has nowhere else left to be seen (only
 // true on a `hasResourceBar` bar — see `showProfileNudge` above, which is
@@ -156,6 +156,18 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
         </button>
       </template>
       <template v-else-if="hasResourceBar">
+        <!-- Same "Name your jarl" entry ReturningPlayerMenu leads with for an
+             unclaimed realm; once the nudge below is dismissed this is the
+             drawer's only way back to /register. -->
+        <button
+          v-if="unclaimedRealm && !showProfileNudge"
+          type="button"
+          class="link"
+          data-testid="drawer-account-name-jarl"
+          @click="go('/register')"
+        >
+          {{ t('hud.returningPlayer.nameJarlTrigger') }}
+        </button>
         <button type="button" class="link" data-testid="drawer-account-login" @click="goToLogin">
           {{ t('hud.returningPlayer.logIn') }}
         </button>
