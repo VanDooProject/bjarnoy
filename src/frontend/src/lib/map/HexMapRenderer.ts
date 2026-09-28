@@ -1378,6 +1378,11 @@ export class HexMapRenderer {
    * triggering while the settlement view is already open) still picks it up.
    */
   private wastedPackLoading: Promise<void> | null = null;
+  /**
+   * Set once the frozen atlas pack's load has been kicked off — same
+   * once-per-instance guard as `wastedPackLoading`, see `maybeLoadFrozenPack`.
+   */
+  private frozenPackLoading: Promise<void> | null = null;
 
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
@@ -2628,10 +2633,8 @@ export class HexMapRenderer {
    * catch the reveal happening *while* the map is already open, e.g. the
    * endboss triggering mid-session) costs nothing beyond the first call.
    *
-   * The frozen pack (`frozenIslesEnabled`, a world flag landing in a
-   * separate backend PR) plugs in here the same way once it exists — one
-   * more `if (worldModel.isFrozenRevealed() && !this.frozenPackLoading) ...`
-   * alongside this.
+   * The frozen pack (`frozenIslesEnabled`, a world flag) plugs in the same
+   * way right below — `maybeLoadFrozenPack`.
    */
   private maybeLoadWastedPack() {
     if (this.options.mode !== 'settlement' || !this.textures) return;
@@ -2649,10 +2652,36 @@ export class HexMapRenderer {
       });
   }
 
+  /**
+   * Loads the frozen atlas pack (`${frozen}-terrain`/`${frozen}-buildings-*`
+   * — see `loadPackAtlases`) once the world has the frozen isles flag on
+   * (`WorldModel.isFrozenEnabled`), merging it into `this.textures` — same
+   * shape as `maybeLoadWastedPack`, just gated on the admin flag instead of
+   * the endboss reveal. Frozen isle generation itself is not implemented
+   * yet, so this only makes the `frozen-*` art available; no tile actually
+   * uses it until that generation exists.
+   */
+  private maybeLoadFrozenPack() {
+    if (this.options.mode !== 'settlement' || !this.textures) return;
+    if (this.frozenPackLoading) return;
+    if (!this.options.worldModel.isFrozenEnabled()) return;
+
+    this.frozenPackLoading = loadPackAtlases('frozen')
+      .then((frozen) => {
+        if (this.destroyed || !this.textures) return;
+        this.textures = mergeTileTextures(this.textures, frozen);
+        this.rebuildAll();
+      })
+      .catch((err) => {
+        console.warn('Frozen atlas pack failed to load', err);
+      });
+  }
+
   private rebuildAll() {
     if (!this.app) return;
     if (this.options.mode === 'settlement' && !this.textures) return;
     this.maybeLoadWastedPack();
+    this.maybeLoadFrozenPack();
     this.lastBuiltCamera = { ...this.camera };
     const rebuildStart = performance.now();
     this.lastRebuildAtMs = rebuildStart;

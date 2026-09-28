@@ -28,6 +28,7 @@ public sealed record WorldResponse(
     string JoinableReason,
     DateTimeOffset? StartsAt,
     bool EndbossTriggered,
+    bool FrozenIslesEnabled,
     double SpeedFactor,
     WorldGenerationResponse Generation,
     WorldMovementResponse Movement)
@@ -51,6 +52,7 @@ public sealed record WorldResponse(
             joinability.Reason.ToString().ToLowerInvariant(),
             world.StartsAt,
             world.EndbossTriggeredAt is not null,
+            world.FrozenIslesEnabled,
             world.SpeedFactor,
             WorldGenerationResponse.From(world.ToGenerationOptions()),
             WorldMovementResponse.Current);
