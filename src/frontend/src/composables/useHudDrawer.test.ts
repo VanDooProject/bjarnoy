@@ -198,4 +198,110 @@ describe('useHudDrawer', () => {
     drawer.onPointerUp(fakeEvent(250, 50));
     expect(drawer.isOpen.value).toBe(false);
   });
+
+  describe('scroll-priority gestures on an already-open, overflowing drawer', () => {
+    // A fake `.hud-drawer-scroll` element — enough of the real DOM surface
+    // (scrollTop/scrollHeight/clientHeight) for splitDrawerDragDelta to work
+    // against, without needing an actual browser layout.
+    function fakeScrollEl(scrollTop: number, scrollHeight: number, clientHeight: number) {
+      return { scrollTop, scrollHeight, clientHeight } as HTMLElement;
+    }
+
+    function openedDrawer(edge: HudBarPosition, scrollEl: () => HTMLElement | null) {
+      const drawer = useHudDrawer(ref<HudBarPosition>(edge), ref(300), scrollEl);
+      // Open it first via a plain toggle (not a drag) so the *next* gesture
+      // starts from an already-open drawer, per the spec.
+      drawer.toggle();
+      expect(drawer.isOpen.value).toBe(true);
+      return drawer;
+    }
+
+    it('top-docked: swiping up (closing direction) scrolls the content down before closing the drawer', () => {
+      const el = fakeScrollEl(0, 500, 300); // 200px of scroll room
+      const drawer = openedDrawer('top', () => el);
+      drawer.onPointerDown(fakeEvent(300, 0));
+      drawer.onPointerMove(fakeEvent(250, 50)); // 50px up — past the 8px threshold, all absorbed by scroll
+      expect(el.scrollTop).toBe(50);
+      expect(drawer.currentOffset()).toBe(300); // drawer itself hasn't budged
+      drawer.onPointerUp(fakeEvent(250, 50));
+      expect(drawer.isOpen.value).toBe(true); // still open — the drag never actually moved
+    });
+
+    it('top-docked: swiping up only starts closing the drawer once the content is fully scrolled', () => {
+      const el = fakeScrollEl(190, 500, 300); // only 10px of scroll room left (maxScrollTop 200)
+      const drawer = openedDrawer('top', () => el);
+      drawer.onPointerDown(fakeEvent(300, 0));
+      drawer.onPointerMove(fakeEvent(250, 50)); // 50px up: 10px scrolls, remaining 40px closes
+      expect(el.scrollTop).toBe(200); // scrolled all the way to the end
+      expect(drawer.currentOffset()).toBe(260); // 300 - 40
+      drawer.onPointerUp(fakeEvent(200, 100)); // drag further past the close threshold
+      expect(drawer.isOpen.value).toBe(false);
+    });
+
+    it('top-docked: swiping down at scrollTop 0 does nothing extra (already fully open)', () => {
+      const el = fakeScrollEl(0, 500, 300);
+      const drawer = openedDrawer('top', () => el);
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(50, 50)); // dragging down (opening direction)
+      expect(el.scrollTop).toBe(0); // nothing to scroll up to
+      expect(drawer.currentOffset()).toBe(300); // stays clamped at fully open
+    });
+
+    it('bottom-docked: swiping down (its closing direction) scrolls the content toward its start before closing', () => {
+      // Natural scrolling always moves content with the finger regardless
+      // of docking edge — finger down scrolls *toward the start*
+      // (scrollTop falling), the mirror image of the top-docked case above
+      // (finger up scrolls toward the end). scrollTop starts with room to
+      // fall (50 of it).
+      const el = fakeScrollEl(50, 500, 300);
+      const drawer = openedDrawer('bottom', () => el);
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(50, 50)); // dragged down 50px — closing direction for a bottom bar
+      expect(el.scrollTop).toBe(0);
+      expect(drawer.currentOffset()).toBe(300); // drawer itself hasn't budged
+    });
+
+    it('bottom-docked: swiping down at scrollTop 0 closes immediately — nothing left to scroll toward the start', () => {
+      const el = fakeScrollEl(0, 500, 300);
+      const drawer = openedDrawer('bottom', () => el);
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(50, 50)); // dragged down 50px, closing direction, nothing to scroll
+      expect(el.scrollTop).toBe(0); // unchanged — no room to scroll toward the start
+      expect(drawer.currentOffset()).toBe(250); // the full 50px instead drags the sheet closed
+    });
+
+    it('bottom-docked: swiping up (opening direction) scrolls toward the end and never closes', () => {
+      const el = fakeScrollEl(150, 500, 300); // room to rise toward maxScrollTop (200)
+      const drawer = openedDrawer('bottom', () => el);
+      drawer.onPointerDown(fakeEvent(300, 0));
+      drawer.onPointerMove(fakeEvent(250, 50)); // dragged up 50px — opening direction for a bottom bar
+      expect(el.scrollTop).toBe(200);
+      expect(drawer.currentOffset()).toBe(300); // stays clamped at fully open
+    });
+
+    it('gestures that start on the collapsed bar (opening it) are unaffected, even with a scroll element present', () => {
+      const el = fakeScrollEl(0, 500, 300);
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300), () => el);
+      expect(drawer.isOpen.value).toBe(false);
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(150, 50)); // opening drag from closed
+      expect(el.scrollTop).toBe(0); // never touched
+      expect(drawer.currentOffset()).toBe(150); // the drag itself moved normally
+    });
+
+    it('non-overflowing content behaves exactly as without a scroll element', () => {
+      const el = fakeScrollEl(0, 300, 300); // scrollHeight === clientHeight: nothing to scroll
+      const withScroll = openedDrawer('top', () => el);
+      const withoutScroll = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+      withoutScroll.toggle();
+
+      withScroll.onPointerDown(fakeEvent(300, 0));
+      withScroll.onPointerMove(fakeEvent(250, 50));
+      withoutScroll.onPointerDown(fakeEvent(300, 0));
+      withoutScroll.onPointerMove(fakeEvent(250, 50));
+
+      expect(el.scrollTop).toBe(0);
+      expect(withScroll.currentOffset()).toBe(withoutScroll.currentOffset());
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue';
-import { clampOffset, shouldOpenOnRelease } from '../lib/hud/drawerDrag';
+import { clampOffset, shouldOpenOnRelease, splitDrawerDragDelta } from '../lib/hud/drawerDrag';
 import type { HudBarPosition } from '../stores/hudPrefs';
 
 // Android-notification-shade-style pull-down for the mobile-only HUD bar
@@ -12,7 +12,18 @@ const DRAG_INTENT_PX = 8;
 const OPEN_THRESHOLD_RATIO = 0.3;
 const FLICK_VELOCITY_PX_MS = 0.5;
 
-export function useHudDrawer(edge: Ref<HudBarPosition>, drawerHeight: Ref<number>) {
+export function useHudDrawer(
+  edge: Ref<HudBarPosition>,
+  drawerHeight: Ref<number>,
+  // Optional getter for the open drawer's own scroll container (see
+  // TopBar.vue's `.hud-drawer-scroll`). When set, a gesture that starts
+  // while the drawer is already open scrolls this element before it drags
+  // the drawer closed — see the "content scrolling" block in onPointerMove
+  // and drawerDrag.ts's `splitDrawerDragDelta`. Omitted entirely by
+  // callers/tests that don't care about scrolling (e.g. useHudDrawer.test.ts's
+  // plain-number gestures), which keeps the drag-only behaviour untouched.
+  scrollEl?: () => HTMLElement | null,
+) {
   const isOpen = ref(false);
   const dragging = ref(false);
   const dragOffset = ref(0); // 0 = closed .. drawerHeight = open; only meaningful while dragging.value is true
@@ -25,6 +36,11 @@ export function useHudDrawer(edge: Ref<HudBarPosition>, drawerHeight: Ref<number
   let lastY = 0;
   let lastT = 0;
   let velocity = 0; // px/ms, positive = towards open
+  // Set once per gesture, at arm time: whether this gesture began on an
+  // already fully-open drawer (as opposed to opening it from the collapsed
+  // bar) — only then is there a scroll container to give priority to. See
+  // the spec comment on the `scrollEl` param above.
+  let scrollPriority = false;
   // A real mouse/touch drag that started on an interactive element (a nav
   // link inside the open drawer, or the grip/a resource pill on the
   // collapsed bar) still gets a compatibility `click` dispatched on
@@ -63,12 +79,6 @@ export function useHudDrawer(edge: Ref<HudBarPosition>, drawerHeight: Ref<number
   /** The offset to render at right now, whether dragging or at rest. */
   function currentOffset(): number {
     return dragging.value ? dragOffset.value : restingOffset();
-  }
-
-  function directionalDelta(clientY: number): number {
-    const raw = clientY - startY;
-    // Pulling down opens a top-docked bar; pulling up opens a bottom-docked one.
-    return edge.value === 'top' ? raw : -raw;
   }
 
   function releaseCapture() {
@@ -124,20 +134,72 @@ export function useHudDrawer(edge: Ref<HudBarPosition>, drawerHeight: Ref<number
       // capture-capable for the rest of the drag).
       capturedTarget = e.currentTarget as Element | null;
       capturedTarget?.setPointerCapture?.(pointerId);
+      // Scroll-vs-drag routing only ever applies to a gesture that begins on
+      // an already fully-open drawer (`startOffset > 0` — see the spec's own
+      // "gestures that start on the collapsed bar are unaffected" carve-out).
+      scrollPriority = startOffset > 0;
+      // Seeds the running offset that every branch below now accumulates
+      // onto incrementally (move-by-move), rather than recomputing from
+      // `startOffset` + the *total* delta since gesture start each time —
+      // the scroll-priority branch has to work incrementally regardless (it
+      // splits against the scroll container's *current* scrollTop, which
+      // itself changes move-by-move), and once scroll priority disengages
+      // for a gesture that used it, the plain path has to pick up
+      // incrementally from wherever that left `dragOffset`, not jump back to
+      // a value computed from the raw total finger movement (which would
+      // ignore the portion of it already spent on scrolling).
+      dragOffset.value = startOffset;
     }
     const dt = e.timeStamp - lastT;
-    if (dt > 0) {
-      velocity = ((e.clientY - lastY) / dt) * (edge.value === 'top' ? 1 : -1);
-    }
+    // This move's own incremental, *raw* (screen-space, unflipped) delta —
+    // as opposed to the total delta since gesture start, and as opposed to
+    // useHudDrawer's own "opening direction is positive" convention.
+    // splitDrawerDragDelta needs the raw form (natural scrolling moves
+    // content with the finger regardless of which edge the bar docks to —
+    // see its own comment); the plain-drag fallback below converts it with
+    // the same sign flip `directionalDelta` used to.
+    const rawStep = e.clientY - lastY;
     lastY = e.clientY;
     lastT = e.timeStamp;
-    dragOffset.value = clampOffset(startOffset + directionalDelta(e.clientY), drawerHeight.value);
+
+    let appliedDelta = rawStep * (edge.value === 'top' ? 1 : -1);
+    if (scrollPriority) {
+      const el = scrollEl?.() ?? null;
+      if (el) {
+        const { scrollDelta, dragDelta } = splitDrawerDragDelta(rawStep, el.scrollTop, el.scrollHeight, el.clientHeight, edge.value);
+        if (scrollDelta !== 0) el.scrollTop += scrollDelta;
+        appliedDelta = dragDelta;
+        // The instant any of this gesture's motion actually moves the
+        // drawer itself (dragDelta !== 0), the player is dragging the sheet,
+        // not scrolling its content — every later step of this same
+        // gesture (even one that reverses direction) drags it from here on.
+        // Re-splitting on a later step would otherwise read the scroll
+        // container's own `clientHeight`, which is `.hud-drawer`'s current
+        // (now-shrinking, mid-close) height — that grows `maxScrollTop` out
+        // from under the split maths as the drag itself proceeds, which
+        // stalled the close indefinitely (confirmed while testing this fix:
+        // the close drag's own container kept "gaining" scroll room exactly
+        // as fast as it was being consumed).
+        if (dragDelta !== 0) scrollPriority = false;
+      } else {
+        // No scroll element at all — behaves exactly like a plain drag.
+        scrollPriority = false;
+      }
+    }
+    dragOffset.value = clampOffset(dragOffset.value + appliedDelta, drawerHeight.value);
+    // A fast flick's release velocity (see shouldOpenOnRelease/onPointerUp
+    // below) has to be measured against how far the *drawer* actually moved,
+    // not the raw finger speed — a fast swipe that's entirely absorbed by
+    // scrolling the content (appliedDelta 0) must not register as a closing
+    // flick just because the finger itself moved quickly.
+    if (dt > 0) velocity = appliedDelta / dt;
   }
 
   function teardown() {
     releaseCapture();
     pointerId = null;
     armed = false;
+    scrollPriority = false;
     dragging.value = false;
     dragOffset.value = 0;
   }
