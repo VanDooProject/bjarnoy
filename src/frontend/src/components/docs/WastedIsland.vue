@@ -68,10 +68,18 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   },
 });
 
+// Regression fix while porting this off the old DOM version (which had the
+// exact same bug): every branch here was missing the `docs.` namespace
+// prefix i18n/index.ts wraps `docs.json`'s content in (see how every other
+// key in this file's own template is written, e.g. `docs.wastedLands.island.blight`)
+// — `t()` on a key vue-i18n can't resolve falls back to printing the raw key
+// string, so a hovered hex's caption has always shown e.g.
+// "wastedLands.tiles.grass.living" instead of "Grassland".
 function tileNameKey(kind: IslandKind, turned: boolean): string {
-  if (kind === 'utgard') return turned ? 'wastedLands.island.giantWasted' : 'wastedLands.island.giantLiving';
-  if (kind === 'volcano') return turned ? 'wastedLands.island.giantVolcano' : 'wastedLands.island.giantMountainLiving';
-  return `wastedLands.tiles.${kind}.${turned ? 'wasted' : 'living'}`;
+  if (kind === 'utgard') return turned ? 'docs.wastedLands.island.giantWasted' : 'docs.wastedLands.island.giantLiving';
+  if (kind === 'volcano')
+    return turned ? 'docs.wastedLands.island.giantVolcano' : 'docs.wastedLands.island.giantMountainLiving';
+  return `docs.wastedLands.tiles.${kind}.${turned ? 'wasted' : 'living'}`;
 }
 
 const captionText = computed(() => {

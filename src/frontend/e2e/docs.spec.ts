@@ -91,14 +91,18 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await expect(caption).toHaveText('Point at a hex to see what it is.');
 
     // Hovering the island (its locked preview camera fits the whole island
-    // to the canvas, so its own centre is a safe bet for "somewhere on the
-    // island") swaps the caption away from the hint text — regression check
-    // that the renderer's real hover pipeline (HexMapRenderer's
-    // onHoverChange, not the old DOM version's own SVG hit polygons) is
-    // actually wired up end to end.
+    // to the canvas, so its own centre — the Utgard shrine, still living at
+    // stage 0 — is a safe bet for "somewhere on the island") swaps the
+    // caption away from the hint text and to the actual translated name, not
+    // a raw i18n key — regression check both for the renderer's real hover
+    // pipeline (HexMapRenderer's onHoverChange, not the old DOM version's
+    // own SVG hit polygons) being wired up end to end, and for the caption
+    // keys themselves resolving (they're missing the `docs.` namespace
+    // prefix every other key on this page uses, `t()` falls back to
+    // printing the raw key on a miss).
     const box = (await mapHost.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(caption).not.toHaveText('Point at a hex to see what it is.');
+    await expect(caption).toHaveText('Stone ring (giant shrine)');
   });
 
   // Regression: in the fixed-height art boxes a tall frame used to keep the
