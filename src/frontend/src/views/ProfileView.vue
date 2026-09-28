@@ -6,8 +6,7 @@ import { api, ApiError } from '../api/client';
 import type { ProfileResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
-import HudPreferences from '../components/settings/HudPreferences.vue';
-import AnimationPreferences from '../components/settings/AnimationPreferences.vue';
+import SettingsDialog from '../components/settings/SettingsDialog.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -52,6 +51,10 @@ async function load() {
 watch(targetUserName, load, { immediate: true });
 
 // --- Own-bio editing ---
+
+// The viewer's own per-device settings live in a modal (SettingsDialog.vue),
+// opened from the header — the profile page itself is what others see.
+const settingsOpen = ref(false);
 
 const editingBio = ref(false);
 const bioDraft = ref('');
@@ -147,6 +150,9 @@ function joinedDate(iso: string): string {
             {{ $t('profile.report') }}
           </button>
           <span v-if="reportDone" class="muted">{{ $t('profile.reportSent') }}</span>
+          <button v-if="isOwnProfile" class="secondary" @click="settingsOpen = true">
+            {{ $t('profile.settings.open') }}
+          </button>
         </div>
       </header>
 
@@ -161,8 +167,7 @@ function joinedDate(iso: string): string {
         </div>
       </dl>
 
-      <HudPreferences v-if="isOwnProfile" />
-      <AnimationPreferences v-if="isOwnProfile" />
+      <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
 
       <section class="bio-section">
         <div class="bio-head">
@@ -269,10 +274,6 @@ function joinedDate(iso: string): string {
   margin: 2px 0 0;
   font-size: 18px;
   font-weight: 600;
-}
-.hud-preferences,
-.animation-preferences {
-  margin: 0 0 24px;
 }
 .bio-head {
   display: flex;

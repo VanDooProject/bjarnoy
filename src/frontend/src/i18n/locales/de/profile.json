@@ -7,6 +7,11 @@
   "reportSent": "Meldung gesendet — vielen Dank.",
   "joined": "Beigetreten",
   "settlements": "Siedlungen",
+  "settings": {
+    "open": "Einstellungen",
+    "title": "Einstellungen",
+    "close": "Schließen"
+  },
   "hudBar": {
     "title": "HUD-Leiste",
     "hint": "Gilt nur auf kleinen Bildschirmen.",

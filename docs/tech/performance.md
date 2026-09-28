@@ -68,8 +68,9 @@ Showcase renders are docs art and never load in the game.
 
 The setting is **per device** (localStorage `bjarnoy.animations`), not per
 account: the same player may want animations on a desktop and not on a
-phone. It is on the player's own profile page, under Graphics, next to a
-line saying what it currently resolves to and why.
+phone. It is in the Settings dialog on the player's own profile (Graphics →
+Map animations), next to a line saying what it currently resolves to and
+why.
 
 | Setting | Result |
 | --- | --- |
@@ -103,8 +104,8 @@ anim pages' textures (`unloadAtlasCategory`, `Assets.unload`), so the memory
 really comes back rather than just stopping playback. The code is in
 `src/frontend/src/lib/perf/animationPreference.ts` (setting, governor,
 resolution), `HexMapRenderer.setAnimationsEnabled`/`syncAnimationAtlases`
-(load and unload) and `components/settings/AnimationPreferences.vue` (the
-profile section).
+(load and unload) and `components/settings/AnimationPreferences.vue` (in
+`SettingsDialog.vue`).
 
 Docs pages (the tile docs, the wasted lands page) play their own clips with
 `useAnimationClock`: frozen under Off, and under reduced motion unless the

@@ -10,8 +10,9 @@ import { useHudPrefsStore } from '../stores/hudPrefs';
 import { createTestI18n } from '../test/i18n';
 import enProfile from '../i18n/locales/en/profile.json';
 
-function mountProfileView() {
+function mountProfileView(options: { attachTo?: HTMLElement } = {}) {
   return mount(ProfileView, {
+    ...options,
     global: { plugins: [createTestI18n({ profile: enProfile })] },
   });
 }
@@ -41,6 +42,11 @@ vi.mock('vue-router', async (importOriginal) => {
 });
 
 const ASCII_ART = '  /\\_/\\\n ( o.o )\n  > ^ <';
+
+/** Opens the own-profile settings modal (SettingsDialog.vue) via its header button. */
+async function openSettings(wrapper: ReturnType<typeof mountProfileView>) {
+  await wrapper.findAll('button').find((b) => b.text() === 'Settings')!.trigger('click');
+}
 
 function profile(overrides: Partial<ProfileResponse> = {}): ProfileResponse {
   return {
@@ -196,6 +202,7 @@ describe('ProfileView', () => {
 
       const wrapper = mountProfileView();
       await flushPromises();
+      await openSettings(wrapper);
 
       expect(wrapper.text()).toContain('HUD bar');
     });
@@ -243,6 +250,7 @@ describe('ProfileView', () => {
 
       const wrapper = mountProfileView();
       await flushPromises();
+      await openSettings(wrapper);
 
       const bottomButton = wrapper.findAll('button').find((b) => b.text() === 'Bottom')!;
       await bottomButton.trigger('click');
@@ -250,6 +258,80 @@ describe('ProfileView', () => {
       const hudPrefs = useHudPrefsStore();
       expect(hudPrefs.barPosition).toBe('bottom');
       expect(bottomButton.attributes('aria-pressed')).toBe('true');
+    });
+  });
+
+  describe('settings modal', () => {
+    it('keeps the settings off the profile page until the Settings button opens them', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Map animations');
+
+      await openSettings(wrapper);
+
+      const dialog = wrapper.find('[role="dialog"]');
+      expect(dialog.exists()).toBe(true);
+      expect(dialog.text()).toContain('Map animations');
+      expect(dialog.text()).toContain('Bar position');
+    });
+
+    it('labels each button group with what it sets', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView({ attachTo: document.body });
+      await flushPromises();
+      await openSettings(wrapper);
+
+      const names = wrapper
+        .findAll('[role="group"]')
+        .map((group) => document.getElementById(group.attributes('aria-labelledby')!)?.textContent);
+      expect(names).toEqual(['Bar position', 'Map animations']);
+      wrapper.unmount();
+    });
+
+    it('closes on the Close button and on Escape', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      await openSettings(wrapper);
+      await wrapper
+        .findAll('[role="dialog"] button')
+        .find((b) => b.text() === 'Close')!
+        .trigger('click');
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+
+      await openSettings(wrapper);
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await flushPromises();
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    });
+
+    it("has no Settings button on someone else's profile", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      const auth = useAuthStore();
+      auth.user = {
+        id: 'user-2',
+        userName: 'floki',
+        role: 'player',
+        status: 'active',
+        displayName: null,
+        isPremium: false,
+        preferredLocale: null,
+      };
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.findAll('button').some((b) => b.text() === 'Settings')).toBe(false);
     });
   });
 
@@ -271,6 +353,7 @@ describe('ProfileView', () => {
 
       const wrapper = mountProfileView();
       await flushPromises();
+      await openSettings(wrapper);
 
       expect(wrapper.text()).toContain('Graphics');
     });
@@ -300,6 +383,7 @@ describe('ProfileView', () => {
 
       const wrapper = mountProfileView();
       await flushPromises();
+      await openSettings(wrapper);
 
       const onButton = wrapper
         .findAll('.animation-preferences button')
@@ -317,6 +401,7 @@ describe('ProfileView', () => {
 
       const wrapper = mountProfileView();
       await flushPromises();
+      await openSettings(wrapper);
 
       expect(wrapper.text()).toContain('measuring frame rate');
     });
@@ -339,6 +424,7 @@ describe('ProfileView', () => {
 
       const wrapper = mountProfileView();
       await flushPromises();
+      await openSettings(wrapper);
 
       expect(wrapper.text()).toContain('reduced motion');
     });
