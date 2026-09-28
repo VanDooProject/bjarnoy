@@ -47,11 +47,11 @@ describe('useAnimationClock', () => {
     expect(now.value).toBe(before);
   });
 
-  it('never ticks under prefers-reduced-motion, staying at frame 0', () => {
+  it('keeps ticking under prefers-reduced-motion, like the in-game map does', () => {
     mockMatchMedia(true);
     const { wrapper, now } = mountClock();
     vi.advanceTimersByTime(2000);
-    expect(now.value).toBe(0);
+    expect(now.value).toBeGreaterThan(0);
     wrapper.unmount();
   });
 });

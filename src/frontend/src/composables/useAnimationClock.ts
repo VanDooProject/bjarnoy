@@ -10,19 +10,15 @@
 // default keeps a comfortable margin above that without being wasteful.
 // Started on mount, stopped on unmount.
 //
-// Does nothing under `prefers-reduced-motion: reduce`: `now` stays frozen at
-// 0, so `clipFrameIndex` always resolves frame 0 for every caller — the
-// reduced-motion contract is "no motion", enforced here once rather than by
-// every caller remembering to special-case it.
+// Keeps ticking under `prefers-reduced-motion: reduce`, on purpose: these
+// clips are the art's own ambient motion (smoke, lava, glowing runes), and
+// the in-game map plays the very same clips regardless of that setting, so
+// the docs showing them frozen made the art look broken rather than calm.
+// Transitions a page adds on top (e.g. the island's blight cross-fade) still
+// honour reduced motion on their own.
 import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
 
 const DEFAULT_INTERVAL_MS = 1000 / 8;
-
-function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    : false;
-}
 
 export function useAnimationClock(intervalMs = DEFAULT_INTERVAL_MS): Ref<number> {
   const now = ref(0);
@@ -39,7 +35,6 @@ export function useAnimationClock(intervalMs = DEFAULT_INTERVAL_MS): Ref<number>
   }
 
   onMounted(() => {
-    if (prefersReducedMotion()) return;
     raf = requestAnimationFrame(tick);
   });
   onBeforeUnmount(() => {

@@ -5,11 +5,10 @@
 // doc comment for why a giant is 14 separate per-hex sprites rather than one
 // pre-composited `showcase` frame), rendered on its own rather than as part
 // of an island, with any `buildings-anim` clip a top part has playing
-// instead of sitting on its static frame. Only mounted while a card is
-// hovered/focused — see WastedLandsView.vue's own `giantFamilyHasClip` gate,
-// which decides whether a family gets this treatment at all (today just the
-// wasted volcano; the wasted Utgard ruin has no clips and stays a plain
-// `<AtlasSprite>`).
+// instead of sitting on its static frame. WastedLandsView.vue's own
+// `giantFamilyHasClip` gate decides whether a family gets this treatment at
+// all (today just the wasted volcano; the wasted Utgard ruin has no clips
+// and stays a plain `<AtlasSprite>`).
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { isoGridPosition } from '../../lib/hex/geometry';
 import { atlasBackgroundStyle, type AtlasBackgroundStyle } from '../../lib/map/atlas';
