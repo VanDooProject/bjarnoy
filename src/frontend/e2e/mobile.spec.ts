@@ -49,6 +49,30 @@ async function plotHitsCanvas(page: Page): Promise<boolean> {
   });
 }
 
+/**
+ * Opens the ring menu on the guided hex GuidancePointer.vue is currently
+ * aiming at (design handoff "2a" frame 2, right after landfall — the pointer
+ * follows the camera via `useMapAnchor`, which writes the hex's screen point
+ * into `--anchor-x`/`--anchor-y` on `[data-testid="guidance-pointer"]`) and
+ * waits for frame 3's "This one fits {terrain}" chip, the case the chip's
+ * placement bug was found on. Reads the anchor vars rather than re-deriving
+ * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
+ * (camera + arrowTipOffset) is exactly where the click needs to land.
+ */
+async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
+  const pointer = settlement.guidancePointer;
+  await expect
+    .poll(async () => (await pointer.getAttribute('style')) ?? '', { message: 'guidance pointer never got an anchor point' })
+    .toMatch(/--anchor-x: -?\d/);
+  const style = (await pointer.getAttribute('style'))!;
+  const x = Number(style.match(/--anchor-x: (-?[\d.]+)px/)![1]);
+  const y = Number(style.match(/--anchor-y: (-?[\d.]+)px/)![1]);
+  const box = await settlement.canvasBox();
+  await settlement.page.mouse.click(box.x + x, box.y + y);
+  await settlement.ring.waitForOpen();
+  await expect(pointer.locator('.chip')).toContainText('fits');
+}
+
 async function expectNoOverlap(a: Locator, b: Locator, what: string): Promise<void> {
   const boxA = (await a.boundingBox())!;
   const boxB = (await b.boundingBox())!;
@@ -158,6 +182,49 @@ test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
   test('the minimal landing hero leaves the plot chip and demo badge uncovered', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await expectHeroClear(page);
+  });
+
+  // guidance-chip-edge: at 320px the chip used to sit to the side of the
+  // arrow (CSS `chipSide`) and ran off the right edge of the viewport once
+  // the ring opened frame 3's "This one fits {terrain}" chip near the screen
+  // edge.
+  test('the guidance chip stays fully on screen once the ring opens', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await openRingOnGuidedHex(settlement);
+    await expectInsideViewport(page, settlement.guidancePointer.locator('.chip'));
+  });
+});
+
+test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
+  test.use({ viewport: { width: 667, height: 375 }, hasTouch: true, isMobile: true });
+
+  // guidance-chip-edge: this short-but-wide viewport is where "centred
+  // above the arrow" (the old mobile CSS fallback) pushed the chip up under
+  // the HUD bar, off the top of the screen entirely.
+  test('the guidance chip stays fully on screen and clear of the HUD bar once the ring opens', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await openRingOnGuidedHex(settlement);
+    const chip = settlement.guidancePointer.locator('.chip');
+    await expectInsideViewport(page, chip);
+    const chipBox = (await chip.boundingBox())!;
+    const hudBar = page.locator('.hud-bar');
+    if (await hudBar.isVisible()) {
+      const hudBarBox = (await hudBar.boundingBox())!;
+      expect(chipBox.y).toBeGreaterThanOrEqual(hudBarBox.y + hudBarBox.height - 1);
+    }
+    // The settlement bubble and demo badge stack in rows under the bar here;
+    // the chip must not end up behind them either.
+    for (const [selector, what] of [
+      ['.settlement-bubble', 'chip covered by the settlement bubble'],
+      ['.demo-badge', 'chip covered by the demo badge'],
+    ] as const) {
+      const overlay = page.locator(selector);
+      if (await overlay.isVisible()) await expectNoOverlap(chip, overlay, what);
+    }
   });
 });
 
