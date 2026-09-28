@@ -28,7 +28,7 @@
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import { isoGridPosition } from '../hex/geometry';
 import { findAtlasClip, findAtlasFrame, type AtlasClip, type AtlasFrameRect } from '../map/atlas';
-import { giantCoverage, GIANT_PARTS } from '../map/giantTiles';
+import { giantCoverage, giantCrop, GIANT_PARTS } from '../map/giantTiles';
 import { TILE_ORIENTATIONS, type Tile, type TileOrientation } from '../map/types';
 
 /** One island hex's terrain family, or one of the two giants. */
@@ -719,16 +719,21 @@ export function tileSpriteBox(origin: { x: number; y: number }, rect: AtlasFrame
 /**
  * A giant top part's box: 1x terrain/buildings-static art (native width
  * 200, height varies per part) rendered at 2x into `origin`'s 400x600
- * source canvas, its bottom edge anchored to that canvas's own bottom
- * (mirrors the game's own `giantCrop`: the part's extra height rises
- * *above* the canvas rather than extending below it). `rect` may be the
- * part's static frame, one frame of its `buildings-anim` clip, or the
- * clip's rest image — each is trimmed on its own (a clip frame's
- * `spriteSourceSize` routinely differs from its static frame's and from
- * its sibling frames'), so each needs its own box — see `giantClipBoxes`.
+ * source canvas, its bottom edge anchored to that canvas's own bottom.
+ * The vertical placement is computed through `giantCrop` (giantTiles.ts) —
+ * the renderer's own "how much does this part's extra height push it up"
+ * formula, `nativeY` — rather than this module's own arithmetic, so the
+ * docs' DOM cards and the real in-game renderer can never quietly drift
+ * onto two different answers for the same question (`giantTiles.test.ts`'s
+ * pixel-derived checks on `giantCrop` cover the formula itself; this only
+ * has to reuse it). `rect` may be the part's static frame, one frame of its
+ * `buildings-anim` clip, or the clip's rest image — each is trimmed on its
+ * own (a clip frame's `spriteSourceSize` routinely differs from its static
+ * frame's and from its sibling frames'), so each needs its own box — see
+ * `giantClipBoxes`.
  */
 export function giantTopPartBox(origin: { x: number; y: number }, rect: AtlasFrameRect): SpriteGeom {
-  const top = origin.y + 2 * (GIANT_PART_NATIVE_CANVAS_H - rect.sourceSize.h) + 2 * rect.spriteSourceSize.y;
+  const top = origin.y + 2 * giantCrop(rect.sourceSize.h).nativeY + 2 * rect.spriteSourceSize.y;
   return {
     left: origin.x + 2 * rect.spriteSourceSize.x,
     top,
