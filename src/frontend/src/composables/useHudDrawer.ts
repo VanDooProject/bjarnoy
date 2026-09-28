@@ -170,7 +170,7 @@ export function useHudDrawer(
         if (scrollDelta !== 0) el.scrollTop += scrollDelta;
         appliedDelta = dragDelta;
         // The instant any of this gesture's motion actually moves the
-        // drawer itself (dragDelta !== 0), the player is dragging the sheet,
+        // drawer itself, the player is dragging the sheet,
         // not scrolling its content — every later step of this same
         // gesture (even one that reverses direction) drags it from here on.
         // Re-splitting on a later step would otherwise read the scroll
@@ -180,7 +180,12 @@ export function useHudDrawer(
         // stalled the close indefinitely (confirmed while testing this fix:
         // the close drag's own container kept "gaining" scroll room exactly
         // as fast as it was being consumed).
-        if (dragDelta !== 0) scrollPriority = false;
+        // Only motion that actually *moves* the drawer counts — a pull in
+        // the opening direction on an already fully-open drawer is clamped
+        // away below and must not disengage scrolling for the rest of the
+        // gesture (the finger reversing afterwards would otherwise close
+        // the drawer instead of scrolling it).
+        if (clampOffset(dragOffset.value + dragDelta, drawerHeight.value) !== dragOffset.value) scrollPriority = false;
       } else {
         // No scroll element at all — behaves exactly like a plain drag.
         scrollPriority = false;

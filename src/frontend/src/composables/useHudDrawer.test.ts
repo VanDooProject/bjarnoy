@@ -247,6 +247,19 @@ describe('useHudDrawer', () => {
       expect(drawer.currentOffset()).toBe(300); // stays clamped at fully open
     });
 
+    it('top-docked: a pull down at scrollTop 0 that then reverses up still scrolls first, not closes', () => {
+      // The downward pull is clamped away (already fully open) — it must not
+      // count as "the sheet moved" and switch scrolling off for the rest of
+      // the gesture.
+      const el = fakeScrollEl(0, 500, 300);
+      const drawer = openedDrawer('top', () => el);
+      drawer.onPointerDown(fakeEvent(300, 0));
+      drawer.onPointerMove(fakeEvent(330, 30)); // 30px down: nothing to scroll, drawer already fully open
+      drawer.onPointerMove(fakeEvent(280, 60)); // then 50px up
+      expect(el.scrollTop).toBe(50);
+      expect(drawer.currentOffset()).toBe(300);
+    });
+
     it('bottom-docked: swiping down (its closing direction) scrolls the content toward its start before closing', () => {
       // Natural scrolling always moves content with the finger regardless
       // of docking edge — finger down scrolls *toward the start*
