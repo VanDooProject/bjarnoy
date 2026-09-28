@@ -85,10 +85,22 @@ export function placeChip(arrow: Box, chip: Size, safe: Box, prefer: ChipSide, g
     (side, i, arr) => arr.indexOf(side) === i,
   );
 
+  const maxX = safe.right - chip.width;
+  const maxY = safe.bottom - chip.height;
+  const clampX = (x: number) => (maxX >= safe.left ? clamp(x, safe.left, maxX) : safe.left);
+  const clampY = (y: number) => (maxY >= safe.top ? clamp(y, safe.top, maxY) : safe.top);
+
   let best: Candidate | null = null;
   let bestOverflow = Infinity;
   for (const side of order) {
-    const candidate = candidateFor(side, arrow, chip, gap);
+    const raw = candidateFor(side, arrow, chip, gap);
+    // Each side may slide along its free axis first (above/below
+    // horizontally, left/right vertically): that keeps the chip on its own
+    // side of the arrow, so it never lands on the arrow or the thing it
+    // points at, and a small nudge (e.g. 13px down to clear the HUD bar)
+    // no longer throws the chip onto a worse side.
+    const candidate =
+      side === 'above' || side === 'below' ? { ...raw, x: clampX(raw.x) } : { ...raw, y: clampY(raw.y) };
     const candidateOverflow = overflow(candidate.x, candidate.y, chip, safe);
     if (candidateOverflow === 0) {
       best = candidate;
@@ -103,9 +115,5 @@ export function placeChip(arrow: Box, chip: Size, safe: Box, prefer: ChipSide, g
   // `order` always has at least `prefer`, so `best` is never null here.
   const chosen = best!;
 
-  const maxX = safe.right - chip.width;
-  const maxY = safe.bottom - chip.height;
-  const x = maxX >= safe.left ? clamp(chosen.x, safe.left, maxX) : safe.left;
-  const y = maxY >= safe.top ? clamp(chosen.y, safe.top, maxY) : safe.top;
-  return { x, y, side: chosen.side };
+  return { x: clampX(chosen.x), y: clampY(chosen.y), side: chosen.side };
 }

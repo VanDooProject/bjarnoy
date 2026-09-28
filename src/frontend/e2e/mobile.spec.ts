@@ -216,5 +216,14 @@ test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
       const hudBarBox = (await hudBar.boundingBox())!;
       expect(chipBox.y).toBeGreaterThanOrEqual(hudBarBox.y + hudBarBox.height - 1);
     }
+    // The settlement bubble and demo badge stack in rows under the bar here;
+    // the chip must not end up behind them either.
+    for (const [selector, what] of [
+      ['.settlement-bubble', 'chip covered by the settlement bubble'],
+      ['.demo-badge', 'chip covered by the demo badge'],
+    ] as const) {
+      const overlay = page.locator(selector);
+      if (await overlay.isVisible()) await expectNoOverlap(chip, overlay, what);
+    }
   });
 });

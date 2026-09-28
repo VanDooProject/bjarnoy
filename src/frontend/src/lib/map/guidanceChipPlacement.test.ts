@@ -64,4 +64,27 @@ describe('placeChip', () => {
     const result = placeChip(arrow, wideChip, safe, 'above', 4);
     expect(result.x).toBe(safe.left);
   });
+
+  it('slides a side placement along its free axis instead of dropping to a worse side (844x390 ring step)', () => {
+    // Measured: the arrow box starts under the 64px HUD bar, so "left" at the
+    // arrow's vertical centre sits 13px too high. It should slide down, not
+    // fall through to "below" (onto the ring the arrow points at).
+    const placement = placeChip(
+      { left: 432, top: 1, right: 582, bottom: 151 },
+      { width: 225, height: 34 },
+      { left: 8, top: 72, right: 836, bottom: 382 },
+      'left',
+    );
+    expect(placement).toEqual({ x: 432 - 4 - 225, y: 72, side: 'left' });
+  });
+
+  it('keeps "above" near the right edge by sliding it horizontally', () => {
+    const placement = placeChip(
+      { left: 150, top: 160, right: 300, bottom: 310 },
+      { width: 176, height: 26 },
+      { left: 8, top: 72, right: 312, bottom: 560 },
+      'above',
+    );
+    expect(placement).toEqual({ x: 312 - 176, y: 160 - 4 - 26, side: 'above' });
+  });
 });
