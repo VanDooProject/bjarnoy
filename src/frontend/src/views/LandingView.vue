@@ -48,7 +48,7 @@ import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
-import { isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
+import { DEMO_BADGE_ROW_PX, isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
@@ -392,6 +392,10 @@ const hudInsetTopPxLanding = computed(() =>
 const hudInsetBottomPxLanding = computed(() =>
   !hideBarForTutorial.value && hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0,
 );
+// With the bar unmounted for the tutorial, the demo badge drops to the top
+// edge (DemoModeBadge.vue) — the landfall banner below reserves its row
+// rather than sliding up underneath it.
+const overlayRowTopPx = computed(() => (DEMO_MODE && hideBarForTutorial.value ? DEMO_BADGE_ROW_PX : 0));
 
 watch(ringScreen, (screen) => {
   if (!screen) ringLaneSpots.value = {};
@@ -831,7 +835,11 @@ watch(
 <template>
   <div
     class="landing"
-    :style="{ '--hud-inset-top': hudInsetTopPxLanding + 'px', '--hud-inset-bottom': hudInsetBottomPxLanding + 'px' }"
+    :style="{
+      '--hud-inset-top': hudInsetTopPxLanding + 'px',
+      '--hud-inset-bottom': hudInsetBottomPxLanding + 'px',
+      '--overlay-row-top': overlayRowTopPx + 'px',
+    }"
   >
     <SettlementCanvas
       v-if="player.hasFoundedSettlement ? world.selectedSettlementId : previewCoord"

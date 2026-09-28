@@ -257,6 +257,10 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
     if (await badge.isVisible()) {
       const badgeBox = (await badge.boundingBox())!;
       expect(badgeBox.y, 'demo badge should sit near the top edge, not a stale bar offset').toBeLessThan(40);
+      // The landfall banner reserves the badge's row instead of sliding up
+      // underneath it now that there's no bar between them.
+      await expect(settlement.banner).toBeVisible();
+      await expectNoOverlap(settlement.banner, badge, 'demo badge covers the landfall banner');
     }
 
     // Opening the ring on a guided hex hides the progress checklist so it
