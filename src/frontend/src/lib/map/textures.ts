@@ -30,7 +30,14 @@
 // its own doc comment and `textures.test.ts` — no Pixi/Texture dependency,
 // so it's exercised directly rather than only through a loaded atlas).
 import { Texture } from 'pixi.js';
-import { loadAtlasCategory, loadAtlasPackCategory, type AtlasClip, type AtlasPack, type LoadedAtlas } from './atlas';
+import {
+  loadAtlasCategory,
+  loadAtlasPackCategory,
+  unloadAtlasCategory,
+  type AtlasClip,
+  type AtlasPack,
+  type LoadedAtlas,
+} from './atlas';
 import {
   classifyGiantClips,
   classifyGiantFrames,
@@ -863,31 +870,77 @@ export function loadTerrainAtlas(): Promise<TileTextures> {
 
 let buildingLoading: Promise<TileTextures> | null = null;
 /**
- * The (much larger) `buildings-static` atlas, plus `buildings-anim`'s clips
- * layered on top as `animTop` (see `buildTileTextures`'s own remarks on why
- * that atlas is kept separate rather than merged into the static one). Its
- * `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those only
- * ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures` rather
- * than using this result standalone.
+ * The (much larger) `buildings-static` atlas alone — no `buildings-anim`.
+ * Its `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those
+ * only ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures`
+ * rather than using this result standalone.
+ *
+ * `buildings-anim` used to load unconditionally alongside this (see
+ * `loadAnimAtlases` below for why it's now separate and conditional): every
+ * `buildings-anim`/`wasted-buildings-anim-*` clip also has a static frame
+ * in this atlas, so the map renders correctly — `topAnimFor` just returns
+ * undefined and the static texture draws instead — without ever loading
+ * animation art at all. That's the ~319 MB of decoded GPU/RAM the split
+ * exists to make optional (see `animationPreference.ts`).
  */
 export function loadBuildingAtlases(): Promise<TileTextures> {
   if (!buildingLoading) {
-    buildingLoading = Promise.all([
-      loadAtlasCategory('buildings-static'),
-      loadAtlasCategory('buildings-anim'),
-    ]).then(([staticAtlas, animAtlas]) => buildTileTextures([staticAtlas], animAtlas));
+    buildingLoading = loadAtlasCategory('buildings-static').then((atlas) => buildTileTextures([atlas]));
   }
   return buildingLoading;
 }
 
+let animLoading: Promise<TileTextures> | null = null;
+/**
+ * `buildings-anim`'s clips, as a `TileTextures` carrying `animTop` (plus the
+ * `base`/`top`/`baseIndexed` `buildTileTextures` derives from
+ * `buildings-static` along the way — harmless, already-loaded duplicates of
+ * what `loadBuildingAtlases` produced, and simplest to just re-merge via
+ * `mergeTileTextures` rather than hand-building a sparser shape). Loaded
+ * only while `animationPreference.effective` is true (see
+ * `HexMapRenderer.setAnimationsEnabled`) — this is the ~319 MB piece that
+ * staying off entirely means never paying for.
+ *
+ * `loadAtlasCategory('buildings-static')` here reuses atlas.ts's own
+ * per-category cache — by the time animations turn on, `loadBuildingAtlases`
+ * has almost always already resolved it, so this only actually loads
+ * `buildings-anim`'s own pages.
+ */
+export function loadAnimAtlases(): Promise<TileTextures> {
+  if (!animLoading) {
+    animLoading = Promise.all([
+      loadAtlasCategory('buildings-static'),
+      loadAtlasCategory('buildings-anim'),
+    ]).then(([staticAtlas, animAtlas]) => buildTileTextures([staticAtlas], animAtlas));
+  }
+  return animLoading;
+}
+
+/**
+ * Releases `buildings-anim`'s decoded GPU textures (see
+ * `atlas.ts`'s `unloadAtlasCategory`) and drops this module's own memoised
+ * promise, so a later `loadAnimAtlases` call actually reloads rather than
+ * replaying a reference to now-destroyed textures. The caller (
+ * `HexMapRenderer.setAnimationsEnabled`) is responsible for first pointing
+ * every sprite that was showing an anim texture back at its static one
+ * (`releaseTopAnim`/`syncTopAnim`) — this only frees the GPU memory, it
+ * doesn't touch anything still drawing with it.
+ */
+export function unloadAnimAtlases(): void {
+  animLoading = null;
+  void unloadAtlasCategory('buildings-anim');
+}
+
 const packLoading = new Map<AtlasPack, Promise<TileTextures>>();
 /**
- * One pack's own terrain/building atlases (`${pack}-terrain`,
- * `${pack}-buildings-static`, `${pack}-buildings-anim`), built into a
- * `TileTextures` the same shape `loadTerrainAtlas`/`loadBuildingAtlases`
- * produce — merge it in with `mergeTileTextures` once the world reveals that
- * pack (see `HexMapRenderer`'s wasted-reveal handling). Each category loads
- * via `loadAtlasPackCategory`, which returns an empty, non-throwing
+ * One pack's own terrain/building-static atlases (`${pack}-terrain`,
+ * `${pack}-buildings-static`) — no `${pack}-buildings-anim`, same static-
+ * only split as `loadBuildingAtlases` vs. `loadAnimAtlases` above, see
+ * `loadPackAnimAtlases` for the animated half. Built into a `TileTextures`
+ * the same shape `loadTerrainAtlas`/`loadBuildingAtlases` produce — merge it
+ * in with `mergeTileTextures` once the world reveals that pack (see
+ * `HexMapRenderer`'s wasted-reveal handling). Each category loads via
+ * `loadAtlasPackCategory`, which returns an empty, non-throwing
  * `LoadedAtlas` for a category the pack has no pages for yet (the currently
  * vendored atlas ships none at all) — so this never fails outright, it just
  * contributes nothing until the pack's pages actually exist.
@@ -899,11 +952,39 @@ export function loadPackAtlases(pack: AtlasPack): Promise<TileTextures> {
   const promise = Promise.all([
     loadAtlasPackCategory(pack, 'terrain'),
     loadAtlasPackCategory(pack, 'buildings-static'),
-    loadAtlasPackCategory(pack, 'buildings-anim'),
-  ]).then(([terrain, buildings, animAtlas]) => buildTileTextures([terrain, buildings], animAtlas));
+  ]).then(([terrain, buildings]) => buildTileTextures([terrain, buildings]));
 
   packLoading.set(pack, promise);
   return promise;
+}
+
+const packAnimLoading = new Map<AtlasPack, Promise<TileTextures>>();
+/**
+ * `${pack}-buildings-anim`'s clips — the pack half of `loadAnimAtlases`,
+ * loaded only once that pack is both revealed (`maybeLoadWastedPack`) and
+ * animations are enabled. Reuses `loadAtlasPackCategory`'s own per-key cache
+ * for `terrain`/`buildings-static`, so — same as `loadAnimAtlases` — calling
+ * this after `loadPackAtlases(pack)` has already resolved only actually
+ * loads the pack's `buildings-anim` pages.
+ */
+export function loadPackAnimAtlases(pack: AtlasPack): Promise<TileTextures> {
+  const cached = packAnimLoading.get(pack);
+  if (cached) return cached;
+
+  const promise = Promise.all([
+    loadAtlasPackCategory(pack, 'terrain'),
+    loadAtlasPackCategory(pack, 'buildings-static'),
+    loadAtlasPackCategory(pack, 'buildings-anim'),
+  ]).then(([terrain, buildings, animAtlas]) => buildTileTextures([terrain, buildings], animAtlas));
+
+  packAnimLoading.set(pack, promise);
+  return promise;
+}
+
+/** The pack-scoped mirror of `unloadAnimAtlases` — see its own doc comment. */
+export function unloadPackAnimAtlases(pack: AtlasPack): void {
+  packAnimLoading.delete(pack);
+  void unloadAtlasCategory(`${pack}-buildings-anim`);
 }
 
 let combinedLoading: Promise<TileTextures> | null = null;

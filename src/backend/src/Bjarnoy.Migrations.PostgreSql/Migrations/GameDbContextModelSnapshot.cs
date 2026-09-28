@@ -1425,6 +1425,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("ForestRockiness")
                         .HasColumnType("double precision");
 
+                    b.Property<bool>("FrozenIslesEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<double>("IslandBendiness")
                         .HasColumnType("double precision");
 

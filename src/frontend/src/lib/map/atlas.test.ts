@@ -6,6 +6,7 @@ import {
   findFrameIn,
   loadAtlasPackCategory,
   pagesForIndex,
+  unloadAtlasCategory,
   type AtlasManifest,
   type AtlasPageIndex,
 } from './atlas';
@@ -230,5 +231,24 @@ describe('loadAtlasPackCategory', () => {
     const result = await loadAtlasPackCategory('wasted', 'no-such-category');
 
     expect(result).toEqual({ textures: {}, frameMeta: {}, clips: {} });
+  });
+});
+
+describe('unloadAtlasCategory', () => {
+  it('is a no-op for a category that was never loaded', async () => {
+    await expect(unloadAtlasCategory('never-loaded-category')).resolves.toBeUndefined();
+  });
+
+  it('is a no-op for a loaded-but-empty pack category (no vendored pages, so no real Assets.unload call)', async () => {
+    await loadAtlasPackCategory('wasted', 'no-such-category-2');
+    await expect(unloadAtlasCategory('wasted-no-such-category-2')).resolves.toBeUndefined();
+    // Dropped from the cache regardless — a later load re-resolves rather
+    // than replaying a stale reference (verified indirectly: loading again
+    // still resolves cleanly rather than throwing on a torn-down promise).
+    await expect(loadAtlasPackCategory('wasted', 'no-such-category-2')).resolves.toEqual({
+      textures: {},
+      frameMeta: {},
+      clips: {},
+    });
   });
 });

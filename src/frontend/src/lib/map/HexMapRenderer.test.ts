@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   attentionPulseFrame,
+  clampAnimationDeltaMs,
   hoverSubjectFor,
   isWaypointTap,
   landfallBurstFrames,
@@ -27,6 +28,22 @@ function tileOf(terrain: Tile['terrain']): Tile {
 }
 
 const river: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null };
+
+describe('clampAnimationDeltaMs', () => {
+  it('passes ordinary frame deltas through unchanged', () => {
+    expect(clampAnimationDeltaMs(16.7)).toBeCloseTo(16.7);
+    expect(clampAnimationDeltaMs(0)).toBe(0);
+  });
+
+  it('caps a huge delta (e.g. the first tick after a backgrounded tab resumes)', () => {
+    expect(clampAnimationDeltaMs(60_000)).toBe(100);
+  });
+
+  it('honours a custom cap', () => {
+    expect(clampAnimationDeltaMs(500, 50)).toBe(50);
+    expect(clampAnimationDeltaMs(10, 50)).toBe(10);
+  });
+});
 
 describe('terrainTitleFor', () => {
   it('names the underlying terrain when there is no river', () => {

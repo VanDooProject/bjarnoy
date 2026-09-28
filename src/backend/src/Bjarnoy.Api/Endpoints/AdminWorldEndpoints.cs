@@ -179,6 +179,7 @@ public static class AdminWorldEndpoints
             request.StartsAt.HasValue,
             request.StartsAt.Value,
             request.JoinsClosed,
+            request.FrozenIslesEnabled,
             request.EndbossAt.HasValue,
             request.EndbossAt.Value,
             cancellationToken);

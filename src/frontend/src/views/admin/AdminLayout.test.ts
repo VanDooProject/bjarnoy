@@ -42,6 +42,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     speedFactor: 1,
     startsAt: null,
     joinsClosed: false,
+    frozenIslesEnabled: false,
     endbossAt: null,
     endbossTriggeredAt: null,
     runState: 'running',
