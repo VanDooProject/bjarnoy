@@ -683,7 +683,11 @@ const backdropStyle = computed(() => {
 .settlement-bubble {
   position: fixed;
   left: 16px;
-  z-index: 41;
+  /* Under every panel that can open over it — the queue drawer (37/38), the
+     HUD drawer (39) and this bar's own popovers (the returning-player menu,
+     ProfileNudge, the account menu, which live inside `.hud-bar` and so
+     rank as 40 from the outside). At 41 it painted over all of them. */
+  z-index: 36;
   display: flex;
   align-items: center;
   gap: 8px;
