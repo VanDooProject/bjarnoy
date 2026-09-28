@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import DemoModeBadge from './DemoModeBadge.vue';
 import { isHudDrawerOpen } from '../composables/hudDrawerOpenState';
-import { isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
+import { isHudBarAtBottom, isHudBarMounted } from '../composables/hudSettlementBubbleState';
 import { createTestI18n } from '../test/i18n';
 import enDemoModeBadge from '../i18n/locales/en/demoModeBadge.json';
 
@@ -35,12 +35,17 @@ describe('DemoModeBadge', () => {
       setItem: () => {},
       removeItem: () => {},
     });
+    // Mobile tutorial focus: every existing test here assumes a real TopBar
+    // is mounted somewhere on the page (the normal case) — only the
+    // dedicated "bar is unmounted" test below turns this off.
+    isHudBarMounted.value = true;
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     isHudDrawerOpen.value = false;
     isHudBarAtBottom.value = false;
+    isHudBarMounted.value = false;
   });
 
   it('renders without the compact bubble class on desktop', () => {
@@ -99,6 +104,22 @@ describe('DemoModeBadge', () => {
     const wrapper = mountBadge();
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.demo-badge').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  // Mobile tutorial focus: LandingView.vue unmounts its founded-branch
+  // TopBar entirely on phones while the guided build steps run. TopBar's
+  // own onBeforeUnmount resets `hudBarHeightPx` back to its 64px *default*,
+  // not to 0, so without `isHudBarMounted` this badge would still park
+  // itself 64px + 8px down, as if a default-height bar were still there.
+  it('sits at the bare top edge, not a stale bar offset, once the bar is unmounted', async () => {
+    stubCompactMediaQuery(true);
+    isHudBarMounted.value = false;
+
+    const wrapper = mountBadge();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('.demo-badge').attributes('style')).toContain('top: 8px');
     wrapper.unmount();
   });
 });

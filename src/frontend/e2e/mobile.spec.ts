@@ -160,3 +160,51 @@ test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
     await expectHeroClear(page);
   });
 });
+
+// Mobile tutorial focus (owner decision): on phones, once a settlement is
+// founded the top HUD bar (and the settlement-name bubble/pull-down drawer
+// it carries) is unmounted entirely for as long as the guided build steps
+// are running, so nothing else on screen competes with the tutorial — it
+// reappears the moment onboarding completes. The progress checklist itself
+// also steps aside while the ring menu is open, since the two would
+// otherwise fight for the same strip of screen near the bottom.
+test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  test('hides the header for the guided build steps and brings it back on completion', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+
+    // Before founding: the pre-founding bar (locale switcher + "I already
+    // have a realm") is untouched by this feature.
+    await expect(page.locator('.hud-bar')).toBeVisible();
+
+    await settlement.claimLandfall();
+
+    // Once founded, the header (and everything it carries) is gone, not
+    // merely hidden — both must be truly absent from the DOM.
+    await expect(page.locator('.hud-bar')).toHaveCount(0);
+    await expect(page.locator('.settlement-bubble')).toHaveCount(0);
+
+    const badge = page.locator('.demo-badge');
+    if (await badge.isVisible()) {
+      const badgeBox = (await badge.boundingBox())!;
+      expect(badgeBox.y, 'demo badge should sit near the top edge, not a stale bar offset').toBeLessThan(40);
+    }
+
+    // Opening the ring on a guided hex hides the progress checklist so it
+    // doesn't fight the ring for the same strip of screen.
+    const target = await settlement.findHex({ terrain: 'grass' });
+    await settlement.clickHex(target);
+    await settlement.ring.waitForOpen();
+    await expect(settlement.checklist).toHaveCount(0);
+
+    // Closing the ring (Escape) brings the checklist straight back.
+    await page.keyboard.press('Escape');
+    await expect(settlement.checklist).toBeVisible();
+
+    // Completing onboarding brings the header back.
+    await settlement.placeGuidedBuildings();
+    await expect(page.locator('.hud-bar')).toBeVisible();
+  });
+});
