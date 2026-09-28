@@ -59,10 +59,11 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
 
   test('wasted lands page scrolls to reveal content below the fold', async ({ page }) => {
     await page.goto('/docs/wasted-lands');
-    // The island's sprites resolve their own atlas frames client-side —
-    // wait for the first one before measuring the page, same as the other
-    // two specs wait on their own first async-loaded content.
-    await page.locator('.island-sprite').first().waitFor();
+    // The turning island mounts a real HexMapRenderer (useHexMapRenderer
+    // sets data-map-ready once it's drawn its first frame) — wait for that
+    // before measuring the page, same as the other two specs wait on their
+    // own first async-loaded content.
+    await page.locator('.wasted-island .map-host[data-map-ready="true"]').waitFor();
 
     const view = new ScrollableView(page, '.wasted-lands');
     const { scrollHeight, clientHeight } = await view.metrics();
@@ -79,20 +80,32 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
 
   test('wasted lands island slider shows the all-living stage', async ({ page }) => {
     await page.goto('/docs/wasted-lands');
-    await page.locator('.island-sprite').first().waitFor();
+    const mapHost = page.locator('.wasted-island .map-host[data-map-ready="true"]');
+    await mapHost.waitFor();
 
     const slider = page.getByTestId('blight-slider');
     await slider.fill('0');
 
     await expect(page.locator('.wasted-island .stage-label')).toHaveText('All living');
-    await expect(page.getByTestId('island-caption')).toHaveText('Point at a hex to see what it is.');
+    const caption = page.getByTestId('island-caption');
+    await expect(caption).toHaveText('Point at a hex to see what it is.');
+
+    // Hovering the island (its locked preview camera fits the whole island
+    // to the canvas, so its own centre is a safe bet for "somewhere on the
+    // island") swaps the caption away from the hint text — regression check
+    // that the renderer's real hover pipeline (HexMapRenderer's
+    // onHoverChange, not the old DOM version's own SVG hit polygons) is
+    // actually wired up end to end.
+    const box = (await mapHost.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(caption).not.toHaveText('Point at a hex to see what it is.');
   });
 
   // Regression: in the fixed-height art boxes a tall frame used to keep the
   // box's full width while max-height squeezed it, stretching it sideways.
   test('wasted lands art keeps each frame aspect ratio', async ({ page }) => {
     await page.goto('/docs/wasted-lands');
-    await page.locator('.island-sprite').first().waitFor();
+    await page.locator('.wasted-island .map-host[data-map-ready="true"]').waitFor();
 
     const sprites = page.locator('.wasted-lands .atlas-sprite');
     expect(await sprites.count()).toBeGreaterThan(0);
