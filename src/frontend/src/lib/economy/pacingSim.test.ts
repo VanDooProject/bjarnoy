@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   constructionSlotsFor,
+  feastCost,
+  feastRenown,
   isOnline,
+  onlineMask,
+  parseClock,
+  productionOnDay,
   settlerCostFrom,
   simulatePacing,
   FALLBACK_SETTLER_COST,
+  PROFILE_PRESETS,
   type PacingParams,
 } from './pacingSim';
 import { def, group } from './testFixtures';
@@ -20,7 +26,9 @@ function params(over: Partial<PacingParams> = {}): PacingParams {
     producerCounts: { mill: 1 },
     settlerCost: { wood: 100, stone: 0, food: 0, iron: 0 },
     settleType: 'hall',
-    profile: 'always',
+    sessions: PROFILE_PRESETS.always24,
+    joinTime: '00:00',
+    producersAhead: 0,
     ...over,
   };
 }
@@ -45,12 +53,24 @@ describe('helpers', () => {
     expect([1, 5, 9, 10, 14, 15, 20].map(constructionSlotsFor)).toEqual([2, 2, 2, 3, 3, 4, 5]);
   });
 
-  it('casual is online only in its listed hours, on every day', () => {
-    expect(isOnline('casual', 7 * 60 + 30)).toBe(true);
-    expect(isOnline('casual', 8 * 60)).toBe(false);
-    expect(isOnline('casual', 1440 + 22 * 60 + 59)).toBe(true);
-    expect(isOnline('casual', 1440 + 23 * 60)).toBe(false);
-    expect(isOnline('always', 12345)).toBe(true);
+  it('a session covers exactly its own minutes, on every day, and may wrap past midnight', () => {
+    const active = PROFILE_PRESETS.active;
+    expect(isOnline(active, 7 * 60)).toBe(true);
+    expect(isOnline(active, 22 * 60 + 59)).toBe(true);
+    expect(isOnline(active, 23 * 60)).toBe(false);
+    expect(isOnline(active, 6 * 60 + 59)).toBe(false);
+    expect(isOnline(active, 1440 + 12 * 60)).toBe(true);
+    const night = [{ start: '23:50', minutes: 20 }];
+    expect(isOnline(night, 23 * 60 + 55)).toBe(true);
+    expect(isOnline(night, 5)).toBe(true);
+    expect(isOnline(night, 10)).toBe(false);
+    expect(onlineMask(PROFILE_PRESETS.checkins4).reduce((a, b) => a + b, 0)).toBe(40);
+    expect(onlineMask(PROFILE_PRESETS.always24).reduce((a, b) => a + b, 0)).toBe(1440);
+  });
+
+  it('parses clock times', () => {
+    expect(parseClock('09:30')).toBe(570);
+    expect(parseClock('garbage')).toBe(0);
   });
 
   it('settler cost is 3x the training cost, with a fallback', () => {
@@ -170,22 +190,31 @@ describe('simulatePacing on a hand-made catalogue', () => {
     expect(Math.max(...r.series.rate.wood)).toBe(60 + 240);
   });
 
-  it('settlers become ready once the settle type is placeable and stock covers the cost', () => {
-    const r = simulatePacing(group(tiny()), params({ horizonDays: 2, settlerCost: { wood: 300, stone: 0, food: 0, iron: 0 } }));
-    expect(r.settlersReadyAt).not.toBeNull();
+  it('policy with producersAhead 0 is unchanged from the hour-granular model on the tiny catalogue', () => {
+    // Golden values from the previous always-online simulator (start 00:00).
+    const r = simulatePacing(group(tiny()), params({ horizonDays: 3 }));
+    expect(r.lhReachedAt).toEqual({ 1: 0, 2: 60, 3: 160 });
+  });
+
+  it('the second settlement needs the settle type placeable, the renown and the settler stock', () => {
+    const cost = { wood: 300, stone: 0, food: 0, iron: 0 };
+    const noRenown = simulatePacing(group(tiny()), params({ horizonDays: 2, settlerCost: cost, renownThreshold: 0 }));
+    expect(noRenown.secondSettlementAt).not.toBeNull();
     // hall needs LH 2
-    expect(r.settlersReadyAt!).toBeGreaterThanOrEqual(r.lhReachedAt[2]);
+    expect(noRenown.secondSettlementAt!).toBeGreaterThanOrEqual(noRenown.lhReachedAt[2]);
+    const needsRenown = simulatePacing(group(tiny()), params({ horizonDays: 2, settlerCost: cost, renownThreshold: 1e9 }));
+    expect(needsRenown.secondSettlementAt).toBeNull();
   });
 
-  it('settlers stay null when the settle type is never placeable', () => {
-    const r = simulatePacing(group(tiny()), params({ settleType: 'nonexistent' }));
-    expect(r.settlersReadyAt).toBeNull();
+  it('the second settlement stays null when the settle type is never placeable', () => {
+    const r = simulatePacing(group(tiny()), params({ settleType: 'nonexistent', renownThreshold: 0 }));
+    expect(r.secondSettlementAt).toBeNull();
   });
 
-  it('casual play reaches milestones no earlier than always-online play', () => {
+  it('a sparser schedule reaches milestones no earlier than always-online play', () => {
     const always = simulatePacing(group(tiny()), params({ horizonDays: 3 }));
-    const casual = simulatePacing(group(tiny()), params({ horizonDays: 3, profile: 'casual' }));
-    expect(casual.lhReachedAt[2]).toBeGreaterThanOrEqual(always.lhReachedAt[2]);
+    const sparse = simulatePacing(group(tiny()), params({ horizonDays: 3, sessions: PROFILE_PRESETS.checkins2 }));
+    expect(sparse.lhReachedAt[2]).toBeGreaterThanOrEqual(always.lhReachedAt[2]);
   });
 });
 
@@ -205,21 +234,208 @@ describe('simulatePacing on the bundled catalogue', () => {
     expect(r.lhReachedAt[2]).toBeGreaterThan(0);
   });
 
-  it('an always-online player reaches every Longhouse level no later than a casual one', () => {
+  it('the most-online profile reaches every Longhouse level no later than a sparser one', () => {
     // Regression: always-online used to lose to casual because it kept
     // spending on producer upgrades instead of saving for the Longhouse.
-    const base = {
-      horizonDays: 30,
-      producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
-      startStock: { wood: 300, stone: 300, food: 200, iron: 0 },
-      settleType: 'cartworkshop',
-    };
-    const always = simulatePacing(byType, params(base));
-    const casual = simulatePacing(byType, params({ ...base, profile: 'casual' }));
-    for (const [level, at] of Object.entries(casual.lhReachedAt)) {
-      expect(always.lhReachedAt[Number(level)], `LH ${level}`).toBeLessThanOrEqual(at);
+    for (const producersAhead of [0, 3]) {
+      const base = {
+        horizonDays: 30,
+        producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+        startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
+        settleType: 'cartworkshop',
+        producersAhead,
+      };
+      const most = simulatePacing(byType, params(base));
+      for (const sessions of [PROFILE_PRESETS.active, PROFILE_PRESETS.checkins4, PROFILE_PRESETS.checkins2]) {
+        const sparse = simulatePacing(byType, params({ ...base, sessions, joinTime: '09:00' }));
+        for (const [level, at] of Object.entries(sparse.lhReachedAt)) {
+          expect(most.lhReachedAt[Number(level)], `ahead ${producersAhead} LH ${level}`).toBeLessThanOrEqual(at);
+        }
+      }
     }
   });
 
+  it('running producers ahead of the Longhouse makes the settlement stronger on day 14', () => {
+    const base = {
+      horizonDays: 20,
+      producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+      startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
+      settleType: 'cartworkshop',
+      sessions: PROFILE_PRESETS.active,
+      joinTime: '09:00',
+    };
+    const level = simulatePacing(byType, params({ ...base, producersAhead: 0 }));
+    const ahead = simulatePacing(byType, params({ ...base, producersAhead: 3 }));
+    expect(productionOnDay(ahead, 14)!).toBeGreaterThan(productionOnDay(level, 14)!);
+  });
 });
 
+// A producer whose levels cost nothing and take a minute: builds are limited only by the player's sessions.
+function instantMill(levels: number): BuildingDefinitionResponse[] {
+  return [
+    def('longhouse', 1),
+    ...Array.from({ length: levels }, (_, i) => def('mill', i + 1, { buildSeconds: 60, prod: { wood: 60 * (i + 1) } })),
+  ];
+}
+const WOOD_PER_LEVEL = 60;
+
+describe('sessions and join time', () => {
+  const base = { producerCounts: { mill: 1 }, producersAhead: Infinity, renownThreshold: 0 };
+
+  it('a 10-minute check-in starts at most 10 builds and nothing starts outside sessions', () => {
+    const r = simulatePacing(
+      group(instantMill(200)),
+      params({ ...base, horizonDays: 1, sessions: [{ start: '20:00', minutes: 10 }], joinTime: '09:00' }),
+    );
+    // 20:00 is elapsed hour 11. Nothing before it, and one level per minute inside it.
+    for (let h = 0; h <= 11; h++) expect(r.series.rate.wood[h]).toBe(WOOD_PER_LEVEL);
+    const levels = r.series.rate.wood[r.series.rate.wood.length - 1] / WOOD_PER_LEVEL;
+    expect(levels - 1).toBeGreaterThan(0);
+    expect(levels - 1).toBeLessThanOrEqual(10);
+  });
+
+  it('two daily check-ins allow at most 20 starts a day', () => {
+    const r = simulatePacing(
+      group(instantMill(200)),
+      params({ ...base, horizonDays: 3, sessions: PROFILE_PRESETS.checkins2, joinTime: '00:00' }),
+    );
+    const levels = r.series.rate.wood[72] / WOOD_PER_LEVEL - 1;
+    expect(levels).toBeGreaterThan(30);
+    expect(levels).toBeLessThanOrEqual(60);
+  });
+
+  it('the player waits for the first session after joining', () => {
+    const sessions = [{ start: '08:00', minutes: 600 }];
+    const early = simulatePacing(group(instantMill(50)), params({ ...base, horizonDays: 1, sessions, joinTime: '05:00' }));
+    const late = simulatePacing(group(instantMill(50)), params({ ...base, horizonDays: 1, sessions, joinTime: '12:00' }));
+    // Joining at 05:00 the first session is 3 h away; joining at 12:00 the player is already in one.
+    expect(early.series.rate.wood[2]).toBe(WOOD_PER_LEVEL);
+    expect(early.series.rate.wood[4]).toBeGreaterThan(WOOD_PER_LEVEL);
+    expect(late.series.rate.wood[1]).toBeGreaterThan(WOOD_PER_LEVEL);
+  });
+
+  it('a player with no sessions never builds', () => {
+    const r = simulatePacing(group(instantMill(20)), params({ ...base, horizonDays: 2, sessions: [] }));
+    expect(Math.max(...r.series.rate.wood)).toBe(WOOD_PER_LEVEL);
+  });
+});
+
+describe('producersAhead', () => {
+  const cat = () => [
+    def('longhouse', 1),
+    def('longhouse', 2, { cost: { wood: 1e9 } }),
+    ...Array.from({ length: 10 }, (_, i) => def('mill', i + 1, { buildSeconds: 60, prod: { wood: 60 * (i + 1) } })),
+  ];
+  const maxRate = (producersAhead: number) =>
+    Math.max(...simulatePacing(group(cat()), params({ horizonDays: 1, producerCounts: { mill: 1 }, producersAhead })).series.rate.wood);
+
+  it('0 keeps producers level with the Longhouse; more lets them pass it; Infinity is limited by the catalogue', () => {
+    expect(maxRate(0)).toBe(60);
+    expect(maxRate(3)).toBe(240);
+    expect(maxRate(Infinity)).toBe(600);
+  });
+
+  it('the Longhouse does not wait for a producer that storage cannot hold the next level of', () => {
+    const blocked = [
+      def('longhouse', 1),
+      def('longhouse', 2, { cost: { wood: 10 } }),
+      def('mill', 1, { prod: { wood: 60 } }),
+      def('mill', 2, { cost: { wood: 1e6 }, prod: { wood: 120 } }),
+      def('mill', 3, { prod: { wood: 180 } }),
+    ];
+    const r = simulatePacing(
+      group(blocked),
+      params({ horizonDays: 1, producerCounts: { mill: 1 }, producersAhead: 1, startStock: { wood: 100, stone: 0, food: 0, iron: 0 } }),
+    );
+    expect(r.lhReachedAt[2]).toBeGreaterThan(0);
+  });
+});
+
+describe('renown and the second settlement', () => {
+  const NO_COST = { ...ZERO };
+  const cat = () => [def('longhouse', 1), def('mill', 1), def('hall', 1)];
+
+  it('accrues renown per standing building level per hour', () => {
+    // Longhouse 1 + mill 1 = 2 levels -> 2 renown/h, for the 1441 simulated minutes.
+    const one = simulatePacing(group(cat()), params({ horizonDays: 1 }));
+    expect(one.renown).toBeCloseTo((2 * 1441) / 60, 6);
+    const two = simulatePacing(group(cat()), params({ horizonDays: 1, renownPerLevelHour: 2 }));
+    expect(two.renown).toBeCloseTo(2 * one.renown, 6);
+  });
+
+  it('the second settlement waits for the renown threshold', () => {
+    const r = simulatePacing(group(cat()), params({ horizonDays: 2, renownThreshold: 24, settlerCost: NO_COST }));
+    // 2 renown per hour: 24 renown after 12 h.
+    expect(r.secondSettlementAt).toBeGreaterThanOrEqual(719);
+    expect(r.secondSettlementAt).toBeLessThanOrEqual(722);
+    expect(simulatePacing(group(cat()), params({ horizonDays: 2, renownThreshold: 0, settlerCost: NO_COST })).secondSettlementAt).toBe(0);
+  });
+});
+
+describe('feasts', () => {
+  const cat = () => [
+    def('longhouse', 1, { storage: 100000 }),
+    def('longhouse', 2, { buildSeconds: 60, storage: 100000 }),
+    def('townsquare', 1, { reqLh: 2 }),
+  ];
+  const rich = { wood: 10000, stone: 10000, food: 10000, iron: 0 };
+  const feastParams = (over: Partial<PacingParams> = {}) =>
+    params({ producerCounts: {}, startStock: rich, feasts: true, renownThreshold: 1e9, ...over });
+
+  it('uses the design formulas', () => {
+    expect(feastCost(1)).toBe(800);
+    expect(feastCost(3)).toBeCloseTo(1250, 6);
+    expect(feastRenown(1)).toBe(6000);
+    expect(feastRenown(2)).toBeCloseTo(7200, 6);
+  });
+
+  it('starts nothing without the option, or before the Town Square unlock level', () => {
+    expect(simulatePacing(group(cat()), feastParams({ feasts: false, horizonDays: 1 })).feastsHeld).toBe(0);
+    const locked = [def('longhouse', 1, { storage: 100000 }), def('townsquare', 1, { reqLh: 2 })];
+    expect(simulatePacing(group(locked), feastParams({ horizonDays: 1 })).feastsHeld).toBe(0);
+  });
+
+  it('grants the renown only after 12 hours, one feast at a time', () => {
+    const early = simulatePacing(group(cat()), feastParams({ horizonDays: 0.4 }));
+    expect(early.feastsHeld).toBe(1);
+    expect(early.renown).toBeLessThan(6000);
+    const later = simulatePacing(group(cat()), feastParams({ horizonDays: 0.6 }));
+    expect(later.renown).toBeGreaterThanOrEqual(6000);
+    // Three windows of 12 h fit into 1.5 days of continuous play, not 2160.
+    const long = simulatePacing(group(cat()), feastParams({ horizonDays: 1.5 }));
+    expect(long.feastsHeld).toBe(3);
+  });
+
+  it('needs the stock to cover the feast', () => {
+    const poor = simulatePacing(group(cat()), feastParams({ horizonDays: 1, startStock: { wood: 700, stone: 700, food: 700, iron: 0 } }));
+    expect(poor.feastsHeld).toBe(0);
+  });
+
+  it('only starts feasts inside a session', () => {
+    const r = simulatePacing(
+      group(cat()),
+      feastParams({ horizonDays: 2, sessions: [{ start: '20:00', minutes: 10 }], joinTime: '09:00' }),
+    );
+    // First session at elapsed 11 h; the 12 h feast ends at 23 h, the next session is at 35 h.
+    expect(r.feastsHeld).toBe(2);
+    expect(simulatePacing(group(cat()), feastParams({ horizonDays: 2, sessions: [] })).feastsHeld).toBe(0);
+  });
+});
+
+describe('growth flattening', () => {
+  // One mill whose levels take a day each: production doubles until level 4, then stops.
+  const cat = () => [
+    def('longhouse', 1),
+    ...[1, 2, 3, 4].map((l) => def('mill', l, { buildSeconds: 86400, prod: { wood: 60 * 2 ** (l - 1) } })),
+  ];
+  it('is the first day after day 2 that production grew less than 5% over the previous day', () => {
+    const r = simulatePacing(group(cat()), params({ horizonDays: 8, producerCounts: { mill: 1 }, producersAhead: Infinity }));
+    // 60, 120, 240, 480 on days 0-3, then flat.
+    expect(r.growthFlattensAt).toBe(4);
+  });
+
+  it('is null while production is still growing at the end of the horizon', () => {
+    const r = simulatePacing(group(cat()), params({ horizonDays: 3.9, producerCounts: { mill: 1 }, producersAhead: Infinity }));
+    expect(r.growthFlattensAt).toBeNull();
+  });
+});
