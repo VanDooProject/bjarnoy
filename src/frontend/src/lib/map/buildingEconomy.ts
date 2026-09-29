@@ -314,9 +314,9 @@ export function buildingStatsFor(
       };
     case 'claybrickworks':
       return { output: { kind: 'resourceRate', resource: 'stone', amount: producerOutput(36, level) } };
-    // No production or storage of its own yet — retired Iron production for
-    // a future troop-upgrade mechanic, same "no output" shape as meadery
-    // above (see BuildingCatalogue.cs's Smithy doc comment).
+    // The Weaponsmith (display name; the type stays `smithy`): no production
+    // or storage of its own, a troop-upgrade building only — same "no output"
+    // shape as meadery above (see BuildingCatalogue.cs's Smithy doc comment).
     case 'smithy':
       return {};
     // Mirrors BuildingCatalogue.cs's CartWorkshop(level): purely a training

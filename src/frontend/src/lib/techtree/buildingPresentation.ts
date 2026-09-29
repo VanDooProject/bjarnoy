@@ -53,6 +53,8 @@ const TYPE_LABELS: Record<string, string> = {
   druidhut: "Druid's hut",
   cartworkshop: 'Cart workshop',
   claybrickworks: 'Clay brickworks',
+  // Display name only; the internal type stays `smithy`.
+  smithy: 'Weaponsmith',
 };
 
 export function typeLabel(type: string): string {
@@ -75,6 +77,7 @@ const SHORT_LABELS: Record<string, string> = {
   shrineofullr: 'Ullr',
   shrineofnjord: 'Njörd',
   archeryrange: 'Archery',
+  smithy: 'Weapons.',
 };
 
 export function shortLabel(type: string): string {

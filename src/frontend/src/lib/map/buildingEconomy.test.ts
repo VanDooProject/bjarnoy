@@ -140,7 +140,7 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
     expect(buildingStatsFor('meadery', 1, 0)).toEqual({});
   });
 
-  it('smithy has no production/storage of its own yet', () => {
+  it('smithy (the Weaponsmith) has no production/storage of its own', () => {
     expect(buildingStatsFor('smithy', 1, 0)).toEqual({});
   });
 });
