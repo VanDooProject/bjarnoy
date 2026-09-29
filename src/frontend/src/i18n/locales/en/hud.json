@@ -380,5 +380,16 @@
   "mapLoading": {
     "terrain": "Loading map…",
     "buildings": "Loading buildings…"
+  },
+  "mapStatus": {
+    "joiningWorld": "Joining world…",
+    "findingPlot": "Finding a place to land…",
+    "loadingSettlement": "Loading your settlement…",
+    "revealingMap": "Lifting the fog…",
+    "loadingTiles": "Loading map art…",
+    "errorTitle": "Couldn't load the map",
+    "retry": "Retry",
+    "pollErrorTitle": "Connection problem — retrying",
+    "dismiss": "Dismiss"
   }
 }
