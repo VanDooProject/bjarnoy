@@ -226,22 +226,79 @@ A new settlement needs:
 **Feasts (Town Square)** are what lets a strong player settle early:
 Travian's celebrations.
 
-- A feast costs `800 · 1.25^(TS−1)` of each of wood, stone and food.
-- It runs for 12 h and then grants `6 000 · 1.20^(TS−1)` renown.
-- Only one feast can run at a time per settlement.
+- A feast needs a standing Town Square; its level TS sets the numbers.
+- It costs `800 · 1.25^(TS−1)` of each of wood, stone and food, paid up front.
+- It runs for 12 h and then grants `3 500 · 1.15^(TS−1)` renown to the account.
+- Only one feast can run at a time per settlement. It does not use a
+  construction slot.
+
+The constants live in `Feasts.cs` (backend) and `lib/economy/feasts.ts` (lab).
 
 An average player earns renown only from their buildings. An optimising
 player turns surplus into feasts.
 
-Simulator result for these numbers:
+### Tuning the gain
 
-| Profile | Online | Spends on troops etc. | Feasts | 2nd settlement | LH 25 |
-|---|---|---|---|---|---|
-| pro | 07–23 h | 20% of income | yes | ~4d 20h | ~29 d |
-| average | 3 check-ins/day | 45% of income | no | ~13d 9h | ~2 months |
+The first guess, `6 000 · 1.20^(TS−1)`, was too strong: by day 60 the lab
+showed 2.4–3.7 million renown against a 55 000 threshold, so feasts stopped
+mattering and the Cart Workshop's Longhouse 10 unlock became the only gate.
+The gain `G1 · g^(TS−1)` was picked on a grid, with the live catalogue and the
+lab's defaults (join 09:00, 3/3/3 producers, 2 storage houses, producers 3
+ahead), against four targets:
 
-The pacing lab will model a second settlement, so the "settle when the first
-one flattens" check in §5 can be verified against these numbers.
+- active with feasts founds the 2nd settlement around day 5 (4.5–6.5), without
+  around day 13–14;
+- 4 check-ins with feasts around day 13–15;
+- renown is the binding gate for the active player (it reaches 55 000 well
+  after Longhouse 10, which is done on day 3.4);
+- renown on day 30 with feasts stays within 3–6× the no-feast figure, so the
+  3rd and 4th thresholds (110k, 220k) still mean something.
+
+| G1 | g | active 2nd | active renown 55k | active r30 (x no-feast) | 4 check-ins 2nd | 4 check-ins r30 (x) | 2 check-ins 2nd |
+|---|---|---|---|---|---|---|---|
+| no feasts | | d13.48 | d13.47 | 162k | d20.65 | 106k | d28.18 |
+| 1500 | 1 | d10.08 | d10.08 | 241k (1.5x) | d16.18 | 157k (1.5x) | d25.98 |
+| 1500 | 1.05 | d9.42 | d9.42 | 281k (1.7x) | d15.63 | 175k (1.7x) | d25.98 |
+| 1500 | 1.1 | d8.72 | d8.72 | 340k (2.1x) | d15.43 | 201k (1.9x) | d25.98 |
+| 1500 | 1.15 | d8.03 | d8.03 | 423k (2.6x) | d15.00 | 235k (2.2x) | d25.98 |
+| 1500 | 1.2 | d7.52 | d7.52 | 541k (3.3x) | d14.95 | 283k (2.7x) | d25.98 |
+| 2500 | 1 | d8.92 | d8.92 | 294k (1.8x) | d14.46 | 191k (1.8x) | d25.98 |
+| 2500 | 1.05 | d8.14 | d8.14 | 361k (2.2x) | d14.07 | 221k (2.1x) | d25.98 |
+| 2500 | 1.1 | d7.42 | d7.42 | 459k (2.8x) | d13.63 | 264k (2.5x) | d25.98 |
+| 2500 | 1.15 | d7.05 | d7.05 | 598k (3.7x) | d13.63 | 322k (3.0x) | d25.98 |
+| 2500 | 1.2 | d6.92 | d6.92 | 794k (4.9x) | d13.27 | 402k (3.8x) | d25.98 |
+| 3500 | 1 | d7.92 | d7.92 | 347k (2.1x) | d13.00 | 225k (2.1x) | d25.98 |
+| 3500 | 1.05 | d7.42 | d7.42 | 441k (2.7x) | d13.00 | 268k (2.5x) | d25.98 |
+| 3500 | 1.1 | d6.92 | d6.92 | 578k (3.6x) | d12.98 | 327k (3.1x) | d25.98 |
+| 3500 | 1.15 | d6.42 | d6.42 | 773k (4.8x) | d12.98 | 408k (3.9x) | d25.98 |
+| 3500 | 1.2 | d6.42 | d6.42 | 1046k (6.4x) | d12.98 | 520k (4.9x) | d25.98 |
+| 4000 | 1 | d7.55 | d7.55 | 374k (2.3x) | d12.98 | 242k (2.3x) | d25.98 |
+| 4000 | 1.05 | d6.92 | d6.92 | 481k (3.0x) | d12.98 | 291k (2.7x) | d25.98 |
+| 4000 | 1.1 | d6.67 | d6.67 | 638k (3.9x) | d12.98 | 358k (3.4x) | d25.98 |
+| 4000 | 1.15 | d6.42 | d6.42 | 860k (5.3x) | d12.98 | 451k (4.3x) | d25.98 |
+| 4000 | 1.2 | d5.92 | d5.92 | 1173k (7.2x) | d12.98 | 579k (5.5x) | d25.98 |
+| 5000 | 1 | d6.92 | d6.92 | 427k (2.6x) | d12.98 | 276k (2.6x) | d25.98 |
+| 5000 | 1.05 | d6.51 | d6.51 | 561k (3.5x) | d12.98 | 337k (3.2x) | d25.98 |
+| 5000 | 1.1 | d6.42 | d6.42 | 757k (4.7x) | d12.98 | 421k (4.0x) | d25.98 |
+| 5000 | 1.15 | d5.92 | d5.92 | 1035k (6.4x) | d12.98 | 538k (5.1x) | d25.98 |
+| 5000 | 1.2 | d5.92 | d5.92 | 1425k (8.8x) | d12.98 | 697k (6.6x) | d25.98 |
+| 6000 | 1 | d6.67 | d6.67 | 480k (3.0x) | d12.98 | 310k (2.9x) | d25.98 |
+| 6000 | 1.05 | d6.42 | d6.42 | 641k (3.9x) | d12.98 | 383k (3.6x) | d25.98 |
+| 6000 | 1.1 | d5.92 | d5.92 | 875k (5.4x) | d12.98 | 484k (4.6x) | d25.98 |
+| 6000 | 1.15 | d5.92 | d5.92 | 1209k (7.4x) | d12.98 | 624k (5.9x) | d25.98 |
+| 6000 | 1.2 | d5.43 | d5.42 | 1678k (10.3x) | d12.98 | 815k (7.7x) | d25.98 |
+
+**Chosen: `G(TS) = 3 500 · 1.15^(TS−1)`.**
+
+| Profile | 2nd settlement, no feasts | 2nd settlement, feasts | Renown reaches 55k (feasts) | Longhouse 10 | Renown day 30, feasts (no feasts) | Binds with feasts |
+|---|---|---|---|---|---|---|
+| active | d13.5 | d6.4 | d6.4 | d3.4 | 773k (162k, 4.8×) | renown |
+| 4 check-ins | d20.7 | d13.0 | d12.5 | d13.0 | 408k (106k, 3.9×) | Longhouse 10 (renown half a day earlier) |
+| 2 check-ins | d28.2 | d26.0 | d18.5 | d26.0 | 211k (61k, 3.4×) | Longhouse 10 |
+
+Feasts are what lets an active player settle a week early. A casual player
+gains a few days at most, because the Longhouse 10 unlock is still ahead of
+their renown.
 
 ## 7. First 10 minutes (T1)
 
@@ -425,8 +482,8 @@ Open work, in rough order. Each is its own PR.
 
 1. ~~**Economy lab:** session-based profiles, what-if panel, producers-ahead
    strategy and second settlement.~~ Done.
-2. **Feasts and renown** (§6): Town Square feasts, and the renown threshold
-   for the 2nd settlement at 55 000.
+2. ~~**Feasts and renown** (§6): Town Square feasts, and the renown threshold
+   for the 2nd settlement at 55 000.~~ Done.
 3. **Tutorial** (§7): placing a Storage House and upgrading the Longhouse,
    resource rewards for the onboarding steps, and a fast Longhouse 2 (about
    2 minutes).
