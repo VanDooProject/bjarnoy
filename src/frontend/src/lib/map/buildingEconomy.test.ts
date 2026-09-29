@@ -102,13 +102,6 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
     });
   });
 
-  it('magictower matches BuildingCatalogue.cs’s 6 iron/level', () => {
-    expect(buildingStatsFor('magictower', 1, 0)).toEqual({
-      output: { kind: 'resourceRate', resource: 'iron', amount: 6 },
-      modifier: { kind: 'arcane' },
-    });
-  });
-
   it('fisherhut ignores terrain adjacency, like farm/pumpkinfarm', () => {
     expect(buildingStatsFor('fisherhut', 1, 6)).toEqual({
       output: { kind: 'resourceRate', resource: 'food', amount: 42 },

@@ -142,7 +142,6 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // composite (still in the pack, no longer referenced) had no per-level
   // art at all. See buildingArt.ts's matching docs-page choice.
   fishinghut: 'fisherhut',
-  magictower: 'magictower',
   tower: 'towerbuilding',
   dockyard: 'dockyard',
   fisherhut: 'fisherhut',

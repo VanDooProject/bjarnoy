@@ -1271,7 +1271,6 @@ export class WorldModel {
       'farm',
       'tower',
       'fishinghut',
-      'magictower',
       'pumpkinfarm',
       'shrineofthor',
       'shrineoffreyja',

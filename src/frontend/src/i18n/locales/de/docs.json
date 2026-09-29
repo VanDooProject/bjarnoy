@@ -32,7 +32,6 @@
   "buildingTypes": {
     "storagehouse": "Lagerhaus",
     "fishinghut": "Fischerhütte",
-    "magictower": "Magischer Turm",
     "pumpkinfarm": "Kürbisfarm",
     "shrineofthor": "Schrein des Thor",
     "shrineoffreyja": "Schrein der Freyja",
@@ -85,7 +84,6 @@
       "storagehouse": "Zusätzlicher Platz für die Ernte auf Gras, damit ein volles Lager die Produktion nie stoppt.",
       "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter hinausschiebt.",
       "fishinghut": "Ein Steg über flachem Wasser, der die Untiefen befischt, die ein Bauernhof nie erreichen könnte.",
-      "magictower": "Arkanes Eisen aus Grasland — kein Erz, keine Ader, nur die Arbeit selbst.",
       "pumpkinfarm": "Eine zweite Ernte für Gras — Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Nur auf einer Kürbisboden-Insel baubar (das Spiel bestimmt den Boden jeder Insel, nicht der Spieler) — der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
       "shrineofthor": "Für Thor errichtet auf Gras — seine Gunst steigert die Holz- und Steinproduktion. Pro Insel darf nur ein Schrein je Gott stehen — eine Siedlung kann weiterhin alle vier errichten, nur nie einen zweiten für Thor.",
       "shrineoffreyja": "Für Freyja errichtet auf Gras — ihre Gunst steigert die Nahrungsproduktion. Pro Insel darf nur ein Schrein je Gott stehen — eine Siedlung kann weiterhin alle vier errichten, nur nie einen zweiten für Freyja.",

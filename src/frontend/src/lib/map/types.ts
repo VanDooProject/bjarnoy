@@ -275,7 +275,6 @@ export interface Tile {
     | 'farm'
     | 'tower'
     | 'fishinghut'
-    | 'magictower'
     | 'pumpkinfarm'
     | 'shrineofthor'
     | 'shrineoffreyja'

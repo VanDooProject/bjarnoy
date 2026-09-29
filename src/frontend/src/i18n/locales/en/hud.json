@@ -59,7 +59,6 @@
     "modifierTerrainBoost": "{terrain} (+{percent}%)",
     "modifierCoastal": "Coastal",
     "modifierCoastalBoost": "Coastal (+{percent}%)",
-    "modifierArcane": "Arcane",
     "modifierShrineFavour": "+{percent}% {domain} production",
     "modifierShrineFavourLandAttack": "+{percent}% land unit attack",
     "modifierShrineFavourShipAttack": "+{percent}% ship attack",
@@ -250,7 +249,6 @@
       "storagehouse": "Storehouse",
       "tower": "Watchtower",
       "fishinghut": "Fishing hut",
-      "magictower": "Magic tower",
       "pumpkinfarm": "Pumpkin farm"
     },
     "missionAttack": "Attack",

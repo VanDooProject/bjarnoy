@@ -20,7 +20,6 @@ export type BuildingModifier =
   | { kind: 'trainsCivilianCrews' }
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
   | { kind: 'coastal'; percent?: number }
-  | { kind: 'arcane' }
   | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
   | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' };
 
@@ -280,8 +279,6 @@ export function buildingStatsFor(
             : { kind: 'coastal' },
       };
     }
-    case 'magictower':
-      return { output: { kind: 'resourceRate', resource: 'iron', amount: level * 6 }, modifier: { kind: 'arcane' } };
     // Mirrors ShrineCatalogue.Favour.cs: +10% at level 1, +3%/level after,
     // capped at level 5 (+22%) so slotted runes always have headroom.
     case 'shrineofthor':
@@ -358,7 +355,6 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   lumberjack: PRODUCER_COST,
   quarry: PRODUCER_COST,
   claybrickworks: PRODUCER_COST,
-  magictower: PRODUCER_COST,
   longhouse: { wood: 120, stone: 100, food: 60, iron: 0 },
   tower: { wood: 120, stone: 200, food: 0, iron: 0 },
   shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },

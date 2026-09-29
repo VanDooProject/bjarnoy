@@ -28,11 +28,12 @@ export const ANCHOR = 'longhouse';
 
 /**
  * Slated for removal from the game and already gone from the art pipeline,
- * so the docs stop advertising them. They are still in the catalogue (a
- * building type can't simply be dropped from a persisted enum), so this is a
- * docs-only omission — delete the entry to bring one back.
+ * so the docs stop advertising them. They are still in the catalogue, so
+ * this is a docs-only omission — delete the entry to bring one back. (The
+ * Magic Tower, which used to be listed here, is gone from the catalogue
+ * altogether.)
  */
-export const HIDDEN_FROM_DOCS: readonly string[] = ['magictower', 'fisherhut'];
+export const HIDDEN_FROM_DOCS: readonly string[] = ['fisherhut'];
 
 export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Advanced', 'Capstone'];
 

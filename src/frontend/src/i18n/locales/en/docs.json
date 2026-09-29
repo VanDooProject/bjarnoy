@@ -32,7 +32,6 @@
   "buildingTypes": {
     "storagehouse": "Storage house",
     "fishinghut": "Fishing hut",
-    "magictower": "Magic tower",
     "pumpkinfarm": "Pumpkin farm",
     "shrineofthor": "Shrine of Thor",
     "shrineoffreyja": "Shrine of Freyja",
@@ -85,7 +84,6 @@
       "storagehouse": "Extra room for the harvest on grass, so a full warehouse never stalls production.",
       "tower": "A watch built on grass or sand at the border, pushing the claimed ground further out.",
       "fishinghut": "A dock over shallow water, fishing the shallows a farm never could.",
-      "magictower": "Arcane iron out of grassland — no ore, no vein, just the working.",
       "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player) — the bonus crop a \"more fertile\" island unlocks.",
       "shrineofthor": "Raised to Thor on grass — its favour boosts Wood and Stone production. Only one shrine per god may stand on an island — a settlement can still raise all four, just never a second Thor.",
       "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production. Only one shrine per god may stand on an island — a settlement can still raise all four, just never a second Freyja.",

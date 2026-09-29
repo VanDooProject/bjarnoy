@@ -36,7 +36,6 @@ describe('TechTreeGraph', () => {
   it('leaves buildings hidden from the docs out', () => {
     const wrapper = mountGraph();
 
-    expect(wrapper.find('a[href="#magictower"]').exists()).toBe(false);
     expect(wrapper.find('a[href="#fisherhut"]').exists()).toBe(false);
     wrapper.unmount();
   });

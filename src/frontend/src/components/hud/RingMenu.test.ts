@@ -26,7 +26,7 @@ const CATEGORIES: RingCategory[] = [
     color: 'var(--iron)',
     buildings: [
       { id: 'tower', label: 'Watchtower', cost: { wood: 120, stone: 200, iron: 10 }, time: '8:00', lock: 'Requires longhouse 2' },
-      { id: 'magictower', label: 'Magic Tower', cost: { wood: 100, stone: 80 }, time: '4:00', gives: '+24 iron/h' },
+      { id: 'barracks', label: 'Barracks', cost: { wood: 130, stone: 110 }, time: '7:00', gives: 'Trains land troops' },
     ],
   },
 ];
@@ -85,7 +85,7 @@ describe('RingMenu', () => {
     await bubble(wrapper, 'Build').trigger('mouseenter');
     await bubble(wrapper, 'Defense').trigger('mouseenter');
     expect(labels(wrapper)).toContain('Watchtower');
-    expect(labels(wrapper)).toContain('Magic Tower');
+    expect(labels(wrapper)).toContain('Barracks');
     expect(wrapper.emitted('select')).toBeUndefined();
   });
 
@@ -97,11 +97,11 @@ describe('RingMenu', () => {
     // category popped a card for something nobody had pointed at.
     expect(wrapper.find('.ring-card').exists()).toBe(false);
 
-    await bubble(wrapper, 'Magic Tower').trigger('mouseenter');
+    await bubble(wrapper, 'Barracks').trigger('mouseenter');
     const card = wrapper.get('.ring-card');
-    expect(card.text()).toContain('Magic Tower');
-    expect(card.text()).toContain('4:00');
-    expect(card.text()).toContain('+24 iron/h');
+    expect(card.text()).toContain('Barracks');
+    expect(card.text()).toContain('7:00');
+    expect(card.text()).toContain('Trains land troops');
   });
 
   it('marks a cost the player cannot afford, and refuses to build a locked building', async () => {
@@ -123,8 +123,8 @@ describe('RingMenu', () => {
     const wrapper = ring();
     await bubble(wrapper, 'Build').trigger('mouseenter');
     await bubble(wrapper, 'Defense').trigger('mouseenter');
-    await bubble(wrapper, 'Magic Tower').trigger('click');
-    expect(wrapper.emitted('select')).toEqual([['magictower']]);
+    await bubble(wrapper, 'Barracks').trigger('click');
+    expect(wrapper.emitted('select')).toEqual([['barracks']]);
   });
 
   it('treats a touch tap as hover-then-click: first tap previews, second commits', async () => {
@@ -138,13 +138,13 @@ describe('RingMenu', () => {
     await bubble(wrapper, 'Build').trigger('mouseenter');
     await bubble(wrapper, 'Defense').trigger('mouseenter');
 
-    await bubble(wrapper, 'Magic Tower').trigger('touchstart');
-    expect(wrapper.get('.ring-card').text()).toContain('Magic Tower');
+    await bubble(wrapper, 'Barracks').trigger('touchstart');
+    expect(wrapper.get('.ring-card').text()).toContain('Barracks');
     expect(wrapper.emitted('select')).toBeUndefined();
 
     // The building is now previewed; the next tap's click commits it.
-    await bubble(wrapper, 'Magic Tower').trigger('click');
-    expect(wrapper.emitted('select')).toEqual([['magictower']]);
+    await bubble(wrapper, 'Barracks').trigger('click');
+    expect(wrapper.emitted('select')).toEqual([['barracks']]);
   });
 
   it('a touch tap previews a locked building but never commits it', async () => {
@@ -166,8 +166,8 @@ describe('RingMenu', () => {
 
     // A mouse click never fires touchstart at all, so onBuildingTouchStart
     // never runs — this is the same interaction the pre-touch RingMenu had.
-    await bubble(wrapper, 'Magic Tower').trigger('click');
-    expect(wrapper.emitted('select')).toEqual([['magictower']]);
+    await bubble(wrapper, 'Barracks').trigger('click');
+    expect(wrapper.emitted('select')).toEqual([['barracks']]);
   });
 
   it('emits a root action straight through instead of drilling', async () => {

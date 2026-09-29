@@ -133,9 +133,14 @@ public class SettlementEntity
         // write path that bypasses those methods), so ClaimRadius/LonghouseLevel
         // can never read an out-of-range value here even if one somehow lands in
         // the column.
+        // A stored MagicTower (removed from the game, see
+        // BuildingType.MagicTower) has no catalogue definition any more, so it
+        // is dropped here rather than lingering as a building nothing can
+        // total, upgrade or render; its queued orders go with it.
         Buildings =
         [
             .. Buildings
+                .Where(b => BuildingCatalogue.MaxLevelFor(b.Type) > 0)
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
                 .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(b.Type)))),
         ],
@@ -146,7 +151,8 @@ public class SettlementEntity
             // QueuedAt — deterministic queue order is what makes SettleTo's
             // same-hex contiguity rule (issue #158 stage 1d) correct with no
             // extra bookkeeping.
-            .. Queue.OrderBy(o => o.StartedAt ?? DateTimeOffset.MaxValue).ThenBy(o => o.QueuedAt).ThenBy(o => o.Id)
+            .. Queue.Where(o => BuildingCatalogue.MaxLevelFor(o.Type) > 0)
+                .OrderBy(o => o.StartedAt ?? DateTimeOffset.MaxValue).ThenBy(o => o.QueuedAt).ThenBy(o => o.Id)
                 .Select(o => new BuildOrder
                 {
                     Id = o.Id,

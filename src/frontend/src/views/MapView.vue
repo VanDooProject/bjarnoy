@@ -580,7 +580,6 @@ type BuildableType =
   | 'farm'
   | 'tower'
   | 'fishinghut'
-  | 'magictower'
   | 'pumpkinfarm'
   | 'shrineofthor'
   | 'shrineoffreyja'
@@ -609,7 +608,7 @@ interface BuildCategory {
   buildings: { type: BuildableType }[];
 }
 // Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
-// MagicTower/Shrine are Grass-only, Lumberjack is Forest-only, Quarry is
+// Shrine is Grass-only, Lumberjack is Forest-only, Quarry is
 // Mountain-only, and Tower/ArcheryRange are SandOrGrass. Offering a building
 // the backend's own AllowedTerrain would reject is what "messed up
 // categories" on a shore (sand) tile meant — sand used to fall into the same
@@ -659,7 +658,6 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       id: 'military',
       buildings: [
         { type: 'tower' },
-        { type: 'magictower' },
         { type: 'archeryrange' },
         { type: 'barracks' },
         { type: 'smithy' },
@@ -887,8 +885,6 @@ function formatModifier(modifier: BuildingModifier): string {
       return modifier.percent
         ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
         : t('hud.hoverTooltip.modifierCoastal');
-    case 'arcane':
-      return t('hud.hoverTooltip.modifierArcane');
     case 'shrineFavour':
       if (modifier.domain === 'shipAttack') {
         return t('hud.hoverTooltip.modifierShrineFavourShipAttack', { percent: modifier.percent });

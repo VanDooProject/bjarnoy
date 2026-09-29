@@ -1027,6 +1027,13 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.HexOccupied);
         }
 
+        // A type with no definition at all (the removed Magic Tower) is never
+        // buildable — refused before any level arithmetic.
+        if (BuildingCatalogue.MaxLevelFor(type) == 0)
+        {
+            return BuildDecision.Rejected(BuildRejection.UnknownBuildingLevel);
+        }
+
         var baseLevel = ordersOnHex.Count > 0 ? ordersOnHex[^1].TargetLevel : (occupied ? existing.Level : 0);
         var targetLevel = baseLevel + 1;
         if (targetLevel > BuildingCatalogue.MaxLevelFor(type))

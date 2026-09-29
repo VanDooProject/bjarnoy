@@ -96,8 +96,6 @@ function formatModifier(modifier: BuildingModifier): string {
       return modifier.percent
         ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
         : t('hud.hoverTooltip.modifierCoastal');
-    case 'arcane':
-      return t('hud.hoverTooltip.modifierArcane');
     case 'shrineFavour':
       if (modifier.domain === 'shipAttack') {
         return t('hud.hoverTooltip.modifierShrineFavourShipAttack', { percent: modifier.percent });

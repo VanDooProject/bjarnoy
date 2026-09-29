@@ -367,4 +367,35 @@ public class EconomyDesignTests
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
+
+    [Fact]
+    public void The_magic_tower_is_removed_from_the_catalogue_but_keeps_its_persisted_value()
+    {
+        Assert.DoesNotContain(BuildingType.MagicTower, BuildingCatalogue.AllTypes);
+        Assert.Equal(0, BuildingCatalogue.MaxLevelFor(BuildingType.MagicTower));
+        Assert.Null(BuildingCatalogue.TryGet(BuildingType.MagicTower, 1));
+        Assert.Equal(7, (int)BuildingType.MagicTower); // persisted ints must not shift
+        Assert.Equal(8, (int)BuildingType.PumpkinFarm);
+    }
+
+    [Fact]
+    public void The_magic_tower_can_no_longer_be_built()
+    {
+        var settlement = SettlementWith(10);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.MagicTower, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(BuildRejection.UnknownBuildingLevel, decision.Rejection);
+    }
+
+    [Fact]
+    public void Totals_ignore_a_stray_magic_tower_instead_of_throwing()
+    {
+        var (production, _) = BuildingCatalogue.Totals(
+            [new PlacedBuilding(new HexCoord(1, 0), BuildingType.MagicTower, 3)], terrainAt: null);
+
+        Assert.True(production.IsZero);
+    }
 }
