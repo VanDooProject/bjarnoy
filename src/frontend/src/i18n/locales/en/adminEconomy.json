@@ -37,6 +37,7 @@
     "startStock": "Start stock",
     "producers": "Owned producers",
     "horizon": "Horizon (days)",
+    "storageCount": "Storage houses",
     "settings": "Run settings",
     "settlerCost": "Settler cost",
     "run": "Run simulation",

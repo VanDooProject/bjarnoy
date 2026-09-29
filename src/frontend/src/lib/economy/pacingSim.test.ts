@@ -181,4 +181,21 @@ describe('simulatePacing on the bundled catalogue', () => {
       expect(always.lhReachedAt[Number(level)], `LH ${level}`).toBeLessThanOrEqual(at);
     }
   });
+
+  it('a second storage house lets the Longhouse outgrow what one house can store', () => {
+    // Regression: the sim used to model a single storage house, so the
+    // current catalogue's Longhouse 10 (~13.7k wood) looked unreachable.
+    // Settlements may build any number of storage houses.
+    const base = {
+      horizonDays: 40,
+      producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+      startStock: { wood: 300, stone: 300, food: 200, iron: 0 },
+      settleType: 'cartworkshop',
+    };
+    const one = simulatePacing(byType, params(base));
+    const two = simulatePacing(byType, params({ ...base, storageCount: 2 }));
+    expect(one.lhReachedAt[10]).toBeUndefined();
+    expect(two.lhReachedAt[10]).toBeGreaterThan(0);
+  });
 });
+

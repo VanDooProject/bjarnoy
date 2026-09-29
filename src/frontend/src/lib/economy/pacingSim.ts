@@ -2,8 +2,8 @@ import type { BuildingDefinitionResponse, BuildingPrerequisiteResponse, Resource
 
 // Deterministic minute-step pacing model of ONE settlement, generic over
 // whatever building catalogue it is handed (live or bundled snapshot). It is
-// a design tool, not a mirror of the server: no terrain boosts, no raids, one
-// storage house, and a simple greedy player.
+// a design tool, not a mirror of the server: no terrain boosts, no raids, and a
+// simple greedy player.
 
 export type Resource = 'wood' | 'stone' | 'food' | 'iron';
 export const RESOURCES: readonly Resource[] = ['wood', 'stone', 'food', 'iron'];
@@ -32,6 +32,13 @@ export interface PacingParams {
   /** Settlers count as affordable once this type's level-1 definition is placeable and stock covers settlerCost. */
   settleType: string;
   profile: Profile;
+  /**
+   * Storage houses the player may own (the first stands at level 1 from the
+   * start; the rest are placed when storage runs short). A settlement may
+   * build any number of them — the server has no one-per-settlement rule.
+   * Defaults to 1.
+   */
+  storageCount?: number;
 }
 
 export interface PacingSeries {
@@ -110,7 +117,7 @@ function compile(defs: BuildingDefinitionResponse[] | undefined): Compiled[] {
 
 interface Job {
   kind: 'lh' | 'storage' | 'producer';
-  /** Producer instance index (unused for lh/storage). */
+  /** Producer or storage-house instance index (unused for lh). */
   index: number;
   finishMinute: number;
   slotCost: number;
@@ -149,7 +156,11 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   const standingBest = new Map<string, number>();
 
   let lh = lhMax > 0 ? 1 : 0;
-  let storageLevel = storageMax > 0 ? 1 : 0;
+  // One entry per owned storage house; 0 = not built yet.
+  const storageLevels: number[] = [];
+  for (let i = 0; i < Math.max(1, Math.floor(params.storageCount ?? 1)); i++) {
+    storageLevels.push(i === 0 && storageMax > 0 ? 1 : 0);
+  }
   let storageBusy = false;
   let lhBusy = false;
 
@@ -169,14 +180,18 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     rate.fill(0);
     capacity.fill(BASE_STORAGE_CAPACITY);
     if (lh > 0) addDef(lhDefs[lh - 1]);
-    if (storageLevel > 0) addDef(storageDefs[storageLevel - 1]);
+    let storageBest = 0;
+    for (const level of storageLevels) {
+      if (level > 0) addDef(storageDefs[level - 1]);
+      storageBest = Math.max(storageBest, level);
+    }
     standingBest.clear();
     for (let i = 0; i < pLevel.length; i++) {
       addDef(pDefs[i][pLevel[i] - 1]);
       if ((standingBest.get(pType[i]) ?? 0) < pLevel[i]) standingBest.set(pType[i], pLevel[i]);
     }
     if (lh > 0) standingBest.set(LONGHOUSE, lh);
-    if (storageLevel > 0) standingBest.set(STORAGE, storageLevel);
+    if (storageBest > 0) standingBest.set(STORAGE, storageBest);
   }
   function addDef(d: Compiled) {
     for (let r = 0; r < 4; r++) {
@@ -230,7 +245,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
         lhBusy = false;
         lhReachedAt[lh] = minute;
       } else if (job.kind === 'storage') {
-        storageLevel++;
+        storageLevels[job.index]++;
         storageBusy = false;
       } else {
         pLevel[job.index]++;
@@ -287,18 +302,25 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       }
     }
 
-    // (b) storage house
-    if (!storageBusy && storageLevel > 0 && storageLevel < storageMax) {
+    // (b) storage: when a resource is nearly full, or the next Longhouse
+    // level costs more than can be stored, raise the lowest storage house —
+    // placing a new one (level 0 -> 1) before upgrading one already standing.
+    let target = -1;
+    for (let i = 0; i < storageLevels.length; i++) {
+      if (storageLevels[i] >= storageMax) continue;
+      if (target < 0 || storageLevels[i] < storageLevels[target]) target = i;
+    }
+    if (!storageBusy && target >= 0) {
       let full = false;
       for (let r = 0; r < 4; r++) if (stock[r] > STORAGE_FULL_FRACTION * capacity[r]) full = true;
       if (!full && lh > 0 && lh < lhMax) {
         const nextLh = lhDefs[lh];
         for (let r = 0; r < 4; r++) if (nextLh.cost[r] > capacity[r]) full = true;
       }
-      const next = storageDefs[storageLevel];
+      const next = storageDefs[storageLevels[target]];
       if (full && placeable(next, true) && affordable(next) && usedSlots + next.slotCost <= slots) {
         spend(next);
-        jobs.push({ kind: 'storage', index: 0, finishMinute: minute + Math.ceil(next.buildMinutes), slotCost: next.slotCost });
+        jobs.push({ kind: 'storage', index: target, finishMinute: minute + Math.ceil(next.buildMinutes), slotCost: next.slotCost });
         usedSlots += next.slotCost;
         storageBusy = true;
         return;

@@ -96,6 +96,7 @@ const producerTypes = computed(() =>
 const startStock = reactive({ ...FOUNDING_STOCK });
 const producerCounts = reactive<Record<string, number>>({ ...DEFAULT_PRODUCER_COUNTS });
 const horizonDays = ref(60);
+const storageCount = ref(2);
 // Every producer type gets an explicit count so its input never renders blank.
 watch(
   producerTypes,
@@ -117,6 +118,7 @@ function run() {
     producerCounts: { ...producerCounts },
     settlerCost: settlerCost.value,
     settleType: 'cartworkshop',
+    storageCount: Math.max(1, Number(storageCount.value) || 1),
   };
   results.value = {
     always: simulatePacing(byType.value, { ...base, profile: 'always' }),
@@ -271,6 +273,10 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
             <label>
               {{ $t('adminEconomy.pacing.horizon') }}
               <input v-model.number="horizonDays" type="number" min="1" max="365" step="1" />
+            </label>
+            <label>
+              {{ $t('adminEconomy.pacing.storageCount') }}
+              <input v-model.number="storageCount" type="number" min="1" max="10" step="1" data-testid="storage-count" />
             </label>
             <p class="muted small">{{ $t('adminEconomy.pacing.settlerCost') }}: {{ costText(settlerCost) }}</p>
           </fieldset>
