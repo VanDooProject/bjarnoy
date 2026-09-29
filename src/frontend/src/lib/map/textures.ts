@@ -123,19 +123,20 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   forest: 'foresttile',
   hut: 'vikinghut',
   longhouse: 'greathall',
-  shrineofthor: 'thorshrine',
+  // Thor's shrine is animated (a lightning clip in the buildings-anim
+  // atlas, played like any other family's — see `animTop`).
+  shrineofthor: 'torshrine',
   shrineoffreyja: 'freyjashrine',
-  // Placeholder art only — see buildingArt.ts's BUILDING_ART_FAMILIES for
-  // the matching docs-page choice.
-  shrineofullr: 'thorshrine',
-  shrineofnjord: 'freyjashrine',
+  shrineofullr: 'ullrshrine',
+  // A skerry standing in coastal water — a water-only building.
+  shrineofnjord: 'njordshrine',
   // Newer, on-palette scripted art — see buildingArt.ts's matching docs-page
   // choice. Pumpkin Farm stays on the legacy `farm_pumpkin` family for now.
   farm: 'farm',
   pumpkinfarm: 'farm_pumpkin',
-  lumberjack: 'lumberjackhut',
+  lumberjack: 'lumberjack',
   storagehouse: 'storagebuilding',
-  archeryrange: 'archerybuilding',
+  archeryrange: 'archeryrange',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
   // Shares FisherHut's leveled family now — the legacy 'fishinghutbuilding'
