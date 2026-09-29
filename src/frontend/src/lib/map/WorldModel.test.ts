@@ -213,6 +213,24 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.placeBuilding(settlement.id, spots[2], 'farm')).toBe(true);
   });
 
+  it('refuses an additional storage house until one stands at level 10 (ADDITIONAL_STORAGE_HOUSE_LEVEL)', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    expect(spots.length).toBeGreaterThan(2);
+
+    settlement.level = 3; // widen the claim so the spots are reachable
+    expect(model.storageHouses(settlement.id)).toEqual([]);
+    // The first is never refused; the second is, while the first is below 10.
+    expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
+    expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(false);
+
+    model.getTile(spots[0].q, spots[0].r).buildingLevel = 10;
+    expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(true);
+  });
+
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);

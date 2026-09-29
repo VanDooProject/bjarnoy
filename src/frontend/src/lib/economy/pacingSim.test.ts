@@ -83,13 +83,33 @@ describe('simulatePacing on a hand-made catalogue', () => {
       def('longhouse', 1),
       def('longhouse', 2, { cost: { wood: 900 } }),
       def('lumberjack', 1, { prod: { wood: 600 } }),
+      // Levels 1-10 hold 300 each: the second house may only be started once the
+      // first stands at level 10, and only then does capacity grow past 800.
       def('storagehouse', 1, { cost: { wood: 50 }, storage: 300 }),
+      ...Array.from({ length: 9 }, (_, i) => def('storagehouse', i + 2, { cost: { wood: 5 }, buildSeconds: 60, storage: 300 })),
     ]);
     const base = { producerCounts: { lumberjack: 1 }, horizonDays: 1 };
     const one = simulatePacing(byType, params(base));
     const two = simulatePacing(byType, params({ ...base, storageCount: 2 }));
     expect(one.lhReachedAt[2]).toBeUndefined();
     expect(two.lhReachedAt[2]).toBeGreaterThan(0);
+  });
+
+  it('never starts a second storage house while the first is below level 10', () => {
+    // Ten levels of 300 storage. With only 5 levels available the first house
+    // cannot reach 10, so a second (and the capacity it adds) never arrives.
+    const levels = (n: number) =>
+      Array.from({ length: n }, (_, i) => def('storagehouse', i + 1, { cost: { wood: 5 }, buildSeconds: 60, storage: 300 }));
+    const build = (n: number) =>
+      group([
+        def('longhouse', 1),
+        def('longhouse', 2, { cost: { wood: 900 } }),
+        def('lumberjack', 1, { prod: { wood: 600 } }),
+        ...levels(n),
+      ]);
+    const p = params({ producerCounts: { lumberjack: 1 }, horizonDays: 1, storageCount: 2 });
+    expect(simulatePacing(build(5), p).lhReachedAt[2]).toBeUndefined();
+    expect(simulatePacing(build(10), p).lhReachedAt[2]).toBeGreaterThan(0);
   });
 
   it('is deterministic', () => {

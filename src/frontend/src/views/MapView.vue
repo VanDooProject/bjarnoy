@@ -56,6 +56,7 @@ import {
   formatMissingResources,
   longhouseLock,
   riverBuildingAllowedHere,
+  storageHouseLock,
   towerLimitLock,
 } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
@@ -942,6 +943,20 @@ function towersHeld(): number {
   return hexes.size;
 }
 
+// Storage houses held (standing plus queued, distinct hexes like
+// Settlement.PlanBuild counts them) and the best standing level, for the
+// additional-storage-house lock.
+function storageHouseLockFor(): string | undefined {
+  const id = world.selectedSettlementId;
+  if (!id) return undefined;
+  const standing = world.model.storageHouses(id);
+  const hexes = new Set(standing.map((h) => `${h.q},${h.r}`));
+  for (const order of world.hud.queue) {
+    if (order.building === 'storagehouse') hexes.add(`${order.q},${order.r}`);
+  }
+  return storageHouseLock(hexes.size, Math.max(0, ...standing.map((h) => h.level)));
+}
+
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
@@ -955,7 +970,8 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
     gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
     lock:
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
-      ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined),
+      ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
+      ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined),
     art: buildingArt(type, 1),
   };
 }

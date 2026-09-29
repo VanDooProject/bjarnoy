@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, towerLimitLock } from './ringCatalogue';
+import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -39,6 +39,18 @@ describe('longhouseLock', () => {
     // "hut" is demo-only and has no backend definition, so there is no gate to
     // report — it must not read as locked.
     expect(longhouseLock(undefined, 1)).toBeUndefined();
+  });
+});
+
+describe('storageHouseLock', () => {
+  it('locks an additional storage house until the best one is level 10', () => {
+    expect(storageHouseLock(1, 1)).toBe('Raise a storage house to level 10 before building another');
+    expect(storageHouseLock(2, 9)).toBe('Raise a storage house to level 10 before building another');
+  });
+
+  it('never locks the first storage house, nor once one is level 10', () => {
+    expect(storageHouseLock(0, 0)).toBeUndefined();
+    expect(storageHouseLock(1, 10)).toBeUndefined();
   });
 });
 

@@ -137,6 +137,12 @@ export function maxTowers(longhouseLevel: number): number {
   return longhouseLevel < 3 ? 0 : 1 + Math.max(0, Math.floor((longhouseLevel - 5) / 2));
 }
 
+/**
+ * Mirrors `BuildingCatalogue.AdditionalStorageHouseLevel`: an additional
+ * storage house may only be placed once one already stands at this level.
+ */
+export const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
+
 /** Mirrors `BuildingCatalogue.ProductionFor`: a level's total output is `perHourAtLevelOne · 1.20^(level−1)`. */
 function producerOutput(perHourAtLevelOne: number, level: number, multiplier = 1): number {
   return Math.round(perHourAtLevelOne * Math.pow(1.2, level - 1) * multiplier);

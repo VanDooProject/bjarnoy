@@ -5,7 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
-import { maxTowers } from './buildingEconomy';
+import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
 import { cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
@@ -1339,6 +1339,21 @@ export class WorldModel {
     return (this.settlementTowers.get(settlementId) ?? []).map((t) => ({ q: t.q, r: t.r }));
   }
 
+  /**
+   * This settlement's standing storage houses (hex and level), for the
+   * additional-storage-house rule (`ADDITIONAL_STORAGE_HOUSE_LEVEL`): a new
+   * one needs one of these at level 10.
+   */
+  storageHouses(settlementId: string): { q: number; r: number; level: number }[] {
+    const levels: { q: number; r: number; level: number }[] = [];
+    for (const tile of this.tiles.values()) {
+      if (tile.ownerId === settlementId && tile.buildingType === 'storagehouse') {
+        levels.push({ q: tile.q, r: tile.r, level: tile.buildingLevel ?? 1 });
+      }
+    }
+    return levels;
+  }
+
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return false;
@@ -1387,6 +1402,12 @@ export class WorldModel {
     // here, so it is never refused for this reason.
     if (type === 'tower' && this.towerCoords(settlementId).length >= maxTowers(settlement.level)) {
       return false;
+    }
+    // An additional storage house needs one standing at level 10 (matches
+    // BuildRejection.StorageHouseTooLow). Upgrades never go through here.
+    if (type === 'storagehouse') {
+      const held = this.storageHouses(settlementId);
+      if (held.length >= 1 && Math.max(...held.map((h) => h.level)) < ADDITIONAL_STORAGE_HOUSE_LEVEL) return false;
     }
     tile.ownerId = settlementId;
     tile.buildingType = type;

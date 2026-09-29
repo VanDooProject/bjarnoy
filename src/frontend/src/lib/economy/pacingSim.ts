@@ -22,6 +22,8 @@ export const CASUAL_HOURS: readonly number[] = [7, 12, 18, 19, 20, 21, 22];
 const LONGHOUSE = 'longhouse';
 const STORAGE = 'storagehouse';
 const STORAGE_FULL_FRACTION = 0.85;
+/** BuildingCatalogue.AdditionalStorageHouseLevel: another storage house needs one at this level. */
+const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
 
 export interface PacingParams {
   startStock: ResourceLine;
@@ -305,9 +307,13 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     // (b) storage: when a resource is nearly full, or the next Longhouse
     // level costs more than can be stored, raise the lowest storage house —
     // placing a new one (level 0 -> 1) before upgrading one already standing.
+    // An additional house (level 0) may only be started once another stands
+    // at level 10 (BuildingCatalogue.AdditionalStorageHouseLevel).
+    const additionalAllowed = Math.max(0, ...storageLevels) >= ADDITIONAL_STORAGE_HOUSE_LEVEL;
     let target = -1;
     for (let i = 0; i < storageLevels.length; i++) {
       if (storageLevels[i] >= storageMax) continue;
+      if (storageLevels[i] === 0 && !additionalAllowed) continue;
       if (target < 0 || storageLevels[i] < storageLevels[target]) target = i;
     }
     if (!storageBusy && target >= 0) {
