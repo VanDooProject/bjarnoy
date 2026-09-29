@@ -175,10 +175,14 @@ public sealed class SettlementService(
     /// between two settlements' <em>centres</em> that lets a candidate skip
     /// straight past the real per-neighbour territory check
     /// (<see cref="FoundAsync"/>'s "phase 2", below) without loading anyone's
-    /// building list. Sized so that even if both settlements' longhouses
-    /// reach <see cref="BuildingCatalogue.HighestMaxLevel"/>, their <em>centre
-    /// discs alone</em> (<see cref="Settlement.MaxClaimRadius"/>) can never
-    /// overlap.
+    /// building list. A fixed design figure, not derived from
+    /// <see cref="Settlement.MaxClaimRadius"/>: the Longhouse's own disc
+    /// stops growing at radius 3 (docs/design/economy.md, "Territory and
+    /// towers"), and from there territory grows only through towers, so
+    /// settlements need room between them for their towers — deriving the
+    /// spacing from the centre disc (<c>2 × 3 + 1 = 7</c>) would pack them
+    /// together. 15 is the spacing the game had while the centre disc grew
+    /// to radius 7, and keeps world density unchanged.
     /// </summary>
     /// <remarks>
     /// This is deliberately <em>not</em> sized to also cover Tower satellite
@@ -196,7 +200,7 @@ public sealed class SettlementService(
     /// obviously-too-close case before that real check has to run — it is
     /// not itself a completeness guarantee.
     /// </remarks>
-    public static readonly int MinimumSpacing = (2 * Settlement.MaxClaimRadius) + 1;
+    public const int MinimumSpacing = 15;
 
     /// <summary>
     /// Fixed safety cushion (in hexes) phase 2 of <see cref="FoundAsync"/>'s

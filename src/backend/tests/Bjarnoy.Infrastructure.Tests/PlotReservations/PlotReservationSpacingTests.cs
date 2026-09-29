@@ -30,19 +30,17 @@ public class PlotReservationSpacingTests
     }
 
     [Fact]
-    public void MinimumSpacing_is_7_as_derived_from_max_claim_radius()
+    public void MinimumSpacing_is_15_as_derived_from_max_claim_radius()
     {
-        // 2 * MaxClaimRadius + 1, where the Longhouse's claim radius stops at 3
-        // (docs/design/economy.md section 5: territory then grows through
-        // towers). Pinned so a change to MaxClaimRadius/MaxLevel is caught here
-        // rather than only showing up as a mismatch against the frontend's own
+        // Pinned so a change to MaxClaimRadius/MaxLevel is caught here rather
+        // than only showing up as a mismatch against the frontend's own
         // (now-deleted) stale copy of this constant.
-        Assert.Equal(7, SettlementService.MinimumSpacing);
+        Assert.Equal(15, SettlementService.MinimumSpacing);
     }
 
     [Fact]
-    public void ReservationSpacing_is_9()
+    public void ReservationSpacing_is_17()
     {
-        Assert.Equal(9, PlotReservationService.ReservationSpacing);
+        Assert.Equal(17, PlotReservationService.ReservationSpacing);
     }
 }
