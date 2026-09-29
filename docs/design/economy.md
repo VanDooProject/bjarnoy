@@ -26,10 +26,10 @@ formula changes, re-run the lab and check all of them.
 Wood, Stone, Food, Iron.
 
 - **Wood** — Lumberjack (forest).
-- **Stone** — Quarry (mountain) *or* Clay Brickworks (bog ground). Both at
-  LH 1: world generation does not guarantee a mountain near a start, so Clay
-  is the no-mountain stone source, not an upgrade. It stands on bog ground,
-  so every start needs bog in reach (§8).
+- **Stone** — the **Clay Brickworks** on bog ground is the start's stone
+  source: bog is guaranteed in reach of every start (§8, `bog.md`), a
+  mountain is not. Where a mountain is in reach, the **Quarry** is an
+  alternative. Both unlock at LH 1.
 - **Food** — Reindeer Herder (the default, any grass), later Farm / Pumpkin
   Farm by island soil (one tech-tree card), Fishing Hut on coastal water.
 - **Iron** — comes from **bog ore**: the bog-ore works stand on bog ground

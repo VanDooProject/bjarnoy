@@ -1,9 +1,10 @@
 # Bogs, bog ore and the Hammerschmiede (game side)
 
 Status: **planned**, not in the game yet. The art is being built in
-`VanDooProject/3D_assets` as the **bog set** (PRs #115, #116). Its contract,
-the tile list and the map rules live in that repo's `docs/bog-tiles.md`,
-which is the source of truth. This page covers only what the game has to do
+`VanDooProject/3D_assets` as the **bog set** (PRs #115, #116; design
+session: https://claude.ai/code/session_01KeZX9kzmCwKuGbwBo4BEBo). Its
+contract, the tile list and the map rules live in that repo's
+`docs/bog-tiles.md`, which is the source of truth. This page covers only what the game has to do
 with it. For why iron comes from bog ore, see `economy.md` §8; for where
 this sits among the open work, see §11 there.
 
@@ -11,8 +12,8 @@ this sits among the open work, see §11 there.
 
 | Tile | What it is in the game |
 |---|---|
-| `bog` (moss ground, several decorated variants) | a new land terrain |
-| `bogcreek`, `bogcreek_bend`, `bogcreek_spring` | creeks: river crossings on bog ground, same profile as a river |
+| `bog` (moss ground, several decorated variants) | a new land terrain with its own base tile (its own `Terrain` value, not a grass variant) |
+| `bogcreek`, `bogcreek_bend`, `bogcreek_spring` | creeks: water crossings on bog ground with a river's profile, so they join rivers seamlessly. They do **not** count as rivers for the Sawmill, Crop Mill or Hammerschmiede: those buildings' art has grass banks, which don't match bog ground. |
 | `boglake`, `boglake_inlet`, `boglake_shore`, `boglake_half`, `boglake_mouth` | bog lakes: open water plus shore tiles with 1, 2 or 3 water edges |
 | `bogoreworks` | **Bog-ore works**, the iron producer (7 levels: diggings to bloomery) |
 | `fisherhut_lake` | the **Fisher Hut** on stilts on a half-shore: the same building as the coastal one, with lake art |
@@ -36,9 +37,10 @@ The generator has to follow the art's map rules, or tiles are missing:
 6. No walkways or causeways.
 
 On top of that, the economy needs one thing: **bog ground in reach of every
-start**. Clay Brickworks (the no-mountain stone source, LH 1) and the
-bog-ore works (iron, from about LH 6) both stand on bog, so a start without
-bog in reach would have no stone without a mountain and no iron.
+start**. The Clay Brickworks on bog is the start's stone source (LH 1), and
+the bog-ore works on bog are its iron source (from about LH 6). A mountain
+is *not* needed at the start; where one is in reach, the Quarry is an
+alternative stone source.
 
 Bogs are part of the living lands (not a wasted or frozen pack). A bog meets
 grass at a hex edge, like the wasteland does.
@@ -60,13 +62,11 @@ grass at a hex edge, like the wasteland does.
 
 ## Open questions
 
-- Is bog ground a separate `Terrain` value, or a variant of grass? The
-  placement rules (Clay Brickworks, bog-ore works) need to tell them apart.
 - How much bog does an island get, and how is "in reach of every start"
   guaranteed: one bog patch per island, or per start region?
-- Do creeks count as rivers for the Sawmill, the Crop Mill and the
-  Hammerschmiede? They share the river profile, but the mills' art is drawn
-  on grass-banked rivers.
+
+Decided: bog is its own `Terrain` value with its own base tile, and bog
+creeks don't count as rivers for the river buildings.
 
 ## Agent prompt (game side)
 
@@ -80,8 +80,8 @@ grass at a hex edge, like the wasteland does.
 > **Goal: bog ground, creeks and lakes in world generation; the bog-ore
 > works; Clay Brickworks and the Fisher Hut on the bog.**
 >
-> 1. **Terrain.** Settle the open questions above with the user first. Then
->    generate bogs with the map rules above, guarantee bog in reach of every
+> 1. **Terrain.** Add `Terrain.Bog` (its own base tile). Settle the open
+>    question above with the user first. Then generate bogs with the map rules above, guarantee bog in reach of every
 >    start, and keep the C# and TS generators byte-identical through the
 >    shared goldens (regenerate them with the repo's tooling).
 > 2. **Buildings.** Add the bog-ore works (new `BuildingType`), move Clay
