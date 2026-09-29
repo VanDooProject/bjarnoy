@@ -735,6 +735,9 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
   align-items: center;
   gap: 6px;
 }
+.inputs input[type='time'] {
+  width: 124px;
+}
 .inputs label.check input {
   width: auto;
 }
