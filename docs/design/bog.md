@@ -60,13 +60,14 @@ grass at a hex edge, like the wasteland does.
   lake. Unlocks at LH 20 behind bog-ore works level 10, max level 20. Boosts
   bog-ore works within range, with the mills' percent and range curve.
 
-## Open questions
+## Decisions
 
-- How much bog does an island get, and how is "in reach of every start"
-  guaranteed: one bog patch per island, or per start region?
-
-Decided: bog is its own `Terrain` value with its own base tile, and bog
-creeks don't count as rivers for the river buildings.
+- Bog is its own `Terrain` value with its own base tile.
+- Bog creeks don't count as rivers for the river buildings.
+- "Bog in reach of every start" is guaranteed by start placement, not by
+  world generation: **no start position (building spot) is offered where
+  there is no bog in reach.** An island without bog simply gets no start
+  positions.
 
 ## Agent prompt (game side)
 
@@ -80,10 +81,11 @@ creeks don't count as rivers for the river buildings.
 > **Goal: bog ground, creeks and lakes in world generation; the bog-ore
 > works; Clay Brickworks and the Fisher Hut on the bog.**
 >
-> 1. **Terrain.** Add `Terrain.Bog` (its own base tile). Settle the open
->    question above with the user first. Then generate bogs with the map rules above, guarantee bog in reach of every
->    start, and keep the C# and TS generators byte-identical through the
->    shared goldens (regenerate them with the repo's tooling).
+> 1. **Terrain.** Add `Terrain.Bog` (its own base tile) and generate bogs
+>    with the map rules above. Start placement (the landing page's plot
+>    suggestions and founding) never offers a spot without bog in reach.
+>    Keep the C# and TS generators byte-identical through the shared
+>    goldens (regenerate them with the repo's tooling).
 > 2. **Buildings.** Add the bog-ore works (new `BuildingType`), move Clay
 >    Brickworks to bog ground, and let the Fisher Hut stand on a bog-lake
 >    shore, all as described above. The Hammerschmiede comes separately,
@@ -98,6 +100,6 @@ creeks don't count as rivers for the river buildings.
 >    say which families are missing. Don't render or push art: that's the
 >    maintainer's (see the 3D_assets `AGENTS.md`).
 >
-> Tests: world-generation guarantees (bog in reach of every start, the map
+> Tests: start placement (no spot offered without bog in reach), the map
 > rules), placement rules for the buildings, the terrain boost, and the unit
 > cost and gate changes.
