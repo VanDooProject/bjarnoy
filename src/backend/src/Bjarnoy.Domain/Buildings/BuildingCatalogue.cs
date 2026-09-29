@@ -65,7 +65,7 @@ public static class BuildingCatalogue
     /// interaction is a real move, not a countdown).
     /// </summary>
     public static ResourceAmounts FoundingStock { get; } =
-        new(Wood: 300, Stone: 300, Food: 200, Iron: 0);
+        new(Wood: 600, Stone: 500, Food: 400, Iron: 0);
 
     public static IReadOnlyList<BuildingType> AllTypes { get; } =
         [.. Enum.GetValues<BuildingType>().Where(t => MaxLevelFor(t) > 0)];
