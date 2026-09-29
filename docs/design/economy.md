@@ -18,7 +18,7 @@ formula changes, re-run the lab and check all of them.
 | T3 | 2nd settlement: optimising player ≈ **5 days**, average player ≈ **2 weeks** | simulator profiles `pro` / `average` (§6) |
 | T4 | A settlement is "full" (LH 30, producers maxed) after **1–2 months** | `pro` ≈ 5–6 weeks, `average` ≈ 8–9 weeks |
 | T5 | Later levels still pay off, but ever more slowly | producer payback grows ~7% per level (cost ×1.30 vs output ×1.20) |
-| T6 | Troops and sea access come before settling | Cart Workshop (settlers) needs Dockyard; LH 10 |
+| T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Dockyard (LH 8) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
 
 ## 2. Resources
@@ -117,7 +117,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 7 | Palisade* | Tower 5 |
 | 8 | Dockyard | Fishing Hut 5 |
 | 9 | Archery Range | Barracks 5 |
-| 10 | Cart Workshop (settlers) | Dockyard 1 |
+| 10 | Cart Workshop (settlers) | Town Square 3 |
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
@@ -174,7 +174,7 @@ takes a level off at a time until it is gone.
 
 A new settlement needs:
 
-1. a Cart Workshop (LH 10, Dockyard 1), so troops and sea access come first (T6);
+1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
 2. 3 Settler Crews (the crew cost doubles per settlement already held);
 3. **renown**: +1 per building level per hour, across all settlements
    (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
@@ -242,8 +242,15 @@ The plan:
   Sawmill and Crop Mill are. (Water-powered hammers are a century or two
   later than the Vikings, like the game's water-powered sawmill.)
 
-Until this lands, the Longhouse is the only iron source. Unit iron costs
-have to be checked against that (a Spearman costs 40 iron).
+The Hammerschmiede stands on a river only, never on the lake itself.
+
+A lake may not be in reach early on, and a smelting furnace alone (Rennofen)
+creates no ore, so there is no early iron producer. Instead, **the early
+game doesn't need iron**: buildings cost no iron at all, and the early,
+low-tier units must not cost iron either. Iron becomes a requirement only
+for the higher-tier units, by which time a lake is in reach. Until lake ore
+lands, the Longhouse's small iron trickle is the only source. (Today a
+Spearman costs 40 iron, so the unit costs need that pass.)
 
 ## 9. Open questions
 
