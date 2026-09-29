@@ -1476,3 +1476,59 @@ describe('construction slots/reservations degrade gracefully in demo mode', () =
     expect(store.hud.construction.maxWaitingOrders).toBe(0);
   });
 });
+
+describe('useWorldStore poll failure reporting', () => {
+  async function loadWithConnection() {
+    const store = await loadStoreModule(false);
+    const { useConnectionStatusStore } = await import('./connectionStatus');
+    return { store, connection: useConnectionStatusStore() };
+  }
+
+  it('trackPoll reports a failing poll instead of rejecting, and a later success clears it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { store, connection } = await loadWithConnection();
+    const failure = new Error('503');
+    const poll = vi.fn().mockRejectedValueOnce(failure).mockResolvedValueOnce(undefined);
+
+    await expect(store.trackPoll('trade', poll)).resolves.toBeUndefined();
+    expect(connection.issues.trade?.error).toBe(failure);
+    expect(connection.issues.trade?.failures).toBe(1);
+
+    await store.trackPoll('trade', poll);
+    expect(connection.issues.trade).toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it('startHudSync records a failing settlement poll under the "settlement" key', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { store, connection } = await loadWithConnection();
+    const failure = new Error('boom');
+    getSettlement.mockReset().mockRejectedValue(failure);
+    store.selectedSettlementId = 'settlement-1';
+    store.ownerId = 'player-1';
+
+    store.startHudSync();
+    await vi.waitFor(() => expect(connection.issues.settlement?.error).toBe(failure));
+    store.stopHudSync();
+    warn.mockRestore();
+  });
+
+  it('reports a failed fog mask fetch under "fogMask" and clears it on the next success', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { store, connection } = await loadWithConnection();
+    const failure = new Error('network error');
+    getFogMask
+      .mockReset()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({ bitmap: { close: vi.fn() }, version: '"v1"' });
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogMask();
+    expect(connection.issues.fogMask?.error).toBe(failure);
+
+    await store.fetchFogMask();
+    expect(connection.issues.fogMask).toBeUndefined();
+    warn.mockRestore();
+  });
+});
