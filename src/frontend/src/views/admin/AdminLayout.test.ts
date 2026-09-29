@@ -18,7 +18,7 @@ import adminLayout from '../../i18n/locales/en/adminLayout.json';
 function testRouter() {
   return createRouter({
     history: createMemoryHistory(),
-    routes: ['worlds', 'users', 'settlements', 'reports', 'activity', 'island-lab'].map((tab) => ({
+    routes: ['worlds', 'users', 'settlements', 'reports', 'activity', 'economy', 'island-lab'].map((tab) => ({
       path: `/admin/${tab}`,
       component: { template: '<div />' },
     })),
