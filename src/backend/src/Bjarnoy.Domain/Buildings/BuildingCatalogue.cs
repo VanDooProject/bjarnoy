@@ -82,8 +82,9 @@ public static class BuildingCatalogue
     /// <summary>
     /// The Longhouse level each non-Longhouse building unlocks at — the unlock
     /// ladder from <c>docs/design/economy.md</c> §5, in one table. A building's
-    /// level can never exceed the Longhouse level either, see
-    /// <see cref="RequiredLonghouseLevelFor"/>.
+    /// level can never exceed the Longhouse level either, except for the
+    /// producers (<see cref="StorageCappedProducers"/>), which storage caps
+    /// instead — see <see cref="RequiredLonghouseLevelFor"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -137,14 +138,43 @@ public static class BuildingCatalogue
         UnlockLevels.TryGetValue(type, out var unlock) ? unlock : 1;
 
     /// <summary>
+    /// The buildings whose level is capped by storage instead of by the
+    /// Longhouse: a level whose cost exceeds the settlement's storage capacity
+    /// can never be afforded, so storage is the natural brake. An active
+    /// player's production must be able to run ahead of the Longhouse (see
+    /// <c>docs/design/economy.md</c>), otherwise the casual player catches up
+    /// once the active one stalls at the cap.
+    /// </summary>
+    public static IReadOnlySet<BuildingType> StorageCappedProducers { get; } = new HashSet<BuildingType>
+    {
+        BuildingType.Lumberjack,
+        BuildingType.Quarry,
+        BuildingType.ClayBrickworks,
+        BuildingType.Farm,
+        BuildingType.PumpkinFarm,
+        BuildingType.FishingHut,
+        BuildingType.FisherHut,
+    };
+
+    /// <summary>
+    /// A settlement may only place an additional storage house once one
+    /// already stands at this level.
+    /// </summary>
+    public const int AdditionalStorageHouseLevel = 10;
+
+    /// <summary>
     /// The Longhouse level needed to build <paramref name="type"/> at
     /// <paramref name="level"/>: <c>max(UnlockLevel(type), level)</c> — a
-    /// building's level can never exceed the Longhouse's. The Longhouse
+    /// building's level can never exceed the Longhouse's — except for the
+    /// <see cref="StorageCappedProducers"/>, which only need their unlock
+    /// level at every level (storage caps them instead). The Longhouse
     /// itself only ever needs level 1 (it is upgraded by having a standing
     /// Longhouse, not by a higher one).
     /// </summary>
     public static int RequiredLonghouseLevelFor(BuildingType type, int level) =>
-        type == BuildingType.Longhouse ? 1 : Math.Max(UnlockLevel(type), level);
+        type == BuildingType.Longhouse ? 1
+        : StorageCappedProducers.Contains(type) ? UnlockLevel(type)
+        : Math.Max(UnlockLevel(type), level);
 
     /// <summary>
     /// Which buildings a settlement must already have standing before it may

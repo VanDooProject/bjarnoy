@@ -173,6 +173,33 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Equal("TowerLimitReached", await second.RejectionAsync(Ct));
     }
 
+    /// <summary>
+    /// A second storage house is refused with <c>StorageHouseTooLow</c> while the
+    /// first (queued, level 0 stub) is below level 10.
+    /// </summary>
+    [Fact]
+    public async Task A_second_storage_house_is_refused_with_StorageHouseTooLow_below_level_10()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
+        var grass = layout!.Hexes.Where(h => !h.IsCentre && h.Building is null && h.Terrain == "grass").Take(2).ToList();
+        Assert.Equal(2, grass.Count);
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var first = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("storagehouse", grass[0].Q, grass[0].R), Ct);
+        Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+
+        var second = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("storagehouse", grass[1].Q, grass[1].R), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal("StorageHouseTooLow", await second.RejectionAsync(Ct));
+    }
+
     [Fact]
     public async Task Instant_build_finishes_a_queued_build_that_would_otherwise_take_hours()
     {

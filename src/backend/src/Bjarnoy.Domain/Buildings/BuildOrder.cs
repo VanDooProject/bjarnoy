@@ -119,6 +119,13 @@ public enum BuildRejection
     /// is never refused for this reason.
     /// </summary>
     TowerLimitReached,
+
+    /// <summary>
+    /// An additional Storage House was ordered while the settlement's best one
+    /// is below <see cref="BuildingCatalogue.AdditionalStorageHouseLevel"/>.
+    /// The first storage house and upgrades are never refused for this reason.
+    /// </summary>
+    StorageHouseTooLow,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

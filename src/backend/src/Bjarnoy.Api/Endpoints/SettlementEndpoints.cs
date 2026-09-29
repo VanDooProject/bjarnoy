@@ -690,6 +690,8 @@ public static class SettlementEndpoints
         BuildRejection.RequiredBuildingTooLow => "A required building is not high enough level yet.",
         BuildRejection.TowerLimitReached =>
             "You already hold as many towers as your longhouse level allows. Upgrade the longhouse to raise the limit.",
+        BuildRejection.StorageHouseTooLow =>
+            "Raise a storage house to level 10 before building another.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",

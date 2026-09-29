@@ -88,16 +88,34 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void A_buildings_level_can_never_exceed_the_longhouse_level_it_needs()
+    public void A_buildings_level_can_never_exceed_the_longhouse_level_it_needs_except_for_storage_capped_producers()
     {
         foreach (var type in BuildingCatalogue.AllTypes.Where(t => t != BuildingType.Longhouse))
         {
             var unlock = BuildingCatalogue.UnlockLevel(type);
+            var producer = BuildingCatalogue.StorageCappedProducers.Contains(type);
             for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 Assert.Equal(
-                    Math.Max(unlock, level),
+                    producer ? unlock : Math.Max(unlock, level),
                     BuildingCatalogue.Get(type, level).RequiredLonghouseLevel);
+            }
+        }
+    }
+
+    [Fact]
+    public void Every_producer_level_fits_in_what_a_settlement_can_store()
+    {
+        // Storage is what caps a producer now: base capacity + a maxed Longhouse + three maxed storage houses.
+        var storageHouse = BuildingCatalogue.Get(BuildingType.StorageHouse, BuildingCatalogue.MaxLevelFor(BuildingType.StorageHouse));
+        var longhouse = BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse));
+        var capacity = BuildingCatalogue.BaseStorageCapacity + longhouse.StorageCapacity + 3 * storageHouse.StorageCapacity;
+
+        foreach (var type in BuildingCatalogue.StorageCappedProducers.Where(t => BuildingCatalogue.MaxLevelFor(t) > 0))
+        {
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
+            {
+                Assert.True(capacity.Covers(BuildingCatalogue.Get(type, level).Cost), $"{type} level {level} cannot be stored");
             }
         }
     }
@@ -377,6 +395,53 @@ public class EconomyDesignTests
 
         var decision = settlement.PlanBuild(
             BuildingType.Lumberjack, new HexCoord(1, 0), Terrain.Forest, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    private static BuildDecision PlanStorage(Settlement settlement, HexCoord coord) =>
+        settlement.PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+
+    [Fact]
+    public void The_first_storage_house_is_never_refused_by_the_level_10_rule()
+    {
+        Assert.True(PlanStorage(SettlementWith(1), new HexCoord(1, 0)).Accepted);
+    }
+
+    [Fact]
+    public void A_second_storage_house_is_refused_while_the_first_is_below_level_10()
+    {
+        var settlement = SettlementWith(12, (BuildingType.StorageHouse, 9));
+
+        Assert.Equal(BuildingCatalogue.AdditionalStorageHouseLevel, 10);
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(settlement, new HexCoord(1, 0)).Rejection);
+    }
+
+    [Fact]
+    public void A_queued_first_storage_house_already_blocks_a_second()
+    {
+        var settlement = SettlementWith(1);
+        var first = PlanStorage(settlement, new HexCoord(1, 0));
+        Assert.True(first.Accepted);
+        var queued = settlement.Enqueue(first.Order!, T0);
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(queued, new HexCoord(1, 1)).Rejection);
+    }
+
+    [Fact]
+    public void A_second_storage_house_is_allowed_once_one_stands_at_level_10()
+    {
+        var settlement = SettlementWith(12, (BuildingType.StorageHouse, 10));
+
+        Assert.True(PlanStorage(settlement, new HexCoord(1, 0)).Accepted);
+    }
+
+    [Fact]
+    public void Upgrading_a_storage_house_is_never_refused_by_the_level_10_rule()
+    {
+        var settlement = SettlementWith(5, (BuildingType.StorageHouse, 1), (BuildingType.StorageHouse, 2));
+
+        var decision = PlanStorage(settlement, new HexCoord(-1, 0));
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }

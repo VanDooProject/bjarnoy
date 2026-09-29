@@ -1125,6 +1125,22 @@ public sealed record Settlement
             }
         }
 
+        // Storage houses keep their Longhouse cap, and an additional one is only
+        // allowed once one stands at AdditionalStorageHouseLevel. Only a *new*
+        // storage house counts (baseLevel 0) — upgrading one is never refused.
+        if (type == BuildingType.StorageHouse && baseLevel == 0)
+        {
+            var storageHexes = Buildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord)
+                .Concat(Queue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord))
+                .Distinct()
+                .Count();
+            if (storageHexes >= 1
+                && HighestLevelOf(BuildingType.StorageHouse) < BuildingCatalogue.AdditionalStorageHouseLevel)
+            {
+                return BuildDecision.Rejected(BuildRejection.StorageHouseTooLow);
+            }
+        }
+
         // Every prerequisite must be met, and each is judged against the
         // settlement's *highest-level* building of that type — not the first
         // one in coordinate order, which would let a second, lower building of
