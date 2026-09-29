@@ -19,6 +19,7 @@ import docs from './locales/en/docs.json';
 import showcase from './locales/en/showcase.json';
 import adminActivityChart from './locales/en/adminActivityChart.json';
 import adminActivity from './locales/en/adminActivity.json';
+import adminEconomy from './locales/en/adminEconomy.json';
 import adminIslandLab from './locales/en/adminIslandLab.json';
 import adminLayout from './locales/en/adminLayout.json';
 import adminReports from './locales/en/adminReports.json';
@@ -58,6 +59,7 @@ export interface MessageSchema {
   // fallbackLocale in index.ts and the skip clause in src/test/i18n.ts).
   adminActivityChart: typeof adminActivityChart;
   adminActivity: typeof adminActivity;
+  adminEconomy: typeof adminEconomy;
   adminIslandLab: typeof adminIslandLab;
   adminLayout: typeof adminLayout;
   adminReports: typeof adminReports;
