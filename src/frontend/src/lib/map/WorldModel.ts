@@ -1348,10 +1348,11 @@ export class WorldModel {
     // claimed but must still refuse building on it.
     if (tile.giant) return false;
     // Every other building needs dry land; the fishing hut, dockyard, and
-    // fisher hut are the exceptions, and *only* stand on the coastal ring of
+    // fisher hut and Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
     // BuildingDefinition.RequiresCoastalWater).
-    const isWaterOnlyBuilding = type === 'fishinghut' || type === 'dockyard' || type === 'fisherhut';
+    const isWaterOnlyBuilding =
+      type === 'fishinghut' || type === 'dockyard' || type === 'fisherhut' || type === 'shrineofnjord';
     if (isWaterOnlyBuilding ? !tile.isCoastalWater : tile.terrain === 'sea') return false;
     if (tile.buildingType) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only

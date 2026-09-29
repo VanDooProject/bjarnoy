@@ -148,8 +148,6 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.ShrineOfFreyja, Terrain.Sand, false)]
     [InlineData(BuildingType.ShrineOfUllr, Terrain.Grass, true)]
     [InlineData(BuildingType.ShrineOfUllr, Terrain.Forest, false)]
-    [InlineData(BuildingType.ShrineOfNjord, Terrain.Grass, true)]
-    [InlineData(BuildingType.ShrineOfNjord, Terrain.Sand, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
     {
         // This is the rule the legacy AllowedTiles list encoded by holding a
@@ -190,7 +188,8 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.FishingHut)]
     [InlineData(BuildingType.Dockyard)]
     [InlineData(BuildingType.FisherHut)]
-    public void The_fishing_hut_dockyard_and_fisher_hut_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
+    [InlineData(BuildingType.ShrineOfNjord)]
+    public void The_fishing_hut_dockyard_fisher_hut_and_shrine_of_njord_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
 
@@ -1661,6 +1660,43 @@ public class SettlementTests
             speedFactor: 1.0, isCoastalWater: true);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_shrine_of_njord_is_refused_on_land_even_when_affordable()
+    {
+        // Its art is a shrine on a rock in the shallows — same rule as
+        // FishingHut/Dockyard/FisherHut, it is built on coastal water only.
+        var settlement = FoundAtLonghouseLevel(10);
+
+        var decision = settlement.PlanBuild(BuildingType.ShrineOfNjord, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_shrine_of_njord_is_refused_on_open_sea_that_is_not_coastal()
+    {
+        var settlement = FoundAtLonghouseLevel(10);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfNjord, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: false);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_shrine_of_njord_passes_the_terrain_check_on_coastal_water()
+    {
+        var settlement = FoundAtLonghouseLevel(10);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfNjord, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: true);
+
+        // May still be refused for its capstone prerequisites, but never for terrain.
+        Assert.NotEqual(BuildRejection.TerrainNotAllowed, decision.Rejection);
     }
 
     [Fact]
