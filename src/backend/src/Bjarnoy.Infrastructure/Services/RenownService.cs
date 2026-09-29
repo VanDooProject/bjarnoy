@@ -70,10 +70,16 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
             .SelectMany(s => s.Buildings)
             .SumAsync(b => (int?)b.Level, cancellationToken).ConfigureAwait(false) ?? 0;
 
+        var feastRenown = await CollectFeastRenownAsync(userId, worldId, now, cancellationToken).ConfigureAwait(false);
+
         var account = new RenownAccount { Total = user.RenownTotal, SettledAt = user.RenownSettledAt == default ? now : user.RenownSettledAt };
         var settled = account.SettleTo(now, totalLevels);
+        settled = settled with { Total = settled.Total + feastRenown };
 
-        if (settled.Total != user.RenownTotal || settled.SettledAt != user.RenownSettledAt)
+        // One SaveChanges carries both the account's new total and the
+        // settlements' zeroed PendingFeastRenown (CollectFeastRenownAsync), so
+        // a feast's renown is credited exactly once.
+        if (settled.Total != user.RenownTotal || settled.SettledAt != user.RenownSettledAt || _dbContext.ChangeTracker.HasChanges())
         {
             user.RenownTotal = settled.Total;
             user.RenownSettledAt = settled.SettledAt;
@@ -81,6 +87,39 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
         }
 
         return settled.Total;
+    }
+
+    /// <summary>
+    /// Takes the renown of every feast the player's settlements in
+    /// <paramref name="worldId"/> have finished: a feast whose end has passed is
+    /// ended first (whether or not anything settled that settlement since),
+    /// then each settlement's <see cref="SettlementEntity.PendingFeastRenown"/>
+    /// is summed and zeroed on the tracked entities. The caller saves.
+    /// </summary>
+    private async Task<double> CollectFeastRenownAsync(
+        Guid userId, Guid worldId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var owed = await _dbContext.Settlements
+            .Where(s => s.UserId == userId && s.WorldId == worldId
+                && (s.PendingFeastRenown > 0 || (s.FeastEndsAt != null && s.FeastEndsAt <= now)))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var total = 0.0;
+        foreach (var settlement in owed)
+        {
+            if (settlement.FeastEndsAt is { } endsAt && endsAt <= now)
+            {
+                settlement.PendingFeastRenown += settlement.FeastRenownGain;
+                settlement.FeastStartedAt = null;
+                settlement.FeastEndsAt = null;
+                settlement.FeastRenownGain = 0;
+            }
+
+            total += settlement.PendingFeastRenown;
+            settlement.PendingFeastRenown = 0;
+        }
+
+        return total;
     }
 
     /// <summary>Renown total, without accruing further — for display alongside other already-fresh data.</summary>
@@ -95,6 +134,15 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
     }
 
     /// <summary>Convenience: accrues against "now" (wall clock) — used where no particular world's game clock is already in scope.</summary>
-    public Task<double> AccrueAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default) =>
-        AccrueAsync(userId, worldId, _timeProvider.GetUtcNow(), cancellationToken);
+    public async Task<double> AccrueAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default)
+    {
+        // Feasts end in the world's game time, so the wall clock is mapped
+        // through the world's clock (identical at speed 1.0).
+        var world = await _dbContext.Worlds.AsNoTracking().FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken)
+            .ConfigureAwait(false);
+        var wall = _timeProvider.GetUtcNow();
+        var now = world is null ? wall : world.ToClock().ToGameTime(wall);
+
+        return await AccrueAsync(userId, worldId, now, cancellationToken).ConfigureAwait(false);
+    }
 }
