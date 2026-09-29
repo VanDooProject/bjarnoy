@@ -125,7 +125,10 @@ public sealed class AdminSettlementEndpointsTests : IAsyncLifetime
         var (_, settlement) = await FoundAsync(client);
 
         var rate = settlement.Resources.RatePerHour.Food;
-        _factory.Time.Advance(TimeSpan.FromHours(4));
+        // A new settlement starts 50 below its storage capacity
+        // (BuildingCatalogue.FoundingStock), so the wait stays short enough
+        // that production doesn't reach the cap.
+        _factory.Time.Advance(TimeSpan.FromHours(2));
 
         // Minted after the time advance, so the token's own lifetime isn't
         // what expires here.
@@ -135,7 +138,7 @@ public sealed class AdminSettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var detail = await response.ReadStrictAsync<SettlementResponse>(Ct);
 
-        Assert.Equal(settlement.Resources.Stock.Food + (rate * 4), detail.Resources.Stock.Food, 0);
+        Assert.Equal(settlement.Resources.Stock.Food + (rate * 2), detail.Resources.Stock.Food, 0);
     }
 
     [Fact]
@@ -145,9 +148,11 @@ public sealed class AdminSettlementEndpointsTests : IAsyncLifetime
         var (_, settlement) = await FoundAsync(client);
 
         var rate = settlement.Resources.RatePerHour.Wood;
-        // Two hours of production accrue before the admin's grant lands, so the
-        // grant must not silently discard or overwrite it.
-        _factory.Time.Advance(TimeSpan.FromHours(2));
+        // An hour of production accrues before the admin's grant lands, so the
+        // grant must not silently discard or overwrite it. The founding stock
+        // sits 50 below capacity, so the hour and the grant together stay
+        // under it.
+        _factory.Time.Advance(TimeSpan.FromHours(1));
 
         // Minted after the time advance, so the token's own lifetime isn't
         // what expires here.
@@ -158,12 +163,12 @@ public sealed class AdminSettlementEndpointsTests : IAsyncLifetime
         // clamp (that is covered separately, by the negative-delta test).
         var response = await client.PostJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/resources",
-            new GrantResourcesRequest(Wood: 50), Ct);
+            new GrantResourcesRequest(Wood: 20), Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var granted = await response.ReadStrictAsync<SettlementResponse>(Ct);
 
-        Assert.Equal(settlement.Resources.Stock.Wood + (rate * 2) + 50, granted.Resources.Stock.Wood, 0);
+        Assert.Equal(settlement.Resources.Stock.Wood + rate + 20, granted.Resources.Stock.Wood, 0);
     }
 
     [Fact]

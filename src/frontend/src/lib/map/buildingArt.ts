@@ -10,7 +10,6 @@
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
 import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
-import magictowerUrl from '../../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
 export type ArtRef = { kind: 'atlas'; frame: AtlasFrameRect } | { kind: 'png'; url: string };
@@ -62,13 +61,6 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   druidhut: 'druidhut',
   cartworkshop: 'cartworkshop',
   claybrickworks: 'claybrickworks',
-};
-
-// magictower has no level suffix at all — a single composited image,
-// unlike the families above — and showcase doesn't carry it yet, so it
-// stays PNG-only.
-const SINGLE_LEVEL_ART: Record<string, string> = {
-  magictower: magictowerUrl,
 };
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
@@ -161,7 +153,6 @@ function showcaseBuildingFrame(family: string, level: number): AtlasFrameRect | 
  * level per type. Returns undefined for a type with no art in the pack.
  */
 export function buildingArt(type: string, level = 1): ArtRef | undefined {
-  if (SINGLE_LEVEL_ART[type]) return { kind: 'png', url: SINGLE_LEVEL_ART[type] };
   const family = BUILDING_ART_FAMILIES[type];
   if (!family) return undefined;
   return buildingArtByFamily(family, level);
@@ -200,9 +191,8 @@ export interface BuildingLayers {
   clip?: AtlasClip & { frameRects: AtlasFrameRect[]; restRect?: AtlasFrameRect };
 }
 
-/** Same wire-type-to-family resolution `buildingArt` does, for a caller that wants the layered form instead of a flattened picture. Undefined for a single-level-art or unmapped type — those have no `buildings-static` base/top split to animate. */
+/** Same wire-type-to-family resolution `buildingArt` does, for a caller that wants the layered form instead of a flattened picture. Undefined for an unmapped type — it has no `buildings-static` base/top split to animate. */
 export function buildingLayersForType(type: string, level: number): BuildingLayers | undefined {
-  if (SINGLE_LEVEL_ART[type]) return undefined;
   const family = BUILDING_ART_FAMILIES[type];
   return family ? buildingLayers(family, level) : undefined;
 }

@@ -28,91 +28,80 @@ export const ANCHOR = 'longhouse';
 
 /**
  * Slated for removal from the game and already gone from the art pipeline,
- * so the docs stop advertising them. They are still in the catalogue (a
- * building type can't simply be dropped from a persisted enum), so this is a
- * docs-only omission — delete the entry to bring one back.
+ * so the docs stop advertising them. They are still in the catalogue, so
+ * this is a docs-only omission — delete the entry to bring one back. (The
+ * Magic Tower, which used to be listed here, is gone from the catalogue
+ * altogether.)
  */
-export const HIDDEN_FROM_DOCS: readonly string[] = ['magictower', 'fisherhut'];
+export const HIDDEN_FROM_DOCS: readonly string[] = ['fisherhut'];
 
 export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Advanced', 'Capstone'];
 
 export type Slot = readonly [col: number, row: number];
 
 /**
- * Column is dependency depth; row is chosen so that most links are a single
- * horizontal run — sources sit level with everything they feed: storage
- * house with great storehouse, fishing hut with dockyard, and tower with
- * barracks and archery range.
+ * Column is dependency depth; row is the unlock ladder (docs/design/economy.md
+ * section 5), read top to bottom: rows are ordered by the Longhouse level their
+ * first card unlocks at, so scrolling down the page walks the game's own
+ * progression — Lumberjack, Farm, Quarry, Clay Brickworks and Storage House
+ * (LH 1), Fishing Hut (LH 2), Tower (LH 3), Pumpkin Farm (LH 4), Town Square
+ * (LH 6). Each row is one chain: a source sits level with what it feeds, so
+ * most links are a single horizontal run — Lumberjack -> Sawmill -> Shrine of
+ * Ullr, Farm -> Crop Mill -> Shrine of Freyja, Storage House -> Great
+ * Storehouse, Fishing Hut -> Dockyard -> Shrine of Njörd, Tower -> Barracks ->
+ * Archery Range.
  *
- * Every capstone (Great Storehouse, both shrines) sits in the rightmost
- * column, on its nearer parent's row, so the whole run of "late-game tier"
- * cards reads as one column. Their farther parent's link doesn't need its
- * own routing at all — `routing.ts`'s `reuseSameRowChain` notices the row
- * is already a chain of real edges (adjacent ones, or ones already routed
- * straight through an empty cell) and just extends the hops already drawn,
- * rather than routing a separate line around the nearer parent's card.
- *
- * A column-3 cell is left empty on every row whose capstone's nearer parent
- * sits in column 2, so that parent's link can pass straight through to
- * column 4 instead of detouring: [3, 4] for Storage House -> Great
- * Storehouse ([2, 4] is empty too, since Great Storehouse has no column-2
- * parent at all), and [3, 5] for Dockyard -> Shrine of Njörd. [2, 0] is
- * likewise left empty for Lumberjack -> Sawmill — Shrine of Ullr's own
- * nearer parent (Sawmill) already sits in column 3, right next to it, so
- * its row needs no further empty cell.
- *
- * Row 1's own column-2 cell is left empty on purpose: Crop Mill (column 3)
- * now sits between Farm and Shrine of Freyja on Farm's own row, so
- * `reuseSameRowChain` can trace Farm -> Crop Mill -> Shrine of Freyja as one
- * continuous run instead of routing Farm's own link to the shrine around a
- * card in the way. Meadery — also Farm-based, but not a hop on that chain —
- * moved off this row entirely, beneath Quarry, to stay out of it.
+ * Every building has at most one feeder now, so every link joins two adjacent
+ * columns and nothing needs the same-row chain reuse or the bypass lane. A
+ * source with a second target (Farm -> Meadery, Barracks -> Weaponsmith, Town
+ * Square -> Druid Hut) drops it one row down, below its own row's chain, and
+ * its trunk runs down the gutter beside it. The Weaponsmith (Smithy) has the
+ * Shrine of Thor as its own capstone in the last column.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
-  longhouse: [0, 2],
+  longhouse: [0, 3],
 
+  // Row 0 — Lumberjack (LH 1) -> Sawmill (LH 20) -> Shrine of Ullr (LH 25).
   lumberjack: [1, 0],
+  sawmill: [2, 0],
+  shrineofullr: [3, 0],
+
+  // Row 1 — Farm (LH 1) -> Crop Mill (LH 20) -> Shrine of Freyja (LH 25).
   farm: [1, 1],
+  cropmill: [2, 1],
+  shrineoffreyja: [3, 1],
+  // Row 2 — Quarry (LH 1), and Farm's second target, the Meadery (LH 11),
+  // one row below the Farm chain.
   quarry: [1, 2],
-  // Clay Brickworks sits directly beneath Quarry — the last plain root (no
-  // cross-building prerequisite, same as Tower/StorageHouse/Quarry) — with
-  // Meadery alongside it in column 2, out of Farm's row (see above).
+  meadery: [2, 2],
+
+  // Row 3 — Clay Brickworks (LH 1), a plain root with nothing behind it.
   claybrickworks: [1, 3],
+
+  // Row 4 — Storage House (LH 1) -> Great Storehouse (LH 15).
   storagehouse: [1, 4],
+  greatstorehouse: [2, 4],
+
+  // Row 5 — Fishing Hut (LH 2) -> Dockyard (LH 8) -> Shrine of Njörd (LH 25).
   fishinghut: [1, 5],
-  tower: [1, 6],
-
-  // [2, 0] intentionally empty — the lane Lumberjack -> Sawmill runs through.
-  meadery: [2, 3],
-  pumpkinfarm: [2, 2],
   dockyard: [2, 5],
+  shrineofnjord: [3, 5],
+
+  // Row 6 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9).
+  tower: [1, 6],
   barracks: [2, 6],
-
-  sawmill: [3, 0],
-  cropmill: [3, 1],
-  // [3, 4] intentionally empty — the lane Storage House -> Great Storehouse runs through.
-  // [3, 5] intentionally empty — the lane Dockyard -> Shrine of Njörd runs through.
   archeryrange: [3, 6],
+  // Row 7 — Pumpkin Farm (LH 4), a plain root; and Barracks' second target,
+  // the Weaponsmith (Smithy, LH 15), with the Shrine of Thor (LH 25) behind it.
+  pumpkinfarm: [1, 7],
+  smithy: [3, 7],
+  shrineofthor: [4, 7],
 
-  greatstorehouse: [4, 4],
-  shrineoffreyja: [4, 1],
-  shrineofullr: [4, 0],
-  shrineofnjord: [4, 5],
-  shrineofthor: [4, 6],
-
-  // Smithy sits one row beneath Shrine of Thor, in the same capstone
-  // column — it shares that shrine's exact Barracks-10/ArcheryRange-10
-  // prerequisite pair, so it reads as the military line's second capstone
-  // rather than a fresh root.
-  smithy: [4, 7],
-
-  // Town Square is a plain root too; Druid's Hut shares its row since it's
-  // now gated on a standing Town Square (one prerequisite -> column 2).
-  townsquare: [1, 7],
-  druidhut: [2, 7],
-
-  // Behind a standing Town Square, so column 2.
+  // Row 8 — Town Square (LH 6) -> Cart Workshop (LH 10); its second target,
+  // the Druid Hut (LH 12), one row below.
+  townsquare: [1, 8],
   cartworkshop: [2, 8],
+  druidhut: [2, 9],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;

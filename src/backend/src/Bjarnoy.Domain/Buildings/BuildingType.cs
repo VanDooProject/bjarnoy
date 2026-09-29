@@ -36,7 +36,15 @@ public enum BuildingType
     /// <summary>Food, from shallow (coastal) water rather than land.</summary>
     FishingHut = 6,
 
-    /// <summary>Iron, from arcane means. Placed on grass only.</summary>
+    /// <summary>
+    /// <b>Obsolete — removed from the game</b> (<c>docs/design/economy.md</c>
+    /// section 2). The value stays in the enum only because persisted rows
+    /// store the integer and the ones after it must not shift; it has no
+    /// definition in <see cref="BuildingCatalogue"/> (<c>TryGet</c> returns
+    /// <see langword="null"/>), is not in <see cref="BuildingCatalogue.AllTypes"/>,
+    /// cannot be built, and a stored MagicTower is dropped when its settlement
+    /// is loaded.
+    /// </summary>
     MagicTower = 7,
 
     /// <summary>Food, on grass. A second farm variant (issue #24).</summary>
@@ -146,10 +154,10 @@ public enum BuildingType
     CropMill = 21,
 
     /// <summary>
-    /// Iron, on grass or sand — takes over <see cref="MagicTower"/>'s
-    /// economic role as that building is retired from the game. A
-    /// military-line capstone behind the same maxed <see cref="Barracks"/>/
-    /// <see cref="ArcheryRange"/> pair as <see cref="ShrineOfThor"/>.
+    /// The Weaponsmith (display name; the type keeps its persisted name).
+    /// Produces nothing — a troop-upgrade building only — and is the military
+    /// line's capstone behind a level-10 <see cref="Barracks"/>, feeding the
+    /// <see cref="ShrineOfThor"/>.
     /// </summary>
     Smithy = 22,
 

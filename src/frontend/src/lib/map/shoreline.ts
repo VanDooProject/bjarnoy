@@ -35,7 +35,7 @@ export function hasShoreline(center: AxialCoord, claimRadius: number, terrain: T
 
 /**
  * Mirrors `Settlement.cs`'s `ClaimRadius` (backed by
- * `BuildingCatalogue`'s Longhouse `ClaimRadius = 2 + (level / 2)`, the same
+ * `BuildingCatalogue`'s Longhouse `ClaimRadius = level == 1 ? 2 : 3`, the same
  * number `building-catalogue.json`'s `longhouse` entries carry in their own
  * `claimRadius` field) — the centre disc's own radius, derived purely from
  * the longhouse level the frontend already tracks (`hud.level`), so no
@@ -45,7 +45,10 @@ export function hasShoreline(center: AxialCoord, claimRadius: number, terrain: T
  * claimed territory once Tower satellite discs are included.
  */
 export function claimRadiusForLevel(longhouseLevel: number): number {
-  return 2 + Math.floor(longhouseLevel / 2);
+  // The Longhouse only grows the realm until towers are available: 2 at
+  // level 1, 3 from level 2 on, and it stops there — territory then grows
+  // through towers (docs/design/economy.md section 5).
+  return longhouseLevel <= 1 ? 2 : 3;
 }
 
 /**

@@ -40,7 +40,7 @@ describe('buildGraph', () => {
 
   it('drops prerequisites naming a building the page does not show', () => {
     const withHidden = buildGraph(['longhouse', 'dockyard'], (type) =>
-      type === 'dockyard' ? [{ type: 'fishinghut', level: 4 }] : [],
+      type === 'dockyard' ? [{ type: 'fishinghut', level: 5 }] : [],
     );
 
     // Fishing hut isn't in this set, so the dockyard falls back to the anchor
@@ -51,17 +51,17 @@ describe('buildGraph', () => {
 
 describe('ancestry', () => {
   it('walks the whole chain, not just direct parents', () => {
-    // Shrine of Thor needs both Barracks and Archery Range, and the latter
-    // is itself downstream of the former — the join should still dedupe to
-    // one flat ancestor set, not double-count the shared Tower/Longhouse root.
+    // Shrine of Thor <- Weaponsmith (Smithy) <- Barracks <- Tower <- Longhouse:
+    // one feeder per building, so the ancestors are the single chain up to
+    // the anchor.
     expect(ancestorsOf(graph, 'shrineofthor')).toEqual(
-      new Set(['barracks', 'archeryrange', 'tower', 'longhouse']),
+      new Set(['smithy', 'barracks', 'tower', 'longhouse']),
     );
   });
 
   it('reports what a building leads to', () => {
     expect(descendantsOf(graph, 'farm')).toEqual(
-      new Set(['pumpkinfarm', 'shrineoffreyja', 'meadery', 'cropmill']),
+      new Set(['shrineoffreyja', 'meadery', 'cropmill']),
     );
     expect(descendantsOf(graph, 'tower')).toEqual(
       new Set(['barracks', 'archeryrange', 'shrineofthor', 'smithy']),
@@ -94,14 +94,12 @@ describe('hoverSets', () => {
     const sets = hoverSets(graph, 'barracks');
 
     expect(sets.up).toEqual(new Set(['barracks', 'tower', 'longhouse']));
-    expect(sets.down).toEqual(new Set(['archeryrange', 'shrineofthor', 'smithy']));
+    expect(sets.down).toEqual(new Set(['archeryrange', 'smithy', 'shrineofthor']));
     expect(sets.downKeys).toEqual(
       new Set([
         edgeKey('barracks', 'archeryrange'),
-        edgeKey('archeryrange', 'shrineofthor'),
-        edgeKey('barracks', 'shrineofthor'),
-        edgeKey('archeryrange', 'smithy'),
         edgeKey('barracks', 'smithy'),
+        edgeKey('smithy', 'shrineofthor'),
       ]),
     );
     // The edge into the hovered card belongs to the prerequisite side.

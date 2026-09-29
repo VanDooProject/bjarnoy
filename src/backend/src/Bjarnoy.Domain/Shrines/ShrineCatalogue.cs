@@ -9,9 +9,10 @@ namespace Bjarnoy.Domain.Shrines;
 /// <remarks>
 /// A shrine's level is its <c>BuildingType</c> level like any other building —
 /// see <c>BuildingCatalogue</c> — but its effect only scales up to
-/// <see cref="MaxEffectLevel"/>; a shrine built past that keeps the level-5
-/// favour rather than growing forever, so the tech tree's generic
-/// <c>MaxLevel</c> of 10 does not have to be reinvented per shrine.
+/// <see cref="MaxEffectLevel"/>. A shrine's own maximum level
+/// (<c>BuildingCatalogue.MaxLevelFor</c>) is 5, the same number, so the two
+/// ceilings agree; a level clamped in from a stored row keeps the level-5
+/// favour rather than growing forever.
 /// </remarks>
 public static class ShrineCatalogue
 {

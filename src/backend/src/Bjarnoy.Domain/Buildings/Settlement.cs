@@ -107,7 +107,11 @@ public sealed record Settlement
 
     /// <summary>
     /// Claim radius of the settlement's own centre disc, driven by longhouse
-    /// level (MECHANICS.md §2: borders grow when the anchor levels up). This
+    /// level: 2 at level 1 and 3 from level 2 on. The Longhouse only grows the
+    /// realm until towers are available and stops there — from LH 3, when the
+    /// first Tower unlocks, territory grows only through towers (see
+    /// <see cref="BuildingCatalogue.MaxTowers"/> and
+    /// <c>docs/design/economy.md</c> section 5). This
     /// is only the centre disc — the settlement's full claimed territory is
     /// the union of this and every placed Tower's own satellite disc; see
     /// <see cref="Claims"/> and <see cref="ClaimDiscs"/>. Backed by
@@ -118,12 +122,12 @@ public sealed record Settlement
 
     /// <summary>
     /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, clamped to
-    /// <c>[1, BuildingCatalogue.MaxLevel]</c> — a settlement with no standing
+    /// <c>[1, MaxLevelFor(Longhouse)]</c> — a settlement with no standing
     /// Longhouse (level 0, e.g. mid-founding) still gets the level-1 radius
     /// (2, not this property's old level-0 floor of 1: the floor itself grew
     /// by the same one hex as every other level when the formula changed)
     /// rather than a lookup failure, and a corrupted/out-of-range level above
-    /// <see cref="BuildingCatalogue.MaxLevel"/> is clamped down to it instead
+    /// <see cref="BuildingCatalogue.MaxLevelFor"/> is clamped down to it instead
     /// of throwing — the same defensive clamp <c>SettlementEntity.ToDomain</c>
     /// already applies for exactly this "a raw DB row could carry a bad
     /// level" reason. Public so callers with only a raw longhouse level on
@@ -132,13 +136,12 @@ public sealed record Settlement
     /// number without a full <see cref="Settlement"/> instance.
     /// </summary>
     public static int ClaimRadiusForLonghouseLevel(int longhouseLevel) =>
-        BuildingCatalogue.Get(BuildingType.Longhouse, Math.Clamp(longhouseLevel, 1, BuildingCatalogue.MaxLevel)).ClaimRadius;
+        BuildingCatalogue.Get(BuildingType.Longhouse, Math.Clamp(longhouseLevel, 1, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse))).ClaimRadius;
 
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
     /// <c>2 + max(0, (longhouseLevel − 5) / 5)</c> — 2 slots at level 1–9, 3 at
-    /// 10, 4 at 15, 5 at 20. The formula deliberately outlives today's
-    /// <see cref="BuildingCatalogue.MaxLevel"/> of 10. A razed settlement
+    /// 10, 4 at 15, 5 at 20, 7 at 30. A razed settlement
     /// (<see cref="LonghouseLevel"/> 0) still reads 2 — harmless, since every
     /// building needs <see cref="BuildingDefinition.RequiredLonghouseLevel"/>
     /// &gt;= 1 and nothing can be queued there anyway.
@@ -215,7 +218,7 @@ public sealed record Settlement
 
     /// <summary>
     /// The largest <see cref="ClaimRadius"/> the centre disc alone can ever
-    /// reach (longhouse at <see cref="BuildingCatalogue.MaxLevel"/>). This is
+    /// reach (longhouse at its maximum level). This is
     /// deliberately <em>not</em> a bound on a settlement's full territory —
     /// once Towers are involved there is no such fixed ceiling (a long enough
     /// chain of towers, each built inside ground the last one's own disc
@@ -228,7 +231,7 @@ public sealed record Settlement
     /// tower-aware check runs.
     /// </summary>
     public static readonly int MaxClaimRadius =
-        BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevel).ClaimRadius;
+        BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse)).ClaimRadius;
 
     /// <summary>
     /// Extra radius a single <see cref="BuildingType.Tower"/>'s own satellite
@@ -242,7 +245,7 @@ public sealed record Settlement
     /// of its own — it simply reads 0 rather than a level-1-sized floor. A
     /// non-positive level (no tower, or a level-0 foundation stub —
     /// see <see cref="ClaimDiscsFor"/>'s remarks) returns 0 rather than
-    /// looking anything up; a level above <see cref="BuildingCatalogue.MaxLevel"/>
+    /// looking anything up; a level above <see cref="BuildingCatalogue.MaxLevelFor"/> of a tower
     /// (a corrupted/out-of-range DB row) is clamped down to it instead of
     /// silently returning 0 — the same defensive clamp <see cref="ClaimRadiusForLonghouseLevel"/>
     /// applies for the Longhouse side of this same concern.
@@ -250,11 +253,11 @@ public sealed record Settlement
     public static int TowerClaimRadius(int towerLevel) =>
         towerLevel <= 0
             ? 0
-            : BuildingCatalogue.Get(BuildingType.Tower, Math.Min(towerLevel, BuildingCatalogue.MaxLevel)).ClaimRadius;
+            : BuildingCatalogue.Get(BuildingType.Tower, Math.Min(towerLevel, BuildingCatalogue.MaxLevelFor(BuildingType.Tower))).ClaimRadius;
 
-    /// <summary>The largest a single tower's own satellite disc can ever reach on its own (at <see cref="BuildingCatalogue.MaxLevel"/>).</summary>
+    /// <summary>The largest a single tower's own satellite disc can ever reach on its own (at its maximum level).</summary>
     public static readonly int MaxTowerClaimRadius =
-        BuildingCatalogue.Get(BuildingType.Tower, BuildingCatalogue.MaxLevel).ClaimRadius;
+        BuildingCatalogue.Get(BuildingType.Tower, BuildingCatalogue.MaxLevelFor(BuildingType.Tower)).ClaimRadius;
 
     /// <summary>
     /// Every disc that makes up the claimed territory described by
@@ -1024,9 +1027,16 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.HexOccupied);
         }
 
+        // A type with no definition at all (the removed Magic Tower) is never
+        // buildable — refused before any level arithmetic.
+        if (BuildingCatalogue.MaxLevelFor(type) == 0)
+        {
+            return BuildDecision.Rejected(BuildRejection.UnknownBuildingLevel);
+        }
+
         var baseLevel = ordersOnHex.Count > 0 ? ordersOnHex[^1].TargetLevel : (occupied ? existing.Level : 0);
         var targetLevel = baseLevel + 1;
-        if (targetLevel > BuildingCatalogue.MaxLevel)
+        if (targetLevel > BuildingCatalogue.MaxLevelFor(type))
         {
             return BuildDecision.Rejected(BuildRejection.MaxLevelReached);
         }
@@ -1095,6 +1105,40 @@ public sealed record Settlement
         if (LonghouseLevel < definition.RequiredLonghouseLevel)
         {
             return BuildDecision.Rejected(BuildRejection.LonghouseTooLow);
+        }
+
+        // Towers are the only way to grow the realm once the Longhouse stops
+        // (ClaimRadius), so their number follows the Longhouse level. Only a
+        // *new* tower counts against the limit (baseLevel 0: nothing standing
+        // or queued on this hex) — upgrading one is always allowed. A queued
+        // new tower already stakes a level-0 stub in Buildings, so towers are
+        // counted by distinct hex across standing buildings and queued orders.
+        if (type == BuildingType.Tower && baseLevel == 0)
+        {
+            var towerHexes = Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
+                .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord))
+                .Distinct()
+                .Count();
+            if (towerHexes >= BuildingCatalogue.MaxTowers(LonghouseLevel))
+            {
+                return BuildDecision.Rejected(BuildRejection.TowerLimitReached);
+            }
+        }
+
+        // Storage houses keep their Longhouse cap, and an additional one is only
+        // allowed once one stands at AdditionalStorageHouseLevel. Only a *new*
+        // storage house counts (baseLevel 0) — upgrading one is never refused.
+        if (type == BuildingType.StorageHouse && baseLevel == 0)
+        {
+            var storageHexes = Buildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord)
+                .Concat(Queue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord))
+                .Distinct()
+                .Count();
+            if (storageHexes >= 1
+                && HighestLevelOf(BuildingType.StorageHouse) < BuildingCatalogue.AdditionalStorageHouseLevel)
+            {
+                return BuildDecision.Rejected(BuildRejection.StorageHouseTooLow);
+            }
         }
 
         // Every prerequisite must be met, and each is judged against the

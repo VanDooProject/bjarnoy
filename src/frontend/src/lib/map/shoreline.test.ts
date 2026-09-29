@@ -75,12 +75,12 @@ describe('hasShoreline', () => {
 });
 
 describe('claimRadiusForLevel', () => {
-  it('mirrors Settlement.cs\'s 2 + (LonghouseLevel / 2), integer division', () => {
+  it('mirrors Settlement.cs: 2 at longhouse level 1, 3 from level 2 on, and it stops there', () => {
     expect(claimRadiusForLevel(1)).toBe(2);
     expect(claimRadiusForLevel(2)).toBe(3);
     expect(claimRadiusForLevel(3)).toBe(3);
-    expect(claimRadiusForLevel(4)).toBe(4);
-    expect(claimRadiusForLevel(10)).toBe(7);
+    expect(claimRadiusForLevel(4)).toBe(3);
+    expect(claimRadiusForLevel(30)).toBe(3);
   });
 });
 

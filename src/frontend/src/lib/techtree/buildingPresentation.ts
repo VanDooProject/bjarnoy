@@ -39,7 +39,6 @@ const PREVIEW_LEVEL: Record<string, number> = {
 const TYPE_LABELS: Record<string, string> = {
   storagehouse: 'Storage house',
   fishinghut: 'Fishing hut',
-  magictower: 'Magic tower',
   pumpkinfarm: 'Pumpkin farm',
   shrineofthor: 'Shrine of Thor',
   shrineoffreyja: 'Shrine of Freyja',
@@ -54,6 +53,8 @@ const TYPE_LABELS: Record<string, string> = {
   druidhut: "Druid's hut",
   cartworkshop: 'Cart workshop',
   claybrickworks: 'Clay brickworks',
+  // Display name only; the internal type stays `smithy`.
+  smithy: 'Weaponsmith',
 };
 
 export function typeLabel(type: string): string {
@@ -76,7 +77,6 @@ const SHORT_LABELS: Record<string, string> = {
   shrineofullr: 'Ullr',
   shrineofnjord: 'Njörd',
   archeryrange: 'Archery',
-  magictower: 'Magic t.',
 };
 
 export function shortLabel(type: string): string {
@@ -113,7 +113,6 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   quarry: 'production',
   pumpkinfarm: 'production',
   sawmill: 'production',
-  magictower: 'production',
   meadery: 'production',
   cropmill: 'production',
   claybrickworks: 'production',

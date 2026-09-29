@@ -174,6 +174,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
   it('a freshly placed (level-1) tower claims one extra ring of ground — Settlement.TowerClaimRadius(1) == 1', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
+    settlement.level = 3; // the first tower unlocks (and is allowed) at longhouse 3
     const radius = model.borderRadius(settlement);
     const edge = findLandBorderEdge(model, at, radius);
 
@@ -187,9 +188,53 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(beyond.some((c) => model.getTile(c.q, c.r).ownerId === settlement.id)).toBe(true);
   });
 
+  it('refuses a new tower when the longhouse level allows none, and once the limit is reached (maxTowers)', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    expect(spots.length).toBeGreaterThan(3);
+
+    // Longhouse 1-2: the Tower is not unlocked, no tower may stand.
+    settlement.level = 2;
+    expect(model.placeBuilding(settlement.id, spots[0], 'tower')).toBe(false);
+
+    // Longhouse 3 allows exactly one.
+    settlement.level = 3;
+    expect(model.placeBuilding(settlement.id, spots[0], 'tower')).toBe(true);
+    expect(model.placeBuilding(settlement.id, spots[1], 'tower')).toBe(false);
+    expect(model.towerCoords(settlement.id)).toEqual([{ q: spots[0].q, r: spots[0].r }]);
+
+    // Longhouse 7 allows a second; other buildings were never limited.
+    settlement.level = 7;
+    expect(model.placeBuilding(settlement.id, spots[1], 'tower')).toBe(true);
+    expect(model.placeBuilding(settlement.id, spots[2], 'tower')).toBe(false);
+    expect(model.placeBuilding(settlement.id, spots[2], 'farm')).toBe(true);
+  });
+
+  it('refuses an additional storage house until one stands at level 10 (ADDITIONAL_STORAGE_HOUSE_LEVEL)', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    expect(spots.length).toBeGreaterThan(2);
+
+    settlement.level = 3; // widen the claim so the spots are reachable
+    expect(model.storageHouses(settlement.id)).toEqual([]);
+    // The first is never refused; the second is, while the first is below 10.
+    expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
+    expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(false);
+
+    model.getTile(spots[0].q, spots[0].r).buildingLevel = 10;
+    expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(true);
+  });
+
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
+    settlement.level = 3; // the tower limit must not be what refuses this
     const radius = model.borderRadius(settlement);
     const outside = findLandBorderEdge(model, at, radius + 3);
 

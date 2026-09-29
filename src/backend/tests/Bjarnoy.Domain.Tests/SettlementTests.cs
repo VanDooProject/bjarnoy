@@ -12,7 +12,7 @@ public class BuildingCatalogueTests
     {
         foreach (var type in BuildingCatalogue.AllTypes)
         {
-            for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 var definition = BuildingCatalogue.TryGet(type, level);
 
@@ -28,7 +28,7 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(26)] // Farm tops out at 25
     public void Levels_outside_the_range_have_no_definition(int level)
     {
         Assert.Null(BuildingCatalogue.TryGet(BuildingType.Farm, level));
@@ -37,25 +37,24 @@ public class BuildingCatalogueTests
     }
 
     /// <summary>
-    /// Regression coverage for a frontend/backend realm-border mismatch: the
-    /// frontend's own realm-border formula (`WorldModel.borderRadius`,
-    /// `2 + floor(level / 2)`) and the backend's `Settlement.ClaimRadius`
-    /// (previously `1 + (level / 2)`) disagreed by exactly one hex at every
-    /// longhouse level, so a tile the frontend rendered as "inside the
-    /// realm" could still be rejected by the backend with
-    /// `HexNotInSettlement`. `Settlement.ClaimRadius` now reads this same
-    /// catalogue value back (see <see cref="Settlement.ClaimRadius"/>), so
-    /// this is the one place either side's number can drift from the other.
+    /// The Longhouse only grows the realm until towers exist: radius 2 at
+    /// level 1, 3 from level 2 on, and it stops there. The frontend mirrors
+    /// this in <c>shoreline.ts</c>'s <c>claimRadiusForLevel</c> (a mismatch
+    /// once let a tile render as "inside the realm" that the backend then
+    /// rejected with <c>HexNotInSettlement</c>), so this is the one place
+    /// either side's number can drift from the other.
     /// </summary>
     [Theory]
     [InlineData(1, 2)]
     [InlineData(2, 3)]
     [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(10, 7)]
-    public void Longhouse_ClaimRadius_matches_the_frontends_2_plus_half_level_formula(int level, int expectedRadius)
+    [InlineData(4, 3)]
+    [InlineData(10, 3)]
+    [InlineData(30, 3)]
+    public void Longhouse_ClaimRadius_is_2_at_level_1_and_3_from_level_2_on(int level, int expectedRadius)
     {
         Assert.Equal(expectedRadius, BuildingCatalogue.Get(BuildingType.Longhouse, level).ClaimRadius);
+        Assert.Equal(expectedRadius, Settlement.ClaimRadiusForLonghouseLevel(level));
     }
 
     [Theory]
@@ -75,7 +74,7 @@ public class BuildingCatalogueTests
         {
             if (type is BuildingType.Longhouse or BuildingType.Tower) continue;
 
-            for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 Assert.Equal(0, BuildingCatalogue.Get(type, level).ClaimRadius);
             }
@@ -96,22 +95,22 @@ public class BuildingCatalogueTests
     /// earned.
     /// </summary>
     [Theory]
-    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(31)] // Longhouse tops out at 30
     [InlineData(int.MaxValue)]
     public void ClaimRadiusForLonghouseLevel_clamps_a_too_high_level_instead_of_throwing(int longhouseLevel)
     {
         Assert.Equal(
-            BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevel).ClaimRadius,
+            BuildingCatalogue.Get(BuildingType.Longhouse, 30).ClaimRadius,
             Settlement.ClaimRadiusForLonghouseLevel(longhouseLevel));
     }
 
     [Theory]
-    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(11)] // Tower tops out at 10
     [InlineData(int.MaxValue)]
     public void TowerClaimRadius_clamps_a_too_high_level_instead_of_returning_zero(int towerLevel)
     {
         Assert.Equal(
-            BuildingCatalogue.Get(BuildingType.Tower, BuildingCatalogue.MaxLevel).ClaimRadius,
+            BuildingCatalogue.Get(BuildingType.Tower, 10).ClaimRadius,
             Settlement.TowerClaimRadius(towerLevel));
     }
 
@@ -131,8 +130,6 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Quarry, Terrain.Forest, false)]
     [InlineData(BuildingType.Farm, Terrain.Grass, true)]
     [InlineData(BuildingType.Farm, Terrain.Mountain, false)]
-    [InlineData(BuildingType.MagicTower, Terrain.Grass, true)]
-    [InlineData(BuildingType.MagicTower, Terrain.Sand, false)]
     [InlineData(BuildingType.PumpkinFarm, Terrain.Grass, true)]
     [InlineData(BuildingType.PumpkinFarm, Terrain.Mountain, false)]
     [InlineData(BuildingType.Tower, Terrain.Sand, true)]
@@ -221,33 +218,31 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void The_great_storehouse_requires_a_level_10_storage_house_alongside_the_longhouse()
+    public void The_great_storehouse_requires_a_level_15_storage_house_alongside_a_level_15_longhouse()
     {
         var definition = BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1);
 
-        Assert.Equal(10, definition.RequiredLonghouseLevel);
+        Assert.Equal(15, definition.RequiredLonghouseLevel);
         var prerequisite = Assert.Single(definition.Prerequisites);
         Assert.Equal(BuildingType.StorageHouse, prerequisite.Type);
-        Assert.Equal(10, prerequisite.Level);
+        Assert.Equal(15, prerequisite.Level);
     }
 
     [Theory]
+    [InlineData(BuildingType.Barracks, BuildingType.Tower, 3)]
+    [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 5)]
+    [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 5)]
+    [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 3)]
+    [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
+    [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 5)]
+    [InlineData(BuildingType.Smithy, BuildingType.Barracks, 10)]
+    [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 15)]
     [InlineData(BuildingType.Sawmill, BuildingType.Lumberjack, 10)]
-    [InlineData(BuildingType.PumpkinFarm, BuildingType.Farm, 5)]
-    [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 4)]
-    [InlineData(BuildingType.Barracks, BuildingType.Tower, 5)]
-    [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 3)]
-    [InlineData(BuildingType.ShrineOfThor, BuildingType.Barracks, 10)]
-    [InlineData(BuildingType.ShrineOfThor, BuildingType.ArcheryRange, 10)]
-    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.Farm, 10)]
-    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.PumpkinFarm, 10)]
-    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.CropMill, 10)]
-    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.Meadery, 10)]
-    [InlineData(BuildingType.ShrineOfUllr, BuildingType.Lumberjack, 10)]
-    [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 10)]
-    [InlineData(BuildingType.ShrineOfNjord, BuildingType.FishingHut, 10)]
+    [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
+    [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 5)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.CropMill, 5)]
     [InlineData(BuildingType.ShrineOfNjord, BuildingType.Dockyard, 10)]
-    [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 10)]
+    [InlineData(BuildingType.ShrineOfThor, BuildingType.Smithy, 5)]
     public void The_catalogue_carries_the_agreed_prerequisites(
         BuildingType type, BuildingType required, int requiredLevel)
     {
@@ -263,6 +258,10 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.FishingHut)]
     [InlineData(BuildingType.Tower)]
     [InlineData(BuildingType.StorageHouse)]
+    [InlineData(BuildingType.ClayBrickworks)]
+    [InlineData(BuildingType.FisherHut)]
+    [InlineData(BuildingType.PumpkinFarm)]
+    [InlineData(BuildingType.TownSquare)]
     public void The_tech_trees_roots_have_no_building_prerequisite(BuildingType type)
     {
         Assert.Empty(BuildingCatalogue.Get(type, 1).Prerequisites);
@@ -276,7 +275,7 @@ public class BuildingCatalogueTests
         // rather than merely expensive.
         foreach (var type in BuildingCatalogue.AllTypes)
         {
-            for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 Assert.DoesNotContain(
                     BuildingCatalogue.Get(type, level).Prerequisites,
@@ -286,21 +285,13 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void Prerequisites_gate_only_the_first_level_except_the_great_storehouse()
+    public void Prerequisites_gate_only_the_first_level()
     {
         foreach (var type in BuildingCatalogue.AllTypes)
         {
-            for (var level = 2; level <= BuildingCatalogue.MaxLevel; level++)
+            for (var level = 2; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
-                var prerequisites = BuildingCatalogue.Get(type, level).Prerequisites;
-                if (type == BuildingType.GreatStorehouse)
-                {
-                    Assert.NotEmpty(prerequisites);
-                }
-                else
-                {
-                    Assert.Empty(prerequisites);
-                }
+                Assert.Empty(BuildingCatalogue.Get(type, level).Prerequisites);
             }
         }
     }
@@ -313,7 +304,7 @@ public class BuildingCatalogueTests
             foreach (var prerequisite in BuildingCatalogue.Get(type, 1).Prerequisites)
             {
                 Assert.NotEqual(type, prerequisite.Type);
-                Assert.InRange(prerequisite.Level, 1, BuildingCatalogue.MaxLevel);
+                Assert.InRange(prerequisite.Level, 1, BuildingCatalogue.MaxLevelFor(prerequisite.Type));
                 Assert.NotNull(BuildingCatalogue.TryGet(prerequisite.Type, prerequisite.Level));
             }
         }
@@ -360,7 +351,7 @@ public class BuildingCatalogueTests
     [Fact]
     public void Cost_grows_with_level()
     {
-        for (var level = 2; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 2; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Farm); level++)
         {
             var previous = BuildingCatalogue.Get(BuildingType.Farm, level - 1);
             var current = BuildingCatalogue.Get(BuildingType.Farm, level);
@@ -371,12 +362,13 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void Production_grows_with_level()
+    public void Production_grows_geometrically_with_level()
     {
         var one = BuildingCatalogue.Get(BuildingType.Lumberjack, 1);
         var three = BuildingCatalogue.Get(BuildingType.Lumberjack, 3);
 
-        Assert.Equal(one.ProductionPerHour.Wood * 3, three.ProductionPerHour.Wood, 6);
+        Assert.Equal(40, one.ProductionPerHour.Wood, 6);
+        Assert.Equal(one.ProductionPerHour.Wood * 1.2 * 1.2, three.ProductionPerHour.Wood, 6);
     }
 
     [Fact]
@@ -480,7 +472,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.CropMill)]
     public void A_radius_boost_producer_has_no_production_of_its_own(BuildingType type)
     {
-        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
         {
             Assert.Equal(ResourceAmounts.Zero, BuildingCatalogue.Get(type, level).ProductionPerHour);
         }
@@ -488,20 +480,23 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(1, 5.0)]
-    [InlineData(10, 100.0)]
-    public void RadiusBoostPercent_is_linear_from_5_percent_at_level_1_to_100_percent_at_level_10(int level, double expected)
+    [InlineData(11, 55.0)]
+    [InlineData(20, 100.0)]
+    public void RadiusBoostPercent_is_linear_from_5_percent_at_level_1_to_100_percent_at_level_20(int level, double expected)
     {
         Assert.Equal(expected, BuildingCatalogue.RadiusBoostPercent(level), 6);
     }
 
     [Theory]
     [InlineData(1, 1)]
-    [InlineData(2, 1)]
-    [InlineData(3, 2)]
-    [InlineData(4, 2)]
-    [InlineData(9, 5)]
-    [InlineData(10, 5)]
-    public void RadiusBoostRange_grows_by_one_ring_every_two_levels(int level, int expectedRange)
+    [InlineData(4, 1)]
+    [InlineData(5, 2)]
+    [InlineData(8, 2)]
+    [InlineData(9, 3)]
+    [InlineData(16, 4)]
+    [InlineData(17, 5)]
+    [InlineData(20, 5)]
+    public void RadiusBoostRange_grows_by_one_ring_every_four_levels(int level, int expectedRange)
     {
         Assert.Equal(expectedRange, BuildingCatalogue.RadiusBoostRange(level));
     }
@@ -557,10 +552,9 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
-    [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 1)]
+    [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 3)]
     [InlineData(BuildingType.Smithy, BuildingType.Barracks, 10)]
-    [InlineData(BuildingType.Smithy, BuildingType.ArcheryRange, 10)]
-    [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 1)]
+    [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 5)]
     public void A_new_building_carries_its_own_prerequisite(BuildingType type, BuildingType prerequisite, int level)
     {
         Assert.Contains(
@@ -569,7 +563,7 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(BuildingType.CartWorkshop, 1)]
-    [InlineData(BuildingType.Smithy, 2)]
+    [InlineData(BuildingType.Smithy, 1)]
     [InlineData(BuildingType.DruidHut, 1)]
     public void A_new_building_needs_exactly_its_own_prerequisites(BuildingType type, int expectedCount)
     {
@@ -577,11 +571,12 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void Smithy_is_a_flat_level_10_capstone_like_the_shrines_and_sawmill()
+    public void Smithy_unlocks_at_longhouse_15_and_needs_a_longhouse_as_high_as_its_own_level_after_that()
     {
-        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Smithy); level++)
         {
-            Assert.Equal(10, BuildingCatalogue.Get(BuildingType.Smithy, level).RequiredLonghouseLevel);
+            Assert.Equal(
+                Math.Max(15, level), BuildingCatalogue.Get(BuildingType.Smithy, level).RequiredLonghouseLevel);
         }
     }
 
@@ -621,16 +616,16 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(BuildingType.ClayBrickworks)]
-    public void A_new_producer_scales_linearly_with_level(BuildingType type)
+    public void A_new_producer_scales_geometrically_with_level(BuildingType type)
     {
         var one = BuildingCatalogue.Get(type, 1).ProductionPerHour;
         var three = BuildingCatalogue.Get(type, 3).ProductionPerHour;
 
         Assert.True(one.Wood + one.Stone + one.Food + one.Iron > 0);
-        Assert.Equal(one.Wood * 3, three.Wood, 6);
-        Assert.Equal(one.Stone * 3, three.Stone, 6);
-        Assert.Equal(one.Food * 3, three.Food, 6);
-        Assert.Equal(one.Iron * 3, three.Iron, 6);
+        Assert.Equal(one.Wood * 1.2 * 1.2, three.Wood, 6);
+        Assert.Equal(one.Stone * 1.2 * 1.2, three.Stone, 6);
+        Assert.Equal(one.Food * 1.2 * 1.2, three.Food, 6);
+        Assert.Equal(one.Iron * 1.2 * 1.2, three.Iron, 6);
     }
 
     [Theory]
@@ -644,7 +639,7 @@ public class BuildingCatalogueTests
         // settler-cap boost, a rune/favour slot, a future morale boost, a
         // future troop-upgrade mechanic) doesn't exist yet — they're
         // buildable now purely ahead of that mechanic landing.
-        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
         {
             var definition = BuildingCatalogue.Get(type, level);
             Assert.Equal(ResourceAmounts.Zero, definition.ProductionPerHour);
@@ -662,7 +657,7 @@ public class BuildingCatalogueTests
     [Fact]
     public void CartWorkshop_is_purely_a_training_gate_with_no_storage_of_its_own()
     {
-        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.CartWorkshop); level++)
         {
             var definition = BuildingCatalogue.Get(BuildingType.CartWorkshop, level);
             Assert.Equal(ResourceAmounts.Zero, definition.StorageCapacity);
@@ -786,12 +781,12 @@ public class SettlementTests
         var firstTower = new HexCoord(1, 0);
         var settlement = Found() with
         {
-            // Longhouse level 3, not 1: a new Tower's RequiredLonghouseLevel
-            // (BuildingCatalogue.Tower) is 3 at level 1 — this test is about
-            // the claim check, not the longhouse-prerequisite one.
+            // Longhouse level 7, not 1: a new Tower needs a level-3 Longhouse,
+            // and a second tower (one stands already) needs MaxTowers(LH) >= 2
+            // — this test is about the claim check, not those two gates.
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 3), // ClaimRadius == 3
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 7), // ClaimRadius == 3
                 new PlacedBuilding(firstTower, BuildingType.Tower, 10), // TowerClaimRadius(10) == 10
             ],
         };
@@ -964,7 +959,8 @@ public class SettlementTests
     [Fact]
     public void A_fishing_hut_may_be_built_on_coastal_water()
     {
-        var settlement = Found();
+        // Fishing Hut unlocks at longhouse level 2.
+        var settlement = FoundAtLonghouseLevel(2);
 
         var decision = settlement.PlanBuild(
             BuildingType.FishingHut, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
@@ -1227,7 +1223,8 @@ public class SettlementTests
     [Fact]
     public void Building_the_same_type_on_an_occupied_hex_upgrades_it()
     {
-        var settlement = Found();
+        // Longhouse level 2: the level-2 upgrade needs a level-2 Longhouse.
+        var settlement = FoundAtLonghouseLevel(2);
         var coord = new HexCoord(1, 0);
         var first = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
         var built = settlement.Enqueue(first, T0).SettleTo(first.CompletesAt!.Value).Settlement;
@@ -1244,7 +1241,7 @@ public class SettlementTests
     {
         var settlement = Found();
 
-        // Tower level 1 needs a level-2 longhouse; a new settlement has 1.
+        // Tower level 1 needs a level-3 longhouse; a new settlement has 1.
         var decision = settlement.PlanBuild(
             BuildingType.Tower, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
@@ -1252,19 +1249,19 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_great_storehouse_is_refused_below_storage_house_level_10()
+    public void A_great_storehouse_is_refused_below_storage_house_level_15()
     {
         var settlement = Found() with
         {
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
-                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 9),
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 15),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 14),
             ],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 10), (BuildingType.StorageHouse, 9)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 10), (BuildingType.StorageHouse, 9)]).Capacity,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 14)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 14)]).Capacity,
                 T0),
         };
 
@@ -1275,19 +1272,19 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_great_storehouse_is_accepted_once_the_storage_house_reaches_level_10()
+    public void A_great_storehouse_is_accepted_once_the_storage_house_reaches_level_15()
     {
         var settlement = Found() with
         {
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
-                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 10),
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 15),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 15),
             ],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 10), (BuildingType.StorageHouse, 10)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 10), (BuildingType.StorageHouse, 10)]).Capacity,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 15)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 15)]).Capacity,
                 T0),
         };
 
@@ -1301,15 +1298,15 @@ public class SettlementTests
     public void A_prerequisite_is_judged_by_the_settlements_highest_building_of_that_type()
     {
         // Two storage houses: an unfinished level-0 stub on the lower coord and
-        // the real level-10 one behind it. The check must find the level 10,
+        // the real level-15 one behind it. The check must find the level 15,
         // not whichever building happens to come first.
         var settlement = Found() with
         {
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 15),
                 new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 0),
-                new PlacedBuilding(new HexCoord(2, 0), BuildingType.StorageHouse, 10),
+                new PlacedBuilding(new HexCoord(2, 0), BuildingType.StorageHouse, 15),
             ],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
@@ -1331,7 +1328,7 @@ public class SettlementTests
         {
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 15),
                 new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 0),
             ],
             Resources = ResourcePool.Create(
@@ -1346,7 +1343,7 @@ public class SettlementTests
 
         Assert.Equal(BuildRejection.RequiredBuildingTooLow, decision.Rejection);
         Assert.Equal(BuildingType.StorageHouse, decision.MissingPrerequisite?.Type);
-        Assert.Equal(10, decision.MissingPrerequisite?.Level);
+        Assert.Equal(15, decision.MissingPrerequisite?.Level);
     }
 
     /// <summary>
@@ -1377,28 +1374,27 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_building_with_two_prerequisites_is_refused_while_either_is_missing()
+    public void A_building_is_refused_while_its_prerequisite_is_missing_or_too_low()
     {
-        // Shrine of Thor wants a maxed Barracks and Archery Range.
-        var withoutArchery = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10));
-        var withoutBarracks = FoundAtLonghouseLevel(10, (BuildingType.ArcheryRange, 10));
+        // Shrine of Thor (LH 25) wants a level-5 Weaponsmith (Smithy).
+        var withoutSmithy = FoundAtLonghouseLevel(25);
+        var withLowSmithy = FoundAtLonghouseLevel(25, (BuildingType.Smithy, 4));
 
-        var missingArchery = withoutArchery.PlanBuild(
+        var missing = withoutSmithy.PlanBuild(
             BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
-        var missingBarracks = withoutBarracks.PlanBuild(
+        var low = withLowSmithy.PlanBuild(
             BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingArchery.Rejection);
-        Assert.Equal(BuildingType.ArcheryRange, missingArchery.MissingPrerequisite?.Type);
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingBarracks.Rejection);
-        Assert.Equal(BuildingType.Barracks, missingBarracks.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missing.Rejection);
+        Assert.Equal(new BuildingPrerequisite(BuildingType.Smithy, 5), missing.MissingPrerequisite);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, low.Rejection);
+        Assert.Equal(BuildingType.Smithy, low.MissingPrerequisite?.Type);
     }
 
     [Fact]
-    public void A_building_with_two_prerequisites_is_accepted_once_both_stand()
+    public void A_building_is_accepted_once_its_prerequisite_stands()
     {
-        var settlement = FoundAtLonghouseLevel(
-            10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10));
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.Smithy, 5));
 
         var decision = settlement.PlanBuild(
             BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
@@ -1407,12 +1403,20 @@ public class SettlementTests
     }
 
     [Fact]
-    public void Shrine_of_freyja_is_accepted_once_all_four_food_line_prerequisites_stand()
+    public void A_shrine_is_refused_below_longhouse_25_even_with_its_feeder_standing()
     {
-        var settlement = FoundAtLonghouseLevel(
-            10,
-            (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10),
-            (BuildingType.CropMill, 10), (BuildingType.Meadery, 10));
+        var settlement = FoundAtLonghouseLevel(24, (BuildingType.Smithy, 5));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.LonghouseTooLow, decision.Rejection);
+    }
+
+    [Fact]
+    public void Shrine_of_freyja_is_accepted_once_a_level_5_crop_mill_stands()
+    {
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.CropMill, 5));
 
         var decision = settlement.PlanBuild(
             BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
@@ -1421,22 +1425,17 @@ public class SettlementTests
     }
 
     [Fact]
-    public void Shrine_of_freyja_is_refused_while_crop_mill_or_meadery_is_missing()
+    public void Shrine_of_freyja_is_refused_while_the_crop_mill_is_missing()
     {
-        var withoutCropMill = FoundAtLonghouseLevel(
-            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10), (BuildingType.Meadery, 10));
-        var withoutMeadery = FoundAtLonghouseLevel(
-            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10), (BuildingType.CropMill, 10));
+        // The Meadery and Pumpkin Farm are no longer part of the Freyja line.
+        var settlement = FoundAtLonghouseLevel(
+            25, (BuildingType.Farm, 25), (BuildingType.PumpkinFarm, 25), (BuildingType.Meadery, 20));
 
-        var missingCropMill = withoutCropMill.PlanBuild(
-            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
-        var missingMeadery = withoutMeadery.PlanBuild(
+        var decision = settlement.PlanBuild(
             BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingCropMill.Rejection);
-        Assert.Equal(BuildingType.CropMill, missingCropMill.MissingPrerequisite?.Type);
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingMeadery.Rejection);
-        Assert.Equal(BuildingType.Meadery, missingMeadery.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, decision.Rejection);
+        Assert.Equal(BuildingType.CropMill, decision.MissingPrerequisite?.Type);
     }
 
     [Fact]
@@ -1463,7 +1462,7 @@ public class SettlementTests
     [Fact]
     public void Barracks_is_buildable_once_its_longhouse_gate_and_tower_prerequisite_are_met()
     {
-        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Tower, 5));
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Tower, 3));
 
         var decision = settlement.PlanBuild(BuildingType.Barracks, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
@@ -1471,10 +1470,10 @@ public class SettlementTests
     }
 
     [Fact]
-    public void Barracks_is_refused_without_a_level_5_tower()
+    public void Barracks_is_refused_without_a_level_3_tower()
     {
         var withoutTower = FoundAtLonghouseLevel(5);
-        var withLowTower = FoundAtLonghouseLevel(5, (BuildingType.Tower, 4));
+        var withLowTower = FoundAtLonghouseLevel(5, (BuildingType.Tower, 2));
 
         var missingTower = withoutTower.PlanBuild(
             BuildingType.Barracks, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
@@ -1483,7 +1482,7 @@ public class SettlementTests
 
         Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingTower.Rejection);
         Assert.Equal(BuildingType.Tower, missingTower.MissingPrerequisite?.Type);
-        Assert.Equal(5, missingTower.MissingPrerequisite?.Level);
+        Assert.Equal(3, missingTower.MissingPrerequisite?.Level);
         Assert.Equal(BuildRejection.RequiredBuildingTooLow, lowTower.Rejection);
         Assert.Equal(BuildingType.Tower, lowTower.MissingPrerequisite?.Type);
     }
@@ -1491,7 +1490,7 @@ public class SettlementTests
     [Fact]
     public void A_shrine_is_buildable_on_grass_once_its_longhouse_gate_and_prerequisites_are_met()
     {
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10));
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.Smithy, 5));
 
         var decision = settlement.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
@@ -1504,7 +1503,7 @@ public class SettlementTests
     [InlineData(Terrain.Mountain)]
     public void A_shrine_is_refused_off_grass(Terrain terrain)
     {
-        var settlement = FoundAtLonghouseLevel(5);
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.Smithy, 5));
 
         var decision = settlement.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), terrain, T0, Guid.CreateVersion7());
 
@@ -1517,7 +1516,7 @@ public class SettlementTests
         // The caller (SettlementService.QueueBuildAsync) computes this set
         // from every settlement on the island, not just this one — see
         // Settlement.PlanBuild's shrineGodsElsewhereOnIsland doc comment.
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10));
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.Smithy, 5));
 
         var decision = settlement.PlanBuild(
             BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1531,8 +1530,7 @@ public class SettlementTests
     {
         // A settlement (or island) can still raise all four gods' shrines —
         // it's the same god twice that's refused, not shrines in general.
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10),
-            (BuildingType.CropMill, 10), (BuildingType.Meadery, 10));
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.CropMill, 5));
 
         var decision = settlement.PlanBuild(
             BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1547,9 +1545,8 @@ public class SettlementTests
         // The caller excludes the target coord from the set it builds, so a
         // settlement can always level up the shrine already standing there —
         // the island limit only ever blocks a *new* shrine to a claimed god.
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10),
-            (BuildingType.ShrineOfThor, 1));
-        var shrineCoord = new HexCoord(-4, 0); // FoundAtLonghouseLevel's third `standing` entry
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.Smithy, 5), (BuildingType.ShrineOfThor, 1));
+        var shrineCoord = new HexCoord(-3, 0); // FoundAtLonghouseLevel's second `standing` entry
 
         var decision = settlement.PlanBuild(
             BuildingType.ShrineOfThor, shrineCoord, Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1604,7 +1601,7 @@ public class SettlementTests
         // A settlement from before this rule existed may already have a
         // PumpkinFarm standing on what is now Wheat soil — leveling it up
         // must still work; the soil gate only ever blocks placing a *new* one.
-        var settlement = FoundAtLonghouseLevel(1, (BuildingType.PumpkinFarm, 1));
+        var settlement = FoundAtLonghouseLevel(4, (BuildingType.PumpkinFarm, 1));
         var farmCoord = new HexCoord(-2, 0); // FoundAtLonghouseLevel's first `standing` entry
 
         var decision = settlement.PlanBuild(
@@ -1733,7 +1730,7 @@ public class SettlementTests
     [InlineData(RiverTileShape.Bend60)]
     public void A_sawmill_may_be_built_on_a_straight_bend_or_bend60_river_tile(RiverTileShape shape)
     {
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.Lumberjack, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1751,7 +1748,7 @@ public class SettlementTests
         // see A_sawmill_may_be_built_on_a_straight_bend_or_bend60_river_tile
         // above), the Crop Mill's vendor art only has a Straight-river
         // composite: its waterwheel stands directly in the current.
-        var settlement = FoundAtLonghouseLevel(10);
+        var settlement = FoundAtLonghouseLevel(20);
 
         var decision = settlement.PlanBuild(
             BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1763,7 +1760,7 @@ public class SettlementTests
     [Fact]
     public void A_crop_mill_may_be_built_on_a_straight_river_tile()
     {
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10));
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.Farm, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1780,7 +1777,7 @@ public class SettlementTests
         // Loop variant, so that one variant is refused even though Bend60
         // itself is otherwise a valid Sawmill shape (see
         // BuildingCatalogue.SawmillExcludedRiverVariants).
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.Lumberjack, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1792,7 +1789,7 @@ public class SettlementTests
     [Fact]
     public void A_sawmill_may_be_built_on_a_plain_bend60_river_tile()
     {
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.Lumberjack, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1809,7 +1806,7 @@ public class SettlementTests
     public void A_sawmill_may_be_built_on_a_straight_or_bend_river_tile_showing_a_meander_or_island_variant(
         RiverTileShape shape, RiverVariant variant)
     {
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.Lumberjack, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1824,7 +1821,7 @@ public class SettlementTests
     [InlineData(RiverVariant.Island)]
     public void A_crop_mill_may_be_built_on_every_straight_river_variant(RiverVariant variant)
     {
-        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10));
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.Farm, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1839,7 +1836,7 @@ public class SettlementTests
     public void A_crop_mill_stays_refused_on_a_bend_or_bend60_river_tile_regardless_of_variant(
         RiverTileShape shape, RiverVariant variant)
     {
-        var settlement = FoundAtLonghouseLevel(10);
+        var settlement = FoundAtLonghouseLevel(20);
 
         var decision = settlement.PlanBuild(
             BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1992,7 +1989,7 @@ public class SettlementTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(BuildingCatalogue.HighestMaxLevel + 1)] // Centre holds the Longhouse
     public void Setting_a_level_outside_the_catalogues_range_is_refused(int level)
     {
         var settlement = Found();

@@ -44,7 +44,10 @@ describe('AdminEconomyView', () => {
     await flushPromises();
     const cost = wrapper.findAllComponents(EconomyChart)[0].props('series');
     expect(cost.map((s: { label: string }) => s.label).sort()).toHaveLength(6);
-    expect(cost[0].points.map((p: { x: number }) => p.x)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    // One point per level, from 1 up to that building's own max level.
+    const xs = cost[0].points.map((p: { x: number }) => p.x);
+    expect(xs.length).toBeGreaterThan(1);
+    expect(xs).toEqual(xs.map((_: number, i: number) => i + 1));
   });
 
   it('runs the simulation only on demand and lists milestones for both profiles', async () => {

@@ -111,6 +111,21 @@ public enum BuildRejection
 
     /// <summary>No construction slot is free, and there is no waiting-queue room either (the non-premium wall).</summary>
     NoFreeSlot,
+
+    /// <summary>
+    /// A new Tower was ordered while the settlement already holds (standing
+    /// plus queued) as many as its Longhouse level allows — see
+    /// <see cref="BuildingCatalogue.MaxTowers"/>. Upgrading an existing tower
+    /// is never refused for this reason.
+    /// </summary>
+    TowerLimitReached,
+
+    /// <summary>
+    /// An additional Storage House was ordered while the settlement's best one
+    /// is below <see cref="BuildingCatalogue.AdditionalStorageHouseLevel"/>.
+    /// The first storage house and upgrades are never refused for this reason.
+    /// </summary>
+    StorageHouseTooLow,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

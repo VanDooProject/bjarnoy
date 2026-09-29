@@ -14,7 +14,7 @@ const NEW_TYPES = [
   { type: 'meadery', label: 'Meadery', graphCategory: 'production' },
   { type: 'townsquare', label: 'Town square', graphCategory: 'logistics' },
   { type: 'cropmill', label: 'Crop mill', graphCategory: 'production' },
-  { type: 'smithy', label: 'Smithy', graphCategory: 'military' },
+  { type: 'smithy', label: 'Weaponsmith', graphCategory: 'military' },
   { type: 'druidhut', label: "Druid's hut", graphCategory: 'logistics' },
   { type: 'cartworkshop', label: 'Cart workshop', graphCategory: 'logistics' },
   { type: 'claybrickworks', label: 'Clay brickworks', graphCategory: 'production' },

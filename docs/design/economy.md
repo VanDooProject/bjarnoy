@@ -26,17 +26,17 @@ formula changes, re-run the lab and check all of them.
 Wood, Stone, Food, Iron.
 
 - **Wood** — Lumberjack (forest).
-- **Stone** — Quarry (mountain) *or* Clay Brickworks (grass). Both at LH 1:
-  world generation does not guarantee a mountain near a start, so Clay is
-  the no-mountain stone source, not an upgrade.
+- **Stone** — the **Clay Brickworks** on bog ground is the start's stone
+  source: bog is guaranteed in reach of every start (§8, `bog.md`), a
+  mountain is not. Where a mountain is in reach, the **Quarry** is an
+  alternative. Both unlock at LH 1.
 - **Food** — Reindeer Herder (the default, any grass), later Farm / Pumpkin
   Farm by island soil (one tech-tree card), Fishing Hut on coastal water.
-- **Iron** — comes from **lake ore** (Seeerz): a later feature adds a lake
-  tile to every island, connected to the rivers, with a lake-ore building
-  on it and a river **Hammerschmiede** (water-powered hammer mill) that
-  boosts it, the way the Sawmill boosts Lumberjacks (§8). Until then the
-  Longhouse is the only iron source, so buildings cost no iron; iron is a
-  military resource (units, Tower).
+- **Iron** — comes from **bog ore**: the bog-ore works stand on bog ground
+  (§8, `bog.md`), and a river **Hammerschmiede** (water-powered hammer
+  mill) boosts them later, the way the Sawmill boosts Lumberjacks. Before
+  the bog-ore works, the Longhouse is the only iron source, so buildings
+  cost no iron; iron is a military resource (units, Tower).
 
 The **Magic Tower is removed**. The **Smithy** is renamed **Weaponsmith**
 (Waffenschmiede; its art has an anvil) so it doesn't clash with the
@@ -100,9 +100,21 @@ has 3–8 stages per building, and each level maps onto a stage
 
 Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 
+**What caps a building's level.** Most buildings can never be a higher level
+than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
+keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
+Farm, Pumpkin Farm, Fishing Hut, Fisher Hut) are capped by **storage**
+instead: they only need their unlock LH at every level, and a level whose cost
+exceeds what the settlement can store can never be afforded, so the next level
+has to fit in storage. An **additional Storage House** can only be placed once
+one already stands at **level 10** (the first is never held back, and
+upgrading is always allowed). See §5 for why.
+
 ## 5. Unlock ladder
 
-Each building needs a Longhouse level, and at most one feeder building.
+Each building needs a Longhouse level, and at most one feeder building. The
+Longhouse level is also the level cap for everything except the resource
+producers, which storage caps instead (§4).
 Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 25), since there is no need for an unlock at every late level.
 
@@ -126,6 +138,37 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
 practice they still arrive one at a time.
+
+### Why producers are capped by storage, not the Longhouse
+
+If producers could never outlevel the Longhouse, an active player's economy
+would stall at the cap while the Longhouse (the slow, expensive upgrade)
+catches up, and a casual player who checks in twice a day would close the gap.
+Capping producers by storage lets an active player's production run ahead.
+Simulator result, production per hour (wood + stone + food) of an active
+player (awake 07–23) relative to one checking in twice a day, 3 of each
+producer:
+
+| Rule | day 7 | day 14 | day 30 |
+|---|---|---|---|
+| producers capped at the Longhouse level | 2.4× | 3.0× | 1.7× |
+| producers up to 3 levels ahead | 2.8× | 3.3× | 2.1× |
+| producers limited only by storage | 2.7× | 3.4× | 3.8× |
+
+With the Longhouse cap the casual player catches up once the active one
+stalls at the cap; without it the active player's lead keeps growing.
+
+Storage stays a real brake because a higher producer level costs more than
+base capacity plus the Longhouse can hold, so storage has to grow with it.
+Storage Houses themselves keep the Longhouse cap, and an additional one needs
+one at level 10, so storage cannot be stacked cheaply in place of upgrading.
+
+**Design principle.** When an active player's first settlement slows down (the
+Longhouse and storage become the limit), the answer is a second settlement,
+not waiting: the renown threshold and Town Square feasts (§6) are tuned so an
+optimising player can settle at about the point their first settlement's
+growth flattens (~day 5), which gives them a new, fast-growing settlement to
+play.
 
 ### Territory and towers
 
@@ -197,13 +240,21 @@ Simulator result for these numbers:
 | pro | 07–23 h | 20% of income | yes | ~4d 20h | ~29 d |
 | average | 3 check-ins/day | 45% of income | no | ~13d 9h | ~2 months |
 
+The pacing lab will model a second settlement, so the "settle when the first
+one flattens" check in §5 can be verified against these numbers.
+
 ## 7. First 10 minutes (T1)
 
-- Founding stock: 600 wood / 500 stone / 400 food.
+- Founding stock: the starting storage nearly full — capacity (500 base +
+  250 from the Longhouse) less 50, so 700 wood / 700 stone / 700 food, no
+  iron.
 - Level-1 producers cost 50 / 40 / 15 and build in 3 min; the Longhouse is
   +15 / 12 / 15 per level.
 - **Onboarding quests pay resources** (Travian's task list), so the first
-  hour keeps moving:
+  hour keeps moving. They never hand out a finished building, so the
+  Longhouse 2 upgrade the tutorial asks for has to build fast (a couple of
+  minutes). The tutorial also walks the player through placing a Storage
+  House and upgrading the Longhouse:
 
   | Quest | Reward (wood / stone / food) |
   |---|---|
@@ -217,35 +268,36 @@ Simulator result for these numbers:
 Simulated: the first 25 minutes are continuous building (9 producers, then
 LH 2 at about 13 min), LH 3 at about 1h45.
 
-## 8. Iron: lake ore (later feature)
+## 8. Iron: bog ore
 
 Viking-age Norse iron did not come from mountains. It came from ore that
 forms by itself where iron-rich fresh groundwater meets air:
 
-- **Bog iron** (Raseneisenerz, Sumpferz): rusty lumps a spade's depth under
-  wet meadows and bog edges.
+- **Bog iron** (Old Norse *mýrr*, German Raseneisenerz or Sumpferz): rusty
+  lumps a spade's depth under wet moss ground and bog edges.
 - **Lake ore** (Seeerz, Swedish *sjömalm*): the same process on lake
-  bottoms, raked up from boats, often through the winter ice.
+  bottoms.
 - Not sea water: the sea doesn't form this ore.
-- The ore was smelted on site in a small clay furnace (Rennofen) with
-  charcoal (Holzkohle, from a Kohlenmeiler), giving a bloom (Luppe) that the
-  smith hammered into iron. Rock-ore mines in mountains only mattered after
-  the Viking age.
+- The ore was dug, roasted, and smelted on site in a small clay furnace
+  (Rennofen, bloomery) with charcoal, giving a bloom (Luppe) that the smith
+  hammered into iron. Rock-ore mines in mountains only mattered after the
+  Viking age.
 
-The plan:
+The art for this is the **bog set** in `VanDooProject/3D_assets`
+(`docs/bog-tiles.md` there, PRs #115 and #116). The game side is in
+[`bog.md`](./bog.md):
 
-- A **lake tile**, one guaranteed per island (like a mountain), connected
-  to the river network. It needs new art and world-generation changes.
-- A **lake-ore building** on the lake: the iron producer.
-- A **Hammerschmiede** on a river: a water-powered hammer mill that boosts
-  lake-ore buildings within range, limited by river shapes the same way the
-  Sawmill and Crop Mill are. (Water-powered hammers are a century or two
-  later than the Vikings, like the game's water-powered sawmill.)
+- **Bog ground** (moss), with bog creeks and bog lakes.
+- **Bog-ore works** on bog ground: the iron producer, from diggings to a
+  bloomery over 7 levels.
+- **Clay Brickworks** moves from grass onto bog ground.
+- A **lake Fisher Hut** on stilts, the same building as the coastal one.
+- A **Hammerschmiede** on a river only (not part of the bog set; art still
+  to come): boosts bog-ore works within range, limited by river shapes the
+  same way the Sawmill and Crop Mill are.
 
-The Hammerschmiede stands on a river only, never on the lake itself.
-
-A furnace alone (Rennofen) creates no ore, so lake ore is the only real
-source, and the Longhouse gives a small trickle (+2 iron/h per level).
+A furnace alone creates no ore, so bog ore is the only real source, and the
+Longhouse gives a small trickle (+2 iron/h per level).
 
 **Iron is an indirect gate for the army.** Buildings cost no iron. Every
 unit costs iron except the cheap first unit (Thrall), so how fast you can
@@ -255,18 +307,146 @@ sources have to line up with the unit unlocks:
 | When | Iron source | Units it has to carry |
 |---|---|---|
 | LH 1–5 | Longhouse trickle only (2–10 iron/h) | Thrall (no iron), then the first Spearmen when the Barracks opens at LH 5 |
-| from ~LH 6 | lake ore: the lake tile is guaranteed on every island, so it is always in reach | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
-| LH 20 | Hammerschmiede (river) boosts lake ore | elite units: Berserker, Catapult, Longship |
+| from ~LH 6 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
+| LH 20 | Hammerschmiede (river) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
-So the lake tile and the lake-ore building are needed by about LH 6, not
-as a late add-on. The unit costs and unlock levels get reworked together
+So bog ground and the bog-ore works are needed by about LH 6, not as a
+late add-on. The unit costs and unlock levels get reworked together
 with them so the levels match: today every unit costs iron (Thrall 15 …
 Catapult 250), and the unit Longhouse gates still follow the old ladder
 (the Spearman at LH 1, while the Barracks now opens at LH 5).
 
-## 9. Open questions
+## 9. Pacing model (the Economy lab)
 
-- Fishing Hut and Fisher Hut are near-duplicates (same art, nearly the
-  same stats); merge them into one building?
+The admin **Economy lab** (`/admin/economy`) simulates one settlement minute
+by minute against the live building catalogue. It is how every number in
+this document is checked.
+
+### Player profiles
+
+| Profile | Online |
+|---|---|
+| active | awake 07–23, acting whenever a build slot is free (8 h sleep) |
+| 4 check-ins | four short sessions a day (e.g. 08, 12, 17, 21) |
+| 2 check-ins | two short sessions a day (08, 20) |
+
+A check-in is a **short session** (about 10 minutes), not a whole hour
+online. The lab still models check-ins as whole hours, which flatters the
+check-in profiles; minute-level sessions are on the roadmap.
+
+### What the simulator showed
+
+- **Measure economic strength as production per hour on a given day**, not
+  as "days until Longhouse X". When producers may run ahead of the Longhouse,
+  a player who invests in them levels the Longhouse later while being
+  stronger.
+- **Without combat, the active player's lead comes from the build queue.**
+  A 2-check-ins player fills the slots, logs off, and the slots sit idle
+  until the next visit. That gap (about 2.1× to Longhouse 20) barely moves
+  with the economy knobs:
+
+  | Change | Gap at Longhouse 20 (active vs 2 check-ins) |
+  |---|---|
+  | today | 2.15× |
+  | Longhouse cost ×1.5 | 1.98× |
+  | Longhouse cost ×2 | 1.79× |
+  | storage houses hold 30–50% as much | 1.98–2.08× |
+
+  A pricier Longhouse **shrinks** the gap: it adds waiting for everyone, and
+  waiting costs a casual player nothing. Storage pressure hardly matters
+  either, because a casual player runs out of queue before storage overflows.
+- **The Longhouse cap on producers let casual players catch up.** An active
+  player stalled at the cap. Capping producers by storage instead keeps the
+  lead growing (§5, "Why producers are capped by storage").
+
+### Build times
+
+Short build times do two things at once: the first hour is a run of real
+moves instead of waiting, and a player who checks in often can chain builds
+while an infrequent player's slots sit idle. The cost is that casual players
+fall further behind and everyone reaches the caps sooner. Hence the growing
+curve (×1.33 per level): short early for the entry, long late so a casual
+player can keep up.
+
+Towers follow the same logic (8 min at level 1, about 1 h 45 at level 10).
+The active edge there is bounded by the tower count, which grows with the
+Longhouse (§5), so the edge is getting each tower sooner, not getting more
+of them. The premium build queue works the other way: it lets a casual
+player queue past full slots, which gives back some of the idle time.
+
+## 10. Raiding, wildlife and snowballing
+
+### Where an active player's early loot comes from
+
+In Travian the early production rush comes from farming: inactive players,
+oases and NPC villages. Bjarnoy's version:
+
+- **Wildlife on empty islands.** Unclaimed islands are guarded by wildlife
+  (wolves, bears; a seal colony on the coast). Founding a settlement there is
+  allowed (land troops need a base on the island to fight from), but while
+  the wildlife is there **no tower can go up** on that island ("wolves eat
+  the builders"), so the realm can't grow until it's cleared. Clearing it
+  gives loot. **Exploring and clearing new islands
+  must pay much more than farming smaller players.**
+- **Beast dens** are the oasis equivalent: raidable spots whose loot grows
+  back over time, and which can later be annexed for a production bonus.
+- **Merchant ships** sail NPC routes between islands and can be raided at
+  sea.
+- **Inactive players** become raidable, but only after several days of
+  inactivity (7 by default).
+- **Late game:** the Jötunn outposts and the giant fortress.
+
+The NPC side hooks into the existing NPC settlement design (issue #125:
+peaceful, hostile and trader villages). The beginner-protection design
+(`beginner-protection.md` §4) already points a new player's first raids at
+peaceful NPC villages.
+
+### Keeping snowballing in check
+
+- **Size-gap protection with revenge.** A player can't attack a settlement
+  whose Longhouse is more than 5 levels below theirs, unless that settlement
+  attacked them in the last 48 hours. Inactive players (§ above) are exempt.
+- **Hideout.** Storage buildings hide a share of the stock from plunder
+  (10% by default, growing with the storage house level) — Travian's cranny,
+  built into the storage houses rather than a separate building.
+- When an active player's first settlement slows down, the answer is a
+  **second settlement**, not attacking smaller neighbours (§6).
+
+The defaults above (5 levels, 48 h, 7 days, 10%) are starting values to
+tune, not settled numbers.
+
+## 11. Roadmap
+
+Open work, in rough order. Each is its own PR.
+
+1. **Economy lab:** the player profiles above with short (minute-level)
+   check-ins and an editable schedule; a what-if panel (growth factors,
+   level-1 values, founding stock) shown next to the live catalogue; a
+   strategy setting for how far producers run ahead of the Longhouse; and a
+   second settlement, to check when each profile can settle against when its
+   first settlement's growth flattens.
+2. **Feasts and renown** (§6): Town Square feasts, and the renown threshold
+   for the 2nd settlement at 55 000.
+3. **Tutorial** (§7): placing a Storage House and upgrading the Longhouse,
+   resource rewards for the onboarding steps, and a fast Longhouse 2 (about
+   2 minutes).
+4. **Merge Fishing Hut and Fisher Hut** into one coastal building; stored
+   Fisher Huts are converted, not deleted.
+5. **New buildings:** the Reindeer Herder (the default food building; Farm and
+   Pumpkin Farm move to LH 4 as one card by soil), the Odin Statue (Ravens and
+   Wisdom, §5) and the Palisade (§5).
+6. **Bogs and iron** (§8, `bog.md`): bog ground, creeks and lakes in world
+   generation, the bog-ore works, Clay Brickworks on bog ground, the lake
+   Fisher Hut, and the Hammerschmiede.
+7. **Units and iron:** every unit except the Thrall costs iron, and the unit
+   unlock levels follow the building ladder, matched to the iron sources.
+8. **Raiding and snowballing** (§10): wildlife on empty islands, beast dens,
+   merchant ships, size-gap protection with revenge, and the hideout.
+
+## 12. Open questions
+
+- ~~Fishing Hut and Fisher Hut~~: decided, merge them into one coastal
+  building. A lake version comes with the bog set (on stilts on a bog-lake
+  shore): the same building, with its own art.
 - The profile parameters (online hours, share spent on troops) are
   assumptions; real telemetry should replace them once players exist.

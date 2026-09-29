@@ -330,7 +330,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void Starvation_kills_enough_of_the_highest_upkeep_stack_to_zero_out_the_deficit()
     {
-        var longhouseLevel = 6;
+        var longhouseLevel = 4;
         var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
         var berserkerUpkeep = UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour;
 
@@ -354,7 +354,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void Starvation_prefers_the_highest_upkeep_stack_and_moves_on_if_it_is_not_enough()
     {
-        var longhouseLevel = 6;
+        var longhouseLevel = 4;
         var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
         var spearmanUpkeep = UnitCatalogue.Get(UnitType.Spearman).UpkeepPerHour;
         var berserkerUpkeep = UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour;
@@ -477,7 +477,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void A_mixed_home_and_guest_starvation_pass_splits_deaths_proportionally_by_pre_starvation_holding()
     {
-        var longhouseLevel = 6;
+        var longhouseLevel = 4;
         var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
         var berserkerUpkeep = UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour;
 

@@ -20,7 +20,6 @@ export type BuildingModifier =
   | { kind: 'trainsCivilianCrews' }
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
   | { kind: 'coastal'; percent?: number }
-  | { kind: 'arcane' }
   | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
   | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' };
 
@@ -70,18 +69,88 @@ export const RADIUS_BOOST_RESOURCE: Partial<Record<BuildingKind, 'wood' | 'food'
   cropmill: 'food',
 };
 
-const MAX_LEVEL = 10;
+/** The level the mills (Sawmill, Crop Mill) top out at — where their boost reaches +100%. */
+const RADIUS_BOOST_MAX_LEVEL = 20;
 
-/** Mirrors `BuildingCatalogue.RadiusBoostPercent`: linear from 5% at level 1 to 100% at level 10. */
+/** Mirrors `BuildingCatalogue.RadiusBoostPercent`: linear from 5% at level 1 to 100% at level 20. */
 export function radiusBoostPercent(level: number): number {
-  const clamped = Math.min(Math.max(level, 1), MAX_LEVEL);
-  return 5 + (clamped - 1) * (95 / (MAX_LEVEL - 1));
+  const clamped = Math.min(Math.max(level, 1), RADIUS_BOOST_MAX_LEVEL);
+  return 5 + (clamped - 1) * (95 / (RADIUS_BOOST_MAX_LEVEL - 1));
 }
 
-/** Mirrors `BuildingCatalogue.RadiusBoostRange`: 1 ring at levels 1-2, +1 ring every 2 levels after. */
+/** Mirrors `BuildingCatalogue.RadiusBoostRange`: 1 ring at levels 1-4, +1 ring every 4 levels after (5 at 17-20). */
 export function radiusBoostRange(level: number): number {
-  const clamped = Math.min(Math.max(level, 1), MAX_LEVEL);
-  return 1 + Math.floor((clamped - 1) / 2);
+  const clamped = Math.min(Math.max(level, 1), RADIUS_BOOST_MAX_LEVEL);
+  return 1 + Math.floor((clamped - 1) / 4);
+}
+
+/**
+ * Mirrors `BuildingCatalogue.MaxLevelFor` (docs/design/economy.md §4):
+ * Longhouse 30; resource producers and Storage House 25; military/civic
+ * buildings and the mills 20; Tower and Great Storehouse 10; shrines 5.
+ * `hut` is demo-only (no backend entry) and gets the small-building ceiling.
+ */
+export function maxLevelFor(type: BuildingKind): number {
+  switch (type) {
+    case 'longhouse':
+      return 30;
+    case 'lumberjack':
+    case 'quarry':
+    case 'claybrickworks':
+    case 'farm':
+    case 'pumpkinfarm':
+    case 'fishinghut':
+    case 'fisherhut':
+    case 'storagehouse':
+      return 25;
+    case 'barracks':
+    case 'archeryrange':
+    case 'dockyard':
+    case 'townsquare':
+    case 'cartworkshop':
+    case 'druidhut':
+    case 'smithy':
+    case 'meadery':
+    case 'sawmill':
+    case 'cropmill':
+      return 20;
+    case 'tower':
+    case 'greatstorehouse':
+    case 'hut':
+      return 10;
+    case 'shrineofthor':
+    case 'shrineoffreyja':
+    case 'shrineofullr':
+    case 'shrineofnjord':
+      return 5;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Mirrors `BuildingCatalogue.MaxTowers`: how many towers a settlement with a
+ * Longhouse at `longhouseLevel` may hold — none below LH 3, then
+ * `1 + max(0, floor((LH − 5) / 2))` (1 for LH 3-6, 2 at LH 7, … 13 at LH 29-30).
+ */
+export function maxTowers(longhouseLevel: number): number {
+  return longhouseLevel < 3 ? 0 : 1 + Math.max(0, Math.floor((longhouseLevel - 5) / 2));
+}
+
+/**
+ * Mirrors `BuildingCatalogue.AdditionalStorageHouseLevel`: an additional
+ * storage house may only be placed once one already stands at this level.
+ */
+export const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
+
+/** Mirrors `BuildingCatalogue.ProductionFor`: a level's total output is `perHourAtLevelOne · 1.20^(level−1)`. */
+function producerOutput(perHourAtLevelOne: number, level: number, multiplier = 1): number {
+  return Math.round(perHourAtLevelOne * Math.pow(1.2, level - 1) * multiplier);
+}
+
+/** Mirrors `BuildingCatalogue.GeometricCapacity`: `c1 · (g^L − 1) / (g − 1)` per resource. */
+function geometricCapacity(c1: number, growth: number, level: number): number {
+  return Math.round((c1 * (Math.pow(growth, level) - 1)) / (growth - 1));
 }
 
 /** How many of `tile`'s six direct neighbours (never `tile` itself) are `terrain`. */
@@ -120,7 +189,7 @@ export function buildingStatsFor(
     case 'farm': {
       const workersCap = level * 4;
       return {
-        output: { kind: 'resourceRate', resource: 'food', amount: level * 36 },
+        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(40, level) },
         workers: { cap: workersCap },
       };
     }
@@ -148,7 +217,7 @@ export function buildingStatsFor(
     case 'fisherhut': {
       const workersCap = level * 4;
       return {
-        output: { kind: 'resourceRate', resource: 'food', amount: level * 32 },
+        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(42, level) },
         workers: { cap: workersCap },
       };
     }
@@ -163,24 +232,25 @@ export function buildingStatsFor(
           resource: 'wood',
         },
       };
+    // Mirrors BuildingCatalogue.cs's Longhouse(level): Uniform(250) * level.
     case 'longhouse':
-      return { output: { kind: 'storageCapacity', amount: level * 100 } };
-    // Mirrors BuildingCatalogue.cs's StorageHouse(level): ResourceAmounts.Uniform(1000) * level.
+      return { output: { kind: 'storageCapacity', amount: level * 250 } };
+    // Mirrors BuildingCatalogue.cs's StorageHouse(level): 600 * (1.22^L - 1) / 0.22 per resource.
     case 'storagehouse':
-      return { output: { kind: 'storageCapacity', amount: level * 1000 } };
-    // Mirrors BuildingCatalogue.cs's GreatStorehouse(level): ResourceAmounts.Uniform(2000) * level.
+      return { output: { kind: 'storageCapacity', amount: geometricCapacity(600, 1.22, level) } };
+    // Mirrors BuildingCatalogue.cs's GreatStorehouse(level): 2500 * (1.30^L - 1) / 0.30 per resource.
     case 'greatstorehouse':
-      return { output: { kind: 'storageCapacity', amount: level * 2000 } };
+      return { output: { kind: 'storageCapacity', amount: geometricCapacity(2500, 1.3, level) } };
     case 'pumpkinfarm': {
       const workersCap = level * 4;
       return {
-        output: { kind: 'resourceRate', resource: 'food', amount: level * 44 },
+        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(44, level) },
         workers: { cap: workersCap },
       };
     }
     case 'lumberjack': {
       const multiplier = boostMultiplier(matchingNeighbours);
-      const output = Math.round(level * 30 * multiplier);
+      const output = producerOutput(40, level, multiplier);
       return {
         output: { kind: 'resourceRate', resource: 'wood', amount: output },
         modifier:
@@ -191,7 +261,7 @@ export function buildingStatsFor(
     }
     case 'quarry': {
       const multiplier = boostMultiplier(matchingNeighbours);
-      const output = Math.round(level * 24 * multiplier);
+      const output = producerOutput(40, level, multiplier);
       return {
         output: { kind: 'resourceRate', resource: 'stone', amount: output },
         modifier:
@@ -206,7 +276,7 @@ export function buildingStatsFor(
     // surrounds it, same 10%-per-neighbour/50%-cap curve as lumberjack/quarry.
     case 'fishinghut': {
       const multiplier = boostMultiplier(matchingNeighbours);
-      const output = Math.round(level * 30 * multiplier);
+      const output = producerOutput(40, level, multiplier);
       return {
         output: { kind: 'resourceRate', resource: 'food', amount: output },
         modifier:
@@ -215,8 +285,6 @@ export function buildingStatsFor(
             : { kind: 'coastal' },
       };
     }
-    case 'magictower':
-      return { output: { kind: 'resourceRate', resource: 'iron', amount: level * 6 }, modifier: { kind: 'arcane' } };
     // Mirrors ShrineCatalogue.Favour.cs: +10% at level 1, +3%/level after,
     // capped at level 5 (+22%) so slotted runes always have headroom.
     case 'shrineofthor':
@@ -251,10 +319,10 @@ export function buildingStatsFor(
         },
       };
     case 'claybrickworks':
-      return { output: { kind: 'resourceRate', resource: 'stone', amount: level * 20 } };
-    // No production or storage of its own yet — retired Iron production for
-    // a future troop-upgrade mechanic, same "no output" shape as meadery
-    // above (see BuildingCatalogue.cs's Smithy doc comment).
+      return { output: { kind: 'resourceRate', resource: 'stone', amount: producerOutput(36, level) } };
+    // The Weaponsmith (display name; the type stays `smithy`): no production
+    // or storage of its own, a troop-upgrade building only — same "no output"
+    // shape as meadery above (see BuildingCatalogue.cs's Smithy doc comment).
     case 'smithy':
       return {};
     // Mirrors BuildingCatalogue.cs's CartWorkshop(level): purely a training
@@ -273,54 +341,50 @@ export function buildingStatsFor(
   }
 }
 
-/** Cost multiplier for a level: 1, 1.6, 2.56, … Mirrors BuildingCatalogue.cs's CostFactor. */
-function costFactor(level: number): number {
-  return Math.pow(1.6, level - 1);
+/** Cost growth per level: ×1.30 for every building, ×1.34 for the Longhouse. Mirrors BuildingCatalogue.cs's CostFactor. */
+function costFactor(type: BuildingKind, level: number): number {
+  return Math.pow(type === 'longhouse' ? 1.34 : 1.3, level - 1);
 }
 
 // Base (level-1) resource cost per type, mirroring BuildingCatalogue.cs's
-// per-type builders (Producer/Longhouse/Tower). "hut" has no backend
+// per-type builders. Buildings cost no iron. "hut" has no backend
 // catalogue entry — it's demo-only, see SettlementView.vue's build() doc
-// comment — so it's approximated at the same base cost as the other small
-// producer buildings.
+// comment — so it's approximated at the producer cost.
+const PRODUCER_COST: ResourceLine = { wood: 50, stone: 40, food: 15, iron: 0 };
+const SMALL_BUILDING_COST: ResourceLine = { wood: 100, stone: 80, food: 0, iron: 0 };
 const BASE_COST: Record<BuildingKind, ResourceLine> = {
-  hut: { wood: 100, stone: 80, food: 0, iron: 0 },
-  farm: { wood: 100, stone: 80, food: 0, iron: 0 },
-  pumpkinfarm: { wood: 100, stone: 80, food: 0, iron: 0 },
-  fishinghut: { wood: 100, stone: 80, food: 0, iron: 0 },
-  magictower: { wood: 100, stone: 80, food: 0, iron: 0 },
-  lumberjack: { wood: 100, stone: 80, food: 0, iron: 0 },
-  quarry: { wood: 100, stone: 80, food: 0, iron: 0 },
-  longhouse: { wood: 200, stone: 150, food: 100, iron: 0 },
-  tower: { wood: 120, stone: 200, food: 0, iron: 10 },
+  hut: PRODUCER_COST,
+  farm: PRODUCER_COST,
+  pumpkinfarm: PRODUCER_COST,
+  fishinghut: PRODUCER_COST,
+  fisherhut: PRODUCER_COST,
+  lumberjack: PRODUCER_COST,
+  quarry: PRODUCER_COST,
+  claybrickworks: PRODUCER_COST,
+  longhouse: { wood: 120, stone: 100, food: 60, iron: 0 },
+  tower: { wood: 120, stone: 200, food: 0, iron: 0 },
   shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineofullr: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineofnjord: { wood: 180, stone: 140, food: 60, iron: 0 },
-  storagehouse: { wood: 150, stone: 120, food: 0, iron: 0 },
+  storagehouse: { wood: 80, stone: 60, food: 0, iron: 0 },
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
-  archeryrange: { wood: 140, stone: 100, food: 0, iron: 20 },
-  dockyard: { wood: 200, stone: 120, food: 0, iron: 20 },
-  barracks: { wood: 130, stone: 110, food: 0, iron: 15 },
-  fisherhut: { wood: 100, stone: 80, food: 0, iron: 0 },
-  sawmill: { wood: 100, stone: 80, food: 0, iron: 0 },
-  // Meadery/CropMill/Smithy/ClayBrickworks are all plain Producer()
-  // buildings (BuildingCatalogue.cs), so they share the same base cost as
-  // farm/lumberjack/quarry/etc above. TownSquare/DruidHut/CartWorkshop are
-  // bespoke definitions with their own Cost.
-  meadery: { wood: 100, stone: 80, food: 0, iron: 0 },
-  cropmill: { wood: 100, stone: 80, food: 0, iron: 0 },
-  smithy: { wood: 100, stone: 80, food: 0, iron: 0 },
-  claybrickworks: { wood: 100, stone: 80, food: 0, iron: 0 },
+  archeryrange: { wood: 140, stone: 100, food: 0, iron: 0 },
+  dockyard: { wood: 200, stone: 120, food: 0, iron: 0 },
+  barracks: { wood: 130, stone: 110, food: 0, iron: 0 },
+  sawmill: SMALL_BUILDING_COST,
+  meadery: SMALL_BUILDING_COST,
+  cropmill: SMALL_BUILDING_COST,
+  smithy: SMALL_BUILDING_COST,
   townsquare: { wood: 160, stone: 140, food: 40, iron: 0 },
   druidhut: { wood: 160, stone: 110, food: 80, iron: 0 },
-  cartworkshop: { wood: 150, stone: 110, food: 0, iron: 10 },
+  cartworkshop: { wood: 150, stone: 110, food: 0, iron: 0 },
 };
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */
 export function buildingUpgradeCost(type: BuildingKind, targetLevel: number): ResourceLine {
   const base = BASE_COST[type];
-  const factor = costFactor(targetLevel);
+  const factor = costFactor(type, targetLevel);
   return {
     wood: Math.round(base.wood * factor),
     stone: Math.round(base.stone * factor),

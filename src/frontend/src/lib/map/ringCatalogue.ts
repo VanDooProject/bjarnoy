@@ -5,6 +5,7 @@
 // renders one.
 import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
+import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
 import type { RiverVariant } from './worldGenerator';
 
 const RESOURCE_KEYS: (keyof ResourceLine)[] = ['wood', 'stone', 'food', 'iron'];
@@ -32,6 +33,32 @@ export function formatBuildTime(seconds: number): string {
 export function longhouseLock(requiredLevel: number | undefined, currentLevel: number): string | undefined {
   if (requiredLevel === undefined || requiredLevel <= currentLevel) return undefined;
   return `Requires longhouse ${requiredLevel}`;
+}
+
+/**
+ * The reason a *new* tower can't be placed: the settlement already holds
+ * (standing plus queued) as many as its Longhouse level allows — mirrors
+ * `Settlement.PlanBuild`'s `BuildRejection.TowerLimitReached` and
+ * `buildingEconomy.maxTowers`. Undefined while there is room (or while the
+ * longhouse itself is still too low, which `longhouseLock` already explains).
+ * Like `longhouseLock` this is a progression gate the player can work
+ * towards, so it is shown as an explained, disabled bubble.
+ */
+export function towerLimitLock(towersHeld: number, longhouseLevel: number): string | undefined {
+  const allowed = maxTowers(longhouseLevel);
+  if (allowed === 0 || towersHeld < allowed) return undefined;
+  return `Tower limit reached (${towersHeld}/${allowed}) — level up the longhouse for more`;
+}
+
+/**
+ * The reason an *additional* storage house can't be placed: the settlement
+ * already holds one (standing or queued) and its best is below level 10 —
+ * mirrors `Settlement.PlanBuild`'s `BuildRejection.StorageHouseTooLow`. The
+ * first storage house is never locked by this.
+ */
+export function storageHouseLock(storageHousesHeld: number, bestStorageLevel: number): string | undefined {
+  if (storageHousesHeld < 1 || bestStorageLevel >= ADDITIONAL_STORAGE_HOUSE_LEVEL) return undefined;
+  return `Raise a storage house to level ${ADDITIONAL_STORAGE_HOUSE_LEVEL} before building another`;
 }
 
 /**

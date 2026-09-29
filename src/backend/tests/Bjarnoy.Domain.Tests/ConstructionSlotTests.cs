@@ -338,8 +338,9 @@ public sealed class ConstructionSlotTests
     [Fact]
     public void With_max_orders_per_hex_three_a_level_chain_queues_completes_in_order_and_refuses_skipped_levels()
     {
-        // Longhouse level 2: a level-3 Farm needs RequiredLonghouseLevel 2.
-        var settlement = Found(longhouseLevel: 2);
+        // Longhouse level 3: a level-3 Farm needs RequiredLonghouseLevel 3
+        // (a building's level can never exceed the Longhouse's).
+        var settlement = Found(longhouseLevel: 3);
         var coord = new HexCoord(1, 0);
 
         var first = settlement.PlanBuild(

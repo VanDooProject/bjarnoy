@@ -51,6 +51,12 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
       const world = win.__demoWorld();
       const model = world.model;
       const settlement = model.getSettlement(world.selectedSettlementId);
+      // The Tower unlocks at longhouse 3, and a longhouse below that allows
+      // no tower at all (BuildingCatalogue.MaxTowers, mirrored by
+      // WorldModel.placeBuilding) — level the longhouse up first, then
+      // re-claim so the border matches the new level.
+      settlement.level = 3;
+      model.claimTerritory(settlement.id);
       const at = { q: settlement.q, r: settlement.r };
       const radius = model.borderRadius(settlement);
 

@@ -88,7 +88,7 @@ describe('buildingLayersForType', () => {
     expect(buildingLayersForType('sawmill', 1)?.top).toBeDefined();
   });
 
-  it('is undefined for a single-level-art type (no buildings-static split)', () => {
+  it('is undefined for an unmapped type (no buildings-static split)', () => {
     expect(buildingLayersForType('magictower', 1)).toBeUndefined();
   });
 

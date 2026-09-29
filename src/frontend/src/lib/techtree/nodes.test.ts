@@ -26,10 +26,11 @@ describe('buildTechTreeNodes', () => {
   });
 
   it('takes the longhouse chip from the real unlock level', () => {
-    // Tower and barracks were moved to longhouse 3; the chip must follow the
-    // catalogue rather than repeat a number from the mockup.
+    // The chip follows the catalogue's unlock ladder rather than repeat a
+    // number from a mockup: Tower LH 3, Barracks LH 5, Weaponsmith LH 15.
     expect(byName.get('tower')!.chips[0]).toEqual({ text: 'LH 3', kind: 'longhouse' });
-    expect(byName.get('barracks')!.chips[0]).toEqual({ text: 'LH 3', kind: 'longhouse' });
+    expect(byName.get('barracks')!.chips[0]).toEqual({ text: 'LH 5', kind: 'longhouse' });
+    expect(byName.get('smithy')!.chips[0]).toEqual({ text: 'LH 15', kind: 'longhouse' });
     expect(byName.get('lumberjack')!.chips[0]).toEqual({ text: 'LH 1', kind: 'longhouse' });
   });
 
@@ -41,19 +42,18 @@ describe('buildTechTreeNodes', () => {
   it('lists real prerequisites as short chips', () => {
     expect(byName.get('storagehouse')!.chips).toEqual([{ text: 'LH 1', kind: 'longhouse' }]);
     expect(byName.get('greatstorehouse')!.chips).toEqual([
-      { text: 'LH 10', kind: 'longhouse' },
-      { text: 'Storage 10', kind: 'building' },
+      { text: 'LH 15', kind: 'longhouse' },
+      { text: 'Storage 15', kind: 'building' },
     ]);
     expect(byName.get('shrineofthor')!.chips).toEqual([
-      { text: 'LH 10', kind: 'longhouse' },
-      { text: 'Barracks 10', kind: 'building' },
-      { text: 'Archery 10', kind: 'building' },
+      { text: 'LH 25', kind: 'longhouse' },
+      { text: 'Weaponsmith 5', kind: 'building' },
     ]);
   });
 
   it('describes what a building gives from the shared stats helper', () => {
-    expect(byName.get('lumberjack')!.gives).toBe('+30 wood/h');
-    expect(byName.get('storagehouse')!.gives).toBe('+1000 storage capacity');
+    expect(byName.get('lumberjack')!.gives).toBe('+40 wood/h');
+    expect(byName.get('storagehouse')!.gives).toBe('+600 storage capacity');
     expect(byName.get('barracks')!.gives).toBe('Trains land troops');
   });
 
@@ -72,7 +72,7 @@ describe('buildTechTreeNodes', () => {
 describe('unlockLevel and prerequisitesOf', () => {
   it('read the level-1 definition, not the whole ladder', () => {
     expect(unlockLevel(byType.tower!)).toBe(3);
-    expect(prerequisitesOf(byType, 'archeryrange')).toEqual([{ type: 'barracks', level: 3 }]);
+    expect(prerequisitesOf(byType, 'archeryrange')).toEqual([{ type: 'barracks', level: 5 }]);
   });
 
   it('report nothing for a building the catalogue does not have', () => {

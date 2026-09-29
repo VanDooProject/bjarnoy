@@ -50,7 +50,15 @@ import {
   type BuildingModifier,
   type BuildingOutput,
 } from '../lib/map/buildingEconomy';
-import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from '../lib/map/ringCatalogue';
+import {
+  cropAllowedHere,
+  formatBuildTime,
+  formatMissingResources,
+  longhouseLock,
+  riverBuildingAllowedHere,
+  storageHouseLock,
+  towerLimitLock,
+} from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
@@ -573,7 +581,6 @@ type BuildableType =
   | 'farm'
   | 'tower'
   | 'fishinghut'
-  | 'magictower'
   | 'pumpkinfarm'
   | 'shrineofthor'
   | 'shrineoffreyja'
@@ -602,7 +609,7 @@ interface BuildCategory {
   buildings: { type: BuildableType }[];
 }
 // Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
-// MagicTower/Shrine are Grass-only, Lumberjack is Forest-only, Quarry is
+// Shrine is Grass-only, Lumberjack is Forest-only, Quarry is
 // Mountain-only, and Tower/ArcheryRange are SandOrGrass. Offering a building
 // the backend's own AllowedTerrain would reject is what "messed up
 // categories" on a shore (sand) tile meant — sand used to fall into the same
@@ -652,7 +659,6 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       id: 'military',
       buildings: [
         { type: 'tower' },
-        { type: 'magictower' },
         { type: 'archeryrange' },
         { type: 'barracks' },
         { type: 'smithy' },
@@ -880,8 +886,6 @@ function formatModifier(modifier: BuildingModifier): string {
       return modifier.percent
         ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
         : t('hud.hoverTooltip.modifierCoastal');
-    case 'arcane':
-      return t('hud.hoverTooltip.modifierArcane');
     case 'shrineFavour':
       if (modifier.domain === 'shipAttack') {
         return t('hud.hoverTooltip.modifierShrineFavourShipAttack', { percent: modifier.percent });
@@ -926,6 +930,33 @@ function currentIslandSoil(): 'wheat' | 'pumpkin' | undefined {
   return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
 }
 
+// Standing towers plus still-queued new-tower orders (live mode only — demo
+// mode places instantly), counted by distinct hex like Settlement.PlanBuild
+// does, so a queued tower already uses up its slot.
+function towersHeld(): number {
+  const id = world.selectedSettlementId;
+  if (!id) return 0;
+  const hexes = new Set(world.model.towerCoords(id).map((c) => `${c.q},${c.r}`));
+  for (const order of world.hud.queue) {
+    if (order.building === 'tower') hexes.add(`${order.q},${order.r}`);
+  }
+  return hexes.size;
+}
+
+// Storage houses held (standing plus queued, distinct hexes like
+// Settlement.PlanBuild counts them) and the best standing level, for the
+// additional-storage-house lock.
+function storageHouseLockFor(): string | undefined {
+  const id = world.selectedSettlementId;
+  if (!id) return undefined;
+  const standing = world.model.storageHouses(id);
+  const hexes = new Set(standing.map((h) => `${h.q},${h.r}`));
+  for (const order of world.hud.queue) {
+    if (order.building === 'storagehouse') hexes.add(`${order.q},${order.r}`);
+  }
+  return storageHouseLock(hexes.size, Math.max(0, ...standing.map((h) => h.level)));
+}
+
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
@@ -937,7 +968,10 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
     cost: definition?.cost ?? buildingUpgradeCost(type, 1),
     time: definition ? formatBuildTime(definition.buildSeconds) : undefined,
     gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
-    lock: longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
+    lock:
+      longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
+      ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
+      ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined),
     art: buildingArt(type, 1),
   };
 }

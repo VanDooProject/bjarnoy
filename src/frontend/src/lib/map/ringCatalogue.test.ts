@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from './ringCatalogue';
+import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -39,6 +39,34 @@ describe('longhouseLock', () => {
     // "hut" is demo-only and has no backend definition, so there is no gate to
     // report — it must not read as locked.
     expect(longhouseLock(undefined, 1)).toBeUndefined();
+  });
+});
+
+describe('storageHouseLock', () => {
+  it('locks an additional storage house until the best one is level 10', () => {
+    expect(storageHouseLock(1, 1)).toBe('Raise a storage house to level 10 before building another');
+    expect(storageHouseLock(2, 9)).toBe('Raise a storage house to level 10 before building another');
+  });
+
+  it('never locks the first storage house, nor once one is level 10', () => {
+    expect(storageHouseLock(0, 0)).toBeUndefined();
+    expect(storageHouseLock(1, 10)).toBeUndefined();
+  });
+});
+
+describe('towerLimitLock', () => {
+  it('explains the limit once the settlement holds as many towers as its longhouse level allows', () => {
+    expect(towerLimitLock(1, 3)).toBe('Tower limit reached (1/1) — level up the longhouse for more');
+    expect(towerLimitLock(2, 8)).toBe('Tower limit reached (2/2) — level up the longhouse for more');
+  });
+
+  it('stays open while there is room', () => {
+    expect(towerLimitLock(0, 3)).toBeUndefined();
+    expect(towerLimitLock(1, 7)).toBeUndefined();
+  });
+
+  it('leaves the "longhouse too low" case to longhouseLock', () => {
+    expect(towerLimitLock(0, 2)).toBeUndefined();
   });
 });
 

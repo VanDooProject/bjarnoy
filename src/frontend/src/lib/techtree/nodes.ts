@@ -47,8 +47,6 @@ function formatModifier(modifier: BuildingModifier): string {
       return `${TERRAIN_LABELS[modifier.terrain] ?? modifier.terrain} (+${modifier.percent}%)`;
     case 'coastal':
       return modifier.percent ? `Coastal (+${modifier.percent}%)` : 'Coastal';
-    case 'arcane':
-      return 'Arcane';
     case 'shrineFavour':
       if (modifier.domain === 'shipAttack') return `+${modifier.percent}% ship attack`;
       if (modifier.domain === 'landAttack') return `+${modifier.percent}% land unit attack`;

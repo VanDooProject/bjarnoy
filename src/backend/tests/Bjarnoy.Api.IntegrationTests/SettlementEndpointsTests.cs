@@ -364,7 +364,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
                 Buildings =
                 [
                     .. domain.Buildings.Where(b => b.Type != BuildingType.Tower),
-                    .. towerCoords.Select(c => new PlacedBuilding(c, BuildingType.Tower, BuildingCatalogue.MaxLevel)),
+                    .. towerCoords.Select(c => new PlacedBuilding(c, BuildingType.Tower, BuildingCatalogue.MaxLevelFor(BuildingType.Tower))),
                 ],
             };
             entity.ApplyDomain(domain);
@@ -428,12 +428,15 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var before = settlement.Resources.Stock.Food;
         var rate = settlement.Resources.RatePerHour.Food;
 
-        _factory.Time.Advance(TimeSpan.FromHours(5));
+        // A new settlement starts 50 below its storage capacity
+        // (BuildingCatalogue.FoundingStock), so the wait stays short enough
+        // that production doesn't reach the cap.
+        _factory.Time.Advance(TimeSpan.FromHours(3));
         var later = await GetAsync(client, settlement.Id);
 
-        // No worker ran, no tick fired: five hours of production is simply what
+        // No worker ran, no tick fired: three hours of production is simply what
         // the timestamp implies.
-        Assert.Equal(before + (rate * 5), later!.Resources.Stock.Food, 0);
+        Assert.Equal(before + (rate * 3), later!.Resources.Stock.Food, 0);
     }
 
     [Fact]
@@ -837,21 +840,24 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Empty(levelOne.Single(d => d.Type == "lumberjack").Prerequisites);
 
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("fishinghut", 4)],
+            [new BuildingPrerequisiteResponse("fishinghut", 5)],
             levelOne.Single(d => d.Type == "dockyard").Prerequisites);
         Assert.Empty(levelOne.Single(d => d.Type == "storagehouse").Prerequisites);
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("barracks", 10), new BuildingPrerequisiteResponse("archeryrange", 10)],
+            [new BuildingPrerequisiteResponse("smithy", 5)],
             levelOne.Single(d => d.Type == "shrineofthor").Prerequisites);
+        Assert.Equal(
+            [new BuildingPrerequisiteResponse("storagehouse", 15)],
+            levelOne.Single(d => d.Type == "greatstorehouse").Prerequisites);
 
-        // Prerequisites gate placement, so they sit on level 1 only — bar the
-        // Great Storehouse, a flat level-10-only tier.
+        // Prerequisites gate placement, so they sit on level 1 only — the
+        // Great Storehouse no longer carries its own on every level.
         var levelTwo = await client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(
             "/api/v1/buildings?level=2", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(levelTwo);
         Assert.Empty(levelTwo.Single(d => d.Type == "dockyard").Prerequisites);
-        Assert.NotEmpty(levelTwo.Single(d => d.Type == "greatstorehouse").Prerequisites);
+        Assert.Empty(levelTwo.Single(d => d.Type == "greatstorehouse").Prerequisites);
     }
 
     [Fact]
