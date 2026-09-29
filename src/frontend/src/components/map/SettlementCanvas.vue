@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import MapLoadingIndicator from './MapLoadingIndicator.vue';
+import MapStatusOverlay from './MapStatusOverlay.vue';
 import type { WorldModel } from '../../lib/map/WorldModel';
 import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
@@ -63,7 +64,7 @@ const emit = defineEmits<{
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer, loadState } = useHexMapRenderer(canvas, container, {
+const { renderer, loadState, mountError, retry: retryMount } = useHexMapRenderer(canvas, container, {
   mode: props.mode ?? 'settlement',
   worldModel: props.worldModel,
   playerId: props.playerId,
@@ -84,13 +85,16 @@ const { renderer, loadState } = useHexMapRenderer(canvas, container, {
 // FogDebugPanel (SettlementView.vue, ?debug=1) needs to force a rebuild
 // after flipping a fogDebugFlags toggle — nothing else would make the
 // change visible until the next real camera pan/zoom.
-defineExpose({ renderer, loadState });
+// `mountError`/`retryMount` let a parent view see (and re-trigger) a failed
+// renderer mount, e.g. to gate its own e2e-visible ready state.
+defineExpose({ renderer, loadState, mountError, retryMount });
 </script>
 
 <template>
   <div ref="container" class="map-container" :style="background ? { background } : undefined">
     <canvas ref="canvas" />
     <MapLoadingIndicator :state="loadState" />
+    <MapStatusOverlay :step="null" :error="mountError" @retry="retryMount" />
   </div>
 </template>
 

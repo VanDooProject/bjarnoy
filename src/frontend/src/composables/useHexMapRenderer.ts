@@ -40,13 +40,34 @@ export function useHexMapRenderer(
   // 'settlement'-mode mount says otherwise, since a 'world'-mode mount never
   // narrates a loading state at all (see HexMapRenderer's `startTextureLoad`).
   const loadState = shallowRef<MapLoadState>(options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE);
+  // Set when building/mounting the renderer throws (most commonly the
+  // terrain atlas failing to load) — SettlementCanvas shows it through
+  // MapStatusOverlay, whose Retry calls `retry()`. Without this the failure
+  // was an unhandled rejection and the map just stayed on 'terrain' forever.
+  const mountError = shallowRef<unknown>(null);
   let resizeObserver: ResizeObserver | null = null;
   let stopAnimationWatch: (() => void) | null = null;
+  // Bumped on every (re)mount attempt and on unmount, so a mount that
+  // resolves after being superseded (retry, or the component going away)
+  // tears itself down instead of wiring up a second renderer.
+  let attempt = 0;
 
-  onMounted(async () => {
+  function teardown(r: HexMapRenderer | null) {
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    stopAnimationWatch?.();
+    stopAnimationWatch = null;
+    r?.destroy();
+    renderer.value = null;
+    delete containerRef.value?.dataset.mapReady;
+  }
+
+  async function mountRenderer() {
     const canvas = canvasRef.value;
     const container = containerRef.value;
     if (!canvas || !container) return;
+    const mine = ++attempt;
+    mountError.value = null;
     const r = new HexMapRenderer({
       ...options,
       onLoadState: (state) => {
@@ -54,8 +75,20 @@ export function useHexMapRenderer(
         options.onLoadState?.(state);
       },
     });
-    const { width, height } = await waitForRealSize(container);
-    await r.mount(canvas, Math.max(1, width), Math.max(1, height));
+    try {
+      const { width, height } = await waitForRealSize(container);
+      await r.mount(canvas, Math.max(1, width), Math.max(1, height));
+    } catch (err) {
+      r.destroy();
+      if (mine !== attempt) return;
+      console.error('useHexMapRenderer: mounting the map renderer failed', err);
+      mountError.value = err;
+      return;
+    }
+    if (mine !== attempt) {
+      r.destroy();
+      return;
+    }
     renderer.value = r;
     // `immediate: true` applies whatever animationPreference already
     // resolved to (most commonly 'measuring'/off, on a fresh mount) right
@@ -78,15 +111,21 @@ export function useHexMapRenderer(
       r.resize(Math.max(1, w), Math.max(1, h));
     });
     resizeObserver.observe(container);
-  });
+  }
+
+  /** Destroys any half-built renderer and runs the mount sequence again. */
+  async function retry() {
+    teardown(renderer.value);
+    loadState.value = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
+    await mountRenderer();
+  }
+
+  onMounted(mountRenderer);
 
   onBeforeUnmount(() => {
-    resizeObserver?.disconnect();
-    stopAnimationWatch?.();
-    renderer.value?.destroy();
-    renderer.value = null;
-    delete containerRef.value?.dataset.mapReady;
+    attempt++;
+    teardown(renderer.value);
   });
 
-  return { renderer, loadState };
+  return { renderer, loadState, mountError, retry };
 }

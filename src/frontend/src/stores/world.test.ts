@@ -1106,6 +1106,26 @@ describe('useWorldStore fetchFogMask', () => {
     expect(store.fogMaskBitmap).toBe(firstBitmap);
   });
 
+  it('records a failed fetch on fogMaskError so a view with no bitmap yet can say why, and clears it on success', async () => {
+    const failure = new Error('network error');
+    getFogMask
+      .mockReset()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({ bitmap: { close: vi.fn() }, version: '"v1"' });
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogMask();
+    expect(store.fogMaskBitmap).toBeNull();
+    expect(store.fogMaskError).toBe(failure);
+
+    await store.fetchFogMask();
+    expect(store.fogMaskError).toBeNull();
+    expect(store.fogMaskBitmap).not.toBeNull();
+  });
+
   // Regression: startHudSync polls this on a fixed LIVE_POLL_MS timer with no
   // regard for how long the previous fetch actually took — a fetch slower
   // than the poll interval (a slow network, or demo mode's own

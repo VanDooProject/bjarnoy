@@ -9,6 +9,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
+import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
+import { useLoadFlow } from '../composables/useLoadFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
@@ -202,9 +204,22 @@ function stopPreviewPoll() {
   }
 }
 
-onMounted(async () => {
+// What the landing page is waiting on, shown by MapStatusOverlay — without it
+// a slow load is an empty backdrop and a failed one an unhandled rejection
+// with the page fogged forever. Re-runnable (the overlay's Retry calls it
+// again): bootstrapLiveWorld is idempotent via liveReady, startHudSync stops
+// its own previous timers, and the preview poll is stopped up front so a
+// retry never leaves two of them running.
+const {
+  step: loadStep,
+  error: loadError,
+  run: loadLanding,
+} = useLoadFlow(async (setStep) => {
+  stopPreviewPoll();
+  setStep(t('hud.mapStatus.joiningWorld'));
   await world.bootstrapLiveWorld();
   if (player.hasFoundedSettlement && player.settlementId) {
+    setStep(t('hud.mapStatus.loadingSettlement'));
     await world.restoreLiveSettlement(player.id, player.settlementId);
     world.startHudSync();
     return;
@@ -221,6 +236,7 @@ onMounted(async () => {
   if (DEMO_MODE) {
     previewCoord.value = world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
   } else {
+    setStep(t('hud.mapStatus.findingPlot'));
     const result = await world.refreshPlotSuggestion(player.id);
     if (result.kind === 'alreadyFounded') {
       // L7: a reload with a stale/missing localStorage settlement id — the
@@ -257,6 +273,32 @@ onMounted(async () => {
   (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
     canvasRef.value?.renderer;
 });
+
+onMounted(loadLanding);
+
+// A founded player's canvas exists as soon as the settlement is restored, but
+// the fog quads stay opaque until the mask arrives — say so instead of showing
+// a bare fogged map. Not while the load itself is running (its own step wins).
+const revealingMap = computed(
+  () =>
+    !loadStep.value &&
+    !loadError.value &&
+    player.hasFoundedSettlement &&
+    !!world.selectedSettlementId &&
+    world.fogMaskBitmap === null &&
+    !world.fogMaskError,
+);
+const overlayStep = computed(() => loadStep.value ?? (revealingMap.value ? t('hud.mapStatus.revealingMap') : null));
+// The first fog mask fetch failing (nothing to show yet) is as fatal for the
+// view as the load failing; later poll failures keep the old bitmap and are
+// the connection banner's business instead.
+const overlayError = computed(
+  () => loadError.value ?? (world.fogMaskBitmap === null && player.hasFoundedSettlement ? world.fogMaskError : null),
+);
+function retryLoad() {
+  if (loadError.value) void loadLanding();
+  else void world.fetchFogMask();
+}
 onUnmounted(() => {
   world.stopHudSync();
   stopPreviewPoll();
@@ -846,6 +888,9 @@ watch(
       '--overlay-row-top': overlayRowTopPx + 'px',
     }"
   >
+    <!-- Deliberately outside the SettlementCanvas v-if below: it has to show
+         before the canvas exists (world/settlement/plot still loading). -->
+    <MapStatusOverlay :step="overlayStep" :error="overlayError" @retry="retryLoad" />
     <SettlementCanvas
       v-if="player.hasFoundedSettlement ? world.selectedSettlementId : previewCoord"
       ref="canvasRef"

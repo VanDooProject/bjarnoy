@@ -950,6 +950,16 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
   };
 }
 
+/**
+ * Drops a memoised load once it rejects, so a later call (e.g. the map's
+ * "Retry" button) actually re-fetches instead of replaying the same failed
+ * promise forever. `evict` runs only if the slot still holds this promise.
+ */
+function evictOnReject<T>(promise: Promise<T>, evict: () => void): Promise<T> {
+  promise.catch(evict);
+  return promise;
+}
+
 let terrainLoading: Promise<TileTextures> | null = null;
 /**
  * The small `terrain` atlas alone — enough for the landing page / world map
@@ -959,7 +969,10 @@ let terrainLoading: Promise<TileTextures> | null = null;
  */
 export function loadTerrainAtlas(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!terrainLoading) {
-    terrainLoading = loadAtlasCategory('terrain', onPage).then((atlas) => buildTileTextures([atlas]));
+    const promise = loadAtlasCategory('terrain', onPage).then((atlas) => buildTileTextures([atlas]));
+    terrainLoading = evictOnReject(promise, () => {
+      if (terrainLoading === promise) terrainLoading = null;
+    });
   }
   return terrainLoading;
 }
@@ -985,9 +998,12 @@ let level1Loading: Promise<TileTextures> | null = null;
  */
 export function loadLevel1Atlases(): Promise<TileTextures> {
   if (!level1Loading) {
-    level1Loading = loadOptionalAtlasCategory('buildings-level1').then((atlas) =>
+    const promise = loadOptionalAtlasCategory('buildings-level1').then((atlas) =>
       buildTileTextures([atlas], undefined, { sparse: true }),
     );
+    level1Loading = evictOnReject(promise, () => {
+      if (level1Loading === promise) level1Loading = null;
+    });
   }
   return level1Loading;
 }
@@ -1017,9 +1033,12 @@ let buildingLoading: Promise<TileTextures> | null = null;
  */
 export function loadBuildingAtlases(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!buildingLoading) {
-    buildingLoading = loadAtlasCategory('buildings-static', onPage).then((atlas) =>
+    const promise = loadAtlasCategory('buildings-static', onPage).then((atlas) =>
       buildTileTextures([atlas], undefined, { sparse: true }),
     );
+    buildingLoading = evictOnReject(promise, () => {
+      if (buildingLoading === promise) buildingLoading = null;
+    });
   }
   return buildingLoading;
 }
@@ -1050,11 +1069,14 @@ let animLoading: Promise<TileTextures> | null = null;
  */
 export function loadAnimAtlases(): Promise<TileTextures> {
   if (!animLoading) {
-    animLoading = Promise.all([
+    const promise = Promise.all([
       loadAtlasCategory('buildings-static'),
       loadOptionalAtlasCategory('buildings-level1'),
       loadAtlasCategory('buildings-anim'),
     ]).then(([staticAtlas, level1Atlas, animAtlas]) => buildTileTextures([staticAtlas, level1Atlas], animAtlas));
+    animLoading = evictOnReject(promise, () => {
+      if (animLoading === promise) animLoading = null;
+    });
   }
   return animLoading;
 }
@@ -1107,7 +1129,9 @@ export function loadPackAtlases(pack: AtlasPack): Promise<TileTextures> {
   ]).then(([terrain, buildings, level1]) => buildTileTextures([terrain, buildings, level1]));
 
   packLoading.set(pack, promise);
-  return promise;
+  return evictOnReject(promise, () => {
+    if (packLoading.get(pack) === promise) packLoading.delete(pack);
+  });
 }
 
 const packAnimLoading = new Map<AtlasPack, Promise<TileTextures>>();
@@ -1131,7 +1155,9 @@ export function loadPackAnimAtlases(pack: AtlasPack): Promise<TileTextures> {
   ]).then(([terrain, buildings, level1, animAtlas]) => buildTileTextures([terrain, buildings, level1], animAtlas));
 
   packAnimLoading.set(pack, promise);
-  return promise;
+  return evictOnReject(promise, () => {
+    if (packAnimLoading.get(pack) === promise) packAnimLoading.delete(pack);
+  });
 }
 
 /** The pack-scoped mirror of `unloadAnimAtlases` — see its own doc comment. */
@@ -1151,12 +1177,15 @@ let combinedLoading: Promise<TileTextures> | null = null;
  */
 export function loadTileTextures(): Promise<TileTextures> {
   if (!combinedLoading) {
-    combinedLoading = Promise.all([
+    const promise = Promise.all([
       loadAtlasCategory('terrain'),
       loadAtlasCategory('buildings-static'),
       loadOptionalAtlasCategory('buildings-level1'),
       loadAtlasCategory('buildings-anim'),
     ]).then(([terrain, buildings, level1, animAtlas]) => buildTileTextures([terrain, buildings, level1], animAtlas));
+    combinedLoading = evictOnReject(promise, () => {
+      if (combinedLoading === promise) combinedLoading = null;
+    });
   }
   return combinedLoading;
 }

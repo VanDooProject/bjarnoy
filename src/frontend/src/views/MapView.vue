@@ -5,6 +5,8 @@ import type { MessageSchema } from '../i18n/schema';
 import { buildingName, resourceName, terrainName } from '../i18n/catalogueNames';
 import { useRoute, useRouter } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
+import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
+import { useLoadFlow } from '../composables/useLoadFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
@@ -157,15 +159,59 @@ function onArmySelect(armyId: string) {
   onQueueSelect(coord);
 }
 
+// What the map view is waiting on, shown by MapStatusOverlay — a failed
+// settlement restore used to be an unhandled rejection with the page fogged
+// forever. Only the REST restore can fail here; the rest of mount is
+// fire-and-forget and runs regardless (see onMounted).
+const {
+  step: loadStep,
+  error: loadError,
+  run: loadSettlement,
+} = useLoadFlow(async (setStep) => {
+  if (!DEMO_MODE && player.hasFoundedSettlement && player.settlementId) {
+    setStep(t('hud.mapStatus.loadingSettlement'));
+    await world.restoreLiveSettlement(player.id, player.settlementId);
+  }
+});
+
+// The renderer only draws fog once the settlement exists (HexMapRenderer's
+// isFogActive — in world mode too, since it needs a settlement of the local
+// player), and keeps the fog quads on an opaque placeholder until the mask
+// arrives. So wait for it exactly when a settlement is selected — demo and
+// live both fill fogMaskBitmap (refreshDemoFogMask / fetchFogMask).
+const revealingMap = computed(
+  () =>
+    !loadStep.value &&
+    !loadError.value &&
+    !!world.selectedSettlementId &&
+    world.fogMaskBitmap === null &&
+    !world.fogMaskError,
+);
+const overlayStep = computed(() => loadStep.value ?? (revealingMap.value ? t('hud.mapStatus.revealingMap') : null));
+// A first fog mask fetch that fails leaves nothing to draw; later failures
+// keep the previous bitmap and only reach the connection banner.
+const overlayError = computed(
+  () => loadError.value ?? (world.selectedSettlementId && world.fogMaskBitmap === null ? world.fogMaskError : null),
+);
+function retryLoad() {
+  if (loadError.value) {
+    void loadSettlement().then(() => {
+      // The poll timers were started before this succeeded — restart them so
+      // everything a failed first pass could not have pulled gets fetched.
+      if (!loadError.value) world.startHudSync();
+    });
+  } else {
+    void world.fetchFogMask();
+  }
+}
+
 onMounted(async () => {
   // A direct load of either route (reload, deep link) arrives here with no
   // guarantee anything else has bootstrapped the world yet — restoreLiveSettlement
   // bootstraps internally (see its own remarks), so this covers both routes'
   // old per-view bootstrap without needing two copies of it.
   world.setWorldMapActive(mode.value === 'world');
-  if (!DEMO_MODE && player.hasFoundedSettlement && player.settlementId) {
-    await world.restoreLiveSettlement(player.id, player.settlementId);
-  }
+  await loadSettlement();
   world.startHudSync();
   void unitCatalogue.load();
   buildingCatalogue.load();
@@ -1152,6 +1198,8 @@ async function upgrade() {
     class="map-view"
     :style="{ '--hud-inset-top': hudInsetTopPx + 'px', '--hud-inset-bottom': hudInsetBottomPx + 'px' }"
   >
+    <!-- Outside the canvas v-if: shows while the settlement is still loading. -->
+    <MapStatusOverlay :step="overlayStep" :error="overlayError" @retry="retryLoad" />
     <SettlementCanvas
       v-if="world.selectedSettlementId"
       ref="canvasRef"

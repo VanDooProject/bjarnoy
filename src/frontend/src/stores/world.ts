@@ -330,6 +330,11 @@ export const useWorldStore = defineStore('world', {
     // `ImageBitmap` is a plain, non-reactive resource, not app state Vue
     // needs to proxy.
     fogMaskBitmap: null as ImageBitmap | null,
+    // Error of the most recent failed fog mask fetch, cleared by the next
+    // success. Lets a view tell "mask still loading" from "mask can't be
+    // loaded" while no bitmap exists yet (the map would otherwise stay fogged
+    // with no explanation).
+    fogMaskError: null as unknown,
     /**
      * `WorldModel.fogSignature()` as of the last demo fog bake, so the poll
      * can skip a bake that would reproduce the mask already on screen. Null
@@ -967,6 +972,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.shipments = [];
       this.fogMaskBitmap?.close();
       this.fogMaskBitmap = null;
+      this.fogMaskError = null;
     },
     /**
      * Recovers from a world that has stopped existing out from under this
@@ -1540,6 +1546,7 @@ export const useWorldStore = defineStore('world', {
         this.fogMaskBitmap?.close();
         this.fogMaskBitmap = markRaw(bitmap);
         fogPerfStats.maskVersion = version;
+        this.fogMaskError = null;
       } catch (err) {
         if (isWorldNotFound(err)) {
           // Unlike a transient failure, this world is never going to start
@@ -1555,7 +1562,9 @@ export const useWorldStore = defineStore('world', {
         // Best-effort: any other failed fetch just leaves the previous
         // bitmap (or null) in place, same as any other poll in this store
         // that doesn't want a transient network blip to surface as a hard
-        // error.
+        // error. It is recorded though, so a view with no bitmap yet can say
+        // why instead of staying fogged silently.
+        this.fogMaskError = err;
       } finally {
         fogPerfStats.maskFetchMs = performance.now() - startedAt;
         fogPerfStats.maskFetchInFlight = false;

@@ -378,6 +378,15 @@ export function atlasBackgroundStyle(rect: AtlasFrameRect): AtlasBackgroundStyle
 
 const cache = new Map<string, Promise<LoadedAtlas>>();
 
+// A rejected load must not stay cached: the map's "Retry" would otherwise
+// replay the same failed promise instead of fetching again. Only evicts if
+// the slot still holds *this* promise (an unload + reload may have replaced it).
+function evictOnReject(key: string, promise: Promise<LoadedAtlas>): void {
+  promise.catch(() => {
+    if (cache.get(key) === promise) cache.delete(key);
+  });
+}
+
 /**
  * Called after each page of a category finishes loading — `loaded` counts
  * from 1, `total` is the category's page count known up front (`pages.length`,
@@ -457,6 +466,7 @@ function loadCategoryOrEmpty(key: string, onPage?: AtlasPageProgress): Promise<L
   })();
 
   cache.set(key, promise);
+  evictOnReject(key, promise);
   return promise;
 }
 
@@ -485,6 +495,7 @@ export function loadAtlasCategory(category: string, onPage?: AtlasPageProgress):
   })();
 
   cache.set(category, promise);
+  evictOnReject(category, promise);
   return promise;
 }
 
