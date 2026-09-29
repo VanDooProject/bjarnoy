@@ -71,7 +71,7 @@ describe('api.adminGetActivitySummary', () => {
 
     await expect(
       api.adminGetActivitySummary({ from: '2026-01-01T00:00:00Z', to: '2026-08-01T00:00:00Z' }),
-    ).rejects.toMatchObject(new ApiError(400, { detail: 'Range exceeds 92 days for bucket=day.' }));
+    ).rejects.toMatchObject({ status: 400, problem: { detail: 'Range exceeds 92 days for bucket=day.' } });
   });
 });
 
@@ -143,5 +143,32 @@ describe('api.adminGetUserActivityDetail', () => {
     await expect(
       api.adminGetUserActivityDetail('missing', { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' }),
     ).rejects.toThrow(ApiError);
+  });
+});
+
+describe('ApiError request context', () => {
+  it('records method and path on an HTTP failure', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 'nope' }, 503));
+    const err = await api.getIslands('w1').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 503, method: 'GET', path: '/worlds/w1/islands' });
+  });
+
+  it('records the explicit method of a mutating call', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({}, 500));
+    const err = await api
+      .foundSettlement('w1', {} as Parameters<typeof api.foundSettlement>[1])
+      .catch((e) => e);
+    expect(err).toMatchObject({ status: 500, method: 'POST', path: '/worlds/w1/settlements' });
+  });
+
+  it('wraps a rejected fetch as a status-0 ApiError carrying method, path and cause', async () => {
+    const original = new TypeError('Failed to fetch');
+    vi.mocked(fetch).mockRejectedValue(original);
+    const err = await api.getWorld('w1').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 0, method: 'GET', path: '/worlds/w1' });
+    expect(err.message).toBe('Network error: Failed to fetch');
+    expect(err.cause).toBe(original);
   });
 });
