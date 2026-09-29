@@ -19,16 +19,16 @@ public sealed class RemovedBuildingDropsOrderTests
     private static readonly DateTimeOffset T0 = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
     private static readonly HexCoord Centre = new(0, 0);
 
-    private static Settlement Found()
+    private static Settlement Found(int longhouseLevel = 1)
     {
-        var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
+        var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
 
         return new Settlement
         {
             Id = Guid.CreateVersion7(),
             Name = "Bjornstad",
             Centre = Centre,
-            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 1)],
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
             Resources = ResourcePool.Create(ResourceAmounts.Uniform(100_000), production, capacity, T0),
         };
     }
@@ -101,7 +101,8 @@ public sealed class RemovedBuildingDropsOrderTests
         // (LevelAfter 0) — the pending upgrade order must go with it, or
         // SettleTo would find nothing at that hex and add the finished
         // upgrade back, resurrecting a building the siege just removed.
-        var settlement = Found();
+        // Longhouse level 2: the level-2 upgrade needs a level-2 Longhouse.
+        var settlement = Found(longhouseLevel: 2);
         var coord = new HexCoord(1, 0);
         var first = settlement.PlanBuild(BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7());
         var built = settlement.Enqueue(first.Order!, T0).SettleTo(first.Order!.CompletesAt!.Value).Settlement;
@@ -138,7 +139,7 @@ public sealed class RemovedBuildingDropsOrderTests
         // siege; built directly rather than by stepping through several real
         // completions, since only the "does the order survive" behaviour is
         // under test here, not the levelling path itself.
-        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 5), (BuildingType.Farm, 8)]);
+        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 9), (BuildingType.Farm, 8)]);
         var coord = new HexCoord(1, 0);
         var settlement = new Settlement
         {
@@ -147,7 +148,7 @@ public sealed class RemovedBuildingDropsOrderTests
             Centre = Centre,
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 5),
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 9),
                 new PlacedBuilding(coord, BuildingType.Farm, 8),
             ],
             // A fixed, generous capacity rather than the catalogue's own

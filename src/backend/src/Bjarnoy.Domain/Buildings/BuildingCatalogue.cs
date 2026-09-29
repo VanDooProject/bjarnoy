@@ -71,80 +71,129 @@ public static class BuildingCatalogue
         [.. Enum.GetValues<BuildingType>().Where(t => MaxLevelFor(t) > 0)];
 
     /// <summary>
-    /// Which buildings a settlement must already have standing before it may
-    /// place another — the tech tree's shape, in one table.
+    /// The Longhouse level each non-Longhouse building unlocks at — the unlock
+    /// ladder from <c>docs/design/economy.md</c> §5, in one table. A building's
+    /// level can never exceed the Longhouse level either, see
+    /// <see cref="RequiredLonghouseLevelFor"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Every entry must be met, not any one of them. These are deliberately
-    /// production-led: Farm opens the second food tier (Pumpkin Farm), the
-    /// water line runs Fishing Hut → Dockyard, and the military line runs
-    /// Tower → Barracks → Archery Range, so the border watch comes first,
-    /// then the basic melee roster, then the archer/siege one (see
-    /// <see cref="Units.UnitCatalogue"/>, where Spearman trains at the
-    /// Barracks and Bowman at the Archery Range).
+    /// LH 1: Lumberjack, Quarry, Clay Brickworks, Storage House and Farm.
+    /// Stone has two sources at LH 1 because world generation does not
+    /// guarantee a Mountain near a start, so Clay Brickworks is the
+    /// no-mountain stone source, not an upgrade. Early levels unlock about one
+    /// building each; the late game comes in tiers (LH 15, 20, 25).
     /// </para>
     /// <para>
-    /// The four shrines and the Sawmill are late-game capstones rather than
-    /// early unlocks: each needs a maxed-out pair (or single building) from
-    /// its own line standing before it can go up at all — see their
-    /// <c>RequiredLonghouseLevel = 10</c> in <see cref="Shrine"/> and the
-    /// <see cref="BuildingType.Sawmill"/> case in <see cref="TryGet"/>.
+    /// Farm stays at LH 1 for now: the Reindeer Herder that replaces it as the
+    /// starting food building arrives in a later change, which moves Farm to
+    /// LH 4. Pumpkin Farm is at LH 4 already and stays soil-gated (see
+    /// <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
+    /// </para>
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<BuildingType, int> UnlockLevels =
+        new Dictionary<BuildingType, int>
+        {
+            [BuildingType.Lumberjack] = 1,
+            [BuildingType.Quarry] = 1,
+            [BuildingType.ClayBrickworks] = 1,
+            [BuildingType.StorageHouse] = 1,
+            [BuildingType.Farm] = 1,
+            [BuildingType.FishingHut] = 2,
+            [BuildingType.FisherHut] = 2,
+            [BuildingType.Tower] = 3,
+            [BuildingType.PumpkinFarm] = 4,
+            [BuildingType.Barracks] = 5,
+            [BuildingType.TownSquare] = 6,
+            [BuildingType.Dockyard] = 8,
+            [BuildingType.ArcheryRange] = 9,
+            [BuildingType.CartWorkshop] = 10,
+            [BuildingType.Meadery] = 11,
+            [BuildingType.DruidHut] = 12,
+            [BuildingType.Smithy] = 15,
+            [BuildingType.GreatStorehouse] = 15,
+            [BuildingType.Sawmill] = 20,
+            [BuildingType.CropMill] = 20,
+            [BuildingType.ShrineOfUllr] = 25,
+            [BuildingType.ShrineOfFreyja] = 25,
+            [BuildingType.ShrineOfNjord] = 25,
+            [BuildingType.ShrineOfThor] = 25,
+        };
+
+    /// <summary>
+    /// The Longhouse level <paramref name="type"/> unlocks at (1 for the
+    /// Longhouse itself and for unknown types).
+    /// </summary>
+    public static int UnlockLevel(BuildingType type) =>
+        UnlockLevels.TryGetValue(type, out var unlock) ? unlock : 1;
+
+    /// <summary>
+    /// The Longhouse level needed to build <paramref name="type"/> at
+    /// <paramref name="level"/>: <c>max(UnlockLevel(type), level)</c> — a
+    /// building's level can never exceed the Longhouse's. The Longhouse
+    /// itself only ever needs level 1 (it is upgraded by having a standing
+    /// Longhouse, not by a higher one).
+    /// </summary>
+    public static int RequiredLonghouseLevelFor(BuildingType type, int level) =>
+        type == BuildingType.Longhouse ? 1 : Math.Max(UnlockLevel(type), level);
+
+    /// <summary>
+    /// Which buildings a settlement must already have standing before it may
+    /// place another — the tech tree's shape, in one table. At most one
+    /// feeder building per entry (Shrine of Freyja et al. each have their own).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every entry must be met, not any one of them. The lines are: Tower →
+    /// Barracks → Archery Range → Weaponsmith (Smithy) → Shrine of Thor for
+    /// the military; Fishing Hut → Dockyard → Shrine of Njörd for the water;
+    /// Lumberjack → Sawmill → Shrine of Ullr and Farm → Meadery / Crop Mill →
+    /// Shrine of Freyja for the land; Town Square → Cart Workshop / Druid Hut
+    /// for the civic line; Storage House → Great Storehouse for storage. See
+    /// <c>docs/design/economy.md</c> §5.
     /// </para>
     /// <para>
-    /// Storage House deliberately gates nothing — it is the settlement's
-    /// early safety valve against overflow, not a reward for reaching
-    /// somewhere else first. Quarry likewise gates nothing: it needs a
-    /// Mountain hex, and <see cref="World.WorldGenerator"/> does not
-    /// guarantee one within reach of a starting position — anything behind a
-    /// Quarry would be unreachable for an unlucky map roll rather than
-    /// merely expensive.
+    /// Storage House, Quarry, Clay Brickworks, Lumberjack, Tower, Town Square
+    /// and Pumpkin Farm gate nothing on their own way in (Pumpkin Farm stays
+    /// soil-gated only): Quarry needs a Mountain hex, and
+    /// <see cref="World.WorldGenerator"/> does not guarantee one within reach
+    /// of a starting position — anything behind a Quarry would be unreachable
+    /// for an unlucky map roll rather than merely expensive.
     /// </para>
     /// </remarks>
     private static readonly IReadOnlyDictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>> PrerequisiteTable =
         new Dictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>>
         {
-            [BuildingType.Sawmill] = [new(BuildingType.Lumberjack, 10)],
-            [BuildingType.PumpkinFarm] = [new(BuildingType.Farm, 5)],
-            [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 4)],
-            [BuildingType.Barracks] = [new(BuildingType.Tower, 5)],
-            [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 3)],
-            [BuildingType.ShrineOfThor] =
-                [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
-            [BuildingType.ShrineOfFreyja] =
-                [
-                    new(BuildingType.Farm, 10), new(BuildingType.PumpkinFarm, 10),
-                    new(BuildingType.CropMill, 10), new(BuildingType.Meadery, 10),
-                ],
-            [BuildingType.ShrineOfUllr] =
-                [new(BuildingType.Lumberjack, 10), new(BuildingType.Sawmill, 10)],
-            [BuildingType.ShrineOfNjord] =
-                [new(BuildingType.FishingHut, 10), new(BuildingType.Dockyard, 10)],
-            [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 10)],
+            [BuildingType.Barracks] = [new(BuildingType.Tower, 3)],
+            [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 5)],
+            [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 5)],
+            [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
             [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
+            [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 5)],
+            [BuildingType.Smithy] = [new(BuildingType.Barracks, 10)],
+            [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 15)],
+            [BuildingType.Sawmill] = [new(BuildingType.Lumberjack, 10)],
             [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
-            [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 1)],
-            [BuildingType.Smithy] =
-                [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
-            [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 1)],
+            [BuildingType.ShrineOfUllr] = [new(BuildingType.Sawmill, 5)],
+            [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
+            [BuildingType.ShrineOfNjord] = [new(BuildingType.Dockyard, 10)],
+            [BuildingType.ShrineOfThor] = [new(BuildingType.Smithy, 5)],
         };
 
     /// <summary>
     /// The prerequisites attached to one level's definition. Prerequisites gate
-    /// <em>placing</em> a building, so they sit on the level whose construction
-    /// they gate — level 1 — and a building's own
-    /// <see cref="BuildingDefinition.RequiredLonghouseLevel"/> curve governs the
-    /// rest of its ladder. <see cref="BuildingType.GreatStorehouse"/> is the
-    /// exception: a flat level-10-only tier, so every level is that level.
+    /// <em>placing</em> a building, so they sit on level 1 only — the level
+    /// whose construction they gate — and
+    /// <see cref="RequiredLonghouseLevelFor"/> governs the rest of its ladder.
     /// </summary>
     private static IReadOnlyList<BuildingPrerequisite> PrerequisitesFor(BuildingType type, int level)
     {
-        if (!PrerequisiteTable.TryGetValue(type, out var prerequisites))
+        if (level != 1 || !PrerequisiteTable.TryGetValue(type, out var prerequisites))
         {
             return [];
         }
 
-        return level == 1 || type == BuildingType.GreatStorehouse ? prerequisites : [];
+        return prerequisites;
     }
 
     /// <summary>The definition for a level, or <see langword="null"/> if out of range.</summary>
@@ -161,12 +210,13 @@ public static class BuildingCatalogue
             BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 40, 0, 0, 0)),
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 40, 0, 0)),
             // Farm is the settlement's always-available staple, buildable on
-            // any island regardless of soil.
+            // any island regardless of soil. It stays at LH 1 until the
+            // Reindeer Herder replaces it as the starting food building (a
+            // later change moves Farm to LH 4).
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 40, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
             BuildingType.FishingHut => FishingHut(level),
-            BuildingType.MagicTower => Producer(type, level, Grass, new ResourceAmounts(0, 0, 0, Iron: 6)),
             // The bonus crop: only buildable on a Pumpkin-soil island
             // (Settlement.PlanBuild's islandSoil parameter, from
             // World.TerrainSampler.SoilAt) — not a free player choice, and
@@ -186,9 +236,8 @@ public static class BuildingCatalogue
             BuildingType.FisherHut => FisherHut(level),
             // Grass qualifies terrain-wise, but only a hex that is itself a
             // Straight/Bend river tile is actually buildable — see
-            // BuildingDefinition.RequiresRiverShape. A late-game capstone on
-            // a maxed Lumberjack (see PrerequisiteTable), so its longhouse
-            // gate overrides Producer's usual early-unlock curve.
+            // BuildingDefinition.RequiresRiverShape. Unlocks at LH 20 behind
+            // a level-10 Lumberjack (see PrerequisiteTable).
             //
             // No Wood of its own — a radius-boost producer instead (see
             // RadiusBoostTargets/RadiusBoostPercent/RadiusBoostRange): it
@@ -201,16 +250,13 @@ public static class BuildingCatalogue
                     {
                         RequiresRiverShape = SawmillRiverShapes,
                         ExcludedRiverVariants = SawmillExcludedRiverVariants,
-                        RequiredLonghouseLevel = 10,
                     },
             // No production of its own yet — its mead is meant for a future
-            // morale-boost mechanic (see BuildingType.Smithy's own note on
-            // its retired Iron production), buildable now so it has a place
-            // in the tech tree ahead of that mechanic landing.
+            // morale-boost mechanic, buildable now so it has a place in the
+            // tech tree ahead of that mechanic landing.
             BuildingType.Meadery => Producer(type, level, Grass, ResourceAmounts.Zero, SmallBuildingCost, 4),
             BuildingType.TownSquare => TownSquare(level),
-            // Same capstone shape as Sawmill: behind a maxed Farm, so its
-            // longhouse gate overrides Producer's usual early-unlock curve.
+            // Same shape as Sawmill: behind a level-10 Farm at LH 20.
             //
             // No Food of its own, same reasoning as Sawmill above — boosts
             // every Farm within range instead. Not PumpkinFarm: a mill
@@ -218,17 +264,13 @@ public static class BuildingCatalogue
             // RadiusBoostTargets).
             BuildingType.CropMill =>
                 Producer(type, level, Grass, ResourceAmounts.Zero, SmallBuildingCost, 4)
-                    with { RequiresRiverShape = CropMillRiverShapes, RequiredLonghouseLevel = 10 },
-            // No production of its own yet — retired Iron production in
-            // favour of a future troop-upgrade mechanic (costs/effects not
-            // yet designed); still a military-line capstone alongside
-            // Shrine of Thor, behind the same maxed Barracks/ArcheryRange
-            // pair (see PrerequisiteTable), so its longhouse gate overrides
-            // Producer's usual early-unlock curve the same way
-            // Sawmill's/Crop Mill's do.
+                    with { RequiresRiverShape = CropMillRiverShapes },
+            // The Weaponsmith (display name; the type stays Smithy). No
+            // production of its own — a troop-upgrade building only (costs and
+            // effects not yet designed); the military line's capstone and the
+            // feeder of the Shrine of Thor.
             BuildingType.Smithy =>
-                Producer(type, level, SandOrGrass, ResourceAmounts.Zero, SmallBuildingCost, 4)
-                    with { RequiredLonghouseLevel = 10 },
+                Producer(type, level, SandOrGrass, ResourceAmounts.Zero, SmallBuildingCost, 4),
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),
             BuildingType.ClayBrickworks => Producer(type, level, Grass, new ResourceAmounts(0, Stone: 36, 0, 0)),
@@ -236,9 +278,16 @@ public static class BuildingCatalogue
         };
 
         // Attached here rather than in each helper so the tech tree's shape
-        // lives in exactly one table, and every building goes through the same
-        // rule for which of its levels the prerequisites gate.
-        return definition is null ? null : definition with { Prerequisites = PrerequisitesFor(type, level) };
+        // (unlock ladder + prerequisites) lives in exactly one place, and every
+        // building goes through the same rule for which of its levels the
+        // prerequisites gate.
+        return definition is null
+            ? null
+            : definition with
+            {
+                Prerequisites = PrerequisitesFor(type, level),
+                RequiredLonghouseLevel = RequiredLonghouseLevelFor(type, level),
+            };
     }
 
     public static BuildingDefinition Get(BuildingType type, int level) =>
@@ -497,7 +546,6 @@ public static class BuildingCatalogue
             // Geometric in level (x1.20 per level), the level's total.
             ProductionPerHour = ProductionFor(perHourAtLevelOne, level),
             AllowedTerrain = terrain,
-            RequiredLonghouseLevel = 1 + ((level - 1) / 2),
         };
 
     private static BuildingDefinition Longhouse(int level) => new()
@@ -512,7 +560,6 @@ public static class BuildingCatalogue
         ProductionPerHour = new ResourceAmounts(Wood: 15, Stone: 12, Food: 15, Iron: 2) * level,
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
         AllowedTerrain = Grass,
-        RequiredLonghouseLevel = 1,
         // The settlement's own centre-disc claim radius at this longhouse
         // level (MECHANICS.md §2: borders grow when the anchor levels up) —
         // see Settlement.ClaimRadius, which reads this back.
@@ -532,7 +579,6 @@ public static class BuildingCatalogue
         // Total at this level: 600 * (1.22^L - 1) / 0.22 per resource.
         StorageCapacity = GeometricCapacity(600, 1.22, level),
         AllowedTerrain = Grass,
-        RequiredLonghouseLevel = 1 + ((level - 1) / 2),
     };
 
     private static BuildingDefinition Tower(int level) => new()
@@ -542,12 +588,13 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(8, level),
         AllowedTerrain = SandOrGrass,
-        // Later than the other border buildings on purpose: a tower extends
-        // the realm, so opening it at the very first longhouse level made
-        // expansion the obvious first move rather than a decision. Also now
-        // the entry point to the military line — Barracks needs a level-5
-        // Tower before it can go up (see PrerequisiteTable).
-        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
+        // Unlocks at LH 3, later than the first producers on purpose: a tower
+        // extends the realm, so opening it at the very first longhouse level
+        // made expansion the obvious first move rather than a decision. It is
+        // also the entry point to the military line — Barracks needs a
+        // level-3 Tower before it can go up (see PrerequisiteTable). How many
+        // towers a settlement may hold follows its Longhouse level, see
+        // MaxTowers.
         // This tower's own satellite-disc claim radius, centred on the tower
         // rather than the settlement — see Settlement.ClaimDiscsFor, which
         // reads this back for every standing Tower. One hex of reach per
@@ -566,7 +613,6 @@ public static class BuildingCatalogue
         BuildDuration = Duration(3, level),
         ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 40, 0), level),
         RequiresCoastalWater = true,
-        RequiredLonghouseLevel = 1 + ((level - 1) / 2),
     };
 
     /// <summary>
@@ -582,7 +628,6 @@ public static class BuildingCatalogue
         BuildDuration = Duration(3, level),
         ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 42, 0), level),
         RequiresCoastalWater = true,
-        RequiredLonghouseLevel = 1 + ((level - 1) / 2),
     };
 
     /// <summary>
@@ -626,10 +671,9 @@ public static class BuildingCatalogue
     /// A shrine contributes no flat production or storage of its own — its
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
-    /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm/
-    /// MagicTower. Every shrine is a late-game capstone now — a maxed pair
-    /// standing from their own line (see PrerequisiteTable) — so the
-    /// longhouse gate is flat 10 rather than the usual early-unlock curve.
+    /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm.
+    /// Every shrine unlocks at LH 25, each behind its own feeder building
+    /// (see PrerequisiteTable), and has 5 levels.
     /// </summary>
     private static BuildingDefinition Shrine(BuildingType type, int level) => new()
     {
@@ -637,18 +681,15 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
-        RequiredLonghouseLevel = 10,
         AllowedTerrain = Grass,
     };
 
     /// <summary>
-    /// A flat level-10-only late-game storage tier: both the Longhouse and
-    /// the settlement's own <see cref="BuildingType.StorageHouse"/> must
-    /// already be level 10 (see <see cref="Settlement.PlanBuild"/>'s
-    /// <see cref="BuildingDefinition.Prerequisites"/> check). Unlike every
-    /// other building's prerequisites, which gate level 1 only, this one is
-    /// carried on every level — the tier is flat, so there is only ever one
-    /// rung to gate.
+    /// A late-game storage tier (LH 15, 10 levels) behind a level-15
+    /// <see cref="BuildingType.StorageHouse"/> (see
+    /// <see cref="Settlement.PlanBuild"/>'s
+    /// <see cref="BuildingDefinition.Prerequisites"/> check). Like every other
+    /// building, that prerequisite gates level 1 only.
     /// </summary>
     private static BuildingDefinition GreatStorehouse(int level) => new()
     {
@@ -659,7 +700,6 @@ public static class BuildingCatalogue
         // Total at this level: 2500 * (1.30^L - 1) / 0.30 per resource.
         StorageCapacity = GeometricCapacity(2500, 1.30, level),
         AllowedTerrain = Grass,
-        RequiredLonghouseLevel = 10,
     };
 
     /// <summary>
@@ -677,9 +717,8 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 140, Stone: 100, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = SandOrGrass,
-        // The deepest tier of the military line (Tower -> Barracks ->
-        // Archery Range), held back further than either behind it.
-        RequiredLonghouseLevel = 5 + ((level - 1) / 2),
+        // The deepest tier of the early military line (Tower -> Barracks ->
+        // Archery Range), behind a level-5 Barracks.
     };
 
     // Same shape as FishingHut: RequiresCoastalWater rather than
@@ -698,7 +737,6 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 200, Stone: 120, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(9, level),
         RequiresCoastalWater = true,
-        RequiredLonghouseLevel = 2 + ((level - 1) / 2),
     };
 
     /// <summary>
@@ -717,11 +755,10 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 130, Stone: 110, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = SandOrGrass,
-        // The middle rung of the military line: needs a level-5 Tower
+        // The middle rung of the military line: needs a level-3 Tower
         // standing first (see PrerequisiteTable) and gates Archery Range in
         // turn, so raising an army is a mid-game commitment rather than
         // something a settlement can start with.
-        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 
     /// <summary>
@@ -737,7 +774,6 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 160, Stone: 140, Food: 40, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(8, level),
         AllowedTerrain = Grass,
-        RequiredLonghouseLevel = 5 + ((level - 1) / 2),
     };
 
     /// <summary>
@@ -753,7 +789,6 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 160, Stone: 110, Food: 80, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(9, level),
         AllowedTerrain = Grass,
-        RequiredLonghouseLevel = 6 + ((level - 1) / 2),
     };
 
     /// <summary>
@@ -772,6 +807,5 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 150, Stone: 110, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = Grass,
-        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 }

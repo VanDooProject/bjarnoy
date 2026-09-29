@@ -132,9 +132,7 @@ public sealed record BuildingDefinition
     /// These gate <em>placing</em> a building, not upgrading one: the
     /// catalogue attaches them to a type's level-1 definition only, so once a
     /// building stands its own <see cref="RequiredLonghouseLevel"/> curve
-    /// governs the rest of its ladder. <see cref="BuildingType.GreatStorehouse"/>
-    /// is the deliberate exception — it carries its prerequisite on every
-    /// level, being a flat level-10-only tier. This is data, not a rule in
+    /// (<c>max(unlock level, level)</c>) governs the rest of its ladder. This is data, not a rule in
     /// <see cref="Settlement.PlanBuild"/>: the check simply enforces whatever
     /// the target level's definition lists, so a future "level 5 of X needs Y"
     /// is a catalogue edit rather than a code change.

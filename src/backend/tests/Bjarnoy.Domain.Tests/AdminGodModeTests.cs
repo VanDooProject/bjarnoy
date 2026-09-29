@@ -215,7 +215,9 @@ public sealed class AdminGodModeTests
     [Fact]
     public void Razing_removes_the_building_and_drops_any_order_still_aimed_at_that_hex()
     {
-        var settlement = NewSettlement();
+        // Longhouse level 2: the level-2 Farm upgrade needs a level-2 Longhouse.
+        var settlement = NewSettlement().PlaceBuilding(
+            new HexCoord(0, 0), BuildingType.Longhouse, 2, Terrain.Grass, false, Start, terrainAt: Grass).Settlement!;
         var coord = new HexCoord(1, 0);
 
         var placed = settlement.PlaceBuilding(
