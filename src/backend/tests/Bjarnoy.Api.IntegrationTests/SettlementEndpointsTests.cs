@@ -428,12 +428,15 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var before = settlement.Resources.Stock.Food;
         var rate = settlement.Resources.RatePerHour.Food;
 
-        _factory.Time.Advance(TimeSpan.FromHours(5));
+        // A new settlement starts 50 below its storage capacity
+        // (BuildingCatalogue.FoundingStock), so the wait stays short enough
+        // that production doesn't reach the cap.
+        _factory.Time.Advance(TimeSpan.FromHours(3));
         var later = await GetAsync(client, settlement.Id);
 
-        // No worker ran, no tick fired: five hours of production is simply what
+        // No worker ran, no tick fired: three hours of production is simply what
         // the timestamp implies.
-        Assert.Equal(before + (rate * 5), later!.Resources.Stock.Food, 0);
+        Assert.Equal(before + (rate * 3), later!.Resources.Stock.Food, 0);
     }
 
     [Fact]

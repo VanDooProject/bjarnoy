@@ -41,6 +41,19 @@ public class EconomyDesignTests
     private static double Sum(ResourceAmounts a) => a.Wood + a.Stone + a.Food + a.Iron;
 
     [Fact]
+    public void A_new_settlement_starts_with_its_storage_nearly_full_and_no_iron()
+    {
+        // Starting capacity is the base plus the level-1 Longhouse's own
+        // storage (500 + 250); the founding stock sits 50 below it.
+        var capacity = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]).Capacity;
+        var stock = BuildingCatalogue.FoundingStock;
+
+        Assert.Equal(new ResourceAmounts(Wood: 700, Stone: 700, Food: 700, Iron: 0), stock);
+        Assert.Equal(capacity.Wood - BuildingCatalogue.FoundingHeadroom, stock.Wood);
+        Assert.True(capacity.Covers(stock));
+    }
+
+    [Fact]
     public void The_ladder_table_covers_every_non_longhouse_type()
     {
         var covered = Ladder.Select(l => l.Type).ToHashSet();

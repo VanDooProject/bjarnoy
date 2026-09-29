@@ -59,13 +59,22 @@ public static class BuildingCatalogue
     /// <summary>What a settlement can store before it builds a storage house.</summary>
     public static ResourceAmounts BaseStorageCapacity { get; } = ResourceAmounts.Uniform(500);
 
+    /// <summary>How far below its starting storage capacity a new settlement's stock sits.</summary>
+    public const double FoundingHeadroom = 50;
+
     /// <summary>
-    /// What a new settlement starts with — enough to put up the first
-    /// production building without waiting (MECHANICS.md §9: the first
-    /// interaction is a real move, not a countdown).
+    /// What a new settlement starts with: its starting storage nearly full —
+    /// base capacity plus the level-1 Longhouse's own storage, less
+    /// <see cref="FoundingHeadroom"/> — so the first builds never wait
+    /// (docs/design/economy.md, T1: the first ten minutes are a run of real
+    /// moves, not a countdown). No iron: the first unit needs none, and the
+    /// Longhouse's trickle covers the rest until lake ore. Computed on access
+    /// rather than in a static initializer, since the Longhouse definition
+    /// reads tables declared further down this class.
     /// </summary>
-    public static ResourceAmounts FoundingStock { get; } =
-        new(Wood: 600, Stone: 500, Food: 400, Iron: 0);
+    public static ResourceAmounts FoundingStock =>
+        (BaseStorageCapacity + Get(BuildingType.Longhouse, 1).StorageCapacity - ResourceAmounts.Uniform(FoundingHeadroom))
+        with { Iron = 0 };
 
     public static IReadOnlyList<BuildingType> AllTypes { get; } =
         [.. Enum.GetValues<BuildingType>().Where(t => MaxLevelFor(t) > 0)];
