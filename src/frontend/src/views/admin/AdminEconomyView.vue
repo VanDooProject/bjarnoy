@@ -443,7 +443,7 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
               </label>
               <label>
                 {{ $t('adminEconomy.pacing.sessionMinutes') }}
-                <input v-model.number="s.minutes" type="number" min="1" max="1440" step="5" />
+                <input v-model.number="s.minutes" type="number" min="1" max="1440" step="1" />
               </label>
               <button type="button" class="secondary" @click="removeSession(i)">{{ $t('adminEconomy.pacing.removeSession') }}</button>
             </div>
