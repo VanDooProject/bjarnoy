@@ -1,8 +1,10 @@
 # Economy & tech tree
 
-Status: **proposal** — the formulas and targets below are agreed in
-direction; numbers are tuned against the pacing simulator (the admin
-*Economy lab* page, `/admin/economy`) and change only together with it.
+Status: **agreed design, not yet in the game.** The catalogue still runs
+the old numbers until the rebalance PR lands. Numbers are tuned against the
+pacing simulator (the admin *Economy lab* page, `/admin/economy`); change
+them together with it. Buildings marked * don't exist in the game yet and
+come in their own PRs.
 
 ## 1. Design targets
 
@@ -17,6 +19,7 @@ formula changes, re-run the lab and check all of them.
 | T4 | A settlement is "full" (LH 30, producers maxed) after **1–2 months** | `pro` ≈ 5–6 weeks, `average` ≈ 8–9 weeks |
 | T5 | Later levels still pay off, but ever more slowly | producer payback grows ~7% per level (cost ×1.30 vs output ×1.20) |
 | T6 | Troops and sea access come before settling | Cart Workshop (settlers) needs Dockyard; LH 10 |
+| T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
 
 ## 2. Resources
 
@@ -28,11 +31,17 @@ Wood, Stone, Food, Iron.
   the no-mountain stone source, not an upgrade.
 - **Food** — Reindeer Herder (the default, any grass), later Farm / Pumpkin
   Farm by island soil (one tech-tree card), Fishing Hut on coastal water.
-- **Iron** — needs its own producer (open: §8). Until it exists, buildings
-  cost no iron; iron is a military resource (units, Tower).
+- **Iron** — comes from **lake ore** (Seeerz): a later feature adds a lake
+  tile to every island, connected to the rivers, with a lake-ore building
+  on it and a river **Hammerschmiede** (water-powered hammer mill) that
+  boosts it, the way the Sawmill boosts Lumberjacks (§8). Until then the
+  Longhouse is the only iron source, so buildings cost no iron; iron is a
+  military resource (units, Tower).
 
-The Magic Tower is removed for now. The Smithy produces nothing: it is a
-troop-upgrade building only.
+The **Magic Tower is removed**. The **Smithy** is renamed **Weaponsmith**
+(Waffenschmiede; its art has an anvil) so it doesn't clash with the
+Hammerschmiede. It produces nothing and is a troop-upgrade building only.
+Only its display name changes; the internal type stays `smithy`.
 
 ## 3. Level formulas
 
@@ -82,7 +91,7 @@ has 3–8 stages per building, and each level maps onto a stage
 |---|---|
 | Longhouse | 30 (also drives build slots, claim radius and the build-speed bonus) |
 | Resource producers, Storage House | 25 |
-| Military and civic buildings (Barracks, Archery Range, Dockyard, Town Square, Cart Workshop, Druid Hut, Smithy, Meadery) | 20 |
+| Military and civic buildings (Barracks, Archery Range, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
 | Mills (Sawmill, Crop Mill) | 20 |
 | Tower | 10 |
 | Great Storehouse | 10 |
@@ -94,42 +103,48 @@ Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 ## 5. Unlock ladder
 
 Each building needs a Longhouse level, and at most one feeder building.
+Early levels unlock one building each; late game comes in tiers (LH 15, 20,
+25), since there is no need for an unlock at every late level.
 
 | LH | Unlocks | Also needs |
 |---|---|---|
-| 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder, Storage House | — |
+| 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder*, Storage House | — |
 | 2 | Fishing Hut | — |
 | 3 | Tower | — |
-| 4 | Farm / Pumpkin Farm (by soil) | Reindeer Herder 3 |
+| 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |
 | 5 | Barracks | Tower 3 |
 | 6 | Town Square (feasts, §6) | — |
-| 7 | Palisade | Tower 5 |
+| 7 | Palisade* | Tower 5 |
 | 8 | Dockyard | Fishing Hut 5 |
 | 9 | Archery Range | Barracks 5 |
 | 10 | Cart Workshop (settlers) | Dockyard 1 |
 | 11 | Meadery | Farm 5 |
-| 12 | *Iron producer (open, §8)* | — |
-| 13 | Druid Hut | Town Square 5 |
-| 14 | Sawmill | Lumberjack 10 |
-| 15 | Crop Mill | Farm 10 |
-| 16 | Smithy (troop upgrades) | Barracks 10 |
-| 18 | Great Storehouse | Storage House 15 |
-| 25 | Shrine of Ullr | Sawmill 5 |
-| 25 | Shrine of Freyja | Crop Mill 5 |
-| 25 | Shrine of Njörd | Dockyard 10 |
-| 25 | Shrine of Thor | Smithy 5 |
-| 25 | Odin Statue | any other shrine 5 |
+| 12 | Druid Hut | Town Square 5 |
+| 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
+| 20 | Sawmill, Crop Mill | Lumberjack 10 / Farm 10 |
+| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue* | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / any other shrine 5 |
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
 practice they still arrive one at a time.
 
-### Space and limits
+### Territory and towers
 
-- Producers are limited only by territory: every matching hex inside the
-  claim can hold one. The claim grows with the Longhouse (`2 + LH/2` rings).
-- **Towers are limited per Longhouse level:** one at LH 3, then one more at
-  LH 10, 15, 20, 25 and 30. A tower extends the claim, so an uncapped count
-  would make territory, and with it producer count, unbounded.
+- **The Longhouse grows the realm only until towers are available.** Its
+  claim radius is 2 at LH 1 and 3 from LH 2 on, and it stops there: from
+  LH 3, when the first Tower unlocks, territory grows only through towers.
+- **Tower count follows one rule:** 1 tower from LH 3, then one more for
+  every second Longhouse level after LH 5:
+
+  ```
+  maxTowers(LH) = 0                          for LH < 3
+                = 1 + max(0, ⌊(LH − 5) / 2⌋)  otherwise
+  ```
+
+  So LH 3–6 allow 1, LH 7 allows 2, LH 9 allows 3, …, and LH 29–30 allow 13.
+  The tech tree shows only the first unlock (LH 3); the rule is shown where
+  a tower is placed, not as extra tech-tree cards.
+- **Producers are limited only by territory:** every matching hex inside
+  the claim can hold one.
 - **Rivers block space but pay for it.** A river hex can't take an ordinary
   building, but it is the only place for the mills, and a mill boosts every
   Lumberjack / Farm within its range (up to +100% at max level). A river
@@ -143,7 +158,7 @@ to hold several settlements on one island and merge them later.
 
 | Shrine | Favour |
 |---|---|
-| Thor | + land unit attack |
+| Thor | + land unit attack (feeder: Weaponsmith) |
 | Freyja | + food production |
 | Ullr | + wood production |
 | Njörd | + ship attack (coastal-water building) |
@@ -202,16 +217,37 @@ Simulator result for these numbers:
 Simulated: the first 25 minutes are continuous building (9 producers, then
 LH 2 at about 13 min), LH 3 at about 1h45.
 
-## 8. Open questions
+## 8. Iron: lake ore (later feature)
 
-- **Iron producer.** Historically, Norse iron was almost all *bog iron*
-  (myrmalm): ore dug from peat bogs and wet ground, smelted on site in a
-  small clay bloomery furnace with charcoal. That fits better than a
-  mountain mine. Suggestion: a **Bog Iron Pit** on grass that must touch
-  water (a river or the coast), art built with the Clay Brickworks'
-  "hole in the ground" template. Its boost building would be a
-  **Charcoal Kiln** in the forest (charcoal fed the bloomeries), boosting
-  pits within range the way the mills do. A river mill for iron (a
-  water-powered trip hammer) is later than the Viking age.
+Viking-age Norse iron did not come from mountains. It came from ore that
+forms by itself where iron-rich fresh groundwater meets air:
+
+- **Bog iron** (Raseneisenerz, Sumpferz): rusty lumps a spade's depth under
+  wet meadows and bog edges.
+- **Lake ore** (Seeerz, Swedish *sjömalm*): the same process on lake
+  bottoms, raked up from boats, often through the winter ice.
+- Not sea water: the sea doesn't form this ore.
+- The ore was smelted on site in a small clay furnace (Rennofen) with
+  charcoal (Holzkohle, from a Kohlenmeiler), giving a bloom (Luppe) that the
+  smith hammered into iron. Rock-ore mines in mountains only mattered after
+  the Viking age.
+
+The plan:
+
+- A **lake tile**, one guaranteed per island (like a mountain), connected
+  to the river network. It needs new art and world-generation changes.
+- A **lake-ore building** on the lake: the iron producer.
+- A **Hammerschmiede** on a river: a water-powered hammer mill that boosts
+  lake-ore buildings within range, limited by river shapes the same way the
+  Sawmill and Crop Mill are. (Water-powered hammers are a century or two
+  later than the Vikings, like the game's water-powered sawmill.)
+
+Until this lands, the Longhouse is the only iron source. Unit iron costs
+have to be checked against that (a Spearman costs 40 iron).
+
+## 9. Open questions
+
+- Fishing Hut and Fisher Hut are near-duplicates (same art, nearly the
+  same stats); merge them into one building?
 - The profile parameters (online hours, share spent on troops) are
   assumptions; real telemetry should replace them once players exist.
