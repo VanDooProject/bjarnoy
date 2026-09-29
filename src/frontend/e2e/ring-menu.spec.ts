@@ -139,11 +139,13 @@ test.describe('ring menu drill-down', () => {
     // The detail card is what the redesign added on top of navigation: the
     // player asked to see "resource cost, build time, can I afford it" without
     // committing to anything. It must also be honest about the gate — the
-    // watchtower is RequiredLonghouseLevel 3 (BuildingCatalogue.cs), so a
-    // fresh level-1 realm cannot place one, and the ring says why rather than
-    // letting the click silently do nothing.
+    // Barracks unlocks at longhouse 5 (BuildingCatalogue.cs UnlockLevels), so
+    // a longhouse-3 realm cannot place one, and the ring says why rather than
+    // letting the click silently do nothing. The Watchtower (longhouse 3) is
+    // the unlocked building placed at the end.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
+    await settlement.setSettlementLevel(3);
 
     // Ask the model for a real empty, owned, grass hex (grass is what carries
     // the Military category — see BUILD_CATEGORIES) rather than guessing a
@@ -162,21 +164,20 @@ test.describe('ring menu drill-down', () => {
     // not pop a card for a building the player never pointed at.
     await expect(settlement.ring.card).toHaveCount(0);
 
-    const watchtower = settlement.ring.child('Watchtower').first();
-    await settlement.ring.hover(watchtower);
+    const barracks = settlement.ring.child('Barracks').first();
+    await settlement.ring.hover(barracks);
 
     const card = settlement.ring.card;
     await expect(card).toBeVisible();
     // Cost, time and the gate all come from the building catalogue, so these
-    // are the backend's own numbers: 120 wood / 200 stone / 10 iron, 8:00,
-    // longhouse 3.
-    await expect(card).toContainText('120');
-    await expect(card).toContainText('200');
-    await expect(card).toContainText('8:00');
-    await expect(card).toContainText('REQUIRES LONGHOUSE 3');
-    await expect(watchtower).toHaveClass(/locked/);
+    // are the backend's own numbers: 130 wood / 110 stone, 7:00, longhouse 5.
+    await expect(card).toContainText('130');
+    await expect(card).toContainText('110');
+    await expect(card).toContainText('7:00');
+    await expect(card).toContainText('REQUIRES LONGHOUSE 5');
+    await expect(barracks).toHaveClass(/locked/);
 
-    await watchtower.click({ force: true });
+    await barracks.click({ force: true });
     await page.waitForTimeout(300);
     expect(await countBuildings()).toBe(before);
 
@@ -191,9 +192,9 @@ test.describe('ring menu drill-down', () => {
     );
     expect(underCard).not.toContain('ring-card');
 
-    const magicTower = settlement.ring.child('Magic Tower').first();
-    await settlement.ring.hover(magicTower);
-    await magicTower.click();
+    const watchtower = settlement.ring.child('Watchtower').first();
+    await settlement.ring.hover(watchtower);
+    await watchtower.click();
     await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 
@@ -208,16 +209,16 @@ test.describe('ring menu drill-down', () => {
     const longhouse = await settlement.centreHex();
     const buildingLevel = () => settlement.longhouseBuildingLevel();
 
-    // Longhouse's next level costs 320 wood / 240 stone / 160 food
-    // (BuildingCatalogue.cs's base * CostFactor(2)) and 0 iron at every
-    // level — zeroing every resource is short on exactly the first three.
+    // Longhouse's next level costs 161 wood / 134 stone / 81 food
+    // (BuildingCatalogue.cs's 120/100/60 base * 1.34, rounded up for
+    // display) and 0 iron at every level — zeroing every resource is short on exactly the first three.
     await settlement.setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
     await settlement.clickHex(longhouse);
 
     const upgradeBubble = settlement.ring.action('Upgrade').first();
     await expect(upgradeBubble).toBeVisible();
     await expect(upgradeBubble).toHaveClass(/disabled/);
-    await expect(upgradeBubble).toHaveAttribute('title', 'Needs 320 Wood, 240 Stone, 160 Food');
+    await expect(upgradeBubble).toHaveAttribute('title', 'Needs 161 Wood, 134 Stone, 81 Food');
 
     const levelBefore = await buildingLevel();
     await upgradeBubble.click({ force: true });
@@ -429,17 +430,18 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
     await settlement.clickHex(target);
     await settlement.ring.waitForOpen();
     await settlement.ring.action('Build').first().tap();
-    await settlement.ring.category('Military').first().tap();
+    await settlement.ring.category('Resource').first().tap();
 
-    const magicTower = settlement.ring.child('Magic Tower').first();
-    await expect(magicTower).toBeVisible();
+    // Farm: unlocked at longhouse 1 and buildable on grass.
+    const farm = settlement.ring.child('Farm').first();
+    await expect(farm).toBeVisible();
 
-    await magicTower.tap();
-    await expect(settlement.ring.card).toContainText('Magic Tower');
+    await farm.tap();
+    await expect(settlement.ring.card).toContainText('Farm');
     await page.waitForTimeout(300);
     expect(await countBuildings(), 'the first tap must only preview, not build').toBe(before);
 
-    await magicTower.tap();
+    await farm.tap();
     await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 });

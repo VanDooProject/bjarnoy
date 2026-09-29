@@ -17,10 +17,10 @@ test('building a dockyard from the ring menu on coastal water places it', async 
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.found(page);
 
-  // Dockyard is RequiredLonghouseLevel 2 (BuildingCatalogue.cs:
-  // 2 + ((level - 1) / 2) at level 1) — level the longhouse up first, same
+  // Dockyard unlocks at longhouse 8 (BuildingCatalogue.cs UnlockLevels,
+  // docs/design/economy.md's ladder) — level the longhouse up first, same
   // approach shrine-build.spec.ts uses for the shrine's own gate.
-  await settlement.setSettlementLevel(2);
+  await settlement.setSettlementLevel(8);
 
   // Find a real owned coastal-water hex within the settlement's claim radius
   // — same approach as shrine-build.spec.ts's grass-hex search, but for
