@@ -64,10 +64,11 @@ grass at a hex edge, like the wasteland does.
 
 - Bog is its own `Terrain` value with its own base tile.
 - Bog creeks don't count as rivers for the river buildings.
-- "Bog in reach of every start" is guaranteed by start placement, not by
-  world generation: **no start position (building spot) is offered where
-  there is no bog in reach.** An island without bog simply gets no start
-  positions.
+- "Bog in reach of every start" is guaranteed by the **landing spots**: a
+  new player is never offered a landing spot (start position) without bog
+  in reach. An island without bog simply gets no landing spots. This rule
+  is only about where new players land; where later settlements are founded
+  is up to the player.
 
 ## Agent prompt (game side)
 
@@ -82,10 +83,10 @@ grass at a hex edge, like the wasteland does.
 > works; Clay Brickworks and the Fisher Hut on the bog.**
 >
 > 1. **Terrain.** Add `Terrain.Bog` (its own base tile) and generate bogs
->    with the map rules above. Start placement (the landing page's plot
->    suggestions and founding) never offers a spot without bog in reach.
->    Keep the C# and TS generators byte-identical through the shared
->    goldens (regenerate them with the repo's tooling).
+>    with the map rules above. The landing spots offered to new players (the
+>    landing page's plot suggestions and reservations) never include a spot
+>    without bog in reach. Keep the C# and TS generators byte-identical
+>    through the shared goldens (regenerate them with the repo's tooling).
 > 2. **Buildings.** Add the bog-ore works (new `BuildingType`), move Clay
 >    Brickworks to bog ground, and let the Fisher Hut stand on a bog-lake
 >    shore, all as described above. The Hammerschmiede comes separately,
@@ -100,6 +101,6 @@ grass at a hex edge, like the wasteland does.
 >    say which families are missing. Don't render or push art: that's the
 >    maintainer's (see the 3D_assets `AGENTS.md`).
 >
-> Tests: start placement (no spot offered without bog in reach), the map
+> Tests: landing spots (none offered without bog in reach), the map
 > rules), placement rules for the buildings, the terrain boost, and the unit
 > cost and gate changes.
