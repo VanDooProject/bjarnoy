@@ -560,7 +560,11 @@ public static class BuildingCatalogue
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
     /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm/
-    /// MagicTower. Every shrine is a late-game capstone now — a maxed pair
+    /// MagicTower — except the Shrine of Njörd, whose art is a shrine on a
+    /// skerry standing in the shallows: it is built directly on a coastal-water
+    /// hex (<see cref="BuildingDefinition.RequiresCoastalWater"/>, the hex under
+    /// it stays plain <see cref="World.Terrain.Sea"/>) like FishingHut/Dockyard
+    /// and has no <see cref="BuildingDefinition.AllowedTerrain"/>. Every shrine is a late-game capstone now — a maxed pair
     /// standing from their own line (see PrerequisiteTable) — so the
     /// longhouse gate is flat 10 rather than the usual early-unlock curve.
     /// </summary>
@@ -571,7 +575,8 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
         RequiredLonghouseLevel = 10,
-        AllowedTerrain = Grass,
+        AllowedTerrain = type == BuildingType.ShrineOfNjord ? new HashSet<Terrain>() : Grass,
+        RequiresCoastalWater = type == BuildingType.ShrineOfNjord,
     };
 
     /// <summary>

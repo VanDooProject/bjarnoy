@@ -361,6 +361,21 @@ describe('WorldModel.placeBuilding — fisher hut and sawmill', () => {
     expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
   });
 
+  it('places a Shrine of Njörd on coastal water only, never on land', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
+    const radius = model.borderRadius(settlement);
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
+
+    expect(model.placeBuilding(settlement.id, grass, 'shrineofnjord')).toBe(false);
+    expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
+    expect(model.placeBuilding(settlement.id, coastal, 'shrineofnjord')).toBe(true);
+    expect(model.getTile(coastal.q, coastal.r).buildingType).toBe('shrineofnjord');
+  });
+
   it('places a sawmill directly on a straight or bend river tile', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);

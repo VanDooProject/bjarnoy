@@ -608,7 +608,7 @@ interface BuildCategory {
 // categories" on a shore (sand) tile meant — sand used to fall into the same
 // flat bucket as forest/mountain and offer Farm/Lumberjack/Quarry, none of
 // which the backend would ever accept there.
-// FishingHut, Dockyard, and FisherHut aren't land-terrain buildings at all
+// FishingHut, Dockyard, FisherHut and ShrineOfNjord aren't land-terrain buildings at all
 // (RequiresCoastalWater, on a Sea hex) — WATER_CATEGORY below is the ring
 // path to them, offered only on a coastal-water sea tile (see
 // categoriesFor), not through this land-terrain table.
@@ -618,15 +618,15 @@ const SHRINE_CATEGORY: BuildCategory = {
     { type: 'shrineofthor' },
     { type: 'shrineoffreyja' },
     { type: 'shrineofullr' },
-    { type: 'shrineofnjord' },
   ],
 };
-// Fisher Hut is built directly on a coastal-water hex, exactly like Fishing
-// Hut/Dockyard (BuildingDefinition.RequiresCoastalWater) — not on Grass, so
-// it lives in the water category rather than the grass one below.
+// Fisher Hut and the Shrine of Njörd (a shrine on a skerry) are built
+// directly on a coastal-water hex, exactly like Fishing Hut/Dockyard
+// (BuildingDefinition.RequiresCoastalWater) — not on Grass, so they live in
+// the water category rather than the grass one below.
 const WATER_CATEGORY: BuildCategory = {
   id: 'water',
-  buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'fisherhut' }],
+  buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'fisherhut' }, { type: 'shrineofnjord' }],
 };
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [

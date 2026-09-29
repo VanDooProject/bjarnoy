@@ -98,7 +98,9 @@ const art = computed(() => {
 // this only ever sees such a tile with a building on it already (nothing in
 // this modal's own `build` flow offers water as a target), so it can't be
 // mistaken for turning open water buildable from empty.
-const buildable = computed(() => props.tile.terrain !== 'sea' || props.tile.buildingType === 'fishinghut');
+const buildable = computed(
+  () => props.tile.terrain !== 'sea' || props.tile.buildingType === 'fishinghut' || props.tile.buildingType === 'shrineofnjord',
+);
 
 const name = computed(() =>
   props.tile.buildingType ? buildingName(props.tile.buildingType) : terrainName(props.tile.terrain),
