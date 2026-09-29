@@ -83,6 +83,7 @@ import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { animationPreference } from '../perf/animationPreference';
+import { advanceClipFrame } from './clipPlayback';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -325,10 +326,10 @@ function createSpriteLayer(): SpriteLayer {
 interface TopAnimState {
   clip: TileAnimClip;
   sprite: Sprite;
+  /** The frame index currently on screen. */
   frame: number;
-  elapsedMs: number;
-  /** Ping-pong direction; unused (and harmless) for a looping clip. */
-  dir: 1 | -1;
+  /** Total playback time since this clip started, in ms — `clipFrameIndex` folds it into the loop/pingpong/pause cycle. */
+  playedMs: number;
   /**
    * A second sprite drawn directly above `sprite` for an overlay clip
    * (`clip.rest` set): `sprite` shows the clip's rest image (the static
@@ -4037,39 +4038,30 @@ export class HexMapRenderer {
     const initial = topAnimTextures(anim, 0);
     sprite.texture = initial.base;
     if (overlay) overlay.texture = initial.overlay!;
-    this.topAnimState.set(key, { clip: anim, sprite, frame: 0, elapsedMs: 0, dir: 1, overlay });
+    this.topAnimState.set(key, { clip: anim, sprite, frame: 0, playedMs: 0, overlay });
   }
 
   /** Advances every active top-layer clip by `deltaMs` of playback, called once per app tick regardless of whether a rebuild ran this frame. */
   private advanceTopAnimations(deltaMs: number) {
     for (const state of this.topAnimState.values()) {
-      const frameDurationMs = 1000 / state.clip.fps;
-      state.elapsedMs += deltaMs;
-      let advanced = false;
-      while (state.elapsedMs >= frameDurationMs) {
-        state.elapsedMs -= frameDurationMs;
-        advanced = true;
-        const lastIndex = state.clip.textures.length - 1;
-        if (state.clip.playback === 'pingpong') {
-          state.frame += state.dir;
-          if (state.frame >= lastIndex) {
-            state.frame = lastIndex;
-            state.dir = -1;
-          } else if (state.frame <= 0) {
-            state.frame = 0;
-            state.dir = 1;
-          }
-        } else {
-          state.frame = (state.frame + 1) % state.clip.textures.length;
-        }
-      }
-      if (advanced) {
-        const texture = state.clip.textures[state.frame]!;
-        // The rest sprite (`state.sprite`) never changes texture again once
-        // an overlay sprite exists — only the overlay cycles.
-        if (state.overlay) state.overlay.texture = texture;
-        else state.sprite.texture = texture;
-      }
+      // clipPlayback.ts owns the frame math, so the clip's `pause` - the hold
+      // on its last frame between cycles - applies on the map too.
+      const frame = advanceClipFrame(
+        {
+          frameCount: state.clip.textures.length,
+          fps: state.clip.fps,
+          playback: state.clip.playback,
+          pause: state.clip.pause,
+        },
+        state,
+        deltaMs,
+      );
+      if (frame === undefined) continue;
+      const texture = state.clip.textures[frame]!;
+      // The rest sprite (`state.sprite`) never changes texture again once
+      // an overlay sprite exists — only the overlay cycles.
+      if (state.overlay) state.overlay.texture = texture;
+      else state.sprite.texture = texture;
     }
   }
 

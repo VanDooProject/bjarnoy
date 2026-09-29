@@ -67,3 +67,23 @@ export function clipFrameIndex(clip: ClipTiming, elapsedMs: number): number {
   const step = Math.floor(elapsedMs / (1000 / clip.fps)) % total;
   return frameIndexAtStep(clip, step);
 }
+
+/**
+ * One tick of a clip player that keeps its own clock (`HexMapRenderer`'s
+ * per-hex top animations): adds `deltaMs` to `state.playedMs` and returns the
+ * frame now due if it differs from `state.frame` (updating `state.frame`),
+ * else `undefined` — so the caller only swaps a texture when one is due.
+ * Goes through `clipFrameIndex`, so the clip's `pause` holds its last frame
+ * between cycles here too.
+ */
+export function advanceClipFrame(
+  clip: ClipTiming,
+  state: { playedMs: number; frame: number },
+  deltaMs: number,
+): number | undefined {
+  state.playedMs += deltaMs;
+  const frame = clipFrameIndex(clip, state.playedMs);
+  if (frame === state.frame) return undefined;
+  state.frame = frame;
+  return frame;
+}
