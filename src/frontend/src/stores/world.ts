@@ -28,6 +28,7 @@ import {
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
 import { WorldModel } from '../lib/map/WorldModel';
+import { useConnectionStatusStore } from './connectionStatus';
 import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
 import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
@@ -330,6 +331,11 @@ export const useWorldStore = defineStore('world', {
     // `ImageBitmap` is a plain, non-reactive resource, not app state Vue
     // needs to proxy.
     fogMaskBitmap: null as ImageBitmap | null,
+    // Error of the most recent failed fog mask fetch, cleared by the next
+    // success. Lets a view tell "mask still loading" from "mask can't be
+    // loaded" while no bitmap exists yet (the map would otherwise stay fogged
+    // with no explanation).
+    fogMaskError: null as unknown,
     /**
      * `WorldModel.fogSignature()` as of the last demo fog bake, so the poll
      * can skip a bake that would reproduce the mask already on screen. Null
@@ -967,6 +973,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.shipments = [];
       this.fogMaskBitmap?.close();
       this.fogMaskBitmap = null;
+      this.fogMaskError = null;
     },
     /**
      * Recovers from a world that has stopped existing out from under this
@@ -1472,26 +1479,42 @@ export const useWorldStore = defineStore('world', {
       this.hud.population = this.model.populationFor(settlement.id);
       this.hud.tick += 1;
     },
+    /**
+     * Runs one background poll, reporting its outcome to the connection
+     * status store: a failure is recorded (and warned about) instead of
+     * escaping as an unhandled rejection, a success clears the key again.
+     * Never rejects.
+     */
+    async trackPoll(key: string, poll: () => Promise<unknown>) {
+      const connection = useConnectionStatusStore();
+      try {
+        await poll();
+        connection.clear(key);
+      } catch (err) {
+        console.warn(`poll "${key}" failed`, err);
+        connection.report(key, err);
+      }
+    },
     startHudSync() {
       this.stopHudSync();
       this.syncHud();
       this.syncHandle = setInterval(() => this.syncHud(), 1000);
       if (!DEMO_MODE) {
-        void this.refreshLiveSettlement();
-        void this.refreshWorldSettlements();
-        void this.refreshTradeAsync();
-        void this.refreshArmies();
-        void this.fetchFogMask();
-        this.livePollHandle = setInterval(() => {
-          void this.refreshLiveSettlement();
-          void this.refreshWorldSettlements();
-          void this.refreshTradeAsync();
+        // fogMask reports for itself (fetchFogMask keeps its own recovery and
+        // in-flight logic and never rejects), the rest go through trackPoll.
+        const pollLive = () => {
+          void this.trackPoll('settlement', () => this.refreshLiveSettlement());
+          void this.trackPoll('worldSettlements', () => this.refreshWorldSettlements());
+          void this.trackPoll('trade', () => this.refreshTradeAsync());
           void this.fetchFogMask();
-        }, LIVE_POLL_MS);
+        };
+        pollLive();
+        void this.trackPoll('armies', () => this.refreshArmies());
+        this.livePollHandle = setInterval(pollLive, LIVE_POLL_MS);
         // Separate, tighter interval than LIVE_POLL_MS — see ARMY_POLL_MS's
         // own comment for why armies need to be polled more often than
         // buildings/queues.
-        this.armyPollHandle = setInterval(() => void this.refreshArmies(), ARMY_POLL_MS);
+        this.armyPollHandle = setInterval(() => void this.trackPoll('armies', () => this.refreshArmies()), ARMY_POLL_MS);
       } else {
         void this.refreshDemoFogMask();
         this.demoFogPollHandle = setInterval(() => void this.refreshDemoFogMask(), LIVE_POLL_MS);
@@ -1540,6 +1563,8 @@ export const useWorldStore = defineStore('world', {
         this.fogMaskBitmap?.close();
         this.fogMaskBitmap = markRaw(bitmap);
         fogPerfStats.maskVersion = version;
+        this.fogMaskError = null;
+        useConnectionStatusStore().clear('fogMask');
       } catch (err) {
         if (isWorldNotFound(err)) {
           // Unlike a transient failure, this world is never going to start
@@ -1555,7 +1580,11 @@ export const useWorldStore = defineStore('world', {
         // Best-effort: any other failed fetch just leaves the previous
         // bitmap (or null) in place, same as any other poll in this store
         // that doesn't want a transient network blip to surface as a hard
-        // error.
+        // error. It is recorded though, so a view with no bitmap yet can say
+        // why instead of staying fogged silently.
+        this.fogMaskError = err;
+        console.warn('poll "fogMask" failed', err);
+        useConnectionStatusStore().report('fogMask', err);
       } finally {
         fogPerfStats.maskFetchMs = performance.now() - startedAt;
         fogPerfStats.maskFetchInFlight = false;

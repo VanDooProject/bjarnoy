@@ -5,7 +5,7 @@
 // underneath, through the very same <router-view> element — never a second,
 // separately-mounted one — so a persistent renderer (MapView's Pixi canvas
 // in real use) survives the modal opening and closing. AccountRestrictedBanner/
-// DemoModeBadge/ProfileModal are stubbed out here: this file is only about
+// ConnectionBanner/DemoModeBadge/ProfileModal are stubbed out here: this file is only about
 // which route <router-view> renders and whether it remounts, not about
 // those components' own content.
 import { createPinia, setActivePinia } from 'pinia';
@@ -45,6 +45,7 @@ function mountApp(router: ReturnType<typeof testRouter>) {
       plugins: [router],
       stubs: {
         AccountRestrictedBanner: true,
+        ConnectionBanner: true,
         DemoModeBadge: true,
         ProfileModal: true,
         LeaderboardModal: true,

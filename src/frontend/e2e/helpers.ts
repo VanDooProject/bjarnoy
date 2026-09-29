@@ -33,6 +33,10 @@ export async function loginTestUser(page: Page, userName = 'e2e-player'): Promis
  */
 export async function waitForMapReady(page: Page): Promise<void> {
   await page.locator('.map-container[data-map-ready]').waitFor({ timeout: 15_000 });
+  // MapStatusOverlay swallows pointer events while it is up (loading steps,
+  // e.g. waiting for the fog mask) — raw page.mouse calls don't auto-wait on
+  // actionability, so wait for it to be gone before interacting.
+  await page.locator('[data-testid="map-status-overlay"]').waitFor({ state: 'detached', timeout: 15_000 });
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))),
   );

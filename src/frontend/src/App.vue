@@ -2,6 +2,7 @@
 import { computed, shallowRef, watch } from 'vue';
 import { loadRouteLocation, useRoute, useRouter, type RouteLocationNormalizedLoaded } from 'vue-router';
 import AccountRestrictedBanner from './components/AccountRestrictedBanner.vue';
+import ConnectionBanner from './components/hud/ConnectionBanner.vue';
 import DemoModeBadge from './components/DemoModeBadge.vue';
 import ProfileModal from './components/profile/ProfileModal.vue';
 import LeaderboardModal from './components/leaderboard/LeaderboardModal.vue';
@@ -103,6 +104,7 @@ watch(
 
 <template>
   <AccountRestrictedBanner />
+  <ConnectionBanner />
   <DemoModeBadge />
   <!-- Nothing behind the modal until a directly-loaded background has loaded. -->
   <router-view v-if="!isModalRoute || backgroundRoute" :route="isModalRoute ? backgroundRoute! : undefined" />

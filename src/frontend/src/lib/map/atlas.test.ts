@@ -4,6 +4,7 @@ import {
   categorySearchOrder,
   findClipIn,
   findFrameIn,
+  loadAtlasCategory,
   loadAtlasPackCategory,
   loadOptionalAtlasCategory,
   pagesForIndex,
@@ -336,5 +337,26 @@ describe('unloadAtlasCategory', () => {
       frameMeta: {},
       clips: {},
     });
+  });
+});
+
+describe('loadAtlasCategory failure caching', () => {
+  it('does not cache a rejected load, so a retry re-runs it instead of replaying the failure', async () => {
+    // A core category with no vendored pages rejects (see loadAtlasCategory).
+    const first = loadAtlasCategory('no-such-core-category-reject');
+    await expect(first).rejects.toThrow(/no vendored pages/);
+    // Let the eviction handler (attached to the same promise) run.
+    await Promise.resolve();
+
+    const second = loadAtlasCategory('no-such-core-category-reject');
+    expect(second).not.toBe(first);
+    await expect(second).rejects.toThrow(/no vendored pages/);
+  });
+
+  it('still shares one in-flight promise between concurrent callers', async () => {
+    const a = loadAtlasCategory('no-such-core-category-inflight');
+    const b = loadAtlasCategory('no-such-core-category-inflight');
+    expect(b).toBe(a);
+    await expect(a).rejects.toThrow();
   });
 });

@@ -100,11 +100,35 @@ import type {
 export class ApiError extends Error {
   status: number;
   problem: ProblemDetails | undefined;
+  /** HTTP method of the failed request — lets a load-error UI say *which* call failed. */
+  method?: string;
+  /** Path (relative to API_BASE_URL) of the failed request. */
+  path?: string;
 
-  constructor(status: number, problem: ProblemDetails | undefined) {
+  constructor(status: number, problem: ProblemDetails | undefined, method?: string, path?: string) {
     super(problem?.detail ?? problem?.title ?? `Request failed with status ${status}`);
     this.status = status;
     this.problem = problem;
+    this.method = method;
+    this.path = path;
+  }
+}
+
+/**
+ * `fetch` rejects (TypeError) when the request never got an HTTP response at
+ * all — network down, DNS, CORS. Wrapping that as an `ApiError` with status 0
+ * keeps method/path attached, so callers can report it like any other failed
+ * call instead of a bare "Failed to fetch".
+ */
+async function fetchOrThrow(method: string, path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${API_BASE_URL}${path}`, init);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const wrapped = new ApiError(0, undefined, method, path);
+    wrapped.message = `Network error: ${message}`;
+    wrapped.cause = err;
+    throw wrapped;
   }
 }
 
@@ -146,7 +170,8 @@ function ownerHeader(ownerId?: string): HeadersInit | undefined {
 
 async function request<T>(path: string, init?: RequestInit, allowRefresh = true): Promise<T> {
   const accessToken = authHooks.getAccessToken();
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const method = init?.method ?? 'GET';
+  const res = await fetchOrThrow(method, path, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -168,7 +193,7 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
     if (res.status === 403 && (problem as ProblemDetails | undefined)?.error === 'user_locked') {
       authHooks.onAccountLocked();
     }
-    throw new ApiError(res.status, problem);
+    throw new ApiError(res.status, problem, method, path);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -191,7 +216,7 @@ export interface ImageBitmapResponse {
  */
 async function requestImageBitmap(path: string, ownerId?: string): Promise<ImageBitmapResponse> {
   const accessToken = authHooks.getAccessToken();
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetchOrThrow('GET', path, {
     headers: {
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...ownerHeader(ownerId),
@@ -200,7 +225,7 @@ async function requestImageBitmap(path: string, ownerId?: string): Promise<Image
 
   if (!res.ok) {
     const problem = await res.json().catch(() => undefined);
-    throw new ApiError(res.status, problem);
+    throw new ApiError(res.status, problem, 'GET', path);
   }
 
   const blob = await res.blob();

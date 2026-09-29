@@ -67,12 +67,23 @@ async function expectFillTracksMatchNumbers(page: Page): Promise<void> {
   const pills = page.locator(`${REAL_BAR} .resource`);
   const count = await pills.count();
   expect(count).toBeGreaterThan(0);
-  for (let i = 0; i < count; i++) {
-    const pill = pills.nth(i);
-    const trackBox = (await pill.locator('.fill-track').boundingBox())!;
-    const numbersBox = (await pill.locator('.numbers, .numbers-compact').boundingBox())!;
-    expect(trackBox.width).toBeLessThanOrEqual(numbersBox.width + 1);
-  }
+  // Both widths are read in one evaluate (same frame) and polled: two separate
+  // boundingBox() calls can straddle a relayout — the bar switching notation
+  // after a viewport resize (ResourceBar's async updateFit), or a value
+  // ticking — and compare a track from one layout with text from the next.
+  await expect
+    .poll(() =>
+      pills.evaluateAll((els) =>
+        Math.max(
+          ...els.map(
+            (el) =>
+              el.querySelector('.fill-track')!.getBoundingClientRect().width -
+              el.querySelector('.numbers, .numbers-compact')!.getBoundingClientRect().width,
+          ),
+        ),
+      ),
+    )
+    .toBeLessThanOrEqual(1);
 }
 
 /** Owner's decision, phase 3: the row must never wrap — every pill's own top edge must land on the same line. */

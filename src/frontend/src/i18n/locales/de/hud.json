@@ -380,5 +380,16 @@
   "mapLoading": {
     "terrain": "Karte wird geladen…",
     "buildings": "Gebäude werden geladen…"
+  },
+  "mapStatus": {
+    "joiningWorld": "Welt wird betreten…",
+    "findingPlot": "Landeplatz wird gesucht…",
+    "loadingSettlement": "Siedlung wird geladen…",
+    "revealingMap": "Nebel lichtet sich…",
+    "loadingTiles": "Kartengrafik wird geladen…",
+    "errorTitle": "Karte konnte nicht geladen werden",
+    "retry": "Erneut versuchen",
+    "pollErrorTitle": "Verbindungsproblem — neuer Versuch läuft",
+    "dismiss": "Schließen"
   }
 }
