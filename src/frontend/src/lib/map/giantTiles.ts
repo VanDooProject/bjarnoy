@@ -113,6 +113,8 @@ export interface GiantFamilyClip {
   frames: string[];
   fps: number;
   playback: 'loop' | 'pingpong';
+  /** See `AtlasClip.pause` — seconds held at the end of each cycle; absent in an older manifest means none. */
+  pause?: number;
   /** See `AtlasClip.overlay` — a giant clip whose frames carry only its moving parts, to be drawn over `rest`. */
   overlay?: boolean;
   /** See `AtlasClip.rest` — only meaningful when `overlay` is true. */
@@ -137,8 +139,8 @@ export interface GiantFamilyClip {
 export function classifyGiantClips<T>(
   clips: GiantFamilyClip[],
   resolveFrame: (name: string) => T | undefined,
-): GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }> {
-  const result = {} as GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }>;
+): GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T }> {
+  const result = {} as GiantTextureMap<{ textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T }>;
   for (const orientation of TILE_ORIENTATIONS) result[orientation] = {};
   for (const clip of clips) {
     const orientation = clip.orientation as TileOrientation;
@@ -156,7 +158,7 @@ export function classifyGiantClips<T>(
       rest = resolveFrame(clip.rest);
       if (rest === undefined) continue;
     }
-    result[orientation][clip.giant_part] = { textures: frameValues as T[], fps: clip.fps, playback: clip.playback, rest };
+    result[orientation][clip.giant_part] = { textures: frameValues as T[], fps: clip.fps, playback: clip.playback, pause: clip.pause ?? 0, rest };
   }
   return result;
 }

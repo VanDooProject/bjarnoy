@@ -567,6 +567,12 @@ export interface TileAnimClip {
   fps: number;
   playback: 'loop' | 'pingpong';
   /**
+   * Seconds to hold the end of each cycle before the next one starts (the
+   * atlas clip's `pause`, from 3D_assets' `anim_pause`; 0 = none) — see
+   * `clipPlayback.ts`'s `clipFrameIndex`, which owns that math.
+   */
+  pause: number;
+  /**
    * The clip's rest image (the building/tile with its moving parts held
    * still), present exactly when the source `AtlasClip.overlay` was true and
    * its `rest` frame resolved — see `classifyFamilyClips`/`classifyGiantClips`.
@@ -592,9 +598,9 @@ export interface TileAnimClip {
 export function classifyFamilyClips<T>(
   clips: AtlasClip[],
   resolveFrame: (name: string) => T | undefined,
-): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }>> {
+): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T }>> {
   const byOrientation = emptyOrientationMap<
-    Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; rest?: T }>
+    Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T }>
   >(() => new Map());
   for (const clip of clips) {
     const match = ANIM_LEVEL_RE.exec(clip.name);
@@ -617,6 +623,7 @@ export function classifyFamilyClips<T>(
       textures: frameValues as T[],
       fps: clip.fps,
       playback: clip.playback,
+      pause: clip.pause ?? 0,
       rest,
     });
   }
@@ -814,11 +821,11 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
             (
               Object.entries(parts) as [
                 GiantPart,
-                { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong'; rest?: Texture },
+                { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: Texture },
               ][]
             ).map(([part, clip]) => [
               part,
-              { textures: clip.textures, fps: clip.fps, playback: clip.playback, rest: clip.rest },
+              { textures: clip.textures, fps: clip.fps, playback: clip.playback, pause: clip.pause, rest: clip.rest },
             ]),
           ) as Partial<Record<GiantPart, TileAnimClip>>,
         );

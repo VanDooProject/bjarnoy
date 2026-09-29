@@ -155,7 +155,17 @@ describe('classifyGiantClips', () => {
       textures: ['giantshrine_E_level000_partC_f00', 'giantshrine_E_level000_partC_f01'],
       fps: 1,
       playback: 'loop',
+      pause: 0,
     });
+  });
+
+  it("carries a giant clip's pause through (0 when an older manifest has none)", () => {
+    const result = classifyGiantClips(
+      [giantClip({ family: 'giantvolcano', orientation: 'SE', frames: ['giantvolcano_SE_level000_partC_f00'], pause: 2.5 })],
+      resolveAll,
+    );
+
+    expect(result.SE.C?.pause).toBe(2.5);
   });
 
   it('drops a clip when any of its frames fails to resolve', () => {
@@ -230,6 +240,7 @@ describe('classifyGiantClips', () => {
       textures: ['giantshrine_SE_level000_partN_f00'],
       fps: 4,
       playback: 'loop',
+      pause: 0,
       rest: 'giantshrine_SE_level000_partN_rest',
     });
   });

@@ -381,7 +381,7 @@ describe('classifyFamilyClips', () => {
       resolveAll,
     );
 
-    expect(result.SE.get(3)).toEqual({ textures: ['f00', 'f01'], fps: 6, playback: 'loop' });
+    expect(result.SE.get(3)).toEqual({ textures: ['f00', 'f01'], fps: 6, playback: 'loop', pause: 0 });
     expect(result.SE.get(4)).toBeUndefined();
     expect(result.NE.size).toBe(0);
   });
@@ -471,8 +471,18 @@ describe('classifyFamilyClips', () => {
       textures: ['f00', 'f01'],
       fps: 6,
       playback: 'loop',
+      pause: 0,
       rest: 'sawmillriver_SE_level003_rest',
     });
+  });
+
+  it("carries the clip's pause through to the map clip, so the map can hold its last frame", () => {
+    const result = classifyFamilyClips(
+      [clip({ name: 'torshrine_SE_level003', orientation: 'SE', frames: ['f00', 'f01'], fps: 12, pause: 8 })],
+      resolveAll,
+    );
+
+    expect(result.SE.get(3)?.pause).toBe(8);
   });
 
   it('drops an overlay clip whose rest frame does not resolve', () => {
@@ -507,7 +517,7 @@ describe('classifyFamilyClips', () => {
       resolveAll,
     );
 
-    expect(result.SE.get(3)).toEqual({ textures: ['f00', 'f01'], fps: 6, playback: 'loop' });
+    expect(result.SE.get(3)).toEqual({ textures: ['f00', 'f01'], fps: 6, playback: 'loop', pause: 0 });
     expect(result.SE.get(3)?.rest).toBeUndefined();
   });
 });
