@@ -148,6 +148,16 @@ describe('riverArtFor', () => {
   });
 });
 
+describe('KEY_FAMILY dedicated shrine, archery range and lumberjack art', () => {
+  it('maps each building to its own dedicated family rather than a placeholder or legacy one', () => {
+    expect(KEY_FAMILY.shrineofthor).toBe('torshrine');
+    expect(KEY_FAMILY.shrineofullr).toBe('ullrshrine');
+    expect(KEY_FAMILY.shrineofnjord).toBe('njordshrine');
+    expect(KEY_FAMILY.archeryrange).toBe('archeryrange');
+    expect(KEY_FAMILY.lumberjack).toBe('lumberjack');
+  });
+});
+
 describe('KEY_FAMILY new building families (map fix #1)', () => {
   // These families' art already existed in the vendored pack and were
   // already wired into buildingArt.ts's docs-page previews — only the

@@ -17,14 +17,10 @@ export type ArtRef = { kind: 'atlas'; frame: AtlasFrameRect } | { kind: 'png'; u
 const BUILDING_ART_FAMILIES: Record<string, string> = {
   hut: 'vikinghut',
   longhouse: 'greathall',
-  shrineofthor: 'thorshrine',
+  shrineofthor: 'torshrine',
   shrineoffreyja: 'freyjashrine',
-  // Placeholder art only — Ullr and Njörd have no art of their own in the
-  // pack yet, so their shrines borrow Thor's/Freyja's family (both already
-  // in the glob list below) rather than falling back to a bare terrain tile.
-  // Swap these for dedicated families once the art exists.
-  shrineofullr: 'thorshrine',
-  shrineofnjord: 'freyjashrine',
+  shrineofullr: 'ullrshrine',
+  shrineofnjord: 'njordshrine',
   // `farm_crop` is the legacy, non-scripted family (VanDooProject/3d_assets'
   // asset-inventory.md: "Legacy, non-scripted... its lowest level used to be
   // the finished farmhouse"). `farm` is the newer, on-palette, scripted
@@ -39,9 +35,9 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // family through buildingArtByFamily, same as the Sawmill's river looks).
   quarry: 'quarry_corrie',
   pumpkinfarm: 'farm_pumpkin',
-  lumberjack: 'lumberjackhut',
+  lumberjack: 'lumberjack',
   storagehouse: 'storagebuilding',
-  archeryrange: 'archerybuilding',
+  archeryrange: 'archeryrange',
   dockyard: 'dockyard',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
@@ -69,7 +65,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 

@@ -1,0 +1,64 @@
+{
+  "title": "Economy lab",
+  "intro": "Charts read the building catalogue live, so they follow BuildingCatalogue.cs without edits here.",
+  "loading": "Loading catalogue…",
+  "source": {
+    "live": "Source: live catalogue",
+    "fallback": "Source: bundled fallback snapshot, generated {generatedAt}"
+  },
+  "curves": {
+    "title": "Curves",
+    "pick": "Building types",
+    "totalCost": "Total cost per level (log)",
+    "buildTime": "Build time per level (minutes, log)",
+    "production": "Production per level (total per hour)",
+    "payback": "Payback per level (hours)",
+    "level": "Level",
+    "cost": "Resources",
+    "minutes": "Minutes",
+    "perHour": "Per hour",
+    "hours": "Hours",
+    "empty": "Select at least one building type."
+  },
+  "unlocks": {
+    "title": "Unlock ladder",
+    "hint": "New buildings per Longhouse level. Target is roughly one per level.",
+    "chartTitle": "Unlocks per Longhouse level",
+    "lhLevel": "Longhouse level",
+    "count": "Unlocks",
+    "levelRow": "Longhouse {level}",
+    "none": "no new building",
+    "bulk": "Bulk unlock",
+    "gap": "Dry stretch"
+  },
+  "pacing": {
+    "title": "Pacing",
+    "hint": "One settlement, no terrain boosts, greedy player: Longhouse when producers keep up, storage when nearly full, else the best-payback producer upgrade. Prerequisites on buildings the simulation does not build are assumed met for the settlers check.",
+    "startStock": "Start stock",
+    "producers": "Owned producers",
+    "horizon": "Horizon (days)",
+    "storageCount": "Storage houses",
+    "settings": "Run settings",
+    "settlerCost": "Settler cost",
+    "run": "Run simulation",
+    "running": "Running…",
+    "chartTitle": "Longhouse level over time",
+    "days": "Days",
+    "lhLevel": "Longhouse level",
+    "profileAlways": "Always online",
+    "profileCasual": "Casual (7, 12, 18-22 h)",
+    "milestones": "Longhouse milestones",
+    "colLevel": "Longhouse level",
+    "notReached": "not reached",
+    "settlers": "Settlers affordable",
+    "settlersNever": "not within horizon",
+    "noRun": "Press Run to simulate."
+  },
+  "resources": {
+    "wood": "Wood",
+    "stone": "Stone",
+    "food": "Food",
+    "iron": "Iron"
+  },
+  "prereqChip": "{building} {level}"
+}

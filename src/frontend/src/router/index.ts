@@ -201,6 +201,13 @@ export const router = createRouter({
           component: () => import('../views/admin/AdminActivityView.vue'),
         },
         {
+          // Design charts over the live building catalogue: cost/time/
+          // production/payback curves, the unlock ladder and a pacing sim.
+          path: 'economy',
+          name: 'admin-economy',
+          component: () => import('../views/admin/AdminEconomyView.vue'),
+        },
+        {
           // A live, backend-free playground for the island-shape generation
           // params (worldGenerator.ts mirrors the backend algorithm exactly)
           // — lets an admin compare several seed/parameter combos' minimaps

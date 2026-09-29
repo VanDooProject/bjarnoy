@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-29T17:50:08.015Z"
+    "generatedAt": "2026-09-29T22:17:05.719Z"
   },
   "data": [
     {
@@ -10216,10 +10216,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 25,
       "slotCost": 1,
       "occupiesAllSlots": false,
@@ -10253,10 +10251,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 25,
       "slotCost": 1,
       "occupiesAllSlots": false,
@@ -10285,10 +10281,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 25,
       "slotCost": 1,
       "occupiesAllSlots": false,
@@ -10317,10 +10311,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 25,
       "slotCost": 1,
       "occupiesAllSlots": false,
@@ -10349,10 +10341,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 25,
       "slotCost": 1,
       "occupiesAllSlots": false,

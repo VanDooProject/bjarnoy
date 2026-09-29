@@ -695,9 +695,14 @@ public static class BuildingCatalogue
     /// A shrine contributes no flat production or storage of its own — its
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
-    /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm.
-    /// Every shrine unlocks at LH 25, each behind its own feeder building
-    /// (see PrerequisiteTable), and has 5 levels.
+    /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm —
+    /// except the Shrine of Njörd, whose art is a shrine on a skerry standing
+    /// in the shallows: it is built directly on a coastal-water hex
+    /// (<see cref="BuildingDefinition.RequiresCoastalWater"/>, the hex under it
+    /// stays plain <see cref="World.Terrain.Sea"/>) like FishingHut/Dockyard
+    /// and has no <see cref="BuildingDefinition.AllowedTerrain"/>. Every shrine
+    /// unlocks at LH 25, each behind its own feeder building (see
+    /// PrerequisiteTable), and has 5 levels.
     /// </summary>
     private static BuildingDefinition Shrine(BuildingType type, int level) => new()
     {
@@ -705,7 +710,8 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
-        AllowedTerrain = Grass,
+        AllowedTerrain = type == BuildingType.ShrineOfNjord ? new HashSet<Terrain>() : Grass,
+        RequiresCoastalWater = type == BuildingType.ShrineOfNjord,
     };
 
     /// <summary>
