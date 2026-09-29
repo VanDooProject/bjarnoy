@@ -45,6 +45,16 @@ const scaleLine = (l: ResourceLine, f: number): ResourceLine => ({
   iron: l.iron * f,
 });
 
+// Manual copy: the input is often a reactive proxy, which structuredClone rejects.
+const copyDef = (d: BuildingDefinitionResponse): BuildingDefinitionResponse => ({
+  ...d,
+  cost: { ...d.cost },
+  productionPerHour: { ...d.productionPerHour },
+  storageCapacity: { ...d.storageCapacity },
+  allowedTerrain: [...d.allowedTerrain],
+  prerequisites: d.prerequisites.map((p) => ({ ...p })),
+});
+
 /** A new catalogue with every level regenerated from its type's level 1. Types without a level 1 are copied as is. */
 export function applyWhatIf(
   byType: Record<string, BuildingDefinitionResponse[]>,
@@ -54,7 +64,7 @@ export function applyWhatIf(
   for (const [type, defs] of Object.entries(byType)) {
     const first = defs.find((d) => d.level === 1);
     if (!first) {
-      out[type] = defs.map((d) => structuredClone(d));
+      out[type] = defs.map(copyDef);
       continue;
     }
     const lh = type === 'longhouse';
@@ -64,7 +74,7 @@ export function applyWhatIf(
     out[type] = defs.map((d) => {
       const n = d.level - 1;
       return {
-        ...structuredClone(d),
+        ...copyDef(d),
         cost: scaleLine(first.cost, costScale * costGrowth ** n),
         buildSeconds: Math.round(first.buildSeconds * knobs.timeScale * timeGrowth ** n),
         productionPerHour: scaleLine(first.productionPerHour, lh ? d.level : knobs.productionGrowth ** n),

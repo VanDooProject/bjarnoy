@@ -6,14 +6,20 @@ import { buildingName } from '../../i18n/catalogueNames';
 import type { MessageSchema } from '../../i18n/schema';
 import { curvesFor } from '../../lib/economy/curves';
 import {
+  DEFAULT_JOIN_TIME,
   DEFAULT_PRODUCER_COUNTS,
+  DEFAULT_PRODUCERS_AHEAD,
+  DEFAULT_RENOWN_THRESHOLD,
   FOUNDING_STOCK,
+  PROFILE_PRESETS,
   RESOURCES,
+  productionOnDay,
   settlerCostFrom,
   simulatePacing,
   type PacingResult,
-  type Profile,
+  type Session,
 } from '../../lib/economy/pacingSim';
+import { applyWhatIf, defaultWhatIf, type WhatIfKnobs } from '../../lib/economy/whatIf';
 import { unlockLadder } from '../../lib/economy/unlocks';
 import { useBuildingCatalogueStore } from '../../stores/buildingCatalogue';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
@@ -49,21 +55,50 @@ watch(
   { immediate: true },
 );
 
+// --- What-if: the same catalogue regenerated from level 1 and the growth knobs ---
+
+const whatIf = reactive<WhatIfKnobs>(defaultWhatIf());
+const whatIfByType = computed(() => applyWhatIf(byType.value, whatIf));
+function resetWhatIf() {
+  Object.assign(whatIf, defaultWhatIf());
+}
+const WHAT_IF_FIELDS = [
+  'costGrowth',
+  'longhouseCostGrowth',
+  'timeGrowth',
+  'longhouseTimeGrowth',
+  'productionGrowth',
+  'producerCostScale',
+  'longhouseCostScale',
+  'timeScale',
+] as const;
+
 const curves = computed(() =>
   catalogue.types
     .filter((type) => selectedTypes.value.includes(type))
-    .map((type) => ({ type, points: curvesFor(byType.value[type]) })),
+    .map((type) => ({
+      type,
+      live: curvesFor(byType.value[type]),
+      whatIf: curvesFor(whatIfByType.value[type] ?? byType.value[type]),
+    })),
 );
 
+/** Live series first (solid), then the what-if twins (dashed, same colour). */
 function curveSeries(pick: (p: ReturnType<typeof curvesFor>[number]) => number | null, dropZero: boolean): EconomySeries[] {
-  return curves.value.map(({ type, points }) => ({
-    label: buildingName(type),
-    color: typeColor(type),
-    points: points.map((p) => {
+  const toPoints = (points: ReturnType<typeof curvesFor>) =>
+    points.map((p) => {
       const y = pick(p);
       return { x: p.level, y: dropZero && y !== null && y <= 0 ? null : y };
-    }),
-  }));
+    });
+  return [
+    ...curves.value.map(({ type, live }) => ({ label: buildingName(type), color: typeColor(type), points: toPoints(live) })),
+    ...curves.value.map(({ type, whatIf: w }) => ({
+      label: t('adminEconomy.curves.whatIfSuffix', { name: buildingName(type) }),
+      color: typeColor(type),
+      dashed: true,
+      points: toPoints(w),
+    })),
+  ];
 }
 const costSeries = computed(() => curveSeries((p) => p.totalCost, true));
 const timeSeries = computed(() => curveSeries((p) => p.buildMinutes, true));
@@ -97,6 +132,11 @@ const startStock = reactive({ ...FOUNDING_STOCK });
 const producerCounts = reactive<Record<string, number>>({ ...DEFAULT_PRODUCER_COUNTS });
 const horizonDays = ref(60);
 const storageCount = ref(2);
+const joinTime = ref(DEFAULT_JOIN_TIME);
+const producersAhead = ref(DEFAULT_PRODUCERS_AHEAD);
+const aheadUnlimited = ref(false);
+const feasts = ref(false);
+const renownThreshold = ref(DEFAULT_RENOWN_THRESHOLD);
 // Every producer type gets an explicit count so its input never renders blank.
 watch(
   producerTypes,
@@ -107,23 +147,63 @@ watch(
 );
 const settlerCost = computed(() => settlerCostFrom(units.byType['settlercrew']?.trainingCost));
 
-const results = ref<Record<Profile, PacingResult> | null>(null);
+type ProfileKey = 'active' | 'checkins4' | 'checkins2' | 'always24' | 'custom';
+const PROFILE_KEYS: ProfileKey[] = ['active', 'checkins4', 'checkins2', 'always24', 'custom'];
+const PROFILE_LABEL: Record<ProfileKey, string> = {
+  active: 'adminEconomy.pacing.profileActive',
+  checkins4: 'adminEconomy.pacing.profileCheckins4',
+  checkins2: 'adminEconomy.pacing.profileCheckins2',
+  always24: 'adminEconomy.pacing.profileAlways24',
+  custom: 'adminEconomy.pacing.profileCustom',
+};
+const selectedProfiles = ref<ProfileKey[]>(['active', 'checkins4', 'checkins2']);
+const customSessions = ref<Session[]>([
+  { start: '08:00', minutes: 10 },
+  { start: '13:00', minutes: 10 },
+  { start: '19:00', minutes: 10 },
+]);
+function addSession() {
+  customSessions.value.push({ start: '12:00', minutes: 10 });
+}
+function removeSession(i: number) {
+  customSessions.value.splice(i, 1);
+}
+const sessionsOf = (key: ProfileKey): Session[] =>
+  key === 'custom' ? customSessions.value.map((s) => ({ ...s })) : PROFILE_PRESETS[key];
+
+interface ProfileRun {
+  live: PacingResult;
+  whatIf: PacingResult;
+}
+const results = ref<Partial<Record<ProfileKey, ProfileRun>> | null>(null);
+/** Profiles the shown results were run for, in display order. */
+const ranProfiles = ref<ProfileKey[]>([]);
 const running = ref(false);
 
 function run() {
   running.value = true;
   const base = {
-    startStock: { ...startStock },
     horizonDays: Math.max(1, Number(horizonDays.value) || 1),
     producerCounts: { ...producerCounts },
     settlerCost: settlerCost.value,
     settleType: 'cartworkshop',
     storageCount: Math.max(1, Number(storageCount.value) || 1),
+    joinTime: joinTime.value || DEFAULT_JOIN_TIME,
+    producersAhead: aheadUnlimited.value ? Infinity : Math.max(0, Number(producersAhead.value) || 0),
+    feasts: feasts.value,
+    renownThreshold: Math.max(0, Number(renownThreshold.value) || 0),
   };
-  results.value = {
-    always: simulatePacing(byType.value, { ...base, profile: 'always' }),
-    casual: simulatePacing(byType.value, { ...base, profile: 'casual' }),
-  };
+  const keys = PROFILE_KEYS.filter((k) => selectedProfiles.value.includes(k));
+  const out: Partial<Record<ProfileKey, ProfileRun>> = {};
+  for (const key of keys) {
+    const sessions = sessionsOf(key);
+    out[key] = {
+      live: simulatePacing(byType.value, { ...base, sessions, startStock: { ...startStock } }),
+      whatIf: simulatePacing(whatIfByType.value, { ...base, sessions, startStock: { ...whatIf.foundingStock } }),
+    };
+  }
+  results.value = out;
+  ranProfiles.value = keys;
   running.value = false;
 }
 
@@ -142,17 +222,23 @@ watch(
 
 const pacingSeries = computed<EconomySeries[]>(() => {
   if (!results.value) return [];
-  return (['always', 'casual'] as const).map((profile, i) => {
-    const s = results.value![profile].series;
-    return {
-      label: t(profile === 'always' ? 'adminEconomy.pacing.profileAlways' : 'adminEconomy.pacing.profileCasual'),
-      color: PALETTE[i],
-      points: s.minute.map((m, k) => ({ x: m / 1440, y: s.lh[k] })),
-    };
-  });
+  const make = (which: 'live' | 'whatIf'): EconomySeries[] =>
+    ranProfiles.value.map((key) => {
+      const s = results.value![key]![which].series;
+      const label = t(PROFILE_LABEL[key]);
+      return {
+        label: which === 'live' ? label : t('adminEconomy.curves.whatIfSuffix', { name: label }),
+        color: PALETTE[PROFILE_KEYS.indexOf(key)],
+        dashed: which === 'whatIf',
+        points: s.minute.map((m, k) => ({ x: m / 1440, y: s.lh[k] })),
+      };
+    });
+  return [...make('live'), ...make('whatIf')];
 });
 
-const lhLevels = computed(() => ladder.value.map((l) => l.level));
+const MILESTONE_LEVELS = [5, 10, 15, 20, 25, 30];
+const PRODUCTION_DAYS = [7, 14, 30];
+const lhLevels = computed(() => MILESTONE_LEVELS.filter((l) => l <= Math.max(...ladder.value.map((r) => r.level), 0)));
 
 /** Minutes as `Xd HH:MM`. */
 function formatDuration(minutes: number | null | undefined): string {
@@ -161,6 +247,20 @@ function formatDuration(minutes: number | null | undefined): string {
   const h = Math.floor((minutes % 1440) / 60);
   const m = Math.floor(minutes % 60);
   return `${d}d ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function levelText(r: PacingResult, level: number): string {
+  return r.lhReachedAt[level] === undefined ? t('adminEconomy.pacing.never') : formatDuration(r.lhReachedAt[level]);
+}
+function productionText(r: PacingResult, day: number): string {
+  const p = productionOnDay(r, day);
+  return p === null ? '—' : Math.round(p).toLocaleString('en-US');
+}
+function settlementText(r: PacingResult): string {
+  return r.secondSettlementAt === null ? t('adminEconomy.pacing.never') : formatDuration(r.secondSettlementAt);
+}
+function flattenText(r: PacingResult): string {
+  return r.growthFlattensAt === null ? t('adminEconomy.pacing.never') : String(r.growthFlattensAt);
 }
 
 function costText(line: { wood: number; stone: number; food: number; iron: number }): string {
@@ -179,9 +279,35 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
     <p v-if="!ready" class="muted">{{ $t('adminEconomy.loading') }}</p>
 
     <template v-else>
+      <!-- What-if -->
+      <div class="panel-section">
+        <h2>{{ $t('adminEconomy.whatIf.title') }}</h2>
+        <p class="hint">{{ $t('adminEconomy.whatIf.hint') }}</p>
+        <form class="inputs" data-testid="whatif-form" @submit.prevent>
+          <fieldset>
+            <legend>{{ $t('adminEconomy.whatIf.title') }}</legend>
+            <label v-for="f in WHAT_IF_FIELDS" :key="f">
+              {{ $t(`adminEconomy.whatIf.${f}`) }}
+              <input v-model.number="whatIf[f]" type="number" min="0" step="0.01" :data-testid="`whatif-${f}`" />
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>{{ $t('adminEconomy.whatIf.foundingStock') }}</legend>
+            <label v-for="r in RESOURCES" :key="r">
+              {{ $t(`adminEconomy.resources.${r}`) }}
+              <input v-model.number="whatIf.foundingStock[r]" type="number" min="0" step="50" />
+            </label>
+          </fieldset>
+          <button type="button" class="secondary" data-testid="whatif-reset" @click="resetWhatIf">
+            {{ $t('adminEconomy.whatIf.reset') }}
+          </button>
+        </form>
+      </div>
+
       <!-- Curves -->
       <div class="panel-section">
         <h2>{{ $t('adminEconomy.curves.title') }}</h2>
+        <p class="hint">{{ $t('adminEconomy.curves.note') }}</p>
         <fieldset class="type-picker">
           <legend>{{ $t('adminEconomy.curves.pick') }}</legend>
           <label v-for="type in catalogue.types" :key="type" class="type-chip" :class="{ on: selectedTypes.includes(type) }">
@@ -278,7 +404,52 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
               {{ $t('adminEconomy.pacing.storageCount') }}
               <input v-model.number="storageCount" type="number" min="1" max="10" step="1" data-testid="storage-count" />
             </label>
-            <p class="muted small">{{ $t('adminEconomy.pacing.settlerCost') }}: {{ costText(settlerCost) }}</p>
+            <label>
+              {{ $t('adminEconomy.pacing.joinTime') }}
+              <input v-model="joinTime" type="time" data-testid="join-time" />
+            </label>
+            <label>
+              {{ $t('adminEconomy.pacing.producersAhead') }}
+              <input v-model.number="producersAhead" type="number" min="0" max="30" step="1" :disabled="aheadUnlimited" data-testid="producers-ahead" />
+            </label>
+            <label class="check">
+              <input v-model="aheadUnlimited" type="checkbox" data-testid="ahead-unlimited" />
+              {{ $t('adminEconomy.pacing.aheadUnlimited') }}
+            </label>
+            <label class="check">
+              <input v-model="feasts" type="checkbox" data-testid="feasts" />
+              {{ $t('adminEconomy.pacing.feasts') }}
+            </label>
+            <label>
+              {{ $t('adminEconomy.pacing.renownThreshold') }}
+              <input v-model.number="renownThreshold" type="number" min="0" step="500" data-testid="renown-threshold" />
+            </label>
+            <p class="muted small note">{{ $t('adminEconomy.pacing.renownNote') }}</p>
+            <p class="muted small note">{{ $t('adminEconomy.pacing.settlerCrewNote') }}: {{ costText(settlerCost) }}</p>
+          </fieldset>
+          <fieldset>
+            <legend>{{ $t('adminEconomy.pacing.profiles') }}</legend>
+            <label v-for="key in PROFILE_KEYS" :key="key" class="check">
+              <input v-model="selectedProfiles" type="checkbox" :value="key" :data-testid="`profile-${key}`" />
+              {{ $t(PROFILE_LABEL[key]) }}
+            </label>
+          </fieldset>
+          <fieldset v-if="selectedProfiles.includes('custom')" data-testid="custom-schedule">
+            <legend>{{ $t('adminEconomy.pacing.customTitle') }}</legend>
+            <div v-for="(s, i) in customSessions" :key="i" class="session-row">
+              <label>
+                {{ $t('adminEconomy.pacing.sessionStart') }}
+                <input v-model="s.start" type="time" />
+              </label>
+              <label>
+                {{ $t('adminEconomy.pacing.sessionMinutes') }}
+                <input v-model.number="s.minutes" type="number" min="1" max="1440" step="5" />
+              </label>
+              <button type="button" class="secondary" @click="removeSession(i)">{{ $t('adminEconomy.pacing.removeSession') }}</button>
+            </div>
+            <button type="button" class="secondary" data-testid="add-session" @click="addSession">
+              {{ $t('adminEconomy.pacing.addSession') }}
+            </button>
           </fieldset>
           <button type="submit" class="run" :disabled="running" data-testid="economy-run">
             {{ running ? $t('adminEconomy.pacing.running') : $t('adminEconomy.pacing.run') }}
@@ -286,6 +457,7 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
         </form>
 
         <p v-if="!results" class="muted">{{ $t('adminEconomy.pacing.noRun') }}</p>
+        <p v-else-if="ranProfiles.length === 0" class="muted">{{ $t('adminEconomy.pacing.noProfile') }}</p>
         <template v-else>
           <div class="chart-card">
             <h3>{{ $t('adminEconomy.pacing.chartTitle') }}</h3>
@@ -296,31 +468,51 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
               :y-title="$t('adminEconomy.pacing.lhLevel')"
             />
           </div>
-          <div class="tables">
-            <div>
-              <h3>{{ $t('adminEconomy.pacing.milestones') }}</h3>
-              <table class="table" data-testid="milestones">
-                <thead>
-                  <tr>
-                    <th>{{ $t('adminEconomy.pacing.colLevel') }}</th>
-                    <th>{{ $t('adminEconomy.pacing.profileAlways') }}</th>
-                    <th>{{ $t('adminEconomy.pacing.profileCasual') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="level in lhLevels" :key="level">
-                    <td>{{ level }}</td>
-                    <td>{{ results.always.lhReachedAt[level] === undefined ? $t('adminEconomy.pacing.notReached') : formatDuration(results.always.lhReachedAt[level]) }}</td>
-                    <td>{{ results.casual.lhReachedAt[level] === undefined ? $t('adminEconomy.pacing.notReached') : formatDuration(results.casual.lhReachedAt[level]) }}</td>
-                  </tr>
-                  <tr class="settlers-row">
-                    <td>{{ $t('adminEconomy.pacing.settlers') }}</td>
-                    <td data-testid="settlers-always">{{ results.always.settlersReadyAt === null ? $t('adminEconomy.pacing.settlersNever') : formatDuration(results.always.settlersReadyAt) }}</td>
-                    <td data-testid="settlers-casual">{{ results.casual.settlersReadyAt === null ? $t('adminEconomy.pacing.settlersNever') : formatDuration(results.casual.settlersReadyAt) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <div class="table-scroll">
+            <table class="table" data-testid="milestones">
+              <thead>
+                <tr>
+                  <th rowspan="2">{{ $t('adminEconomy.pacing.colLevel') }}</th>
+                  <th v-for="key in ranProfiles" :key="key" colspan="2" class="group">{{ $t(PROFILE_LABEL[key]) }}</th>
+                </tr>
+                <tr>
+                  <template v-for="key in ranProfiles" :key="key">
+                    <th class="sub">{{ $t('adminEconomy.pacing.live') }}</th>
+                    <th class="sub whatif">{{ $t('adminEconomy.pacing.whatIf') }}</th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="level in lhLevels" :key="`lh${level}`">
+                  <td>{{ $t('adminEconomy.pacing.levelRow', { level }) }}</td>
+                  <template v-for="key in ranProfiles" :key="key">
+                    <td :data-testid="`lh-${level}-${key}-live`">{{ levelText(results[key]!.live, level) }}</td>
+                    <td class="whatif" :data-testid="`lh-${level}-${key}-whatif`">{{ levelText(results[key]!.whatIf, level) }}</td>
+                  </template>
+                </tr>
+                <tr v-for="day in PRODUCTION_DAYS" :key="`p${day}`" class="section-row">
+                  <td>{{ $t('adminEconomy.pacing.production', { day }) }}</td>
+                  <template v-for="key in ranProfiles" :key="key">
+                    <td :data-testid="`prod-${day}-${key}-live`">{{ productionText(results[key]!.live, day) }}</td>
+                    <td class="whatif" :data-testid="`prod-${day}-${key}-whatif`">{{ productionText(results[key]!.whatIf, day) }}</td>
+                  </template>
+                </tr>
+                <tr class="section-row">
+                  <td>{{ $t('adminEconomy.pacing.secondSettlement') }}</td>
+                  <template v-for="key in ranProfiles" :key="key">
+                    <td :data-testid="`settlement-${key}-live`">{{ settlementText(results[key]!.live) }}</td>
+                    <td class="whatif" :data-testid="`settlement-${key}-whatif`">{{ settlementText(results[key]!.whatIf) }}</td>
+                  </template>
+                </tr>
+                <tr>
+                  <td>{{ $t('adminEconomy.pacing.growthFlattens') }}</td>
+                  <template v-for="key in ranProfiles" :key="key">
+                    <td :data-testid="`flatten-${key}-live`">{{ flattenText(results[key]!.live) }}</td>
+                    <td class="whatif" :data-testid="`flatten-${key}-whatif`">{{ flattenText(results[key]!.whatIf) }}</td>
+                  </template>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </template>
       </div>
@@ -506,10 +698,27 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
 .inputs input {
   width: 84px;
 }
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
 .table {
   width: 100%;
-  max-width: 640px;
   border-collapse: collapse;
+}
+.table th.group {
+  text-align: center;
+  border-left: 1px solid var(--panel-border);
+}
+.table th.sub {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.table td.whatif,
+.table th.whatif {
+  font-style: italic;
+  border-right: 1px solid var(--panel-border);
 }
 .table th,
 .table td {
@@ -518,8 +727,35 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
   border-bottom: 1px solid var(--panel-border);
   font-size: 14px;
 }
-.settlers-row td {
+.section-row td:first-child {
   font-weight: 600;
+}
+.inputs label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.inputs label.check input {
+  width: auto;
+}
+.inputs .note {
+  flex-basis: 100%;
+  margin: 0;
+}
+.session-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-basis: 100%;
+}
+.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  align-self: flex-end;
 }
 input {
   background: var(--panel-bg);
