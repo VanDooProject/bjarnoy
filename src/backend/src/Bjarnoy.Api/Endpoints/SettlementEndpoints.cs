@@ -512,7 +512,7 @@ public static class SettlementEndpoints
     {
         var levels = level is { } requested
             ? [requested]
-            : Enumerable.Range(1, BuildingCatalogue.MaxLevel).ToArray();
+            : Enumerable.Range(1, BuildingCatalogue.HighestMaxLevel).ToArray();
 
         IReadOnlyList<BuildingDefinitionResponse> response =
         [

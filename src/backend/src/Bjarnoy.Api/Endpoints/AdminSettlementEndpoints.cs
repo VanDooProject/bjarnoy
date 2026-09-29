@@ -211,7 +211,7 @@ public static class AdminSettlementEndpoints
             domain.ClaimRadius,
             hexes,
             [.. BuildingCatalogue.AllTypes.Select(t => t.ToWireName())],
-            BuildingCatalogue.MaxLevel));
+            BuildingCatalogue.HighestMaxLevel));
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> PlaceBuilding(

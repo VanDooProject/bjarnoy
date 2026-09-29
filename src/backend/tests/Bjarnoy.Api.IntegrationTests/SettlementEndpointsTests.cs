@@ -364,7 +364,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
                 Buildings =
                 [
                     .. domain.Buildings.Where(b => b.Type != BuildingType.Tower),
-                    .. towerCoords.Select(c => new PlacedBuilding(c, BuildingType.Tower, BuildingCatalogue.MaxLevel)),
+                    .. towerCoords.Select(c => new PlacedBuilding(c, BuildingType.Tower, BuildingCatalogue.MaxLevelFor(BuildingType.Tower))),
                 ],
             };
             entity.ApplyDomain(domain);

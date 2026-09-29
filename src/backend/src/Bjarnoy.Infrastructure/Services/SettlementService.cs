@@ -176,7 +176,7 @@ public sealed class SettlementService(
     /// straight past the real per-neighbour territory check
     /// (<see cref="FoundAsync"/>'s "phase 2", below) without loading anyone's
     /// building list. Sized so that even if both settlements' longhouses
-    /// reach <see cref="BuildingCatalogue.MaxLevel"/>, their <em>centre
+    /// reach <see cref="BuildingCatalogue.HighestMaxLevel"/>, their <em>centre
     /// discs alone</em> (<see cref="Settlement.MaxClaimRadius"/>) can never
     /// overlap.
     /// </summary>

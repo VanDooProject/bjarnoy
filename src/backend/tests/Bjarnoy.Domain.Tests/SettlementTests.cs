@@ -12,7 +12,7 @@ public class BuildingCatalogueTests
     {
         foreach (var type in BuildingCatalogue.AllTypes)
         {
-            for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 var definition = BuildingCatalogue.TryGet(type, level);
 
@@ -28,7 +28,7 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(26)] // Farm tops out at 25
     public void Levels_outside_the_range_have_no_definition(int level)
     {
         Assert.Null(BuildingCatalogue.TryGet(BuildingType.Farm, level));
@@ -75,7 +75,7 @@ public class BuildingCatalogueTests
         {
             if (type is BuildingType.Longhouse or BuildingType.Tower) continue;
 
-            for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 Assert.Equal(0, BuildingCatalogue.Get(type, level).ClaimRadius);
             }
@@ -96,22 +96,22 @@ public class BuildingCatalogueTests
     /// earned.
     /// </summary>
     [Theory]
-    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(31)] // Longhouse tops out at 30
     [InlineData(int.MaxValue)]
     public void ClaimRadiusForLonghouseLevel_clamps_a_too_high_level_instead_of_throwing(int longhouseLevel)
     {
         Assert.Equal(
-            BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevel).ClaimRadius,
+            BuildingCatalogue.Get(BuildingType.Longhouse, 30).ClaimRadius,
             Settlement.ClaimRadiusForLonghouseLevel(longhouseLevel));
     }
 
     [Theory]
-    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(11)] // Tower tops out at 10
     [InlineData(int.MaxValue)]
     public void TowerClaimRadius_clamps_a_too_high_level_instead_of_returning_zero(int towerLevel)
     {
         Assert.Equal(
-            BuildingCatalogue.Get(BuildingType.Tower, BuildingCatalogue.MaxLevel).ClaimRadius,
+            BuildingCatalogue.Get(BuildingType.Tower, 10).ClaimRadius,
             Settlement.TowerClaimRadius(towerLevel));
     }
 
@@ -131,8 +131,6 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Quarry, Terrain.Forest, false)]
     [InlineData(BuildingType.Farm, Terrain.Grass, true)]
     [InlineData(BuildingType.Farm, Terrain.Mountain, false)]
-    [InlineData(BuildingType.MagicTower, Terrain.Grass, true)]
-    [InlineData(BuildingType.MagicTower, Terrain.Sand, false)]
     [InlineData(BuildingType.PumpkinFarm, Terrain.Grass, true)]
     [InlineData(BuildingType.PumpkinFarm, Terrain.Mountain, false)]
     [InlineData(BuildingType.Tower, Terrain.Sand, true)]
@@ -277,7 +275,7 @@ public class BuildingCatalogueTests
         // rather than merely expensive.
         foreach (var type in BuildingCatalogue.AllTypes)
         {
-            for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 Assert.DoesNotContain(
                     BuildingCatalogue.Get(type, level).Prerequisites,
@@ -291,7 +289,7 @@ public class BuildingCatalogueTests
     {
         foreach (var type in BuildingCatalogue.AllTypes)
         {
-            for (var level = 2; level <= BuildingCatalogue.MaxLevel; level++)
+            for (var level = 2; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 var prerequisites = BuildingCatalogue.Get(type, level).Prerequisites;
                 if (type == BuildingType.GreatStorehouse)
@@ -314,7 +312,7 @@ public class BuildingCatalogueTests
             foreach (var prerequisite in BuildingCatalogue.Get(type, 1).Prerequisites)
             {
                 Assert.NotEqual(type, prerequisite.Type);
-                Assert.InRange(prerequisite.Level, 1, BuildingCatalogue.MaxLevel);
+                Assert.InRange(prerequisite.Level, 1, BuildingCatalogue.MaxLevelFor(prerequisite.Type));
                 Assert.NotNull(BuildingCatalogue.TryGet(prerequisite.Type, prerequisite.Level));
             }
         }
@@ -361,7 +359,7 @@ public class BuildingCatalogueTests
     [Fact]
     public void Cost_grows_with_level()
     {
-        for (var level = 2; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 2; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Farm); level++)
         {
             var previous = BuildingCatalogue.Get(BuildingType.Farm, level - 1);
             var current = BuildingCatalogue.Get(BuildingType.Farm, level);
@@ -372,12 +370,13 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void Production_grows_with_level()
+    public void Production_grows_geometrically_with_level()
     {
         var one = BuildingCatalogue.Get(BuildingType.Lumberjack, 1);
         var three = BuildingCatalogue.Get(BuildingType.Lumberjack, 3);
 
-        Assert.Equal(one.ProductionPerHour.Wood * 3, three.ProductionPerHour.Wood, 6);
+        Assert.Equal(40, one.ProductionPerHour.Wood, 6);
+        Assert.Equal(one.ProductionPerHour.Wood * 1.2 * 1.2, three.ProductionPerHour.Wood, 6);
     }
 
     [Fact]
@@ -481,7 +480,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.CropMill)]
     public void A_radius_boost_producer_has_no_production_of_its_own(BuildingType type)
     {
-        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
         {
             Assert.Equal(ResourceAmounts.Zero, BuildingCatalogue.Get(type, level).ProductionPerHour);
         }
@@ -489,20 +488,23 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(1, 5.0)]
-    [InlineData(10, 100.0)]
-    public void RadiusBoostPercent_is_linear_from_5_percent_at_level_1_to_100_percent_at_level_10(int level, double expected)
+    [InlineData(11, 55.0)]
+    [InlineData(20, 100.0)]
+    public void RadiusBoostPercent_is_linear_from_5_percent_at_level_1_to_100_percent_at_level_20(int level, double expected)
     {
         Assert.Equal(expected, BuildingCatalogue.RadiusBoostPercent(level), 6);
     }
 
     [Theory]
     [InlineData(1, 1)]
-    [InlineData(2, 1)]
-    [InlineData(3, 2)]
-    [InlineData(4, 2)]
-    [InlineData(9, 5)]
-    [InlineData(10, 5)]
-    public void RadiusBoostRange_grows_by_one_ring_every_two_levels(int level, int expectedRange)
+    [InlineData(4, 1)]
+    [InlineData(5, 2)]
+    [InlineData(8, 2)]
+    [InlineData(9, 3)]
+    [InlineData(16, 4)]
+    [InlineData(17, 5)]
+    [InlineData(20, 5)]
+    public void RadiusBoostRange_grows_by_one_ring_every_four_levels(int level, int expectedRange)
     {
         Assert.Equal(expectedRange, BuildingCatalogue.RadiusBoostRange(level));
     }
@@ -580,7 +582,7 @@ public class BuildingCatalogueTests
     [Fact]
     public void Smithy_is_a_flat_level_10_capstone_like_the_shrines_and_sawmill()
     {
-        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Smithy); level++)
         {
             Assert.Equal(10, BuildingCatalogue.Get(BuildingType.Smithy, level).RequiredLonghouseLevel);
         }
@@ -622,16 +624,16 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(BuildingType.ClayBrickworks)]
-    public void A_new_producer_scales_linearly_with_level(BuildingType type)
+    public void A_new_producer_scales_geometrically_with_level(BuildingType type)
     {
         var one = BuildingCatalogue.Get(type, 1).ProductionPerHour;
         var three = BuildingCatalogue.Get(type, 3).ProductionPerHour;
 
         Assert.True(one.Wood + one.Stone + one.Food + one.Iron > 0);
-        Assert.Equal(one.Wood * 3, three.Wood, 6);
-        Assert.Equal(one.Stone * 3, three.Stone, 6);
-        Assert.Equal(one.Food * 3, three.Food, 6);
-        Assert.Equal(one.Iron * 3, three.Iron, 6);
+        Assert.Equal(one.Wood * 1.2 * 1.2, three.Wood, 6);
+        Assert.Equal(one.Stone * 1.2 * 1.2, three.Stone, 6);
+        Assert.Equal(one.Food * 1.2 * 1.2, three.Food, 6);
+        Assert.Equal(one.Iron * 1.2 * 1.2, three.Iron, 6);
     }
 
     [Theory]
@@ -645,7 +647,7 @@ public class BuildingCatalogueTests
         // settler-cap boost, a rune/favour slot, a future morale boost, a
         // future troop-upgrade mechanic) doesn't exist yet — they're
         // buildable now purely ahead of that mechanic landing.
-        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
         {
             var definition = BuildingCatalogue.Get(type, level);
             Assert.Equal(ResourceAmounts.Zero, definition.ProductionPerHour);
@@ -663,7 +665,7 @@ public class BuildingCatalogueTests
     [Fact]
     public void CartWorkshop_is_purely_a_training_gate_with_no_storage_of_its_own()
     {
-        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.CartWorkshop); level++)
         {
             var definition = BuildingCatalogue.Get(BuildingType.CartWorkshop, level);
             Assert.Equal(ResourceAmounts.Zero, definition.StorageCapacity);
@@ -1956,7 +1958,7 @@ public class SettlementTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(BuildingCatalogue.HighestMaxLevel + 1)] // Centre holds the Longhouse
     public void Setting_a_level_outside_the_catalogues_range_is_refused(int level)
     {
         var settlement = Found();
