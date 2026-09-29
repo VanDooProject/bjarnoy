@@ -34,7 +34,7 @@ describe('TechTreeGraph', () => {
     wrapper.unmount();
   });
 
-  it('leaves buildings hidden from the docs out', () => {
+  it('draws no card for the Fisher Hut, merged into the Fishing Hut', () => {
     const wrapper = mountGraph();
 
     expect(wrapper.find('a[href="#fisherhut"]').exists()).toBe(false);

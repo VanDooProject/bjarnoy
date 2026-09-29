@@ -305,7 +305,7 @@ describe('WorldModel applyServerSnapshot renders every backend building type', (
     expect(model.getTile(quarryCoord.q, quarryCoord.r).buildingType).toBe('quarry');
   });
 
-  it('places a barracks, fisher hut and sawmill from a snapshot', () => {
+  it('places a barracks, fishing hut and sawmill from a snapshot', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const coords = neighbors(at).slice(0, 3);
@@ -317,13 +317,13 @@ describe('WorldModel applyServerSnapshot renders every backend building type', (
       capacity: settlement.resources,
       buildings: [
         { q: coords[0].q, r: coords[0].r, type: 'barracks', level: 1 },
-        { q: coords[1].q, r: coords[1].r, type: 'fisherhut', level: 1 },
+        { q: coords[1].q, r: coords[1].r, type: 'fishinghut', level: 1 },
         { q: coords[2].q, r: coords[2].r, type: 'sawmill', level: 1 },
       ],
     });
 
     expect(model.getTile(coords[0].q, coords[0].r).buildingType).toBe('barracks');
-    expect(model.getTile(coords[1].q, coords[1].r).buildingType).toBe('fisherhut');
+    expect(model.getTile(coords[1].q, coords[1].r).buildingType).toBe('fishinghut');
     expect(model.getTile(coords[2].q, coords[2].r).buildingType).toBe('sawmill');
   });
 });
@@ -378,8 +378,28 @@ function findOwnedHex(
   throw new Error('no matching owned hex found — pick a different test seed');
 }
 
-describe('WorldModel.placeBuilding — fisher hut and sawmill', () => {
-  it('places a fisher hut directly on a coastal-water hex, like the fishing hut/dockyard', () => {
+describe('WorldModel.applyServerSnapshot — merged fisher hut', () => {
+  it('shows a stale stored fisherhut as a fishinghut', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const coord = neighbors(at)[0];
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [{ q: coord.q, r: coord.r, type: 'fisherhut', level: 3 }],
+    });
+
+    const tile = model.getTile(coord.q, coord.r);
+    expect(tile.buildingType).toBe('fishinghut');
+    expect(tile.buildingLevel).toBe(3);
+  });
+});
+
+describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
+  it('places a fishing hut directly on a coastal-water hex, like the fishing hut/dockyard', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     // A settlement's *founding* spot is guaranteed no sea within two hexes
@@ -392,17 +412,17 @@ describe('WorldModel.placeBuilding — fisher hut and sawmill', () => {
     const radius = model.borderRadius(settlement);
     const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
 
-    expect(model.placeBuilding(settlement.id, coastal, 'fisherhut')).toBe(true);
-    expect(model.getTile(coastal.q, coastal.r).buildingType).toBe('fisherhut');
+    expect(model.placeBuilding(settlement.id, coastal, 'fishinghut')).toBe(true);
+    expect(model.getTile(coastal.q, coastal.r).buildingType).toBe('fishinghut');
   });
 
-  it('refuses a fisher hut on plain land, even a buildable Grass hex', () => {
+  it('refuses a fishing hut on plain land, even a buildable Grass hex', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
     const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
 
-    expect(model.placeBuilding(settlement.id, grass, 'fisherhut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, grass, 'fishinghut')).toBe(false);
     expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
   });
 

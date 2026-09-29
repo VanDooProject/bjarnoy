@@ -6,7 +6,7 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
-import { cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
+import { cropAllowedHere, isWaterOnlyBuilding, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
@@ -1283,7 +1283,6 @@ export class WorldModel {
       'dockyard',
       'greatstorehouse',
       'barracks',
-      'fisherhut',
       'sawmill',
       'meadery',
       'townsquare',
@@ -1297,12 +1296,15 @@ export class WorldModel {
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
     const nowRendered = new Set<string>();
     for (const building of snapshot.buildings) {
-      if (!RENDERABLE_TYPES.has(building.type)) continue;
+      // The Fisher Hut was merged into the Fishing Hut; a stored one is
+      // converted server-side, this is the same rule for any stale payload.
+      const type = building.type === 'fisherhut' ? 'fishinghut' : building.type;
+      if (!RENDERABLE_TYPES.has(type)) continue;
       const key = coordKey({ q: building.q, r: building.r });
       nowRendered.add(key);
       const tile = this.getTile(building.q, building.r);
       tile.ownerId = settlementId;
-      tile.buildingType = building.type as Tile['buildingType'];
+      tile.buildingType = type as Tile['buildingType'];
       tile.buildingLevel = building.level;
       // The fishing hut is the only building with its own orientation (a
       // dock that has to face this settlement's shore, not whatever a bare
@@ -1372,13 +1374,11 @@ export class WorldModel {
     // since a giant whose whole 7-hex footprint *is* fully enclosed reads as
     // claimed but must still refuse building on it.
     if (tile.giant) return false;
-    // Every other building needs dry land; the fishing hut, dockyard, and
-    // fisher hut and Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
+    // Every other building needs dry land; the fishing hut, dockyard and
+    // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
     // BuildingDefinition.RequiresCoastalWater).
-    const isWaterOnlyBuilding =
-      type === 'fishinghut' || type === 'dockyard' || type === 'fisherhut' || type === 'shrineofnjord';
-    if (isWaterOnlyBuilding ? !tile.isCoastalWater : tile.terrain === 'sea') return false;
+    if (isWaterOnlyBuilding(type) ? !tile.isCoastalWater : tile.terrain === 'sea') return false;
     if (tile.buildingType) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes (and, for the Sawmill, only some variants — see
