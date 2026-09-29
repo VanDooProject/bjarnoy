@@ -26,17 +26,17 @@ formula changes, re-run the lab and check all of them.
 Wood, Stone, Food, Iron.
 
 - **Wood** — Lumberjack (forest).
-- **Stone** — Quarry (mountain) *or* Clay Brickworks (grass). Both at LH 1:
-  world generation does not guarantee a mountain near a start, so Clay is
-  the no-mountain stone source, not an upgrade.
+- **Stone** — Quarry (mountain) *or* Clay Brickworks (bog ground). Both at
+  LH 1: world generation does not guarantee a mountain near a start, so Clay
+  is the no-mountain stone source, not an upgrade. It stands on bog ground,
+  so every start needs bog in reach (§8).
 - **Food** — Reindeer Herder (the default, any grass), later Farm / Pumpkin
   Farm by island soil (one tech-tree card), Fishing Hut on coastal water.
-- **Iron** — comes from **lake ore** (Seeerz): a later feature adds a lake
-  tile to every island, connected to the rivers, with a lake-ore building
-  on it and a river **Hammerschmiede** (water-powered hammer mill) that
-  boosts it, the way the Sawmill boosts Lumberjacks (§8). Until then the
-  Longhouse is the only iron source, so buildings cost no iron; iron is a
-  military resource (units, Tower).
+- **Iron** — comes from **bog ore**: the bog-ore works stand on bog ground
+  (§8, `bog.md`), and a river **Hammerschmiede** (water-powered hammer
+  mill) boosts them later, the way the Sawmill boosts Lumberjacks. Before
+  the bog-ore works, the Longhouse is the only iron source, so buildings
+  cost no iron; iron is a military resource (units, Tower).
 
 The **Magic Tower is removed**. The **Smithy** is renamed **Weaponsmith**
 (Waffenschmiede; its art has an anvil) so it doesn't clash with the
@@ -268,35 +268,36 @@ one flattens" check in §5 can be verified against these numbers.
 Simulated: the first 25 minutes are continuous building (9 producers, then
 LH 2 at about 13 min), LH 3 at about 1h45.
 
-## 8. Iron: lake ore
+## 8. Iron: bog ore
 
 Viking-age Norse iron did not come from mountains. It came from ore that
 forms by itself where iron-rich fresh groundwater meets air:
 
-- **Bog iron** (Raseneisenerz, Sumpferz): rusty lumps a spade's depth under
-  wet meadows and bog edges.
+- **Bog iron** (Old Norse *mýrr*, German Raseneisenerz or Sumpferz): rusty
+  lumps a spade's depth under wet moss ground and bog edges.
 - **Lake ore** (Seeerz, Swedish *sjömalm*): the same process on lake
-  bottoms, raked up from boats, often through the winter ice.
+  bottoms.
 - Not sea water: the sea doesn't form this ore.
-- The ore was smelted on site in a small clay furnace (Rennofen) with
-  charcoal (Holzkohle, from a Kohlenmeiler), giving a bloom (Luppe) that the
-  smith hammered into iron. Rock-ore mines in mountains only mattered after
-  the Viking age.
+- The ore was dug, roasted, and smelted on site in a small clay furnace
+  (Rennofen, bloomery) with charcoal, giving a bloom (Luppe) that the smith
+  hammered into iron. Rock-ore mines in mountains only mattered after the
+  Viking age.
 
-The plan:
+The art for this is the **bog set** in `VanDooProject/3D_assets`
+(`docs/bog-tiles.md` there, PRs #115 and #116). The game side is in
+[`bog.md`](./bog.md):
 
-- A **lake tile**, one guaranteed per island (like a mountain), connected
-  to the river network. It needs new art and world-generation changes.
-- A **lake-ore building** on the lake: the iron producer.
-- A **Hammerschmiede** on a river: a water-powered hammer mill that boosts
-  lake-ore buildings within range, limited by river shapes the same way the
-  Sawmill and Crop Mill are. (Water-powered hammers are a century or two
-  later than the Vikings, like the game's water-powered sawmill.)
+- **Bog ground** (moss), with bog creeks and bog lakes.
+- **Bog-ore works** on bog ground: the iron producer, from diggings to a
+  bloomery over 7 levels.
+- **Clay Brickworks** moves from grass onto bog ground.
+- A **lake Fisher Hut** on stilts, the same building as the coastal one.
+- A **Hammerschmiede** on a river only (not part of the bog set; art still
+  to come): boosts bog-ore works within range, limited by river shapes the
+  same way the Sawmill and Crop Mill are.
 
-The Hammerschmiede stands on a river only, never on the lake itself.
-
-A furnace alone (Rennofen) creates no ore, so lake ore is the only real
-source, and the Longhouse gives a small trickle (+2 iron/h per level).
+A furnace alone creates no ore, so bog ore is the only real source, and the
+Longhouse gives a small trickle (+2 iron/h per level).
 
 **Iron is an indirect gate for the army.** Buildings cost no iron. Every
 unit costs iron except the cheap first unit (Thrall), so how fast you can
@@ -306,11 +307,11 @@ sources have to line up with the unit unlocks:
 | When | Iron source | Units it has to carry |
 |---|---|---|
 | LH 1–5 | Longhouse trickle only (2–10 iron/h) | Thrall (no iron), then the first Spearmen when the Barracks opens at LH 5 |
-| from ~LH 6 | lake ore: the lake tile is guaranteed on every island, so it is always in reach | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
-| LH 20 | Hammerschmiede (river) boosts lake ore | elite units: Berserker, Catapult, Longship |
+| from ~LH 6 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
+| LH 20 | Hammerschmiede (river) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
-So the lake tile and the lake-ore building are needed by about LH 6, not
-as a late add-on. The unit costs and unlock levels get reworked together
+So bog ground and the bog-ore works are needed by about LH 6, not as a
+late add-on. The unit costs and unlock levels get reworked together
 with them so the levels match: today every unit costs iron (Thrall 15 …
 Catapult 250), and the unit Longhouse gates still follow the old ladder
 (the Spearman at LH 1, while the Barracks now opens at LH 5).
@@ -381,9 +382,11 @@ In Travian the early production rush comes from farming: inactive players,
 oases and NPC villages. Bjarnoy's version:
 
 - **Wildlife on empty islands.** Unclaimed islands are guarded by wildlife
-  (wolves, bears; a seal colony on the coast). While it's there, no tower
-  can go up and nobody can settle on that island ("wolves eat the
-  builders"). Clearing it gives loot. **Exploring and clearing new islands
+  (wolves, bears; a seal colony on the coast). Founding a settlement there is
+  allowed (land troops need a base on the island to fight from), but while
+  the wildlife is there **no tower can go up** on that island ("wolves eat
+  the builders"), so the realm can't grow until it's cleared. Clearing it
+  gives loot. **Exploring and clearing new islands
   must pay much more than farming smaller players.**
 - **Beast dens** are the oasis equivalent: raidable spots whose loot grows
   back over time, and which can later be annexed for a production bonus.
@@ -432,8 +435,9 @@ Open work, in rough order. Each is its own PR.
 5. **New buildings:** the Reindeer Herder (the default food building; Farm and
    Pumpkin Farm move to LH 4 as one card by soil), the Odin Statue (Ravens and
    Wisdom, §5) and the Palisade (§5).
-6. **Lakes and iron** (§8, `lakes.md`): the lake tile, the lake-ore
-   building, the Hammerschmiede, and a lakeshore version of the fisher.
+6. **Bogs and iron** (§8, `bog.md`): bog ground, creeks and lakes in world
+   generation, the bog-ore works, Clay Brickworks on bog ground, the lake
+   Fisher Hut, and the Hammerschmiede.
 7. **Units and iron:** every unit except the Thrall costs iron, and the unit
    unlock levels follow the building ladder, matched to the iron sources.
 8. **Raiding and snowballing** (§10): wildlife on empty islands, beast dens,
@@ -442,7 +446,7 @@ Open work, in rough order. Each is its own PR.
 ## 12. Open questions
 
 - ~~Fishing Hut and Fisher Hut~~: decided, merge them into one coastal
-  building. A lakeshore version comes with the lake work: the same building,
-  with its own art.
+  building. A lake version comes with the bog set (on stilts on a bog-lake
+  shore): the same building, with its own art.
 - The profile parameters (online hours, share spent on troops) are
   assumptions; real telemetry should replace them once players exist.
