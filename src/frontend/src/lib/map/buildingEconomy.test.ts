@@ -8,6 +8,7 @@ import {
   isNearAnyOf,
   matchingNeighbourCount,
   maxLevelFor,
+  maxTowers,
   radiusBoostPercent,
   radiusBoostRange,
 } from './buildingEconomy';
@@ -194,5 +195,14 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
     expect(radiusBoostPercent(11)).toBe(55);
     expect(radiusBoostPercent(20)).toBe(100);
     expect([1, 4, 5, 9, 17, 20].map(radiusBoostRange)).toEqual([1, 1, 2, 3, 5, 5]);
+  });
+});
+
+describe('maxTowers (mirrors BuildingCatalogue.MaxTowers)', () => {
+  it('is 0 below longhouse 3, 1 for LH 3-6, then one more every second level after LH 5', () => {
+    const table: Record<number, number> = { 1: 0, 2: 0, 3: 1, 6: 1, 7: 2, 8: 2, 9: 3, 30: 13 };
+    for (const [level, expected] of Object.entries(table)) {
+      expect(maxTowers(Number(level)), `LH ${level}`).toBe(expected);
+    }
   });
 });

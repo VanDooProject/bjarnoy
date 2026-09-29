@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
 
@@ -246,5 +247,124 @@ public class EconomyDesignTests
     {
         Assert.Equal(percent, BuildingCatalogue.RadiusBoostPercent(level), 6);
         Assert.Equal(range, BuildingCatalogue.RadiusBoostRange(level));
+    }
+
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 3)]
+    [InlineData(3, 3)]
+    [InlineData(30, 3)]
+    public void The_longhouse_claim_radius_is_2_at_level_1_and_stops_at_3(int level, int radius)
+    {
+        Assert.Equal(radius, Settlement.ClaimRadiusForLonghouseLevel(level));
+        Assert.Equal(3, Settlement.MaxClaimRadius);
+    }
+
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(2, 0)]
+    [InlineData(3, 1)]
+    [InlineData(5, 1)]
+    [InlineData(6, 1)]
+    [InlineData(7, 2)]
+    [InlineData(8, 2)]
+    [InlineData(9, 3)]
+    [InlineData(15, 6)]
+    [InlineData(29, 13)]
+    [InlineData(30, 13)]
+    public void MaxTowers_follows_one_tower_from_LH3_then_one_per_two_levels_after_LH5(int longhouseLevel, int expected)
+    {
+        Assert.Equal(expected, BuildingCatalogue.MaxTowers(longhouseLevel));
+    }
+
+    private static readonly HexCoord Centre = new(0, 0);
+    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>A rich settlement at the given Longhouse level with the given other buildings on the ring behind the centre.</summary>
+    private static Settlement SettlementWith(int longhouseLevel, params (BuildingType Type, int Level)[] standing)
+    {
+        var buildings = new List<PlacedBuilding> { new(Centre, BuildingType.Longhouse, longhouseLevel) };
+        buildings.AddRange(standing.Select((b, i) => new PlacedBuilding(new HexCoord(-1, -i), b.Type, b.Level)));
+        var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
+
+        return new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Bjornstad",
+            Centre = Centre,
+            Buildings = buildings,
+            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity, T0),
+        };
+    }
+
+    private static BuildDecision PlanTower(Settlement settlement, HexCoord coord) =>
+        settlement.PlanBuild(BuildingType.Tower, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+
+    [Fact]
+    public void A_new_tower_is_refused_once_the_standing_towers_reach_the_limit()
+    {
+        // LH 3 allows exactly one tower.
+        var settlement = SettlementWith(3, (BuildingType.Tower, 1));
+
+        var decision = PlanTower(settlement, new HexCoord(1, 0));
+
+        Assert.Equal(BuildRejection.TowerLimitReached, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_new_tower_is_accepted_below_the_limit_and_the_first_tower_at_LH3()
+    {
+        Assert.True(PlanTower(SettlementWith(3), new HexCoord(1, 0)).Accepted);
+        Assert.True(PlanTower(SettlementWith(7, (BuildingType.Tower, 1)), new HexCoord(1, 0)).Accepted);
+    }
+
+    [Fact]
+    public void A_queued_new_tower_counts_against_the_limit_before_it_stands()
+    {
+        var settlement = SettlementWith(3);
+        var first = PlanTower(settlement, new HexCoord(1, 0));
+        Assert.True(first.Accepted);
+        var queued = settlement.Enqueue(first.Order!, T0);
+
+        var second = PlanTower(queued, new HexCoord(1, 1));
+
+        Assert.Equal(BuildRejection.TowerLimitReached, second.Rejection);
+    }
+
+    [Fact]
+    public void A_waiting_new_tower_order_counts_against_the_limit_too()
+    {
+        // Fill both construction slots so the tower waits; waiting orders stake no stub.
+        var settlement = SettlementWith(3);
+        var waiting = settlement.PlanBuild(
+            BuildingType.Tower, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            maxWaitingOrders: 5) with { };
+        Assert.True(waiting.Accepted);
+        var queued = settlement.Enqueue(waiting.Order! with { StartedAt = null, CompletesAt = null }, T0);
+
+        Assert.Equal(BuildRejection.TowerLimitReached, PlanTower(queued, new HexCoord(1, 1)).Rejection);
+    }
+
+    [Fact]
+    public void Upgrading_an_existing_tower_is_allowed_even_at_the_limit()
+    {
+        var settlement = SettlementWith(3, (BuildingType.Tower, 1));
+        var towerCoord = new HexCoord(-1, 0);
+
+        var decision = PlanTower(settlement, towerCoord);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.Equal(2, decision.Order!.TargetLevel);
+    }
+
+    [Fact]
+    public void The_limit_does_not_stop_other_buildings()
+    {
+        var settlement = SettlementWith(3, (BuildingType.Tower, 1));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Lumberjack, new HexCoord(1, 0), Terrain.Forest, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 }

@@ -50,7 +50,14 @@ import {
   type BuildingModifier,
   type BuildingOutput,
 } from '../lib/map/buildingEconomy';
-import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from '../lib/map/ringCatalogue';
+import {
+  cropAllowedHere,
+  formatBuildTime,
+  formatMissingResources,
+  longhouseLock,
+  riverBuildingAllowedHere,
+  towerLimitLock,
+} from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
@@ -926,6 +933,19 @@ function currentIslandSoil(): 'wheat' | 'pumpkin' | undefined {
   return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
 }
 
+// Standing towers plus still-queued new-tower orders (live mode only — demo
+// mode places instantly), counted by distinct hex like Settlement.PlanBuild
+// does, so a queued tower already uses up its slot.
+function towersHeld(): number {
+  const id = world.selectedSettlementId;
+  if (!id) return 0;
+  const hexes = new Set(world.model.towerCoords(id).map((c) => `${c.q},${c.r}`));
+  for (const order of world.hud.queue) {
+    if (order.building === 'tower') hexes.add(`${order.q},${order.r}`);
+  }
+  return hexes.size;
+}
+
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
@@ -937,7 +957,9 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
     cost: definition?.cost ?? buildingUpgradeCost(type, 1),
     time: definition ? formatBuildTime(definition.buildSeconds) : undefined,
     gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
-    lock: longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
+    lock:
+      longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
+      ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined),
     art: buildingArt(type, 1),
   };
 }

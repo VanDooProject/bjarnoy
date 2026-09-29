@@ -397,6 +397,18 @@ public static class BuildingCatalogue
     public sealed record TerrainBoost(IReadOnlySet<Terrain> Matching, double PerTilePercent, double CapPercent);
 
     /// <summary>
+    /// How many Towers a settlement with a Longhouse at
+    /// <paramref name="longhouseLevel"/> may hold: none below LH 3 (where the
+    /// Tower unlocks), then <c>1 + max(0, (LH − 5) / 2)</c> with integer
+    /// division — 1 for LH 3-6, 2 at LH 7, 3 at LH 9, … 13 at LH 29-30.
+    /// Counts standing towers and queued new-tower orders alike, see
+    /// <see cref="Settlement.PlanBuild"/>. The tech tree shows only the first
+    /// unlock (LH 3); this limit is surfaced where a tower is placed.
+    /// </summary>
+    public static int MaxTowers(int longhouseLevel) =>
+        longhouseLevel < 3 ? 0 : 1 + Math.Max(0, (longhouseLevel - 5) / 2);
+
+    /// <summary>
     /// Percent added to a defending garrison's power for a given Tower level
     /// (issue #40 phase 3), applied by <see cref="Bjarnoy.Domain.Combat.BattleResolver.Resolve"/>.
     /// </summary>
@@ -561,9 +573,12 @@ public static class BuildingCatalogue
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
         AllowedTerrain = Grass,
         // The settlement's own centre-disc claim radius at this longhouse
-        // level (MECHANICS.md §2: borders grow when the anchor levels up) —
-        // see Settlement.ClaimRadius, which reads this back.
-        ClaimRadius = 2 + (level / 2),
+        // level — see Settlement.ClaimRadius, which reads this back. The
+        // Longhouse only grows the realm until towers are available: 2 at
+        // level 1, 3 from level 2 on, and it stops there (the first Tower
+        // unlocks at LH 3; from then on territory grows through towers, see
+        // MaxTowers and docs/design/economy.md section 5).
+        ClaimRadius = level == 1 ? 2 : 3,
         // A longhouse upgrade is the settlement's biggest single commitment —
         // it consumes every construction slot the settlement currently has,
         // blocking all other construction until it finishes (issue #158).

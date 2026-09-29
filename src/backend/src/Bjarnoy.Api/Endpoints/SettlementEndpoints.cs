@@ -688,6 +688,8 @@ public static class SettlementEndpoints
         BuildRejection.LonghousePlacementNotAllowed =>
             "A settlement gets its longhouse from founding, not from the build queue.",
         BuildRejection.RequiredBuildingTooLow => "A required building is not high enough level yet.",
+        BuildRejection.TowerLimitReached =>
+            "You already hold as many towers as your longhouse level allows. Upgrade the longhouse to raise the limit.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",

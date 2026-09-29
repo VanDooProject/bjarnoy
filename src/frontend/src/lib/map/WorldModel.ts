@@ -5,6 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
+import { maxTowers } from './buildingEconomy';
 import { cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
@@ -1329,6 +1330,16 @@ export class WorldModel {
     this.renderedBuildingCoords.set(settlementId, nowRendered);
   }
 
+  /**
+   * The hexes of this settlement's standing towers, for the tower limit
+   * (`maxTowers`): the ring menu unions these with any still-queued tower
+   * orders (which only exist in live mode) so a queued tower counts before it
+   * stands, the same way `Settlement.PlanBuild` counts it.
+   */
+  towerCoords(settlementId: string): AxialCoord[] {
+    return (this.settlementTowers.get(settlementId) ?? []).map((t) => ({ q: t.q, r: t.r }));
+  }
+
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return false;
@@ -1368,6 +1379,13 @@ export class WorldModel {
     // PumpkinFarm is only buildable on a Pumpkin-soil island (matches
     // BuildRejection.WrongCropForIslandSoil) — Farm has no such gate.
     if (type && !cropAllowedHere(type, this.soilForSettlement(settlementId))) {
+      return false;
+    }
+    // A new tower is refused once the settlement holds as many as its
+    // longhouse level allows (matches BuildRejection.TowerLimitReached and
+    // BuildingCatalogue.MaxTowers). Upgrading a tower never goes through
+    // here, so it is never refused for this reason.
+    if (type === 'tower' && this.towerCoords(settlementId).length >= maxTowers(settlement.level)) {
       return false;
     }
     tile.ownerId = settlementId;

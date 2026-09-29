@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from './ringCatalogue';
+import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -39,6 +39,22 @@ describe('longhouseLock', () => {
     // "hut" is demo-only and has no backend definition, so there is no gate to
     // report — it must not read as locked.
     expect(longhouseLock(undefined, 1)).toBeUndefined();
+  });
+});
+
+describe('towerLimitLock', () => {
+  it('explains the limit once the settlement holds as many towers as its longhouse level allows', () => {
+    expect(towerLimitLock(1, 3)).toBe('Tower limit reached (1/1) — level up the longhouse for more');
+    expect(towerLimitLock(2, 8)).toBe('Tower limit reached (2/2) — level up the longhouse for more');
+  });
+
+  it('stays open while there is room', () => {
+    expect(towerLimitLock(0, 3)).toBeUndefined();
+    expect(towerLimitLock(1, 7)).toBeUndefined();
+  });
+
+  it('leaves the "longhouse too low" case to longhouseLock', () => {
+    expect(towerLimitLock(0, 2)).toBeUndefined();
   });
 });
 

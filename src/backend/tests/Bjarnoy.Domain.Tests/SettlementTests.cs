@@ -37,25 +37,24 @@ public class BuildingCatalogueTests
     }
 
     /// <summary>
-    /// Regression coverage for a frontend/backend realm-border mismatch: the
-    /// frontend's own realm-border formula (`WorldModel.borderRadius`,
-    /// `2 + floor(level / 2)`) and the backend's `Settlement.ClaimRadius`
-    /// (previously `1 + (level / 2)`) disagreed by exactly one hex at every
-    /// longhouse level, so a tile the frontend rendered as "inside the
-    /// realm" could still be rejected by the backend with
-    /// `HexNotInSettlement`. `Settlement.ClaimRadius` now reads this same
-    /// catalogue value back (see <see cref="Settlement.ClaimRadius"/>), so
-    /// this is the one place either side's number can drift from the other.
+    /// The Longhouse only grows the realm until towers exist: radius 2 at
+    /// level 1, 3 from level 2 on, and it stops there. The frontend mirrors
+    /// this in <c>shoreline.ts</c>'s <c>claimRadiusForLevel</c> (a mismatch
+    /// once let a tile render as "inside the realm" that the backend then
+    /// rejected with <c>HexNotInSettlement</c>), so this is the one place
+    /// either side's number can drift from the other.
     /// </summary>
     [Theory]
     [InlineData(1, 2)]
     [InlineData(2, 3)]
     [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(10, 7)]
-    public void Longhouse_ClaimRadius_matches_the_frontends_2_plus_half_level_formula(int level, int expectedRadius)
+    [InlineData(4, 3)]
+    [InlineData(10, 3)]
+    [InlineData(30, 3)]
+    public void Longhouse_ClaimRadius_is_2_at_level_1_and_3_from_level_2_on(int level, int expectedRadius)
     {
         Assert.Equal(expectedRadius, BuildingCatalogue.Get(BuildingType.Longhouse, level).ClaimRadius);
+        Assert.Equal(expectedRadius, Settlement.ClaimRadiusForLonghouseLevel(level));
     }
 
     [Theory]
@@ -783,12 +782,12 @@ public class SettlementTests
         var firstTower = new HexCoord(1, 0);
         var settlement = Found() with
         {
-            // Longhouse level 3, not 1: a new Tower's RequiredLonghouseLevel
-            // (BuildingCatalogue.Tower) is 3 at level 1 — this test is about
-            // the claim check, not the longhouse-prerequisite one.
+            // Longhouse level 7, not 1: a new Tower needs a level-3 Longhouse,
+            // and a second tower (one stands already) needs MaxTowers(LH) >= 2
+            // — this test is about the claim check, not those two gates.
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 3), // ClaimRadius == 3
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 7), // ClaimRadius == 3
                 new PlacedBuilding(firstTower, BuildingType.Tower, 10), // TowerClaimRadius(10) == 10
             ],
         };

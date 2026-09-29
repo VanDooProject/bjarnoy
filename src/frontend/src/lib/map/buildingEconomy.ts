@@ -129,6 +129,15 @@ export function maxLevelFor(type: BuildingKind): number {
   }
 }
 
+/**
+ * Mirrors `BuildingCatalogue.MaxTowers`: how many towers a settlement with a
+ * Longhouse at `longhouseLevel` may hold — none below LH 3, then
+ * `1 + max(0, floor((LH − 5) / 2))` (1 for LH 3-6, 2 at LH 7, … 13 at LH 29-30).
+ */
+export function maxTowers(longhouseLevel: number): number {
+  return longhouseLevel < 3 ? 0 : 1 + Math.max(0, Math.floor((longhouseLevel - 5) / 2));
+}
+
 /** Mirrors `BuildingCatalogue.ProductionFor`: a level's total output is `perHourAtLevelOne · 1.20^(level−1)`. */
 function producerOutput(perHourAtLevelOne: number, level: number, multiplier = 1): number {
   return Math.round(perHourAtLevelOne * Math.pow(1.2, level - 1) * multiplier);

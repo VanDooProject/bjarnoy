@@ -53,6 +53,7 @@ describe('explored hexes stay within exploredRadius of their settlement', () => 
     const model = new WorldModel(20260824);
     const at = model.findLandfall({ q: 0, r: 0 })!;
     const settlement = model.foundSettlement('p1', 'You', 'Home', at);
+    settlement.level = 9; // three towers are allowed at longhouse 9
     // Towers are what make this non-trivial: they explore around a point that
     // is not the settlement, so the radius has to account for the offset.
     // Placement has real rules (owned, land, empty), so take whatever the

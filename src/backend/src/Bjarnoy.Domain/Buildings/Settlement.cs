@@ -107,7 +107,11 @@ public sealed record Settlement
 
     /// <summary>
     /// Claim radius of the settlement's own centre disc, driven by longhouse
-    /// level (MECHANICS.md §2: borders grow when the anchor levels up). This
+    /// level: 2 at level 1 and 3 from level 2 on. The Longhouse only grows the
+    /// realm until towers are available and stops there — from LH 3, when the
+    /// first Tower unlocks, territory grows only through towers (see
+    /// <see cref="BuildingCatalogue.MaxTowers"/> and
+    /// <c>docs/design/economy.md</c> section 5). This
     /// is only the centre disc — the settlement's full claimed territory is
     /// the union of this and every placed Tower's own satellite disc; see
     /// <see cref="Claims"/> and <see cref="ClaimDiscs"/>. Backed by
@@ -137,8 +141,7 @@ public sealed record Settlement
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
     /// <c>2 + max(0, (longhouseLevel − 5) / 5)</c> — 2 slots at level 1–9, 3 at
-    /// 10, 4 at 15, 5 at 20. The formula deliberately outlives today's
-    /// <see cref="BuildingCatalogue.MaxLevelFor"/> of 30. A razed settlement
+    /// 10, 4 at 15, 5 at 20, 7 at 30. A razed settlement
     /// (<see cref="LonghouseLevel"/> 0) still reads 2 — harmless, since every
     /// building needs <see cref="BuildingDefinition.RequiredLonghouseLevel"/>
     /// &gt;= 1 and nothing can be queued there anyway.
@@ -1095,6 +1098,24 @@ public sealed record Settlement
         if (LonghouseLevel < definition.RequiredLonghouseLevel)
         {
             return BuildDecision.Rejected(BuildRejection.LonghouseTooLow);
+        }
+
+        // Towers are the only way to grow the realm once the Longhouse stops
+        // (ClaimRadius), so their number follows the Longhouse level. Only a
+        // *new* tower counts against the limit (baseLevel 0: nothing standing
+        // or queued on this hex) — upgrading one is always allowed. A queued
+        // new tower already stakes a level-0 stub in Buildings, so towers are
+        // counted by distinct hex across standing buildings and queued orders.
+        if (type == BuildingType.Tower && baseLevel == 0)
+        {
+            var towerHexes = Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
+                .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord))
+                .Distinct()
+                .Count();
+            if (towerHexes >= BuildingCatalogue.MaxTowers(LonghouseLevel))
+            {
+                return BuildDecision.Rejected(BuildRejection.TowerLimitReached);
+            }
         }
 
         // Every prerequisite must be met, and each is judged against the
