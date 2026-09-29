@@ -244,13 +244,25 @@ The plan:
 
 The Hammerschmiede stands on a river only, never on the lake itself.
 
-A lake may not be in reach early on, and a smelting furnace alone (Rennofen)
-creates no ore, so there is no early iron producer. Instead, **the early
-game doesn't need iron**: buildings cost no iron at all, and the early,
-low-tier units must not cost iron either. Iron becomes a requirement only
-for the higher-tier units, by which time a lake is in reach. Until lake ore
-lands, the Longhouse's small iron trickle is the only source. (Today a
-Spearman costs 40 iron, so the unit costs need that pass.)
+A furnace alone (Rennofen) creates no ore, so lake ore is the only real
+source, and the Longhouse gives a small trickle (+2 iron/h per level).
+
+**Iron is an indirect gate for the army.** Buildings cost no iron. Every
+unit costs iron except the cheap first unit (Thrall), so how fast you can
+raise troops depends on your iron income. For that to work, the iron
+sources have to line up with the unit unlocks:
+
+| When | Iron source | Units it has to carry |
+|---|---|---|
+| LH 1–5 | Longhouse trickle only (2–10 iron/h) | Thrall (no iron), then the first Spearmen when the Barracks opens at LH 5 |
+| from ~LH 6 | lake ore: the lake tile is guaranteed on every island, so it is always in reach | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
+| LH 20 | Hammerschmiede (river) boosts lake ore | elite units: Berserker, Catapult, Longship |
+
+So the lake tile and the lake-ore building are needed by about LH 6, not
+as a late add-on. The unit costs and unlock levels get reworked together
+with them so the levels match: today every unit costs iron (Thrall 15 …
+Catapult 250), and the unit Longhouse gates still follow the old ladder
+(the Spearman at LH 1, while the Barracks now opens at LH 5).
 
 ## 9. Open questions
 
