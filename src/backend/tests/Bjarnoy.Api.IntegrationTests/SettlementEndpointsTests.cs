@@ -197,45 +197,62 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task Spacing_is_enforced_within_an_island_but_never_across_separate_islands()
     {
         using var client = Client();
-        // Seed 51: re-picked again after the island-shape retune (bigger,
-        // more-elongated islands) moved every seed's terrain — seed 5/60 no
-        // longer places two islands close enough to exercise the
-        // cross-island case below.
-        var world = await _factory.CreateWorldAsync(Unique("w"), 51, 60, cancellationToken: Ct);
+        // Seed 77: re-picked after the Longhouse claim radius stopped at 3
+        // (MinimumSpacing 15 -> 7) — seed 51/60 no longer places two islands
+        // within 7 hexes of each other to exercise the cross-island case
+        // below (found by scanning seeds 1-400 at radius 60; 77 is the only
+        // one with a start position that has both a same-island and a
+        // cross-island neighbour that close).
+        var world = await _factory.CreateWorldAsync(Unique("w"), 77, 60, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
 
-        // Two start positions on the very same island, closer together than
-        // MinimumSpacing — with an island's start positions this dense
-        // (FindStartPositions places one on every qualifying grass hex),
-        // any pair within a real island is essentially guaranteed to have
-        // at least one such pair.
-        (Guid IslandId, TileCoordinate First, TileCoordinate Second)? sameIsland = null;
+        // One start position with BOTH a partner on its own island and a
+        // start position on a different island, each closer than
+        // MinimumSpacing: the partner must be refused (same island), the
+        // other-island one must found cleanly (separate islands never
+        // overlap real land). An island's start positions are dense
+        // (FindStartPositions places one on every qualifying grass hex), so
+        // the same-island half is easy; the cross-island half is the rare one.
+        (Guid IslandId, TileCoordinate First, TileCoordinate Second, Guid CrossIslandId, TileCoordinate CrossPlot)? scenario = null;
         foreach (var island in islands!)
         {
-            for (var i = 0; i < island.StartPositions.Count && sameIsland is null; i++)
+            foreach (var candidate in island.StartPositions)
             {
-                for (var j = i + 1; j < island.StartPositions.Count; j++)
+                var candidateCentre = new HexCoord(candidate.Q, candidate.R);
+                var partner = island.StartPositions.FirstOrDefault(
+                    p => p != candidate && new HexCoord(p.Q, p.R).DistanceTo(candidateCentre) < SettlementService.MinimumSpacing);
+                if (partner is null)
                 {
-                    var a = new HexCoord(island.StartPositions[i].Q, island.StartPositions[i].R);
-                    var b = new HexCoord(island.StartPositions[j].Q, island.StartPositions[j].R);
-                    if (a.DistanceTo(b) < SettlementService.MinimumSpacing)
+                    continue;
+                }
+
+                foreach (var other in islands.Where(i => i.Id != island.Id))
+                {
+                    var close = other.StartPositions.FirstOrDefault(
+                        p => new HexCoord(p.Q, p.R).DistanceTo(candidateCentre) < SettlementService.MinimumSpacing);
+                    if (close is not null)
                     {
-                        sameIsland = (island.Id, island.StartPositions[i], island.StartPositions[j]);
+                        scenario = (island.Id, candidate, partner, other.Id, close);
                         break;
                     }
                 }
+
+                if (scenario is not null)
+                {
+                    break;
+                }
             }
 
-            if (sameIsland is not null)
+            if (scenario is not null)
             {
                 break;
             }
         }
 
-        Assert.True(sameIsland is not null, "Seed 51/radius 60 no longer has an island dense enough to exercise same-island spacing.");
-        var (islandId, first, second) = sameIsland!.Value;
+        Assert.True(scenario is not null, "This seed/radius no longer has a start position with both a same-island and a cross-island neighbour closer than MinimumSpacing.");
+        var (islandId, first, second, crossIslandId, crossPlot) = scenario!.Value;
 
         var founded = await client.PostJsonAsync(
             $"/api/v1/worlds/{world.Id}/settlements",
@@ -250,24 +267,8 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
         Assert.Equal("TooCloseToNeighbour", await rejected.RejectionAsync(Ct));
 
-        // A start position on a *different* island, just as close to the
+        // The start position on a *different* island, just as close to the
         // first settlement by raw hex distance, must still found cleanly.
-        var firstCentre = new HexCoord(first.Q, first.R);
-        (Guid IslandId, TileCoordinate Plot)? crossIsland = null;
-        foreach (var island in islands.Where(i => i.Id != islandId))
-        {
-            var close = island.StartPositions.FirstOrDefault(
-                p => new HexCoord(p.Q, p.R).DistanceTo(firstCentre) < SettlementService.MinimumSpacing);
-            if (close is not null)
-            {
-                crossIsland = (island.Id, close);
-                break;
-            }
-        }
-
-        Assert.True(crossIsland is not null, "Seed 51/radius 60 no longer has two islands close enough to exercise cross-island spacing.");
-        var (crossIslandId, crossPlot) = crossIsland!.Value;
-
         var crossFounded = await client.PostJsonAsync(
             $"/api/v1/worlds/{world.Id}/settlements",
             new FoundSettlementRequest(crossIslandId, crossPlot.Q, crossPlot.R, "Third realm", "Astrid", Unique("owner")),
@@ -837,21 +838,24 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Empty(levelOne.Single(d => d.Type == "lumberjack").Prerequisites);
 
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("fishinghut", 4)],
+            [new BuildingPrerequisiteResponse("fishinghut", 5)],
             levelOne.Single(d => d.Type == "dockyard").Prerequisites);
         Assert.Empty(levelOne.Single(d => d.Type == "storagehouse").Prerequisites);
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("barracks", 10), new BuildingPrerequisiteResponse("archeryrange", 10)],
+            [new BuildingPrerequisiteResponse("smithy", 5)],
             levelOne.Single(d => d.Type == "shrineofthor").Prerequisites);
+        Assert.Equal(
+            [new BuildingPrerequisiteResponse("storagehouse", 15)],
+            levelOne.Single(d => d.Type == "greatstorehouse").Prerequisites);
 
-        // Prerequisites gate placement, so they sit on level 1 only — bar the
-        // Great Storehouse, a flat level-10-only tier.
+        // Prerequisites gate placement, so they sit on level 1 only — the
+        // Great Storehouse no longer carries its own on every level.
         var levelTwo = await client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(
             "/api/v1/buildings?level=2", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(levelTwo);
         Assert.Empty(levelTwo.Single(d => d.Type == "dockyard").Prerequisites);
-        Assert.NotEmpty(levelTwo.Single(d => d.Type == "greatstorehouse").Prerequisites);
+        Assert.Empty(levelTwo.Single(d => d.Type == "greatstorehouse").Prerequisites);
     }
 
     [Fact]

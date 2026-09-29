@@ -140,6 +140,39 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, world.StatusCode);
     }
 
+    /// <summary>
+    /// <c>BuildingCatalogue.MaxTowers</c> over the real build endpoint: a
+    /// Longhouse at level 3 allows exactly one tower, so the second is a 409
+    /// with the machine-readable <c>TowerLimitReached</c> reason (the queued
+    /// first tower already counts before it stands).
+    /// </summary>
+    [Fact]
+    public async Task A_second_tower_is_refused_with_TowerLimitReached_at_longhouse_3()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var leveled = await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{settlement.Id}/buildings/{settlement.Q}/{settlement.R}/level",
+            new SetBuildingLevelRequest(3), Ct);
+        Assert.Equal(HttpStatusCode.OK, leveled.StatusCode);
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
+        var grass = layout!.Hexes.Where(h => !h.IsCentre && h.Building is null && h.Terrain == "grass").Take(2).ToList();
+        Assert.Equal(2, grass.Count);
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var first = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("tower", grass[0].Q, grass[0].R), Ct);
+        Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+
+        var second = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("tower", grass[1].Q, grass[1].R), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal("TowerLimitReached", await second.RejectionAsync(Ct));
+    }
+
     [Fact]
     public async Task Instant_build_finishes_a_queued_build_that_would_otherwise_take_hours()
     {
