@@ -266,17 +266,19 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   }
 
   function startOne(minute: number, slots: number) {
-    // (a) Longhouse: only when nothing is building and producers keep up.
-    if (jobs.length === 0 && lh > 0 && lh < lhMax) {
+    // (a) Longhouse: wanted once every producer has caught up with it. It
+    // can only start with nothing building, but while it is wanted the
+    // player saves for it — producer upgrades (c) are skipped — otherwise a
+    // player who is online every minute keeps spending the stock the
+    // Longhouse needs and levels it *later* than one who checks in rarely.
+    let lhWanted = false;
+    if (lh > 0 && lh < lhMax) {
       const next = lhDefs[lh];
-      let keepingUp = true;
-      for (let i = 0; i < pLevel.length; i++) {
-        if (pLevel[i] < Math.min(lh, pDefs[i].length)) {
-          keepingUp = false;
-          break;
-        }
+      lhWanted = placeable(next, true);
+      for (let i = 0; lhWanted && i < pLevel.length; i++) {
+        if (pLevel[i] < Math.min(lh, pDefs[i].length)) lhWanted = false;
       }
-      if (keepingUp && placeable(next, true) && affordable(next)) {
+      if (lhWanted && jobs.length === 0 && affordable(next)) {
         spend(next);
         jobs.push({ kind: 'lh', index: 0, finishMinute: minute + Math.ceil(next.buildMinutes), slotCost: slots });
         usedSlots += slots;
@@ -304,6 +306,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     }
 
     // (c) best producer upgrade: lowest scarcity-weighted payback
+    if (lhWanted) return;
     let best = -1;
     let bestScore = Infinity;
     for (let i = 0; i < pLevel.length; i++) {

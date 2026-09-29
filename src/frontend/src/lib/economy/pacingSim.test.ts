@@ -165,4 +165,20 @@ describe('simulatePacing on the bundled catalogue', () => {
     expect(r.series.minute).toHaveLength(60 * 24 + 1);
     expect(r.lhReachedAt[2]).toBeGreaterThan(0);
   });
+
+  it('an always-online player reaches every Longhouse level no later than a casual one', () => {
+    // Regression: always-online used to lose to casual because it kept
+    // spending on producer upgrades instead of saving for the Longhouse.
+    const base = {
+      horizonDays: 30,
+      producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+      startStock: { wood: 300, stone: 300, food: 200, iron: 0 },
+      settleType: 'cartworkshop',
+    };
+    const always = simulatePacing(byType, params(base));
+    const casual = simulatePacing(byType, params({ ...base, profile: 'casual' }));
+    for (const [level, at] of Object.entries(casual.lhReachedAt)) {
+      expect(always.lhReachedAt[Number(level)], `LH ${level}`).toBeLessThanOrEqual(at);
+    }
+  });
 });
