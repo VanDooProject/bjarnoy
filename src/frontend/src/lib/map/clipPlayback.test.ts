@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clipFrameIndex, clipTimingOf, type ClipTiming } from './clipPlayback';
+import { advanceClipFrame, clipFrameIndex, clipTimingOf, type ClipTiming } from './clipPlayback';
 
 const loop: ClipTiming = { frameCount: 4, fps: 4, playback: 'loop', pause: 0 };
 const loopWithPause: ClipTiming = {
@@ -77,5 +77,50 @@ describe('clipTimingOf', () => {
       playback: 'pingpong',
       pause: 0.25,
     });
+  });
+});
+
+// The map's own per-hex clip player (HexMapRenderer.advanceTopAnimations)
+// ticks through advanceClipFrame. Before it did, it stepped frames at the
+// clip's fps and wrapped straight back to frame 0, never reading `pause` -
+// so a clip like the Tor shrine's lightning (8 frames at 12 fps, then an 8 s
+// hold) struck every 0.67 s on the map instead of every ~8.7 s.
+describe('advanceClipFrame', () => {
+  const lightning: ClipTiming = { frameCount: 8, fps: 12, playback: 'loop', pause: 8 };
+  const tickMs = 1000 / 60;
+
+  /** Runs a 60 fps ticker for `ms` and returns the frame shown at the end, plus every frame change seen. */
+  function play(clip: ClipTiming, ms: number, state = { playedMs: 0, frame: 0 }) {
+    const changes: number[] = [];
+    for (let t = 0; t < ms; t += tickMs) {
+      const frame = advanceClipFrame(clip, state, tickMs);
+      if (frame !== undefined) changes.push(frame);
+    }
+    return { state, changes };
+  }
+
+  it('plays the strike once, then holds its last frame for the pause', () => {
+    const { state, changes } = play(lightning, 8000);
+    expect(changes).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(state.frame).toBe(7);
+  });
+
+  it('starts the next strike only after the pause has run out', () => {
+    // one cycle = 8 frames + 8 s * 12 fps = 104 steps = 8.667 s
+    const { state, changes } = play(lightning, 8700);
+    expect(changes).toEqual([1, 2, 3, 4, 5, 6, 7, 0]);
+    expect(state.frame).toBe(0);
+  });
+
+  it('wraps straight round without a pause, as every clip did on the map before', () => {
+    const { changes } = play({ ...lightning, pause: 0 }, 1000);
+    expect(changes.slice(0, 9)).toEqual([1, 2, 3, 4, 5, 6, 7, 0, 1]);
+  });
+
+  it('only reports a frame when it changes, so the caller swaps a texture no more than once per frame', () => {
+    const state = { playedMs: 0, frame: 0 };
+    expect(advanceClipFrame(lightning, state, 10)).toBeUndefined();
+    expect(advanceClipFrame(lightning, state, 80)).toBe(1);
+    expect(advanceClipFrame(lightning, state, 1)).toBeUndefined();
   });
 });
