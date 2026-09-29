@@ -77,7 +77,6 @@ const SHORT_LABELS: Record<string, string> = {
   shrineofullr: 'Ullr',
   shrineofnjord: 'Njörd',
   archeryrange: 'Archery',
-  smithy: 'Weapons.',
 };
 
 export function shortLabel(type: string): string {

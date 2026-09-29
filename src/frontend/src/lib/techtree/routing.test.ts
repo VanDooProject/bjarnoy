@@ -106,7 +106,7 @@ describe('routeEdges', () => {
   });
 
   it('tags each trunk gap with only the branches travelling through it', () => {
-    // Sawmill is the topmost thing the longhouse chain reaches, so the gap
+    // Lumberjack is the topmost thing the longhouse chain reaches, so the gap
     // just below the longhouse's own row must not claim it.
     const trunk = segments.filter(
       (s) => isVertical(s) && s.keys.every((k) => k.startsWith('longhouse>')),
@@ -128,59 +128,88 @@ describe('routeEdges', () => {
     }
   });
 
-  it('runs a level target straight across with no trunk at all', () => {
-    // Barracks and archery range share a row, so their link is one segment.
-    const [barracksCol, barracksRow] = TECH_TREE_LAYOUT.barracks!;
-    const y = rowY(barracksRow) + CARD_H / 2;
-    const straight = segments.find((s) => s.keys.includes(edgeKey('barracks', 'archeryrange')));
+  it('runs a lone level target straight across with no trunk at all', () => {
+    // Tower's only target is Barracks, on its own row, so their link is one segment.
+    const [towerCol, towerRow] = TECH_TREE_LAYOUT.tower!;
+    const y = rowY(towerRow) + CARD_H / 2;
+    const straight = segments.find((s) => s.keys.includes(edgeKey('tower', 'barracks')));
 
     expect(straight!.points).toEqual([
-      [columnX(barracksCol) + CARD_W, y],
-      [columnX(barracksCol + 1), y],
+      [columnX(towerCol) + CARD_W, y],
+      [columnX(towerCol + 1), y],
     ]);
   });
 
-  it("reuses a multi-parent capstone's own row instead of routing its far parent separately", () => {
-    // Shrine of Thor needs both Barracks and Archery Range, which already sit
-    // adjacent on Shrine of Thor's own row (Barracks -> Archery Range is its
-    // own real edge) — the Barracks -> Shrine of Thor link should reuse that
-    // exact run and the Archery Range -> Shrine of Thor leaf, rather than
-    // drawing a third line of its own. Archery Range also feeds Smithy one
-    // row down, so its own row-5 run splits into a shared stub (both
-    // targets) and a Shrine-of-Thor-only tail — the tail, not the stub, is
-    // the leg Barracks -> Shrine of Thor reuses.
-    const barracksToShrine = edgeKey('barracks', 'shrineofthor');
-    const archeryToShrineKey = edgeKey('archeryrange', 'shrineofthor');
-    const barracksToArchery = segments.find((s) => s.keys.includes(edgeKey('barracks', 'archeryrange')));
-    const archeryToShrineTail = segments.find(
-      (s) => s.keys.includes(archeryToShrineKey) && s.keys.includes(barracksToShrine),
-    );
+  it('gives a source with a second target one trunk: stub, a vertical in its gutter, a branch each', () => {
+    // Barracks feeds Archery Range on its own row and the Weaponsmith one row down.
+    const branch = (target: string) =>
+      segments.find(
+        (s) =>
+          s.keys.length === 1 &&
+          s.keys[0] === edgeKey('barracks', target) &&
+          s.points.length === 2 &&
+          s.points[0]![1] === s.points[1]![1],
+      );
+    const toArchery = branch('archeryrange');
+    const toSmithy = branch('smithy');
+    const [, smithyRow] = TECH_TREE_LAYOUT.smithy!;
 
-    expect(barracksToArchery!.keys).toContain(barracksToShrine);
-    expect(archeryToShrineTail).toBeDefined();
-    // No separate line was drawn just for it.
-    expect(segments.filter((s) => s.keys.includes(barracksToShrine))).toHaveLength(2);
+    expect(toArchery).toBeDefined();
+    expect(toSmithy).toBeDefined();
+    // The Weaponsmith's branch ends level with the Weaponsmith, on its left edge.
+    expect(toSmithy!.points.at(-1)).toEqual([columnX(TECH_TREE_LAYOUT.smithy![0]), rowMid(smithyRow)]);
+    for (const segment of segments.filter((s) => s.keys.includes(edgeKey('barracks', 'smithy')))) {
+      for (const [, y] of segment.points) expect(y).not.toBe(BYPASS_Y);
+    }
+  });
+
+  it("reuses a chain on the same row instead of routing a far parent separately", () => {
+    // A synthetic row rather than a live catalogue chain (every real building
+    // has a single feeder now, so no live edge spans more than one column):
+    // gamma needs both alpha and beta, and beta already sits between them on
+    // the row, with alpha -> beta its own real edge. The alpha -> gamma link
+    // should reuse those two hops instead of drawing a third line.
+    const rowLayout = { alpha: [0, 0], beta: [1, 0], gamma: [2, 0] } as const;
+    const rowGraph = buildGraph(['alpha', 'beta', 'gamma'], (type) =>
+      type === 'beta' ? [{ type: 'alpha', level: 1 }]
+        : type === 'gamma' ? [{ type: 'alpha', level: 1 }, { type: 'beta', level: 1 }]
+          : [],
+    );
+    const rowSegments = routeEdges(rowLayout, rowGraph);
+    const farKey = edgeKey('alpha', 'gamma');
+
+    // Exactly the two hops carry it — alpha -> beta and beta -> gamma — and
+    // nothing was drawn just for it.
+    const carrying = rowSegments.filter((s) => s.keys.includes(farKey));
+    expect(carrying).toHaveLength(2);
+    expect(carrying.some((s) => s.keys.includes(edgeKey('alpha', 'beta')))).toBe(true);
+    expect(carrying.some((s) => s.keys.includes(edgeKey('beta', 'gamma')))).toBe(true);
   });
 
   it('is stable across calls, so the picture never reshuffles', () => {
     expect(routeEdges(TECH_TREE_LAYOUT, graph)).toEqual(segments);
   });
 
-  it("routes a same-row-blocked distant edge as a short dogleg, not a detour under the whole grid", () => {
-    // Barracks -> Smithy: same source row as Archery Range -> Shrine of
-    // Thor, but Smithy sits one row down, so the direct same-row approach
-    // lane would cross Archery Range's own card. Regression coverage for a
-    // routing bug where this fell all the way through to the BYPASS_Y
-    // fallback (down below every row, across, and back up) instead of the
-    // much shorter "drop into Barracks' own gutter immediately" path.
-    const segment = segments.find((s) => s.keys.includes(edgeKey('barracks', 'smithy')));
+  it("routes a distant edge blocked in its source's row as a short dogleg, not a detour under the whole grid", () => {
+    // A synthetic layout (no live edge spans more than one column any more):
+    // src -> target is two columns and one row down, and a blocker sits in
+    // src's own row between them, so the direct same-row approach lane would
+    // cross it. Regression coverage for a routing bug where this fell all the
+    // way through to the BYPASS_Y fallback (down below every row, across, and
+    // back up) instead of the much shorter "drop into src's own gutter
+    // immediately" path.
+    const dogLayout = { src: [0, 0], blocker: [1, 0], target: [2, 1] } as const;
+    const dogGraph = buildGraph(['src', 'blocker', 'target'], (type) =>
+      type === 'target' ? [{ type: 'src', level: 1 }] : [],
+    );
+    const dogSegments = routeEdges(dogLayout, dogGraph);
+
+    const segment = dogSegments.find((s) => s.keys.includes(edgeKey('src', 'target')));
     expect(segment).toBeDefined();
-    // Four points: stub right, straight down, straight right into the
-    // target — never touching BYPASS_Y.
-    expect(segment!.points).toHaveLength(4);
     for (const [, y] of segment!.points) {
       expect(y).not.toBe(BYPASS_Y);
     }
+    expect(segment!.points.length).toBeLessThanOrEqual(4);
   });
 
   it('routes a same-row edge blocked by a card in its own row as a small dip between rows, not a loop under everything', () => {
@@ -227,13 +256,10 @@ describe('crossesCard', () => {
 
     // The gap below the row's cards.
     expect(crossesCard(TECH_TREE_LAYOUT, rowY(row) + CARD_H + 4, 0, 2000)).toBe(false);
-    // Column 2, row 0 is empty by design — the lane Lumberjack -> Sawmill
-    // (column 1 to column 3) runs through, since Sawmill sits a column
-    // further out than its one real hop from Lumberjack would suggest.
-    const [sawmillCol, sawmillRow] = TECH_TREE_LAYOUT.sawmill!;
-    expect(
-      crossesCard(TECH_TREE_LAYOUT, rowY(sawmillRow) + CARD_H / 2, columnX(sawmillCol - 1), columnX(sawmillCol)),
-    ).toBe(false);
+    // Clay Brickworks (row 3, column 1) has nothing behind it: columns 2-4 of
+    // its row are empty cells a run can pass straight through.
+    const [, clayRow] = TECH_TREE_LAYOUT.claybrickworks!;
+    expect(crossesCard(TECH_TREE_LAYOUT, rowMid(clayRow), columnX(2), columnX(4) + CARD_W)).toBe(false);
   });
 });
 

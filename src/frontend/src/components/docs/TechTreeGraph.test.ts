@@ -28,8 +28,9 @@ describe('TechTreeGraph', () => {
     const wrapper = mountGraph();
 
     expect(card(wrapper, 'shrineoffreyja').text()).toContain('Shrine of Freyja');
-    expect(card(wrapper, 'shrineoffreyja').text()).toContain('Farm 10');
-    expect(card(wrapper, 'shrineoffreyja').text()).toContain('Pumpkin 10');
+    expect(card(wrapper, 'shrineoffreyja').text()).toContain('LH 25');
+    expect(card(wrapper, 'shrineoffreyja').text()).toContain('Crop mill 5');
+    expect(card(wrapper, 'shrineofthor').text()).toContain('Weaponsmith 5');
     wrapper.unmount();
   });
 
@@ -51,14 +52,17 @@ describe('TechTreeGraph', () => {
   it('lights prerequisites, half-lights what a building leads to, dims the rest', async () => {
     const wrapper = mountGraph();
 
-    await card(wrapper, 'archeryrange').trigger('mouseenter');
+    await card(wrapper, 'barracks').trigger('mouseenter');
 
-    // Needs these — the whole Tower -> Barracks -> Archery Range chain.
-    for (const type of ['archeryrange', 'barracks', 'tower', 'longhouse']) {
+    // Needs these — the Tower -> Barracks chain.
+    for (const type of ['barracks', 'tower', 'longhouse']) {
       expect(card(wrapper, type).classes(), type).toContain('card--full');
     }
-    // Leads to this.
-    expect(card(wrapper, 'shrineofthor').classes()).toContain('card--soft');
+    // Leads to these — the Archery Range and the Weaponsmith, and the
+    // Shrine of Thor behind it.
+    for (const type of ['archeryrange', 'smithy', 'shrineofthor']) {
+      expect(card(wrapper, type).classes(), type).toContain('card--soft');
+    }
     // Unrelated.
     expect(card(wrapper, 'quarry').classes()).toContain('card--dim');
 
@@ -73,6 +77,7 @@ describe('TechTreeGraph', () => {
     await card(wrapper, 'archeryrange').trigger('focus');
 
     expect(card(wrapper, 'barracks').classes()).toContain('card--full');
+    expect(card(wrapper, 'tower').classes()).toContain('card--full');
     wrapper.unmount();
   });
 
