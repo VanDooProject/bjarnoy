@@ -199,11 +199,16 @@ Simulator result for these numbers:
 
 ## 7. First 10 minutes (T1)
 
-- Founding stock: 600 wood / 500 stone / 400 food.
+- Founding stock: the starting storage nearly full — capacity (500 base +
+  250 from the Longhouse) less 50, so 700 wood / 700 stone / 700 food, no
+  iron.
 - Level-1 producers cost 50 / 40 / 15 and build in 3 min; the Longhouse is
   +15 / 12 / 15 per level.
 - **Onboarding quests pay resources** (Travian's task list), so the first
-  hour keeps moving:
+  hour keeps moving. They never hand out a finished building, so the
+  Longhouse 2 upgrade the tutorial asks for has to build fast (a couple of
+  minutes). The tutorial also walks the player through placing a Storage
+  House and upgrading the Longhouse:
 
   | Quest | Reward (wood / stone / food) |
   |---|---|
@@ -266,7 +271,8 @@ Catapult 250), and the unit Longhouse gates still follow the old ladder
 
 ## 9. Open questions
 
-- Fishing Hut and Fisher Hut are near-duplicates (same art, nearly the
-  same stats); merge them into one building?
+- ~~Fishing Hut and Fisher Hut~~: decided, merge them into one coastal
+  building. A lakeshore version comes with the lake work: the same building,
+  with its own art.
 - The profile parameters (online hours, share spent on troops) are
   assumptions; real telemetry should replace them once players exist.
