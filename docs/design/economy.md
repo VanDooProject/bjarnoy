@@ -100,9 +100,21 @@ has 3–8 stages per building, and each level maps onto a stage
 
 Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 
+**What caps a building's level.** Most buildings can never be a higher level
+than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
+keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
+Farm, Pumpkin Farm, Fishing Hut, Fisher Hut) are capped by **storage**
+instead: they only need their unlock LH at every level, and a level whose cost
+exceeds what the settlement can store can never be afforded, so the next level
+has to fit in storage. An **additional Storage House** can only be placed once
+one already stands at **level 10** (the first is never held back, and
+upgrading is always allowed). See §5 for why.
+
 ## 5. Unlock ladder
 
-Each building needs a Longhouse level, and at most one feeder building.
+Each building needs a Longhouse level, and at most one feeder building. The
+Longhouse level is also the level cap for everything except the resource
+producers, which storage caps instead (§4).
 Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 25), since there is no need for an unlock at every late level.
 
@@ -126,6 +138,37 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
 practice they still arrive one at a time.
+
+### Why producers are capped by storage, not the Longhouse
+
+If producers could never outlevel the Longhouse, an active player's economy
+would stall at the cap while the Longhouse (the slow, expensive upgrade)
+catches up, and a casual player who checks in twice a day would close the gap.
+Capping producers by storage lets an active player's production run ahead.
+Simulator result, production per hour (wood + stone + food) of an active
+player (awake 07–23) relative to one checking in twice a day, 3 of each
+producer:
+
+| Rule | day 7 | day 14 | day 30 |
+|---|---|---|---|
+| producers capped at the Longhouse level | 2.4× | 3.0× | 1.7× |
+| producers up to 3 levels ahead | 2.8× | 3.3× | 2.1× |
+| producers limited only by storage | 2.7× | 3.4× | 3.8× |
+
+With the Longhouse cap the casual player catches up once the active one
+stalls at the cap; without it the active player's lead keeps growing.
+
+Storage stays a real brake because a higher producer level costs more than
+base capacity plus the Longhouse can hold, so storage has to grow with it.
+Storage Houses themselves keep the Longhouse cap, and an additional one needs
+one at level 10, so storage cannot be stacked cheaply in place of upgrading.
+
+**Design principle.** When an active player's first settlement slows down (the
+Longhouse and storage become the limit), the answer is a second settlement,
+not waiting: the renown threshold and Town Square feasts (§6) are tuned so an
+optimising player can settle at about the point their first settlement's
+growth flattens (~day 5), which gives them a new, fast-growing settlement to
+play.
 
 ### Territory and towers
 
@@ -196,6 +239,9 @@ Simulator result for these numbers:
 |---|---|---|---|---|---|
 | pro | 07–23 h | 20% of income | yes | ~4d 20h | ~29 d |
 | average | 3 check-ins/day | 45% of income | no | ~13d 9h | ~2 months |
+
+The pacing lab will model a second settlement, so the "settle when the first
+one flattens" check in §5 can be verified against these numbers.
 
 ## 7. First 10 minutes (T1)
 
