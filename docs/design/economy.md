@@ -268,7 +268,7 @@ one flattens" check in §5 can be verified against these numbers.
 Simulated: the first 25 minutes are continuous building (9 producers, then
 LH 2 at about 13 min), LH 3 at about 1h45.
 
-## 8. Iron: lake ore (later feature)
+## 8. Iron: lake ore
 
 Viking-age Norse iron did not come from mountains. It came from ore that
 forms by itself where iron-rich fresh groundwater meets air:
@@ -315,7 +315,131 @@ with them so the levels match: today every unit costs iron (Thrall 15 …
 Catapult 250), and the unit Longhouse gates still follow the old ladder
 (the Spearman at LH 1, while the Barracks now opens at LH 5).
 
-## 9. Open questions
+## 9. Pacing model (the Economy lab)
+
+The admin **Economy lab** (`/admin/economy`) simulates one settlement minute
+by minute against the live building catalogue. It is how every number in
+this document is checked.
+
+### Player profiles
+
+| Profile | Online |
+|---|---|
+| active | awake 07–23, acting whenever a build slot is free (8 h sleep) |
+| 4 check-ins | four short sessions a day (e.g. 08, 12, 17, 21) |
+| 2 check-ins | two short sessions a day (08, 20) |
+
+A check-in is a **short session** (about 10 minutes), not a whole hour
+online. The lab still models check-ins as whole hours, which flatters the
+check-in profiles; minute-level sessions are on the roadmap.
+
+### What the simulator showed
+
+- **Measure economic strength as production per hour on a given day**, not
+  as "days until Longhouse X". When producers may run ahead of the Longhouse,
+  a player who invests in them levels the Longhouse later while being
+  stronger.
+- **Without combat, the active player's lead comes from the build queue.**
+  A 2-check-ins player fills the slots, logs off, and the slots sit idle
+  until the next visit. That gap (about 2.1× to Longhouse 20) barely moves
+  with the economy knobs:
+
+  | Change | Gap at Longhouse 20 (active vs 2 check-ins) |
+  |---|---|
+  | today | 2.15× |
+  | Longhouse cost ×1.5 | 1.98× |
+  | Longhouse cost ×2 | 1.79× |
+  | storage houses hold 30–50% as much | 1.98–2.08× |
+
+  A pricier Longhouse **shrinks** the gap: it adds waiting for everyone, and
+  waiting costs a casual player nothing. Storage pressure hardly matters
+  either, because a casual player runs out of queue before storage overflows.
+- **The Longhouse cap on producers let casual players catch up.** An active
+  player stalled at the cap. Capping producers by storage instead keeps the
+  lead growing (§5, "Why producers are capped by storage").
+
+### Build times
+
+Short build times do two things at once: the first hour is a run of real
+moves instead of waiting, and a player who checks in often can chain builds
+while an infrequent player's slots sit idle. The cost is that casual players
+fall further behind and everyone reaches the caps sooner. Hence the growing
+curve (×1.33 per level): short early for the entry, long late so a casual
+player can keep up.
+
+Towers follow the same logic (8 min at level 1, about 1 h 45 at level 10).
+The active edge there is bounded by the tower count, which grows with the
+Longhouse (§5), so the edge is getting each tower sooner, not getting more
+of them. The premium build queue works the other way: it lets a casual
+player queue past full slots, which gives back some of the idle time.
+
+## 10. Raiding, wildlife and snowballing
+
+### Where an active player's early loot comes from
+
+In Travian the early production rush comes from farming: inactive players,
+oases and NPC villages. Bjarnoy's version:
+
+- **Wildlife on empty islands.** Unclaimed islands are guarded by wildlife
+  (wolves, bears; a seal colony on the coast). While it's there, no tower
+  can go up and nobody can settle on that island ("wolves eat the
+  builders"). Clearing it gives loot. **Exploring and clearing new islands
+  must pay much more than farming smaller players.**
+- **Beast dens** are the oasis equivalent: raidable spots whose loot grows
+  back over time, and which can later be annexed for a production bonus.
+- **Merchant ships** sail NPC routes between islands and can be raided at
+  sea.
+- **Inactive players** become raidable, but only after several days of
+  inactivity (7 by default).
+- **Late game:** the Jötunn outposts and the giant fortress.
+
+The NPC side hooks into the existing NPC settlement design (issue #125:
+peaceful, hostile and trader villages). The beginner-protection design
+(`beginner-protection.md` §4) already points a new player's first raids at
+peaceful NPC villages.
+
+### Keeping snowballing in check
+
+- **Size-gap protection with revenge.** A player can't attack a settlement
+  whose Longhouse is more than 5 levels below theirs, unless that settlement
+  attacked them in the last 48 hours. Inactive players (§ above) are exempt.
+- **Hideout.** Storage buildings hide a share of the stock from plunder
+  (10% by default, growing with the storage house level) — Travian's cranny,
+  built into the storage houses rather than a separate building.
+- When an active player's first settlement slows down, the answer is a
+  **second settlement**, not attacking smaller neighbours (§6).
+
+The defaults above (5 levels, 48 h, 7 days, 10%) are starting values to
+tune, not settled numbers.
+
+## 11. Roadmap
+
+Open work, in rough order. Each is its own PR.
+
+1. **Economy lab:** the player profiles above with short (minute-level)
+   check-ins and an editable schedule; a what-if panel (growth factors,
+   level-1 values, founding stock) shown next to the live catalogue; a
+   strategy setting for how far producers run ahead of the Longhouse; and a
+   second settlement, to check when each profile can settle against when its
+   first settlement's growth flattens.
+2. **Feasts and renown** (§6): Town Square feasts, and the renown threshold
+   for the 2nd settlement at 55 000.
+3. **Tutorial** (§7): placing a Storage House and upgrading the Longhouse,
+   resource rewards for the onboarding steps, and a fast Longhouse 2 (about
+   2 minutes).
+4. **Merge Fishing Hut and Fisher Hut** into one coastal building; stored
+   Fisher Huts are converted, not deleted.
+5. **New buildings:** the Reindeer Herder (the default food building; Farm and
+   Pumpkin Farm move to LH 4 as one card by soil), the Odin Statue (Ravens and
+   Wisdom, §5) and the Palisade (§5).
+6. **Lakes and iron** (§8, `lakes.md`): the lake tile, the lake-ore
+   building, the Hammerschmiede, and a lakeshore version of the fisher.
+7. **Units and iron:** every unit except the Thrall costs iron, and the unit
+   unlock levels follow the building ladder, matched to the iron sources.
+8. **Raiding and snowballing** (§10): wildlife on empty islands, beast dens,
+   merchant ships, size-gap protection with revenge, and the hideout.
+
+## 12. Open questions
 
 - ~~Fishing Hut and Fisher Hut~~: decided, merge them into one coastal
   building. A lakeshore version comes with the lake work: the same building,
