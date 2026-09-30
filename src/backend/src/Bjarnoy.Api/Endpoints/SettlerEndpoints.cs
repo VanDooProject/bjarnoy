@@ -32,7 +32,8 @@ public static class SettlerEndpoints
         worlds.MapGet("/{worldId:guid}/renown", GetOwnRenown)
             .WithName("GetOwnRenown")
             .WithSummary("The caller's own renown in this world, accrued as of now (issue #55).")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/settlements/mine", ListOwnSettlements)
             .WithName("ListOwnSettlementsInWorld")

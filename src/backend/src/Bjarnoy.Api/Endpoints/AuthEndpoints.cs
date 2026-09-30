@@ -23,7 +23,8 @@ public static class AuthEndpoints
 
         auth.MapPost("/register", Register)
             .WithName("Register")
-            .WithSummary("Creates a player account and logs it in.");
+            .WithSummary("Creates a player account and logs it in.")
+            .WithConcurrencyRetry();
 
         auth.MapPost("/login", Login)
             .WithName("Login")

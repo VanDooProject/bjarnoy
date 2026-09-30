@@ -36,7 +36,8 @@ public static class SettlementEndpoints
             // body), so there is nothing to own yet at this point — see
             // QueueBuild/TrainUnits below for where that filter applies.
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
@@ -53,54 +54,62 @@ public static class SettlementEndpoints
             // Full read (stock/rates/queues/garrison/runes) — owner only. A
             // rival is offered GetView below instead, fog-gated and without
             // any of that.
-            .RequireSettlementOwner();
+            .RequireSettlementOwner()
+            .WithConcurrencyRetry();
 
         settlements.MapGet("/{settlementId:guid}/view", GetView)
             .WithName("GetSettlementView")
             .WithSummary("A fog-gated read of any settlement whose ground the caller has explored.")
-            .RequireCallerRealm();
+            .RequireCallerRealm()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
             .WithName("QueueBuild")
             .WithSummary("Queues a building, charging its cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/builds/{orderId:guid}/cancel", CancelBuild)
             .WithName("CancelBuild")
             .WithSummary("Cancels a still-queued build order, refunding its cost.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/feast", HoldFeast)
             .WithName("HoldFeast")
             .WithSummary("Starts a Town Square feast, charging its cost immediately; it grants renown when it ends.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
             .WithName("SlotRune")
             .WithSummary("Slots an unslotted rune into the shrine standing on a hex.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/unslot", UnslotRune)
             .WithName("UnslotRune")
             .WithSummary("Returns a slotted rune to storage.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         app.MapGet("/api/v1/buildings", Catalogue)
             .WithApiVersionSet(versionSet)
