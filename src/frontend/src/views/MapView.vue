@@ -833,7 +833,7 @@ const rootActions = computed<RingAction[]>(() => {
     return actions;
   }
   if (isMineTile.value) {
-    const buildableSea = tile.terrain !== 'sea' || tile.isCoastalWater;
+    const buildableSea = (tile.terrain !== 'sea' && tile.terrain !== 'lake') || tile.isCoastalWater;
     // A giant hex is never buildable, claimed or not — its own art fully
     // occupies the ground there (mirrors WorldModel.placeBuilding's own
     // `tile.giant` refusal). Checked ahead of the open-water hint since a

@@ -169,5 +169,5 @@ export function isWaterOnlyBuilding(type: string | undefined): boolean {
  * water itself is never offered as an empty build target).
  */
 export function tileIsBuildable(tile: { terrain: string; buildingType?: string }): boolean {
-  return tile.terrain !== 'sea' || isWaterOnlyBuilding(tile.buildingType);
+  return (tile.terrain !== 'sea' && tile.terrain !== 'lake') || isWaterOnlyBuilding(tile.buildingType);
 }

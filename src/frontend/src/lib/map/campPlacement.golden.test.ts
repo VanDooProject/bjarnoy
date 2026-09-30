@@ -19,6 +19,7 @@ interface Scenario {
   tiles: [number, number, Terrain][];
   rivers: { q: number; r: number; shape: RiverTileShape; inDirections: TileOrientation[]; outDirection: TileOrientation | null; width: RiverWidth }[];
   giants: [number, number][];
+  plainBog: [number, number][];
   camps: { q: number; r: number; family: string; level: number; orientation: TileOrientation | null }[];
 }
 
@@ -32,7 +33,8 @@ describe('camp-placement golden fixture (wildlife camp parity)', () => {
     const rivers: RiverTile[] = scenario.rivers.map((r) => ({ ...r }));
     const giants: AxialCoord[] = scenario.giants.map(([q, r]) => ({ q, r }));
 
-    const actual = placeCamps(tiles, terrainOf, rivers, giants, scenario.worldSeed, scenario.islandIndex, scenario.wasted);
+    const plainBog = new Set(scenario.plainBog.map(([q, r]) => coordKey({ q, r })));
+    const actual = placeCamps(tiles, terrainOf, rivers, giants, scenario.worldSeed, scenario.islandIndex, scenario.wasted, plainBog);
 
     expect(actual.map((p) => ({ q: p.coord.q, r: p.coord.r, family: p.family, level: p.level, orientation: p.orientation }))).toEqual(
       scenario.camps,
@@ -46,5 +48,14 @@ describe('camp-placement golden fixture (wildlife camp parity)', () => {
     const wasted = fixture.scenarios.filter((s) => s.wasted);
     expect(wasted.length).toBeGreaterThan(0);
     for (const s of wasted) expect(s.camps.every((c) => c.family === 'fenrirbrood')).toBe(true);
+  });
+
+  it('places bog camps, on plain bog moss only', () => {
+    const scenario = fixture.scenarios.find((s) => s.name === 'green_island_bog_camps')!;
+    const bogFamilies = new Set(['moosemire', 'beaverlodge', 'cranedance']);
+    const bogCamps = scenario.camps.filter((c) => bogFamilies.has(c.family));
+    expect(bogCamps.length).toBeGreaterThanOrEqual(2);
+    const plain = new Set(scenario.plainBog.map(([q, r]) => coordKey({ q, r })));
+    for (const camp of bogCamps) expect(plain.has(coordKey({ q: camp.q, r: camp.r }))).toBe(true);
   });
 });

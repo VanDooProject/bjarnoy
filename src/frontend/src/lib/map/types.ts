@@ -322,6 +322,12 @@ export interface Tile {
   orientation?: TileOrientation;
   /** Which numbered variant of this terrain's tile art to use. */
   variant?: number;
+  /**
+   * This hex is part of an island's bogland (moss, lake water, shore, creek, mouth or spring) — see `BogTile`. Its
+   * `terrain` is `bog` (`lake` for the water) and the art family follows `kind` (`textures.ts`'s `bogArtFor`). Set by
+   * `WorldModel.setBogTiles` (live mode) / demo-mode generation, never derived from the seed hex by hex.
+   */
+  bog?: BogTile;
   /** Settlement id that currently claims this hex, if any (Settlers II style borders). */
   ownerId?: string;
   buildingType?:

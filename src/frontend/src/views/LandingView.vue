@@ -644,7 +644,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     // back into a real one — the panel's own "Start a new realm instead"
     // button is the only way to fall through to founding here.
     if (showReturningLoginGate.value) return;
-    if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
+    if (tile.terrain === 'sea' || tile.terrain === 'lake' || founding.value || joinBlocked.value) return;
     // Live mode only founds on an exact, unclaimed start position (see
     // `startPositionAt`, issue #96) — a click elsewhere used to silently
     // found on the nearest one instead; that's gone (issue #96 covers why),
@@ -675,7 +675,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // full settlement view's job once onboarding hands off to it), so any
   // other click (the longhouse, a rival's tile, open water) just closes
   // whatever ring is open rather than opening some other UI for it.
-  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea') {
+  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea' && tile.terrain !== 'lake') {
     if (!withinBuildableRange(coord)) {
       showInvalidClickMessage(t('landing.invalidClick.beyondClaim'));
       closeRing();
