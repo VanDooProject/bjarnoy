@@ -1486,3 +1486,74 @@ describe('WorldModel frozen isles flag', () => {
     expect(model.isFrozenEnabled()).toBe(false);
   });
 });
+
+describe('WorldModel bogland', () => {
+  const DEMO_SEED = 20260824;
+
+  it('lays a bog over the seed terrain: bog moss is land, a lake is neither land nor sea, and tiles seen earlier follow', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    const moss = near;
+    const lake = neighbors(near)[0]!;
+    // Materialise both before the overlay lands: a tile already cached must be rewritten, not left on its seed terrain.
+    const before = model.getTile(moss.q, moss.r);
+    expect(before.bog).toBeUndefined();
+    model.getTile(lake.q, lake.r);
+
+    model.setBogTiles([
+      { q: moss.q, r: moss.r, kind: 'inlet', inDirections: [], outDirection: null, waterEdges: ['E'] },
+      { q: lake.q, r: lake.r, kind: 'lake', inDirections: [], outDirection: null, waterEdges: [] },
+    ]);
+
+    expect(model.terrainOf(moss.q, moss.r)).toBe('bog');
+    expect(model.isLand(moss.q, moss.r)).toBe(true);
+    expect(model.terrainOf(lake.q, lake.r)).toBe('lake');
+    expect(model.isLand(lake.q, lake.r)).toBe(false);
+    expect(model.getTile(moss.q, moss.r).bog?.kind).toBe('inlet');
+    expect(model.getTile(lake.q, lake.r)).toMatchObject({ terrain: 'lake', isCoastalWater: false });
+    expect(model.getBogTile(lake.q, lake.r)?.kind).toBe('lake');
+    expect(model.listBogTiles()).toHaveLength(2);
+
+    // A new call replaces the overlay: the hexes go back to what the seed says.
+    model.setBogTiles([]);
+    expect(model.getBogTile(lake.q, lake.r)).toBeUndefined();
+    expect(model.terrainOf(moss.q, moss.r)).not.toBe('bog');
+  });
+
+  it('refuses to build on a lake', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+    const lake = neighbors(at)[0]!;
+    model.setBogTiles([{ q: lake.q, r: lake.r, kind: 'lake', inDirections: [], outDirection: null, waterEdges: [] }]);
+    expect(model.placeBuilding(settlement.id, lake, 'farm')).toBe(false);
+    expect(model.placeBuilding(settlement.id, lake, 'fishinghut')).toBe(false);
+
+    // The same hex is fine once it is land again: it was the lake that refused, not the claim or the terrain.
+    model.setBogTiles([]);
+    expect(model.placeBuilding(settlement.id, lake, 'farm')).toBe(true);
+  });
+
+  it('generates the home island’s bog with its rivers and keeps giants, camps and the landfall off it', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+
+    const bog = model.listBogTiles();
+    expect(bog.length).toBeGreaterThan(50);
+    expect(bog.some((t) => t.kind === 'lake')).toBe(true);
+    expect(bog.some((t) => t.kind === 'mouth')).toBe(true);
+
+    for (const tile of bog) {
+      const t = model.getTile(tile.q, tile.r);
+      expect(t.terrain).toBe(tile.kind === 'lake' ? 'lake' : 'bog');
+      expect(t.bog).toBe(tile);
+      expect(t.giant, `giant on bog hex ${tile.q},${tile.r}`).toBeUndefined();
+      if (t.camp) expect(tile.kind).toBe('bog');
+    }
+
+    const landfall = model.findLandfall(near)!;
+    expect(model.getBogTile(landfall.q, landfall.r)).toBeUndefined();
+    expect(model.getTile(landfall.q, landfall.r).terrain).toBe('grass');
+  });
+});

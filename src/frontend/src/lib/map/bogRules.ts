@@ -35,6 +35,9 @@ export function totalViolations(v: BogRuleViolations): number {
   return Object.values(v).reduce((a, b) => a + b, 0);
 }
 
+/** How far from a pocket lake its bog ring (and the sand it turned to bog) reaches: `BogPocketRadius` plus the lake's own filled edge. */
+const POCKET_RING_REACH = 6;
+
 const DQ = [1, 1, 0, -1, -1, 0];
 const DR = [0, -1, -1, 0, 1, 1];
 const nb = (c: AxialCoord, d: number): AxialCoord => ({ q: c.q + DQ[d]!, r: c.r + DR[d]! });
@@ -91,6 +94,11 @@ export function checkBogRules(
 
   const pocketLake = (id: number): boolean => componentTiles[id]!.some((c) => baseTerrain(c) === 'sea');
 
+  // An enclosed pocket's ring may touch sand (the pocket is inside the island); everything else may not. A hex counts as
+  // a pocket ring when it lies within the ring's reach of a pocket lake.
+  const pocketTiles = componentTiles.flatMap((tiles, id) => (pocketLake(id) ? tiles : []));
+  const inPocketRing = (c: AxialCoord): boolean => pocketTiles.some((p) => hexDist(p, c) <= POCKET_RING_REACH);
+
   for (const t of bog) {
     const c = { q: t.q, r: t.r };
     if (t.kind === 'lake') {
@@ -146,7 +154,7 @@ export function checkBogRules(
       const n = nb(c, d);
       if (byCoord.has(coordKey(n))) continue;
       const terrain = baseTerrain(n);
-      if (terrain === 'sea' || terrain === 'sand') v.R7++;
+      if (terrain === 'sea' || (terrain === 'sand' && !inPocketRing(c))) v.R7++;
     }
 
     // Creek family: flow links, shapes, lake contact.

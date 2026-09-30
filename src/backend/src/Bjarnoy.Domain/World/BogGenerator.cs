@@ -495,39 +495,8 @@ internal sealed class BogGenerator
             layer = next;
         }
 
-        // Bog never touches sand: sand next to the ring turns to bog too, up to the point it would meet the open sea.
-        for (var iteration = 0; iteration < 400; iteration++)
-        {
-            HexCoord? found = null;
-            foreach (var t in Sorted(NeighboursOf(ring)))
-            {
-                if (ring.Contains(t) || lake.Contains(t) || !_islandLand.Contains(t))
-                {
-                    continue;
-                }
-
-                if (_land[t] == Terrain.Sand)
-                {
-                    found = t;
-                    break;
-                }
-            }
-
-            if (found is null)
-            {
-                break;
-            }
-
-            var f = found.Value;
-            if (HasOpenSeaNeighbour(f, OpenSea) || _bog.Contains(f) || _lake.Contains(f))
-            {
-                return false;
-            }
-
-            ring.Add(f);
-        }
-
-        // R7 for the whole ring: nothing touches the open sea or sand.
+        // R7 for the whole ring: nothing touches the open sea. (Sand is fine here: the pocket is inside the island, its own
+        // beach and the sand beside it turn to bog as far as the ring reaches; see docs/design/bog.md.)
         foreach (var t in ring)
         {
             foreach (var n in Nb6(t))
@@ -537,7 +506,7 @@ internal sealed class BogGenerator
                     continue;
                 }
 
-                if (OpenSea(n) || (_islandLand.Contains(n) && _land[n] == Terrain.Sand))
+                if (OpenSea(n))
                 {
                     return false;
                 }

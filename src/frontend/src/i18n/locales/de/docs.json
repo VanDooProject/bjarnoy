@@ -315,7 +315,7 @@
   "wildlifeCamps": {
     "title": "Wildtierlager",
     "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber in der Nähe eines bewachten Lagers wird kein Turm gebaut. Auf einer großen Insel räumst du die Lager, die im Weg sind, und baust dort, wo das Land frei ist.",
-    "status": "Lager erscheinen jetzt auf der Karte, bewacht, auf dem Untergrund, zu dem sie gehören. Räumen, Beute und die Turmregel unten kommen noch; die Moorlager folgen mit den Moorlanden.",
+    "status": "Lager erscheinen jetzt auf der Karte, bewacht, auf dem Untergrund, zu dem sie gehören. Räumen, Beute und die Turmregel unten kommen noch; die Moorlager (Elchmoor, Biberburg, Kranichtanz) stehen auf freiem Moosboden.",
     "rules": {
       "heading": "Wie ein Lager funktioniert",
       "towers": "Ein bewachtes Lager hält das Land um sich herum: In seiner Reichweite kann kein Turm gebaut werden (die Wölfe fressen die Bauleute). Außerhalb dieser Reichweite kann auf der Insel gebaut werden.",
@@ -389,7 +389,7 @@
   "bogLands": {
     "title": "Moorland",
     "intro": "Nasser Moosboden (altnordisch mýrr), durchzogen von trägen Bächen und dunklen Seen. Rostfarbene Quellen zeigen das Raseneisenerz, das hier gegraben wird, und an den Seeufern wird Lehm gestochen. Moore gehören zu den lebendigen Landen und grenzen an einer Feldkante an Gras.",
-    "status": "Demnächst: Die Grafik für das Moor-Set ist fertig; Welten erzeugen noch keine Moore.",
+    "status": "Moore gibt es jetzt in Welten: einen See mit einem Fluss, der hindurchfließt, auf den meisten großen Inseln, und einen See mit Moorring dort, wo eine Insel eine Meeresbucht umschließt. Die Moorgebäude (Raseneisenerz-Grube, Lehmziegelei auf Moor und Seefischerhütte) kommen noch.",
     "looks": "Aussehen",
     "camera": "Richtung",
     "stage": "Stufe",
@@ -471,7 +471,9 @@
       "creeks": "Bäche verlaufen gerade oder biegen um 120° ab und enden in einer Quelle oder einer Seemündung.",
       "mouth": "Ein Bach trifft einen See nur an einer Mündung.",
       "weir": "Die Fischreuse gibt es nur in der Nähe einer Seefischerhütte.",
-      "landing": "Jeder Landeplatz, der einem neuen Spieler angeboten wird, hat Moor in Reichweite, denn Lehmziegelei und Raseneisenerz-Grube brauchen es beide."
+      "landing": "Jeder Landeplatz, der einem neuen Spieler angeboten wird, hat Moor in Reichweite, denn Lehmziegelei und Raseneisenerz-Grube brauchen es beide.",
+      "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal fließt ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
+      "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Ring aus Moor, und die Flüsse in der Nähe münden in ihn."
     }
   }
 }

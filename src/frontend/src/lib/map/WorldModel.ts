@@ -893,7 +893,7 @@ export class WorldModel {
 
   /** Everything an island's picture is made of: land and the bog lakes among it (not the sea). */
   private isLandOrLake(q: number, r: number): boolean {
-    return this.terrainOf(q, r) !== 'sea';
+    return this.isLand(q, r) || this.terrainOf(q, r) === 'lake';
   }
 
   /** Land: everything that is neither the sea nor a bog lake (a lake is water, but not the sea). */

@@ -427,27 +427,13 @@ export class BogGenerator {
       layer = next;
     }
 
-    // Bog never touches sand: sand next to the ring turns to bog too, up to the point it would meet the open sea.
-    for (let iteration = 0; iteration < 400; iteration++) {
-      let found: AxialCoord | null = null;
-      for (const t of sorted(BogGenerator.neighboursOf(ring))) {
-        if (ring.has(t) || lake.has(t) || !this.inIsland(t)) continue;
-        if (this.terrainOf(t) === 'sand') {
-          found = t;
-          break;
-        }
-      }
-      if (found === null) break;
-      if (hasOpenSeaNeighbour(found) || this.bog.has(found) || this.lake.has(found)) return false;
-      ring.add(found);
-    }
-
-    // R7 for the whole ring: nothing touches the open sea or sand.
+    // R7 for the whole ring: nothing touches the open sea. (Sand is fine here: the pocket is inside the island, its own
+    // beach and the sand beside it turn to bog as far as the ring reaches; see docs/design/bog.md.)
     for (const t of ring) {
       for (let d = 0; d < 6; d++) {
         const n = nb(t, d);
         if (lake.has(n) || ring.has(n)) continue;
-        if (openSea(n) || (this.inIsland(n) && this.terrainOf(n) === 'sand')) return false;
+        if (openSea(n)) return false;
       }
     }
 

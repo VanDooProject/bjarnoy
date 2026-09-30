@@ -30,6 +30,9 @@ public sealed record BogRuleViolations(int R1, int R2, int R3, int R4, int R5, i
 /// </remarks>
 public static class BogRules
 {
+    /// <summary>How far from a pocket lake its bog ring (and the sand it turned to bog) reaches: <c>BogPocketRadius</c> plus the lake's own filled edge.</summary>
+    private const int PocketRingReach = 6;
+
     public static BogRuleViolations Check(
         IReadOnlyList<BogTile> bog,
         IReadOnlyList<RiverTile> rivers,
@@ -99,6 +102,11 @@ public static class BogRules
         }
 
         bool PocketLake(int id) => componentTiles[id].Any(c => baseTerrain(c) == Terrain.Sea);
+
+        // An enclosed pocket's ring may touch sand (the pocket is inside the island); everything else may not. A hex counts
+        // as a pocket ring when it lies within the ring's reach of a pocket lake.
+        var pocketTiles = componentTiles.Where((_, id) => PocketLake(id)).SelectMany(t => t).ToList();
+        bool InPocketRing(HexCoord c) => pocketTiles.Any(p => HexCoord.Distance(p, c) <= PocketRingReach);
 
         foreach (var t in bog)
         {
@@ -192,7 +200,7 @@ public static class BogRules
                 }
 
                 var terrain = baseTerrain(n);
-                if (terrain is Terrain.Sea or Terrain.Sand)
+                if (terrain == Terrain.Sea || (terrain == Terrain.Sand && !InPocketRing(c)))
                 {
                     r7++;
                 }

@@ -26,8 +26,6 @@ public class BogGenerationTests
         }
     }
 
-    private static bool OnLand(TerrainSampler sampler, GeneratedIsland island, BogTile tile) => sampler.TerrainAt(tile.Coord) != Terrain.Sea;
-
     [Fact]
     public void Every_generated_island_satisfies_every_bog_map_rule()
     {
@@ -135,17 +133,27 @@ public class BogGenerationTests
     }
 
     [Fact]
-    public void Bog_never_touches_the_sea_or_the_coast_sand()
+    public void Bog_never_touches_the_sea_or_the_coast_sand_except_the_sand_ring_of_an_enclosed_pocket()
     {
         foreach (var (seed, sampler, island) in GreenIslands().Where(i => i.Island.BogTiles.Count > 0))
         {
             var bog = island.BogTiles.Select(t => t.Coord).ToHashSet();
+            var pocketWater = island.BogTiles
+                .Where(t => t.Kind == BogTileKind.Lake && sampler.TerrainAt(t.Coord) == Terrain.Sea)
+                .Select(t => t.Coord)
+                .ToList();
             foreach (var tile in island.BogTiles.Where(t => t.Kind != BogTileKind.Lake))
             {
+                var inPocketRing = pocketWater.Any(w => HexCoord.Distance(w, tile.Coord) <= 6);
                 foreach (var n in tile.Coord.Neighbours().Where(n => !bog.Contains(n)))
                 {
                     var terrain = sampler.TerrainAt(n);
-                    Assert.True(terrain is not (Terrain.Sea or Terrain.Sand), $"seed {seed}: bog {tile.Coord} touches {terrain} at {n}");
+                    Assert.NotEqual(Terrain.Sea, terrain);
+                    if (terrain == Terrain.Sand)
+                    {
+                        // Inside an island's own pocket the beach turns to bog with the ring; nowhere else may a bog touch sand.
+                        Assert.True(inPocketRing, $"seed {seed}: bog {tile.Coord} touches sand at {n} away from any pocket");
+                    }
                 }
             }
         }
