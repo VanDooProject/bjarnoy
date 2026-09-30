@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import TopBar from '../components/hud/TopBar.vue';
@@ -8,6 +8,7 @@ import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
+import { CAMP_FAMILIES, type CampGround, type CampStrength } from '../lib/map/campPlacement';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -18,29 +19,45 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // that state is read off the showcase atlas rather than typed out here — a
 // re-rated camp picks up its new rotations with the next art drop.
 
-type Ground = 'grass' | 'river' | 'sand' | 'forest' | 'mountain' | 'wasteland' | 'bog';
-type CampId =
-  | 'wolfden'
-  | 'bearrapids'
-  | 'sealhaulout'
-  | 'boarwallow'
-  | 'eagleeyrie'
-  | 'fenrirbrood'
-  | 'moosemire'
-  | 'beaverlodge'
-  | 'cranedance';
+// Which camps exist, their ground and whether they are strong or weak come
+// from the game's own family table (`CAMP_FAMILIES`, the TS mirror of
+// `CampFamilies.All`), so the badges and filters here always say what world
+// generation actually places.
+type Ground = CampGround;
+type CampId = string;
+interface CampEntry {
+  id: CampId;
+  ground: Ground;
+  strength: CampStrength;
+}
 
-const CAMPS: { id: CampId; ground: Ground }[] = [
-  { id: 'wolfden', ground: 'grass' },
-  { id: 'bearrapids', ground: 'river' },
-  { id: 'sealhaulout', ground: 'sand' },
-  { id: 'boarwallow', ground: 'forest' },
-  { id: 'eagleeyrie', ground: 'mountain' },
-  { id: 'fenrirbrood', ground: 'wasteland' },
-  { id: 'moosemire', ground: 'bog' },
-  { id: 'beaverlodge', ground: 'bog' },
-  { id: 'cranedance', ground: 'bog' },
+// Camps whose art is drawn but which the family table does not list yet
+// (3D_assets hextile130-132, the weak deer, hare and otter camps). Each one
+// only gets a card once its art is in the atlas, and the family table wins
+// as soon as it lists the family.
+const UPCOMING: CampEntry[] = [
+  { id: 'deerglade', ground: 'forest', strength: 'weak' },
+  { id: 'harewarren', ground: 'grass', strength: 'weak' },
+  { id: 'otterslide', ground: 'riverStraight', strength: 'weak' },
 ];
+
+const CAMPS: CampEntry[] = [
+  ...CAMP_FAMILIES.map((f) => ({ id: f.family, ground: f.ground, strength: f.strength })),
+  ...UPCOMING.filter((u) => !CAMP_FAMILIES.some((f) => f.family === u.id)),
+].filter((c) => TILE_ORIENTATIONS.some((cam) => frameFor(c.id, cam, false)));
+
+const STRENGTHS: CampStrength[] = ['strong', 'weak'];
+// Grounds in the order the family table first mentions them, only those with a camp on the page.
+const GROUNDS: Ground[] = [...new Set(CAMPS.map((c) => c.ground))];
+const strengthFilter = ref<CampStrength | 'all'>('all');
+const groundFilter = ref<Ground | 'all'>('all');
+const shownCamps = computed(() =>
+  CAMPS.filter(
+    (c) =>
+      (strengthFilter.value === 'all' || c.strength === strengthFilter.value) &&
+      (groundFilter.value === 'all' || c.ground === groundFilter.value),
+  ),
+);
 
 const BOX_H = 238;
 function fit(frame: AtlasFrameRect | undefined, boxHeight: number): { width: string } | undefined {
@@ -114,10 +131,61 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
       <section id="camps">
         <h2>{{ $t('docs.wildlifeCamps.camps.heading') }}</h2>
         <p>{{ $t('docs.wildlifeCamps.camps.body') }}</p>
+        <p>{{ $t('docs.wildlifeCamps.strength.help') }}</p>
+        <div class="filters">
+          <div class="pills" data-testid="strength-filter">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.strength.label') }}</span>
+            <button
+              type="button"
+              class="pill"
+              :class="{ active: strengthFilter === 'all' }"
+              @click="strengthFilter = 'all'"
+            >
+              {{ $t('docs.wildlifeCamps.filters.all') }}
+            </button>
+            <button
+              v-for="strength in STRENGTHS"
+              :key="strength"
+              type="button"
+              class="pill"
+              :class="{ active: strengthFilter === strength }"
+              @click="strengthFilter = strength"
+            >
+              {{ t(`docs.wildlifeCamps.strength.${strength}`) }}
+            </button>
+          </div>
+          <div class="pills" data-testid="ground-filter">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.filters.ground') }}</span>
+            <button
+              type="button"
+              class="pill"
+              :class="{ active: groundFilter === 'all' }"
+              @click="groundFilter = 'all'"
+            >
+              {{ $t('docs.wildlifeCamps.filters.all') }}
+            </button>
+            <button
+              v-for="ground in GROUNDS"
+              :key="ground"
+              type="button"
+              class="pill"
+              :class="{ active: groundFilter === ground }"
+              @click="groundFilter = ground"
+            >
+              {{ t(`docs.wildlifeCamps.grounds.${ground}`) }}
+            </button>
+          </div>
+        </div>
+        <p v-if="shownCamps.length === 0" class="empty">{{ $t('docs.wildlifeCamps.filters.none') }}</p>
         <div class="cards">
-          <div v-for="camp in CAMPS" :id="`camp-${camp.id}`" :key="camp.id" class="card">
+          <div v-for="camp in shownCamps" :id="`camp-${camp.id}`" :key="camp.id" class="card">
             <h3>{{ t(`docs.wildlifeCamps.list.${camp.id}.name`) }}</h3>
-            <span class="ground">{{ t(`docs.wildlifeCamps.grounds.${camp.ground}`) }}</span>
+            <div class="tags">
+              <span class="ground">{{ t(`docs.wildlifeCamps.grounds.${camp.ground}`) }}</span>
+              <span class="strength" :class="camp.strength" :data-strength="camp.strength">
+                {{ t(`docs.wildlifeCamps.strength.${camp.strength}`) }}
+              </span>
+            </div>
             <div class="art-box">
               <AtlasSprite
                 v-if="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)"
@@ -232,9 +300,35 @@ h2 {
   font-size: 13px;
   line-height: 1.5;
 }
+.filters {
+  margin: 12px 0 4px;
+}
+.empty {
+  font-style: italic;
+}
+.tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+.strength {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.strength.strong {
+  color: #e0715c;
+}
+.strength.weak {
+  color: #7fc4c9;
+}
 .ground {
   display: inline-block;
-  margin: 4px 0 10px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
