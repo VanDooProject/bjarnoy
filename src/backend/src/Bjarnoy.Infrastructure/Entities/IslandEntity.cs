@@ -51,6 +51,19 @@ public class IslandEntity
     public List<RiverTileRecord> RiverTiles { get; set; } = [];
 
     /// <summary>
+    /// This island's bogland, one entry per bog hex (moss, lake water, shores, creeks, mouths) — see
+    /// <c>Bjarnoy.Domain.World.BogGenerator</c>.
+    /// </summary>
+    /// <remarks>
+    /// Persisted like <see cref="RiverTiles"/>: the bog is placed by a whole-island pass over the drainage network
+    /// (the through river, sinks, spawns, enclosed sea pockets) and is not derivable from the seed hex by hex. Its lake
+    /// and moss hexes are also the only place the game learns that a hex is <c>bog</c> or <c>lake</c> terrain (see
+    /// <c>WorldTerrain</c>). Empty for an island stored before bogs existed; a reseed adds them. Stored as a single
+    /// column, see <see cref="Persistence.BogTileListConverter"/> for the encoding.
+    /// </remarks>
+    public List<BogTileRecord> BogTiles { get; set; } = [];
+
+    /// <summary>
     /// This island's 7-hex giant features — see
     /// <c>Bjarnoy.Domain.World.GiantGenerator</c>.
     /// </summary>
@@ -102,6 +115,42 @@ public readonly record struct GiantRecord(int Q, int R, string Family, int Orien
 /// family (<c>CampFamilies</c>).
 /// </summary>
 public readonly record struct CampRecord(int Q, int R, string Family, int Level, int Orientation);
+
+/// <summary>
+/// A stored bog hex. <c>Kind</c>, <c>InDirections</c>, <c>OutDirection</c> and <c>WaterEdges</c> are the domain's
+/// <c>BogTileKind</c>/<c>TileOrientation</c> values by their plain numeric index, like <see cref="RiverTileRecord"/>.
+/// </summary>
+public readonly record struct BogTileRecord(
+    int Q, int R, int Kind, IReadOnlyList<int> InDirections, int? OutDirection, IReadOnlyList<int> WaterEdges)
+{
+    public bool Equals(BogTileRecord other) =>
+        Q == other.Q
+        && R == other.R
+        && Kind == other.Kind
+        && OutDirection == other.OutDirection
+        && InDirections.SequenceEqual(other.InDirections)
+        && WaterEdges.SequenceEqual(other.WaterEdges);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Q);
+        hash.Add(R);
+        hash.Add(Kind);
+        hash.Add(OutDirection);
+        foreach (var direction in InDirections)
+        {
+            hash.Add(direction);
+        }
+
+        foreach (var direction in WaterEdges)
+        {
+            hash.Add(direction);
+        }
+
+        return hash.ToHashCode();
+    }
+}
 
 /// <summary>A stored hex coordinate. Kept separate from the domain's
 /// <c>HexCoord</c> so persistence concerns never leak into the game rules.</summary>

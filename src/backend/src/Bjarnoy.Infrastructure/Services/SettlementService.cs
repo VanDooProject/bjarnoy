@@ -680,7 +680,7 @@ public sealed class SettlementService(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
         var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
         var result = settled.SetBuildingLevel(
-            coord, level, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+            coord, level, now, settlement.World.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
 
         if (!result.Accepted)
         {
@@ -756,7 +756,7 @@ public sealed class SettlementService(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
         var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
         var result = settled.SlotRune(
-            runeId, shrineCoord, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+            runeId, shrineCoord, now, settlement.World.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
 
         if (!result.Accepted)
         {
@@ -799,7 +799,7 @@ public sealed class SettlementService(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
         var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
         var result = settled.UnslotRune(
-            runeId, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+            runeId, now, settlement.World.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
 
         if (!result.Accepted)
         {
@@ -853,7 +853,7 @@ public sealed class SettlementService(
 
         var result = settlement.ToDomain()
             .WithQueuesDueAt(now, builds, training)
-            .SettleTo(now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+            .SettleTo(now, settlement.World.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
 
         if (result.Changed)
         {
@@ -888,12 +888,12 @@ public sealed class SettlementService(
         }
 
         var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
-        var sampler = new TerrainSampler(settlement.World!.ToGenerationOptions());
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World!, cancellationToken).ConfigureAwait(false);
         var placeGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
 
         var result = settled.PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
-            now, settlement.World.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants);
+            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants);
 
         if (!result.Accepted)
         {
@@ -927,7 +927,7 @@ public sealed class SettlementService(
         var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
 
         var result = settled.RazeBuilding(
-            coord, now, settlement.World!.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+            coord, now, settlement.World!.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
 
         if (!result.Accepted)
         {
@@ -966,7 +966,7 @@ public sealed class SettlementService(
         var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
 
         var result = settled.AdjustGarrison(
-            unitType, delta, now, settlement.World!.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+            unitType, delta, now, settlement.World!.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
 
         if (!result.Accepted)
         {
@@ -1064,7 +1064,7 @@ public sealed class SettlementService(
 
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World, cancellationToken).ConfigureAwait(false);
 
         // Settle first so the decision sees the queue and stock as of now: a
         // build that finished a minute ago must free its slot and count towards
@@ -1201,7 +1201,7 @@ public sealed class SettlementService(
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
-        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World, cancellationToken).ConfigureAwait(false);
 
         // Ship training needs the settlement's *full* claimed territory to
         // reach the sea, not just its centre disc — a settlement inland at
@@ -1378,7 +1378,7 @@ public sealed class SettlementService(
             .Where(s => s.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        var terrainAt = TerrainAt(world);
+        var terrainAt = await TerrainAtAsync(world, cancellationToken).ConfigureAwait(false);
 
         var settlementIds = settlements.Select(s => s.Id).ToHashSet();
         var guestArmies = await _dbContext.Armies
@@ -1445,8 +1445,12 @@ public sealed class SettlementService(
     /// per call since a <see cref="TerrainSampler"/> is cheap (no state, no
     /// I/O) and a world's generation options can differ per request.
     /// </summary>
-    private static Func<HexCoord, Terrain> TerrainAt(WorldEntity world) =>
-        new TerrainSampler(world.ToGenerationOptions()).TerrainAt;
+    /// <summary>The terrain sampler (bog laid over the seed) for a settlement's world — for the admin layout view.</summary>
+    public Task<TerrainSampler> GetSamplerAsync(WorldEntity world, CancellationToken cancellationToken = default) =>
+        WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken);
+
+    private async Task<Func<HexCoord, Terrain>> TerrainAtAsync(WorldEntity world, CancellationToken cancellationToken) =>
+        (await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false)).TerrainAt;
 
     /// <summary>
     /// The shape of the river tile standing on <paramref name="coord"/>
@@ -1599,7 +1603,7 @@ public sealed class SettlementService(
         var guestStacks = AggregateStacks(
             guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
 
-        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, TerrainAt(entity.World!));
+        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, await TerrainAtAsync(entity.World!, cancellationToken).ConfigureAwait(false));
         return (result.Settlement, result, guestArmies);
     }
 

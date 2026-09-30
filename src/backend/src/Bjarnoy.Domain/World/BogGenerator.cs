@@ -67,7 +67,7 @@ internal sealed class BogPaths
 internal sealed class BogGenerator
 {
     /// <summary>Extra reach of a sink beyond the site radius: a river this close to the lake can be led in.</summary>
-    private const int SinkExtraReach = 2;
+    private const int SinkExtraReach = 6;
 
     /// <summary>Longest creek a route may have (tiles), so a search never wanders across the island.</summary>
     private const int MaxCreekLength = 40;
@@ -818,7 +818,7 @@ internal sealed class BogGenerator
                 continue;
             }
 
-            if (!DiscIsClear(anchor.Tile, radius - 2))
+            if (!DiscIsClear(anchor.Tile, 2))
             {
                 continue;
             }

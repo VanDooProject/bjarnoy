@@ -27,6 +27,64 @@ public class RiverStreamTests
 
     private static HexCoord Step(HexCoord from, TileOrientation direction) => from + HexCoord.Directions[(int)direction];
 
+    /// <summary>
+    /// Follows the water from a river tile that hands it to a bog creek: down the creek into the lake, out of the
+    /// lake by its outflow mouth and on down that creek to the river it feeds. Returns that river tile, or null when
+    /// the water ends in a lake with no outflow (a river sunk into a pocket).
+    /// </summary>
+    private static RiverTile? ThroughBog(GeneratedIsland island, HexCoord start, Dictionary<HexCoord, RiverTile> rivers)
+    {
+        var bog = island.BogTiles.ToDictionary(t => t.Coord);
+        var current = start;
+        for (var guard = 0; guard < 400; guard++)
+        {
+            if (!bog.TryGetValue(current, out var tile))
+            {
+                return rivers.GetValueOrDefault(current) is { } r ? r : throw new Xunit.Sdk.XunitException($"water leaves the bog into {current}, which is neither bog nor river");
+            }
+
+            if (tile.Kind == BogTileKind.Mouth && tile.OutDirection is { } o && bog.TryGetValue(Step(current, o), out var next) && next.Kind == BogTileKind.Lake)
+            {
+                // Into the lake: it leaves by the lake's outflow mouth, if it has one.
+                var lake = new HashSet<HexCoord> { next.Coord };
+                var stack = new Stack<HexCoord>();
+                stack.Push(next.Coord);
+                while (stack.Count > 0)
+                {
+                    var c = stack.Pop();
+                    foreach (var d in HexCoord.Directions.ToArray())
+                    {
+                        var n = c + d;
+                        if (bog.TryGetValue(n, out var nt) && nt.Kind == BogTileKind.Lake && lake.Add(n))
+                        {
+                            stack.Push(n);
+                        }
+                    }
+                }
+
+                var outflow = island.BogTiles.FirstOrDefault(t => t.Kind == BogTileKind.Mouth
+                    && t.WaterEdges.Count == 1 && t.InDirections.Count == 1 && t.InDirections[0] == t.WaterEdges[0]
+                    && lake.Contains(Step(t.Coord, t.WaterEdges[0])));
+                if (outflow.Kind != BogTileKind.Mouth)
+                {
+                    return null;
+                }
+
+                current = Step(outflow.Coord, outflow.OutDirection!.Value);
+                continue;
+            }
+
+            if (tile.OutDirection is not { } outDirection)
+            {
+                throw new Xunit.Sdk.XunitException($"the creek at {current} has no outflow");
+            }
+
+            current = Step(current, outDirection);
+        }
+
+        throw new Xunit.Sdk.XunitException("a creek loops");
+    }
+
     [Fact]
     public void Every_river_path_ends_at_a_sea_mouth_never_inland()
     {
@@ -41,13 +99,32 @@ public class RiverStreamTests
             {
                 var current = spring;
                 var guard = 0;
+                var ended = false;
                 while (current.OutDirection is { } outDirection)
                 {
                     Assert.True(guard++ < island.RiverTiles.Count, $"seed {seed}: river loops at {current.Coord}");
                     var nextCoord = Step(current.Coord, outDirection);
-                    Assert.True(byCoord.TryGetValue(nextCoord, out var next), $"seed {seed}: {current.Coord} flows into {nextCoord}, which is not a river tile");
+                    if (!byCoord.TryGetValue(nextCoord, out var next))
+                    {
+                        // A river may hand its water to a bog creek; the water comes back out of the lake (or ends in a pocket lake).
+                        var back = ThroughBog(island, nextCoord, byCoord);
+                        if (back is null)
+                        {
+                            ended = true;
+                            break;
+                        }
+
+                        current = back.Value;
+                        continue;
+                    }
+
                     Assert.Contains((TileOrientation)(((int)outDirection + 3) % 6), next.InDirections);
                     current = next;
+                }
+
+                if (ended)
+                {
+                    continue;
                 }
 
                 Assert.Equal(RiverTileShape.Mouth, current.Shape);
@@ -88,7 +165,8 @@ public class RiverStreamTests
         foreach (var (seed, island, sampler) in GreenIslands())
         {
             var byCoord = island.RiverTiles.ToDictionary(t => t.Coord);
-            bool UpstreamIsRiver(RiverTile t, TileOrientation d) => byCoord[Step(t.Coord, d)].Width != RiverWidth.Stream;
+            // A creek is river width, so a tile fed by one has a river upstream.
+            bool UpstreamIsRiver(RiverTile t, TileOrientation d) => !byCoord.TryGetValue(Step(t.Coord, d), out var up) || up.Width != RiverWidth.Stream;
 
             foreach (var tile in island.RiverTiles)
             {
@@ -140,19 +218,21 @@ public class RiverStreamTests
                 // Tiles above it in the run (a run is a pure chain up to its spring).
                 var above = 0;
                 var up = tile;
-                while (up.InDirections.Count > 0)
+                while (up.InDirections.Count > 0 && byCoord.TryGetValue(Step(up.Coord, up.InDirections[0]), out var upstream))
                 {
-                    up = byCoord[Step(up.Coord, up.InDirections[0])];
+                    up = upstream;
                     above++;
                 }
 
                 // Tiles below it up to (excluding) the confluence or mouth the run feeds.
+                // (A run that hands its water to a bog creek ends at that tile.)
                 var below = 0;
-                var down = byCoord[Step(tile.Coord, tile.OutDirection!.Value)];
-                while (down.Shape != RiverTileShape.Confluence && down.Shape != RiverTileShape.Mouth)
+                var cursor = tile;
+                while (byCoord.TryGetValue(Step(cursor.Coord, cursor.OutDirection!.Value), out var next)
+                    && next.Shape != RiverTileShape.Confluence && next.Shape != RiverTileShape.Mouth)
                 {
                     below++;
-                    down = byCoord[Step(down.Coord, down.OutDirection!.Value)];
+                    cursor = next;
                 }
 
                 var runLength = above + 1 + below;
