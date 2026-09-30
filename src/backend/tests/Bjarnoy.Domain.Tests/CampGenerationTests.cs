@@ -34,8 +34,8 @@ public class CampGenerationTests
         var strong = CampFamilies.All.Where(f => f.Strength == CampStrength.Strong).Select(f => f.Family).Order();
         var weak = CampFamilies.All.Where(f => f.Strength == CampStrength.Weak).Select(f => f.Family).Order();
 
-        Assert.Equal(["bearrapids", "boarwallow", "fenrirbrood", "wolfden"], strong);
-        Assert.Equal(["beaverlodge", "cranedance", "eagleeyrie", "moosemire", "sealhaulout"], weak);
+        Assert.Equal(["bearrapids", "boarwallow", "fenrirbrood", "moosemire", "wolfden"], strong);
+        Assert.Equal(["beaverlodge", "cranedance", "eagleeyrie", "sealhaulout"], weak);
         Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Strong), f => Assert.Equal(CampLevelSkew.Cubic, f.LevelSkew));
         Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Weak), f => Assert.Equal(CampLevelSkew.Quadratic, f.LevelSkew));
     }

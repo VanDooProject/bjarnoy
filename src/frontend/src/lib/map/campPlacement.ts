@@ -46,7 +46,7 @@ export const CAMP_FAMILIES: readonly CampFamilyInfo[] = [
   { family: 'fenrirbrood', ground: 'wasteland', strength: 'strong', levelSkew: 'cubic' },
   { family: 'sealhaulout', ground: 'sand', strength: 'weak', levelSkew: 'quadratic' },
   { family: 'eagleeyrie', ground: 'mountain', strength: 'weak', levelSkew: 'quadratic' },
-  { family: 'moosemire', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'moosemire', ground: 'bog', strength: 'strong', levelSkew: 'cubic' },
   { family: 'beaverlodge', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
   { family: 'cranedance', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
 ];
@@ -257,8 +257,8 @@ export function placeCamps(
       if (!direction) continue;
       orientation = straightOrientationOf(direction);
     } else {
-      // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) picks one of
-      // moosemire / beaverlodge / cranedance by hash; bog terrain does not exist yet.
+      // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) gets moosemire from the
+      // strong budget, beaverlodge / cranedance (by hash) from the weak one; bog terrain does not exist yet.
       const ground = groundOf(terrainOf(coord), wasted);
       info = ground ? familyFor(ground) : null;
     }

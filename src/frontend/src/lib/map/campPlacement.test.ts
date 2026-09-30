@@ -35,8 +35,8 @@ describe('camp family table', () => {
   it('has the owner-decided strengths', () => {
     const strong = CAMP_FAMILIES.filter((f) => f.strength === 'strong').map((f) => f.family).sort();
     const weak = CAMP_FAMILIES.filter((f) => f.strength === 'weak').map((f) => f.family).sort();
-    expect(strong).toEqual(['bearrapids', 'boarwallow', 'fenrirbrood', 'wolfden']);
-    expect(weak).toEqual(['beaverlodge', 'cranedance', 'eagleeyrie', 'moosemire', 'sealhaulout']);
+    expect(strong).toEqual(['bearrapids', 'boarwallow', 'fenrirbrood', 'moosemire', 'wolfden']);
+    expect(weak).toEqual(['beaverlodge', 'cranedance', 'eagleeyrie', 'sealhaulout']);
     expect(isStrongCampFamily('wolfden')).toBe(true);
     expect(isStrongCampFamily('sealhaulout')).toBe(false);
     expect(isStrongCampFamily('nonsense')).toBe(false);

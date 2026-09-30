@@ -16,8 +16,10 @@ One shared table, mirrored by `Camp.cs` (`CampFamilies.All`) and `campPlacement.
 | fenrirbrood | wasteland (grass of a wasted island); wasted islands only | strong | cubic |
 | sealhaulout | sand | weak | quadratic |
 | eagleeyrie | mountain | weak | quadratic |
-| moosemire / beaverlodge / cranedance | plain bog | weak | quadratic |
+| moosemire | plain bog | strong | cubic |
+| beaverlodge / cranedance | plain bog | weak | quadratic |
 
+The moose mire is the bog's strong camp (owner decision), the beaver lodge and the crane dance its weak ones.
 The bog camps are in the table but are **not placed yet**: bog terrain lands in a later PR
 (`TODO(bog PR)` in `CampGenerator.PlaceCore` / `placeCamps`). Bearrapids goes on a river tile of shape
 `Straight` and **River width** only (not a stream, widening or river-stream tile). Wasted islands get
@@ -104,17 +106,30 @@ guard-range formulas above.
 
 ## Loot (kinds only)
 
-Clearing a camp pays loot (`economy.md` section 10). The owner's kinds, with the amounts still open (#334):
+Clearing a camp pays loot (`economy.md` section 10) in the four resources. The kinds are the owner's mix of a
+base rule and each camp's own extras from the design roster (#334's brainstorm); the amounts are still open.
 
-| Camps | Loot |
-|---|---|
-| every camp | food, from the hunt |
-| strong camps | food and **iron**: the gear of earlier settlers the pack ate, among the bones |
-| otter slide, beaver lodge | also a little **wood** (drift logs, the lodge's gnawed timber) |
+- **Base rule:** every camp gives food, from the hunt; a strong camp adds iron, the gear of earlier settlers
+  its pack has eaten.
+- **Extras:** what the camp's ground holds. **++** marks the kind a camp pays a larger share of, so a camp's
+  type shapes its loot once amounts exist.
+
+| Camp | Strength | Loot |
+|---|---|---|
+| wolfden | strong | food, wood, iron |
+| boarwallow | strong | **food ++**, iron |
+| bearrapids | strong | food, stone, iron |
+| moosemire | strong | **food ++**, iron |
+| fenrirbrood | strong | food, **iron ++** |
+| sealhaulout | weak | food |
+| eagleeyrie | weak | food, stone, iron |
+| beaverlodge | weak | food, wood |
+| cranedance | weak | food |
+| otterslide, deerglade, harewarren (art only, not in the table yet) | weak | otter: food, wood; deer and hare: food |
 
 Amounts grow with the camp's level, a strong camp's several times a weak one's. The eagle eyrie and Fenrir's
 brood are never built on, so their loot is a one-off prize. Nothing reads this yet: the docs page
-(`WildlifeCampsView.vue`, `lootOf`) shows the kinds per card and is the only consumer.
+(`WildlifeCampsView.vue`, `LOOT_EXTRAS`/`lootOf`) shows it per card and is the only consumer.
 
 ## Data, API and art
 

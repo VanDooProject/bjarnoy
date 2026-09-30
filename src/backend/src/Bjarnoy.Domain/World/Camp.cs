@@ -3,7 +3,7 @@ namespace Bjarnoy.Domain.World;
 /// <summary>Whether a wildlife camp will block towers once camp gameplay lands — see <c>docs/design/wildlife-camps.md</c>.</summary>
 public enum CampStrength
 {
-    /// <summary>Guards only its nearest hexes; will not block towers. Seals, eagles, and the bog camps.</summary>
+    /// <summary>Guards only its nearest hexes; will not block towers. Seals, eagles, and the beaver and crane bog camps.</summary>
     Weak,
 
     /// <summary>Guards a wide stretch of land; will block towers. Wolves, boars, bears, Fenrir.</summary>
@@ -66,7 +66,7 @@ public static class CampFamilies
         new(Fenrirbrood, CampGround.Wasteland, CampStrength.Strong, CampLevelSkew.Cubic),
         new(Sealhaulout, CampGround.Sand, CampStrength.Weak, CampLevelSkew.Quadratic),
         new(Eagleeyrie, CampGround.Mountain, CampStrength.Weak, CampLevelSkew.Quadratic),
-        new(Moosemire, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
+        new(Moosemire, CampGround.Bog, CampStrength.Strong, CampLevelSkew.Cubic),
         new(Beaverlodge, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
         new(Cranedance, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
     ];

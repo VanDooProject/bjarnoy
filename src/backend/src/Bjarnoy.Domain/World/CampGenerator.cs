@@ -179,8 +179,8 @@ internal static class CampGenerator
             }
             else
             {
-                // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) picks one of
-                // moosemire / beaverlodge / cranedance by hash; bog terrain does not exist yet.
+                // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) gets moosemire from the
+                // strong budget, beaverlodge / cranedance (by hash) from the weak one; bog terrain does not exist yet.
                 info = GroundOf(terrain, wasted) is { } ground ? FamilyFor(ground) : null;
             }
 
