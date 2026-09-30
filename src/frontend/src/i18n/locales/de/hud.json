@@ -172,7 +172,20 @@
     "noFreeSlotPremium": "Kein freier Platz — Premium erforderlich",
     "queueBuild": "Bau einreihen",
     "upgradeToLevel": "Auf Stufe {level} ausbauen",
-    "buildHere": "Hier bauen"
+    "buildHere": "Hier bauen",
+    "feastTitle": "Fest",
+    "feastDesc": "Verwandle überschüssiges Holz, Stein und Essen in Ruhm. Die Kosten werden sofort bezahlt, der Ruhm kommt, wenn das Fest endet.",
+    "feastCost": "Kosten",
+    "feastDuration": "Dauer",
+    "feastHours": "{hours} Std.",
+    "feastGain": "Ruhm",
+    "feastRenown": "+{renown} nach Ende",
+    "feastAction": "Fest ausrichten",
+    "feastRunning": "Hier läuft bereits ein Fest.",
+    "feastEndsIn": "Das Fest endet in {time} und bringt +{renown} Ruhm.",
+    "feastPaused": "Ein Fest läuft (die Weltuhr ist angehalten).",
+    "feastDemo": "Feste brauchen eine Live-Welt; die Demo vergibt keinen Ruhm.",
+    "feastError": "Das Fest konnte nicht ausgerichtet werden."
   },
   "trainingModal": {
     "title": "Einheiten ausbilden",

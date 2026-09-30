@@ -4,12 +4,16 @@
 // instant-build-on-click in SettlementView.vue with the mockup's full-screen
 // hex detail screen (Viking Realm.dc.html's `sel` overlay): art on the left,
 // name/level/description/action on the right.
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName, terrainName, resourceName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
+import { DEMO_MODE } from '../../config';
+import { apiErrorMessage } from '../../i18n/apiErrors';
+import { FEAST_HOURS, feastCost, feastRenown } from '../../lib/economy/feasts';
+import { formatCountdown } from '../../composables/useQueueOrders';
 import { useWorldStore } from '../../stores/world';
 import {
   BOOST_TERRAIN,
@@ -86,6 +90,67 @@ async function unslot(runeId: string) {
     runeError.value = t('hud.buildingModal.unslotRuneError');
   } finally {
     runeBusy.value = false;
+  }
+}
+
+// Town Square feast (economy.md section 6). Live worlds only: the local demo
+// WorldModel has no renown, so demo mode shows the action but disabled, with
+// the reason, rather than pretending to hold one.
+const isTownSquare = computed(() => props.tile.buildingType === 'townsquare' && (props.tile.buildingLevel ?? 0) >= 1);
+const feastOffer = computed(() => {
+  const offer = world.hud.nextFeast;
+  if (offer) return offer;
+  const ts = props.tile.buildingLevel ?? 1;
+  const each = feastCost(ts);
+  return {
+    townSquareLevel: ts,
+    cost: { wood: each, stone: each, food: each, iron: 0 } as ResourceLine,
+    durationSeconds: FEAST_HOURS * 3600,
+    renownGain: feastRenown(ts),
+  };
+});
+const feastCostLine = computed(() =>
+  (['wood', 'stone', 'food'] as const)
+    .map((key) => `${Math.round(feastOffer.value.cost[key])} ${resourceName(key)}`)
+    .join(' · '),
+);
+const feastHours = computed(() => Math.round(feastOffer.value.durationSeconds / 3600));
+const runningFeast = computed(() => world.hud.feast);
+const canAffordFeast = computed(() =>
+  (['wood', 'stone', 'food'] as const).every((key) => world.hud.available[key] >= feastOffer.value.cost[key]),
+);
+const feastBusy = ref(false);
+const feastError = ref<string | null>(null);
+
+// One-second ticker for the running feast's countdown.
+const nowMs = ref(Date.now());
+let feastTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  feastTimer = setInterval(() => (nowMs.value = Date.now()), 1000);
+});
+onBeforeUnmount(() => clearInterval(feastTimer));
+const feastRemaining = computed(() => {
+  const f = runningFeast.value;
+  if (!f || f.endsInSeconds === null) return null;
+  return Math.max(0, f.endsInSeconds - (nowMs.value - world.hud.feastFetchedAt) / 1000);
+});
+
+const feastDisabledReason = computed(() => {
+  if (DEMO_MODE) return t('hud.buildingModal.feastDemo');
+  if (runningFeast.value) return t('hud.buildingModal.feastRunning');
+  if (!canAffordFeast.value) return t('hud.buildingModal.notEnoughResources');
+  return null;
+});
+
+async function holdFeast() {
+  feastBusy.value = true;
+  feastError.value = null;
+  try {
+    await world.holdFeastLive();
+  } catch (err) {
+    feastError.value = apiErrorMessage(err, t('hud.buildingModal.feastError'));
+  } finally {
+    feastBusy.value = false;
   }
 }
 
@@ -314,6 +379,31 @@ const actionLabel = computed(() => {
           </template>
         </div>
 
+        <div v-if="isTownSquare && mine" class="feast" data-testid="feast">
+          <div class="runes-head">{{ t('hud.buildingModal.feastTitle') }}</div>
+          <p class="desc feast-desc">{{ t('hud.buildingModal.feastDesc') }}</p>
+          <dl class="stats">
+            <dt>{{ t('hud.buildingModal.feastCost') }}</dt>
+            <dd data-testid="feast-cost">{{ feastCostLine }}</dd>
+            <dt>{{ t('hud.buildingModal.feastDuration') }}</dt>
+            <dd>{{ t('hud.buildingModal.feastHours', { hours: feastHours }) }}</dd>
+            <dt>{{ t('hud.buildingModal.feastGain') }}</dt>
+            <dd data-testid="feast-gain">{{ t('hud.buildingModal.feastRenown', { renown: Math.round(feastOffer.renownGain) }) }}</dd>
+          </dl>
+          <p v-if="runningFeast && !DEMO_MODE" class="feast-running" data-testid="feast-countdown">
+            {{
+              feastRemaining === null
+                ? t('hud.buildingModal.feastPaused')
+                : t('hud.buildingModal.feastEndsIn', { time: formatCountdown(feastRemaining), renown: Math.round(runningFeast.renownGain) })
+            }}
+          </p>
+          <p v-if="feastDisabledReason && !runningFeast" class="desc afford-note" data-testid="feast-reason">{{ feastDisabledReason }}</p>
+          <p v-if="feastError" class="desc afford-note">{{ feastError }}</p>
+          <button class="primary" data-testid="feast-button" :disabled="feastBusy || !!feastDisabledReason" @click="holdFeast">
+            {{ t('hud.buildingModal.feastAction') }}
+          </button>
+        </div>
+
         <div v-if="mine && buildable && waitingOrderHere" class="actions">
           <p class="desc queued-note">{{ t('hud.buildingModal.queuedNote') }}</p>
         </div>
@@ -480,6 +570,21 @@ const actionLabel = computed(() => {
 .primary:disabled {
   opacity: 0.6;
   cursor: default;
+}
+.feast {
+  margin: 16px 0 0;
+  max-width: 380px;
+  font-size: 13px;
+}
+.feast-desc {
+  margin: 0 0 8px;
+}
+.feast-running {
+  margin: 8px 0;
+  color: var(--gold);
+}
+.feast .primary {
+  margin-top: 4px;
 }
 .runes {
   margin: 16px 0 0;

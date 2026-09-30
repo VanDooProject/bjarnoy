@@ -172,7 +172,20 @@
     "noFreeSlotPremium": "No free slot — Premium required",
     "queueBuild": "Queue build",
     "upgradeToLevel": "Upgrade to level {level}",
-    "buildHere": "Build here"
+    "buildHere": "Build here",
+    "feastTitle": "Feast",
+    "feastDesc": "Turn surplus wood, stone and food into renown. It is paid up front and the renown arrives when the feast ends.",
+    "feastCost": "Cost",
+    "feastDuration": "Duration",
+    "feastHours": "{hours} h",
+    "feastGain": "Renown",
+    "feastRenown": "+{renown} when it ends",
+    "feastAction": "Hold a feast",
+    "feastRunning": "A feast is already running here.",
+    "feastEndsIn": "Feast ends in {time}, granting +{renown} renown.",
+    "feastPaused": "A feast is running (the world clock is paused).",
+    "feastDemo": "Feasts need a live world; the demo has no renown to grant.",
+    "feastError": "Could not hold a feast."
   },
   "trainingModal": {
     "title": "Train units",

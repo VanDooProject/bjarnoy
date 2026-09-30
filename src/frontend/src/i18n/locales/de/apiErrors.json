@@ -72,6 +72,8 @@
     "authentication_required": "Dafür musst du angemeldet sein.",
     "premium_required": "Dafür wird Premium benötigt.",
     "invalid_credentials": "Benutzername oder Passwort ist falsch.",
-    "invalid_refresh_token": "Deine Sitzung ist abgelaufen — bitte melde dich erneut an."
+    "invalid_refresh_token": "Deine Sitzung ist abgelaufen — bitte melde dich erneut an.",
+    "AlreadyRunning": "Hier kann nur ein Fest gleichzeitig laufen.",
+    "NoTownSquare": "Hier steht kein Dorfplatz, um ein Fest auszurichten."
   }
 }

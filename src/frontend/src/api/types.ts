@@ -240,6 +240,24 @@ export interface RuneInstanceResponse {
   slottedAtR: number | null;
 }
 
+/** A Town Square feast in progress (economy.md section 6). */
+export interface FeastResponse {
+  startedAtGameTime: string;
+  endsAtGameTime: string;
+  /** Null while the world clock is frozen. */
+  endsInSeconds: number | null;
+  /** Renown the account gains when it ends. */
+  renownGain: number;
+}
+
+/** What a feast would cost and grant at the standing Town Square's level. */
+export interface FeastOfferResponse {
+  townSquareLevel: number;
+  cost: ResourceLine;
+  durationSeconds: number;
+  renownGain: number;
+}
+
 export interface SettlementResponse {
   id: string;
   worldId: string;
@@ -258,6 +276,10 @@ export interface SettlementResponse {
   garrison: UnitStackResponse[];
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
+  /** The running feast, if any. */
+  feast: FeastResponse | null;
+  /** Cost and gain of the next feast; null without a Town Square. */
+  nextFeast: FeastOfferResponse | null;
   world: WorldClockResponse;
 }
 
