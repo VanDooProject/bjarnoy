@@ -221,7 +221,7 @@ public static class SettlementEndpoints
         if (realm.Outcome != CallerRealmOutcome.Resolved)
         {
             // MissingHeader/Refused: nothing to check explored ground
-            // against — same 403 the fog-mask/plot-suggestion reads answer
+            // against — same 403 the fog-chunks/plot-suggestion reads answer
             // with for the same two outcomes.
             return NotOwnerRefusal();
         }
@@ -236,7 +236,14 @@ public static class SettlementEndpoints
         }
 
         var isOwnSettlement = string.Equals(entity.OwnerId, realm.OwnerId, StringComparison.Ordinal);
-        if (!isOwnSettlement && !area.Hexes.Contains(new HexCoord(entity.CentreQ, entity.CentreR)))
+        var explored = isOwnSettlement
+            ? []
+            : await exploredArea.ExploredAmongAsync(
+                area,
+                entity.Buildings.Select(b => new HexCoord(b.Q, b.R))
+                    .Append(new HexCoord(entity.CentreQ, entity.CentreR)),
+                cancellationToken);
+        if (!isOwnSettlement && !explored.Contains(new HexCoord(entity.CentreQ, entity.CentreR)))
         {
             // Never reveal that an unexplored settlement even exists.
             return TypedResults.NotFound(SettlementNotFoundProblem());
@@ -245,7 +252,7 @@ public static class SettlementEndpoints
         IReadOnlyList<PlacedBuildingResponse> buildings =
         [
             .. entity.Buildings
-                .Where(b => isOwnSettlement || area.Hexes.Contains(new HexCoord(b.Q, b.R)))
+                .Where(b => isOwnSettlement || explored.Contains(new HexCoord(b.Q, b.R)))
                 .Select(b => new PlacedBuildingResponse(b.Q, b.R, b.Type.ToWireName(), b.Level)),
         ];
 
@@ -301,12 +308,21 @@ public static class SettlementEndpoints
 
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
 
+        // Only rivals' centres need the fog check; the explored lookup reads
+        // just the stored chunks those centres fall in.
+        var explored = await exploredArea.ExploredAmongAsync(
+            area,
+            entities
+                .Where(s => s.OwnerId != realm.OwnerId && !(callerUserId is not null && s.UserId == callerUserId))
+                .Select(s => new HexCoord(s.CentreQ, s.CentreR)),
+            cancellationToken);
+
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
                 .Where(s => s.OwnerId == realm.OwnerId
                     || (callerUserId is not null && s.UserId == callerUserId)
-                    || area.Hexes.Contains(new HexCoord(s.CentreQ, s.CentreR)))
+                    || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
                 .Select(s => new SettlementSummary(
                     s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
                     s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
@@ -632,7 +648,7 @@ public static class SettlementEndpoints
     /// resolves neither a JWT realm nor a usable <c>X-Owner-Id</c> header, or
     /// refuses one naming someone else's already-claimed realm — the same
     /// body <see cref="OwnershipGate"/> and <see cref="WorldEndpoints"/>'s
-    /// fog-mask/plot-suggestion reads use for the same outcomes.
+    /// fog-chunks/plot-suggestion reads use for the same outcomes.
     /// </summary>
     private static IResult NotOwnerRefusal() =>
         Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
