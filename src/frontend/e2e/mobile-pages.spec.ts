@@ -1,7 +1,8 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { AdminActivityPage } from './pages';
-import { layoutOverflow } from './helpers';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { AdminActivityPage, SettlementPage } from './pages';
+import { layoutOverflow, openRingOnGuidedHex } from './helpers';
 
 // Second mobile-readiness sweep (after mobile.spec.ts): defects found by
 // walking every page at phone sizes, portrait and landscape. The desktop
@@ -62,3 +63,42 @@ for (const [name, viewport] of [
     });
   });
 }
+
+test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
+  test.use({ viewport: { width: 320, height: 568 }, hasTouch: true, isMobile: true });
+
+  // A long single word used to split mid-word inside its bubble
+  // ("Watchtowe" / "r"), and the hub's "GRASSLAND"/"LONGHOUSE" ran past the
+  // round edge; the label size now shrinks to fit the longest word.
+  test('no bubble splits a word across lines or runs past its own edge', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await openRingOnGuidedHex(settlement);
+    // the long single word the bug was found on must be on screen, or the check below proves nothing
+    await expect(settlement.ring.bubbles.filter({ hasText: 'Watchtower' })).toBeVisible();
+
+    const broken = await page.locator('.ring-hub, .ring-bubble').evaluateAll((els) =>
+      els.flatMap((el) => {
+        const box = el.getBoundingClientRect();
+        const problems: string[] = [];
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const text = node.textContent ?? '';
+          for (const match of text.matchAll(/\S+/g)) {
+            const range = document.createRange();
+            range.setStart(node, match.index!);
+            range.setEnd(node, match.index! + match[0].length);
+            const rects = [...range.getClientRects()];
+            if (rects.length > 1) problems.push(`"${match[0]}" split across lines`);
+            for (const r of rects) {
+              if (r.left < box.left - 1 || r.right > box.right + 1) problems.push(`"${match[0]}" runs past its bubble`);
+            }
+          }
+        }
+        return problems;
+      }),
+    );
+    expect(broken).toEqual([]);
+  });
+});

@@ -490,3 +490,27 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
     mode: placementMode(x, y, area),
   };
 }
+
+/**
+ * Font size for a label inside a round bubble of `diameter` px: `basePx`,
+ * shrunk just enough that the label's longest word fits on one line.
+ * Without it a single long word ("Watchtower", "LONGHOUSE", German
+ * "Holzfällerhütte") either overflowed the circle or — with
+ * `overflow-wrap: anywhere` as the fallback — split mid-word
+ * ("Watchtowe"/"r"). Glyph widths are an estimate for the UI font's
+ * semibold weight (uppercase is wider), deliberately on the generous side.
+ */
+export function bubbleLabelFontPx(
+  label: string,
+  diameter: number,
+  basePx: number,
+  { uppercase = false, letterSpacingEm = 0.02, minPx = 6.5 } = {},
+): number {
+  const longest = label.split(/\s+/).reduce((max, word) => Math.max(max, [...word].length), 0);
+  if (longest === 0) return basePx;
+  // The bubble's own 2px side padding, plus a little for the round edge.
+  const available = diameter - 6;
+  const glyphEm = (uppercase ? 0.7 : 0.56) + letterSpacingEm;
+  const fitting = available / (longest * glyphEm);
+  return Math.floor(Math.max(minPx, Math.min(basePx, fitting)) * 10) / 10;
+}

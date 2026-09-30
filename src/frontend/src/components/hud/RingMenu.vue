@@ -40,6 +40,7 @@ import {
   layoutRing,
   NOTE_W,
   type Rect,
+  bubbleLabelFontPx,
 } from '../../lib/map/ringLayout';
 
 export interface RingAction {
@@ -383,7 +384,7 @@ function onBackdropPointerDown(e: PointerEvent) {
       :title="atRoot ? undefined : t('hud.ringMenu.back')"
       @click="goUp"
     >
-      <span class="hub-label">{{ hubLabel }}</span>
+      <span class="hub-label" :style="{ fontSize: `${bubbleLabelFontPx(hubLabel, HUB, 10.5, { uppercase: true, letterSpacingEm: 0.06 })}px` }">{{ hubLabel }}</span>
       <span v-if="hubSub" class="hub-sub">{{ hubSub }}</span>
     </button>
 
@@ -401,7 +402,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         top: `${entry.y}px`,
         width: `${layout.collapsed ? DOT : BUB1}px`,
         height: `${layout.collapsed ? DOT : BUB1}px`,
-        fontSize: entry.item.label.length > 7 ? '8.2px' : '9.2px',
+        fontSize: `${bubbleLabelFontPx(entry.item.label, BUB1, entry.item.label.length > 7 ? 8.2 : 9.2)}px`,
         '--tint': entry.color,
       }"
       :aria-disabled="entry.item.disabled || undefined"
@@ -432,7 +433,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         top: `${b.y}px`,
         width: `${BUB2}px`,
         height: `${BUB2}px`,
-        fontSize: b.building.label.length > 7 ? '8.4px' : '9.4px',
+        fontSize: `${bubbleLabelFontPx(b.building.label, BUB2, b.building.label.length > 7 ? 8.4 : 9.4)}px`,
         '--tint': b.color,
       }"
       :title="b.building.lock"
@@ -561,6 +562,11 @@ function onBackdropPointerDown(e: PointerEvent) {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+.hub-label,
+.hub-sub {
+  /* Keeps a wrapped coordinate line inside the circle's round edge. */
+  max-width: 84%;
 }
 .hub-sub {
   font-size: 8px;
