@@ -1,0 +1,70 @@
+# Wildlife camps: placement, levels and guard ranges
+
+Spawn and render only. Camps are generated with the world, stored per island and drawn on the map;
+nothing reads them yet (no tower blocking, clearing, loot or respawn: see `economy.md` section 10
+for the rules they will carry). Requirements: `world-generation-rules.md`, "Wildlife camps".
+
+## Families
+
+One shared table, mirrored by `Camp.cs` (`CampFamilies.All`) and `campPlacement.ts` (`CAMP_FAMILIES`):
+
+| Family | Ground | Strength | Level skew |
+|---|---|---|---|
+| wolfden | grass | strong | high |
+| boarwallow | forest | strong | high |
+| bearrapids | a straight river tile (river width) | strong | high |
+| fenrirbrood | wasteland (grass of a wasted island); wasted islands only | strong | high |
+| sealhaulout | sand | weak | low |
+| eagleeyrie | mountain | weak | low |
+| moosemire / beaverlodge / cranedance | plain bog | weak | low |
+
+The bog camps are in the table but are **not placed yet**: bog terrain lands in a later PR
+(`TODO(bog PR)` in `CampGenerator.PlaceCore` / `placeCamps`). Bearrapids goes on a river tile of shape
+`Straight` only; a later PR adds "river width only, not stream" (`TODO(streams PR)`). Wasted islands get
+fenrirbrood only.
+
+## Placement
+
+Per island, deterministic, run after rivers and giants and **before** start positions
+(`WorldGenerator.BuildIslands`). Pure core: `CampGenerator.PlaceCore` (C#) and `placeCamps` (TS),
+bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
+(`CampPlacementGoldenTests`, `campPlacement.golden.test.ts`; regenerate with
+`GoldenRegenerationTests`, `BJARNOY_REGEN_GOLDENS=1`).
+
+1. **Count** = `clamp(round(islandLand / CampTilesPerCamp), 1, MaxCampsPerIsland)`. A 6-tile islet gets
+   one camp if it has a candidate; an island of 16 800+ tiles gets the cap.
+2. **Candidates**: land tiles not on a giant footprint, not a river tile (except a straight river tile
+   for bearrapids), and whose ground has a family (see the table). Mountain tiles count.
+3. **Farthest-point sampling** (like the river springs): the first pick is the hash-best candidate; each
+   next pick is the candidate farthest from every camp so far, at least `MinCampSpacing` from all of them
+   (ties: hash, then q, r). Weighting: while some ground the island has still has no camp, only
+   candidates on such grounds are considered, so each ground gets one before any gets a second.
+4. **Level**: rolled per camp in `1..MaxCampLevel` from a hash `u`: weak `u^2` (mostly low), strong
+   `1 - (1 - u)^2` (mostly high).
+5. **Orientation**: the tile's own orientation (`TerrainSampler.OrientationAt`); a bearrapids camp
+   follows its river (`straightOrientationOf` of the river's direction).
+
+## Guard range
+
+`GuardRange(level, strength)`: weak `1 + floor(level / 2)` (1 to 3 hexes), strong `2 + level` (3 to 7).
+A start position is dropped when its distance to a **strong** camp is at most `GuardRange + 2`
+(`StartPositionMargin`); weak camps may sit next to a spot. Camps are placed first, so an island
+with strong camps everywhere can lose start positions; that is the owner's decision.
+
+Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `CampTilesPerCamp` 700,
+`MaxCampsPerIsland` 24, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
+guard-range formulas above.
+
+## Data, API and art
+
+- `GeneratedIsland.Camps` (`Camp`: coord, family, level, orientation; `Strong` and `GuardRange` derived),
+  stored in `islands.Camps` (`CampListConverter`, `q,r,family,level,orientation` tokens; existing
+  islands have none until a reseed), sent as `IslandResponse.camps` and in the admin preview island.
+- Client: `WorldModel.setCamps` tags `Tile.camp`; demo mode places camps in `placeGiantsForIsland`; a
+  camp hex is not buildable; `findLandfall` avoids strong camps.
+- Render: the ground's own base plus the camp's guarded (`level001`) animated top from the
+  `buildings-anim` atlas (bearrapids also brings its river base). The guarded art ships only one to
+  three rotations; the tile orientation is mapped onto those (read off the atlas) by modulo in
+  `TILE_ORIENTATIONS` order, and bearrapids picks the kept rotation with its river's channel
+  (orientation index mod 3, a straight channel is symmetric).
+- Preview: `npm run worldgen-preview -- --layers terrain,camps` (markers per family, ring = guard range).
