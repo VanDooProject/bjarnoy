@@ -51,7 +51,7 @@ For a building with level-1 values `C₁` (cost, per resource), `P₁`
 ```
 cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (Longhouse 1.34)
 production(L) = P₁ · g_p^(L−1)           g_p = 1.20
-buildTime(L)  = t₁ · g_t^(L−1) · s(LH)   g_t = 1.33  (Longhouse 1.30)
+buildTime(L)  = t₁ · g_t^(L−1) · s(LH)   g_t = 1.33
 s(LH)         = 0.97^(LH−1)              Longhouse build-speed bonus (Travian's Main Building)
 ```
 
@@ -64,7 +64,7 @@ per level: the next level is always worth building, just less obviously.
 | Building | C₁ wood/stone/food | P₁ /h | t₁ min |
 |---|---|---|---|
 | Producers (Lumberjack, Quarry, Clay, Herder, Farm, Fishing) | 50 / 40 / 15 | 40 | 3 |
-| Longhouse | 120 / 100 / 60 | +15 wood, +12 stone, +15 food per level (linear) | 3 |
+| Longhouse | 120 / 100 / 60 | +15 wood, +12 stone, +15 food per level (linear) | 1.5 |
 | Storage House | 80 / 60 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
 
 (Other buildings: same formulas, `C₁`/`t₁` set per building in the
@@ -309,8 +309,9 @@ their renown.
   +15 / 12 / 15 per level.
 - **Onboarding quests pay resources** (Travian's task list), so the first
   hour keeps moving. They never hand out a finished building, so the
-  Longhouse 2 upgrade the tutorial asks for has to build fast (a couple of
-  minutes). The tutorial also walks the player through placing a Storage
+  Longhouse 2 upgrade the tutorial asks for has to build fast: the
+  Longhouse's `t₁` is 1.5 min at the shared ×1.33, so LH 2 builds in about 2
+  min. The tutorial also walks the player through placing a Storage
   House and upgrading the Longhouse:
 
   | Quest | Reward (wood / stone / food) |

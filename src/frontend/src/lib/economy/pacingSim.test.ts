@@ -461,7 +461,7 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
 
   it('the 4-check-ins player still settles around day 13 with feasts', () => {
     const r = run(PROFILE_PRESETS.checkins4, true);
-    expect(day(r.secondSettlementAt)).toBeGreaterThan(12.5);
+    expect(day(r.secondSettlementAt)).toBeGreaterThan(12);
     expect(day(r.secondSettlementAt)).toBeLessThan(15);
   });
 
