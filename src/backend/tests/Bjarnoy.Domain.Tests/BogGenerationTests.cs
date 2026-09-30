@@ -199,6 +199,15 @@ public class BogGenerationTests
             foreach (var start in island.StartPositions)
             {
                 Assert.False(bog.ContainsKey(start), $"seed {seed}: start position {start} is bog");
+
+                // A bog lake is water: like the sea, none within two hexes of a start (the client's
+                // WorldModel.isLand excludes 'lake' for the same rule).
+                foreach (var near in start.WithinRadius(2))
+                {
+                    Assert.False(
+                        bog.TryGetValue(near, out var nearBog) && nearBog.Kind == BogTileKind.Lake,
+                        $"seed {seed}: start position {start} is within two hexes of lake {near}");
+                }
             }
 
             foreach (var camp in island.Camps.Where(c => bog.ContainsKey(c.Coord)))

@@ -419,11 +419,12 @@ public sealed class WorldGenerator
             }
 
             // No water within two hexes. `land` holds only land, so an absent
-            // key inside the world radius is sea.
+            // key inside the world radius is sea; a bog lake is water too
+            // (mirrors WorldModel.isLand on the client, which excludes 'lake').
             var coastal = false;
             foreach (var nearby in tile.WithinRadius(2))
             {
-                if (!land.ContainsKey(nearby))
+                if (!land.TryGetValue(nearby, out var near) || near == Terrain.Lake)
                 {
                     coastal = true;
                     break;
