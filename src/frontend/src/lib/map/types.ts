@@ -239,6 +239,17 @@ export function confluenceOrientationOf(
   return confluenceFileFor(inDirections, outDirection, 'narrow');
 }
 
+/**
+ * The `rivertile_smallwide_bend120_tributary` file for a stream joining a river from direction
+ * `streamIn` (the river arms then lie at `streamIn + 2` and `streamIn + 4`). Pixel-measured against
+ * `isoTopPoints` (docs/design/river-generation.md): file D has the stream on polygon edge D+3 and the
+ * river on D+1 / D+5, and edge(d) = (3 - d) mod 6 gives D = (6 - streamIn) mod 6.
+ */
+export function tributaryOrientationOf(streamIn: TileOrientation): TileOrientation {
+  const s = TILE_ORIENTATIONS.indexOf(streamIn);
+  return TILE_ORIENTATIONS[(6 - s) % 6]!;
+}
+
 /** `confluenceOrientationOf` for the `ywide` family; see there. */
 export function confluenceWideOrientationOf(
   inDirections: readonly TileOrientation[],

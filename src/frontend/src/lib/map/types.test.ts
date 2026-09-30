@@ -5,6 +5,7 @@ import {
   confluenceKind,
   confluenceOrientationOf,
   confluenceWideOrientationOf,
+  tributaryOrientationOf,
   deltaOrientationOf,
   mouthOrientationOf,
   mouthSeaDirection,
@@ -262,6 +263,18 @@ describe('confluenceOrientationOf', () => {
   it('with no outDirection (an old row) accepts any rotation that draws both inflows', () => {
     expect(confluenceOrientationOf(['SE', 'SW'], null)).not.toBeNull();
     expect(confluenceOrientationOf(['E', 'NE'], null)).not.toBeNull();
+  });
+});
+
+describe('tributaryOrientationOf', () => {
+  // Pixel-measured edge sets of rivertile_smallwide_bend120_tributary (polygon edges, stream first):
+  // file E: stream 3, river 1/5; NE: 4, 0/2; NW: 5, 1/3; W: 0, 2/4; SW: 1, 3/5; SE: 2, 4/0.
+  const EDGE_OF = (d: number) => (3 - d + 6) % 6;
+  it.each(TILE_ORIENTATIONS.map((o, s) => [o, s] as const))('stream from %s', (streamIn, s) => {
+    const file = TILE_ORIENTATIONS.indexOf(tributaryOrientationOf(streamIn));
+    expect((file + 3) % 6).toBe(EDGE_OF(s));
+    const riverEdges = [(file + 1) % 6, (file + 5) % 6].sort();
+    expect(riverEdges).toEqual([EDGE_OF((s + 2) % 6), EDGE_OF((s + 4) % 6)].sort());
   });
 });
 

@@ -1505,8 +1505,15 @@ internal static class RiverGenerator
                     else if (v.Out >= 0 && RiverConfluence.Classify(v.Ins[0], v.Ins[1], v.Out) == ConfluenceKind.Wide)
                     {
                         // A stream joining a river at the wide Y: the river-stream Y, no widening needed.
+                        // The stream inflow is stored first so the renderer can orient the tributary art
+                        // (rivertile_smallwide_bend120_tributary) by it.
                         v.Width = RiverWidth.RiverStream;
                         v.OutRiver = true;
+                        if (a.OutRiver)
+                        {
+                            (v.Ins[0], v.Ins[1]) = (v.Ins[1], v.Ins[0]);
+                        }
+
                         if (stats is not null)
                         {
                             stats.RiverStreamJoins++;

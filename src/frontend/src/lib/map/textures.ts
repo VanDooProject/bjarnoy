@@ -61,6 +61,7 @@ import {
   springOrientationOf,
   straightOrientationOf,
   TILE_ORIENTATIONS,
+  tributaryOrientationOf,
   widenStraightOrientationOf,
 } from './types';
 
@@ -275,6 +276,8 @@ type RiverArtShape =
   | 'widen_straight'
   | 'widen_yn'
   | 'widen_yw'
+  // A stream joining a river: river arms at s+2 / s+4, the stream arm at s.
+  | 'riverstream'
   // A river meeting the sea head-on.
   | 'delta';
 
@@ -323,6 +326,7 @@ export const RIVER_FAMILY: Record<RiverArtShape, string> = {
   widen_straight: 'rivertile_smallwide_bend180_island',
   widen_yn: 'rivertile_smallwide_y_narrow',
   widen_yw: 'rivertile_smallwide_ywide',
+  riverstream: 'rivertile_smallwide_bend120_tributary',
   delta: 'rivertile_delta',
 };
 
@@ -1539,14 +1543,11 @@ export function riverArtFor(
     return { shape, orientation: springOrientationOf(river.outDirection) };
   }
   if (river.shape === 'confluence') {
-    // TODO(art): rivertile_riverstream_ywide (two river arms, one stream arm, the ywide edge set)
-    // draws a stream joining a river. Until the atlas has it, the plain big-river ywide stands in.
-    // Once it exists the tile's orientation needs the same pixel check as the other Y families:
-    // which of the two non-outflow arms (`o+2` / `o+4`) is the stream - the stream is the inflow
-    // whose upstream tile has width 'stream'; the file will have to be rotated (or mirrored) to it.
-    if (width === 'riverstream') {
-      const wide = confluenceWideOrientationOf(river.inDirections, river.outDirection);
-      if (wide) return { shape: 'confluencewide', orientation: wide };
+    // A stream joining a river (width 'riverstream'): the tributary tile. The generator stores the
+    // stream inflow first; pixel-measured, file D carries the stream on polygon edge D+3 and the river
+    // on D+1 / D+5, so a stream arriving from direction s uses file (6 - s) mod 6.
+    if (width === 'riverstream' && river.inDirections[0]) {
+      return { shape: 'riverstream', orientation: tributaryOrientationOf(river.inDirections[0]) };
     }
     // Two streams meeting: the smallwide Y (river out); otherwise the river Y.
     const narrow = confluenceOrientationOf(river.inDirections, river.outDirection);

@@ -334,16 +334,14 @@ old "1 apart falls back to straight" note above is obsolete). `mouthSeaDirection
 neighbours the one straight ahead, then a 60-degree turn, then the hairpin, which is the same "sea opposite the
 inflow" test the generator uses when it lets a stream reach a mouth.
 
-**TODO(art): `rivertile_riverstream_ywide`.** The owner is drawing it: the `ywide` geometry with two river arms
-and one stream arm, covering a stream that joins a river from either side with the river bending 60 degrees at
-the junction (the river in at `o+2` or `o+4`, the stream at the other). The generator already produces the tile
-(`RiverWidth.RiverStream`, wire `"riverstream"`, classified by `RiverConfluence.Classify(inA, aIsRiver, inB,
-bIsRiver, out)` as `RiverStreamWide`; the shared fixture has a `riverStreamRows` table for it) and
-`riverArtFor` renders it with the plain big-river `confluencewide` (`rivertile_ywide`) until the atlas hash
-arrives; the placeholder is marked `TODO(art)` at the family mapping in `textures.ts`. When the art exists it
-needs the same pixel check as the other Y families, plus one more fact: **which of the two non-outflow arms
-is the stream** (the tile does not store it; it is the inflow whose upstream tile has width `stream`), so the
-file's rotation/mirror for each of the two cases has to be measured, not assumed.
+**Stream into river: `rivertile_smallwide_bend120_tributary`** (bg_assets_hextile `edba233`). The `ywide` geometry
+with two river arms and one stream arm: a stream joins a river from either side, the river bending 60 degrees at
+the junction (river at `s+2` and `s+4` for a stream arriving from `s`). The generator produces it as
+`RiverWidth.RiverStream` (wire `"riverstream"`, classified by `RiverConfluence.Classify(inA, aIsRiver, inB,
+bIsRiver, out)` as `RiverStreamWide`) and stores the **stream inflow first** in `InDirections`, so the renderer
+knows which arm is the stream. Pixel-measured against `isoTopPoints`: file D carries the stream on polygon edge
+`D+3` and the river on `D+1`/`D+5`, so with `edge(d) = (3-d) mod 6` the file for a stream arriving from `s` is
+`D = (6 - s) mod 6` (`tributaryOrientationOf`, tested for all six directions in `types.test.ts`).
 
 The spring art (`mountaintile_corrie_spring`, `_saddleback_spring`) hands over at stream width already.
 

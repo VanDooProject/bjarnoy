@@ -4529,7 +4529,7 @@
       ],
       "rivers": [
         {"q": -372, "r": -488, "shape": "mouth", "inDirections": ["E"], "outDirection": null, "width": "river"},
-        {"q": -371, "r": -488, "shape": "confluence", "inDirections": ["SE", "NE"], "outDirection": "W", "width": "riverstream"},
+        {"q": -371, "r": -488, "shape": "confluence", "inDirections": ["NE", "SE"], "outDirection": "W", "width": "riverstream"},
         {"q": -371, "r": -487, "shape": "bend", "inDirections": ["E"], "outDirection": "NW", "width": "river"},
         {"q": -370, "r": -489, "shape": "straight", "inDirections": ["NE"], "outDirection": "SW", "width": "stream"},
         {"q": -370, "r": -487, "shape": "bend", "inDirections": ["SE"], "outDirection": "W", "width": "river"},
@@ -4552,7 +4552,7 @@
         {"q": -367, "r": -479, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "width": "river"},
         {"q": -367, "r": -478, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "width": "river"},
         {"q": -367, "r": -477, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "width": "river"},
-        {"q": -367, "r": -476, "shape": "confluence", "inDirections": ["E", "SW"], "outDirection": "NW", "width": "riverstream"},
+        {"q": -367, "r": -476, "shape": "confluence", "inDirections": ["SW", "E"], "outDirection": "NW", "width": "riverstream"},
         {"q": -366, "r": -492, "shape": "bend", "inDirections": ["NE"], "outDirection": "W", "width": "stream"},
         {"q": -366, "r": -476, "shape": "straight", "inDirections": ["E"], "outDirection": "W", "width": "river"},
         {"q": -365, "r": -493, "shape": "bend", "inDirections": ["E"], "outDirection": "SW", "width": "stream"},

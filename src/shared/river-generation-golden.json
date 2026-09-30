@@ -5116,7 +5116,7 @@
         {"q": -581, "r": 647, "shape": "bend", "inDirections": ["NE"], "outDirection": "SE", "width": "stream", "wasted": false},
         {"q": -581, "r": 648, "shape": "confluence", "inDirections": ["NW", "NE"], "outDirection": "SE", "width": "widen", "wasted": false},
         {"q": -581, "r": 649, "shape": "straight", "inDirections": ["NW"], "outDirection": "SE", "width": "river", "wasted": false},
-        {"q": -581, "r": 650, "shape": "confluence", "inDirections": ["NW", "E"], "outDirection": "SW", "width": "riverstream", "wasted": false},
+        {"q": -581, "r": 650, "shape": "confluence", "inDirections": ["E", "NW"], "outDirection": "SW", "width": "riverstream", "wasted": false},
         {"q": -581, "r": 652, "shape": "bend", "inDirections": ["SE"], "outDirection": "NE", "width": "stream", "wasted": false},
         {"q": -581, "r": 653, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "width": "stream", "wasted": false},
         {"q": -581, "r": 654, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "width": "stream", "wasted": false},

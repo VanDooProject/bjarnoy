@@ -757,6 +757,7 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         widen_straight: orientationMap('r' as unknown as never),
         widen_yn: orientationMap('r' as unknown as never),
         widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
         delta: orientationMap('r' as unknown as never),
       },
       riverTop: {
@@ -781,6 +782,7 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         widen_straight: orientationMap('r' as unknown as never),
         widen_yn: orientationMap('r' as unknown as never),
         widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
         delta: orientationMap('r' as unknown as never),
       },
       lavaRiverBase: {},
@@ -906,6 +908,7 @@ describe('riverTexturesFor lava-island shapes', () => {
         widen_straight: orientationMap('plain-river-base' as unknown as never),
         widen_yn: orientationMap('plain-river-base' as unknown as never),
         widen_yw: orientationMap('plain-river-base' as unknown as never),
+        riverstream: orientationMap('plain-river-base' as unknown as never),
         delta: orientationMap('plain-river-base' as unknown as never),
       },
       riverTop: {
@@ -930,6 +933,7 @@ describe('riverTexturesFor lava-island shapes', () => {
         widen_straight: orientationMap('plain-river-top' as unknown as never),
         widen_yn: orientationMap('plain-river-top' as unknown as never),
         widen_yw: orientationMap('plain-river-top' as unknown as never),
+        riverstream: orientationMap('plain-river-top' as unknown as never),
         delta: orientationMap('plain-river-top' as unknown as never),
       },
       lavaRiverBase: {
@@ -1044,6 +1048,7 @@ describe('riverTexturesFor river-art variants', () => {
         widen_straight: orientationMap('r' as unknown as never),
         widen_yn: orientationMap('r' as unknown as never),
         widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
         delta: orientationMap('r' as unknown as never),
       },
       riverTop: {
@@ -1068,6 +1073,7 @@ describe('riverTexturesFor river-art variants', () => {
         widen_straight: orientationMap('r' as unknown as never),
         widen_yn: orientationMap('r' as unknown as never),
         widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
         delta: orientationMap('r' as unknown as never),
       },
       lavaRiverBase: {},

@@ -478,9 +478,11 @@ function assignWidths(
           v.width = 'river';
           v.outRiver = true;
         } else if (v.out >= 0 && confluenceKind(v.ins[0]!, v.ins[1]!, v.out) === 'wide') {
-          // A stream joining a river at the wide Y: the river-stream Y, no widening needed.
+          // A stream joining a river at the wide Y: the river-stream Y, no widening needed. The stream
+          // inflow is stored first so the renderer can orient the tributary art by it.
           v.width = 'riverstream';
           v.outRiver = true;
+          if (a.outRiver) [v.ins[0], v.ins[1]] = [v.ins[1]!, v.ins[0]!];
           if (stats) stats.riverStreamJoins++;
         } else {
           const streamBranch = a.outRiver ? b : a;
