@@ -212,7 +212,7 @@ if (wantStopPrefix('settlement_giant_orientations') && giantAnchor) {
 // Rivers and streams (see docs/design/river-generation.md): demo mode traces the home island's
 // rivers on founding (WorldModel.placeGiantsForIsland). Rivers sit anywhere on the ~150-hex island,
 // far outside the ~10-hex demo vision, so this lifts the fog (the same flags FogDebugPanel flips),
-// finds the nearest tile of each kind (a stream, the widening straight, a stream confluence, a
+// finds the nearest tile of each kind (a stream, the widening straight, a stream confluence, a stream-into-river confluence, a
 // delta mouth, a plain river) and shoots each. Kinds the island does not have are skipped.
 if (wantStopPrefix('settlement_river')) {
   await page.evaluate(() => {
@@ -228,6 +228,8 @@ if (wantStopPrefix('settlement_river')) {
       stream: (t) => t.width === 'stream' && (t.shape === 'straight' || t.shape === 'bend'),
       widen: (t) => t.width === 'widen' && t.shape === 'straight',
       confluence: (t) => t.shape === 'confluence' && t.width === 'widen',
+      riverstream: (t) => t.shape === 'confluence' && t.width === 'riverstream',
+      riverconfluence: (t) => t.shape === 'confluence' && t.width === 'river',
       delta: (t) => t.shape === 'mouth' && t.width === 'river',
       river: (t) => t.width === 'river' && t.shape === 'straight',
     };

@@ -183,9 +183,6 @@ public sealed record WorldGenerationOptions
     /// <summary>Drainage cost within which a tributary looks for a trunk to join (about 1.4 per hex).</summary>
     public double MergeReach { get; init; } = 20.0;
 
-    /// <summary>An island whose rivers leave fewer river-width Straight tiles than this (what the Crop Mill needs; the Sawmill takes more shapes) gets no rivers at all.</summary>
-    public int MinMillStraights { get; init; } = 8;
-
     /// <summary>Drainage cost a junction search takes off a wide-Y junction into a river-width trunk (a stream joining there needs no widening first).</summary>
     public double RiverStreamBonus { get; init; } = 3.0;
 
@@ -255,7 +252,6 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(MergeSlack);
         ArgumentOutOfRangeException.ThrowIfNegative(MergeReach);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverStreamBonus);
-        ArgumentOutOfRangeException.ThrowIfNegative(MinMillStraights);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);

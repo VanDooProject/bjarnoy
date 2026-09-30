@@ -204,21 +204,6 @@ public class RiverStreamTests
     }
 
     [Fact]
-    public void Every_island_with_rivers_has_room_for_the_mills()
-    {
-        // Crop Mill needs a river-width Straight tile, Sawmill a river-width straight or bend.
-        var checkedIslands = 0;
-        foreach (var (seed, island, _) in GreenIslands())
-        {
-            checkedIslands++;
-            var straights = island.RiverTiles.Count(t => t.Shape == RiverTileShape.Straight && t.Width == RiverWidth.River);
-            Assert.True(straights >= 8, $"seed {seed} island {island.Index}: only {straights} river-width Straight tiles");
-        }
-
-        Assert.True(checkedIslands >= 30, $"only {checkedIslands} islands with rivers");
-    }
-
-    [Fact]
     public void Drainage_networks_merge_and_runs_do_not_hug()
     {
         var stats = new RiverGenerator.RiverStats();

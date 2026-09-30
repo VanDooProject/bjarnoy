@@ -20,7 +20,6 @@ internal static class RiverGenerator
         public int RiverStreamJoins;
         public int TruncatedBranches;
         public int DroppedRivers;
-        public int IslandsWithoutMillSpace;
 
         public void Add(RiverStats other)
         {
@@ -131,9 +130,8 @@ internal static class RiverGenerator
         Func<HexCoord, bool> isLand,
         WorldGenerationOptions options,
         int seed,
-        RiverStats? callerStats)
+        RiverStats? stats)
     {
-        var stats = callerStats is null ? null : new RiverStats();
         var candidates = SpringCandidates(islandTiles, land, islandLand);
         if (candidates.Count == 0)
         {
@@ -199,23 +197,7 @@ internal static class RiverGenerator
         }
 
         var nodes = BuildRiverTiles(paths);
-        var tiles = AssignWidths(nodes, isLand, seed, stats);
-
-        // The mills need river-width straights (Crop Mill: only those). An island whose rivers
-        // cannot offer that many gets none: a river nobody can build on is only scenery.
-        var mill = tiles.Count(t => t.Shape == RiverTileShape.Straight && t.Width == RiverWidth.River);
-        if (mill < options.MinMillStraights)
-        {
-            if (callerStats is not null)
-            {
-                callerStats.IslandsWithoutMillSpace++;
-            }
-
-            return [];
-        }
-
-        callerStats?.Add(stats!);
-        return tiles;
+        return AssignWidths(nodes, isLand, seed, stats);
     }
 
     /// <summary>What a legacy walk ended on.</summary>

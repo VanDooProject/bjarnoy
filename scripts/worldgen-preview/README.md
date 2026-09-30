@@ -38,6 +38,11 @@ widens a yellow dot, springs white dots, confluences magenta rings, mouths orang
 merges, widenings, truncated branches, dropped rivers, **inland mouths (must be 0)** and the parallel-run
 metric (adjacent tiles of rivers that drain to different mouths). A `--window` only traces islands it touches.
 
+`npx tsx ../../scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000` (from `src/frontend`) prints the river
+acceptance statistics over several seeds: rivers, outlets and merges per island (with a merge histogram), spring-to-mouth
+lengths, river/widen/stream tile shares, river-width Straight tiles per island, truncated and dropped branches, inland
+mouths and parallel runs. `--islands` also dumps the per-island numbers as JSON.
+
 ## Adding a layer
 
 A layer is an entry in `LAYERS` in `layers.ts`: an id, a description, its legend entries and a

@@ -68,8 +68,6 @@ export const MERGE_SLACK = 6.0;
 export const MERGE_REACH = 20.0;
 /** Cost a junction search takes off a wide-Y junction into a river-width trunk — mirrors `WorldGenerationOptions.RiverStreamBonus`. */
 export const RIVER_STREAM_BONUS = 3.0;
-/** An island whose rivers leave fewer river-width Straight tiles than this gets no rivers — mirrors `WorldGenerationOptions.MinMillStraights`. */
-export const MIN_MILL_STRAIGHTS = 8;
 
 /** Counters a caller can pass to `generateRivers` to see what the tracer did (the preview tool, tests). */
 export interface RiverStats {
@@ -81,23 +79,10 @@ export interface RiverStats {
   riverStreamJoins: number;
   truncatedBranches: number;
   droppedRivers: number;
-  islandsWithoutMillSpace: number;
-}
-
-/** Adds `other`'s tracer counters to `into` (the mill-space counter is the caller's own). */
-function addStats(into: RiverStats, other: RiverStats): void {
-  into.springs += other.springs;
-  into.outlets += other.outlets;
-  into.rivers += other.rivers;
-  into.merges += other.merges;
-  into.widenings += other.widenings;
-  into.riverStreamJoins += other.riverStreamJoins;
-  into.truncatedBranches += other.truncatedBranches;
-  into.droppedRivers += other.droppedRivers;
 }
 
 export function emptyRiverStats(): RiverStats {
-  return { springs: 0, outlets: 0, rivers: 0, merges: 0, widenings: 0, riverStreamJoins: 0, truncatedBranches: 0, droppedRivers: 0, islandsWithoutMillSpace: 0 };
+  return { springs: 0, outlets: 0, rivers: 0, merges: 0, widenings: 0, riverStreamJoins: 0, truncatedBranches: 0, droppedRivers: 0 };
 }
 
 function sortedByQR(tiles: AxialCoord[]): AxialCoord[] {
@@ -1112,8 +1097,6 @@ export function generateRivers(
     return buildNodes(survivors).map((n) => nodeToTile(n, 'river', wasted));
   }
 
-  const callerStats = stats;
-  stats = callerStats ? emptyRiverStats() : undefined;
   const candidates = springCandidates(islandTiles, terrainOf, islandLand);
   if (candidates.length === 0) return [];
 
@@ -1148,16 +1131,5 @@ export function generateRivers(
   }
   if (stats) stats.springs += springs.length;
 
-  const tiles = assignWidths(buildNodes(paths), isLand, seed, stats);
-
-  // The mills need river-width straights (Crop Mill: only those). An island whose rivers cannot
-  // offer that many gets none: a river nobody can build on is only scenery.
-  const mill = tiles.filter((t) => t.shape === 'straight' && t.width === 'river').length;
-  if (mill < MIN_MILL_STRAIGHTS) {
-    if (callerStats) callerStats.islandsWithoutMillSpace++;
-    return [];
-  }
-
-  if (callerStats && stats) addStats(callerStats, stats);
-  return tiles;
+  return assignWidths(buildNodes(paths), isLand, seed, stats);
 }

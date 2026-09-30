@@ -43,10 +43,12 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 *Implemented (streams PR) except the bog entry, which arrives with the bog. Mechanics:
 [`river-generation.md`](./river-generation.md#streams-springs-merging-and-late-widening).*
 
-- More rivers per island; streams should more often combine into bigger rivers. *Implemented: one spring per
-  900 land tiles (1-16), sequential merge-aware tracing with a merge bonus and a pull toward earlier rivers.
-  Measured on seed 11: merges stay rare (~1-2%) because farthest-first springs are tens of hexes apart and
-  every walk runs to its own coast; see the doc for the levers.*
+- More rivers per island; streams should more often combine into bigger rivers. *Implemented as drainage
+  networks: a few outlets on bays per island, a noisy shortest-path drainage field over (tile, arrival
+  direction) states, one spring per 500 land tiles (1-24) following the field, tributaries joining at Ys the art
+  can draw (including a stream into a river at the wide Y). Seeds 1-8 at radius 1000: about 15 rivers per island
+  with rivers, over half of them tributaries, mean spring-to-mouth length ~33 tiles; see the doc for the
+  knobs and the measurements.*
 - A new river starts as a small stream and stays small for the first half of its run. It widens only where two
   streams join, or on a straight tile chosen at random within the second half of the stream's run before it
   must be river-width (sea mouth, bog, meeting a river). Never in the first half, and not always at the very

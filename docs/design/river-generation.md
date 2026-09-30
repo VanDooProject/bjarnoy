@@ -204,52 +204,74 @@ side already supports, remains the follow-up.
 Everything below applies to green islands; lava (wasted) rivers keep the older rules described above (one
 spring per mountain cluster, independent walks, drop-on-collision, river width) and every lava tile is
 `RiverWidth.River`. `RiverGenerator.cs` and `riverGenerator.ts` are byte-identical ports; the golden fixture
-`src/shared/river-generation-golden.json` covers a simple river, a confluence, a bend60, a widening straight,
-a stream confluence (smallwide Y), a river confluence, a widening mouth and a lava stream.
+`src/shared/river-generation-golden.json` covers the smallest island that keeps rivers, a confluence, a bend60,
+a widening straight, a stream confluence (smallwide Y), a river confluence, a stream-into-river confluence, a
+widening mouth and a lava stream.
 
 ### Data model
 
 `RiverTile.Width`: `River` (0, what every stored tile before streams is), `Stream` (1: half width on every
-edge) and `Widen` (2: stream in, river out). Persisted as a sixth field of the `RiverTileListConverter` token
-(older five-field rows parse as `River`), on the wire as `"width": "river" | "stream" | "widen"`. A river
+edge), `Widen` (2: stream in, river out) and `RiverStream` (3: a confluence of one river and one stream
+inflow, river out; wide-Y geometry only). Persisted as a sixth field of the `RiverTileListConverter` token
+(older five-field rows parse as `River`), on the wire as `"width": "river" | "stream" | "widen" | "riverstream"`. A river
 starts as a stream and widens once; what follows the widening tile is river.
 
-### Springs: more, and spread out
+### Drainage networks (green islands)
 
-Candidates are mountain tiles of clusters of at least two that sit on a range edge (a non-mountain land
-neighbour) and do not touch the sea; if there is none of those, any such mountain tile not touching the sea.
-`K = clamp(round(landTiles / RiverTilesPerSpring), 1, MaxSpringsPerIsland)` (900 and 16). Springs are picked
-by farthest-point sampling: the first is the most inland candidate (lowest depth, ties by the `+41` hash then
-(Q, R)); each next maximises its hex distance to the springs already picked (same tie-breaks); picking stops
-at K or when the best is closer than `MinSpringSpacing` (10). Pick order is trace priority.
+The first streams pass walked every spring down the island's radial depth field to its own nearest coast:
+correct (no inland mouth, orientations verified) but tributaries hardly ever met a trunk (2 merges in 147
+rivers, ~17 tiles long). Green islands now get a **drainage network** instead. Everything is in
+`RiverGenerator.GenerateGreen` (`Drainage`, `TraceDrainage`, `SearchJunction`) and mirrored bit for bit in
+`riverGenerator.ts`; all knobs are `WorldGenerationOptions` values (admin-tunable like the rest) and TS
+constants of the same name.
 
-### Sequential, merge-aware tracing
+1. **Outlets.** `Kout = clamp(round(landTiles / OutletTilesPer), 1, MaxOutlets)` (2000, 12). Candidates are
+   coastal land tiles (touching sea) that have an interior neighbour to take flow from. Score = number of island
+   tiles within hex radius 3 (bays score high, spits low) plus the `+59` hash. Farthest-point sampling: the
+   first is the best score, each next maximises its distance to the outlets chosen (ties by score), stopping at
+   `Kout` or when the best is closer than `MinOutletSpacing` (25).
+2. **Drainage field.** Dijkstra from all outlets over **(tile, arrival direction) states** of the island's
+   interior tiles (an interior tile does not touch the sea; only outlets are coastal, so a river never runs
+   along the shore). Entering tile `N` costs `1 + DrainageNoise * hash(+53) + ValleyNoise * valueNoise(+61,
+   wavelength ValleyScale) + MountainCost` (if a mountain): per-tile jitter plus a smooth valley field, so
+   paths bend along coherent valleys instead of running ruler-straight, and go round ranges (`MountainCost`
+   2) rather than across them. A turn costs `BendCost` (60 degrees, a Bend tile) or `SharpBendCost` (120
+   degrees, Bend60); the 180 degree hairpin has no art and is not offered. The cheapest way on from a state is
+   recomputed on demand by scanning the six outflows (`Drainage.BestOut`), which is exactly the value the
+   Dijkstra stored, so no pointer array exists. The heap breaks ties on the state index, so both languages pop
+   in the same order.
+3. **Springs.** Candidates as before (range-edge mountain tiles of clusters of 2+, not touching the sea), now
+   only those the field can drain. `K = clamp(round(landTiles / RiverTilesPerSpring), 1, MaxSpringsPerIsland)`
+   (500, 24), farthest-point sampling with `MinSpringSpacing` 8; the first is the most inland candidate.
+4. **Tracing and junctions.** Springs are processed longest drainage cost first (the longest becomes the
+   trunk). A walk first runs `SearchJunction`: a Dijkstra over free interior tiles (turns priced, no hairpins)
+   to an *approach* tile beside a plain one-inflow trunk tile, on a side its Y can be drawn from
+   (`RiverConfluence.Classify`), priced as its own cost plus the trunk's remaining cost to its outlet. It joins
+   when that total is at most the walk's own cost to an outlet plus `MergeSlack` (6) and the route itself costs
+   at most `MergeReach` (20), so a tributary joins a nearby trunk unless that is much longer than running on
+   alone. A junction into a river-width trunk (downstream of an earlier confluence) with the wide geometry
+   gets `RiverStreamBonus` (3) off, because the river-stream Y needs no widening first.
+   With no junction near, the walk follows the pointers. Before stepping beside an earlier river it searches
+   again; when its next tile is an earlier river's it joins if the Y is drawable, else searches, else runs on
+   alone (`SearchJunction` with `toMouth`: cheapest route to any free coastal tile, tiles beside earlier rivers
+   cost `CrowdingCost` 2 each, reach `3 * MergeReach`) and becomes a river of its own with a new mouth; if even
+   that fails it is dropped and counted (`DroppedRivers`).
+5. Widths per "Width assignment" below.
+6. **Mill space** is reported, not enforced: the preview statistics list the river-width Straight tiles (Crop
+   Mill) per island with rivers (min and median), because the river buildings need River-width tiles.
 
-Springs are traced in priority order, each with the walk described under "Routing", and one change: tiles of
-earlier rivers are no longer invisible.
+A hex has exactly one way to draw a junction from each side, which is why a tributary on the "wrong" side of
+a straight trunk cannot join it (no mirror of the narrow Y; the wide Y needs the trunk to bend 60 degrees):
+the search looks along the trunk for a bend, and otherwise the tributary makes its own mouth.
 
-- Stepping onto a claimed tile is a **merge** and ends the walk (the tributary has become part of the trunk).
-  It is only offered when the claimed tile is a plain one-inflow tile (not a spring, mouth or confluence) and
-  its `(inflow, arrival, outflow)` triple is one the art can draw: `RiverConfluence.Classify` /
-  `confluenceKind` (see the orientation section). Anything else is simply not a candidate, so the walk looks
-  elsewhere or backtracks.
-- A merge candidate scores `MergeBonus` (0.35) higher. On top of that `MergeAttraction` (0.3) pulls a walk
-  toward earlier rivers: every free tile within `MergeAttractionRadius` (12) of an *approach tile* (a free
-  neighbour of a plain trunk tile from which the merge would be drawable) scores up to that much more, linearly
-  with closeness (a breadth-first distance map spread from each committed river).
-- Nothing keeps a walk off tiles adjacent to a claimed one; parallel runs are avoided by the spring spacing,
-  and measured (the preview's "parallel runs" line).
+Hash offsets used by the tracer on the island seed (`worldSeed + islandIndex * 104729`): `+41` spring
+candidates, `+43` legacy meander, `+47` widening pick, `+53` per-tile drainage noise, `+59` outlet score, `+61`
+valley noise.
 
-This replaces `ResolveCollisions` for green islands, which is what removes the "inland mouth" bug: a
-confluence always has an outflow, so every path ends at a mouth touching the sea or at a confluence that
-leads on to one. `RiverStreamTests.Every_river_path_ends_at_a_sea_mouth_never_inland` walks every generated
-river of six default worlds to its end.
-
-Measured (seed 11, radius 1000, 32 islands): 147 rivers on 22 islands, 1-2 merges. Farthest-first springs
-sit tens of hexes apart and the depth field runs every walk radially to its own coast, so tributaries hardly
-ever meet a trunk; at radius 4000 (seed 11) 2527 springs make 38 confluences. Raising `MergeAttraction`,
-its radius or `MaxSpringsPerIsland` moves that number (at the price of parallel runs); the levers are
-options, not code.
+Acceptance (`scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000`, and
+`RiverStreamTests`): 0 inland mouths, every confluence drawable, truncated + dropped under 5% of rivers, at
+least one merge per island with 4+ rivers on average, hugging adjacencies under 3% of river tiles (river-width
+Straight tiles per island are reported, not asserted).
 
 ### Width assignment
 
@@ -258,8 +280,9 @@ After tracing, the tiles form a forest flowing to the mouths. In topological ord
 1. Every tile is a stream at first.
 2. A confluence whose two inflows both arrive as streams is `Widen` (the smallwide Y); everything below is
    river.
-3. Where a branch must arrive at river width (a sea mouth, or the stream branch of a confluence whose other
-   branch is river) it **widens on a Straight tile**: with `L` the length of that stream run (spring to the
+3. A stream branch reaching a river branch at a confluence with the wide-Y geometry (inflows at `o+2` and
+   `o+4`) needs no widening: the tile is `RiverStream`, drawn with `rivertile_riverstream_ywide` (see below).
+   Otherwise (narrow geometry), and at a sea mouth, the branch that must arrive at river width **widens on a Straight tile**: with `L` the length of that stream run (spring to the
    tile before the requirement), one Straight tile with index `>= ceil(L/2)` (and `>= 1`, never the spring) is
    chosen uniformly by the `+47` hash of the requirement tile. Never in the first half. That tile is `Widen`,
    everything below it up to the requirement is river.
@@ -290,6 +313,7 @@ frame, against `edge(d) = (3 - d) mod 6`; stream width is half the river's on th
 | `rivertile_smallwide_y_narrow` | `1+D`, `4+D`, `5+D` | **river at `1+D`**, streams at `4+D`, `5+D` |
 | `rivertile_smallwide_ywide` | `1+D`, `3+D`, `5+D` | **river at `1+D`**, streams at `3+D`, `5+D` |
 | `rivertile_delta` | `D+1`, `D+4` | river in at `D+1`, **sea at `D+4`** |
+| `rivertile_riverstream_ywide` (**not yet in the atlas**) | `1+D`, `3+D`, `5+D` (the ywide edge set) | two river arms, one stream arm; symmetric, so the stream may join from either side |
 
 So the stream families take the river families' orientation helpers unchanged. For the asymmetric ones the
 file for a tile whose upstream flow arrives from direction `i` is `D = (2 - i) mod 6`
@@ -309,6 +333,17 @@ image of the narrow Y has no art).
 old "1 apart falls back to straight" note above is obsolete). `mouthSeaDirection` picks among several sea
 neighbours the one straight ahead, then a 60-degree turn, then the hairpin, which is the same "sea opposite the
 inflow" test the generator uses when it lets a stream reach a mouth.
+
+**TODO(art): `rivertile_riverstream_ywide`.** The owner is drawing it: the `ywide` geometry with two river arms
+and one stream arm, covering a stream that joins a river from either side with the river bending 60 degrees at
+the junction (the river in at `o+2` or `o+4`, the stream at the other). The generator already produces the tile
+(`RiverWidth.RiverStream`, wire `"riverstream"`, classified by `RiverConfluence.Classify(inA, aIsRiver, inB,
+bIsRiver, out)` as `RiverStreamWide`; the shared fixture has a `riverStreamRows` table for it) and
+`riverArtFor` renders it with the plain big-river `confluencewide` (`rivertile_ywide`) until the atlas hash
+arrives; the placeholder is marked `TODO(art)` at the family mapping in `textures.ts`. When the art exists it
+needs the same pixel check as the other Y families, plus one more fact: **which of the two non-outflow arms
+is the stream** (the tile does not store it; it is the inflow whose upstream tile has width `stream`), so the
+file's rotation/mirror for each of the two cases has to be measured, not assumed.
 
 The spring art (`mountaintile_corrie_spring`, `_saddleback_spring`) hands over at stream width already.
 
