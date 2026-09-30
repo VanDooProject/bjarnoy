@@ -57,12 +57,11 @@ describe('guardRange / campCountFor', () => {
     [6, 0],
     [59, 0],
     [60, 1],
-    [349, 1],
-    [1049, 1],
-    [1050, 2],
-    [7000, 10],
-    [16800, 24],
-    [40000, 24],
+    [224, 1],
+    [675, 2],
+    [4500, 10],
+    [14400, 32],
+    [40000, 32],
   ])('%i land tiles -> %i camps', (tiles, expected) => {
     expect(campCountFor(tiles)).toBe(expected);
   });
@@ -92,6 +91,28 @@ describe('placeCamps', () => {
       for (let j = i + 1; j < placed.length; j++) {
         expect(hexDistance(placed[i]!.coord, placed[j]!.coord)).toBeGreaterThanOrEqual(MinCampSpacing);
       }
+    }
+  });
+
+  it('rolls levels low: strong u^3 (~59/15/11/9/7 %), weak u^2 (~45/19/14/12/11 %)', () => {
+    const tally = (ground: 'grass' | 'sand', seeds: number) => {
+      const { tiles, terrainOf } = block(100, () => ground);
+      const counts = [0, 0, 0, 0, 0, 0];
+      for (let seed = 0; seed < seeds; seed++) {
+        for (const p of placeCamps(tiles, terrainOf, [], [], seed, 1)) counts[p.level]!++;
+      }
+      const total = counts.reduce((a, b) => a + b, 0);
+      return { total, share: counts.slice(1).map((c) => c / total) };
+    };
+    const strong = tally('grass', 60);
+    const weak = tally('sand', 100);
+    const expectedStrong = [0.585, 0.152, 0.106, 0.085, 0.072];
+    const expectedWeak = [0.447, 0.185, 0.143, 0.119, 0.106];
+    expect(strong.total).toBeGreaterThan(1000);
+    expect(weak.total).toBeGreaterThan(200);
+    for (let i = 0; i < 5; i++) {
+      expect(Math.abs(strong.share[i]! - expectedStrong[i]!)).toBeLessThan(0.05);
+      expect(Math.abs(weak.share[i]! - expectedWeak[i]!)).toBeLessThan(0.07);
     }
   });
 

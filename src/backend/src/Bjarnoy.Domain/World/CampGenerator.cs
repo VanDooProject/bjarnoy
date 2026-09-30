@@ -11,13 +11,13 @@ namespace Bjarnoy.Domain.World;
 internal static class CampGenerator
 {
     /// <summary>One camp per this many land tiles (rounded), tuning default.</summary>
-    public const int CampTilesPerCamp = 700;
+    public const int CampTilesPerCamp = 450;
 
     /// <summary>An island with fewer land tiles than this gets no camp at all (islets stay camp-free), tuning default.</summary>
     public const int MinCampIslandTiles = 60;
 
     /// <summary>No island gets more camps than this, tuning default.</summary>
-    public const int MaxCampsPerIsland = 24;
+    public const int MaxCampsPerIsland = 32;
 
     /// <summary>Two camps are never closer than this many hex steps, tuning default.</summary>
     public const int MinCampSpacing = 6;
@@ -275,11 +275,16 @@ internal static class CampGenerator
         return best;
     }
 
-    /// <summary>A level in <c>1..MaxCampLevel</c>, skewed by the family: weak low, strong high.</summary>
+    /// <summary>
+    /// A level in <c>1..MaxCampLevel</c>, skewed low for every family so few start positions are lost:
+    /// weak <c>1 + floor(u^2 * 5)</c> (about 45/19/14/12/11 percent on levels 1..5), strong
+    /// <c>1 + floor(u^3 * 5)</c> (about 59/15/11/9/7 percent), capped at <see cref="MaxCampLevel"/>.
+    /// Only multiplications and <c>floor</c>, so C# and TS agree bit for bit.
+    /// </summary>
     private static int RollLevel(Candidate candidate, int seed)
     {
         var u = ValueNoise.Hash2(candidate.Coord.Q, candidate.Coord.R, seed + 313);
-        var f = candidate.Info.LevelSkew == CampLevelSkew.Low ? u * u : 1.0 - ((1.0 - u) * (1.0 - u));
+        var f = candidate.Info.LevelSkew == CampLevelSkew.Quadratic ? u * u : u * u * u;
         return 1 + Math.Min(MaxCampLevel - 1, (int)Math.Floor(f * MaxCampLevel));
     }
 

@@ -34,21 +34,21 @@ export interface CampFamilyInfo {
   family: CampFamily;
   ground: CampGround;
   strength: CampStrength;
-  /** `low`: mostly low levels (weak camps); `high`: mostly high levels (strong camps). */
-  levelSkew: 'low' | 'high';
+  /** Both skews favour low levels. `quadratic`: `u^2` (weak camps); `cubic`: `u^3` (strong camps). */
+  levelSkew: 'quadratic' | 'cubic';
 }
 
 /** The shared camp family table — mirrors `CampFamilies.All`. */
 export const CAMP_FAMILIES: readonly CampFamilyInfo[] = [
-  { family: 'wolfden', ground: 'grass', strength: 'strong', levelSkew: 'high' },
-  { family: 'boarwallow', ground: 'forest', strength: 'strong', levelSkew: 'high' },
-  { family: 'bearrapids', ground: 'riverStraight', strength: 'strong', levelSkew: 'high' },
-  { family: 'fenrirbrood', ground: 'wasteland', strength: 'strong', levelSkew: 'high' },
-  { family: 'sealhaulout', ground: 'sand', strength: 'weak', levelSkew: 'low' },
-  { family: 'eagleeyrie', ground: 'mountain', strength: 'weak', levelSkew: 'low' },
-  { family: 'moosemire', ground: 'bog', strength: 'weak', levelSkew: 'low' },
-  { family: 'beaverlodge', ground: 'bog', strength: 'weak', levelSkew: 'low' },
-  { family: 'cranedance', ground: 'bog', strength: 'weak', levelSkew: 'low' },
+  { family: 'wolfden', ground: 'grass', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'boarwallow', ground: 'forest', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'bearrapids', ground: 'riverStraight', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'fenrirbrood', ground: 'wasteland', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'sealhaulout', ground: 'sand', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'eagleeyrie', ground: 'mountain', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'moosemire', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'beaverlodge', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'cranedance', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
 ];
 
 export function campFamilyInfo(family: string): CampFamilyInfo | undefined {
@@ -60,13 +60,13 @@ export function isStrongCampFamily(family: string): boolean {
 }
 
 /** One camp per this many land tiles (rounded), tuning default — mirrors `CampGenerator.CampTilesPerCamp`. */
-export const CampTilesPerCamp = 700;
+export const CampTilesPerCamp = 450;
 
 /** An island with fewer land tiles than this gets no camp at all — mirrors `CampGenerator.MinCampIslandTiles`. */
 export const MinCampIslandTiles = 60;
 
 /** No island gets more camps than this — mirrors `CampGenerator.MaxCampsPerIsland`. */
-export const MaxCampsPerIsland = 24;
+export const MaxCampsPerIsland = 32;
 
 /** Two camps are never closer than this many hex steps — mirrors `CampGenerator.MinCampSpacing`. */
 export const MinCampSpacing = 6;
@@ -173,7 +173,8 @@ function pickBest(
 
 function rollLevel(candidate: Candidate, seed: number): number {
   const u = hash2(candidate.coord.q, candidate.coord.r, seed + 313);
-  const f = candidate.info.levelSkew === 'low' ? u * u : 1 - (1 - u) * (1 - u);
+  // Weak u^2, strong u^3: only * and floor, bit-identical to C#.
+  const f = candidate.info.levelSkew === 'quadratic' ? u * u : u * u * u;
   return 1 + Math.min(MaxCampLevel - 1, Math.floor(f * MaxCampLevel));
 }
 
