@@ -471,11 +471,14 @@ oases and NPC villages. Bjarnoy's version:
 
 - **Wildlife on empty islands.** Unclaimed islands are guarded by wildlife
   (wolves, bears; a seal colony on the coast). Founding a settlement there is
-  allowed (land troops need a base on the island to fight from), but while
-  the wildlife is there **no tower can go up** on that island ("wolves eat
-  the builders"), so the realm can't grow until it's cleared. Clearing it
-  gives loot. **Exploring and clearing new islands
-  must pay much more than farming smaller players.**
+  allowed (land troops need a base on the island to fight from), but **no
+  tower can go up within a guarded camp's range** ("wolves eat the
+  builders"). The range depends on the camp's level, rolled at random when
+  the camp spawns: a strong camp holds a wide stretch of land, a weak one
+  only its nearest hexes. A small island can be held whole by one camp; on
+  a big one a player clears only the camps in the way and builds towers
+  where the land is then free. Clearing a camp gives loot. **Exploring and
+  clearing new islands must pay much more than farming smaller players.**
 - **Beast dens** are the oasis equivalent: raidable spots whose loot grows
   back over time, and which can later be annexed for a production bonus.
 - **Merchant ships** sail NPC routes between islands and can be raided at
