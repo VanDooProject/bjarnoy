@@ -505,10 +505,10 @@ Two things in the build are easy to miss:
   so the image's `HEALTHCHECK` has something to probe `/health` with — that is
   what `depends_on: service_healthy` and an orchestrator's status both read.
   And `libfontconfig1`, which SkiaSharp's `libSkiaSharp.so` links against:
-  without it the fog-mask endpoint is the one thing that 500s in a container
+  without it the fog-chunks endpoint is the one thing that 500s in a container
   and nowhere else, reporting `/app/liblibSkiaSharp: cannot open shared object
   file` — a missing *dependency of* a native asset, not a missing asset. The
-  image smoke test fetches a fog mask for that reason.
+  image smoke test founds a settlement and fetches its fog chunk for that reason (an empty chunk is never encoded, so it has to be one with something in reach).
 
 ## Behind a proxy
 

@@ -967,6 +967,24 @@ export class WorldModel {
     return [...types];
   }
 
+  /**
+   * How many of each building type a settlement has standing (by wire name) —
+   * `listPlacedBuildings` keeps only the distinct types, but the onboarding
+   * quests ("3 producers built") need the counts. The longhouse is included.
+   */
+  countPlacedBuildingsByType(settlementId: string): Record<string, number> {
+    const settlement = this.settlements.get(settlementId);
+    const counts: Record<string, number> = {};
+    if (!settlement) return counts;
+    for (const c of this.claimedHexes(settlement)) {
+      const tile = this.getTile(c.q, c.r);
+      if (tile.ownerId === settlementId && tile.buildingType) {
+        counts[tile.buildingType] = (counts[tile.buildingType] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
   listSettlements(): Settlement[] {
     return [...this.settlements.values()];
   }

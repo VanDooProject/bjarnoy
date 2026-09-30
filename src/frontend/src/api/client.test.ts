@@ -172,3 +172,51 @@ describe('ApiError request context', () => {
     expect(err.cause).toBe(original);
   });
 });
+
+describe('api.getFogChunks', () => {
+  const rect = { cuMin: -1, cuMax: 2, cvMin: 0, cvMax: 1 };
+
+  function response(status: number, body?: unknown, etag?: string): Response {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+      headers: { get: (name: string) => (name.toLowerCase() === 'etag' ? (etag ?? null) : null) },
+    } as unknown as Response;
+  }
+
+  it('asks for the inclusive chunk rectangle with the owner header and returns body plus ETag', async () => {
+    const body = { chunkSize: 64, ...rect, chunks: [{ cu: -1, cv: 0, version: '0', png: null }] };
+    vi.mocked(fetch).mockResolvedValue(response(200, body, '"abc"'));
+
+    const result = await api.getFogChunks('world-1', 'player-1', rect);
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    const requestUrl = new URL(String(url), 'http://localhost');
+    expect(requestUrl.pathname).toBe('/api/v1/worlds/world-1/fog-chunks');
+    expect(Object.fromEntries(requestUrl.searchParams)).toEqual({ cuMin: '-1', cuMax: '2', cvMin: '0', cvMax: '1' });
+    expect((init?.headers as Record<string, string>)['X-Owner-Id']).toBe('player-1');
+    expect((init?.headers as Record<string, string>)['If-None-Match']).toBeUndefined();
+    expect(result).toEqual({ notModified: false, data: body, etag: '"abc"' });
+  });
+
+  it('sends If-None-Match and reports a 304 as notModified without reading a body', async () => {
+    vi.mocked(fetch).mockResolvedValue(response(304));
+
+    const result = await api.getFogChunks('world-1', 'player-1', rect, '"abc"');
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect((init?.headers as Record<string, string>)['If-None-Match']).toBe('"abc"');
+    expect(result).toEqual({ notModified: true });
+  });
+
+  it('throws an ApiError carrying the problem body on failure (so world_not_found stays detectable)', async () => {
+    vi.mocked(fetch).mockResolvedValue(response(404, { error: 'world_not_found' }));
+
+    await expect(api.getFogChunks('world-1', 'player-1', rect)).rejects.toMatchObject({
+      status: 404,
+      problem: { error: 'world_not_found' },
+    });
+    await expect(api.getFogChunks('world-1', 'player-1', rect)).rejects.toBeInstanceOf(ApiError);
+  });
+});

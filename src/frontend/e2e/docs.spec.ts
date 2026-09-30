@@ -124,4 +124,44 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     );
     expect(mismatches).toEqual([]);
   });
+  test('wildlife camps page scrolls and shows guarded art only for kept rotations', async ({ page }) => {
+    await page.goto('/docs/wildlife-camps');
+    const view = new ScrollableView(page, '.wildlife-camps');
+    const lastCard = page.locator('#camp-cranedance');
+    await lastCard.waitFor();
+    const { scrollHeight, clientHeight } = await view.metrics();
+    expect(scrollHeight).toBeGreaterThan(clientHeight);
+    await view.wheel(100_000);
+    await expect(lastCard).toBeInViewport();
+    expect(await view.noHorizontalOverflow()).toBe(true);
+
+    // Every camp shows art, guarded by default.
+    await expect(page.locator('.wildlife-camps .card .atlas-sprite')).toHaveCount(9);
+
+    // The eyrie's guarded state only ships its SW rotation; cleared, it turns every way.
+    const eyrie = page.locator('#camp-eagleeyrie');
+    await expect(eyrie.getByRole('button', { name: 'SW', exact: true })).toBeEnabled();
+    await expect(eyrie.getByRole('button', { name: 'SE', exact: true })).toBeDisabled();
+    await eyrie.getByRole('button', { name: 'Cleared' }).click();
+    await expect(eyrie.getByRole('button', { name: 'SE', exact: true })).toBeEnabled();
+  });
+
+  test('bog lands page scrolls and every stage and look has art', async ({ page }) => {
+    await page.goto('/docs/bog-lands');
+    const view = new ScrollableView(page, '.bog-lands');
+    const lastSection = page.locator('#map-rules');
+    await lastSection.waitFor();
+    const { scrollHeight, clientHeight } = await view.metrics();
+    expect(scrollHeight).toBeGreaterThan(clientHeight);
+    await view.wheel(100_000);
+    await expect(lastSection).toBeInViewport();
+    expect(await view.noHorizontalOverflow()).toBe(true);
+
+    // Ground + water + three buildings.
+    await expect(page.locator('.bog-lands .art-box .atlas-sprite')).toHaveCount(5);
+    const oreWorks = page.locator('#building-bogoreworks');
+    await expect(oreWorks.locator('.pill', { hasText: /^\d+$/ })).toHaveCount(7);
+    await oreWorks.getByRole('button', { name: '1', exact: true }).click();
+    await expect(oreWorks.locator('.atlas-sprite')).toBeVisible();
+  });
 });

@@ -69,6 +69,17 @@ public sealed record FeastResult(FeastRejection Rejection, Feast? Feast = null, 
     public bool Accepted => Rejection == FeastRejection.None && Feast is not null;
 }
 
+/// <summary>Outcome of claiming an onboarding quest reward.</summary>
+public sealed record ClaimQuestResult(
+    QuestRejection Rejection,
+    bool SettlementNotFound = false,
+    bool WorldPaused = false,
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null)
+{
+    public bool Accepted => Rejection == QuestRejection.None && !SettlementNotFound && !WorldPaused && Settlement is not null;
+}
+
 public sealed record TrainResult(TrainRejection Rejection, TrainingOrder? Order = null, bool WorldPaused = false)
 {
     public bool Accepted => Rejection == TrainRejection.None && Order is not null;
@@ -1281,6 +1292,50 @@ public sealed class SettlementService(
             settlementId, decision.Feast!.EndsAt, decision.Feast.RenownGain);
 
         return new FeastResult(FeastRejection.None, decision.Feast);
+    }
+
+    /// <summary>
+    /// Claims an onboarding quest reward (economy.md section 7): settles first,
+    /// then plans and pays it into the stock (clamped to storage) and sets the
+    /// quest's claimed bit in one save, so it pays exactly once.
+    /// </summary>
+    public async Task<ClaimQuestResult> ClaimQuestAsync(
+        Guid settlementId, string questId, CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new ClaimQuestResult(QuestRejection.None, SettlementNotFound: true);
+        }
+
+        var clock = settlement.World.ToClock();
+        if (!clock.AllowsCommands)
+        {
+            return new ClaimQuestResult(QuestRejection.None, WorldPaused: true);
+        }
+
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        // Settle first so a building that just finished counts, and the reward
+        // lands on the stock as of now.
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+
+        var decision = settled.PlanClaimQuest(questId);
+        if (!decision.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
+                .ConfigureAwait(false);
+            return new ClaimQuestResult(decision.Rejection);
+        }
+
+        settlement.ApplyDomain(settled.ClaimQuest(decision.Quest!, now));
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Settlement {Id} claimed quest {Quest}.", settlementId, decision.Quest!.Id);
+
+        return new ClaimQuestResult(QuestRejection.None, Settlement: settlement, Clock: clock);
     }
 
     /// <summary>

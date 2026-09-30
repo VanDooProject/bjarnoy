@@ -231,4 +231,140 @@ public class FogMaskGeneratorTests
             Assert.Equal(first[texel].NoiseSeed, second[texel].NoiseSeed);
         }
     }
+
+    // ---- Chunked generation (map-fog-v2.md §3) --------------------------------
+
+    /// <summary>
+    /// A world large enough to span several 64-texel chunks (radius 40:
+    /// u in [-41, 42), v in [-81, 82) — chunks (-1..0) x (-2..1)), with vision
+    /// sources placed on chunk seams and persisted history straddling them.
+    /// </summary>
+    private static (IReadOnlyList<FogVisionSource> Sources, HashSet<HexCoord> Explored) SeamWorld()
+    {
+        var sources = new List<FogVisionSource>
+        {
+            new(new HexCoord(0, 0), ExploredRadius: 3, VisibleRadius: 2),      // on the u = 0 and v = 0 seams
+            new(new HexCoord(-1, 32), ExploredRadius: 4, VisibleRadius: 2),    // v = 2r + q = 63: the v = 64 seam
+            new(new HexCoord(20, -20), ExploredRadius: 2, VisibleRadius: 1),
+            new(new HexCoord(-30, 5), ExploredRadius: 5, VisibleRadius: 3),
+            new(new HexCoord(35, -2), ExploredRadius: 3, VisibleRadius: 2),    // far from every other source
+        };
+
+        // History that crosses seams but is not a source ring: a walked strip.
+        var explored = new HashSet<HexCoord>();
+        for (var q = -6; q <= 6; q++)
+        {
+            explored.Add(new HexCoord(q, 30));
+            explored.Add(new HexCoord(q, -30 - (q / 2)));
+        }
+
+        return (sources, explored);
+    }
+
+    /// <summary>The texel rectangle holding real world hexes (the padded WorldBounds ring excluded).</summary>
+    private static bool InsideTightWorld(MaskBounds worldBounds, MaskTexel texel) =>
+        texel.U >= worldBounds.MinU + 1 && texel.U <= worldBounds.MaxU - 2
+        && texel.V >= worldBounds.MinV + 1 && texel.V <= worldBounds.MaxV - 2;
+
+    [Fact]
+    public void Every_chunk_equals_the_matching_window_of_the_whole_world_mask_so_there_are_no_seams()
+    {
+        const int radius = 40;
+        var (sources, explored) = SeamWorld();
+        var worldBounds = FogMaskLayout.WorldBounds(radius);
+        var whole = FogMaskGenerator.Generate(worldBounds, sources, explored, Options);
+
+        var (min, max) = FogChunkLayout.WorldChunkRange(radius);
+        Assert.True((max.U - min.U + 1) * (max.V - min.V + 1) >= 6, "the test world must be multi-chunk");
+
+        var compared = 0;
+        for (var cv = min.V; cv <= max.V; cv++)
+        {
+            for (var cu = min.U; cu <= max.U; cu++)
+            {
+                var chunk = new FogChunkCoord(cu, cv);
+                var bounds = FogChunkLayout.Bounds(chunk);
+
+                // The real delivery path: halo-filtered sources, explored as a lookup.
+                var halo = FogMaskGenerator.SourcesAffecting(bounds, sources, Options);
+                var mask = FogMaskGenerator.GenerateWindow(bounds, halo, explored.Contains, Options);
+
+                Assert.Equal(bounds, mask.Bounds);
+                for (var v = bounds.MinV; v < bounds.MaxV; v++)
+                {
+                    for (var u = bounds.MinU; u < bounds.MaxU; u++)
+                    {
+                        var texel = new MaskTexel(u, v);
+                        if (!InsideTightWorld(worldBounds, texel))
+                        {
+                            continue;
+                        }
+
+                        Assert.Equal(whole[texel], mask[texel]);
+                        compared++;
+                    }
+                }
+            }
+        }
+
+        // 81 x 163 texels of real world, every one of them compared.
+        Assert.Equal(((2 * radius) + 1) * ((4 * radius) + 1), compared);
+    }
+
+    [Fact]
+    public void The_source_halo_drops_far_sources_without_changing_a_single_texel()
+    {
+        var (sources, explored) = SeamWorld();
+        var bounds = FogChunkLayout.Bounds(new FogChunkCoord(0, 1));
+
+        var halo = FogMaskGenerator.SourcesAffecting(bounds, sources, Options);
+        var withHalo = FogMaskGenerator.GenerateWindow(bounds, halo, explored.Contains, Options);
+        var withAll = FogMaskGenerator.GenerateWindow(bounds, sources, explored.Contains, Options);
+
+        Assert.True(halo.Count < sources.Count, "the halo must actually filter something");
+        Assert.Equal(withAll.Cells, withHalo.Cells);
+    }
+
+    [Fact]
+    public void A_source_just_outside_a_chunk_still_shades_its_edge_but_one_beyond_reach_does_not()
+    {
+        var chunk = new FogChunkCoord(0, 0);
+        var bounds = FogChunkLayout.Bounds(chunk);
+
+        // Texel u = 64 is the first column of chunk (1, 0); a hex there sits
+        // one column outside. Radius 3 + margin 4 reaches back into the chunk.
+        var near = new FogVisionSource(FogMaskLayout.ToHex(new MaskTexel(64, 0)), 3, 2);
+        var far = new FogVisionSource(FogMaskLayout.ToHex(new MaskTexel(64 + 40, 0)), 3, 2);
+
+        Assert.Contains(near, FogMaskGenerator.SourcesAffecting(bounds, [near, far], Options));
+        Assert.DoesNotContain(far, FogMaskGenerator.SourcesAffecting(bounds, [near, far], Options));
+
+        var mask = FogMaskGenerator.GenerateWindow(bounds, [near], _ => false, Options);
+        Assert.True(mask[new MaskTexel(63, 0)].Unknown < 255, "edge column must be shaded by the neighbouring source");
+    }
+
+    [Fact]
+    public void Explored_history_in_the_neighbouring_chunk_shades_this_chunks_interpolation_border()
+    {
+        // No sources at all: the only signal is one explored hex just across
+        // the seam. The odd-parity texel next to it, on this side, must show it.
+        var explored = FogMaskLayout.ToHex(new MaskTexel(64, 0));
+        var bounds = FogChunkLayout.Bounds(new FogChunkCoord(0, 0));
+
+        var mask = FogMaskGenerator.GenerateWindow(bounds, [], h => h == explored, Options);
+
+        Assert.True(mask[new MaskTexel(63, 0)].Unknown < 255);
+    }
+
+    [Fact]
+    public void Generating_from_a_lookup_equals_generating_from_a_set()
+    {
+        var (sources, explored) = SeamWorld();
+        var bounds = FogMaskLayout.WorldBounds(12);
+
+        var fromSet = FogMaskGenerator.Generate(bounds, sources, explored, Options);
+        var fromLookup = FogMaskGenerator.Generate(bounds, sources, explored.Contains, Options);
+
+        Assert.Equal(fromSet.Cells, fromLookup.Cells);
+    }
 }

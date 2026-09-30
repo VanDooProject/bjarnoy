@@ -211,9 +211,17 @@ public class EconomyDesignTests
 
         Assert.Equal(new ResourceAmounts(120, 100, 60, 0), one.Cost);
         Assert.Equal(120 * Math.Pow(1.34, 4), five.Cost.Wood, 6);
-        Assert.Equal(TimeSpan.FromSeconds(Math.Round(180 * Math.Pow(1.30, 4))), five.BuildDuration);
+        Assert.Equal(TimeSpan.FromSeconds(Math.Round(90 * Math.Pow(1.33, 4))), five.BuildDuration);
         Assert.Equal(new ResourceAmounts(15 * 5, 12 * 5, 15 * 5, 2 * 5), five.ProductionPerHour);
         Assert.Equal(ResourceAmounts.Uniform(250 * 5), five.StorageCapacity);
+    }
+
+    [Fact]
+    public void Longhouse_2_builds_in_about_two_minutes_so_the_tutorial_upgrade_is_quick()
+    {
+        var two = BuildingCatalogue.Get(BuildingType.Longhouse, 2).BuildDuration;
+
+        Assert.InRange(two.TotalMinutes, 1.9, 2.1);
     }
 
     [Fact]

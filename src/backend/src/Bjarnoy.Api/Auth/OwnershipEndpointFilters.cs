@@ -205,7 +205,7 @@ public sealed class ArmyOwnershipEndpointFilter : IEndpointFilter
 /// not (owned by the <c>Abandoned</c> system user, provable only by the
 /// founding browser's own local id). This gates mutations, via the endpoint
 /// filters above; <see cref="Bjarnoy.Api.Endpoints.WorldEndpoints"/>'s
-/// per-world reads (membership/fog-mask/plot-suggestion) apply the same
+/// per-world reads (membership/fog-chunks/plot-suggestion) apply the same
 /// "claimed realm, header alone is no longer enough" rule to their own
 /// scoping via <see cref="CallerRealmResolver"/> instead, since none of them
 /// take a settlement id to run this gate against directly.

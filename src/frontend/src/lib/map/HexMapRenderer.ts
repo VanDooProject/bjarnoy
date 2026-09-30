@@ -50,7 +50,8 @@ import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
 import { hasWaterProp, type TerrainLookup, type WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
-import { fogMaskPlacement } from './fog/fogMaskLayout';
+import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
+import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
 import { riverPathFor } from './riverPath';
 import {
   TILE_ART_NATIVE_H,
@@ -2052,6 +2053,7 @@ export class HexMapRenderer {
     // itself (fogShader.ts's own screenToWorld-equivalent).
     this.blackFogLayer.setCamera(this.camera, this.viewport);
     this.whiteMistLayer.setCamera(this.camera, this.viewport);
+    this.notifyFogViewport();
   }
 
   private onTick = () => {
@@ -4588,24 +4590,25 @@ export class HexMapRenderer {
 
   /**
    * Fog v2 (docs/design/map-fog-v2.md §2.4/§3): hands the renderer a freshly
-   * fetched (or, in demo mode, generated) mask bitmap for a world of the
-   * given `radius`. `radius` picks the same world-to-mask-UV placement
-   * (worldMaskBounds, mirroring the backend's FogMaskLayout.WorldBounds) on
-   * every call, so this is cheap to call again even when only the texture
-   * itself changed. `bitmap` null is a no-op — both fog layers already
-   * default an unbound mask to fully-unknown, so there's nothing useful to
-   * do before the first real fetch resolves.
+   * fetched (or, in demo mode, generated) mask bitmap and the texel
+   * rectangle it covers — the chunk window a live mask is stitched into, or
+   * the whole demo world (`worldMaskBounds`). The placement is derived from
+   * `bounds` on every call, so this is cheap to call again even when only the
+   * texture itself changed, and the previous texture keeps its own placement
+   * for the cross-fade (FogMaskLayer.setMaskTexture). Ground outside `bounds`
+   * reads as fully unknown (fogShader.ts's sampleMask) — §3's default for a
+   * chunk that isn't loaded. `bitmap` null is a no-op — both fog layers
+   * already default an unbound mask to fully-unknown, so there's nothing
+   * useful to do before the first real fetch resolves.
    */
-  setFogMask(radius: number, bitmap: ImageBitmap | null) {
+  setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null) {
     if (!bitmap) return;
 
-    const placement = fogMaskPlacement(radius, TILE_W, TILE_H);
-    this.blackFogLayer.setPlacement(placement);
-    this.whiteMistLayer.setPlacement(placement);
+    const placement = fogMaskPlacement(bounds, TILE_W, TILE_H);
 
     const texture = Texture.from(bitmap);
-    this.blackFogLayer.setMaskTexture(texture);
-    this.whiteMistLayer.setMaskTexture(texture);
+    this.blackFogLayer.setMaskTexture(texture, placement);
+    this.whiteMistLayer.setMaskTexture(texture, placement);
 
     // Both layers now hold `texture` as their current mask and the previous
     // one as uMaskPrev, mid cross-fade (FogMaskLayer.setMaskTexture, §2.6).
@@ -4615,6 +4618,42 @@ export class HexMapRenderer {
     this.previousFogMaskTexture?.destroy(true);
     this.previousFogMaskTexture = this.fogMaskTexture;
     this.fogMaskTexture = texture;
+  }
+
+  /**
+   * Registers who wants to know which fog chunks the camera sees (the world
+   * store's `requestFogViewport`). Called with the current rectangle at once
+   * and again whenever it changes — chunk-granular, so a pan inside one
+   * chunk costs nothing — never per frame. Pass `null` to unregister.
+   */
+  setFogViewportListener(listener: ((range: ChunkRange) => void) | null) {
+    this.fogViewportListener = listener;
+    this.lastFogViewportRange = null;
+    this.notifyFogViewport();
+  }
+
+  private fogViewportListener: ((range: ChunkRange) => void) | null = null;
+  private lastFogViewportRange: ChunkRange | null = null;
+
+  /**
+   * The chunk rectangle under the camera, from the same texel maths as the
+   * mask placement (u = world x / (0.75 tile width), v = 2 * world y / tile
+   * height — half-texel corrections omitted: the window's margin is far
+   * bigger than that). Reported only when it changes.
+   */
+  private notifyFogViewport() {
+    if (!this.fogViewportListener || this.viewport.width <= 0 || this.viewport.height <= 0) return;
+    const rect = visibleWorldRect(this.camera, this.viewport);
+    const colPitch = 0.75 * TILE_W;
+    const range = chunkRangeOfTexels(
+      rect.minX / colPitch,
+      rect.maxX / colPitch,
+      (2 * rect.minY) / TILE_H,
+      (2 * rect.maxY) / TILE_H,
+    );
+    if (rangesEqual(range, this.lastFogViewportRange)) return;
+    this.lastFogViewportRange = range;
+    this.fogViewportListener(range);
   }
 
   /** World-space centre of a hex's top face — `hexCenterScreen` before the camera transform. */

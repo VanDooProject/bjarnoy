@@ -1,103 +1,101 @@
-using System.Security.Cryptography;
-using System.Text;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace Bjarnoy.Infrastructure.World;
 
+/// <summary>A hex disc a player currently has explored ground from: a settlement ring, a tower, an army's walked position.</summary>
+public readonly record struct ExploredDisc(HexCoord Centre, int Radius);
+
 /// <param name="Settlements">
-/// <paramref name="ownerId"/>'s own settlements in this world, buildings
-/// loaded — what <see cref="FogMaskService"/> builds its vision sources from.
+/// The owner's own settlements in this world, buildings loaded — what the
+/// vision sources below are built from.
 /// </param>
-/// <param name="Hexes">
-/// The decoded, persisted explored set — every hex <paramref name="ownerId"/>
-/// has ever had a settlement ring, tower or in-transit army reach in this
-/// world, merged with whatever was already on record. This is the same
-/// ground the fog mask reveals, and the authority every fog-gated read
-/// (<c>GET /settlements/{id}/view</c>, <c>GET /worlds/{worldId}/settlements</c>)
-/// checks a rival's position against.
+/// <param name="VisionSources">
+/// The settlement and tower <see cref="FogVisionSource"/>s the mask bakes its
+/// two ramps from (armies contribute explored ground only, never a source —
+/// §1c keeps their live vision out of the cached mask).
 /// </param>
-/// <param name="Bits">
-/// The packed form of <paramref name="Hexes"/> (<see cref="PersistedExploredBitset.Encode"/>'s
-/// shape) — already the freshly-merged, saved-back bitset, not a stale read.
+/// <param name="Discs">
+/// Every disc of ground the owner currently explores: each settlement's and
+/// tower's explored ring and each in-transit army's walked-over radius. OR-ed
+/// into the persisted chunks (<see cref="ExploredAreaService"/>) and consulted
+/// directly by <see cref="ExploredAreaService.ExploredAmongAsync"/>, so nothing
+/// ever materialises "the explored set" of a world.
 /// </param>
-/// <param name="Version">
-/// A stable hash of <paramref name="Settlements"/> and <paramref name="Bits"/> —
-/// identical to <see cref="FogMaskService"/>'s own PNG ETag, so a cache keyed
-/// on it self-invalidates exactly when the mask would.
+/// <param name="MergedChunks">
+/// When the area was loaded with <c>persist: true</c>: the post-merge state of
+/// every chunk the <paramref name="Discs"/> touch — what the database holds
+/// now (or would, had a concurrent first insert not won the race), so a
+/// caller reading the store next sees no older data. Empty otherwise.
 /// </param>
 public sealed record ExploredArea(
+    Guid WorldId,
+    string OwnerId,
+    int WorldRadius,
     IReadOnlyList<SettlementEntity> Settlements,
-    IReadOnlySet<HexCoord> Hexes,
-    byte[] Bits,
-    MaskBounds Bounds,
-    string Version);
+    IReadOnlyList<FogVisionSource> VisionSources,
+    IReadOnlyList<ExploredDisc> Discs,
+    IReadOnlyDictionary<FogChunkCoord, ExploredChunkData> MergedChunks)
+{
+    public MaskBounds Bounds => FogMaskLayout.WorldBounds(WorldRadius);
+
+    /// <summary>Whether <paramref name="hex"/> lies inside one of the owner's current discs (no persisted history consulted).</summary>
+    public bool InCurrentDiscs(HexCoord hex)
+    {
+        foreach (var disc in Discs)
+        {
+            if (HexCoord.Distance(disc.Centre, hex) <= disc.Radius)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
 
 /// <summary>
 /// The shared source of truth behind a player's fog of war: which ground in a
 /// world they have actually explored, per <c>docs/design/map-fog-v2.md</c>
-/// §1e. Extracted out of <see cref="FogMaskService"/> (which still owns the
-/// PNG-baking half of that document) so every other read that must respect
-/// fog — <c>GET /settlements/{id}/view</c> and the fog-gated
-/// <c>GET /worlds/{worldId}/settlements</c> — shares the exact same
-/// "which hexes has this owner explored" computation rather than
-/// reimplementing it, which would both duplicate the ring/tower/army-vision
-/// logic and risk the two readings of "explored" silently drifting apart.
+/// §1e. Every fog-gated read — the fog chunks (<see cref="FogChunkService"/>),
+/// <c>GET /settlements/{id}/view</c> and <c>GET /worlds/{worldId}/settlements</c>
+/// — shares this one computation of "which hexes has this owner explored"
+/// rather than reimplementing it, which would both duplicate the ring/tower/
+/// army-vision logic and risk the readings of "explored" drifting apart.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Computes a player's explored hexes from their own settlements' vision
-/// rings (<see cref="FogVisionRadii.ExploredRadius"/>), their towers'
-/// (<see cref="FogVisionRadii.TowerExploredRadius"/>) and their in-transit
-/// armies' current walked-over ground
-/// (<see cref="FogVisionRadii.ArmyVisionRadiusHexes"/> around
-/// <see cref="Domain.Armies.Army.PositionAt"/>), OR-ed into the persisted
-/// <see cref="Entities.PlayerExploredEntity"/> bitset
-/// (<see cref="PersistedExploredBitset.Merge"/>) and saved back if it grew —
-/// exactly what <see cref="FogMaskService.GeneratePlayerMaskAsync"/> used to
-/// do inline before this extraction. Its output must stay byte-identical to
-/// that prior behaviour; <c>FogMaskServiceTests</c> is what proves it.
-/// </para>
-/// <para>
-/// The decoded hex set is cached in <see cref="IMemoryCache"/>, keyed by
-/// <see cref="ExploredArea.Version"/> — the same version FogMaskService's own
-/// PNG cache uses — so the cache self-invalidates the instant the underlying
-/// settlement set or persisted history actually changes, with no separate
-/// eviction call needed on any write path.
+/// Explored ground is the owner's persisted history — sparse 64 x 64-texel
+/// chunks (<see cref="PlayerExploredChunkEntity"/>, <see cref="PersistedExploredBitset"/>),
+/// one row per touched chunk, a fully explored chunk stored as a flag — OR
+/// the discs they explore from right now (settlement and tower rings,
+/// in-transit armies at <see cref="FogVisionRadii.ArmyVisionRadiusHexes"/>).
+/// Nothing here iterates the world or builds a set of it: writes group the
+/// current discs' hexes by chunk and touch only those rows, reads fetch only
+/// the chunks asked for.
 /// </para>
 /// </remarks>
-public sealed class ExploredAreaService(GameDbContext dbContext, IMemoryCache cache, TimeProvider timeProvider)
+public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider timeProvider)
 {
-    /// <summary>
-    /// How long a decoded explored set is kept once nobody has asked for it
-    /// again — same policy, and same reasoning, as
-    /// <see cref="FogMaskService"/>'s own PNG cache.
-    /// </summary>
-    private static readonly TimeSpan CacheSlidingExpiration = TimeSpan.FromMinutes(10);
-
     private readonly GameDbContext _dbContext = dbContext;
-    private readonly IMemoryCache _cache = cache;
     private readonly TimeProvider _timeProvider = timeProvider;
 
     /// <summary>
     /// <see langword="null"/> only when <paramref name="worldId"/> itself
     /// doesn't exist — an owner with no settlements and no explored history
-    /// yet gets back an empty (never null) <see cref="ExploredArea.Hexes"/>,
-    /// matching <see cref="FogMaskService"/>'s own "an all-fog mask is not a
-    /// rejection" rule.
+    /// yet gets back an area with no sources, matching "an all-fog mask is
+    /// not a rejection".
     /// </summary>
     /// <param name="persist">
-    /// Whether newly explored ground is written back to
-    /// <see cref="PlayerExploredEntity"/>. Only the fog mask (the one read
-    /// that owns "exploring") passes <see langword="true"/>. The fog-gated
-    /// settlement reads compute the same merged area in memory without
-    /// saving: they are polled alongside the fog mask, and a second writer
-    /// racing it to insert a new player's first row hit the
-    /// <c>(WorldId, OwnerId)</c> unique index and 500'd the request.
+    /// Whether the current discs are OR-ed into the stored chunks and saved
+    /// back. Only the fog chunk read (the one read that owns "exploring")
+    /// passes <see langword="true"/>. The fog-gated settlement reads use the
+    /// discs directly without saving: they are polled alongside the fog
+    /// chunks, and a second writer racing it to insert a new player's first
+    /// chunk row would hit the primary key and 500 the request.
     /// </param>
     public async Task<ExploredArea?> GetAsync(
         Guid worldId, string ownerId, bool persist = false, CancellationToken cancellationToken = default)
@@ -114,18 +112,16 @@ public sealed class ExploredAreaService(GameDbContext dbContext, IMemoryCache ca
             return null;
         }
 
-        var bounds = FogMaskLayout.WorldBounds(radius.Value);
-
         var settlements = await _dbContext.Settlements
             .AsNoTracking()
             .Include(s => s.Buildings)
             .Where(s => s.WorldId == worldId && s.OwnerId == ownerId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        // In-transit armies only — see FogMaskService's own remarks (an
-        // AtHome army stands in its own settlement's already-explored ring,
-        // a Supporting one stands wherever it's supporting, neither needs
-        // its own walked-ground contribution).
+        // In-transit armies only — an AtHome army stands in its own
+        // settlement's already-explored ring, a Supporting one stands
+        // wherever it's supporting, neither needs its own walked-ground
+        // contribution.
         var travellingArmies = await _dbContext.Armies
             .AsNoTracking()
             .Include(a => a.Settlement)
@@ -135,17 +131,20 @@ public sealed class ExploredAreaService(GameDbContext dbContext, IMemoryCache ca
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var now = _timeProvider.GetUtcNow();
-        var newlyWalked = new List<HexCoord>();
+        var sources = new List<FogVisionSource>();
+        var discs = new List<ExploredDisc>();
         foreach (var settlement in settlements)
         {
             var level = settlement.ToDomain().LonghouseLevel;
-            newlyWalked.AddRange(new HexCoord(settlement.CentreQ, settlement.CentreR)
-                .WithinRadius(FogVisionRadii.ExploredRadius(level)));
+            var centre = new HexCoord(settlement.CentreQ, settlement.CentreR);
+            sources.Add(FogVisionRadii.ToVisionSource(centre, level));
+            discs.Add(new ExploredDisc(centre, FogVisionRadii.ExploredRadius(level)));
 
             foreach (var tower in settlement.Buildings.Where(b => b.Type == BuildingType.Tower))
             {
-                newlyWalked.AddRange(new HexCoord(tower.Q, tower.R)
-                    .WithinRadius(FogVisionRadii.TowerExploredRadius(tower.Level)));
+                var towerCoord = new HexCoord(tower.Q, tower.R);
+                sources.Add(FogVisionRadii.ToTowerVisionSource(towerCoord, tower.Level));
+                discs.Add(new ExploredDisc(towerCoord, FogVisionRadii.TowerExploredRadius(tower.Level)));
             }
         }
 
@@ -153,80 +152,204 @@ public sealed class ExploredAreaService(GameDbContext dbContext, IMemoryCache ca
         {
             var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
             var position = armyEntity.ToDomain().PositionAt(home, now);
-            newlyWalked.AddRange(position.WithinRadius(FogVisionRadii.ArmyVisionRadiusHexes));
+            discs.Add(new ExploredDisc(position, FogVisionRadii.ArmyVisionRadiusHexes));
         }
 
-        var explored = await _dbContext.PlayerExplored
-            .FirstOrDefaultAsync(e => e.WorldId == worldId && e.OwnerId == ownerId, cancellationToken)
-            .ConfigureAwait(false);
+        var merged = persist
+            ? await MergeAndSaveAsync(worldId, ownerId, discs, now, cancellationToken).ConfigureAwait(false)
+            : new Dictionary<FogChunkCoord, ExploredChunkData>();
 
-        var mergedBits = PersistedExploredBitset.Merge(bounds, explored?.Bits, newlyWalked, out var grew);
-        if (grew && persist)
-        {
-            var inserting = explored is null;
-            if (explored is null)
-            {
-                explored = new PlayerExploredEntity { WorldId = worldId, OwnerId = ownerId };
-                _dbContext.PlayerExplored.Add(explored);
-            }
-
-            explored.Bits = mergedBits;
-            explored.UpdatedAt = now;
-            try
-            {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (DbUpdateException) when (inserting)
-            {
-                // Two concurrent fog-mask requests for a brand-new player both
-                // saw no row and both inserted; the unique index let one win.
-                // The loser's bits are the same ground (the bitset only ever
-                // grows, and both were computed from the same inputs), so
-                // dropping this insert loses nothing — the next poll merges
-                // into the winner's row.
-                _dbContext.Entry(explored).State = EntityState.Detached;
-            }
-        }
-
-        var version = ComputeVersion(settlements, mergedBits);
-        var cacheKey = $"explored-area:{worldId}:{ownerId}:{version}";
-
-        if (_cache.TryGetValue<HashSet<HexCoord>>(cacheKey, out var cachedHexes))
-        {
-            return new ExploredArea(settlements, cachedHexes!, mergedBits, bounds, version);
-        }
-
-        var hexes = PersistedExploredBitset.Decode(bounds, mergedBits);
-        _cache.Set(cacheKey, hexes, new MemoryCacheEntryOptions { SlidingExpiration = CacheSlidingExpiration });
-
-        return new ExploredArea(settlements, hexes, mergedBits, bounds, version);
+        return new ExploredArea(worldId, ownerId, radius.Value, settlements, sources, discs, merged);
     }
 
     /// <summary>
-    /// A deterministic hash of the owner's current settlement set — id,
-    /// position, longhouse level, and every standing Tower's own coord/level —
-    /// plus the persisted explored bitset actually folded in. Sorted first so
-    /// the same set always hashes the same way regardless of query order. This
-    /// is byte-for-byte <see cref="FogMaskService"/>'s own former
-    /// <c>ComputeETag</c> — moved here, not reimplemented, so the PNG's `ETag`
-    /// and this service's cache/version key can never drift apart.
+    /// The stored chunks of <paramref name="ownerId"/> inside an inclusive
+    /// chunk rectangle — a range scan on the primary key. Untouched chunks
+    /// have no entry.
     /// </summary>
-    private static string ComputeVersion(IReadOnlyCollection<SettlementEntity> settlements, byte[] persistedBits)
+    public async Task<Dictionary<FogChunkCoord, ExploredChunkData>> LoadRectAsync(
+        Guid worldId,
+        string ownerId,
+        FogChunkCoord min,
+        FogChunkCoord max,
+        CancellationToken cancellationToken = default)
     {
-        var version = string.Join(
-            '|',
-            settlements
-                .Select(s => (s.Id, s.CentreQ, s.CentreR, Level: s.ToDomain().LonghouseLevel, Towers: s.Buildings
-                    .Where(b => b.Type == BuildingType.Tower)
-                    .OrderBy(b => b.Q).ThenBy(b => b.R)
-                    .Select(b => $"{b.Q}:{b.R}:{b.Level}")))
-                .OrderBy(s => s.Id)
-                .Select(s => $"{s.Id}:{s.CentreQ}:{s.CentreR}:{s.Level}:[{string.Join(',', s.Towers)}]"));
+        var rows = await _dbContext.PlayerExploredChunks
+            .AsNoTracking()
+            .Where(c => c.WorldId == worldId && c.OwnerId == ownerId
+                && c.ChunkU >= min.U && c.ChunkU <= max.U
+                && c.ChunkV >= min.V && c.ChunkV <= max.V)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        using var sha = SHA256.Create();
-        sha.TransformBlock(Encoding.UTF8.GetBytes(version), 0, Encoding.UTF8.GetByteCount(version), null, 0);
-        sha.TransformFinalBlock(persistedBits, 0, persistedBits.Length);
-
-        return Convert.ToHexString(sha.Hash!)[..16];
+        return rows.ToDictionary(r => new FogChunkCoord(r.ChunkU, r.ChunkV), ToData);
     }
+
+    /// <summary>
+    /// Which of <paramref name="candidates"/> the owner has explored — the
+    /// fog gate for another realm's settlements and buildings. Answers from
+    /// the current discs first, then reads only the stored chunks the rest
+    /// fall in; the cost scales with the candidates, never with the world.
+    /// </summary>
+    public async Task<HashSet<HexCoord>> ExploredAmongAsync(
+        ExploredArea area, IEnumerable<HexCoord> candidates, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        var explored = new HashSet<HexCoord>();
+        var remaining = new HashSet<HexCoord>();
+        foreach (var hex in candidates)
+        {
+            if (area.InCurrentDiscs(hex))
+            {
+                explored.Add(hex);
+            }
+            else
+            {
+                remaining.Add(hex);
+            }
+        }
+
+        if (remaining.Count == 0)
+        {
+            return explored;
+        }
+
+        var wanted = PersistedExploredBitset.GroupByChunk(remaining);
+        var rows = await LoadChunkRowsAsync(area.WorldId, area.OwnerId, wanted.Keys, tracked: false, cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var (chunk, hexes) in wanted)
+        {
+            if (!rows.TryGetValue(chunk, out var row))
+            {
+                continue;
+            }
+
+            var data = ToData(row);
+            foreach (var hex in hexes)
+            {
+                if (PersistedExploredBitset.Contains(chunk, data, hex))
+                {
+                    explored.Add(hex);
+                }
+            }
+        }
+
+        return explored;
+    }
+
+    /// <summary>
+    /// ORs the discs' hexes into the stored chunks and saves what grew.
+    /// Returns the post-merge state of every touched chunk.
+    /// </summary>
+    private async Task<Dictionary<FogChunkCoord, ExploredChunkData>> MergeAndSaveAsync(
+        Guid worldId,
+        string ownerId,
+        List<ExploredDisc> discs,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var merged = new Dictionary<FogChunkCoord, ExploredChunkData>();
+        if (discs.Count == 0)
+        {
+            return merged;
+        }
+
+        var wanted = PersistedExploredBitset.GroupByChunk(
+            discs.SelectMany(d => d.Centre.WithinRadius(d.Radius)).Distinct());
+        var rows = await LoadChunkRowsAsync(worldId, ownerId, wanted.Keys, tracked: true, cancellationToken)
+            .ConfigureAwait(false);
+
+        var inserting = false;
+        foreach (var (chunk, hexes) in wanted)
+        {
+            var hasRow = rows.TryGetValue(chunk, out var row);
+            var existing = hasRow ? ToData(row!) : ExploredChunkData.None;
+            var next = PersistedExploredBitset.Merge(chunk, existing, hexes, out var grew);
+            merged[chunk] = next;
+            if (!grew)
+            {
+                continue;
+            }
+
+            if (!hasRow)
+            {
+                row = new PlayerExploredChunkEntity
+                {
+                    WorldId = worldId,
+                    OwnerId = ownerId,
+                    ChunkU = chunk.U,
+                    ChunkV = chunk.V,
+                };
+                _dbContext.PlayerExploredChunks.Add(row);
+                inserting = true;
+            }
+
+            row!.Bits = next.Bits;
+            row.IsFull = next.IsFull;
+            row.UpdatedAt = now;
+        }
+
+        if (!_dbContext.ChangeTracker.HasChanges())
+        {
+            return merged;
+        }
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException) when (inserting)
+        {
+            // Two concurrent fog requests for a new player both saw no row
+            // for a chunk and both inserted; the primary key let one win.
+            // The loser's bits are the same ground (the store only ever
+            // grows and both were computed from the same inputs), so
+            // dropping this save loses nothing — the next poll merges into
+            // the winner's row. `merged` above is what this request reports.
+            foreach (var entry in _dbContext.ChangeTracker.Entries<PlayerExploredChunkEntity>().ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
+
+        return merged;
+    }
+
+    private async Task<Dictionary<FogChunkCoord, PlayerExploredChunkEntity>> LoadChunkRowsAsync(
+        Guid worldId,
+        string ownerId,
+        IEnumerable<FogChunkCoord> chunks,
+        bool tracked,
+        CancellationToken cancellationToken)
+    {
+        var wanted = chunks.ToHashSet();
+        if (wanted.Count == 0)
+        {
+            return [];
+        }
+
+        // Two IN lists (columns, rows) narrow the primary-key scan; the exact
+        // pairs are filtered in memory. Rows only exist where the owner has
+        // explored, so the over-fetch of the cross product is bounded by
+        // their own history.
+        var us = wanted.Select(c => c.U).Distinct().ToList();
+        var vs = wanted.Select(c => c.V).Distinct().ToList();
+
+        var query = _dbContext.PlayerExploredChunks
+            .Where(c => c.WorldId == worldId && c.OwnerId == ownerId
+                && us.Contains(c.ChunkU) && vs.Contains(c.ChunkV));
+        if (!tracked)
+        {
+            query = query.AsNoTracking();
+        }
+
+        var rows = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        return rows
+            .Where(r => wanted.Contains(new FogChunkCoord(r.ChunkU, r.ChunkV)))
+            .ToDictionary(r => new FogChunkCoord(r.ChunkU, r.ChunkV));
+    }
+
+    private static ExploredChunkData ToData(PlayerExploredChunkEntity row) => new(row.Bits, row.IsFull);
 }

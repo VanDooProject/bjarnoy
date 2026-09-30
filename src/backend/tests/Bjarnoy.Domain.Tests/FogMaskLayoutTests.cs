@@ -77,6 +77,50 @@ public class FogMaskLayoutTests
         }
     }
 
+    /// <summary>
+    /// The pre-chunking implementation, kept here verbatim as the oracle for
+    /// the closed form: it walked every hex of the disc (48M at radius 4000).
+    /// </summary>
+    private static MaskBounds BruteForceWorldBounds(int radius)
+    {
+        int minU = int.MaxValue, minV = int.MaxValue, maxU = int.MinValue, maxV = int.MinValue;
+        foreach (var hex in HexCoord.Origin.WithinRadius(radius))
+        {
+            var texel = FogMaskLayout.ToTexel(hex);
+            minU = Math.Min(minU, texel.U);
+            minV = Math.Min(minV, texel.V);
+            maxU = Math.Max(maxU, texel.U);
+            maxV = Math.Max(maxV, texel.V);
+        }
+
+        return new MaskBounds(minU - 1, minV - 1, maxU + 2, maxV + 2);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(7)]
+    [InlineData(16)]
+    [InlineData(31)]
+    [InlineData(60)]
+    [InlineData(101)]
+    public void WorldBounds_closed_form_equals_the_brute_force_hex_walk(int radius)
+    {
+        Assert.Equal(BruteForceWorldBounds(radius), FogMaskLayout.WorldBounds(radius));
+    }
+
+    [Fact]
+    public void WorldBounds_at_radius_4000_is_computed_without_walking_the_world()
+    {
+        var bounds = FogMaskLayout.WorldBounds(4000);
+
+        Assert.Equal(new MaskBounds(-4001, -8001, 4002, 8002), bounds);
+        Assert.Equal(8003, bounds.Width);
+        Assert.Equal(16003, bounds.Height);
+    }
+
     [Fact]
     public void WorldBounds_rejects_a_negative_radius()
     {

@@ -263,6 +263,18 @@ export interface FeastOfferResponse {
   renownGain: number;
 }
 
+/**
+ * An onboarding quest and where the settlement stands on it (economy.md
+ * section 7). Mirrors `QuestResponse`; the reward is wood/stone/food, paid
+ * once per settlement on claim and clamped to storage.
+ */
+export interface QuestResponse {
+  id: string;
+  completed: boolean;
+  claimed: boolean;
+  reward: ResourceLine;
+}
+
 export interface SettlementResponse {
   id: string;
   worldId: string;
@@ -285,6 +297,8 @@ export interface SettlementResponse {
   feast: FeastResponse | null;
   /** Cost and gain of the next feast; null without a Town Square. */
   nextFeast: FeastOfferResponse | null;
+  /** The onboarding quests, in presentation order. */
+  quests: QuestResponse[];
   world: WorldClockResponse;
 }
 
@@ -1481,4 +1495,23 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+}
+
+/** Mirrors `FogChunkResponse` — one 64 x 64-texel chunk of the fog mask (map-fog-v2.md §3). `png` is base64, or null for an empty (fully unknown) chunk. */
+export interface FogChunkResponse {
+  cu: number;
+  cv: number;
+  /** Changes exactly when this chunk's pixels would; "0" for an empty chunk. */
+  version: string;
+  png: string | null;
+}
+
+/** Mirrors `FogChunksResponse` — `GET /worlds/{worldId}/fog-chunks`: every chunk of the requested inclusive rectangle. */
+export interface FogChunksResponse {
+  chunkSize: number;
+  cuMin: number;
+  cuMax: number;
+  cvMin: number;
+  cvMax: number;
+  chunks: FogChunkResponse[];
 }

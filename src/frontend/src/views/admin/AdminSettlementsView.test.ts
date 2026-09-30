@@ -106,6 +106,7 @@ function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse
     runes: [],
     feast: null,
     nextFeast: null,
+    quests: [],
     world: { state: 'running', running: true, acceptsCommands: true, gameTime: '2026-01-01T00:00:00Z' },
     ...overrides,
   };

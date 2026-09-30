@@ -286,12 +286,12 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     }
 
     [Fact]
-    public async Task Fog_mask_of_an_unknown_world_is_a_404_with_world_not_found()
+    public async Task Fog_chunks_of_an_unknown_world_is_a_404_with_world_not_found()
     {
         using var client = _fixture.CreateClient();
 
         var request = new HttpRequestMessage(
-            HttpMethod.Get, $"/api/v1/worlds/{Guid.CreateVersion7()}/fog-mask");
+            HttpMethod.Get, $"/api/v1/worlds/{Guid.CreateVersion7()}/fog-chunks?cuMin=0&cuMax=0&cvMin=0&cvMax=0");
         request.Headers.Add("X-Owner-Id", "test-owner");
 
         var response = await client.SendAsync(request, Ct);
