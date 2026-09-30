@@ -9,6 +9,7 @@ import {
   MinCampIslandTiles,
   MinCampSpacing,
   campCountFor,
+  maxSealCampsFor,
   guardRange,
   isStrongCampFamily,
   placeCamps,
@@ -64,6 +65,15 @@ describe('guardRange / campCountFor', () => {
     [40000, 24],
   ])('%i land tiles -> %i camps', (tiles, expected) => {
     expect(campCountFor(tiles)).toBe(expected);
+  });
+
+  it.each([
+    [60, 1],
+    [5999, 1],
+    [6000, 2],
+    [14000, 4],
+  ])('%i land tiles -> at most %i seal colonies', (tiles, expected) => {
+    expect(maxSealCampsFor(tiles)).toBe(expected);
   });
 });
 

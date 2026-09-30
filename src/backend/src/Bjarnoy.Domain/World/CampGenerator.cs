@@ -22,6 +22,16 @@ internal static class CampGenerator
     /// <summary>Two camps are never closer than this many hex steps, tuning default.</summary>
     public const int MinCampSpacing = 6;
 
+    /// <summary>
+    /// Land tiles per seal colony: an island's sand rim is always the farthest ground from its
+    /// interior camps, so without a cap farthest-point sampling hands most picks to seals.
+    /// </summary>
+    public const int SandTilesPerSealCamp = 4000;
+
+    /// <summary>At most this many seal colonies on an island of <paramref name="landTileCount"/> tiles (rounded, at least 1).</summary>
+    public static int MaxSealCampsFor(int landTileCount) =>
+        Math.Max(1, ((2 * landTileCount) + SandTilesPerSealCamp) / (2 * SandTilesPerSealCamp));
+
     /// <summary>Camp levels are rolled in <c>1..MaxCampLevel</c>, tuning default.</summary>
     public const int MaxCampLevel = 5;
 
@@ -171,16 +181,19 @@ internal static class CampGenerator
         Array.Fill(minDistance, int.MaxValue);
         var picked = new bool[candidates.Count];
         var represented = new HashSet<CampGround>();
+        var maxSeals = MaxSealCampsFor(islandTiles.Count);
+        var seals = 0;
 
         while (chosen.Count < count)
         {
             // Grounds without a camp first; once none of them has an eligible tile left,
             // any ground. (The first pick: nothing is placed, so all distances tie and the
             // hash decides.)
-            var index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: true);
+            var sandFull = seals >= maxSeals;
+            var index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: true, sandFull);
             if (index < 0)
             {
-                index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: false);
+                index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: false, sandFull);
             }
 
             if (index < 0)
@@ -192,6 +205,11 @@ internal static class CampGenerator
             picked[index] = true;
             chosen.Add(pick);
             represented.Add(pick.Info.Ground);
+            if (pick.Info.Ground == CampGround.Sand)
+            {
+                seals++;
+            }
+
             for (var i = 0; i < candidates.Count; i++)
             {
                 var distance = candidates[i].Coord.DistanceTo(pick.Coord);
@@ -219,7 +237,8 @@ internal static class CampGenerator
         int[] minDistance,
         bool[] picked,
         HashSet<CampGround> represented,
-        bool restrictToUnrepresented)
+        bool restrictToUnrepresented,
+        bool sandFull)
     {
         var best = -1;
         for (var i = 0; i < candidates.Count; i++)
@@ -230,6 +249,11 @@ internal static class CampGenerator
             }
 
             if (restrictToUnrepresented && represented.Contains(candidates[i].Info.Ground))
+            {
+                continue;
+            }
+
+            if (sandFull && candidates[i].Info.Ground == CampGround.Sand)
             {
                 continue;
             }

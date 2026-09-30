@@ -66,6 +66,24 @@ public class CampGenerationTests
     public void Camp_count_is_the_island_land_over_the_tiles_per_camp_clamped(int landTiles, int expected) =>
         Assert.Equal(expected, CampGenerator.CampCountFor(landTiles));
 
+    [Theory]
+    [InlineData(60, 1)]
+    [InlineData(5_999, 1)]
+    [InlineData(6_000, 2)]
+    [InlineData(14_000, 4)]
+    public void Seal_colonies_are_capped_per_island_land(int landTiles, int expected) =>
+        Assert.Equal(expected, CampGenerator.MaxSealCampsFor(landTiles));
+
+    [Fact]
+    public void No_island_holds_more_seal_colonies_than_its_cap()
+    {
+        foreach (var (seed, _, island) in Islands())
+        {
+            var seals = island.Camps.Count(c => c.Family == "sealhaulout");
+            Assert.True(seals <= CampGenerator.MaxSealCampsFor(island.TileCount), $"seed {seed} island {island.Index}: {seals} seal colonies");
+        }
+    }
+
     [Fact]
     public void Camps_keep_the_minimum_spacing_and_the_count_cap()
     {

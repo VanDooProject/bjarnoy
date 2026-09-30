@@ -88,6 +88,14 @@ export function guardRange(level: number, strength: CampStrength): number {
   return strength === 'strong' ? 2 + level : 1 + Math.floor(level / 2);
 }
 
+/** Land tiles per seal colony — mirrors `CampGenerator.SandTilesPerSealCamp` (the sand rim would otherwise win most farthest-point picks). */
+export const SandTilesPerSealCamp = 4000;
+
+/** At most this many seal colonies per island — mirrors `CampGenerator.MaxSealCampsFor`. */
+export function maxSealCampsFor(landTileCount: number): number {
+  return Math.max(1, Math.floor((2 * landTileCount + SandTilesPerSealCamp) / (2 * SandTilesPerSealCamp)));
+}
+
 /** The number of camps an island of this many land tiles is offered — mirrors `CampGenerator.CampCountFor`. */
 export function campCountFor(landTileCount: number): number {
   if (landTileCount < MinCampIslandTiles) return 0;
@@ -145,11 +153,13 @@ function pickBest(
   picked: boolean[],
   represented: Set<CampGround>,
   restrictToUnrepresented: boolean,
+  sandFull: boolean,
 ): number {
   let best = -1;
   for (let i = 0; i < candidates.length; i++) {
     if (picked[i] || minDistance[i]! < MinCampSpacing) continue;
     if (restrictToUnrepresented && represented.has(candidates[i]!.info.ground)) continue;
+    if (sandFull && candidates[i]!.info.ground === 'sand') continue;
     if (best < 0) {
       best = i;
       continue;
@@ -231,18 +241,22 @@ export function placeCamps(
   const minDistance: number[] = new Array<number>(candidates.length).fill(Number.MAX_SAFE_INTEGER);
   const picked: boolean[] = new Array<boolean>(candidates.length).fill(false);
   const represented = new Set<CampGround>();
+  const maxSeals = maxSealCampsFor(islandTiles.length);
+  let seals = 0;
 
   while (chosen.length < count) {
     // Grounds without a camp first; once none of them has an eligible tile left, any ground.
     // (The first pick: nothing is placed, so all distances tie and the hash decides.)
-    let index = pickBest(candidates, minDistance, picked, represented, true);
-    if (index < 0) index = pickBest(candidates, minDistance, picked, represented, false);
+    const sandFull = seals >= maxSeals;
+    let index = pickBest(candidates, minDistance, picked, represented, true, sandFull);
+    if (index < 0) index = pickBest(candidates, minDistance, picked, represented, false, sandFull);
     if (index < 0) break;
 
     const pick = candidates[index]!;
     picked[index] = true;
     chosen.push(pick);
     represented.add(pick.info.ground);
+    if (pick.info.ground === 'sand') seals++;
     for (let i = 0; i < candidates.length; i++) {
       const distance = hexDistance(candidates[i]!.coord, pick.coord);
       if (distance < minDistance[i]!) minDistance[i] = distance;

@@ -41,6 +41,9 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
    next pick is the candidate farthest from every camp so far, at least `MinCampSpacing` from all of them
    (ties: hash, then q, r). Weighting: while some ground the island has still has no camp, only
    candidates on such grounds are considered, so each ground gets one before any gets a second.
+   **Seal cap**: at most `MaxSealCampsFor(land)` = `max(1, round(land / SandTilesPerSealCamp))` seal
+   colonies per island (`SandTilesPerSealCamp` 4000). The sand rim is always the ground farthest from the
+   interior camps, so without the cap farthest-point sampling gave seals about 45% of all camps.
 4. **Level**: rolled per camp in `1..MaxCampLevel` from a hash `u`: weak `u^2` (mostly low), strong
    `1 - (1 - u)^2` (mostly high).
 5. **Orientation**: the tile's own orientation (`TerrainSampler.OrientationAt`); a bearrapids camp
@@ -61,11 +64,13 @@ Measured on seeds 1-8 at radius 1000 (273 green islands, 15 wasted, 1 532 camps,
 under 60 tiles have none): start positions fell from 278 363 to 248 965 (-11%); 60 green islands had none
 before, 85 have none now (25 islands lost all of theirs, mostly small ones a single strong camp can hold
 whole). Camp families over the same seeds: sealhaulout 653, wolfden 314, boarwallow 241, eagleeyrie 127,
-bearrapids 125, fenrirbrood 72. Seed 11 at radius 1000 (32 islands, 9 under 60 tiles, 23 with camps): 193
-camps (87 strong): sealhaulout 89, wolfden 36, boarwallow 31, bearrapids 20, eagleeyrie 17.
+bearrapids 125, fenrirbrood 72 (before the seal cap). Seed 11 at radius 1000 (32 islands, 9 under 60 tiles,
+23 with camps): 193 camps; before the seal cap 87 strong (sealhaulout 89, wolfden 36, boarwallow 31,
+bearrapids 20, eagleeyrie 17), with it 137 strong (wolfden 65, boarwallow 49, sealhaulout 39, bearrapids 23,
+eagleeyrie 17).
 
 Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `CampTilesPerCamp` 700,
-`MinCampIslandTiles` 60, `MaxCampsPerIsland` 24, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
+`MinCampIslandTiles` 60, `SandTilesPerSealCamp` 4000, `MaxCampsPerIsland` 24, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
 guard-range formulas above.
 
 ## Data, API and art
