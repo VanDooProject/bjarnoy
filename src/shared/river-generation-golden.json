@@ -1,1529 +1,1009 @@
 {
-  "_comment": "Cross-language parity fixture for river generation (RiverGenerator.Generate backend / generateRivers frontend): given a synthetic island's tiles (with terrain), a world seed, an island index, and wasted/allowConfluence flags, both sides must trace the same rivers in the same order. Covers: a small green island with one simple spring-straight-mouth river, a green island whose two traced rivers collide into a confluence, a green island whose river takes at least one sharp (bend60) turn, and a wasted island whose lava stream (allowConfluence: false) never merges. Every scenario's tiles/terrain, seed, island index and wasted flag were taken from a real WorldGenerator.Generate() run (so terrain, depth-field noise and the actual river trace all agree byte-for-byte with what that seed really produces), not hand-crafted. RiverGenerationGoldenTests.cs (backend) and riverGenerator.golden.test.ts (frontend) each compute against this fixture using their own production river-tracing implementation, then assert the frozen `rivers` list below (order matters: sorted by (q, r), same as RiverGenerator.BuildRiverTiles's own output order).",
+  "_comment": "Cross-language parity fixture for river generation (RiverGenerator.Generate backend / generateRivers frontend): given an island's tiles (with terrain), a world seed, an island index, and wasted/allowConfluence flags, both sides must trace the same rivers in the same order. Covers: a green island with one simple spring-to-mouth river, a green island whose traced rivers collide into a confluence, a green island whose river takes at least one sharp (bend60) turn, and a wasted island whose lava stream (allowConfluence: false) never merges. Every scenario is a real island of a real WorldGenerator.Generate() run at the default world size (the smallest one of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the river trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). RiverGenerationGoldenTests.cs (backend) and riverGenerator.golden.test.ts (frontend) each compute against this fixture using their own production river-tracing implementation, then assert the frozen `rivers` list below (order matters: sorted by (q, r), same as RiverGenerator.BuildRiverTiles's own output order).",
   "scenarios": [
     {
       "name": "green_island_simple_river",
-      "worldSeed": 259,
-      "islandIndex": 0,
+      "worldSeed": 33,
+      "islandIndex": 27,
       "wasted": false,
       "allowConfluence": true,
       "tiles": [
-        [
-          -12,
-          45,
-          "grass"
-        ],
-        [
-          -11,
-          45,
-          "forest"
-        ],
-        [
-          -10,
-          44,
-          "forest"
-        ],
-        [
-          -10,
-          45,
-          "forest"
-        ],
-        [
-          -9,
-          44,
-          "forest"
-        ],
-        [
-          -9,
-          45,
-          "mountain"
-        ],
-        [
-          -8,
-          43,
-          "grass"
-        ],
-        [
-          -8,
-          44,
-          "forest"
-        ],
-        [
-          -8,
-          45,
-          "mountain"
-        ],
-        [
-          -7,
-          43,
-          "sand"
-        ],
-        [
-          -7,
-          44,
-          "forest"
-        ],
-        [
-          -7,
-          45,
-          "forest"
-        ],
-        [
-          -6,
-          43,
-          "sand"
-        ],
-        [
-          -6,
-          44,
-          "forest"
-        ],
-        [
-          -6,
-          45,
-          "forest"
-        ],
-        [
-          -5,
-          44,
-          "sand"
-        ],
-        [
-          -5,
-          45,
-          "forest"
-        ],
-        [
-          -4,
-          44,
-          "sand"
-        ],
-        [
-          -4,
-          45,
-          "sand"
-        ]
+        [856, -83, "sand"],
+        [856, -82, "grass"],
+        [856, -81, "grass"],
+        [856, -80, "grass"],
+        [856, -79, "sand"],
+        [857, -86, "sand"],
+        [857, -85, "grass"],
+        [857, -84, "grass"],
+        [857, -83, "grass"],
+        [857, -82, "grass"],
+        [857, -81, "grass"],
+        [857, -80, "grass"],
+        [857, -79, "grass"],
+        [857, -78, "grass"],
+        [857, -77, "sand"],
+        [858, -88, "sand"],
+        [858, -87, "forest"],
+        [858, -86, "forest"],
+        [858, -85, "forest"],
+        [858, -84, "grass"],
+        [858, -83, "grass"],
+        [858, -82, "grass"],
+        [858, -81, "grass"],
+        [858, -80, "grass"],
+        [858, -79, "grass"],
+        [858, -78, "sand"],
+        [859, -88, "sand"],
+        [859, -87, "grass"],
+        [859, -86, "forest"],
+        [859, -85, "forest"],
+        [859, -84, "forest"],
+        [859, -83, "forest"],
+        [859, -82, "forest"],
+        [859, -81, "forest"],
+        [859, -80, "forest"],
+        [859, -79, "grass"],
+        [860, -89, "sand"],
+        [860, -88, "grass"],
+        [860, -87, "grass"],
+        [860, -86, "grass"],
+        [860, -85, "forest"],
+        [860, -84, "forest"],
+        [860, -83, "mountain"],
+        [860, -82, "mountain"],
+        [860, -81, "forest"],
+        [860, -80, "forest"],
+        [861, -88, "grass"],
+        [861, -87, "grass"],
+        [861, -86, "grass"],
+        [861, -85, "grass"],
+        [861, -84, "forest"],
+        [861, -83, "mountain"],
+        [861, -82, "forest"],
+        [861, -81, "forest"],
+        [862, -89, "sand"],
+        [862, -88, "grass"],
+        [862, -87, "grass"],
+        [862, -86, "grass"],
+        [862, -85, "grass"],
+        [862, -84, "grass"],
+        [862, -83, "forest"],
+        [862, -82, "sand"],
+        [863, -88, "sand"],
+        [863, -87, "grass"],
+        [863, -86, "grass"],
+        [863, -85, "grass"],
+        [863, -84, "grass"],
+        [863, -83, "forest"],
+        [864, -88, "sand"],
+        [864, -87, "grass"],
+        [864, -86, "grass"],
+        [864, -85, "grass"]
       ],
       "rivers": [
-        {
-          "q": -8,
-          "r": 45,
-          "shape": "spring",
-          "inDirections": [],
-          "outDirection": "NE",
-          "wasted": false
-        },
-        {
-          "q": -7,
-          "r": 44,
-          "shape": "straight",
-          "inDirections": [
-            "SW"
-          ],
-          "outDirection": "NE",
-          "wasted": false
-        },
-        {
-          "q": -6,
-          "r": 43,
-          "shape": "mouth",
-          "inDirections": [
-            "SW"
-          ],
-          "outDirection": null,
-          "wasted": false
-        }
+        {"q": 856, "r": -79, "shape": "mouth", "inDirections": ["NE"], "outDirection": null, "wasted": false},
+        {"q": 857, "r": -80, "shape": "straight", "inDirections": ["NE"], "outDirection": "SW", "wasted": false},
+        {"q": 858, "r": -81, "shape": "straight", "inDirections": ["NE"], "outDirection": "SW", "wasted": false},
+        {"q": 859, "r": -82, "shape": "straight", "inDirections": ["NE"], "outDirection": "SW", "wasted": false},
+        {"q": 860, "r": -83, "shape": "spring", "inDirections": [], "outDirection": "SW", "wasted": false}
       ]
     },
     {
       "name": "green_island_confluence",
-      "worldSeed": 245,
-      "islandIndex": 0,
+      "worldSeed": 40,
+      "islandIndex": 8,
       "wasted": false,
       "allowConfluence": true,
       "tiles": [
-        [
-          -45,
-          0,
-          "forest"
-        ],
-        [
-          -45,
-          1,
-          "forest"
-        ],
-        [
-          -45,
-          2,
-          "mountain"
-        ],
-        [
-          -45,
-          3,
-          "mountain"
-        ],
-        [
-          -45,
-          4,
-          "grass"
-        ],
-        [
-          -45,
-          5,
-          "grass"
-        ],
-        [
-          -45,
-          6,
-          "grass"
-        ],
-        [
-          -45,
-          7,
-          "forest"
-        ],
-        [
-          -45,
-          8,
-          "forest"
-        ],
-        [
-          -45,
-          9,
-          "forest"
-        ],
-        [
-          -45,
-          10,
-          "forest"
-        ],
-        [
-          -45,
-          11,
-          "sand"
-        ],
-        [
-          -44,
-          -1,
-          "forest"
-        ],
-        [
-          -44,
-          0,
-          "forest"
-        ],
-        [
-          -44,
-          1,
-          "forest"
-        ],
-        [
-          -44,
-          2,
-          "forest"
-        ],
-        [
-          -44,
-          3,
-          "forest"
-        ],
-        [
-          -44,
-          4,
-          "forest"
-        ],
-        [
-          -44,
-          5,
-          "grass"
-        ],
-        [
-          -44,
-          6,
-          "forest"
-        ],
-        [
-          -44,
-          7,
-          "forest"
-        ],
-        [
-          -44,
-          8,
-          "forest"
-        ],
-        [
-          -44,
-          9,
-          "forest"
-        ],
-        [
-          -43,
-          -2,
-          "forest"
-        ],
-        [
-          -43,
-          -1,
-          "mountain"
-        ],
-        [
-          -43,
-          0,
-          "mountain"
-        ],
-        [
-          -43,
-          1,
-          "forest"
-        ],
-        [
-          -43,
-          2,
-          "grass"
-        ],
-        [
-          -43,
-          3,
-          "grass"
-        ],
-        [
-          -43,
-          4,
-          "forest"
-        ],
-        [
-          -43,
-          5,
-          "mountain"
-        ],
-        [
-          -43,
-          6,
-          "forest"
-        ],
-        [
-          -43,
-          7,
-          "forest"
-        ],
-        [
-          -43,
-          8,
-          "forest"
-        ],
-        [
-          -42,
-          -3,
-          "forest"
-        ],
-        [
-          -42,
-          -2,
-          "mountain"
-        ],
-        [
-          -42,
-          -1,
-          "mountain"
-        ],
-        [
-          -42,
-          0,
-          "mountain"
-        ],
-        [
-          -42,
-          1,
-          "forest"
-        ],
-        [
-          -42,
-          2,
-          "grass"
-        ],
-        [
-          -42,
-          3,
-          "grass"
-        ],
-        [
-          -42,
-          4,
-          "forest"
-        ],
-        [
-          -42,
-          5,
-          "forest"
-        ],
-        [
-          -42,
-          6,
-          "forest"
-        ],
-        [
-          -41,
-          -3,
-          "grass"
-        ],
-        [
-          -41,
-          -2,
-          "forest"
-        ],
-        [
-          -41,
-          -1,
-          "forest"
-        ],
-        [
-          -41,
-          0,
-          "forest"
-        ],
-        [
-          -41,
-          1,
-          "forest"
-        ],
-        [
-          -41,
-          2,
-          "forest"
-        ],
-        [
-          -41,
-          3,
-          "forest"
-        ],
-        [
-          -41,
-          4,
-          "forest"
-        ],
-        [
-          -41,
-          5,
-          "forest"
-        ],
-        [
-          -41,
-          6,
-          "sand"
-        ],
-        [
-          -40,
-          -4,
-          "sand"
-        ],
-        [
-          -40,
-          -3,
-          "grass"
-        ],
-        [
-          -40,
-          -2,
-          "grass"
-        ],
-        [
-          -40,
-          -1,
-          "grass"
-        ],
-        [
-          -40,
-          0,
-          "grass"
-        ],
-        [
-          -40,
-          1,
-          "grass"
-        ],
-        [
-          -40,
-          2,
-          "forest"
-        ],
-        [
-          -40,
-          3,
-          "forest"
-        ],
-        [
-          -40,
-          4,
-          "forest"
-        ],
-        [
-          -39,
-          -1,
-          "sand"
-        ],
-        [
-          -39,
-          0,
-          "sand"
-        ],
-        [
-          -39,
-          1,
-          "sand"
-        ],
-        [
-          -39,
-          2,
-          "sand"
-        ],
-        [
-          -39,
-          3,
-          "sand"
-        ],
-        [
-          -39,
-          4,
-          "sand"
-        ]
+        [-548, -102, "sand"],
+        [-548, -101, "sand"],
+        [-548, -100, "sand"],
+        [-548, -99, "sand"],
+        [-548, -98, "sand"],
+        [-548, -97, "sand"],
+        [-548, -96, "sand"],
+        [-548, -95, "sand"],
+        [-548, -94, "sand"],
+        [-547, -103, "sand"],
+        [-547, -102, "grass"],
+        [-547, -101, "grass"],
+        [-547, -100, "grass"],
+        [-547, -99, "forest"],
+        [-547, -98, "forest"],
+        [-547, -97, "forest"],
+        [-547, -96, "grass"],
+        [-547, -95, "grass"],
+        [-547, -94, "grass"],
+        [-547, -93, "forest"],
+        [-547, -92, "sand"],
+        [-547, -91, "sand"],
+        [-546, -105, "grass"],
+        [-546, -104, "grass"],
+        [-546, -103, "grass"],
+        [-546, -102, "grass"],
+        [-546, -101, "grass"],
+        [-546, -100, "forest"],
+        [-546, -99, "forest"],
+        [-546, -98, "forest"],
+        [-546, -97, "forest"],
+        [-546, -96, "forest"],
+        [-546, -95, "grass"],
+        [-546, -94, "forest"],
+        [-546, -93, "forest"],
+        [-546, -92, "grass"],
+        [-546, -91, "sand"],
+        [-545, -106, "grass"],
+        [-545, -105, "grass"],
+        [-545, -104, "grass"],
+        [-545, -103, "grass"],
+        [-545, -102, "grass"],
+        [-545, -101, "grass"],
+        [-545, -100, "forest"],
+        [-545, -99, "forest"],
+        [-545, -98, "forest"],
+        [-545, -97, "forest"],
+        [-545, -96, "forest"],
+        [-545, -95, "forest"],
+        [-545, -94, "forest"],
+        [-545, -93, "grass"],
+        [-545, -92, "grass"],
+        [-545, -91, "grass"],
+        [-545, -90, "sand"],
+        [-544, -108, "sand"],
+        [-544, -107, "forest"],
+        [-544, -106, "grass"],
+        [-544, -105, "grass"],
+        [-544, -104, "grass"],
+        [-544, -103, "grass"],
+        [-544, -102, "grass"],
+        [-544, -101, "grass"],
+        [-544, -100, "forest"],
+        [-544, -99, "forest"],
+        [-544, -98, "mountain"],
+        [-544, -97, "mountain"],
+        [-544, -96, "forest"],
+        [-544, -95, "forest"],
+        [-544, -94, "grass"],
+        [-544, -93, "grass"],
+        [-544, -92, "grass"],
+        [-544, -91, "sand"],
+        [-543, -108, "forest"],
+        [-543, -107, "forest"],
+        [-543, -106, "forest"],
+        [-543, -105, "forest"],
+        [-543, -104, "forest"],
+        [-543, -103, "mountain"],
+        [-543, -102, "forest"],
+        [-543, -101, "grass"],
+        [-543, -100, "grass"],
+        [-543, -99, "grass"],
+        [-543, -98, "forest"],
+        [-543, -97, "forest"],
+        [-543, -96, "grass"],
+        [-543, -95, "grass"],
+        [-543, -94, "grass"],
+        [-543, -93, "grass"],
+        [-543, -92, "grass"],
+        [-543, -91, "grass"],
+        [-543, -90, "sand"],
+        [-542, -110, "sand"],
+        [-542, -109, "forest"],
+        [-542, -108, "forest"],
+        [-542, -107, "mountain"],
+        [-542, -106, "forest"],
+        [-542, -105, "forest"],
+        [-542, -104, "forest"],
+        [-542, -103, "mountain"],
+        [-542, -102, "mountain"],
+        [-542, -101, "grass"],
+        [-542, -100, "grass"],
+        [-542, -99, "grass"],
+        [-542, -98, "forest"],
+        [-542, -97, "forest"],
+        [-542, -96, "grass"],
+        [-542, -95, "grass"],
+        [-542, -94, "grass"],
+        [-542, -93, "grass"],
+        [-542, -92, "grass"],
+        [-542, -91, "sand"],
+        [-541, -110, "grass"],
+        [-541, -109, "forest"],
+        [-541, -108, "forest"],
+        [-541, -107, "forest"],
+        [-541, -106, "forest"],
+        [-541, -105, "grass"],
+        [-541, -104, "forest"],
+        [-541, -103, "forest"],
+        [-541, -102, "forest"],
+        [-541, -101, "forest"],
+        [-541, -100, "forest"],
+        [-541, -99, "forest"],
+        [-541, -98, "forest"],
+        [-541, -97, "forest"],
+        [-541, -96, "forest"],
+        [-541, -95, "forest"],
+        [-541, -94, "grass"],
+        [-541, -93, "grass"],
+        [-541, -92, "grass"],
+        [-541, -91, "grass"],
+        [-540, -111, "grass"],
+        [-540, -110, "grass"],
+        [-540, -109, "grass"],
+        [-540, -108, "forest"],
+        [-540, -107, "forest"],
+        [-540, -106, "grass"],
+        [-540, -105, "grass"],
+        [-540, -104, "grass"],
+        [-540, -103, "grass"],
+        [-540, -102, "forest"],
+        [-540, -101, "forest"],
+        [-540, -100, "mountain"],
+        [-540, -99, "mountain"],
+        [-540, -98, "forest"],
+        [-540, -97, "forest"],
+        [-540, -96, "forest"],
+        [-540, -95, "forest"],
+        [-540, -94, "forest"],
+        [-540, -93, "grass"],
+        [-540, -92, "grass"],
+        [-539, -112, "sand"],
+        [-539, -111, "grass"],
+        [-539, -110, "grass"],
+        [-539, -109, "grass"],
+        [-539, -108, "forest"],
+        [-539, -107, "forest"],
+        [-539, -106, "grass"],
+        [-539, -105, "grass"],
+        [-539, -104, "grass"],
+        [-539, -103, "forest"],
+        [-539, -102, "forest"],
+        [-539, -101, "forest"],
+        [-539, -100, "grass"],
+        [-539, -99, "forest"],
+        [-539, -98, "forest"],
+        [-539, -97, "forest"],
+        [-539, -96, "mountain"],
+        [-539, -95, "mountain"],
+        [-539, -94, "forest"],
+        [-539, -93, "forest"],
+        [-539, -92, "grass"],
+        [-539, -91, "sand"],
+        [-538, -113, "sand"],
+        [-538, -112, "forest"],
+        [-538, -111, "forest"],
+        [-538, -110, "grass"],
+        [-538, -109, "grass"],
+        [-538, -108, "grass"],
+        [-538, -107, "grass"],
+        [-538, -106, "grass"],
+        [-538, -105, "grass"],
+        [-538, -104, "grass"],
+        [-538, -103, "forest"],
+        [-538, -102, "forest"],
+        [-538, -101, "grass"],
+        [-538, -100, "grass"],
+        [-538, -99, "grass"],
+        [-538, -98, "forest"],
+        [-538, -97, "forest"],
+        [-538, -96, "forest"],
+        [-538, -95, "forest"],
+        [-538, -94, "forest"],
+        [-538, -93, "forest"],
+        [-538, -92, "sand"],
+        [-537, -113, "sand"],
+        [-537, -112, "forest"],
+        [-537, -111, "forest"],
+        [-537, -110, "forest"],
+        [-537, -109, "grass"],
+        [-537, -108, "grass"],
+        [-537, -107, "grass"],
+        [-537, -106, "grass"],
+        [-537, -105, "grass"],
+        [-537, -104, "grass"],
+        [-537, -103, "forest"],
+        [-537, -102, "forest"],
+        [-537, -101, "grass"],
+        [-537, -100, "grass"],
+        [-537, -99, "grass"],
+        [-537, -98, "forest"],
+        [-537, -97, "forest"],
+        [-537, -96, "forest"],
+        [-537, -95, "forest"],
+        [-537, -94, "forest"],
+        [-537, -93, "forest"],
+        [-537, -92, "sand"],
+        [-536, -113, "sand"],
+        [-536, -112, "grass"],
+        [-536, -111, "forest"],
+        [-536, -110, "forest"],
+        [-536, -109, "grass"],
+        [-536, -108, "grass"],
+        [-536, -107, "grass"],
+        [-536, -106, "grass"],
+        [-536, -105, "grass"],
+        [-536, -104, "grass"],
+        [-536, -103, "forest"],
+        [-536, -102, "forest"],
+        [-536, -101, "grass"],
+        [-536, -100, "grass"],
+        [-536, -99, "grass"],
+        [-536, -98, "grass"],
+        [-536, -97, "grass"],
+        [-536, -96, "grass"],
+        [-536, -95, "grass"],
+        [-536, -94, "forest"],
+        [-536, -93, "sand"],
+        [-535, -112, "sand"],
+        [-535, -111, "forest"],
+        [-535, -110, "forest"],
+        [-535, -109, "grass"],
+        [-535, -108, "grass"],
+        [-535, -107, "grass"],
+        [-535, -106, "grass"],
+        [-535, -105, "grass"],
+        [-535, -104, "grass"],
+        [-535, -103, "grass"],
+        [-535, -102, "grass"],
+        [-535, -101, "grass"],
+        [-535, -100, "grass"],
+        [-535, -99, "grass"],
+        [-535, -98, "grass"],
+        [-535, -97, "grass"],
+        [-535, -96, "grass"],
+        [-535, -95, "grass"],
+        [-535, -94, "grass"],
+        [-535, -93, "sand"],
+        [-534, -112, "sand"],
+        [-534, -111, "grass"],
+        [-534, -110, "forest"],
+        [-534, -109, "grass"],
+        [-534, -108, "grass"],
+        [-534, -107, "grass"],
+        [-534, -106, "grass"],
+        [-534, -105, "grass"],
+        [-534, -104, "grass"],
+        [-534, -103, "grass"],
+        [-534, -102, "grass"],
+        [-534, -101, "grass"],
+        [-534, -100, "grass"],
+        [-534, -99, "grass"],
+        [-534, -98, "grass"],
+        [-534, -97, "grass"],
+        [-534, -96, "sand"],
+        [-534, -95, "sand"],
+        [-533, -110, "sand"],
+        [-533, -109, "sand"],
+        [-533, -108, "grass"],
+        [-533, -107, "grass"],
+        [-533, -106, "grass"],
+        [-533, -105, "grass"],
+        [-533, -104, "grass"],
+        [-533, -103, "grass"],
+        [-533, -102, "grass"],
+        [-533, -101, "forest"],
+        [-533, -100, "sand"],
+        [-533, -99, "sand"],
+        [-533, -98, "sand"],
+        [-533, -97, "sand"],
+        [-533, -96, "sand"],
+        [-532, -108, "sand"],
+        [-532, -107, "sand"],
+        [-532, -106, "grass"],
+        [-532, -105, "grass"],
+        [-532, -104, "grass"],
+        [-532, -103, "sand"],
+        [-532, -102, "sand"]
       ],
       "rivers": [
-        {
-          "q": -45,
-          "r": 0,
-          "shape": "bend",
-          "inDirections": [
-            "SE"
-          ],
-          "outDirection": "NE",
-          "wasted": false
-        },
-        {
-          "q": -45,
-          "r": 1,
-          "shape": "straight",
-          "inDirections": [
-            "SE"
-          ],
-          "outDirection": "NW",
-          "wasted": false
-        },
-        {
-          "q": -45,
-          "r": 2,
-          "shape": "straight",
-          "inDirections": [
-            "SE"
-          ],
-          "outDirection": "NW",
-          "wasted": false
-        },
-        {
-          "q": -45,
-          "r": 3,
-          "shape": "spring",
-          "inDirections": [],
-          "outDirection": "NW",
-          "wasted": false
-        },
-        {
-          "q": -44,
-          "r": -1,
-          "shape": "straight",
-          "inDirections": [
-            "SW"
-          ],
-          "outDirection": "NE",
-          "wasted": false
-        },
-        {
-          "q": -43,
-          "r": -2,
-          "shape": "confluence",
-          "inDirections": [
-            "SW",
-            "SE"
-          ],
-          "outDirection": "NE",
-          "wasted": false
-        },
-        {
-          "q": -43,
-          "r": -1,
-          "shape": "spring",
-          "inDirections": [],
-          "outDirection": "NW",
-          "wasted": false
-        },
-        {
-          "q": -42,
-          "r": -3,
-          "shape": "mouth",
-          "inDirections": [
-            "SW"
-          ],
-          "outDirection": null,
-          "wasted": false
-        }
+        {"q": -547, "r": -103, "shape": "mouth", "inDirections": ["E"], "outDirection": null, "wasted": false},
+        {"q": -547, "r": -94, "shape": "mouth", "inDirections": ["NE"], "outDirection": null, "wasted": false},
+        {"q": -546, "r": -103, "shape": "straight", "inDirections": ["E"], "outDirection": "W", "wasted": false},
+        {"q": -546, "r": -95, "shape": "straight", "inDirections": ["NE"], "outDirection": "SW", "wasted": false},
+        {"q": -545, "r": -103, "shape": "straight", "inDirections": ["E"], "outDirection": "W", "wasted": false},
+        {"q": -545, "r": -96, "shape": "confluence", "inDirections": ["NE", "E"], "outDirection": "SW", "wasted": false},
+        {"q": -544, "r": -103, "shape": "straight", "inDirections": ["E"], "outDirection": "W", "wasted": false},
+        {"q": -544, "r": -97, "shape": "spring", "inDirections": [], "outDirection": "SW", "wasted": false},
+        {"q": -544, "r": -96, "shape": "straight", "inDirections": ["E"], "outDirection": "W", "wasted": false},
+        {"q": -543, "r": -103, "shape": "straight", "inDirections": ["E"], "outDirection": "W", "wasted": false},
+        {"q": -543, "r": -96, "shape": "bend", "inDirections": ["NE"], "outDirection": "W", "wasted": false},
+        {"q": -542, "r": -103, "shape": "spring", "inDirections": [], "outDirection": "W", "wasted": false},
+        {"q": -542, "r": -97, "shape": "straight", "inDirections": ["NE"], "outDirection": "SW", "wasted": false},
+        {"q": -541, "r": -98, "shape": "straight", "inDirections": ["NE"], "outDirection": "SW", "wasted": false},
+        {"q": -540, "r": -99, "shape": "spring", "inDirections": [], "outDirection": "SW", "wasted": false},
+        {"q": -539, "r": -96, "shape": "spring", "inDirections": [], "outDirection": "E", "wasted": false},
+        {"q": -538, "r": -96, "shape": "bend", "inDirections": ["W"], "outDirection": "SE", "wasted": false},
+        {"q": -538, "r": -95, "shape": "straight", "inDirections": ["NW"], "outDirection": "SE", "wasted": false},
+        {"q": -538, "r": -94, "shape": "straight", "inDirections": ["NW"], "outDirection": "SE", "wasted": false},
+        {"q": -538, "r": -93, "shape": "straight", "inDirections": ["NW"], "outDirection": "SE", "wasted": false},
+        {"q": -538, "r": -92, "shape": "mouth", "inDirections": ["NW"], "outDirection": null, "wasted": false}
       ]
     },
     {
       "name": "green_island_bend60",
-      "worldSeed": 359,
-      "islandIndex": 1,
+      "worldSeed": 9,
+      "islandIndex": 6,
       "wasted": false,
       "allowConfluence": true,
       "tiles": [
-        [
-          -45,
-          38,
-          "sand"
-        ],
-        [
-          -45,
-          39,
-          "forest"
-        ],
-        [
-          -45,
-          40,
-          "forest"
-        ],
-        [
-          -45,
-          41,
-          "forest"
-        ],
-        [
-          -45,
-          42,
-          "forest"
-        ],
-        [
-          -45,
-          43,
-          "forest"
-        ],
-        [
-          -45,
-          44,
-          "mountain"
-        ],
-        [
-          -45,
-          45,
-          "mountain"
-        ],
-        [
-          -44,
-          37,
-          "sand"
-        ],
-        [
-          -44,
-          38,
-          "forest"
-        ],
-        [
-          -44,
-          39,
-          "forest"
-        ],
-        [
-          -44,
-          40,
-          "grass"
-        ],
-        [
-          -44,
-          41,
-          "forest"
-        ],
-        [
-          -44,
-          42,
-          "forest"
-        ],
-        [
-          -44,
-          43,
-          "forest"
-        ],
-        [
-          -44,
-          44,
-          "forest"
-        ],
-        [
-          -44,
-          45,
-          "mountain"
-        ],
-        [
-          -43,
-          37,
-          "sand"
-        ],
-        [
-          -43,
-          38,
-          "grass"
-        ],
-        [
-          -43,
-          39,
-          "grass"
-        ],
-        [
-          -43,
-          40,
-          "grass"
-        ],
-        [
-          -43,
-          41,
-          "grass"
-        ],
-        [
-          -43,
-          42,
-          "forest"
-        ],
-        [
-          -43,
-          43,
-          "forest"
-        ],
-        [
-          -43,
-          44,
-          "forest"
-        ],
-        [
-          -43,
-          45,
-          "grass"
-        ],
-        [
-          -42,
-          37,
-          "sand"
-        ],
-        [
-          -42,
-          38,
-          "grass"
-        ],
-        [
-          -42,
-          39,
-          "grass"
-        ],
-        [
-          -42,
-          40,
-          "grass"
-        ],
-        [
-          -42,
-          41,
-          "grass"
-        ],
-        [
-          -42,
-          42,
-          "forest"
-        ],
-        [
-          -42,
-          43,
-          "forest"
-        ],
-        [
-          -42,
-          44,
-          "grass"
-        ],
-        [
-          -42,
-          45,
-          "grass"
-        ],
-        [
-          -41,
-          37,
-          "sand"
-        ],
-        [
-          -41,
-          38,
-          "grass"
-        ],
-        [
-          -41,
-          39,
-          "grass"
-        ],
-        [
-          -41,
-          40,
-          "grass"
-        ],
-        [
-          -41,
-          41,
-          "grass"
-        ],
-        [
-          -41,
-          42,
-          "grass"
-        ],
-        [
-          -41,
-          43,
-          "grass"
-        ],
-        [
-          -41,
-          44,
-          "grass"
-        ],
-        [
-          -41,
-          45,
-          "grass"
-        ],
-        [
-          -40,
-          37,
-          "grass"
-        ],
-        [
-          -40,
-          38,
-          "grass"
-        ],
-        [
-          -40,
-          39,
-          "grass"
-        ],
-        [
-          -40,
-          40,
-          "forest"
-        ],
-        [
-          -40,
-          41,
-          "grass"
-        ],
-        [
-          -40,
-          42,
-          "grass"
-        ],
-        [
-          -40,
-          43,
-          "grass"
-        ],
-        [
-          -40,
-          44,
-          "grass"
-        ],
-        [
-          -40,
-          45,
-          "grass"
-        ],
-        [
-          -39,
-          37,
-          "sand"
-        ],
-        [
-          -39,
-          38,
-          "sand"
-        ],
-        [
-          -39,
-          39,
-          "sand"
-        ],
-        [
-          -39,
-          40,
-          "sand"
-        ],
-        [
-          -39,
-          41,
-          "sand"
-        ],
-        [
-          -39,
-          42,
-          "sand"
-        ],
-        [
-          -39,
-          43,
-          "sand"
-        ],
-        [
-          -39,
-          44,
-          "forest"
-        ],
-        [
-          -39,
-          45,
-          "forest"
-        ],
-        [
-          -38,
-          40,
-          "sand"
-        ],
-        [
-          -38,
-          41,
-          "sand"
-        ],
-        [
-          -38,
-          42,
-          "sand"
-        ],
-        [
-          -38,
-          43,
-          "forest"
-        ],
-        [
-          -38,
-          44,
-          "forest"
-        ],
-        [
-          -38,
-          45,
-          "forest"
-        ],
-        [
-          -37,
-          41,
-          "sand"
-        ],
-        [
-          -37,
-          42,
-          "sand"
-        ],
-        [
-          -37,
-          43,
-          "sand"
-        ],
-        [
-          -37,
-          44,
-          "forest"
-        ],
-        [
-          -37,
-          45,
-          "forest"
-        ],
-        [
-          -36,
-          41,
-          "sand"
-        ],
-        [
-          -36,
-          42,
-          "sand"
-        ],
-        [
-          -36,
-          43,
-          "sand"
-        ],
-        [
-          -36,
-          44,
-          "sand"
-        ],
-        [
-          -36,
-          45,
-          "sand"
-        ]
+        [-241, -364, "sand"],
+        [-241, -363, "sand"],
+        [-241, -362, "sand"],
+        [-241, -361, "sand"],
+        [-241, -360, "sand"],
+        [-241, -359, "sand"],
+        [-240, -367, "sand"],
+        [-240, -366, "sand"],
+        [-240, -365, "sand"],
+        [-240, -364, "sand"],
+        [-240, -363, "sand"],
+        [-240, -362, "sand"],
+        [-240, -361, "sand"],
+        [-240, -360, "sand"],
+        [-240, -359, "sand"],
+        [-240, -358, "sand"],
+        [-240, -357, "sand"],
+        [-239, -367, "sand"],
+        [-239, -366, "grass"],
+        [-239, -365, "grass"],
+        [-239, -364, "grass"],
+        [-239, -363, "grass"],
+        [-239, -362, "grass"],
+        [-239, -361, "sand"],
+        [-239, -360, "sand"],
+        [-239, -359, "sand"],
+        [-239, -358, "sand"],
+        [-239, -357, "sand"],
+        [-239, -356, "sand"],
+        [-238, -369, "sand"],
+        [-238, -368, "grass"],
+        [-238, -367, "grass"],
+        [-238, -366, "forest"],
+        [-238, -365, "forest"],
+        [-238, -364, "forest"],
+        [-238, -363, "forest"],
+        [-238, -362, "forest"],
+        [-238, -361, "sand"],
+        [-238, -360, "sand"],
+        [-238, -359, "sand"],
+        [-238, -358, "sand"],
+        [-238, -357, "sand"],
+        [-238, -356, "sand"],
+        [-237, -369, "sand"],
+        [-237, -368, "grass"],
+        [-237, -367, "grass"],
+        [-237, -366, "forest"],
+        [-237, -365, "forest"],
+        [-237, -364, "forest"],
+        [-237, -363, "forest"],
+        [-237, -362, "forest"],
+        [-237, -361, "forest"],
+        [-237, -360, "sand"],
+        [-237, -359, "sand"],
+        [-237, -358, "sand"],
+        [-237, -357, "sand"],
+        [-237, -356, "sand"],
+        [-236, -371, "sand"],
+        [-236, -370, "grass"],
+        [-236, -369, "grass"],
+        [-236, -368, "forest"],
+        [-236, -367, "forest"],
+        [-236, -366, "grass"],
+        [-236, -365, "grass"],
+        [-236, -364, "forest"],
+        [-236, -363, "forest"],
+        [-236, -362, "forest"],
+        [-236, -361, "forest"],
+        [-236, -360, "sand"],
+        [-236, -359, "sand"],
+        [-236, -358, "sand"],
+        [-236, -357, "sand"],
+        [-236, -353, "sand"],
+        [-236, -352, "sand"],
+        [-235, -371, "sand"],
+        [-235, -370, "grass"],
+        [-235, -369, "grass"],
+        [-235, -368, "forest"],
+        [-235, -367, "forest"],
+        [-235, -366, "grass"],
+        [-235, -365, "grass"],
+        [-235, -364, "grass"],
+        [-235, -363, "forest"],
+        [-235, -362, "forest"],
+        [-235, -361, "forest"],
+        [-235, -360, "forest"],
+        [-235, -359, "sand"],
+        [-235, -358, "sand"],
+        [-235, -357, "sand"],
+        [-235, -354, "sand"],
+        [-235, -353, "sand"],
+        [-235, -352, "sand"],
+        [-235, -351, "sand"],
+        [-234, -373, "sand"],
+        [-234, -372, "forest"],
+        [-234, -371, "forest"],
+        [-234, -370, "grass"],
+        [-234, -369, "grass"],
+        [-234, -368, "forest"],
+        [-234, -367, "forest"],
+        [-234, -366, "grass"],
+        [-234, -365, "grass"],
+        [-234, -364, "grass"],
+        [-234, -363, "forest"],
+        [-234, -362, "forest"],
+        [-234, -361, "forest"],
+        [-234, -360, "forest"],
+        [-234, -359, "sand"],
+        [-234, -358, "sand"],
+        [-234, -356, "sand"],
+        [-234, -355, "sand"],
+        [-234, -354, "sand"],
+        [-234, -353, "sand"],
+        [-234, -352, "sand"],
+        [-233, -373, "sand"],
+        [-233, -372, "forest"],
+        [-233, -371, "forest"],
+        [-233, -370, "forest"],
+        [-233, -369, "forest"],
+        [-233, -368, "grass"],
+        [-233, -367, "grass"],
+        [-233, -366, "grass"],
+        [-233, -365, "grass"],
+        [-233, -364, "grass"],
+        [-233, -363, "forest"],
+        [-233, -362, "forest"],
+        [-233, -361, "grass"],
+        [-233, -360, "grass"],
+        [-233, -359, "grass"],
+        [-233, -358, "sand"],
+        [-233, -357, "sand"],
+        [-233, -356, "sand"],
+        [-233, -355, "grass"],
+        [-233, -354, "grass"],
+        [-233, -353, "sand"],
+        [-233, -352, "sand"],
+        [-232, -374, "sand"],
+        [-232, -373, "forest"],
+        [-232, -372, "forest"],
+        [-232, -371, "forest"],
+        [-232, -370, "forest"],
+        [-232, -369, "forest"],
+        [-232, -368, "grass"],
+        [-232, -367, "grass"],
+        [-232, -366, "grass"],
+        [-232, -365, "grass"],
+        [-232, -364, "grass"],
+        [-232, -363, "forest"],
+        [-232, -362, "forest"],
+        [-232, -361, "grass"],
+        [-232, -360, "grass"],
+        [-232, -359, "sand"],
+        [-232, -358, "forest"],
+        [-232, -357, "forest"],
+        [-232, -356, "grass"],
+        [-232, -355, "grass"],
+        [-232, -354, "grass"],
+        [-232, -353, "sand"],
+        [-231, -374, "sand"],
+        [-231, -373, "grass"],
+        [-231, -372, "grass"],
+        [-231, -371, "grass"],
+        [-231, -370, "grass"],
+        [-231, -369, "grass"],
+        [-231, -368, "grass"],
+        [-231, -367, "grass"],
+        [-231, -366, "grass"],
+        [-231, -365, "grass"],
+        [-231, -364, "grass"],
+        [-231, -363, "forest"],
+        [-231, -362, "forest"],
+        [-231, -361, "forest"],
+        [-231, -360, "grass"],
+        [-231, -359, "forest"],
+        [-231, -358, "forest"],
+        [-231, -357, "forest"],
+        [-231, -356, "forest"],
+        [-231, -355, "forest"],
+        [-231, -354, "grass"],
+        [-231, -353, "sand"],
+        [-231, -352, "sand"],
+        [-230, -375, "sand"],
+        [-230, -374, "sand"],
+        [-230, -373, "grass"],
+        [-230, -372, "grass"],
+        [-230, -371, "grass"],
+        [-230, -370, "grass"],
+        [-230, -369, "grass"],
+        [-230, -368, "grass"],
+        [-230, -367, "grass"],
+        [-230, -366, "grass"],
+        [-230, -365, "forest"],
+        [-230, -364, "forest"],
+        [-230, -363, "grass"],
+        [-230, -362, "grass"],
+        [-230, -361, "forest"],
+        [-230, -360, "forest"],
+        [-230, -359, "forest"],
+        [-230, -358, "forest"],
+        [-230, -357, "forest"],
+        [-230, -356, "forest"],
+        [-230, -355, "forest"],
+        [-230, -354, "forest"],
+        [-230, -353, "sand"],
+        [-229, -375, "sand"],
+        [-229, -374, "sand"],
+        [-229, -373, "grass"],
+        [-229, -372, "grass"],
+        [-229, -371, "grass"],
+        [-229, -370, "grass"],
+        [-229, -369, "grass"],
+        [-229, -368, "grass"],
+        [-229, -367, "grass"],
+        [-229, -366, "grass"],
+        [-229, -365, "forest"],
+        [-229, -364, "grass"],
+        [-229, -363, "grass"],
+        [-229, -362, "grass"],
+        [-229, -361, "forest"],
+        [-229, -360, "forest"],
+        [-229, -359, "forest"],
+        [-229, -358, "forest"],
+        [-229, -357, "forest"],
+        [-229, -356, "forest"],
+        [-229, -355, "forest"],
+        [-229, -354, "forest"],
+        [-229, -353, "sand"],
+        [-228, -376, "sand"],
+        [-228, -375, "sand"],
+        [-228, -374, "forest"],
+        [-228, -373, "forest"],
+        [-228, -372, "forest"],
+        [-228, -371, "forest"],
+        [-228, -370, "forest"],
+        [-228, -369, "forest"],
+        [-228, -368, "forest"],
+        [-228, -367, "forest"],
+        [-228, -366, "grass"],
+        [-228, -365, "grass"],
+        [-228, -364, "grass"],
+        [-228, -363, "grass"],
+        [-228, -362, "grass"],
+        [-228, -361, "grass"],
+        [-228, -360, "grass"],
+        [-228, -359, "grass"],
+        [-228, -358, "grass"],
+        [-228, -357, "forest"],
+        [-228, -356, "forest"],
+        [-228, -355, "forest"],
+        [-228, -354, "sand"],
+        [-227, -376, "sand"],
+        [-227, -375, "sand"],
+        [-227, -374, "forest"],
+        [-227, -373, "forest"],
+        [-227, -372, "forest"],
+        [-227, -371, "forest"],
+        [-227, -370, "forest"],
+        [-227, -369, "mountain"],
+        [-227, -368, "mountain"],
+        [-227, -367, "forest"],
+        [-227, -366, "grass"],
+        [-227, -365, "grass"],
+        [-227, -364, "grass"],
+        [-227, -363, "grass"],
+        [-227, -362, "grass"],
+        [-227, -361, "grass"],
+        [-227, -360, "grass"],
+        [-227, -359, "grass"],
+        [-227, -358, "grass"],
+        [-227, -357, "grass"],
+        [-227, -356, "forest"],
+        [-227, -355, "forest"],
+        [-227, -354, "forest"],
+        [-227, -353, "sand"],
+        [-226, -377, "sand"],
+        [-226, -376, "sand"],
+        [-226, -375, "forest"],
+        [-226, -374, "forest"],
+        [-226, -373, "grass"],
+        [-226, -372, "grass"],
+        [-226, -371, "grass"],
+        [-226, -370, "grass"],
+        [-226, -369, "forest"],
+        [-226, -368, "forest"],
+        [-226, -367, "forest"],
+        [-226, -366, "grass"],
+        [-226, -365, "grass"],
+        [-226, -364, "grass"],
+        [-226, -363, "forest"],
+        [-226, -362, "forest"],
+        [-226, -361, "grass"],
+        [-226, -360, "grass"],
+        [-226, -359, "grass"],
+        [-226, -358, "grass"],
+        [-226, -357, "grass"],
+        [-226, -356, "forest"],
+        [-226, -355, "sand"],
+        [-225, -376, "sand"],
+        [-225, -375, "forest"],
+        [-225, -374, "grass"],
+        [-225, -373, "grass"],
+        [-225, -372, "grass"],
+        [-225, -371, "grass"],
+        [-225, -370, "grass"],
+        [-225, -369, "grass"],
+        [-225, -368, "forest"],
+        [-225, -367, "forest"],
+        [-225, -366, "grass"],
+        [-225, -365, "grass"],
+        [-225, -364, "grass"],
+        [-225, -363, "mountain"],
+        [-225, -362, "mountain"],
+        [-225, -361, "forest"],
+        [-225, -360, "grass"],
+        [-225, -359, "grass"],
+        [-225, -358, "grass"],
+        [-225, -357, "grass"],
+        [-225, -356, "grass"],
+        [-225, -355, "sand"],
+        [-224, -377, "sand"],
+        [-224, -376, "forest"],
+        [-224, -375, "forest"],
+        [-224, -374, "forest"],
+        [-224, -373, "grass"],
+        [-224, -372, "grass"],
+        [-224, -371, "grass"],
+        [-224, -370, "grass"],
+        [-224, -369, "grass"],
+        [-224, -368, "forest"],
+        [-224, -367, "forest"],
+        [-224, -366, "grass"],
+        [-224, -365, "grass"],
+        [-224, -364, "grass"],
+        [-224, -363, "mountain"],
+        [-224, -362, "mountain"],
+        [-224, -361, "forest"],
+        [-224, -360, "grass"],
+        [-224, -359, "grass"],
+        [-224, -358, "grass"],
+        [-224, -357, "sand"],
+        [-223, -377, "sand"],
+        [-223, -376, "sand"],
+        [-223, -375, "forest"],
+        [-223, -374, "forest"],
+        [-223, -373, "grass"],
+        [-223, -372, "grass"],
+        [-223, -371, "forest"],
+        [-223, -370, "forest"],
+        [-223, -369, "forest"],
+        [-223, -368, "grass"],
+        [-223, -367, "grass"],
+        [-223, -366, "grass"],
+        [-223, -365, "grass"],
+        [-223, -364, "grass"],
+        [-223, -363, "forest"],
+        [-223, -362, "forest"],
+        [-223, -361, "forest"],
+        [-223, -360, "forest"],
+        [-223, -359, "grass"],
+        [-223, -358, "sand"],
+        [-222, -377, "sand"],
+        [-222, -376, "forest"],
+        [-222, -375, "forest"],
+        [-222, -374, "forest"],
+        [-222, -373, "grass"],
+        [-222, -372, "grass"],
+        [-222, -371, "forest"],
+        [-222, -370, "forest"],
+        [-222, -369, "forest"],
+        [-222, -368, "grass"],
+        [-222, -367, "grass"],
+        [-222, -366, "grass"],
+        [-222, -365, "grass"],
+        [-222, -364, "grass"],
+        [-222, -363, "grass"],
+        [-222, -362, "grass"],
+        [-222, -361, "forest"],
+        [-222, -360, "sand"],
+        [-221, -377, "sand"],
+        [-221, -376, "sand"],
+        [-221, -375, "grass"],
+        [-221, -374, "grass"],
+        [-221, -373, "forest"],
+        [-221, -372, "forest"],
+        [-221, -371, "forest"],
+        [-221, -370, "forest"],
+        [-221, -369, "forest"],
+        [-221, -368, "forest"],
+        [-221, -367, "forest"],
+        [-221, -366, "forest"],
+        [-221, -365, "forest"],
+        [-221, -364, "grass"],
+        [-221, -363, "grass"],
+        [-221, -362, "grass"],
+        [-221, -361, "sand"],
+        [-220, -377, "sand"],
+        [-220, -376, "grass"],
+        [-220, -375, "grass"],
+        [-220, -374, "grass"],
+        [-220, -373, "forest"],
+        [-220, -372, "forest"],
+        [-220, -371, "forest"],
+        [-220, -370, "forest"],
+        [-220, -369, "forest"],
+        [-220, -368, "forest"],
+        [-220, -367, "forest"],
+        [-220, -366, "forest"],
+        [-220, -365, "forest"],
+        [-220, -364, "grass"],
+        [-220, -363, "sand"],
+        [-219, -376, "sand"],
+        [-219, -375, "grass"],
+        [-219, -374, "forest"],
+        [-219, -373, "forest"],
+        [-219, -372, "forest"],
+        [-219, -371, "forest"],
+        [-219, -370, "forest"],
+        [-219, -369, "forest"],
+        [-219, -368, "forest"],
+        [-219, -367, "forest"],
+        [-219, -366, "forest"],
+        [-219, -365, "forest"],
+        [-219, -364, "sand"],
+        [-218, -377, "sand"],
+        [-218, -376, "forest"],
+        [-218, -375, "forest"],
+        [-218, -374, "forest"],
+        [-218, -373, "forest"],
+        [-218, -372, "forest"],
+        [-218, -371, "grass"],
+        [-218, -370, "grass"],
+        [-218, -369, "grass"],
+        [-218, -368, "forest"],
+        [-218, -367, "forest"],
+        [-218, -366, "forest"],
+        [-217, -377, "sand"],
+        [-217, -376, "forest"],
+        [-217, -375, "forest"],
+        [-217, -374, "forest"],
+        [-217, -373, "forest"],
+        [-217, -372, "forest"],
+        [-217, -371, "grass"],
+        [-217, -370, "grass"],
+        [-217, -369, "grass"],
+        [-217, -368, "forest"],
+        [-217, -367, "forest"],
+        [-217, -366, "sand"],
+        [-216, -378, "sand"],
+        [-216, -377, "grass"],
+        [-216, -376, "grass"],
+        [-216, -375, "forest"],
+        [-216, -374, "forest"],
+        [-216, -373, "forest"],
+        [-216, -372, "forest"],
+        [-216, -371, "forest"],
+        [-216, -370, "forest"],
+        [-216, -369, "forest"],
+        [-216, -368, "forest"],
+        [-215, -378, "sand"],
+        [-215, -377, "grass"],
+        [-215, -376, "grass"],
+        [-215, -375, "grass"],
+        [-215, -374, "grass"],
+        [-215, -373, "grass"],
+        [-215, -372, "forest"],
+        [-215, -371, "forest"],
+        [-215, -370, "forest"],
+        [-215, -369, "forest"],
+        [-215, -368, "sand"],
+        [-214, -379, "sand"],
+        [-214, -378, "grass"],
+        [-214, -377, "grass"],
+        [-214, -376, "grass"],
+        [-214, -375, "grass"],
+        [-214, -374, "sand"],
+        [-214, -373, "forest"],
+        [-214, -372, "forest"],
+        [-214, -371, "forest"],
+        [-214, -370, "forest"],
+        [-214, -369, "sand"],
+        [-213, -378, "sand"],
+        [-213, -377, "forest"],
+        [-213, -376, "grass"],
+        [-213, -375, "grass"],
+        [-213, -374, "sand"],
+        [-213, -373, "sand"],
+        [-213, -372, "forest"],
+        [-213, -371, "forest"],
+        [-213, -370, "sand"],
+        [-212, -379, "sand"],
+        [-212, -378, "sand"],
+        [-212, -377, "sand"],
+        [-212, -376, "sand"],
+        [-212, -375, "sand"],
+        [-212, -373, "sand"],
+        [-212, -372, "sand"]
       ],
       "rivers": [
-        {
-          "q": -45,
-          "r": 44,
-          "shape": "bend60",
-          "inDirections": [
-            "SE"
-          ],
-          "outDirection": "E",
-          "wasted": false
-        },
-        {
-          "q": -45,
-          "r": 45,
-          "shape": "bend",
-          "inDirections": [
-            "E"
-          ],
-          "outDirection": "NW",
-          "wasted": false
-        },
-        {
-          "q": -44,
-          "r": 44,
-          "shape": "bend",
-          "inDirections": [
-            "W"
-          ],
-          "outDirection": "NE",
-          "wasted": false
-        },
-        {
-          "q": -44,
-          "r": 45,
-          "shape": "spring",
-          "inDirections": [],
-          "outDirection": "W",
-          "wasted": false
-        },
-        {
-          "q": -43,
-          "r": 43,
-          "shape": "bend",
-          "inDirections": [
-            "SW"
-          ],
-          "outDirection": "E",
-          "wasted": false
-        },
-        {
-          "q": -42,
-          "r": 43,
-          "shape": "straight",
-          "inDirections": [
-            "W"
-          ],
-          "outDirection": "E",
-          "wasted": false
-        },
-        {
-          "q": -41,
-          "r": 43,
-          "shape": "bend",
-          "inDirections": [
-            "W"
-          ],
-          "outDirection": "NE",
-          "wasted": false
-        },
-        {
-          "q": -40,
-          "r": 42,
-          "shape": "bend",
-          "inDirections": [
-            "SW"
-          ],
-          "outDirection": "E",
-          "wasted": false
-        },
-        {
-          "q": -39,
-          "r": 42,
-          "shape": "bend",
-          "inDirections": [
-            "W"
-          ],
-          "outDirection": "NE",
-          "wasted": false
-        },
-        {
-          "q": -38,
-          "r": 41,
-          "shape": "mouth",
-          "inDirections": [
-            "SW"
-          ],
-          "outDirection": null,
-          "wasted": false
-        }
+        {"q": -228, "r": -373, "shape": "bend", "inDirections": ["SE"], "outDirection": "NE", "wasted": false},
+        {"q": -228, "r": -372, "shape": "bend", "inDirections": ["E"], "outDirection": "NW", "wasted": false},
+        {"q": -227, "r": -376, "shape": "mouth", "inDirections": ["SE"], "outDirection": null, "wasted": false},
+        {"q": -227, "r": -375, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "wasted": false},
+        {"q": -227, "r": -374, "shape": "bend", "inDirections": ["SW"], "outDirection": "NW", "wasted": false},
+        {"q": -227, "r": -372, "shape": "bend", "inDirections": ["SE"], "outDirection": "W", "wasted": false},
+        {"q": -227, "r": -371, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "wasted": false},
+        {"q": -227, "r": -370, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "wasted": false},
+        {"q": -227, "r": -369, "shape": "spring", "inDirections": [], "outDirection": "NW", "wasted": false},
+        {"q": -225, "r": -365, "shape": "bend", "inDirections": ["SE"], "outDirection": "NE", "wasted": false},
+        {"q": -225, "r": -364, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "wasted": false},
+        {"q": -225, "r": -363, "shape": "bend", "inDirections": ["E"], "outDirection": "NW", "wasted": false},
+        {"q": -224, "r": -366, "shape": "straight", "inDirections": ["SW"], "outDirection": "NE", "wasted": false},
+        {"q": -224, "r": -363, "shape": "spring", "inDirections": [], "outDirection": "W", "wasted": false},
+        {"q": -223, "r": -368, "shape": "bend", "inDirections": ["SE"], "outDirection": "NE", "wasted": false},
+        {"q": -223, "r": -367, "shape": "bend", "inDirections": ["SW"], "outDirection": "NW", "wasted": false},
+        {"q": -222, "r": -369, "shape": "bend", "inDirections": ["SW"], "outDirection": "E", "wasted": false},
+        {"q": -221, "r": -369, "shape": "bend", "inDirections": ["W"], "outDirection": "NE", "wasted": false},
+        {"q": -220, "r": -371, "shape": "bend60", "inDirections": ["SE"], "outDirection": "E", "wasted": false},
+        {"q": -220, "r": -370, "shape": "bend", "inDirections": ["SW"], "outDirection": "NW", "wasted": false},
+        {"q": -219, "r": -371, "shape": "bend", "inDirections": ["W"], "outDirection": "NE", "wasted": false},
+        {"q": -218, "r": -373, "shape": "bend60", "inDirections": ["SE"], "outDirection": "E", "wasted": false},
+        {"q": -218, "r": -372, "shape": "bend", "inDirections": ["SW"], "outDirection": "NW", "wasted": false},
+        {"q": -217, "r": -373, "shape": "straight", "inDirections": ["W"], "outDirection": "E", "wasted": false},
+        {"q": -216, "r": -373, "shape": "straight", "inDirections": ["W"], "outDirection": "E", "wasted": false},
+        {"q": -215, "r": -373, "shape": "bend", "inDirections": ["W"], "outDirection": "NE", "wasted": false},
+        {"q": -214, "r": -374, "shape": "bend", "inDirections": ["SW"], "outDirection": "E", "wasted": false},
+        {"q": -213, "r": -374, "shape": "mouth", "inDirections": ["W"], "outDirection": null, "wasted": false}
       ]
     },
     {
       "name": "wasted_island_lava_stream",
-      "worldSeed": 47,
-      "islandIndex": 2,
+      "worldSeed": 23,
+      "islandIndex": 17,
       "wasted": true,
       "allowConfluence": false,
       "tiles": [
-        [
-          37,
-          -5,
-          "sand"
-        ],
-        [
-          37,
-          -4,
-          "sand"
-        ],
-        [
-          37,
-          -3,
-          "sand"
-        ],
-        [
-          38,
-          -7,
-          "sand"
-        ],
-        [
-          38,
-          -6,
-          "grass"
-        ],
-        [
-          38,
-          -5,
-          "grass"
-        ],
-        [
-          38,
-          -4,
-          "grass"
-        ],
-        [
-          38,
-          -3,
-          "sand"
-        ],
-        [
-          38,
-          -2,
-          "sand"
-        ],
-        [
-          38,
-          -1,
-          "sand"
-        ],
-        [
-          38,
-          0,
-          "sand"
-        ],
-        [
-          39,
-          -7,
-          "sand"
-        ],
-        [
-          39,
-          -6,
-          "forest"
-        ],
-        [
-          39,
-          -5,
-          "grass"
-        ],
-        [
-          39,
-          -4,
-          "grass"
-        ],
-        [
-          39,
-          -3,
-          "grass"
-        ],
-        [
-          39,
-          -2,
-          "grass"
-        ],
-        [
-          39,
-          -1,
-          "grass"
-        ],
-        [
-          39,
-          0,
-          "grass"
-        ],
-        [
-          39,
-          1,
-          "sand"
-        ],
-        [
-          40,
-          -8,
-          "sand"
-        ],
-        [
-          40,
-          -7,
-          "forest"
-        ],
-        [
-          40,
-          -6,
-          "forest"
-        ],
-        [
-          40,
-          -5,
-          "grass"
-        ],
-        [
-          40,
-          -4,
-          "grass"
-        ],
-        [
-          40,
-          -3,
-          "grass"
-        ],
-        [
-          40,
-          -2,
-          "grass"
-        ],
-        [
-          40,
-          -1,
-          "grass"
-        ],
-        [
-          40,
-          0,
-          "grass"
-        ],
-        [
-          41,
-          -8,
-          "forest"
-        ],
-        [
-          41,
-          -7,
-          "forest"
-        ],
-        [
-          41,
-          -6,
-          "forest"
-        ],
-        [
-          41,
-          -5,
-          "forest"
-        ],
-        [
-          41,
-          -4,
-          "grass"
-        ],
-        [
-          41,
-          -3,
-          "grass"
-        ],
-        [
-          41,
-          -2,
-          "grass"
-        ],
-        [
-          41,
-          -1,
-          "grass"
-        ],
-        [
-          41,
-          0,
-          "grass"
-        ],
-        [
-          42,
-          -9,
-          "forest"
-        ],
-        [
-          42,
-          -8,
-          "grass"
-        ],
-        [
-          42,
-          -7,
-          "grass"
-        ],
-        [
-          42,
-          -6,
-          "forest"
-        ],
-        [
-          42,
-          -5,
-          "mountain"
-        ],
-        [
-          42,
-          -4,
-          "forest"
-        ],
-        [
-          42,
-          -3,
-          "grass"
-        ],
-        [
-          42,
-          -2,
-          "grass"
-        ],
-        [
-          42,
-          -1,
-          "grass"
-        ],
-        [
-          42,
-          0,
-          "sand"
-        ],
-        [
-          43,
-          -9,
-          "sand"
-        ],
-        [
-          43,
-          -8,
-          "grass"
-        ],
-        [
-          43,
-          -7,
-          "grass"
-        ],
-        [
-          43,
-          -6,
-          "forest"
-        ],
-        [
-          43,
-          -5,
-          "mountain"
-        ],
-        [
-          43,
-          -4,
-          "forest"
-        ],
-        [
-          43,
-          -3,
-          "grass"
-        ],
-        [
-          43,
-          -2,
-          "grass"
-        ],
-        [
-          43,
-          -1,
-          "grass"
-        ],
-        [
-          43,
-          0,
-          "grass"
-        ],
-        [
-          43,
-          1,
-          "sand"
-        ],
-        [
-          44,
-          -10,
-          "sand"
-        ],
-        [
-          44,
-          -9,
-          "forest"
-        ],
-        [
-          44,
-          -8,
-          "forest"
-        ],
-        [
-          44,
-          -7,
-          "grass"
-        ],
-        [
-          44,
-          -6,
-          "grass"
-        ],
-        [
-          44,
-          -5,
-          "grass"
-        ],
-        [
-          44,
-          -4,
-          "grass"
-        ],
-        [
-          44,
-          -3,
-          "grass"
-        ],
-        [
-          44,
-          -2,
-          "grass"
-        ],
-        [
-          44,
-          -1,
-          "grass"
-        ],
-        [
-          44,
-          0,
-          "grass"
-        ],
-        [
-          44,
-          1,
-          "sand"
-        ],
-        [
-          45,
-          -10,
-          "sand"
-        ],
-        [
-          45,
-          -9,
-          "forest"
-        ],
-        [
-          45,
-          -8,
-          "forest"
-        ],
-        [
-          45,
-          -7,
-          "forest"
-        ],
-        [
-          45,
-          -6,
-          "grass"
-        ],
-        [
-          45,
-          -5,
-          "grass"
-        ],
-        [
-          45,
-          -4,
-          "grass"
-        ],
-        [
-          45,
-          -3,
-          "grass"
-        ],
-        [
-          45,
-          -2,
-          "grass"
-        ],
-        [
-          45,
-          -1,
-          "grass"
-        ],
-        [
-          45,
-          0,
-          "grass"
-        ]
+        [-421, -69, "sand"],
+        [-421, -68, "grass"],
+        [-421, -67, "sand"],
+        [-420, -70, "grass"],
+        [-420, -69, "grass"],
+        [-420, -68, "forest"],
+        [-420, -67, "sand"],
+        [-419, -71, "sand"],
+        [-419, -70, "grass"],
+        [-419, -69, "forest"],
+        [-419, -68, "mountain"],
+        [-419, -67, "forest"],
+        [-418, -72, "grass"],
+        [-418, -71, "forest"],
+        [-418, -70, "mountain"],
+        [-418, -69, "mountain"],
+        [-418, -68, "forest"],
+        [-418, -67, "forest"],
+        [-417, -72, "grass"],
+        [-417, -71, "forest"],
+        [-417, -70, "mountain"],
+        [-417, -69, "mountain"],
+        [-417, -68, "forest"],
+        [-417, -67, "forest"],
+        [-416, -73, "grass"],
+        [-416, -72, "grass"],
+        [-416, -71, "forest"],
+        [-416, -70, "forest"],
+        [-416, -69, "forest"],
+        [-416, -68, "grass"],
+        [-415, -73, "grass"],
+        [-415, -72, "grass"],
+        [-415, -71, "forest"],
+        [-415, -70, "forest"],
+        [-415, -69, "grass"],
+        [-414, -74, "sand"],
+        [-414, -73, "sand"],
+        [-414, -72, "sand"]
       ],
       "rivers": [
-        {
-          "q": 43,
-          "r": -6,
-          "shape": "bend",
-          "inDirections": [
-            "SE"
-          ],
-          "outDirection": "NE",
-          "wasted": true
-        },
-        {
-          "q": 43,
-          "r": -5,
-          "shape": "spring",
-          "inDirections": [],
-          "outDirection": "NW",
-          "wasted": true
-        },
-        {
-          "q": 44,
-          "r": -7,
-          "shape": "bend",
-          "inDirections": [
-            "SW"
-          ],
-          "outDirection": "E",
-          "wasted": true
-        },
-        {
-          "q": 45,
-          "r": -7,
-          "shape": "mouth",
-          "inDirections": [
-            "W"
-          ],
-          "outDirection": null,
-          "wasted": true
-        }
+        {"q": -417, "r": -72, "shape": "mouth", "inDirections": ["SE"], "outDirection": null, "wasted": true},
+        {"q": -417, "r": -71, "shape": "straight", "inDirections": ["SE"], "outDirection": "NW", "wasted": true},
+        {"q": -417, "r": -70, "shape": "spring", "inDirections": [], "outDirection": "NW", "wasted": true}
       ]
     }
   ]

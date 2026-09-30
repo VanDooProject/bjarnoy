@@ -47,9 +47,9 @@ public class WorldEntity
 
     public double IslandChance { get; set; }
 
-    public double IslandMinRadius { get; set; }
+    public double IslandMinWidth { get; set; }
 
-    public double IslandMaxRadius { get; set; }
+    public double IslandMaxWidth { get; set; }
 
     public double BeachThreshold { get; set; }
 
@@ -62,30 +62,35 @@ public class WorldEntity
     public int MinimumIslandTiles { get; set; }
 
     /// <summary>
-    /// Island-shape parameters added alongside the multi-lobe generator. New
-    /// worlds get <see cref="WorldGenerationOptions"/>'s own C# defaults;
-    /// existing rows are backfilled by migration to values that collapse the
-    /// new math back to the original single-disc circle (<c>MinLobes</c> =
-    /// <c>MaxLobes</c> = 1, everything else 0) so their persisted shape never
-    /// changes under them. See <c>docs/design/river-generation.md</c>.
+    /// Island-shape parameters of the v3 generator (spine distance field with
+    /// fractal coasts, see <c>docs/design/river-generation.md</c>). New worlds
+    /// get <see cref="WorldGenerationOptions"/>'s own C# defaults; the migration
+    /// that introduced them reset every existing row to those defaults, so the
+    /// old lobe-chain columns are gone.
     /// </summary>
-    public int IslandMinLobes { get; set; }
+    public int IslandMinSegments { get; set; }
 
-    public int IslandMaxLobes { get; set; }
+    public int IslandMaxSegments { get; set; }
+
+    public double IslandMinElongation { get; set; }
 
     public double IslandMaxElongation { get; set; }
 
-    public double IslandBendiness { get; set; }
+    public double IslandMinBend { get; set; }
 
-    public double IslandLobeBlend { get; set; }
-
-    public double IslandLobeMinScale { get; set; }
-
-    public double IslandLobeMaxScale { get; set; }
+    public double IslandMaxBend { get; set; }
 
     public double IslandCoastWarp { get; set; }
 
     public double IslandCoastWarpScale { get; set; }
+
+    public double IslandCoastNoise { get; set; }
+
+    public double IslandCoastNoiseScale { get; set; }
+
+    public double IslandSmallShare { get; set; }
+
+    public double IslandLargeShare { get; set; }
 
     public int MaxPlayers { get; set; }
 
@@ -192,22 +197,25 @@ public class WorldEntity
         Radius = Radius,
         IslandCellSize = IslandCellSize,
         IslandChance = IslandChance,
-        IslandMinRadius = IslandMinRadius,
-        IslandMaxRadius = IslandMaxRadius,
+        IslandMinWidth = IslandMinWidth,
+        IslandMaxWidth = IslandMaxWidth,
         BeachThreshold = BeachThreshold,
         MountainThreshold = MountainThreshold,
         MountainRockiness = MountainRockiness,
         ForestRockiness = ForestRockiness,
         MinimumIslandTiles = MinimumIslandTiles,
-        IslandMinLobes = IslandMinLobes,
-        IslandMaxLobes = IslandMaxLobes,
+        IslandMinSegments = IslandMinSegments,
+        IslandMaxSegments = IslandMaxSegments,
+        IslandMinElongation = IslandMinElongation,
         IslandMaxElongation = IslandMaxElongation,
-        IslandBendiness = IslandBendiness,
-        IslandLobeBlend = IslandLobeBlend,
-        IslandLobeMinScale = IslandLobeMinScale,
-        IslandLobeMaxScale = IslandLobeMaxScale,
+        IslandMinBend = IslandMinBend,
+        IslandMaxBend = IslandMaxBend,
         IslandCoastWarp = IslandCoastWarp,
         IslandCoastWarpScale = IslandCoastWarpScale,
+        IslandCoastNoise = IslandCoastNoise,
+        IslandCoastNoiseScale = IslandCoastNoiseScale,
+        IslandSmallShare = IslandSmallShare,
+        IslandLargeShare = IslandLargeShare,
     };
 
     public void ApplyGenerationOptions(WorldGenerationOptions options)
@@ -218,21 +226,24 @@ public class WorldEntity
         Radius = options.Radius;
         IslandCellSize = options.IslandCellSize;
         IslandChance = options.IslandChance;
-        IslandMinRadius = options.IslandMinRadius;
-        IslandMaxRadius = options.IslandMaxRadius;
+        IslandMinWidth = options.IslandMinWidth;
+        IslandMaxWidth = options.IslandMaxWidth;
         BeachThreshold = options.BeachThreshold;
         MountainThreshold = options.MountainThreshold;
         MountainRockiness = options.MountainRockiness;
         ForestRockiness = options.ForestRockiness;
         MinimumIslandTiles = options.MinimumIslandTiles;
-        IslandMinLobes = options.IslandMinLobes;
-        IslandMaxLobes = options.IslandMaxLobes;
+        IslandMinSegments = options.IslandMinSegments;
+        IslandMaxSegments = options.IslandMaxSegments;
+        IslandMinElongation = options.IslandMinElongation;
         IslandMaxElongation = options.IslandMaxElongation;
-        IslandBendiness = options.IslandBendiness;
-        IslandLobeBlend = options.IslandLobeBlend;
-        IslandLobeMinScale = options.IslandLobeMinScale;
-        IslandLobeMaxScale = options.IslandLobeMaxScale;
+        IslandMinBend = options.IslandMinBend;
+        IslandMaxBend = options.IslandMaxBend;
         IslandCoastWarp = options.IslandCoastWarp;
         IslandCoastWarpScale = options.IslandCoastWarpScale;
+        IslandCoastNoise = options.IslandCoastNoise;
+        IslandCoastNoiseScale = options.IslandCoastNoiseScale;
+        IslandSmallShare = options.IslandSmallShare;
+        IslandLargeShare = options.IslandLargeShare;
     }
 }

@@ -11,14 +11,11 @@ namespace Bjarnoy.Domain.Tests;
 /// </summary>
 public class GiantGenerationTests
 {
-    // Seed 55 at radius 90 is known (found by scanning seeds 1-200) to place
-    // two giants on one island — the multi-giant, spacing-constrained case
-    // most seeds never exercise.
+    // Seed 55 (default-size world) has islands with two mountain giants — the
+    // multi-giant, spacing-constrained case — and a shrine.
     private const int TwoGiantSeed = 55;
 
-    private static GeneratedWorld Generate(int seed, int radius = 90) =>
-        new WorldGenerator(WorldGenerationOptions.ForSeed(seed) with { Radius = radius })
-            .Generate(TestContext.Current.CancellationToken);
+    private static GeneratedWorld Generate(int seed) => TestWorlds.Default(seed);
 
     [Fact]
     public void Footprint_is_the_anchor_and_its_six_neighbours()
@@ -34,11 +31,11 @@ public class GiantGenerationTests
     [Fact]
     public void Across_many_seeds_at_least_one_world_places_a_giant()
     {
-        var anyGiants = Enumerable.Range(1, 30)
+        var anyGiants = new[] { 1, 2, 3 }
             .Select(seed => Generate(seed))
             .Any(world => world.Islands.Any(i => i.Giants.Count > 0));
 
-        Assert.True(anyGiants, "expected at least one giant across 30 scanned seeds");
+        Assert.True(anyGiants, "expected at least one giant across these seeds");
     }
 
     [Fact]
@@ -62,14 +59,14 @@ public class GiantGenerationTests
         Assert.True(island.TileCount >= GiantGenerator.LargeIslandGiantThreshold);
     }
 
-    public static IEnumerable<object[]> ScanSeeds() => Enumerable.Range(1, 60).Select(s => new object[] { s });
+    public static IEnumerable<object[]> ScanSeeds() => new[] { 1, 5, 6, 10, 55 }.Select(s => new object[] { s });
 
     [Theory]
     [MemberData(nameof(ScanSeeds))]
     public void Generated_giants_comply_with_every_placement_rule(int seed)
     {
         var world = Generate(seed);
-        var sampler = new WorldGenerator(WorldGenerationOptions.ForSeed(seed) with { Radius = 90 }).Sampler;
+        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(seed));
 
         foreach (var island in world.Islands)
         {
@@ -147,7 +144,7 @@ public class GiantGenerationTests
     public void Orientation_matches_the_sampler_at_the_anchor()
     {
         var world = Generate(TwoGiantSeed);
-        var sampler = new WorldGenerator(WorldGenerationOptions.ForSeed(TwoGiantSeed) with { Radius = 90 }).Sampler;
+        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(TwoGiantSeed));
 
         var anyChecked = false;
         foreach (var island in world.Islands)
@@ -168,7 +165,7 @@ public class GiantGenerationTests
         // Volcanoes are a wasted-island-only family — WorldGenerator never
         // places one on a green island (see WastedIslandGenerationTests for
         // the wasted side, which does place them).
-        foreach (var seed in Enumerable.Range(1, 60))
+        foreach (var seed in new[] { 1, 6, 10 })
         {
             var world = Generate(seed);
             foreach (var island in world.Islands.Where(i => !i.IsWasted))

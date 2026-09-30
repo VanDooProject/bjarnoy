@@ -4,8 +4,10 @@ namespace Bjarnoy.Domain.Tests;
 
 public class WorldGeneratorTests
 {
-    private static GeneratedWorld Generate(int seed, int radius = 40) =>
-        new WorldGenerator(WorldGenerationOptions.ForSeed(seed) with { Radius = radius })
+    // The compact preset (see WorldGenerationOptions.Compact): the production-scale
+    // world is 260-hex cells with 150-hex islands, far too big for a unit test's radius.
+    private static GeneratedWorld Generate(int seed, int radius = 300) =>
+        new WorldGenerator(WorldGenerationOptions.Compact(seed, radius))
             .Generate(TestContext.Current.CancellationToken);
 
     [Fact]
@@ -38,11 +40,8 @@ public class WorldGeneratorTests
     public void A_world_contains_several_islands_rather_than_one_landmass()
     {
         // The legacy generator kept only the largest blob, so a world was one
-        // island; MECHANICS.md wants a sea full of them. Radius 80, not the
-        // helper's default 40: islands got bigger (see WorldGenerationOptions'
-        // IslandMinRadius/IslandMaxRadius), so a small test world no longer has
-        // room for several of them side by side.
-        var world = Generate(7, radius: 80);
+        // island; MECHANICS.md wants a sea full of them.
+        var world = Generate(7, radius: 400);
 
         Assert.True(world.Islands.Count > 3, $"expected an archipelago, got {world.Islands.Count} islands");
     }
@@ -83,7 +82,7 @@ public class WorldGeneratorTests
     [Fact]
     public void Islands_smaller_than_the_minimum_are_dropped()
     {
-        var options = WorldGenerationOptions.ForSeed(3) with { Radius = 40, MinimumIslandTiles = 25 };
+        var options = WorldGenerationOptions.Compact(3, 300) with { MinimumIslandTiles = 25 };
 
         var world = new WorldGenerator(options).Generate(TestContext.Current.CancellationToken);
 
@@ -118,7 +117,7 @@ public class WorldGeneratorTests
         // Radius 120 packs enough islands into one world to exhaust the raw
         // stem/ending combination space, exercising the collision-probing (and,
         // if that space really is exhausted, the numbered-fallback) path.
-        var world = Generate(9, radius: 120);
+        var world = Generate(9, radius: 500);
 
         var names = world.Islands.Select(i => i.Name).ToList();
         Assert.Equal(names.Count, names.Distinct(StringComparer.Ordinal).Count());
@@ -127,7 +126,7 @@ public class WorldGeneratorTests
     [Fact]
     public void Start_positions_satisfy_the_founding_rules()
     {
-        var world = Generate(21, radius: 60);
+        var world = Generate(21, radius: 300);
         var sampler = new TerrainSampler(world.Options);
         var checkedAny = false;
 
@@ -156,7 +155,7 @@ public class WorldGeneratorTests
     [Fact]
     public void Start_positions_are_ordered_deterministically_and_are_unique()
     {
-        var world = Generate(21, radius: 60);
+        var world = Generate(21, radius: 300);
 
         foreach (var island in world.Islands)
         {
@@ -177,7 +176,7 @@ public class WorldGeneratorTests
     [InlineData(55)] // Known (GiantGenerationTests.TwoGiantSeed) to place two giants on one island.
     public void Start_positions_never_sit_within_the_giant_exclusion_radius(int seed)
     {
-        var world = Generate(seed, radius: 90);
+        var world = Generate(seed, radius: 300);
         var checkedAny = false;
 
         foreach (var island in world.Islands)
@@ -223,7 +222,7 @@ public class WorldGeneratorTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var generator = new WorldGenerator(WorldGenerationOptions.ForSeed(1) with { Radius = 80 });
+        var generator = new WorldGenerator(WorldGenerationOptions.Compact(1, 300));
 
         Assert.Throws<OperationCanceledException>(() => generator.Generate(cts.Token));
     }
@@ -231,12 +230,49 @@ public class WorldGeneratorTests
     [Fact]
     public void A_large_world_generates_without_overflowing_the_stack()
     {
-        // The legacy flood fill recursed once per land hex. Radius 120 is
-        // ~44k hexes and landmasses of several hundred tiles.
-        var world = Generate(4, radius: 120);
+        // The legacy flood fill recursed once per land hex. The default
+        // production-scale world has landmasses of tens of thousands of tiles.
+        var world = new WorldGenerator(WorldGenerationOptions.ForSeed(4))
+            .Generate(TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(world.Islands);
-        Assert.True(world.LandTileCount > 1000);
+        Assert.True(world.LandTileCount > 20000);
+    }
+}
+
+public class AllLandTestOptionsTests
+{
+    /// <summary>
+    /// The "everything near the origin is grass" options FieldBattleServiceTests and
+    /// ShipMovementEndpointsTests build a world from (same numbers, duplicated there
+    /// because those assemblies do not reference this one). If the island shape changes
+    /// so that this stops holding, both need another seed.
+    /// </summary>
+    [Fact]
+    public void The_all_land_test_options_cover_the_origin()
+    {
+        var options = new WorldGenerationOptions
+        {
+            Seed = 14,
+            Radius = 500,
+            IslandCellSize = 100,
+            IslandChance = 1.0,
+            IslandMinWidth = 100.0,
+            IslandMaxWidth = 100.0,
+            IslandMinSegments = 1,
+            IslandMaxSegments = 1,
+            IslandCoastWarp = 0.0,
+            IslandCoastNoise = 0.0,
+            IslandSmallShare = 0.0,
+            IslandLargeShare = 0.0,
+            BeachThreshold = 1.0,
+            MountainThreshold = 0.0,
+            MountainRockiness = 2.0,
+            ForestRockiness = 2.0,
+        };
+        var sampler = new TerrainSampler(options);
+
+        Assert.All(HexCoord.Origin.WithinRadius(30), c => Assert.Equal(Terrain.Grass, sampler.TerrainAt(c)));
     }
 }
 
@@ -264,15 +300,73 @@ public class WorldGenerationOptionsTests
     }
 
     [Fact]
-    public void Validate_rejects_a_max_island_radius_below_the_min()
+    public void Validate_rejects_a_max_island_width_below_the_min()
     {
-        var options = WorldGenerationOptions.ForSeed(1) with
-        {
-            IslandMinRadius = 5.0,
-            IslandMaxRadius = 2.0,
-        };
+        var options = WorldGenerationOptions.ForSeed(1) with { IslandMinWidth = 30.0, IslandMaxWidth = 20.0 };
 
         Assert.Throws<ArgumentOutOfRangeException>(options.Validate);
+    }
+
+    [Theory]
+    [InlineData(0, 5)]
+    [InlineData(6, 5)]
+    [InlineData(5, 25)]
+    public void Validate_rejects_bad_segment_counts(int min, int max)
+    {
+        var options = WorldGenerationOptions.ForSeed(1) with { IslandMinSegments = min, IslandMaxSegments = max };
+
+        Assert.Throws<ArgumentOutOfRangeException>(options.Validate);
+    }
+
+    [Fact]
+    public void Validate_rejects_elongation_and_bend_ranges_that_are_reversed()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            (WorldGenerationOptions.ForSeed(1) with { IslandMinElongation = 6.0, IslandMaxElongation = 5.0 }).Validate);
+        Assert.Throws<ArgumentOutOfRangeException>(
+            (WorldGenerationOptions.ForSeed(1) with { IslandMinBend = 0.3, IslandMaxBend = 0.2 }).Validate);
+        Assert.Throws<ArgumentOutOfRangeException>(
+            (WorldGenerationOptions.ForSeed(1) with { IslandMaxBend = 1.5 }).Validate);
+    }
+
+    [Fact]
+    public void Validate_rejects_size_class_shares_that_exceed_one_together()
+    {
+        var options = WorldGenerationOptions.ForSeed(1) with { IslandSmallShare = 0.7, IslandLargeShare = 0.4 };
+
+        Assert.Throws<ArgumentOutOfRangeException>(options.Validate);
+    }
+
+    [Fact]
+    public void Validate_accepts_the_largest_supported_radius_and_rejects_beyond_it()
+    {
+        var ok = WorldGenerationOptions.ForSeed(1) with { Radius = WorldGenerationOptions.MaxRadius };
+        ok.Validate();
+
+        var tooBig = WorldGenerationOptions.ForSeed(1) with { Radius = WorldGenerationOptions.MaxRadius + 1 };
+        Assert.Throws<ArgumentOutOfRangeException>(tooBig.Validate);
+    }
+
+    [Fact]
+    public void Validate_rejects_a_coast_warp_that_could_fold_the_coastline_through_either_octave()
+    {
+        // The coarse octave alone is fine (0.2 * 1.5 < 1) but with the constant fine
+        // octave (3.8 / 11.4 = 1/3) added the sum reaches 1: 1.5 * (0.35 + 0.333) > 1.
+        var options = WorldGenerationOptions.ForSeed(1) with { IslandCoastWarp = 14.7, IslandCoastWarpScale = 42.0 };
+
+        var ex = Assert.Throws<ArgumentException>(options.Validate);
+        Assert.Contains("IslandCoastWarp", ex.Message, StringComparison.Ordinal);
+
+        // Same amplitude on a longer wavelength is accepted.
+        (WorldGenerationOptions.ForSeed(1) with { IslandCoastWarp = 14.7, IslandCoastWarpScale = 80.0 }).Validate();
+    }
+
+    [Fact]
+    public void Validate_rejects_a_cell_too_small_for_the_coast_warp()
+    {
+        var options = WorldGenerationOptions.ForSeed(1) with { IslandCellSize = 16, IslandCoastWarp = 30.0, IslandCoastWarpScale = 400.0 };
+
+        Assert.Throws<ArgumentException>(options.Validate);
     }
 
     [Fact]

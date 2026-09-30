@@ -52,23 +52,24 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
     /// </summary>
     private static WorldGenerationOptions LandOptions => new()
     {
-        Seed = 1,
+        // Seed 14 is one where the discs of the cells around the origin cover every
+        // hex within 30 of it (WorldGeneratorTests.The_all_land_test_options_cover_the_origin
+        // guards this with the same numbers; re-search a seed if the island shape changes):
+        // one 100-hex-wide disc per 100-hex cell (a single-vertex spine, no islets
+        // possible to matter, no warp, no coast noise, every cell an island), so the
+        // ground around the origin is plain grass — no sea, sand, forest or mountain.
+        Seed = 14,
         Radius = 500,
-        // Kept in step with FieldBattleServiceTests.LandOptions: the island-
-        // shape retune (#210) made the reach-budget check in
-        // WorldGenerationOptions.Validate scale with IslandMaxElongation/
-        // IslandLobeMaxScale/IslandCoastWarp, so those are pinned to their
-        // floor and IslandCellSize raised to cover the 1000-hex radius —
-        // otherwise Validate throws inside every TerrainSampler the
-        // settlement/army reads below build, and the reads 500.
-        IslandCellSize = 250,
+        IslandCellSize = 100,
         IslandChance = 1.0,
-        IslandMinRadius = 1000,
-        IslandMaxRadius = 1000,
-        IslandMaxElongation = 0.0,
-        IslandLobeMinScale = 0.3,
-        IslandLobeMaxScale = 0.3,
+        IslandMinWidth = 100.0,
+        IslandMaxWidth = 100.0,
+        IslandMinSegments = 1,
+        IslandMaxSegments = 1,
         IslandCoastWarp = 0.0,
+        IslandCoastNoise = 0.0,
+        IslandSmallShare = 0.0,
+        IslandLargeShare = 0.0,
         BeachThreshold = 1.0,
         MountainThreshold = 0.0,
         MountainRockiness = 2.0,

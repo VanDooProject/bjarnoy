@@ -197,11 +197,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task Spacing_is_enforced_within_an_island_but_never_across_separate_islands()
     {
         using var client = Client();
-        // Seed 51: re-picked again after the island-shape retune (bigger,
-        // more-elongated islands) moved every seed's terrain — seed 5/60 no
-        // longer places two islands close enough to exercise the
-        // cross-island case below.
-        var world = await _factory.CreateWorldAsync(Unique("w"), 51, 60, cancellationToken: Ct);
+        // Compact seed 3 (found by scanning seeds 1-400): has an island with two
+        // start positions closer than MinimumSpacing and a second island with a
+        // start position that close to the first — the cross-island case below.
+        var world = await _factory.CreateWorldAsync(Unique("w"), 3, 300, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -234,7 +233,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             }
         }
 
-        Assert.True(sameIsland is not null, "Seed 51/radius 60 no longer has an island dense enough to exercise same-island spacing.");
+        Assert.True(sameIsland is not null, "Compact seed 3 no longer has an island dense enough to exercise same-island spacing.");
         var (islandId, first, second) = sameIsland!.Value;
 
         var founded = await client.PostJsonAsync(
@@ -265,7 +264,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             }
         }
 
-        Assert.True(crossIsland is not null, "Seed 51/radius 60 no longer has two islands close enough to exercise cross-island spacing.");
+        Assert.True(crossIsland is not null, "Compact seed 3 no longer has two islands close enough to exercise cross-island spacing.");
         var (crossIslandId, crossPlot) = crossIsland!.Value;
 
         var crossFounded = await client.PostJsonAsync(
@@ -976,7 +975,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(1, hut.Level);
         Assert.NotNull(hut.Orientation);
 
-        var expectedOrientation = new TerrainSampler(WorldGenerationOptions.ForSeed(1) with { Radius = 60 })
+        var expectedOrientation = new TerrainSampler(TestWorlds.For(1, 60))
             .FishingHutOrientation(waterCoord, centre)
             .ToWireName();
         Assert.Equal(expectedOrientation, hut.Orientation);

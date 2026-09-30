@@ -9,16 +9,20 @@ namespace Bjarnoy.Infrastructure.Tests.World;
 
 public class WorldServiceTests : IDisposable
 {
-    // Seed 20 at radius 30 is a known, deterministic zero-*foundable*-island
-    // draw (found by sampling WorldGenerator directly) — see the ~11%
-    // zero-island rate this regression test guards against. Since wasted
-    // islands shipped, this seed/radius actually produces exactly one
-    // island — but it's wasted (no start positions, hidden until the
-    // endboss triggers), so it must still count as "no islands" for a
-    // player to found on; see HasFoundableIslands_wasted_only test below,
-    // which pins down that this isn't a coincidence of the seed choice.
-    private const int KnownBadSeed = 20;
-    private const int KnownBadRadius = 30;
+    // Compact worlds (see WorldGenerationOptions.Compact) at radius 200 with a low island
+    // chance (0.3), found by sampling WorldGenerator directly: an island has to fit whole
+    // inside the world radius, so a small world regularly draws no island at all (the
+    // ~6% zero-island rate this regression test guards against).
+    // Seed 25 draws no island of any kind. Seed 52 draws four wasted islands and no green
+    // one: since wasted islands shipped that draw must still count as "no islands" for a
+    // player to found on (they have no start positions and are hidden until the endboss
+    // triggers) — see the wasted-only test below, which pins down that this isn't a
+    // coincidence of the seed choice.
+    private const int KnownBadSeed = 25;
+    private const int WastedOnlySeed = 52;
+
+    private static WorldGenerationOptions SmallWorld(int seed) =>
+        WorldGenerationOptions.Compact(seed, 200) with { IslandChance = 0.3 };
 
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
     private readonly GameDbContext _dbContext;
@@ -47,7 +51,7 @@ public class WorldServiceTests : IDisposable
     public async Task An_explicit_seed_that_produces_no_islands_is_reported_as_a_conflict()
     {
         var service = CreateService();
-        var options = WorldGenerationOptions.ForSeed(KnownBadSeed) with { Radius = KnownBadRadius };
+        var options = SmallWorld(KnownBadSeed);
 
         var ex = await Assert.ThrowsAsync<WorldCreationException>(
             () => service.CreateWorldAsync("explicit-seed-world", options, maxPlayers: 10, autoSeed: false, Ct));
@@ -61,13 +65,12 @@ public class WorldServiceTests : IDisposable
     /// directly, which a wasted-only draw (no green islands, so nobody could
     /// ever found on it) satisfied just as well as a real one — silently
     /// creating an unplayable world instead of reporting the conflict.
-    /// <see cref="KnownBadSeed"/>/<see cref="KnownBadRadius"/> is exactly
-    /// such a draw (one wasted island, zero green ones).
+    /// <see cref="WastedOnlySeed"/> is exactly such a draw (wasted islands, zero green ones).
     /// </summary>
     [Fact]
     public async Task A_seed_that_produces_only_a_wasted_island_is_also_reported_as_a_conflict()
     {
-        var options = WorldGenerationOptions.ForSeed(KnownBadSeed) with { Radius = KnownBadRadius };
+        var options = SmallWorld(WastedOnlySeed);
         var generated = new WorldGenerator(options).Generate(Ct);
 
         Assert.NotEmpty(generated.Islands);
@@ -84,7 +87,7 @@ public class WorldServiceTests : IDisposable
     public async Task An_auto_drawn_seed_that_produces_no_islands_is_retried_until_one_does()
     {
         var service = CreateService();
-        var options = WorldGenerationOptions.ForSeed(KnownBadSeed) with { Radius = KnownBadRadius };
+        var options = SmallWorld(KnownBadSeed);
 
         var world = await service.CreateWorldAsync(
             "auto-seed-world", options, maxPlayers: 10, autoSeed: true, Ct);
