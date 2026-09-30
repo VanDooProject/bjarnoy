@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { claimLandfall, layoutOverflow, loginTestUser, waitForMapReady } from './helpers';
+import { claimLandfall, layoutOverflow, loginTestUser, openRingOnGuidedHex, waitForMapReady } from './helpers';
 
 // Mobile-readiness audit: every one of these was a real defect at phone width
 // — the onboarding checklist's third card and the guidance chip clipped past
@@ -47,30 +47,6 @@ async function plotHitsCanvas(page: Page): Promise<boolean> {
     const plot = renderer.hexCenterScreen(renderer.previewCenter!);
     return document.elementFromPoint(box.x + plot.x, box.y + plot.y) === canvas;
   });
-}
-
-/**
- * Opens the ring menu on the guided hex GuidancePointer.vue is currently
- * aiming at (design handoff "2a" frame 2, right after landfall — the pointer
- * follows the camera via `useMapAnchor`, which writes the hex's screen point
- * into `--anchor-x`/`--anchor-y` on `[data-testid="guidance-pointer"]`) and
- * waits for frame 3's "This one fits {terrain}" chip, the case the chip's
- * placement bug was found on. Reads the anchor vars rather than re-deriving
- * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
- * (camera + arrowTipOffset) is exactly where the click needs to land.
- */
-async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
-  const pointer = settlement.guidancePointer;
-  await expect
-    .poll(async () => (await pointer.getAttribute('style')) ?? '', { message: 'guidance pointer never got an anchor point' })
-    .toMatch(/--anchor-x: -?\d/);
-  const style = (await pointer.getAttribute('style'))!;
-  const x = Number(style.match(/--anchor-x: (-?[\d.]+)px/)![1]);
-  const y = Number(style.match(/--anchor-y: (-?[\d.]+)px/)![1]);
-  const box = await settlement.canvasBox();
-  await settlement.page.mouse.click(box.x + x, box.y + y);
-  await settlement.ring.waitForOpen();
-  await expect(pointer.locator('.chip')).toContainText('fits');
 }
 
 async function expectNoOverlap(a: Locator, b: Locator, what: string): Promise<void> {
