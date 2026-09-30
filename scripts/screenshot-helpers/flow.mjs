@@ -67,7 +67,9 @@ await shoot(page, 'landfall');
 // Design handoff "2a": onboarding no longer forces a modal here, so nothing
 // blocks going straight to the settlement view.
 await page.getByRole('button', { name: 'Settlement', exact: true }).click(); // HudNav tab
-await page.waitForTimeout(2000);
+// The settlement map takes ~5 s to draw on headless chromium's software renderer (2 s left the
+// "Loading map" overlay in the shot).
+await page.waitForTimeout(8000);
 await shoot(page, 'settlement');
 
 // Pan the camera outward to check fog continuity/gradient past the default view.
@@ -134,9 +136,30 @@ if (wantStop('settlement_giant') || wantStopPrefix('settlement_giant_orientation
   giantAnchor = await page.evaluate(() => {
     const store = window.__demoWorld();
     const settlement = store.model.getSettlement(store.selectedSettlementId);
-    for (const tile of store.model.getTilesInRect(settlement.q - 20, settlement.q + 20, settlement.r - 20, settlement.r + 20)) {
-      if (tile.giant?.part === 'C') return tile.giant.anchor;
+    let best = null;
+    // Islands are ~150 hexes across, so the nearest giant can be well past 20 hexes away: look
+    // outward from the settlement (giantAnchorAt is a cheap map lookup, unlike materialising tiles).
+    for (let dq = -120; dq <= 120; dq++) {
+      for (let dr = Math.max(-120, -dq - 120); dr <= Math.min(120, -dq + 120); dr++) {
+        const anchor = store.model.giantAnchorAt({ q: settlement.q + dq, r: settlement.r + dr });
+        if (anchor && !(best && best.d <= Math.max(Math.abs(dq), Math.abs(dr), Math.abs(-dq - dr)))) {
+          best = { d: Math.max(Math.abs(dq), Math.abs(dr), Math.abs(-dq - dr)), anchor };
+        }
+      }
     }
+    // Giants are spread over the whole (~150-hex) island and the demo fog only reveals ~10 hexes
+    // around home, so a far one would be shot as pure fog: when none is close, place one by hand.
+    if (best && best.d <= 14) return best.anchor;
+    for (let radius = 4; radius <= 10; radius++) {
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) {
+          if (Math.max(Math.abs(dq), Math.abs(dr), Math.abs(-dq - dr)) !== radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          if (store.model.canPlaceGiant(at) && store.model.placeGiant(at, 'giantmountain')) return at;
+        }
+      }
+    }
+    if (best) return best.anchor;
     return null;
   });
   if (!giantAnchor) throw new Error('no giant generated on the home island for this seed');

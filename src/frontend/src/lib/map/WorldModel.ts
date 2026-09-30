@@ -446,23 +446,23 @@ export class WorldModel {
   islandFootprint(island: IslandLabel): AxialCoord[] {
     const cached = this.islandFootprintCache.get(island.id);
     if (cached) return cached;
-    const MAX_FOOTPRINT_TILES = 200;
+    // A hard backstop against runaway growth, sized for the largest islands (a C-class island is
+    // 15k-40k tiles): the label has to clear the island's real bottom edge, so a cap that cut the
+    // flood short would put the name inside the island. Only explored islands are ever measured
+    // (the renderer skips fogged labels), and the result is cached.
+    const MAX_FOOTPRINT_TILES = 100_000;
     const start = { q: island.q, r: island.r };
     const tiles: AxialCoord[] = [];
     if (this.isLand(start.q, start.r)) {
       const seen = new Set<string>([coordKey(start)]);
-      const queue: AxialCoord[] = [start];
       tiles.push(start);
-      while (queue.length && tiles.length < MAX_FOOTPRINT_TILES) {
-        const c = queue.shift()!;
-        for (const n of neighbors(c)) {
+      // `tiles` doubles as the breadth-first queue (read via `head`): O(n), no Array.shift.
+      for (let head = 0; head < tiles.length && tiles.length < MAX_FOOTPRINT_TILES; head++) {
+        for (const n of neighbors(tiles[head])) {
           const k = coordKey(n);
           if (seen.has(k)) continue;
           seen.add(k);
-          if (this.isLand(n.q, n.r)) {
-            tiles.push(n);
-            queue.push(n);
-          }
+          if (this.isLand(n.q, n.r)) tiles.push(n);
         }
       }
     }

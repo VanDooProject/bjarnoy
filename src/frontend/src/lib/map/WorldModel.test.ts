@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, hexRing, neighbors, type AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
-import { DEFAULT_GENERATION, soilAt, springMountainShapeAt } from './worldGenerator';
+import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
@@ -521,6 +521,16 @@ function riverTile(at: AxialCoord, shape: RiverTile['shape']): RiverTile {
 // textures.ts's riverBuildingArtFor now (a pure function, unit-tested there
 // against real in/out directions) — WorldModel no longer has its own
 // sawmillArtVariantOf query for it.
+
+describe('WorldModel.islandFootprint', () => {
+  it('covers a whole production-size island, so its label clears the real bottom edge', () => {
+    const model = new WorldModel(20260824);
+    const islands = enumerateIslands({ seed: 20260824, generation: model.generation }, model.generation.worldRadius);
+    const footprints = islands.slice(0, 12).map((island) => model.islandFootprint(island).length);
+    // Islands are 1.5k-40k tiles; a footprint capped at a few hundred would put labels inside them.
+    expect(Math.max(...footprints)).toBeGreaterThan(3000);
+  });
+});
 
 describe('WorldModel.seaFacingDirectionOf', () => {
   // Found by search rather than pinned to coordinates: the first coastal land hex near the

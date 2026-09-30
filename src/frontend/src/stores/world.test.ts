@@ -104,7 +104,7 @@ async function loadStoreModule(demoMode: boolean) {
   // of the real bake body, with just those two globals stubbed.)
   vi.doMock('../lib/map/fog/demoFogMask', () => ({
     buildDemoFogMask: (...args: unknown[]) => buildDemoFogMask(...args),
-    DEMO_MASK_RADIUS: 60,
+    demoMaskBounds: () => ({ minU: -61, minV: -121, maxU: 62, maxV: 122, width: 123, height: 243 }),
   }));
   // fogChunkCodec.ts decodes PNGs and builds the window bitmap through
   // createImageBitmap/OffscreenCanvas/ImageData, none of which exist in this
