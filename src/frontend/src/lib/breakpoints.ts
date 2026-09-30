@@ -21,3 +21,8 @@ export const HUD_COMPACT_QUERY = `(max-width: ${HUD_COMPACT_MAX_WIDTH}px), (max-
 // HUD_COMPACT_MAX_WIDTH's own comment on why).
 export const MOBILE_MODAL_MAX_WIDTH = 640;
 export const MOBILE_MODAL_QUERY = `(max-width: ${MOBILE_MODAL_MAX_WIDTH}px)`;
+
+// A device whose primary input is a finger: no hover, coarse pointer. Copy
+// that says "click"/"hover" reads wrong there ("Click this plot" on a phone)
+// and gets its "tap" wording instead.
+export const TOUCH_QUERY = '(hover: none) and (pointer: coarse)';

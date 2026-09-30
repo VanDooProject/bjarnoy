@@ -7,10 +7,13 @@
 // `complete` adds one.
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
+import { useMediaQuery } from '../../composables/useMediaQuery';
+import { TOUCH_QUERY } from '../../lib/breakpoints';
 
 defineProps<{ variant: 'landfall' | 'complete' }>();
 const emit = defineEmits<{ continue: [] }>();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const isTouch = useMediaQuery(TOUCH_QUERY);
 </script>
 
 <template>
@@ -20,7 +23,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
       {{ variant === 'landfall' ? t('landing.banner.landfallTitle') : t('landing.banner.completeTitle') }}
     </span>
     <span class="body">
-      {{ variant === 'landfall' ? t('landing.banner.landfallBody') : t('landing.banner.completeBody') }}
+      {{ variant === 'landfall' ? t('landing.banner.landfallBody') : isTouch ? t('landing.banner.completeBodyTouch') : t('landing.banner.completeBody') }}
     </span>
     <button v-if="variant === 'complete'" type="button" class="continue" data-testid="onboarding-continue" @click="emit('continue')">
       {{ t('landing.banner.continueCta') }}

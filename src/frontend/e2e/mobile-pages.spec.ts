@@ -102,3 +102,19 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
     expect(broken).toEqual([]);
   });
 });
+
+test.describe('touch wording on a phone', { tag: '@g2' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  // The onboarding told a phone player to "Click this plot" / "Click an
+  // empty hex"; a touch screen gets "Tap" instead.
+  test('the onboarding says tap, not click, on a touch screen', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await expect(settlement.guidancePointer).toContainText('Tap this plot');
+    await expect(settlement.checklist).toContainText('Tap your plot to place it');
+    await settlement.claimLandfall();
+    await expect(settlement.checklist).toContainText('Tap an empty hex in your border');
+    await expect(page.locator('#app')).not.toContainText(/click/i);
+  });
+});

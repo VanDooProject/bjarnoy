@@ -51,7 +51,7 @@ import { useIsMobile } from '../composables/useIsMobile';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
 import { DEMO_BADGE_ROW_PX, isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
-import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { HUD_COMPACT_QUERY, TOUCH_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -408,6 +408,7 @@ const queueDrawerOpen = ref(false);
 // CSS custom properties to stay clear of the bar on either edge instead of
 // assuming it's always at the top.
 const isCompactHudLanding = useMediaQuery(HUD_COMPACT_QUERY);
+const isTouch = useMediaQuery(TOUCH_QUERY);
 // Mobile tutorial focus (owner decision): on phones, once a settlement is
 // founded the guided build steps are the whole show — the top HUD bar (and
 // everything it carries: the settlement-name bubble, the pull-down drawer)
@@ -615,7 +616,9 @@ const pointerTarget = computed(() => {
     return {
       mode: 'hex' as const,
       coord: previewCoord.value,
-      label: DEMO_MODE ? t('landing.pointer.clickThisPlot') : t('landing.pointer.anyGlowingPlot'),
+      label: DEMO_MODE
+        ? isTouch.value ? t('landing.pointer.tapThisPlot') : t('landing.pointer.clickThisPlot')
+        : t('landing.pointer.anyGlowingPlot'),
       angle: 38,
       targetRadius: HEX_TARGET_RADIUS_PX,
     };
