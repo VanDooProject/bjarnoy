@@ -156,3 +156,16 @@ test.describe('messages on a phone', { tag: '@g2' }, () => {
     await expect(page).not.toHaveURL(/\/messages/);
   });
 });
+
+test.describe('docs top bar on a phone', { tag: '@g2' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  // The compact bar ellipsised "I already have a realm" to "I already hav…";
+  // it shows the short "Log in" there instead, in full.
+  test('the returning-player trigger reads in full', async ({ page }) => {
+    await page.goto('/docs');
+    const main = page.locator('.hud-bar [data-testid="returning-player-trigger"] .trigger-main:visible');
+    await expect(main).toHaveText('Log in');
+    expect(await main.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  });
+});

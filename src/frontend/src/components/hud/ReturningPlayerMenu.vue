@@ -113,7 +113,11 @@ watch(() => route.fullPath, close);
           <span class="trigger-sub">{{ t('hud.returningPlayer.nameJarlTriggerSub') }}</span>
         </template>
         <template v-else>
-          <span class="trigger-main">{{ t('hud.returningPlayer.trigger') }}</span>
+          <span class="trigger-main trigger-main--full">{{ t('hud.returningPlayer.trigger') }}</span>
+          <!-- The compact phone bar has ~92px for this line: "I already
+               have a realm" ellipsised to "I already hav…", which said
+               nothing. The menu it opens leads with "Log in" anyway. -->
+          <span class="trigger-main trigger-main--short">{{ t('hud.returningPlayer.logIn') }}</span>
           <span class="trigger-sub">{{ t('hud.returningPlayer.triggerSub') }}</span>
         </template>
       </span>
@@ -340,5 +344,14 @@ watch(() => route.fullPath, close);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  .trigger-main--full {
+    display: none;
+  }
+  .trigger-main.trigger-main--short {
+    display: inline-block;
+  }
+}
+.trigger-main--short {
+  display: none;
 }
 </style>
