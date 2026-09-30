@@ -726,7 +726,8 @@ public sealed class WorldService(
         tile.Coord.R,
         (int)tile.Shape,
         [.. tile.InDirections.Select(d => (int)d)],
-        tile.OutDirection is { } outDirection ? (int)outDirection : null);
+        tile.OutDirection is { } outDirection ? (int)outDirection : null,
+        (int)tile.Width);
 
     private static CampRecord ToCampRecord(Camp camp) => new(
         camp.Coord.Q,

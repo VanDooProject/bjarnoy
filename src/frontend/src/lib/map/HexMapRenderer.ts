@@ -3550,7 +3550,7 @@ export class HexMapRenderer {
         // Only a Mouth's orientation actually needs this (see
         // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
         // for every other shape.
-        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
         // Likewise, only a Spring's art actually branches on this.
         const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
         // Only straight/bend/bend60 (and never a wasted/lava tile — see
@@ -3664,8 +3664,10 @@ export class HexMapRenderer {
         continue;
       }
 
-      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
       const { segments, springDot } = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      // A stream is half a river's width: draw its line thinner.
+      const streamScale = river.width === 'stream' ? 0.55 : 1;
 
       for (const { from, control, to } of segments) {
         // Double stroke, same "wide soft casing under a crisp line" trick
@@ -3675,11 +3677,11 @@ export class HexMapRenderer {
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 5, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
+          .stroke({ width: 5 * streamScale, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 2.2, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
+          .stroke({ width: 2.2 * streamScale, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
       }
       if (springDot) {
         this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color: RIVER_COLOR, alpha: 0.95 });

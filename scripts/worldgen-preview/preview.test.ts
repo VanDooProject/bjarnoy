@@ -81,6 +81,17 @@ describe('renderPreview', () => {
   });
 });
 
+describe('rivers layer', () => {
+  it('traces real rivers on an island window and reports no inland mouths', () => {
+    const options = { seed: 11, radius: 1000, window: { q: -215, r: 600, size: 60 }, hexPixels: 4, layers: ['terrain', 'rivers'], legend: true, stats: false };
+    const result = renderPreview(options);
+    const line = result.statsLines.find((l) => l.startsWith('MERGES'));
+    expect(line).toBeDefined();
+    expect(line).toContain('INLAND MOUTHS 0');
+    expect(result.statsLines.some((l) => l.startsWith('RIVERS'))).toBe(true);
+  });
+});
+
 describe('cli arguments', () => {
   it('parses the documented options', () => {
     const { options, out } = parseArgs(['--seed', '5', '--radius', '400', '--window', '1,-2,50', '--px', '3', '--layers', 'terrain,wasted', '--out', 'x.png', '--no-stats']);

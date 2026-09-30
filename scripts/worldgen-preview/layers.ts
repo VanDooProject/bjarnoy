@@ -5,7 +5,9 @@
 // new entry in LAYERS is all the CLI needs.
 import { hexDistance } from '../../src/frontend/src/lib/hex/coords';
 import { terrainAt, wastedTerrainAt, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
-import type { Terrain } from '../../src/frontend/src/lib/map/types';
+import { TILE_ORIENTATIONS, type RiverTile, type Terrain } from '../../src/frontend/src/lib/map/types';
+import { coordKey } from '../../src/frontend/src/lib/hex/coords';
+import { computeRivers, riverStatsLines, type RiverField, type Window } from './rivers';
 import { campsLayer } from './camps';
 
 export type Rgb = readonly [number, number, number];
@@ -43,8 +45,16 @@ export interface Layer {
   description: string;
   /** What the layer draws, in legend order. */
   legend: readonly LegendEntry[];
-  /** The colour of hex (q, r), or `null` to leave what the layers below drew. */
-  colourAt(q: number, r: number, world: WorldSeed): Rgb | null;
+  /** Called once before drawing (a layer that needs a whole-world pass does it here); returns extra stats lines. */
+  prepare?(world: WorldSeed, window: Window | undefined): string[];
+  /** True when `colourAt` wants the pixel's offset inside its hex (a layer that draws lines and marks, not flat hexes). */
+  subhex?: boolean;
+  /**
+   * The colour of hex (q, r), or `null` to leave what the layers below drew. A `subhex` layer also gets
+   * the pixel's offset from the hex centre in circumradius units (`dx`, `dy`, |d| <= 1) and whether the
+   * hexes are big enough on screen (`fine`) for that to be worth drawing.
+   */
+  colourAt(q: number, r: number, world: WorldSeed, dx?: number, dy?: number, fine?: boolean): Rgb | null;
   /** Optional: draws markers on top of the finished map (after every layer's colours). */
   overlay?(canvas: OverlayCanvas, context: PreviewContext): void;
   /** Optional: extra footer lines for this layer. */
@@ -79,9 +89,107 @@ const wastedLayer: Layer = {
   colourAt: (q, r, world) => (wastedTerrainAt(q, r, world) === 'sea' ? null : WASTED_COLOUR),
 };
 
+export const STREAM_COLOUR: Rgb = [130, 205, 245];
+export const RIVER_COLOUR: Rgb = [22, 58, 175];
+export const WIDEN_COLOUR: Rgb = [250, 205, 60];
+export const SPRING_COLOUR: Rgb = [250, 250, 250];
+export const CONFLUENCE_COLOUR: Rgb = [235, 90, 200];
+export const MOUTH_COLOUR: Rgb = [255, 140, 30];
+
+const SQRT3 = Math.sqrt(3);
+const DIRECTION_VECTORS = [
+  [1, 0],
+  [1, -1],
+  [0, -1],
+  [-1, 0],
+  [-1, 1],
+  [0, 1],
+].map(([dq, dr]) => [1.5 * dq!, SQRT3 * (dr! + dq! / 2)] as const);
+const RIVER_HALF_WIDTH = 0.3;
+const STREAM_HALF_WIDTH = 0.14;
+
+/** Distance from (px, py) to the segment centre -> (vx, vy) / 2. */
+function distanceToHalfEdge(px: number, py: number, vx: number, vy: number): number {
+  const ex = vx / 2;
+  const ey = vy / 2;
+  const t = Math.max(0, Math.min(1, (px * ex + py * ey) / (ex * ex + ey * ey)));
+  return Math.hypot(px - t * ex, py - t * ey);
+}
+
+let riverField: RiverField | null = null;
+
+/** The rivers a preview drew last (for the stats and tests). */
+export function lastRiverField(): RiverField | null {
+  return riverField;
+}
+
+function riverColourAt(tile: RiverTile, dx: number, dy: number, fine: boolean): Rgb {
+  const width = tile.width ?? 'river';
+  const markerColour =
+    tile.shape === 'spring'
+      ? SPRING_COLOUR
+      : tile.shape === 'confluence'
+        ? CONFLUENCE_COLOUR
+        : tile.shape === 'mouth'
+          ? MOUTH_COLOUR
+          : width === 'widen'
+            ? WIDEN_COLOUR
+            : null;
+  const bodyColour = width === 'stream' ? STREAM_COLOUR : RIVER_COLOUR;
+  if (!fine) return markerColour ?? bodyColour;
+
+  const dist = Math.hypot(dx, dy);
+  // Marks first: springs and widening tiles are a filled dot, confluences and mouths a ring.
+  if (tile.shape === 'spring' || (width === 'widen' && tile.shape !== 'confluence' && tile.shape !== 'mouth')) {
+    if (dist < 0.4) return markerColour!;
+  } else if (dist > 0.42 && dist < 0.68 && markerColour) {
+    return markerColour;
+  }
+
+  // The flow: in-segments carry what arrives (stream until the widening), the out-segment what leaves.
+  const inHalf = width === 'river' || width === 'riverstream' ? RIVER_HALF_WIDTH : STREAM_HALF_WIDTH;
+  const outHalf = width === 'stream' ? STREAM_HALF_WIDTH : RIVER_HALF_WIDTH;
+  for (const d of tile.inDirections) {
+    const v = DIRECTION_VECTORS[TILE_ORIENTATIONS.indexOf(d)]!;
+    if (distanceToHalfEdge(dx, dy, v[0], v[1]) <= inHalf) return inHalf === STREAM_HALF_WIDTH ? STREAM_COLOUR : RIVER_COLOUR;
+  }
+  if (tile.outDirection) {
+    const v = DIRECTION_VECTORS[TILE_ORIENTATIONS.indexOf(tile.outDirection)]!;
+    if (distanceToHalfEdge(dx, dy, v[0], v[1]) <= outHalf) return outHalf === STREAM_HALF_WIDTH ? STREAM_COLOUR : RIVER_COLOUR;
+  }
+  if (dist <= Math.max(inHalf, outHalf)) return width === 'stream' ? STREAM_COLOUR : RIVER_COLOUR;
+  return TERRAIN_COLOURS.grass;
+}
+
+const riversLayer: Layer = {
+  id: 'rivers',
+  description: 'the rivers of the green islands: streams (thin, light), rivers (thick, dark), widening tiles, springs, confluences, mouths',
+  legend: [
+    { label: 'stream', colour: STREAM_COLOUR },
+    { label: 'river', colour: RIVER_COLOUR },
+    { label: 'widening', colour: WIDEN_COLOUR },
+    { label: 'spring', colour: SPRING_COLOUR },
+    { label: 'confluence', colour: CONFLUENCE_COLOUR },
+    { label: 'mouth', colour: MOUTH_COLOUR },
+  ],
+  subhex: true,
+  prepare(world, window) {
+    riverField = computeRivers(world, window);
+    return riverStatsLines(riverField);
+  },
+  colourAt(q, r, _world, dx = 0, dy = 0, fine = false) {
+    const tile = riverField?.tiles.get(coordKey({ q, r }));
+    if (!tile) return null;
+    const colour = riverColourAt(tile, dx, dy, fine);
+    // Off the flow on a river hex, let the terrain below show.
+    return colour === TERRAIN_COLOURS.grass ? null : colour;
+  },
+};
+
 export const LAYERS: Record<string, Layer> = {
   [terrainLayer.id]: terrainLayer,
   [wastedLayer.id]: wastedLayer,
+  [riversLayer.id]: riversLayer,
   [campsLayer.id]: campsLayer,
 };
 

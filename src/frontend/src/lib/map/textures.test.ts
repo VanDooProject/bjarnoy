@@ -98,13 +98,46 @@ describe('riverArtFor', () => {
   });
 
   it('resolves a representable Confluence tile through confluenceOrientationOf (y_narrow), not the untransformed fallback', () => {
-    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'SE' };
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['SE', 'SW'], outDirection: 'NW' };
     const result = riverArtFor(tile, null);
 
     expect(result.shape).toBe('confluencenarrow');
     expect(result.orientation).toBe('E');
     // The untransformed fallback this used to always return.
-    expect(result.orientation).not.toBe('SE');
+    expect(result.orientation).not.toBe('NW');
+  });
+
+  it('draws two streams joining as the smallwide Y (narrow or wide) with the same rotation as the river Y', () => {
+    const narrow: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['SE', 'SW'], outDirection: 'NW', width: 'widen' };
+    expect(riverArtFor(narrow, null)).toEqual({ shape: 'widen_yn', orientation: 'E' });
+    const wide: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'E', width: 'widen' };
+    expect(riverArtFor(wide, null).shape).toBe('widen_yw');
+  });
+
+  it('picks the stream families for stream tiles, with the river tile rotation', () => {
+    const straight = riverTile('straight', 'E', 'W');
+    expect(riverArtFor({ ...straight, width: 'stream' }, null)).toEqual({
+      shape: 'small_straight',
+      orientation: riverArtFor(straight, null).orientation,
+    });
+    const bend = riverTile('bend', 'NW', 'SW');
+    expect(riverArtFor({ ...bend, width: 'stream' }, null).shape).toBe('small_bend');
+    const bend60 = riverTile('bend60', 'NE', 'NW');
+    expect(riverArtFor({ ...bend60, width: 'stream' }, null).shape).toBe('small_bend60');
+  });
+
+  it('draws a widening straight from its stream (inflow) end and a widening mouth toward the sea', () => {
+    const widen = { ...riverTile('straight', 'E', 'W'), width: 'widen' as const };
+    expect(riverArtFor(widen, null)).toEqual({ shape: 'widen_straight', orientation: 'NW' });
+    const mouth: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['E'], outDirection: null, width: 'widen' };
+    expect(riverArtFor(mouth, 'W')).toEqual({ shape: 'widen_straight', orientation: 'NW' });
+  });
+
+  it('draws a river meeting the sea head-on as a delta, but a bent mouth and a lava mouth as before', () => {
+    const mouth: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['E'], outDirection: null };
+    expect(riverArtFor(mouth, 'W')).toEqual({ shape: 'delta', orientation: 'NW' });
+    expect(riverArtFor(mouth, 'NW').shape).toBe('bend');
+    expect(riverArtFor({ ...mouth, wasted: true }, 'W').shape).toBe('straight');
   });
 
   it('resolves a Confluence tile matching the wide junction (ywide), not the narrow one', () => {
@@ -114,6 +147,7 @@ describe('riverArtFor', () => {
     const result = riverArtFor(tile, null);
 
     expect(result.shape).toBe('confluencewide');
+    expect(result.orientation).toBe('NW');
   });
 
   it('falls back to the untransformed outDirection for a Confluence angle neither asset can represent', () => {
@@ -197,6 +231,15 @@ describe('textureKeyFor: a Sawmill never resolves to the grass family', () => {
   it('uses whatever key a riverArt override supplies', () => {
     const tile: Tile = { q: 0, r: 0, terrain: 'grass', buildingType: 'sawmill' };
     expect(textureKeyFor(tile, { key: 'sawmillbend60', orientation: 'NE' })).toBe('sawmillbend60');
+  });
+});
+
+describe('riverBuildingArtFor on streams', () => {
+  it('has no building art on a stream or widening tile', () => {
+    const straight = { ...riverTile('straight', 'E', 'W') };
+    expect(riverBuildingArtFor('sawmill', straight)).toBeDefined();
+    expect(riverBuildingArtFor('sawmill', { ...straight, width: 'stream' })).toBeUndefined();
+    expect(riverBuildingArtFor('cropmill', { ...straight, width: 'widen' })).toBeUndefined();
   });
 });
 
@@ -705,6 +748,17 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
         confluencewide: orientationMap('r' as unknown as never),
+        small_straight: orientationMap('r' as unknown as never),
+        small_straight_meander: orientationMap('r' as unknown as never),
+        small_bend: orientationMap('r' as unknown as never),
+        small_bend_meander: orientationMap('r' as unknown as never),
+        small_bend60: orientationMap('r' as unknown as never),
+        small_bend60_loop: orientationMap('r' as unknown as never),
+        widen_straight: orientationMap('r' as unknown as never),
+        widen_yn: orientationMap('r' as unknown as never),
+        widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
+        delta: orientationMap('r' as unknown as never),
       },
       riverTop: {
         straight: orientationMap('r' as unknown as never),
@@ -719,6 +773,17 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
         confluencewide: orientationMap('r' as unknown as never),
+        small_straight: orientationMap('r' as unknown as never),
+        small_straight_meander: orientationMap('r' as unknown as never),
+        small_bend: orientationMap('r' as unknown as never),
+        small_bend_meander: orientationMap('r' as unknown as never),
+        small_bend60: orientationMap('r' as unknown as never),
+        small_bend60_loop: orientationMap('r' as unknown as never),
+        widen_straight: orientationMap('r' as unknown as never),
+        widen_yn: orientationMap('r' as unknown as never),
+        widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
+        delta: orientationMap('r' as unknown as never),
       },
       lavaRiverBase: {},
       lavaRiverTop: {},
@@ -834,6 +899,17 @@ describe('riverTexturesFor lava-island shapes', () => {
         springsaddleback: orientationMap('plain-spring-base' as unknown as never),
         confluencenarrow: orientationMap('plain-river-base' as unknown as never),
         confluencewide: orientationMap('plain-river-base' as unknown as never),
+        small_straight: orientationMap('plain-river-base' as unknown as never),
+        small_straight_meander: orientationMap('plain-river-base' as unknown as never),
+        small_bend: orientationMap('plain-river-base' as unknown as never),
+        small_bend_meander: orientationMap('plain-river-base' as unknown as never),
+        small_bend60: orientationMap('plain-river-base' as unknown as never),
+        small_bend60_loop: orientationMap('plain-river-base' as unknown as never),
+        widen_straight: orientationMap('plain-river-base' as unknown as never),
+        widen_yn: orientationMap('plain-river-base' as unknown as never),
+        widen_yw: orientationMap('plain-river-base' as unknown as never),
+        riverstream: orientationMap('plain-river-base' as unknown as never),
+        delta: orientationMap('plain-river-base' as unknown as never),
       },
       riverTop: {
         straight: orientationMap('plain-river-top' as unknown as never),
@@ -848,6 +924,17 @@ describe('riverTexturesFor lava-island shapes', () => {
         springsaddleback: orientationMap('plain-spring-top' as unknown as never),
         confluencenarrow: orientationMap('plain-river-top' as unknown as never),
         confluencewide: orientationMap('plain-river-top' as unknown as never),
+        small_straight: orientationMap('plain-river-top' as unknown as never),
+        small_straight_meander: orientationMap('plain-river-top' as unknown as never),
+        small_bend: orientationMap('plain-river-top' as unknown as never),
+        small_bend_meander: orientationMap('plain-river-top' as unknown as never),
+        small_bend60: orientationMap('plain-river-top' as unknown as never),
+        small_bend60_loop: orientationMap('plain-river-top' as unknown as never),
+        widen_straight: orientationMap('plain-river-top' as unknown as never),
+        widen_yn: orientationMap('plain-river-top' as unknown as never),
+        widen_yw: orientationMap('plain-river-top' as unknown as never),
+        riverstream: orientationMap('plain-river-top' as unknown as never),
+        delta: orientationMap('plain-river-top' as unknown as never),
       },
       lavaRiverBase: {
         straight: orientationMap('lava-base' as unknown as never),
@@ -952,6 +1039,17 @@ describe('riverTexturesFor river-art variants', () => {
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
         confluencewide: orientationMap('r' as unknown as never),
+        small_straight: orientationMap('r' as unknown as never),
+        small_straight_meander: orientationMap('r' as unknown as never),
+        small_bend: orientationMap('r' as unknown as never),
+        small_bend_meander: orientationMap('r' as unknown as never),
+        small_bend60: orientationMap('r' as unknown as never),
+        small_bend60_loop: orientationMap('r' as unknown as never),
+        widen_straight: orientationMap('r' as unknown as never),
+        widen_yn: orientationMap('r' as unknown as never),
+        widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
+        delta: orientationMap('r' as unknown as never),
       },
       riverTop: {
         straight: orientationMap('plain-top' as unknown as never),
@@ -966,6 +1064,17 @@ describe('riverTexturesFor river-art variants', () => {
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
         confluencewide: orientationMap('r' as unknown as never),
+        small_straight: orientationMap('r' as unknown as never),
+        small_straight_meander: orientationMap('r' as unknown as never),
+        small_bend: orientationMap('r' as unknown as never),
+        small_bend_meander: orientationMap('r' as unknown as never),
+        small_bend60: orientationMap('r' as unknown as never),
+        small_bend60_loop: orientationMap('r' as unknown as never),
+        widen_straight: orientationMap('r' as unknown as never),
+        widen_yn: orientationMap('r' as unknown as never),
+        widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
+        delta: orientationMap('r' as unknown as never),
       },
       lavaRiverBase: {},
       lavaRiverTop: {},

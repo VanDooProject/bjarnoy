@@ -26,7 +26,7 @@ function smooth(t: number): number {
 }
 
 /** Bilinear value noise sampled on a lattice of the given cell size. */
-function valueNoise(x: number, y: number, seed: number, cell: number): number {
+export function valueNoise(x: number, y: number, seed: number, cell: number): number {
   const x0 = Math.floor(x / cell);
   const y0 = Math.floor(y / cell);
   const tx = smooth(x / cell - x0);
@@ -694,11 +694,32 @@ export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
   const island = closestIsland(col, row, world, false);
   if (!island) return 'sea';
   if (island.t > world.generation.beachThreshold) return 'sand';
-  const rockiness = valueNoise(q, r, world.seed + 2, 2.5);
-  if (island.t < world.generation.mountainThreshold && rockiness > world.generation.mountainRockiness) {
+  if (island.t < world.generation.mountainThreshold && mountainField(q, r, world.seed) > world.generation.mountainRockiness) {
     return 'mountain';
   }
-  return rockiness > world.generation.forestRockiness ? 'forest' : 'grass';
+  return valueNoise(q, r, world.seed + 2, FOREST_PATCH_SCALE) > world.generation.forestRockiness ? 'forest' : 'grass';
+}
+
+/** Wavelength (hexes) of the forest/grass patch noise — mirrors `TerrainSampler.ForestPatchScale`. */
+export const FOREST_PATCH_SCALE = 6;
+/** Wavelength of the coarse ridge field that shapes mountain ranges — mirrors `TerrainSampler.RangeScale`. */
+export const RANGE_SCALE = 10;
+/** Wavelength of the fine term that roughens a range's edge — mirrors `TerrainSampler.RangeDetailScale`. */
+export const RANGE_DETAIL_SCALE = 2.5;
+/** Weight of the fine term in the mountain field — mirrors `TerrainSampler.RangeDetailWeight`. */
+export const RANGE_DETAIL_WEIGHT = 0.12;
+
+/**
+ * The field a hex inside an island's core must beat `mountainRockiness` in to be mountain. A
+ * ridged (1 - |2n - 1|) coarse value noise puts high values along long winding lines - the
+ * range crests - and a small fine term keeps a range's edge from being a smooth blob. Mirrors
+ * `TerrainSampler.MountainField`.
+ */
+export function mountainField(q: number, r: number, seed: number): number {
+  const n = valueNoise(q, r, seed + 5, RANGE_SCALE);
+  const ridge = 1 - Math.abs(2 * n - 1);
+  const fine = valueNoise(q, r, seed + 7, RANGE_DETAIL_SCALE);
+  return (1 - RANGE_DETAIL_WEIGHT) * ridge + RANGE_DETAIL_WEIGHT * fine;
 }
 
 function isLand(q: number, r: number, world: WorldSeed): boolean {

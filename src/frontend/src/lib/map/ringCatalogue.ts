@@ -114,9 +114,12 @@ export function riverBuildingAllowedHere(
   type: string,
   riverShape: string | undefined,
   riverVariant: RiverVariant = 'plain',
+  riverWidth: string = 'river',
 ): boolean {
   const allowedShapes = RIVER_SHAPES_BY_TYPE[type];
   if (!allowedShapes) return true;
+  // The river buildings' art is river width: a stream or widening hex never takes one.
+  if (riverWidth !== 'river') return false;
   if (riverShape === undefined || !allowedShapes.has(riverShape)) return false;
   return !EXCLUDED_VARIANTS_BY_TYPE[type]?.has(riverVariant);
 }

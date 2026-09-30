@@ -32,7 +32,8 @@ public class CampPlacementGoldenTests
             new HexCoord(r.Q, r.R),
             ParseShape(r.Shape),
             [.. r.InDirections.Select(ParseOrientation)],
-            r.OutDirection is null ? null : ParseOrientation(r.OutDirection))).ToList();
+            r.OutDirection is null ? null : ParseOrientation(r.OutDirection),
+            ParseWidth(r.Width))).ToList();
         var giants = scenario.Giants.Select(g => new HexCoord(g[0], g[1])).ToList();
 
         var actual = CampGenerator.PlaceCore(tiles, land, rivers, giants, scenario.WorldSeed, scenario.IslandIndex, scenario.Wasted);
@@ -69,6 +70,15 @@ public class CampPlacementGoldenTests
         "mouth" => RiverTileShape.Mouth,
         "bend60" => RiverTileShape.Bend60,
         _ => throw new InvalidOperationException($"Unknown river shape '{wireName}'."),
+    };
+
+    private static RiverWidth ParseWidth(string wireName) => wireName switch
+    {
+        "river" => RiverWidth.River,
+        "stream" => RiverWidth.Stream,
+        "widen" => RiverWidth.Widen,
+        "riverstream" => RiverWidth.RiverStream,
+        _ => throw new InvalidOperationException($"Unknown river width '{wireName}'."),
     };
 
     private static TileOrientation ParseOrientation(string wireName) =>
@@ -136,6 +146,8 @@ public class CampPlacementGoldenTests
         public List<string> InDirections { get; set; } = [];
 
         public string? OutDirection { get; set; }
+
+        public string Width { get; set; } = "river";
     }
 
     public sealed class CampDto
