@@ -18,7 +18,9 @@
     "minutes": "Minutes",
     "perHour": "Per hour",
     "hours": "Hours",
-    "empty": "Select at least one building type."
+    "empty": "Select at least one building type.",
+    "whatIfSuffix": "{name} (what-if)",
+    "note": "Solid lines are the live catalogue, dashed lines the what-if catalogue."
   },
   "unlocks": {
     "title": "Unlock ladder",
@@ -33,7 +35,7 @@
   },
   "pacing": {
     "title": "Pacing",
-    "hint": "One settlement, no terrain boosts, greedy player: Longhouse when producers keep up, storage when nearly full, else the best-payback producer upgrade. Prerequisites on buildings the simulation does not build are assumed met for the settlers check.",
+    "hint": "One settlement, no terrain boosts, greedy player: Longhouse when producers are as far ahead as the strategy allows, storage when nearly full, else the best-payback producer upgrade. A profile is a list of daily sessions; the player only acts inside them. Every result shows the live catalogue and the what-if catalogue side by side. Prerequisites on buildings the simulation does not build are assumed met for the second-settlement check.",
     "startStock": "Start stock",
     "producers": "Owned producers",
     "horizon": "Horizon (days)",
@@ -42,17 +44,39 @@
     "settlerCost": "Settler cost",
     "run": "Run simulation",
     "running": "Running…",
-    "chartTitle": "Longhouse level over time",
+    "chartTitle": "Longhouse level over time (solid live, dashed what-if)",
     "days": "Days",
     "lhLevel": "Longhouse level",
-    "profileAlways": "Always online",
-    "profileCasual": "Casual (7, 12, 18-22 h)",
     "milestones": "Longhouse milestones",
-    "colLevel": "Longhouse level",
     "notReached": "not reached",
-    "settlers": "Settlers affordable",
-    "settlersNever": "not within horizon",
-    "noRun": "Press Run to simulate."
+    "noRun": "Press Run to simulate.",
+    "profiles": "Player profiles",
+    "profileActive": "Active (07:00-23:00)",
+    "profileCheckins4": "4 check-ins (10 min)",
+    "profileCheckins2": "2 check-ins (10 min)",
+    "profileAlways24": "24 h online (reference)",
+    "profileCustom": "Custom schedule",
+    "customTitle": "Custom schedule",
+    "sessionStart": "Start",
+    "sessionMinutes": "Minutes",
+    "addSession": "Add session",
+    "removeSession": "Remove",
+    "joinTime": "Join time (day 0)",
+    "producersAhead": "Producers ahead of the Longhouse (levels)",
+    "aheadUnlimited": "Limited by storage only",
+    "feasts": "Town Square feasts",
+    "renownThreshold": "Renown for 2nd settlement",
+    "renownNote": "Design target 55 000; the live game still uses 500 until the feasts PR lands.",
+    "settlerCrewNote": "Settler cost",
+    "live": "Live",
+    "whatIf": "What-if",
+    "production": "Production per hour on day {day}",
+    "secondSettlement": "Second settlement",
+    "growthFlattens": "Growth flattens (day)",
+    "noProfile": "Select at least one profile.",
+    "levelRow": "Longhouse {level}",
+    "colLevel": "Milestone",
+    "never": "not within horizon"
   },
   "resources": {
     "wood": "Wood",
@@ -60,5 +84,19 @@
     "food": "Food",
     "iron": "Iron"
   },
-  "prereqChip": "{building} {level}"
+  "prereqChip": "{building} {level}",
+  "whatIf": {
+    "title": "What-if",
+    "hint": "Every level of every building is regenerated from its level-1 values and these growth factors. The defaults reproduce the live catalogue. Curves update at once; the simulation runs on Run.",
+    "reset": "Reset to live values",
+    "costGrowth": "Cost growth (per level)",
+    "longhouseCostGrowth": "Longhouse cost growth",
+    "timeGrowth": "Build time growth",
+    "longhouseTimeGrowth": "Longhouse build time growth",
+    "productionGrowth": "Production growth",
+    "producerCostScale": "Level-1 cost scale (buildings)",
+    "longhouseCostScale": "Level-1 cost scale (Longhouse)",
+    "timeScale": "Level-1 time scale",
+    "foundingStock": "Founding stock"
+  }
 }

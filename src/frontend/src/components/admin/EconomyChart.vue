@@ -33,6 +33,8 @@ ChartJS.register(
 export interface EconomySeries {
   label: string;
   color: string;
+  /** Draw dashed: the what-if twin of a live series. */
+  dashed?: boolean;
   /** Points; a null y leaves a gap. */
   points: { x: number; y: number | null }[];
 }
@@ -59,9 +61,10 @@ const lineData = computed(() => ({
     data: s.points as unknown as { x: number; y: number }[],
     borderColor: s.color,
     backgroundColor: s.color,
-    pointRadius: props.stepped ? 0 : 3,
+    pointRadius: props.stepped ? 0 : s.dashed ? 2 : 3,
     pointHoverRadius: 5,
     borderWidth: 2,
+    borderDash: s.dashed ? [6, 4] : [],
     tension: 0,
     stepped: props.stepped ? ('before' as const) : false,
     spanGaps: false,
@@ -76,6 +79,7 @@ const barData = computed(() => {
       label: s.label,
       data: xs.map((x) => s.points.find((p) => p.x === x)?.y ?? 0),
       backgroundColor: s.color,
+      ...(s.dashed ? { borderColor: s.color, borderWidth: 1, borderDash: [4, 3] } : {}),
     })),
   };
 });
