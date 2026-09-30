@@ -266,9 +266,13 @@ public sealed class ArmyService(
                 .AccrueAsync(settlement.UserId, settlement.WorldId, now, cancellationToken)
                 .ConfigureAwait(false);
             renownAndSlotAllowed = RenownThresholds.AllowsAnotherSettlement(existingSettlementCount, renownTotal);
-            // AccrueAsync just moved this settlement's finished-feast renown onto
-            // the account and zeroed it on the tracked entity; the domain
-            // snapshot taken before that must not write it back.
+            // Not a race workaround, and the concurrency token cannot replace
+            // it: AccrueAsync zeroes PendingFeastRenown on the *same tracked
+            // entity* in this same DbContext, while `settled` is a domain
+            // snapshot taken before that. ApplyDomain would write the old
+            // value straight back within this one request, crediting the
+            // feast a second time on the next accrual. There is no second
+            // writer here for a version check to catch.
             settled = settled with { PendingFeastRenown = 0 };
 
             var claimedSettlements = await _settlementService
