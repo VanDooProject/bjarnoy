@@ -50,6 +50,9 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
 A start position is dropped when its distance to a **strong** camp is at most `GuardRange + 2`
 (`StartPositionMargin`); weak camps may sit next to a spot. Camps are placed first, so an island
 with strong camps everywhere can lose start positions; that is the owner's decision.
+Measured on seeds 1-8 at radius 1000 (273 green islands, 1 535 camps, 712 strong): start positions
+fell from 278 363 to 248 938 (-11%); 60 islands had none before, 95 have none now (35 islands lost all
+of theirs, mostly small ones a single strong camp can hold whole).
 
 Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `CampTilesPerCamp` 700,
 `MaxCampsPerIsland` 24, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
