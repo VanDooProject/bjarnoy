@@ -189,7 +189,9 @@ onMounted(() => {
   .back,
   .link {
     min-height: 44px;
-    display: inline-flex;
+    /* `flex`, not `inline-flex`: each keeps its own line as on desktop —
+       inline, a short "Log in" link ran straight into "← Back". */
+    display: flex;
     align-items: center;
   }
 }

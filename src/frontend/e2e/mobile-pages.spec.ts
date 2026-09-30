@@ -118,3 +118,20 @@ test.describe('touch wording on a phone', { tag: '@g2' }, () => {
     await expect(page.locator('#app')).not.toContainText(/click/i);
   });
 });
+
+test.describe('account pages on a phone', { tag: '@g2' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  // The phone tap-target rule made both footer links inline, so the short
+  // "Already have an account? Log in" ran straight into "← Back".
+  for (const path of ['/register', '/login']) {
+    test(`${path}: the account link and "Back" sit on their own lines`, async ({ page }) => {
+      await page.goto(path);
+      const link = page.locator('main button.link');
+      const back = page.locator('main button.back');
+      const linkBox = (await link.boundingBox())!;
+      const backBox = (await back.boundingBox())!;
+      expect(backBox.y).toBeGreaterThanOrEqual(linkBox.y + linkBox.height - 1);
+    });
+  }
+});
