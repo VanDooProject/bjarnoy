@@ -1017,6 +1017,37 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Building_on_a_wildlife_camp_hex_is_refused_and_the_neighbouring_hex_is_not()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var campHex = new HexCoord(settlement.Q + 1, settlement.R);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var island = await db.Islands.SingleAsync(i => i.Id == settlement.IslandId, Ct);
+            island.Camps = [new CampRecord(campHex.Q, campHex.R, CampFamilies.Wolfden, 3, 0)];
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var refused = await QueueFarmAtAsync(client, settlement.Id, campHex.Q, campHex.R);
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("HexOccupiedByCamp", await refused.RejectionAsync(Ct));
+
+        // The rule is per hex: no other hex of the settlement reports the camp rejection.
+        foreach (var (dq, dr) in NeighbourOffsets.Where(o => (o.Dq, o.Dr) != (1, 0)))
+        {
+            var other = await QueueFarmAtAsync(client, settlement.Id, settlement.Q + dq, settlement.R + dr);
+            if (other.StatusCode == HttpStatusCode.Conflict)
+            {
+                Assert.NotEqual("HexOccupiedByCamp", await other.RejectionAsync(Ct));
+            }
+        }
+    }
+
+    [Fact]
     public async Task Resuming_gives_back_exactly_the_paused_time()
     {
         using var client = Client();

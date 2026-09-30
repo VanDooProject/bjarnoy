@@ -1024,6 +1024,14 @@ public sealed record Settlement
     /// (and independently of) the claim check, since a giant hex is never
     /// buildable even for the settlement whose claim fully encloses it.
     /// </param>
+    /// <param name="camps">
+    /// The world's wildlife camp index, or <see langword="null"/> for a caller
+    /// with none on hand. A hex holding a camp is refused
+    /// (<see cref="BuildRejection.HexOccupiedByCamp"/>), checked right after the
+    /// giant rule and before the claim check. Every camp is guarded for now,
+    /// so every camp hex is refused; once camps can be cleared, only a cleared
+    /// one will be buildable.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -1038,12 +1046,19 @@ public sealed record Settlement
         RiverVariant riverVariantAt = RiverVariant.Plain,
         IReadOnlySet<GodType>? shrineGodsElsewhereOnIsland = null,
         SoilType? islandSoil = null,
-        World.IGiantIndex? giants = null)
+        World.IGiantIndex? giants = null,
+        World.ICampIndex? camps = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
         {
             return BuildDecision.Rejected(BuildRejection.HexOccupiedByGiant);
+        }
+
+        // TODO(camp gameplay PR): only a guarded camp blocks; every camp is guarded for now.
+        if ((camps ?? World.CampIndex.Empty).TryGetCamp(coord, out _))
+        {
+            return BuildDecision.Rejected(BuildRejection.HexOccupiedByCamp);
         }
 
         if (!Claims(coord, giantIndex))
