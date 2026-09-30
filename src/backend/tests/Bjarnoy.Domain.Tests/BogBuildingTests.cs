@@ -172,6 +172,14 @@ public class BogBuildingTests
     }
 
     [Fact]
+    public void The_bog_ore_works_level_1_iron_is_the_number_tuned_in_the_economy_lab()
+    {
+        // 20 iron/h, mirrored as BOG_ORE_WORKS_IRON_AT_LEVEL_ONE in the frontend's buildingEconomy.ts (docs/design/economy.md section 8).
+        Assert.Equal(20, BuildingCatalogue.BogOreWorksIronAtLevelOne);
+        Assert.Equal(20, BuildingCatalogue.Get(BuildingType.BogOreWorks, 1).ProductionPerHour.Iron);
+    }
+
+    [Fact]
     public void The_bog_ore_works_is_the_iron_producer_unlocking_at_longhouse_6_with_no_feeder()
     {
         for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.BogOreWorks); level++)

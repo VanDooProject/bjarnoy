@@ -40,7 +40,7 @@ import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { RiverTile, Settlement, Terrain, Tile } from './types';
-import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount, type BuildingLevelStats } from './buildingEconomy';
+import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
@@ -2712,9 +2712,7 @@ export class HexMapRenderer {
    */
   private buildingStats(tile: Tile, level: number): BuildingLevelStats | undefined {
     if (!tile.buildingType) return undefined;
-    const boostTerrain = BOOST_TERRAIN[tile.buildingType];
-    const matchingNeighbours = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, this.getTile) : 0;
-    return buildingStatsFor(tile.buildingType, level, matchingNeighbours);
+    return buildingStatsAt(tile.buildingType, level, tile, this.getTile);
   }
 
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);

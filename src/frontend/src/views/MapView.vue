@@ -44,10 +44,8 @@ import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import {
-  BOOST_TERRAIN,
-  buildingStatsFor,
+  buildingStatsAt,
   buildingUpgradeCost,
-  matchingNeighbourCount,
   type BuildingModifier,
   type BuildingOutput,
 } from '../lib/map/buildingEconomy';
@@ -611,7 +609,9 @@ type BuildableType =
   | 'smithy'
   | 'druidhut'
   | 'cartworkshop'
-  | 'claybrickworks';
+  | 'claybrickworks'
+  | 'bogoreworks'
+  | 'hammerschmiede';
 
 interface BuildCategory {
   id: string;
@@ -644,7 +644,16 @@ const WATER_CATEGORY: BuildCategory = {
   id: 'water',
   buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'shrineofnjord' }],
 };
-const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog', BuildCategory[]> = {
+// Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
+// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
+// Hammerschmiede (with the river hammer-mill art for now: TODO(art) bog-creek Hammerschmiede) and a lake's half shore the
+// Fishing Hut with its lake art. Shores, mouths and springs take nothing.
+const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
+  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }],
+  creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
+  half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
+};
+const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
     { id: 'housing', buildings: [{ type: 'hut' }] },
     {
@@ -661,7 +670,6 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog',
         { type: 'sawmill' },
         { type: 'cropmill' },
         { type: 'meadery' },
-        { type: 'claybrickworks' },
       ],
     },
     {
@@ -688,14 +696,13 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog',
   sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }],
   mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
-  // Bogland has its own buildings (bog-ore works, Clay Brickworks), which come with the next change.
-  bog: [],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
   if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY] : [];
-  // A bog lake is water nothing is built on (the lake Fisher Hut comes with the bog buildings).
+  // A bog lake is water nothing is built on (the lake Fishing Hut stands on its half shore, a bog hex).
   if (tile.terrain === 'lake') return [];
+  if (tile.terrain === 'bog') return (tile.bog && BOG_CATEGORIES[tile.bog.kind]) || [];
   return BUILD_CATEGORIES[tile.terrain];
 }
 
@@ -914,7 +921,13 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierRadiusBoost', {
         percent: modifier.percent,
         range: modifier.range,
-        resource: t(modifier.resource === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
+        resource: t(
+          modifier.resource === 'wood'
+            ? 'hud.hoverTooltip.domainWood'
+            : modifier.resource === 'iron'
+              ? 'hud.hoverTooltip.domainIron'
+              : 'hud.hoverTooltip.domainFood',
+        ),
       });
   }
 }
@@ -976,9 +989,7 @@ function storageHouseLockFor(): string | undefined {
 
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
-  const boostTerrain = BOOST_TERRAIN[type];
-  const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
-  const stats = buildingStatsFor(type, 1, matching);
+  const stats = buildingStatsAt(type, 1, tileAt(coord.q, coord.r), tileAt);
   return {
     id: type,
     label: buildingName(type),

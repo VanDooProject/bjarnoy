@@ -66,6 +66,7 @@
     "modifierShrineFavourShipAttack": "+{percent}% Schiffsangriff",
     "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
     "domainFood": "Nahrung",
+    "domainIron": "Eisen",
     "domainWood": "Holz"
   },
   "ringMenu": {

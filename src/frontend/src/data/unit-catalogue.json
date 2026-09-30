@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/units",
-    "generatedAt": "2026-08-29T00:00:00.000Z"
+    "generatedAt": "2026-09-30T13:39:25.000Z"
   },
   "data": [
     {
@@ -13,10 +13,11 @@
       "carryCapacity": 60,
       "foodCarryCapacity": 20,
       "upkeepPerHour": 1,
-      "trainingCost": { "wood": 60, "stone": 30, "food": 25, "iron": 15 },
+      "trainingCost": { "wood": 60, "stone": 30, "food": 25, "iron": 0 },
       "trainingSeconds": 600,
       "requiredLonghouseLevel": 1,
-      "requiredUnitType": null
+      "requiredUnitType": null,
+      "requiredBuildingType": "barracks"
     },
     {
       "type": "spearman",
@@ -29,8 +30,9 @@
       "upkeepPerHour": 1,
       "trainingCost": { "wood": 80, "stone": 40, "food": 20, "iron": 40 },
       "trainingSeconds": 900,
-      "requiredLonghouseLevel": 1,
-      "requiredUnitType": null
+      "requiredLonghouseLevel": 5,
+      "requiredUnitType": null,
+      "requiredBuildingType": "barracks"
     },
     {
       "type": "axeman",
@@ -43,8 +45,9 @@
       "upkeepPerHour": 1,
       "trainingCost": { "wood": 100, "stone": 30, "food": 20, "iron": 60 },
       "trainingSeconds": 1200,
-      "requiredLonghouseLevel": 3,
-      "requiredUnitType": null
+      "requiredLonghouseLevel": 6,
+      "requiredUnitType": null,
+      "requiredBuildingType": "barracks"
     },
     {
       "type": "bowman",
@@ -57,8 +60,9 @@
       "upkeepPerHour": 1,
       "trainingCost": { "wood": 90, "stone": 60, "food": 20, "iron": 50 },
       "trainingSeconds": 1200,
-      "requiredLonghouseLevel": 4,
-      "requiredUnitType": null
+      "requiredLonghouseLevel": 9,
+      "requiredUnitType": null,
+      "requiredBuildingType": "archeryrange"
     },
     {
       "type": "berserker",
@@ -71,8 +75,9 @@
       "upkeepPerHour": 2,
       "trainingCost": { "wood": 150, "stone": 60, "food": 30, "iron": 120 },
       "trainingSeconds": 2100,
-      "requiredLonghouseLevel": 6,
-      "requiredUnitType": "axeman"
+      "requiredLonghouseLevel": 20,
+      "requiredUnitType": "axeman",
+      "requiredBuildingType": "barracks"
     },
     {
       "type": "provisioner",
@@ -85,8 +90,9 @@
       "upkeepPerHour": 1,
       "trainingCost": { "wood": 90, "stone": 40, "food": 30, "iron": 20 },
       "trainingSeconds": 1200,
-      "requiredLonghouseLevel": 4,
-      "requiredUnitType": null
+      "requiredLonghouseLevel": 10,
+      "requiredUnitType": null,
+      "requiredBuildingType": "cartworkshop"
     },
     {
       "type": "catapult",
@@ -99,8 +105,9 @@
       "upkeepPerHour": 3,
       "trainingCost": { "wood": 300, "stone": 200, "food": 40, "iron": 250 },
       "trainingSeconds": 3600,
-      "requiredLonghouseLevel": 10,
-      "requiredUnitType": "berserker"
+      "requiredLonghouseLevel": 20,
+      "requiredUnitType": "berserker",
+      "requiredBuildingType": "archeryrange"
     },
     {
       "type": "karve",
@@ -113,8 +120,9 @@
       "upkeepPerHour": 2,
       "trainingCost": { "wood": 250, "stone": 100, "food": 40, "iron": 100 },
       "trainingSeconds": 2700,
-      "requiredLonghouseLevel": 5,
-      "requiredUnitType": null
+      "requiredLonghouseLevel": 8,
+      "requiredUnitType": null,
+      "requiredBuildingType": "dockyard"
     },
     {
       "type": "longship",
@@ -127,8 +135,24 @@
       "upkeepPerHour": 3,
       "trainingCost": { "wood": 400, "stone": 200, "food": 60, "iron": 220 },
       "trainingSeconds": 5400,
-      "requiredLonghouseLevel": 8,
-      "requiredUnitType": "karve"
+      "requiredLonghouseLevel": 20,
+      "requiredUnitType": "karve",
+      "requiredBuildingType": "dockyard"
+    },
+    {
+      "type": "settlercrew",
+      "class": "civilian",
+      "attack": 0,
+      "defense": 3,
+      "speed": 4,
+      "carryCapacity": 0,
+      "foodCarryCapacity": 40,
+      "upkeepPerHour": 1,
+      "trainingCost": { "wood": 200, "stone": 150, "food": 100, "iron": 100 },
+      "trainingSeconds": 2400,
+      "requiredLonghouseLevel": 10,
+      "requiredUnitType": null,
+      "requiredBuildingType": "cartworkshop"
     }
   ]
 }

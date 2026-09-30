@@ -498,7 +498,7 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<BogTileKind> HalfShoreOnly = new HashSet<BogTileKind> { BogTileKind.Half };
 
     /// <summary>Iron per hour of a level-1 bog-ore works (<c>docs/design/economy.md</c> section 8); the Economy lab numbers are in that page.</summary>
-    public const double BogOreWorksIronAtLevelOne = 40;
+    public const double BogOreWorksIronAtLevelOne = 20;
 
     /// <summary>
     /// Terrain-bound producers boosted by their matching neighbour terrain.

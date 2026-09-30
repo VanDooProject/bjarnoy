@@ -34,6 +34,11 @@ export const BOG_POCKET_MIN_TILES = 3;
 export const BOG_POCKET_MAX_TILES = 400;
 export const BOG_POCKET_RADIUS = 4;
 export const BOG_MAX_SINK_REROUTE = 12;
+/**
+ * A landing spot needs plain bog moss within this many hexes — mirrors `WorldGenerationOptions.BogReach`
+ * (`docs/design/bog.md`, "Decisions"): the Clay Brickworks and the bog-ore works stand on plain bog only.
+ */
+export const BOG_REACH = 12;
 
 const SINK_EXTRA_REACH = 6;
 const MAX_CREEK_LENGTH = 40;
