@@ -20,7 +20,7 @@ about 8 s; a radius-4000 world (the default) takes about a minute, mostly the la
 | `--radius N` | world radius in hexes (default 4000). It is part of the terrain: an island that could cross it is not generated |
 | `--window Q,R,SIZE` | draw only `SIZE` hexes across, centred on axial hex `(Q,R)` (default: the whole world) |
 | `--px N` | pixels per hex circumradius; default fits the map to ~1800 px wide (below 1 px a hex is sampled at its centre) |
-| `--layers a,b` | layers, drawn in order: `terrain` (default), `wasted` |
+| `--layers a,b` | layers, drawn in order: `terrain` (default), `wasted`, `camps` |
 | `--set k=v,...` | override generation constants, e.g. `islandChance=0.5,islandCellSize=200` |
 | `--no-legend`, `--no-stats` | drop the legend strip / skip the landmass scan |
 
@@ -33,7 +33,9 @@ the backend's `WorldGenerator` does, so the counts agree with it.
 A layer is an entry in `LAYERS` in `layers.ts`: an id, a description, its legend entries and a
 `colourAt(q, r, world)` that returns a colour (or `null` to keep what the layers below drew).
 The legend strip is generated from the layers' own colour tables, so the picture and its
-legend cannot drift. Planned: `rivers`, `bog`, `camps` (added with the features that generate them).
+legend cannot drift. Planned: `rivers`, `bog` (added with the features that generate them). A layer may also draw markers over the finished map (`overlay`, used by `camps`: a marker per family, a ring at the guard range, magenta strong / cyan weak) and add footer lines (`stats`).
+
+The `camps` layer runs the client ports of the backend pipeline (rivers, giants, camps) island by island in the backend's own island order, so it shows what a server world holds; with `--window` only the islands in view are generated. Its footer gives camps per island (min/median/max), per family and strong/weak.
 
 ## Tests
 

@@ -315,7 +315,7 @@
   "wildlifeCamps": {
     "title": "Wildlife camps",
     "intro": "Unclaimed islands are not empty. Wolves, bears, seals and worse hold them, each pack in a camp of its own. You may land and settle, but no tower goes up near a guarded camp, so on a big island you clear the camps in your way and build where the land is free.",
-    "status": "Coming soon: the art for all nine camps is finished; the rules below are how they will play once camps are in the game.",
+    "status": "Camps now appear on the map, guarded, on the ground each one belongs to. Clearing them, their loot and the tower rule below are still to come; the bog camps arrive with the bog lands.",
     "rules": {
       "heading": "How a camp works",
       "towers": "A guarded camp holds the land around it: no tower can be built within its range (the wolves eat the builders). Beyond that range the island is open to build on.",

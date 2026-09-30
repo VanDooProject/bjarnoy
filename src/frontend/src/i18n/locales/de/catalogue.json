@@ -43,6 +43,17 @@
     "giantvolcano": "Vulkan",
     "giantutgard": "Utgard"
   },
+  "camps": {
+    "wolfden": "Wolfsbau",
+    "bearrapids": "Bärenstromschnelle",
+    "sealhaulout": "Robbenbank",
+    "boarwallow": "Wildschweinsuhle",
+    "eagleeyrie": "Adlerhorst",
+    "fenrirbrood": "Fenrirs Brut",
+    "moosemire": "Elchmoor",
+    "beaverlodge": "Biberburg",
+    "cranedance": "Kranichtanz"
+  },
   "terrain": {
     "sea": "Offenes Wasser",
     "sand": "Ufer",

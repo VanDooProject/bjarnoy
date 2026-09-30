@@ -38,6 +38,8 @@
     "clickToOpen": "KLICKEN ZUM ÖFFNEN",
     "clickToBuildHere": "Hier klicken zum Bauen",
     "claimedGround": "Beanspruchter Boden",
+    "campStrong": "Starkes Lager",
+    "campWeak": "Schwaches Lager",
     "unclaimed": "Unbeansprucht",
     "ownedByOther": "{name} von {owner}",
     "river": "Fluss",

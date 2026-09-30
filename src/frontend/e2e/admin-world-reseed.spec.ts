@@ -77,6 +77,7 @@ const PREVIEW = {
       startPositions: [{ q: -119, r: -125 }],
       riverTiles: [{ q: -119, r: -125, shape: 'spring', inDirections: [], outDirection: 'E' }],
       giants: [],
+      camps: [],
       wasted: false,
     },
     {
@@ -88,6 +89,7 @@ const PREVIEW = {
       startPositions: [{ q: 315, r: -308 }],
       riverTiles: [],
       giants: [],
+      camps: [],
       wasted: false,
     },
   ],

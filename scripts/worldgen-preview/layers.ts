@@ -6,12 +6,36 @@
 import { hexDistance } from '../../src/frontend/src/lib/hex/coords';
 import { terrainAt, wastedTerrainAt, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
 import type { Terrain } from '../../src/frontend/src/lib/map/types';
+import { campsLayer } from './camps';
 
 export type Rgb = readonly [number, number, number];
+
+/** How a legend swatch / map marker is drawn; a plain colour hex when absent. */
+export type MarkerShape = 'disc' | 'square' | 'diamond' | 'triangle' | 'triangleDown' | 'cross' | 'x' | 'hollowSquare' | 'hollowDisc' | 'ring';
 
 export interface LegendEntry {
   label: string;
   colour: Rgb;
+  /** Draw the swatch as this marker instead of a filled square. */
+  shape?: MarkerShape;
+}
+
+/** What a layer's overlay and stats know about the picture being drawn. */
+export interface PreviewContext {
+  world: WorldSeed;
+  radius: number;
+  /** The drawn window in hexes (the whole world unless `--window`). */
+  window: { q: number; r: number; size: number };
+  windowed: boolean;
+}
+
+/** Pixel-space drawing on the finished map, for things bigger than a hex (markers, rings). */
+export interface OverlayCanvas {
+  /** Pixels per hex circumradius. */
+  scale: number;
+  /** Map-pixel position of the centre of hex (q, r). */
+  toPixel(q: number, r: number): { x: number; y: number };
+  marker(x: number, y: number, shape: MarkerShape, radius: number, colour: Rgb): void;
 }
 
 export interface Layer {
@@ -21,6 +45,10 @@ export interface Layer {
   legend: readonly LegendEntry[];
   /** The colour of hex (q, r), or `null` to leave what the layers below drew. */
   colourAt(q: number, r: number, world: WorldSeed): Rgb | null;
+  /** Optional: draws markers on top of the finished map (after every layer's colours). */
+  overlay?(canvas: OverlayCanvas, context: PreviewContext): void;
+  /** Optional: extra footer lines for this layer. */
+  stats?(context: PreviewContext): string[];
 }
 
 /** The colour of every terrain — used to paint the terrain layer and to build its legend. */
@@ -54,6 +82,7 @@ const wastedLayer: Layer = {
 export const LAYERS: Record<string, Layer> = {
   [terrainLayer.id]: terrainLayer,
   [wastedLayer.id]: wastedLayer,
+  [campsLayer.id]: campsLayer,
 };
 
 /** Colours of the frame the map is drawn in — also legend entries, so they are explained. */

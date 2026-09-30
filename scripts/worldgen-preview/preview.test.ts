@@ -1,10 +1,14 @@
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { canDraw } from './font';
+import { DEFAULT_GENERATION } from '../../src/frontend/src/lib/map/worldGenerator';
 import { parseArgs } from './cli';
 import { legendFor, LAYERS, TERRAIN_COLOURS } from './layers';
 import { crc32, encodePng } from './png';
 import { renderPreview } from './render';
+import { drawMarker } from './marks';
+import { CAMP_MARKERS, campsFor } from './camps';
+import { CAMP_FAMILIES } from '../../src/frontend/src/lib/map/campPlacement';
 
 /** Minimal PNG reader: chunk list with verified CRCs, header, and the unfiltered pixels. */
 function decode(png: Buffer) {
@@ -82,5 +86,48 @@ describe('cli arguments', () => {
     const { options, out } = parseArgs(['--seed', '5', '--radius', '400', '--window', '1,-2,50', '--px', '3', '--layers', 'terrain,wasted', '--out', 'x.png', '--no-stats']);
     expect(options).toMatchObject({ seed: 5, radius: 400, window: { q: 1, r: -2, size: 50 }, hexPixels: 3, layers: ['terrain', 'wasted'], stats: false });
     expect(out).toBe('x.png');
+  });
+});
+
+describe('camps layer', () => {
+  const options = { seed: 11, radius: 1000, window: { q: 0, r: 0, size: 60 }, hexPixels: 6, layers: ['terrain', 'camps'], legend: true, stats: false };
+
+  it('draws marker pixels in the strong / weak colours and prints camp stats', () => {
+    const plain = renderPreview({ ...options, layers: ['terrain'] });
+    const withCamps = renderPreview(options);
+    expect(withCamps.statsLines.some((l) => l.startsWith('CAMPS '))).toBe(true);
+    expect(withCamps.statsLines.some((l) => l.startsWith('CAMPS BY FAMILY'))).toBe(true);
+    expect(decode(withCamps.png).pixels.equals(decode(plain.png).pixels)).toBe(false);
+  });
+
+  it('legend has a marker per placeable family and a ring per strength', () => {
+    const labels = legendFor(['camps']).map((e) => e.label);
+    for (const f of CAMP_FAMILIES.filter((f) => CAMP_MARKERS[f.family])) expect(labels).toContain(f.family.toUpperCase());
+    expect(labels.filter((l) => l.includes('GUARD RANGE'.toLowerCase()) || l.includes('guard range'))).toHaveLength(2);
+    // Bog camps are not placed yet, so they are not in the legend.
+    expect(labels).not.toContain('MOOSEMIRE');
+  });
+
+  it('places camps by the backend island order: a whole small-radius world has camps on every island', () => {
+    let result = { islands: 0, perIsland: [] as number[], camps: [] as { family: string; wasted: boolean }[] };
+    // A radius-300 world holds few islands at the default cell size: take the first seed that has one.
+    for (let seed = 1; seed <= 20 && result.islands === 0; seed++) {
+      result = campsFor({ world: { seed, generation: { ...DEFAULT_GENERATION, worldRadius: 300 } }, radius: 300, window: { q: 0, r: 0, size: 601 }, windowed: false });
+    }
+    expect(result.islands).toBeGreaterThan(0);
+    expect(result.perIsland.every((n) => n >= 1)).toBe(true);
+    expect(result.camps.every((c) => c.family !== 'fenrirbrood' || c.wasted)).toBe(true);
+  });
+
+  it('draws a marker with an outline and a ring of the wanted colour', () => {
+    const rgb = new Uint8Array(21 * 21 * 3);
+    drawMarker(rgb, 21, 21, 10, 10, 'disc', 4, [255, 64, 200]);
+    const centre = (10 * 21 + 10) * 3;
+    expect([...rgb.subarray(centre, centre + 3)]).toEqual([255, 64, 200]);
+    const ring = new Uint8Array(21 * 21 * 3);
+    drawMarker(ring, 21, 21, 10, 10, 'ring', 6, [64, 230, 255]);
+    expect([...ring.subarray(centre, centre + 3)]).toEqual([0, 0, 0]);
+    const edge = (10 * 21 + 16) * 3;
+    expect([...ring.subarray(edge, edge + 3)]).toEqual([64, 230, 255]);
   });
 });
