@@ -10,7 +10,7 @@ namespace Bjarnoy.Domain.Tests;
 /// </summary>
 public class RiverStreamTests
 {
-    private static readonly int[] Seeds = Enumerable.Range(1, 6).ToArray();
+    private static readonly int[] Seeds = Enumerable.Range(1, 8).ToArray();
 
     private static IEnumerable<(int Seed, GeneratedIsland Island, TerrainSampler Sampler)> GreenIslands()
     {
@@ -77,13 +77,14 @@ public class RiverStreamTests
             }
         }
 
-        Assert.True(confluences > 0, "expected some merges across 6 worlds");
+        Assert.True(confluences > 0, "expected some merges across the worlds");
     }
 
     [Fact]
     public void A_stream_never_reaches_the_sea_or_meets_a_river()
     {
         var widenings = 0;
+        var riverStreamJoins = 0;
         foreach (var (seed, island, sampler) in GreenIslands())
         {
             var byCoord = island.RiverTiles.ToDictionary(t => t.Coord);
@@ -109,6 +110,12 @@ public class RiverStreamTests
                         }
 
                         break;
+                    case RiverWidth.RiverStream:
+                        riverStreamJoins++;
+                        Assert.Equal(RiverTileShape.Confluence, tile.Shape);
+                        Assert.Equal(ConfluenceKind.Wide, RiverConfluence.Classify((int)tile.InDirections[0], (int)tile.InDirections[1], (int)tile.OutDirection!.Value));
+                        Assert.Equal(1, tile.InDirections.Count(d => UpstreamIsRiver(tile, d)));
+                        break;
                     default:
                         Assert.True(tile.Shape != RiverTileShape.Spring, where);
                         Assert.All(tile.InDirections, d => Assert.True(UpstreamIsRiver(tile, d), where));
@@ -118,6 +125,7 @@ public class RiverStreamTests
         }
 
         Assert.True(widenings > 0);
+        Assert.True(riverStreamJoins > 0, "expected some streams joining a river at the wide Y");
     }
 
     [Fact]
@@ -188,11 +196,82 @@ public class RiverStreamTests
                 for (var j = i + 1; j < springs.Count; j++)
                 {
                     Assert.True(
-                        HexCoord.Distance(springs[i], springs[j]) >= 10,
+                        HexCoord.Distance(springs[i], springs[j]) >= 8,
                         $"seed {seed}: springs {springs[i]} and {springs[j]} are closer than MinSpringSpacing");
                 }
             }
         }
+    }
+
+    [Fact]
+    public void Every_island_with_rivers_has_room_for_the_mills()
+    {
+        // Crop Mill needs a river-width Straight tile, Sawmill a river-width straight or bend.
+        var checkedIslands = 0;
+        foreach (var (seed, island, _) in GreenIslands())
+        {
+            checkedIslands++;
+            var straights = island.RiverTiles.Count(t => t.Shape == RiverTileShape.Straight && t.Width == RiverWidth.River);
+            Assert.True(straights >= 8, $"seed {seed} island {island.Index}: only {straights} river-width Straight tiles");
+        }
+
+        Assert.True(checkedIslands >= 30, $"only {checkedIslands} islands with rivers");
+    }
+
+    [Fact]
+    public void Drainage_networks_merge_and_runs_do_not_hug()
+    {
+        var stats = new RiverGenerator.RiverStats();
+        var islandsWithManyRivers = 0;
+        var merges = 0;
+        var adjacent = 0;
+        var riverTiles = 0;
+        foreach (var seed in Seeds)
+        {
+            var world = TestWorlds.Default(seed);
+            var sampler = new TerrainSampler(world.Options);
+            foreach (var island in world.Islands.Where(i => !i.IsWasted))
+            {
+                var local = new RiverGenerator.RiverStats();
+                var tiles = RiverGenerator.Generate(island.Tiles, island.Tiles.ToDictionary(t => t, sampler.TerrainAt), sampler, world.Options, island.Index, stats: local);
+                stats.Add(local);
+                if (local.Rivers >= 4 && tiles.Count > 0)
+                {
+                    islandsWithManyRivers++;
+                    merges += local.Merges;
+                }
+
+                // Adjacent tiles of rivers that drain to different mouths: runs that hug without merging.
+                var byCoord = tiles.ToDictionary(t => t.Coord);
+                string Root(RiverTile t)
+                {
+                    var cur = t;
+                    while (cur.OutDirection is { } o && byCoord.TryGetValue(Step(cur.Coord, o), out var next))
+                    {
+                        cur = next;
+                    }
+
+                    return cur.Coord.ToString();
+                }
+
+                var roots = tiles.ToDictionary(t => t.Coord, Root);
+                riverTiles += tiles.Count;
+                foreach (var t in tiles)
+                {
+                    foreach (var n in t.Coord.Neighbours())
+                    {
+                        if (roots.TryGetValue(n, out var other) && roots[t.Coord] != other && n.Q * 100000L + n.R > t.Coord.Q * 100000L + t.Coord.R)
+                        {
+                            adjacent++;
+                        }
+                    }
+                }
+            }
+        }
+
+        Assert.True(islandsWithManyRivers >= 20, $"only {islandsWithManyRivers} islands with >= 4 rivers");
+        Assert.True(merges >= islandsWithManyRivers, $"{merges} merges over {islandsWithManyRivers} islands with >= 4 rivers");
+        Assert.True(adjacent < 0.03 * riverTiles, $"{adjacent} hugging adjacencies over {riverTiles} river tiles");
     }
 
     [Fact]

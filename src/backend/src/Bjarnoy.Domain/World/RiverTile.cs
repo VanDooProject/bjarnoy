@@ -80,6 +80,14 @@ public enum RiverWidth
     /// <see cref="RiverTileShape.Mouth"/> whose river-width edge meets the sea.
     /// </summary>
     Widen = 2,
+
+    /// <summary>
+    /// A <see cref="RiverTileShape.Confluence"/> where a stream joins a river head-on-wide: one
+    /// river and one stream inflow (the wide-Y geometry, the river bending 60 degrees), river
+    /// out. Drawn with the river-stream Y art (<c>rivertile_riverstream_ywide</c>, still to
+    /// come; the plain <c>ywide</c> stands in), so the stream needs no widening first.
+    /// </summary>
+    RiverStream = 3,
 }
 
 /// <summary>Which of the two Y assets a confluence renders with; see <see cref="RiverConfluence"/>.</summary>
@@ -90,6 +98,12 @@ public enum ConfluenceKind
 
     /// <summary>The wide Y: three arms 120 degrees apart.</summary>
     Wide,
+
+    /// <summary>
+    /// The wide Y's geometry with two river arms and one stream arm (<c>rivertile_riverstream_ywide</c>):
+    /// a stream joining a river at 120 degrees, the river bending 60 degrees there.
+    /// </summary>
+    RiverStreamWide,
 }
 
 /// <summary>
@@ -127,6 +141,22 @@ public static class RiverConfluence
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// <see cref="Classify(int, int, int)"/> once the inflows' widths are known: two rivers or two
+    /// streams keep the Y their geometry allows; one river and one stream is drawable only as the
+    /// wide-Y geometry (<see cref="ConfluenceKind.RiverStreamWide"/>, the stream on either side arm).
+    /// </summary>
+    public static ConfluenceKind? Classify(int inA, bool aIsRiver, int inB, bool bIsRiver, int outDirection)
+    {
+        var geometry = Classify(inA, inB, outDirection);
+        if (aIsRiver == bIsRiver)
+        {
+            return geometry;
+        }
+
+        return geometry == ConfluenceKind.Wide ? ConfluenceKind.RiverStreamWide : null;
     }
 
     public static bool IsRepresentable(int inA, int inB, int outDirection) => Classify(inA, inB, outDirection) is not null;

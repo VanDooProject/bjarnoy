@@ -180,7 +180,7 @@ export function deltaOrientationOf(inDirection: TileOrientation): TileOrientatio
 }
 
 /** Which of the two Y assets a confluence renders with. */
-export type ConfluenceKind = 'narrow' | 'wide';
+export type ConfluenceKind = 'narrow' | 'wide' | 'riverstreamwide';
 
 /**
  * Which Y asset can draw a confluence with inflows `inA`/`inB` and outflow `out` (direction
@@ -198,6 +198,23 @@ export function confluenceKind(inA: number, inB: number, out: number): Confluenc
   if (lo === 2 && hi === 3) return 'narrow';
   if (lo === 2 && hi === 4) return 'wide';
   return null;
+}
+
+/**
+ * `confluenceKind` once the inflows' widths are known — mirrors `RiverConfluence.Classify` (widths
+ * overload): two rivers or two streams keep the Y their geometry allows; one river and one stream
+ * is drawable only as the wide-Y geometry (`'riverstreamwide'`, the stream on either side arm).
+ */
+export function confluenceKindWithWidths(
+  inA: number,
+  aIsRiver: boolean,
+  inB: number,
+  bIsRiver: boolean,
+  out: number,
+): ConfluenceKind | null {
+  const geometry = confluenceKind(inA, inB, out);
+  if (aIsRiver === bIsRiver) return geometry;
+  return geometry === 'wide' ? 'riverstreamwide' : null;
 }
 
 /**
@@ -233,7 +250,7 @@ export function confluenceWideOrientationOf(
 function confluenceFileFor(
   inDirections: readonly TileOrientation[],
   outDirection: TileOrientation | null,
-  kind: ConfluenceKind,
+  kind: 'narrow' | 'wide',
 ): TileOrientation | null {
   if (inDirections.length !== 2) return null;
   const a = TILE_ORIENTATIONS.indexOf(inDirections[0]!);
@@ -248,7 +265,7 @@ function confluenceFileFor(
 }
 
 /** How wide the water is on a river hex; mirrors the backend's `RiverWidth`. */
-export type RiverWidth = 'river' | 'stream' | 'widen';
+export type RiverWidth = 'river' | 'stream' | 'widen' | 'riverstream';
 
 export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
@@ -393,7 +410,7 @@ export interface RiverTile {
   outDirection: TileOrientation | null;
   /**
    * `'river'` (the default when absent: every tile of a lava stream and of a world stored before
-   * streams), `'stream'` (half width on every edge) or `'widen'` (stream in, river out).
+   * streams), `'stream'` (half width on every edge), `'widen'` (stream in, river out) or `'riverstream'` (a wide-Y confluence of one river and one stream).
    */
   width?: RiverWidth;
   /** True for a lava stream on a wasted island — renders with the lavastream art families instead of rivertile. */

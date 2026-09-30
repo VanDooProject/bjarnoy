@@ -26,7 +26,7 @@ function smooth(t: number): number {
 }
 
 /** Bilinear value noise sampled on a lattice of the given cell size. */
-function valueNoise(x: number, y: number, seed: number, cell: number): number {
+export function valueNoise(x: number, y: number, seed: number, cell: number): number {
   const x0 = Math.floor(x / cell);
   const y0 = Math.floor(y / cell);
   const tx = smooth(x / cell - x0);

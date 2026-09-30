@@ -119,7 +119,7 @@ function riverColourAt(tile: RiverTile, dx: number, dy: number, fine: boolean): 
   }
 
   // The flow: in-segments carry what arrives (stream until the widening), the out-segment what leaves.
-  const inHalf = width === 'river' ? RIVER_HALF_WIDTH : STREAM_HALF_WIDTH;
+  const inHalf = width === 'river' || width === 'riverstream' ? RIVER_HALF_WIDTH : STREAM_HALF_WIDTH;
   const outHalf = width === 'stream' ? STREAM_HALF_WIDTH : RIVER_HALF_WIDTH;
   for (const d of tile.inDirections) {
     const v = DIRECTION_VECTORS[TILE_ORIENTATIONS.indexOf(d)]!;

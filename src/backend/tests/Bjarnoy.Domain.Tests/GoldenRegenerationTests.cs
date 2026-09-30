@@ -45,9 +45,7 @@ public class GoldenRegenerationTests
 
         var scenarios = new (string Name, Candidate Pick)[]
         {
-            ("green_island_simple_river", Smallest("simple", c => !c.Island.IsWasted
-                && !Has(c.Island, RiverTileShape.Confluence) && !Has(c.Island, RiverTileShape.Bend60)
-                && c.Island.RiverTiles.Count >= 5)),
+            ("green_island_smallest_network", Smallest("smallest", c => !c.Island.IsWasted)),
             ("green_island_confluence", Smallest("confluence", c => !c.Island.IsWasted && Has(c.Island, RiverTileShape.Confluence))),
             ("green_island_bend60", Smallest("bend60", c => !c.Island.IsWasted && Has(c.Island, RiverTileShape.Bend60))),
             ("green_island_widening_straight", Smallest("widening straight", c => !c.Island.IsWasted
@@ -56,6 +54,8 @@ public class GoldenRegenerationTests
                 && c.Island.RiverTiles.Any(t => t.Shape == RiverTileShape.Confluence && t.Width == RiverWidth.Widen))),
             ("green_island_river_confluence", Smallest("river confluence", c => !c.Island.IsWasted
                 && c.Island.RiverTiles.Any(t => t.Shape == RiverTileShape.Confluence && t.Width == RiverWidth.River))),
+            ("green_island_riverstream_confluence", Smallest("river-stream confluence", c => !c.Island.IsWasted
+                && c.Island.RiverTiles.Any(t => t.Shape == RiverTileShape.Confluence && t.Width == RiverWidth.RiverStream))),
             ("green_island_widening_mouth", Smallest("widening mouth", c => !c.Island.IsWasted
                 && c.Island.RiverTiles.Any(t => t.Shape == RiverTileShape.Mouth && t.Width == RiverWidth.Widen))),
             ("wasted_island_lava_stream", Smallest("wasted", c => c.Island.IsWasted)),
@@ -64,7 +64,7 @@ public class GoldenRegenerationTests
         var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var sb = new StringBuilder();
         sb.Append("{\n  \"_comment\": ").Append(JsonSerializer.Serialize(
-            "Cross-language parity fixture for river generation (RiverGenerator.Generate backend / generateRivers frontend): given an island's tiles (with terrain), a world seed, an island index, and wasted/allowConfluence flags, both sides must trace the same rivers in the same order. Covers: a green island with one simple spring-to-mouth river, a stream that widens on a straight tile, a smallwide Y where two streams join, a river-width confluence (a tributary widened before joining), a stream widening on its mouth tile, a green island whose traced rivers collide into a confluence, a green island whose river takes at least one sharp (bend60) turn, and a wasted island whose lava stream (allowConfluence: false) never merges. Every scenario is a real island of a real WorldGenerator.Generate() run at the default world size (the smallest one of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the river trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). RiverGenerationGoldenTests.cs (backend) and riverGenerator.golden.test.ts (frontend) each compute against this fixture using their own production river-tracing implementation, then assert the frozen `rivers` list below (order matters: sorted by (q, r), same as RiverGenerator.BuildRiverTiles's own output order).",
+            "Cross-language parity fixture for river generation (RiverGenerator.Generate backend / generateRivers frontend): given an island's tiles (with terrain), a world seed, an island index, and wasted/allowConfluence flags, both sides must trace the same rivers in the same order. Covers: the smallest green island that keeps any rivers (a small drainage network), a stream that widens on a straight tile, a smallwide Y where two streams join, a river-width confluence (a tributary widened before joining), a stream joining a river at the wide Y (the river-stream Y), a stream widening on its mouth tile, a green island whose traced rivers collide into a confluence, a green island whose river takes at least one sharp (bend60) turn, and a wasted island whose lava stream (allowConfluence: false) never merges. Every scenario is a real island of a real WorldGenerator.Generate() run at the default world size (the smallest one of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the river trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). RiverGenerationGoldenTests.cs (backend) and riverGenerator.golden.test.ts (frontend) each compute against this fixture using their own production river-tracing implementation, then assert the frozen `rivers` list below (order matters: sorted by (q, r), same as RiverGenerator.BuildRiverTiles's own output order).",
             options)).Append(",\n  \"scenarios\": [\n");
 
         var sampler = (Func<int, TerrainSampler>)(seed => new TerrainSampler(TestWorlds.Options(seed)));
@@ -96,6 +96,7 @@ public class GoldenRegenerationTests
         RiverWidth.River => "river",
         RiverWidth.Stream => "stream",
         RiverWidth.Widen => "widen",
+        RiverWidth.RiverStream => "riverstream",
         _ => throw new InvalidOperationException($"Unknown width {width}"),
     };
 

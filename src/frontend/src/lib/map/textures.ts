@@ -1481,6 +1481,15 @@ export function riverArtFor(
     return { shape, orientation: springOrientationOf(river.outDirection) };
   }
   if (river.shape === 'confluence') {
+    // TODO(art): rivertile_riverstream_ywide (two river arms, one stream arm, the ywide edge set)
+    // draws a stream joining a river. Until the atlas has it, the plain big-river ywide stands in.
+    // Once it exists the tile's orientation needs the same pixel check as the other Y families:
+    // which of the two non-outflow arms (`o+2` / `o+4`) is the stream - the stream is the inflow
+    // whose upstream tile has width 'stream'; the file will have to be rotated (or mirrored) to it.
+    if (width === 'riverstream') {
+      const wide = confluenceWideOrientationOf(river.inDirections, river.outDirection);
+      if (wide) return { shape: 'confluencewide', orientation: wide };
+    }
     // Two streams meeting: the smallwide Y (river out); otherwise the river Y.
     const narrow = confluenceOrientationOf(river.inDirections, river.outDirection);
     if (narrow) return { shape: width === 'widen' ? 'widen_yn' : 'confluencenarrow', orientation: narrow };

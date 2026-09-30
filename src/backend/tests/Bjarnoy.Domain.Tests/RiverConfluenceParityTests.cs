@@ -35,4 +35,30 @@ public class RiverConfluenceParityTests
             Assert.Equal(expectedKind, RiverConfluence.Classify(b, a, o));
         }
     }
+
+    [Fact]
+    public void Classify_with_widths_matches_the_shared_table()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Bjarnoy.slnx")))
+        {
+            dir = dir.Parent;
+        }
+
+        var path = Path.Combine(dir!.Parent!.FullName, "shared", "confluence-representability.json");
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var rows = doc.RootElement.GetProperty("riverStreamRows").EnumerateArray().ToList();
+        Assert.Equal(6 * 30, rows.Count);
+
+        foreach (var row in rows)
+        {
+            var o = row.GetProperty("out").GetInt32();
+            var river = row.GetProperty("riverIn").GetInt32();
+            var stream = row.GetProperty("streamIn").GetInt32();
+            ConfluenceKind? expected = row.GetProperty("kind").GetString() == "riverstreamwide" ? ConfluenceKind.RiverStreamWide : null;
+
+            Assert.Equal(expected, RiverConfluence.Classify(river, true, stream, false, o));
+            Assert.Equal(expected, RiverConfluence.Classify(stream, false, river, true, o));
+        }
+    }
 }

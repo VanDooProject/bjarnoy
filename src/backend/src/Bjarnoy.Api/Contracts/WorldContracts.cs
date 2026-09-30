@@ -342,7 +342,7 @@ public sealed record RiverTileResponse(
     string Width = "river")
 {
     // Indexed by RiverWidth's int values: what river width the hex is drawn at.
-    private static readonly string[] WidthNames = ["river", "stream", "widen"];
+    private static readonly string[] WidthNames = ["river", "stream", "widen", "riverstream"];
 
     // Indexed by RiverTileShape's own int values — bend60 sits last (not next
     // to bend) because RiverTileShape.Bend60's doc comment explains why it

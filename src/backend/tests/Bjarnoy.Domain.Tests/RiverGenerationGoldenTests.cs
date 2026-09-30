@@ -68,6 +68,7 @@ public class RiverGenerationGoldenTests
         RiverWidth.River => "river",
         RiverWidth.Stream => "stream",
         RiverWidth.Widen => "widen",
+        RiverWidth.RiverStream => "riverstream",
         _ => throw new InvalidOperationException($"Unknown width {width}"),
     };
 
