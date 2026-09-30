@@ -176,7 +176,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             _dbContext.Entry(claim).State = EntityState.Detached;
             return false;
