@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, hexRing, neighbors, type AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
+import { guardRange, placeCamps } from './campPlacement';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { RiverTile } from './types';
@@ -1249,6 +1250,97 @@ describe('placeGiantsForIsland (demo giant placement v2)', () => {
     const before = giantAnchorsNear(model, near);
     model.placeGiantsForIsland({ q: near.q + 1, r: near.r }, DEMO_SEED);
     expect(giantAnchorsNear(model, near)).toEqual(before);
+  });
+});
+
+describe('WorldModel wildlife camps', () => {
+  const DEMO_SEED = 20260824;
+
+  it('setCamps tags the hex, derives strength and guard range from the family table, and is idempotent', () => {
+    const model = new WorldModel();
+    model.terrainOf = () => 'grass';
+    const coord: AxialCoord = { q: 3, r: 4 };
+
+    model.setCamps([{ family: 'wolfden', coord, level: 4, orientation: 'SE' }]);
+    expect(model.getTile(3, 4).camp).toEqual({ family: 'wolfden', level: 4, orientation: 'SE', strong: true, guardRange: 6 });
+    expect(model.campAt(coord)).toMatchObject({ family: 'wolfden', q: 3, r: 4 });
+
+    model.setCamps([{ family: 'sealhaulout', coord: { q: 9, r: 9 }, level: 5, orientation: 'E' }]);
+    expect(model.getTile(9, 9).camp).toEqual({ family: 'sealhaulout', level: 5, orientation: 'E', strong: false, guardRange: 3 });
+
+    // A second call for a hex that already has a camp leaves it alone.
+    model.setCamps([{ family: 'boarwallow', coord, level: 1, orientation: 'W' }]);
+    expect(model.getTile(3, 4).camp?.family).toBe('wolfden');
+  });
+
+  it('a camp hex is not buildable', () => {
+    // Control: a model with no camp, to find a hex the farm can go on...
+    const control = new WorldModel(DEMO_SEED);
+    const { settlement: controlSettlement, at } = foundLandedSettlement(control);
+    const candidate = hexesInRadius(at, 3).find(
+      (c) => hexDistance(at, c) >= 2 && control.placeBuilding(controlSettlement.id, c, 'farm'),
+    );
+    expect(candidate).toBeDefined();
+
+    // ...and the same hex in an identical model, with a camp on it, is refused.
+    const model = new WorldModel(DEMO_SEED);
+    const { settlement } = foundLandedSettlement(model);
+    model.setCamps([{ family: 'wolfden', coord: candidate!, level: 2, orientation: 'SE' }]);
+    expect(model.placeBuilding(settlement.id, candidate!, 'farm')).toBe(false);
+    expect(model.getTile(candidate!.q, candidate!.r).buildingType).toBeUndefined();
+  });
+
+  it('findLandfall keeps out of a strong camp\'s guard range plus the margin, but not a weak camp\'s', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const spot = model.findLandfall({ q: 0, r: 0 })!;
+
+    model.setCamps([{ family: 'sealhaulout', coord: spot, level: 5, orientation: 'SE' }]);
+    expect(model.findLandfall({ q: 0, r: 0 })).toEqual(spot);
+
+    const strongModel = new WorldModel(DEMO_SEED);
+    strongModel.setCamps([{ family: 'wolfden', coord: spot, level: 3, orientation: 'SE' }]);
+    const away = strongModel.findLandfall({ q: 0, r: 0 })!;
+    expect(hexDistance(away, spot)).toBeGreaterThan(guardRange(3, 'strong') + 2);
+  });
+
+  it('demo mode places an island\'s camps with the shared core, clear of giants, once', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+
+    const island = floodFillLandmass(near, (c) => model.isLand(c.q, c.r), 400)!;
+    const camps = island.map((c) => ({ c, camp: model.campAt(c) })).filter((x) => x.camp);
+    expect(camps.length).toBeGreaterThan(0);
+    for (const { c } of camps) expect(model.giantAnchorAt(c)).toBeNull();
+
+    expect(camps.length).toBeLessThanOrEqual(24);
+
+    const before = camps.map((x) => `${x.c.q},${x.c.r},${x.camp!.family},${x.camp!.level}`).sort();
+    model.placeGiantsForIsland({ q: near.q + 1, r: near.r }, DEMO_SEED);
+    const after = island
+      .map((c) => ({ c, camp: model.campAt(c) }))
+      .filter((x) => x.camp)
+      .map((x) => `${x.c.q},${x.c.r},${x.camp!.family},${x.camp!.level}`)
+      .sort();
+    expect(after).toEqual(before);
+
+    // And the landfall now keeps away from every strong one.
+    const landfall = model.findLandfall(near)!;
+    for (const { c, camp } of camps) {
+      if (camp!.strong) expect(hexDistance(landfall, c)).toBeGreaterThan(camp!.guardRange + 2);
+    }
+  });
+
+  it('placeCamps is deterministic and never puts two camps closer than the minimum spacing', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    const island = floodFillLandmass(near, (c) => model.isLand(c.q, c.r), 400)!;
+    const run = () => placeCamps(island, (c) => model.terrainOf(c.q, c.r), [], [], DEMO_SEED, 7);
+    expect(run()).toEqual(run());
+    const camps = run();
+    for (let i = 0; i < camps.length; i++) {
+      for (let j = i + 1; j < camps.length; j++) expect(hexDistance(camps[i].coord, camps[j].coord)).toBeGreaterThanOrEqual(6);
+    }
   });
 });
 

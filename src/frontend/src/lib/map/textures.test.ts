@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Texture } from 'pixi.js';
 import {
   baseTextureFor,
+  campArtFor,
   classifyFamilyClips,
   classifyFamilyFrames,
   collapseLetteredLevels,
@@ -1327,5 +1328,128 @@ describe('level-1-first loading: sparse top/baseIndexed arrays', () => {
     // must read animTop's index 1 too, not animTop[0] (undefined) or throw.
     expect(topTextureFor(textures, huntTile(0))).toBe('hut-level1-top');
     expect(topAnimFor(textures, huntTile(0))).toEqual({ textures: ['f0'], fps: 6, playback: 'loop' });
+  });
+});
+
+// Wildlife camps: an animated topping at art level 1 (guarded). The guarded art only ships
+// the rotations that show the animals best (wolfden: SW and SE; bearrapids: E, NE and SE), and
+// campArtFor maps the tile's own orientation onto them, reading the kept ones off the frames.
+describe('wildlife camps', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+
+  function emptyTileTextures(): TileTextures {
+    const orientationMap = <T,>(value: T) => Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+    return {
+      base: {},
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      riverBase: {},
+      riverTop: {},
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+  }
+
+  /** `family` with a cleared frame in every orientation and a guarded frame (and clip) only in `kept`. */
+  function withCamp(textures: TileTextures, family: string, kept: readonly string[]) {
+    const top: Record<string, unknown[]> = {};
+    const anim: Record<string, unknown[]> = {};
+    for (const o of ORIENTATIONS) {
+      top[o] = kept.includes(o) ? [`${family}-${o}-cleared`, `${family}-${o}-guarded`] : [`${family}-${o}-cleared`];
+      anim[o] = kept.includes(o) ? [undefined, { textures: [`${family}-${o}-f0`], fps: 6, playback: 'loop' }] : [undefined];
+    }
+    (textures.top as Record<string, unknown>)[family] = top;
+    (textures.animTop as Record<string, unknown>)[family] = anim;
+  }
+
+  function campTile(family: string, orientation: Tile['orientation'], terrain: Tile['terrain'] = 'grass'): Tile {
+    return { q: 0, r: 0, terrain, orientation, camp: { family, level: 3, orientation: orientation!, strong: true, guardRange: 5 } };
+  }
+
+  it('maps the tile orientation onto the guarded rotations by modulo, in TILE_ORIENTATIONS order', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'wolfden', ['SE', 'SW']);
+    // kept in TILE_ORIENTATIONS order: [SW, SE]; index % 2 picks SW for E/NW/SW, SE for NE/W/SE.
+    const mapped = ORIENTATIONS.map((o) => campArtFor(textures, campTile('wolfden', o), undefined)?.orientation);
+    expect(mapped).toEqual(['SW', 'SE', 'SW', 'SE', 'SW', 'SE']);
+  });
+
+  it('a camp with one kept rotation always takes it; with no art loaded yet it keeps its own', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'eagleeyrie', ['SW']);
+    for (const o of ORIENTATIONS) expect(campArtFor(textures, campTile('eagleeyrie', o, 'mountain'), undefined)?.orientation).toBe('SW');
+    expect(campArtFor(emptyTileTextures(), campTile('wolfden', 'NW'), undefined)?.orientation).toBe('NW');
+  });
+
+  it('renders the camp family at the guarded level, and its clip', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'wolfden', ['SE', 'SW']);
+    const tile = { ...campTile('wolfden', 'SW'), variant: 2 };
+    expect(topTextureFor(textures, tile)).toBe('wolfden-SW-guarded');
+    expect(topAnimFor(textures, tile)).toEqual({ textures: ['wolfden-SW-f0'], fps: 6, playback: 'loop' });
+  });
+
+  it('a tile without a camp is untouched by the camp lookup', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'wolfden', ['SE']);
+    expect(campArtFor(textures, { q: 0, r: 0, terrain: 'grass', orientation: 'SE' }, undefined)).toBeUndefined();
+    expect(topTextureFor(textures, { q: 0, r: 0, terrain: 'grass', orientation: 'SE' })).toBeUndefined();
+  });
+
+  describe('bearrapids on a river', () => {
+    const straight = (inDirection: Tile['orientation'], outDirection: Tile['orientation']): RiverTile => ({
+      q: 0,
+      r: 0,
+      shape: 'straight',
+      inDirections: [inDirection!],
+      outDirection: outDirection!,
+    });
+
+    it('keeps its channel: the kept rotation with the river\'s own index mod 3 (a straight channel is symmetric)', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'bearrapids', ['E', 'NE', 'SE']);
+      // The plain straight art for a river flowing E<->W is orientation `straightOrientationOf(E)` = NW, whose
+      // channel (index 2, mod 3 = 2) is SE's (index 5, mod 3 = 2).
+      const art = campArtFor(textures, campTile('bearrapids', 'E', 'grass'), straight('W', 'E'));
+      expect(art?.orientation).toBe('SE');
+      expect(art?.riverArt).toEqual({ key: 'bearrapids', orientation: 'SE' });
+      // Every straight river maps to one of the three kept rotations, and opposite flows agree.
+      for (const flow of [
+        ['E', 'W'],
+        ['NE', 'SW'],
+        ['NW', 'SE'],
+      ] as const) {
+        const forward = campArtFor(textures, campTile('bearrapids', 'E'), straight(flow[0], flow[1]));
+        const backward = campArtFor(textures, campTile('bearrapids', 'E'), straight(flow[1], flow[0]));
+        expect(forward?.orientation).toBe(backward?.orientation);
+        expect(['E', 'NE', 'SE']).toContain(forward?.orientation);
+      }
+    });
+
+    it('is drawn as plain river off a straight river tile (or a lava one)', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'bearrapids', ['E', 'NE', 'SE']);
+      const tile = campTile('bearrapids', 'E');
+      expect(campArtFor(textures, tile, undefined)).toBeUndefined();
+      expect(campArtFor(textures, tile, { ...straight('W', 'E'), shape: 'bend' })).toBeUndefined();
+      expect(campArtFor(textures, tile, { ...straight('W', 'E'), wasted: true })).toBeUndefined();
+    });
+
+    it('uses its own river base and top at the guarded level', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'bearrapids', ['E', 'NE', 'SE']);
+      const bases = Object.fromEntries(ORIENTATIONS.map((o) => [o, [`base-${o}-0`, `base-${o}-1`]]));
+      (textures.baseIndexed as Record<string, unknown>).bearrapids = bases;
+      const tile = campTile('bearrapids', 'E');
+      const art = campArtFor(textures, tile, straight('W', 'E'))!;
+      const drawn = { ...tile, orientation: art.orientation };
+      expect(baseTextureFor(textures, drawn, art.riverArt)).toBe('base-SE-1');
+      expect(topTextureFor(textures, drawn, art.riverArt)).toBe('bearrapids-SE-guarded');
+    });
   });
 });

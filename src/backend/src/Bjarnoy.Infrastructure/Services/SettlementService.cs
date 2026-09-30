@@ -1108,7 +1108,8 @@ public sealed class SettlementService(
             riverVariantAt: riverVariantAt,
             shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland,
             islandSoil: islandSoil,
-            giants: buildGiants);
+            giants: buildGiants,
+            camps: await LoadCampIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false));
 
         if (!decision.Accepted)
         {
@@ -1541,6 +1542,23 @@ public sealed class SettlementService(
             .ToList();
 
         return new GiantIndex(giants);
+    }
+
+    /// <summary>Every wildlife camp across every island of <paramref name="worldId"/>, built into one lookup (the build rule).</summary>
+    public async Task<ICampIndex> LoadCampIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.Camps)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var camps = islands
+            .SelectMany(c => c)
+            .Select(c => new Camp(new HexCoord(c.Q, c.R), c.Family, c.Level, (TileOrientation)c.Orientation))
+            .ToList();
+
+        return new CampIndex(camps);
     }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>

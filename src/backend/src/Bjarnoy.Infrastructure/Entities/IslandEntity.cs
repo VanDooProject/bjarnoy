@@ -66,6 +66,18 @@ public class IslandEntity
     public List<GiantRecord> Giants { get; set; } = [];
 
     /// <summary>
+    /// This island's wildlife camps — see <c>Bjarnoy.Domain.World.CampGenerator</c>.
+    /// </summary>
+    /// <remarks>
+    /// Persisted for the same reason <see cref="Giants"/> is: placement samples the whole
+    /// island (farthest-point over every candidate tile, rivers, giants) and camps are placed
+    /// before start positions, which they shape. Empty for an island stored before camps
+    /// existed; a reseed adds them. Stored as a single column, see
+    /// <see cref="Persistence.CampListConverter"/> for the encoding.
+    /// </remarks>
+    public List<CampRecord> Camps { get; set; } = [];
+
+    /// <summary>
     /// True for an island generated from the wasted-island terrain layer —
     /// see <c>Bjarnoy.Domain.World.GeneratedIsland.IsWasted</c>. Hidden from
     /// the islands list until the world's endboss triggers; defaults to
@@ -83,6 +95,13 @@ public class IslandEntity
 /// never has to change shape when the domain enum does.
 /// </summary>
 public readonly record struct GiantRecord(int Q, int R, string Family, int Orientation);
+
+/// <summary>
+/// A stored wildlife camp. <c>Orientation</c> is the domain's <c>TileOrientation</c> by its plain
+/// numeric index, like <see cref="GiantRecord"/>. Strength is not stored: it follows from the
+/// family (<c>CampFamilies</c>).
+/// </summary>
+public readonly record struct CampRecord(int Q, int R, string Family, int Level, int Orientation);
 
 /// <summary>A stored hex coordinate. Kept separate from the domain's
 /// <c>HexCoord</c> so persistence concerns never leak into the game rules.</summary>

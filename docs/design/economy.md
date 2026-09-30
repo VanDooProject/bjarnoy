@@ -479,6 +479,8 @@ oases and NPC villages. Bjarnoy's version:
   a big one a player clears only the camps in the way and builds towers
   where the land is then free. Clearing a camp gives loot. **Exploring and
   clearing new islands must pay much more than farming smaller players.**
+  Spawn, levels and guard ranges are implemented (no gameplay yet): see
+  [`wildlife-camps.md`](./wildlife-camps.md).
 - **Beast dens** are the oasis equivalent: raidable spots whose loot grows
   back over time, and which can later be annexed for a production bonus.
 - **Merchant ships** sail NPC routes between islands and can be raided at

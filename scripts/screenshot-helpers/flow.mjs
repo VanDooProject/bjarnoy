@@ -265,6 +265,64 @@ if (wantStopPrefix('settlement_river')) {
   }
 }
 
+// Wildlife camps (see src/frontend/src/lib/map/campPlacement.ts): demo mode generates the
+// home island's camps on founding (WorldModel.placeGiantsForIsland, the TS port of the
+// backend's CampGenerator). This stop finds the camps of the home island, one per family
+// (nearest first, up to six), pans to each, switches the mist off (the demo fog only reaches ~10 hexes, and
+// camps are spread over the whole island) and shoots it
+// (`settlement_camp_<family>.png`); `settlement_camp` is the nearest camp of all.
+if (wantStop('settlement_camp') || wantStopPrefix('settlement_camp')) {
+  const camps = await page.evaluate(() => {
+    const store = window.__demoWorld();
+    const settlement = store.model.getSettlement(store.selectedSettlementId);
+    const byFamily = new Map();
+    let nearest = null;
+    for (let dq = -200; dq <= 200; dq++) {
+      for (let dr = Math.max(-200, -dq - 200); dr <= Math.min(200, -dq + 200); dr++) {
+        const at = { q: settlement.q + dq, r: settlement.r + dr };
+        const camp = store.model.campAt(at);
+        if (!camp) continue;
+        const d = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(-dq - dr));
+        const entry = { at, family: camp.family, level: camp.level, orientation: camp.orientation, d };
+        if (!nearest || d < nearest.d) nearest = entry;
+        const best = byFamily.get(camp.family);
+        if (!best || d < best.d) byFamily.set(camp.family, entry);
+      }
+    }
+    return { nearest, families: [...byFamily.values()].sort((a, b) => a.d - b.d).slice(0, 6), total: byFamily.size };
+  });
+  console.log('Camps on the home island:', JSON.stringify(camps));
+  if (!camps.nearest) throw new Error('no camp generated on the home island for this seed');
+  const shootCamp = async (camp, name) => {
+    await page.evaluate((at) => {
+      // Camps are spread over the whole island and the demo fog only reaches ~10 hexes around
+      // home: switch the mist off (the debug flags of FogDebugPanel) so the camp is not shot as fog.
+      const fog = window.__fogDebug;
+      fog.maskUnknown = false;
+      fog.maskOutOfSight = false;
+      fog.terrainCull = false;
+      window.__settlementRenderer?.()?.panTo(at);
+    }, camp.at);
+    await page.waitForTimeout(300);
+    // Zoom in on the camp (mouse wheel over the canvas centre), a camp is a few hexes across.
+    await page.mouse.move(720, 450);
+    for (let i = 0; i < 6; i++) {
+      await page.mouse.wheel(0, -300);
+      await page.waitForTimeout(120);
+    }
+    await page.waitForTimeout(400);
+    await forceRebuild(page);
+    await page.waitForTimeout(1500);
+    await shootAlways(page, name);
+  };
+  if (wantStop('settlement_camp')) await shootCamp(camps.nearest, 'settlement_camp');
+  if (wantStopPrefix('settlement_camp') && requestedStops.some((s) => s.startsWith('settlement_camp_'))) {
+    for (const camp of camps.families) await shootCamp(camp, `settlement_camp_${camp.family}`);
+  } else if (requestedStops.length === 0) {
+    for (const camp of camps.families) await shootCamp(camp, `settlement_camp_${camp.family}`);
+  }
+}
+
 // The fog debug panel (?debug=1, see FogDebugPanel.vue) toggles individual
 // fog mechanisms — flip one on/off from the panel itself rather than the
 // console hook, to check the panel's own forceRebuild wiring, not just the

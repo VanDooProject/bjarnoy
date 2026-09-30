@@ -155,6 +155,19 @@ describe('hoverSubjectFor', () => {
     expect(hoverSubjectFor(tile, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
   });
 
+  it('names a wildlife camp with its level and strength, ahead of a building type and the terrain', () => {
+    const camp = { family: 'wolfden', level: 4, orientation: 'SE' as const, strong: true, guardRange: 6 };
+    expect(hoverSubjectFor({ ...tileOf('grass'), camp }, undefined)).toEqual({ kind: 'camp', family: 'wolfden', level: 4, strong: true });
+    expect(hoverSubjectFor({ ...tileOf('sand'), camp: { ...camp, family: 'sealhaulout', strong: false } }, undefined)).toEqual({
+      kind: 'camp',
+      family: 'sealhaulout',
+      level: 4,
+      strong: false,
+    });
+    // A giant still wins over a camp (a camp is never on a giant footprint; the precedence is defensive).
+    expect(hoverSubjectFor({ ...tileOf('grass'), camp, giant }, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
+  });
+
   it('falls back to building, then terrain, when there is no giant', () => {
     const building = { ...tileOf('grass'), buildingType: 'hut' as const, buildingLevel: 2 };
     expect(hoverSubjectFor(building, undefined)).toEqual({ kind: 'building', buildingType: 'hut', level: 2 });

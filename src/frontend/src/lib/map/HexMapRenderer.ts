@@ -59,6 +59,7 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  campArtFor,
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
@@ -569,7 +570,10 @@ export type HoverSubject =
   // fully covers that terrain. Generic over `family` (not a `'giantmountain'`
   // literal) so a future giant building needs no change here; HexTooltip.vue
   // falls back to the family id itself for one with no translated name yet.
-  | { kind: 'giant'; family: string };
+  | { kind: 'giant'; family: string }
+  // A wildlife camp (campPlacement.ts): named for the camp with its level; HexTooltip.vue
+  // shows the localised family name, level and whether it is a strong camp.
+  | { kind: 'camp'; family: string; level: number; strong: boolean };
 
 export interface HoverInfo {
   screenX: number;
@@ -618,6 +622,7 @@ export function terrainTitleFor(
  */
 export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
   if (tile.giant) return { kind: 'giant', family: tile.giant.family };
+  if (tile.camp) return { kind: 'camp', family: tile.camp.family, level: tile.camp.level, strong: tile.camp.strong };
   if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
   const { terrain, isRiver, wasted } = terrainTitleFor(tile, river);
   return { kind: 'terrain', terrain, isRiver, wasted };
@@ -3503,6 +3508,25 @@ export class HexMapRenderer {
         }
         fogPerfStats.terrainDrawnCount++;
         continue;
+      }
+      // A wildlife camp (see campPlacement.ts) is an animated topping on the hex's own
+      // ground: the ground's base, the camp's guarded (level 1) art on top, its tile
+      // rotation mapped onto the rotations that art ships (campArtFor). A bearrapids
+      // camp stands on its river tile and brings its own river base with it. A camp
+      // whose art cannot be resolved (a bearrapids off a straight river) falls through
+      // and draws as plain ground.
+      if (tile.camp) {
+        const campArt = campArtFor(textures, tile, river);
+        if (campArt) {
+          const campTile = { ...tile, orientation: campArt.orientation };
+          baseEntries.set(key, { texture: baseTextureFor(textures, campTile, campArt.riverArt), coord: c });
+          const campTop = topTextureFor(textures, campTile, campArt.riverArt);
+          if (campTop) {
+            topEntries.set(key, { texture: campTop, coord: c, anim: topAnimFor(textures, campTile, campArt.riverArt) });
+          }
+          fogPerfStats.terrainDrawnCount++;
+          continue;
+        }
       }
       // A Sawmill/Crop Mill is built directly on a river tile
       // (WorldModel.placeBuilding mirrors BuildingCatalogue's

@@ -104,6 +104,21 @@ export interface GiantResponse {
   orientation: string;
 }
 
+/**
+ * Mirrors `CampResponse` — a wildlife camp (see `lib/map/campPlacement.ts` and
+ * `docs/design/wildlife-camps.md`). Spawn and render only for now; every camp is
+ * guarded. `orientation` is the tile's own rotation wire name.
+ */
+export interface CampResponse {
+  family: string;
+  q: number;
+  r: number;
+  level: number;
+  orientation: string;
+  strong: boolean;
+  guardRange: number;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;
@@ -114,6 +129,7 @@ export interface IslandResponse {
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
+  camps: CampResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
 }
@@ -624,6 +640,7 @@ export interface PreviewIslandResponse {
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
+  camps: CampResponse[];
   /** True for an island generated from the wasted-island terrain layer (its river tiles are lava streams). */
   wasted: boolean;
 }

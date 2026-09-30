@@ -337,6 +337,21 @@ export interface Tile {
     part: import('./giantTiles').GiantPart;
     orientation: TileOrientation;
   };
+  /**
+   * A wildlife camp on this hex (see `campPlacement.ts` and
+   * `docs/design/wildlife-camps.md`): an animated topping on the tile's own
+   * ground. Spawn and render only — every camp is guarded (art level 1), and a
+   * camp hex is not buildable. `orientation` is the tile's own rotation as
+   * generated; the renderer maps it onto the rotations the guarded art
+   * actually ships (`textures.ts`'s `campArtFor`).
+   */
+  camp?: {
+    family: string;
+    level: number;
+    orientation: TileOrientation;
+    strong: boolean;
+    guardRange: number;
+  };
 }
 
 export interface Settlement {

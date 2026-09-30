@@ -16,6 +16,8 @@ export interface Landmass {
   tileList?: { q: number; r: number }[];
   /** Lowest (q, r) hex — how the backend orders islands. */
   lowest: { q: number; r: number };
+  /** Bounding box of the landmass in axial (q, r), for drawing only the islands a window shows. */
+  bounds: { minQ: number; maxQ: number; minR: number; maxR: number };
 }
 
 const key = (q: number, r: number) => `${q},${r}`;
@@ -39,6 +41,7 @@ export function findLandmasses(world: WorldSeed, wasted = false, collectTiles = 
         let tiles = 1;
         let lowest = { q: start.q, r: start.r };
         const tileList = collectTiles ? [{ q: start.q, r: start.r }] : undefined;
+        const bounds = { minQ: start.q, maxQ: start.q, minR: start.r, maxR: start.r };
         visited.add(key(start.q, start.r));
         const stack = [start];
         const sea = new Set<string>();
@@ -54,12 +57,16 @@ export function findLandmasses(world: WorldSeed, wasted = false, collectTiles = 
             visited.add(k);
             tiles++;
             tileList?.push({ q: n.q, r: n.r });
+            if (n.q < bounds.minQ) bounds.minQ = n.q;
+            if (n.q > bounds.maxQ) bounds.maxQ = n.q;
+            if (n.r < bounds.minR) bounds.minR = n.r;
+            if (n.r > bounds.maxR) bounds.maxR = n.r;
             if (n.q < lowest.q || (n.q === lowest.q && n.r < lowest.r)) lowest = { q: n.q, r: n.r };
             stack.push(n);
           }
         }
         if (tileList) tileList.sort((a, b) => a.q - b.q || a.r - b.r);
-        landmasses.push({ tiles, lowest, tileList });
+        landmasses.push({ tiles, lowest, tileList, bounds });
       }
     }
   }
@@ -81,4 +88,26 @@ export function sizeDistribution(landmasses: readonly Landmass[]): { label: stri
   const counts = SIZE_BUCKETS.map((b) => ({ label: b.label, count: 0 }));
   for (const l of landmasses) counts[SIZE_BUCKETS.findIndex((b) => l.tiles < b.max)].count++;
   return counts;
+}
+
+/** Every land hex of the landmass containing `start`, in (q, r) order (a flood fill, like the backend's). */
+export function landmassTiles(world: WorldSeed, wasted: boolean, start: { q: number; r: number }): { q: number; r: number }[] {
+  const isLand = wasted
+    ? (q: number, r: number) => wastedTerrainAt(q, r, world) !== 'sea'
+    : (q: number, r: number) => terrainAt(q, r, world) !== 'sea';
+  const seen = new Set<string>([key(start.q, start.r)]);
+  const tiles = [{ q: start.q, r: start.r }];
+  const stack = [{ q: start.q, r: start.r }];
+  while (stack.length > 0) {
+    const c = stack.pop()!;
+    for (const n of neighbors(c)) {
+      const k = key(n.q, n.r);
+      if (seen.has(k) || !isLand(n.q, n.r)) continue;
+      seen.add(k);
+      tiles.push({ q: n.q, r: n.r });
+      stack.push({ q: n.q, r: n.r });
+    }
+  }
+  tiles.sort((a, b) => a.q - b.q || a.r - b.r);
+  return tiles;
 }

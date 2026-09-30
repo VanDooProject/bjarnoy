@@ -11,7 +11,7 @@ import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { BuildingOutput, BuildingModifier } from '../../lib/map/buildingEconomy';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName, terrainName, wastedTerrainName, resourceName, giantName } from '../../i18n/catalogueNames';
+import { buildingName, terrainName, wastedTerrainName, resourceName, giantName, campName } from '../../i18n/catalogueNames';
 
 // Mirrors textures.ts's WASTED_TEXTURE_KEY (grass/forest/sand -> their
 // wasted-island art family) plus the coastal case (sea bordering wasted
@@ -42,6 +42,7 @@ const title = computed(() => {
   const subject = props.info.subject;
   if (subject.kind === 'building') return buildingName(subject.buildingType);
   if (subject.kind === 'giant') return giantName(subject.family);
+  if (subject.kind === 'camp') return campName(subject.family);
   if (subject.isRiver) return t('hud.hoverTooltip.river');
   if (subject.wasted) {
     const key = WASTED_TERRAIN_LABEL_KEY[subject.terrain];
@@ -50,7 +51,10 @@ const title = computed(() => {
   return terrainName(subject.terrain);
 });
 
-const level = computed(() => (props.info.subject.kind === 'building' ? props.info.subject.level : undefined));
+const level = computed(() => {
+  const subject = props.info.subject;
+  return subject.kind === 'building' || subject.kind === 'camp' ? subject.level : undefined;
+});
 
 const subtitle = computed(() => {
   const owner = props.info.owner;
@@ -61,7 +65,10 @@ const subtitle = computed(() => {
 // Only shown for a non-building tile without a level badge — matches the
 // old "stat" line ("Click to build here" / "Claimed ground" / "Unclaimed").
 const stat = computed(() => {
-  if (props.info.subject.kind === 'building') return undefined;
+  const subject = props.info.subject;
+  if (subject.kind === 'building') return undefined;
+  // A wildlife camp: not buildable, so no "click to build" line — say how strong it is.
+  if (subject.kind === 'camp') return subject.strong ? t('hud.hoverTooltip.campStrong') : t('hud.hoverTooltip.campWeak');
   const owner = props.info.owner;
   if (!owner) return t('hud.hoverTooltip.unclaimed');
   return owner.mine ? t('hud.hoverTooltip.clickToBuildHere') : t('hud.hoverTooltip.claimedGround');
@@ -131,7 +138,7 @@ const workersText = computed(() =>
     </div>
     <div v-if="subtitle" class="subtitle">{{ subtitle }}</div>
     <div class="separator" />
-    <div v-if="stat && !level" class="stat">{{ stat }}</div>
+    <div v-if="stat" class="stat">{{ stat }}</div>
     <dl v-if="outputText || modifierText || workersText" class="stats">
       <template v-if="outputText">
         <dt>{{ t('hud.hoverTooltip.output') }}</dt>

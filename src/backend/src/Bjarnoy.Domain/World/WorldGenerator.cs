@@ -96,6 +96,7 @@ public sealed class WorldGenerator
                 var tiles = kept[i].SortedTiles();
                 IReadOnlyList<RiverTile> riverTiles;
                 IReadOnlyList<Giant> giants;
+                IReadOnlyList<Camp> camps;
                 IReadOnlyList<HexCoord> startPositions;
                 if (wasted)
                 {
@@ -103,6 +104,7 @@ public sealed class WorldGenerator
                         tiles, land, _sampler, _options, index, wasted: true, allowConfluence: false);
                     giants = GiantGenerator.Generate(
                         tiles, land, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet(), wasted: true);
+                    camps = CampGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, wasted: true);
                     startPositions = [];
                 }
                 else
@@ -110,7 +112,10 @@ public sealed class WorldGenerator
                     riverTiles = RiverGenerator.Generate(tiles, land, _sampler, _options, index);
                     giants = GiantGenerator.Generate(
                         tiles, land, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet());
-                    startPositions = FindStartPositions(tiles, land, giants);
+                    // Camps are placed before start positions; start positions keep away
+                    // from the strong ones (weak camps are fine next to a spot).
+                    camps = CampGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants);
+                    startPositions = FindStartPositions(tiles, land, giants, camps);
                 }
 
                 built[i] = new GeneratedIsland
@@ -122,6 +127,7 @@ public sealed class WorldGenerator
                     StartPositions = startPositions,
                     RiverTiles = riverTiles,
                     Giants = giants,
+                    Camps = camps,
                     IsWasted = wasted,
                 };
             });
@@ -358,10 +364,16 @@ public sealed class WorldGenerator
     /// anchor. This also rules out a start position ever landing on a
     /// footprint hex outright, since that distance would be 0 or 1.
     /// </remarks>
+    /// <remarks>
+    /// Wildlife camps are placed before this runs (<see cref="CampGenerator"/>), and a spot
+    /// within <c>GuardRange + StartPositionMargin</c> hex steps of a <em>strong</em> camp is
+    /// dropped.
+    /// </remarks>
     private static List<HexCoord> FindStartPositions(
         IReadOnlyList<HexCoord> tiles,
         Dictionary<HexCoord, Terrain> land,
-        IReadOnlyList<Giant> giants)
+        IReadOnlyList<Giant> giants,
+        IReadOnlyList<Camp> camps)
     {
         var candidates = new List<(HexCoord Coord, int Score)>();
 
@@ -424,6 +436,23 @@ public sealed class WorldGenerator
             }
 
             if (tooCloseToGiant)
+            {
+                continue;
+            }
+
+            // Strong camps hold a stretch of land around them: no spot within their guard
+            // range plus a margin. Weak camps do not matter.
+            var tooCloseToCamp = false;
+            foreach (var camp in camps)
+            {
+                if (camp.Strong && tile.DistanceTo(camp.Coord) <= camp.GuardRange + CampGenerator.StartPositionMargin)
+                {
+                    tooCloseToCamp = true;
+                    break;
+                }
+            }
+
+            if (tooCloseToCamp)
             {
                 continue;
             }

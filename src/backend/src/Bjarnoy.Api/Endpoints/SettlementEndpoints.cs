@@ -776,6 +776,7 @@ public static class SettlementEndpoints
         BuildRejection.TerrainNotAllowed => "That building cannot stand on that terrain.",
         BuildRejection.HexNotInSettlement => "That hex is outside the settlement's borders.",
         BuildRejection.HexOccupiedByGiant => "That hex is part of a giant feature and can never be built on.",
+        BuildRejection.HexOccupiedByCamp => "A wildlife camp stands on that hex and it cannot be built on.",
         BuildRejection.HexOccupied => "Another building already stands there.",
         BuildRejection.NotEnoughResources =>
             "Not enough resources (some may be reserved for queued construction).",

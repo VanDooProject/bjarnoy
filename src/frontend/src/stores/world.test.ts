@@ -379,6 +379,7 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         startPositions: [NEAR_ISLAND.at],
         riverTiles: [],
         giants: [],
+        camps: [],
         wasted: false,
       },
       {
@@ -391,6 +392,7 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         startPositions: [FAR_ISLAND.at],
         riverTiles: [],
         giants: [],
+        camps: [],
         wasted: false,
       },
     ];
@@ -536,6 +538,7 @@ describe('useWorldStore founding a settlement (L6b: persist before reconciling)'
         startPositions: [ISLAND.at],
         riverTiles: [],
         giants: [],
+        camps: [],
         wasted: false,
       },
     ];
@@ -1596,7 +1599,7 @@ describe('useWorldStore joinWorld', () => {
       reservedUntil: null,
     };
     store.islands = [
-      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [], giants: [], wasted: false },
+      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [], giants: [], camps: [], wasted: false },
     ];
     store.armies = [{ id: 'old-army' } as never];
     store.liveReady = true;

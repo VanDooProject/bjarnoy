@@ -417,6 +417,7 @@ public sealed class WorldService(
         StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
         Giants = [.. island.Giants.Select(ToGiantRecord)],
+        Camps = [.. island.Camps.Select(ToCampRecord)],
         IsWasted = island.IsWasted,
     };
 
@@ -727,6 +728,13 @@ public sealed class WorldService(
         [.. tile.InDirections.Select(d => (int)d)],
         tile.OutDirection is { } outDirection ? (int)outDirection : null,
         (int)tile.Width);
+
+    private static CampRecord ToCampRecord(Camp camp) => new(
+        camp.Coord.Q,
+        camp.Coord.R,
+        camp.Family,
+        camp.Level,
+        (int)camp.Orientation);
 
     private static GiantRecord ToGiantRecord(Giant giant) => new(
         giant.Anchor.Q,
