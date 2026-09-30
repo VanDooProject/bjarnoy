@@ -30,18 +30,18 @@ internal static class CampGenerator
     public const int MinCampSpacing = 6;
 
     /// <summary>
-    /// Land tiles per seal colony: an island's sand rim is always the farthest ground from its
-    /// interior camps, so without a cap farthest-point sampling hands most picks to seals.
+    /// Land tiles per sand camp (seal or walrus): an island's sand rim is always the farthest ground
+    /// from its interior camps, so without a cap farthest-point sampling hands most picks to it.
     /// </summary>
     public const int SandTilesPerSealCamp = 2000;
 
-    /// <summary>At most this many seal colonies on an island of <paramref name="landTileCount"/> tiles (rounded, at least 1).</summary>
+    /// <summary>At most this many sand camps (seal and walrus together) on an island of <paramref name="landTileCount"/> tiles (rounded, at least 1).</summary>
     public static int MaxSealCampsFor(int landTileCount) =>
         Math.Max(1, ((2 * landTileCount) + SandTilesPerSealCamp) / (2 * SandTilesPerSealCamp));
 
     /// <summary>
     /// Land tiles per eagle eyrie: mountains are big and often the farthest ground from the
-    /// other camps, so without a cap they take a large share of the weak budget.
+    /// other camps, so without a cap they take a large share of the strong budget.
     /// </summary>
     public const int MountainTilesPerEyrieCamp = 2000;
 
@@ -157,7 +157,7 @@ internal static class CampGenerator
             }
 
             TileOrientation? orientation = null;
-            CampFamilyInfo? info;
+            IReadOnlyList<CampFamilyInfo> families;
             if (riverByHex.TryGetValue(coord, out var river))
             {
                 // Only a plain Straight river-width tile may hold bearrapids (a stream or a
@@ -168,7 +168,7 @@ internal static class CampGenerator
                     continue;
                 }
 
-                info = FamilyFor(CampGround.RiverStraight);
+                families = FamiliesFor(CampGround.RiverStraight);
                 var direction = river.InDirections.Count > 0 ? river.InDirections[0] : river.OutDirection;
                 if (direction is null)
                 {
@@ -179,21 +179,23 @@ internal static class CampGenerator
             }
             else
             {
-                // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) gets moosemire from the
-                // strong budget, beaverlodge / cranedance (by hash) from the weak one; bog terrain does not exist yet.
-                info = GroundOf(terrain, wasted) is { } ground ? FamilyFor(ground) : null;
+                // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) gets moosemire or
+                // beaverlodge / cranedance like sand gets walrus or seals below; bog terrain does not exist yet.
+                families = GroundOf(terrain, wasted) is { } ground ? FamiliesFor(ground) : [];
             }
 
-            if (info is null)
+            // One candidate per family the ground holds (sand: the walrus, strong, and the
+            // seals, weak), so the two budgets decide which one a tile gets. The first family
+            // keeps the plain hash; each further one draws its own. Once a tile is picked, its
+            // other candidates sit at distance 0 and can never be picked (MinCampSpacing).
+            for (var k = 0; k < families.Count; k++)
             {
-                continue;
+                candidates.Add(new Candidate(
+                    coord,
+                    families[k],
+                    orientation,
+                    ValueNoise.Hash2(coord.Q, coord.R, seed + 131 + (k * FamilyHashSalt))));
             }
-
-            candidates.Add(new Candidate(
-                coord,
-                info,
-                orientation,
-                ValueNoise.Hash2(coord.Q, coord.R, seed + 131)));
         }
 
         // Two budgets, one shared farthest-point sampling. An island whose budgets both round to
@@ -378,8 +380,12 @@ internal static class CampGenerator
         };
     }
 
-    /// <summary>The family placed on a (non-bog) ground.</summary>
-    private static CampFamilyInfo FamilyFor(CampGround ground) => CampFamilies.All.First(f => f.Ground == ground);
+    /// <summary>Hash salt between a ground's families (see the candidate loop in <see cref="PlaceCore"/>).</summary>
+    private const int FamilyHashSalt = 7919;
+
+    /// <summary>The families placed on a (non-bog) ground, in table order.</summary>
+    private static IReadOnlyList<CampFamilyInfo> FamiliesFor(CampGround ground) =>
+        CampFamilies.All.Where(f => f.Ground == ground).ToList();
 
     /// <summary>
     /// The art rotation of a straight river tile flowing through <paramref name="direction"/> —

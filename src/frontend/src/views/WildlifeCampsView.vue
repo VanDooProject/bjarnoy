@@ -8,6 +8,7 @@ import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
 import { findAtlasClip, findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import { KEY_FAMILY, type TextureKey } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 import { CAMP_FAMILIES, MaxCampLevel, guardRange, type CampGround, type CampStrength } from '../lib/map/campPlacement';
 
@@ -32,20 +33,10 @@ interface CampEntry {
   strength: CampStrength;
 }
 
-// Camps whose art is drawn but which the family table does not list yet
-// (3D_assets hextile130-132, the weak deer, hare and otter camps). Each one
-// only gets a card once its art is in the atlas, and the family table wins
-// as soon as it lists the family.
-const UPCOMING: CampEntry[] = [
-  { id: 'deerglade', ground: 'forest', strength: 'weak' },
-  { id: 'harewarren', ground: 'grass', strength: 'weak' },
-  { id: 'otterslide', ground: 'riverStraight', strength: 'weak' },
-];
-
-const CAMPS: CampEntry[] = [
-  ...CAMP_FAMILIES.map((f) => ({ id: f.family, ground: f.ground, strength: f.strength })),
-  ...UPCOMING.filter((u) => !CAMP_FAMILIES.some((f) => f.family === u.id)),
-].filter((c) => TILE_ORIENTATIONS.some((cam) => frameFor(c.id, cam, false)));
+// A family only gets a card once its art is in the atlas.
+const CAMPS: CampEntry[] = CAMP_FAMILIES.map((f) => ({ id: f.family, ground: f.ground, strength: f.strength })).filter(
+  (c) => TILE_ORIENTATIONS.some((cam) => frameFor(c.id, cam, false)),
+);
 
 const STRENGTHS: CampStrength[] = ['strong', 'weak'];
 // Grounds in the order the family table first mentions them, only those with a camp on the page.
@@ -68,8 +59,14 @@ function fit(frame: AtlasFrameRect | undefined, boxHeight: number): { width: str
   };
 }
 
+// The art a camp is drawn with - the map's own alias (`KEY_FAMILY`): the walrus haul-out
+// borrows the seal haul-out's art until its own is rendered.
+function artOf(id: CampId): string {
+  return KEY_FAMILY[id as TextureKey] ?? id;
+}
+
 function frameFor(id: CampId, camera: TileOrientation, guarded: boolean): AtlasFrameRect | undefined {
-  return findAtlasFrame('showcase', `${id}_${camera}_level00${guarded ? 1 : 0}`);
+  return findAtlasFrame('showcase', `${artOf(id)}_${camera}_level00${guarded ? 1 : 0}`);
 }
 
 /** The hexes a camp of this strength guards at level 1 and at the top level (`guardRange`, the game's own formula). */
@@ -110,7 +107,7 @@ function lootOf(camp: CampEntry): LootShare[] {
 }
 
 function hasClip(id: CampId, camera: TileOrientation): boolean {
-  return !!findAtlasClip('buildings-anim', `${id}_${camera}_level001`);
+  return !!findAtlasClip('buildings-anim', `${artOf(id)}_${camera}_level001`);
 }
 
 function keptCameras(id: CampId): TileOrientation[] {
@@ -253,7 +250,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
             <div class="art-box">
               <AnimatedCamp
                 v-if="view[camp.id].guarded && hasClip(camp.id, view[camp.id].camera)"
-                :family="camp.id"
+                :family="artOf(camp.id)"
                 :orientation="view[camp.id].camera"
               />
               <AtlasSprite

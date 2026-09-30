@@ -383,6 +383,10 @@
         "name": "Seal haul-out",
         "guards": "Five seals basking on the slabs and the sand, two heaving themselves along, and three white pups."
       },
+      "walrushaulout": {
+        "name": "Walrus haul-out",
+        "guards": "Walrus bulls with long tusks on the shore, one rearing up to fight, among the bones of their kills. Drawn with the seal art until its own is ready."
+      },
       "boarwallow": {
         "name": "Boar wallow",
         "guards": "Two boars lying in the mud, one on patrol, and three striped piglets."

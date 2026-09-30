@@ -383,6 +383,10 @@
         "name": "Robbenbank",
         "guards": "Fünf Robben sonnen sich auf Felsplatten und Sand, zwei robben sich voran, dazu drei weiße Junge."
       },
+      "walrushaulout": {
+        "name": "Walross-Liegeplatz",
+        "guards": "Walrossbullen mit langen Stoßzähnen am Ufer, einer richtet sich zum Kampf auf, zwischen den Knochen ihrer Beute. Bis zur eigenen Grafik mit der Robben-Grafik gezeichnet."
+      },
       "boarwallow": {
         "name": "Wildschweinsuhle",
         "guards": "Zwei Keiler liegen im Schlamm, einer hält Wache, dazu drei gestreifte Frischlinge."
