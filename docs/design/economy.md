@@ -312,16 +312,39 @@ their renown.
   Longhouse 2 upgrade the tutorial asks for has to build fast: the
   Longhouse's `t₁` is 1.5 min at the shared ×1.33, so LH 2 builds in about 2
   min. The tutorial also walks the player through placing a Storage
-  House and upgrading the Longhouse:
+  House and upgrading the Longhouse.
 
-  | Quest | Reward (wood / stone / food) |
-  |---|---|
-  | 3 producers built | 150 / 120 / 80 |
-  | Longhouse 2 | 250 / 200 / 150 |
-  | 6 producers built | 200 / 150 / 100 |
-  | Longhouse 3 | 400 / 300 / 200 |
-  | First Storage House | 200 / 200 / 200 |
-  | Longhouse 5 | 800 / 600 / 400 |
+  The quests come in this order (`Bjarnoy.Domain.Settlers.Quests`, mirrored
+  for demo mode in `src/frontend/src/lib/quests.ts`):
+
+  | # | Quest | Condition | Reward (wood / stone / food) |
+  |---|---|---|---|
+  | 1 | 3 producers built | 3 standing resource producers | 150 / 120 / 80 |
+  | 2 | Longhouse 2 | Longhouse level 2 or more | 250 / 200 / 150 |
+  | 3 | First Storage House | a standing Storage House | 200 / 200 / 200 |
+  | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
+  | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
+  | 6 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
+
+  Rules:
+
+  - **Manual claim.** A completed quest pays nothing until the player presses
+    Claim in the quest tray (`POST /settlements/{id}/quests/{questId}/claim`).
+    The tray shows the first unclaimed quest, plus any other completed one so
+    it can be claimed; quests can be claimed in any order.
+  - **Exactly once per settlement.** Each quest has a bit in the settlement's
+    claimed-quests mask, set in the same save that pays the reward, so a
+    double click or a retry gets a 409 (`AlreadyClaimed`), never a second
+    payment. A second settlement has its own list.
+  - **Only standing buildings count.** Queued and under-construction orders do
+    not; a producer is any building (other than the Longhouse) that yields
+    wood, stone, food or iron of its own, so storage, towers and the
+    radius-boost buildings (Sawmill, Crop Mill) do not.
+  - **Clamped to storage.** The reward is deposited like any other income, so
+    whatever would exceed a resource's storage capacity is lost; the tray
+    warns when a reward will not fully fit.
+  - **Never a building.** Rewards are resources only, never a finished or
+    free building.
 
 Simulated: the first 25 minutes are continuous building (9 producers, then
 LH 2 at about 13 min), LH 3 at about 1h45.
