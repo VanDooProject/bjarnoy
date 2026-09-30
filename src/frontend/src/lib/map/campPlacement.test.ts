@@ -131,7 +131,8 @@ describe('placeCamps', () => {
       expect(Math.abs(strong.share[i]! - expectedStrong[i]!)).toBeLessThan(0.05);
       expect(Math.abs(weak.share[i]! - expectedWeak[i]!)).toBeLessThan(0.07);
     }
-  });
+    // 600 placements on a 100x100 block: ~3.5 s alone, more under the full suite's parallel load.
+  }, 30_000);
 
   it('keeps off giant footprints and every river tile that is not a straight one', () => {
     const { tiles, terrainOf } = block(40, () => 'grass');
