@@ -1,6 +1,6 @@
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it } from 'vitest';
-import { isModalRouteName, modalLocation } from './modalRoute';
+import { isModalRouteName, modalLocation, reportsLocation } from './modalRoute';
 
 function testRouter() {
   return createRouter({
@@ -11,6 +11,8 @@ function testRouter() {
       { path: '/profile/:userName', name: 'profile', component: { template: '<div />' } },
       { path: '/leaderboards', name: 'leaderboards', component: { template: '<div />' } },
       { path: '/guild', name: 'guild', component: { template: '<div />' } },
+      { path: '/reports', name: 'reports', component: { template: '<div />' } },
+      { path: '/reports/:reportId', name: 'report-detail', component: { template: '<div />' } },
     ],
   });
 }
@@ -21,6 +23,8 @@ describe('isModalRouteName', () => {
     expect(isModalRouteName('profile')).toBe(true);
     expect(isModalRouteName('leaderboards')).toBe(true);
     expect(isModalRouteName('guild')).toBe(true);
+    expect(isModalRouteName('reports')).toBe(true);
+    expect(isModalRouteName('report-detail')).toBe(true);
   });
 
   it('is false for a non-modal route name, undefined, or null', () => {
@@ -68,5 +72,42 @@ describe('modalLocation', () => {
     await router.push('/leaderboards');
 
     expect(modalLocation(router, '/guild')).toEqual({ path: '/guild', state: undefined });
+  });
+});
+
+describe('reportsLocation', () => {
+  it('stashes the caller\'s current path as the background view, for the list', async () => {
+    const router = testRouter();
+    await router.push('/settlement');
+
+    expect(reportsLocation(router)).toEqual({ path: '/reports', state: { backgroundView: '/settlement' } });
+  });
+
+  it('stashes the background view for a specific report id', async () => {
+    const router = testRouter();
+    await router.push('/settlement');
+
+    expect(reportsLocation(router, 'report-1')).toEqual({
+      path: '/reports/report-1',
+      state: { backgroundView: '/settlement' },
+    });
+  });
+
+  it('reuses the existing backgroundView from list to detail, instead of stacking reports behind reports', async () => {
+    const router = testRouter();
+    await router.push('/settlement');
+    await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
+
+    expect(reportsLocation(router, 'report-1')).toEqual({
+      path: '/reports/report-1',
+      state: { backgroundView: '/settlement' },
+    });
+  });
+
+  it('has no state when opened from a report-detail route with no backgroundView of its own (direct load)', async () => {
+    const router = testRouter();
+    await router.push('/reports/report-1');
+
+    expect(reportsLocation(router)).toEqual({ path: '/reports', state: undefined });
   });
 });
