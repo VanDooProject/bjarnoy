@@ -99,9 +99,11 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
     private async Task<double> CollectFeastRenownAsync(
         Guid userId, Guid worldId, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        // The end instant is compared here, not in the query: SQLite cannot
+        // order a DateTimeOffset column.
         var owed = await _dbContext.Settlements
             .Where(s => s.UserId == userId && s.WorldId == worldId
-                && (s.PendingFeastRenown > 0 || (s.FeastEndsAt != null && s.FeastEndsAt <= now)))
+                && (s.PendingFeastRenown > 0 || s.FeastEndsAt != null))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var total = 0.0;
