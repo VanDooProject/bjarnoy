@@ -103,7 +103,7 @@ Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 **What caps a building's level.** Most buildings can never be a higher level
 than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
 keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
-Farm, Pumpkin Farm, Fishing Hut, Fisher Hut) are capped by **storage**
+Farm, Pumpkin Farm, Fishing Hut) are capped by **storage**
 instead: they only need their unlock LH at every level, and a level whose cost
 exceeds what the settlement can store can never be afforded, so the next level
 has to fit in storage. An **additional Storage House** can only be placed once
@@ -487,8 +487,10 @@ Open work, in rough order. Each is its own PR.
 3. **Tutorial** (§7): placing a Storage House and upgrading the Longhouse,
    resource rewards for the onboarding steps, and a fast Longhouse 2 (about
    2 minutes).
-4. **Merge Fishing Hut and Fisher Hut** into one coastal building; stored
-   Fisher Huts are converted, not deleted.
+4. ~~Merge Fishing Hut and Fisher Hut~~ into one coastal building: done. The
+   Fisher Hut is gone from the catalogue; a stored Fisher Hut (and a queued
+   order for one) becomes a Fishing Hut at the same hex and level when its
+   settlement loads. The enum value 15 stays so persisted rows still read.
 5. **New buildings:** the Reindeer Herder (the default food building; Farm and
    Pumpkin Farm move to LH 4 as one card by soil), the Odin Statue (Ravens and
    Wisdom, §5) and the Palisade (§5).
@@ -502,8 +504,8 @@ Open work, in rough order. Each is its own PR.
 
 ## 12. Open questions
 
-- ~~Fishing Hut and Fisher Hut~~: decided, merge them into one coastal
-  building. A lake version comes with the bog set (on stilts on a bog-lake
+- ~~Fishing Hut and Fisher Hut~~: merged into one coastal building (the
+  Fishing Hut). A lake version comes with the bog set (on stilts on a bog-lake
   shore): the same building, with its own art.
 - The profile parameters (online hours, share spent on troops) are
   assumptions; real telemetry should replace them once players exist.

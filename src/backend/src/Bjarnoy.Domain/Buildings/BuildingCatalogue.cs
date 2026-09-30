@@ -45,7 +45,7 @@ public static class BuildingCatalogue
         BuildingType.Longhouse => 30,
         BuildingType.Lumberjack or BuildingType.Quarry or BuildingType.ClayBrickworks
             or BuildingType.Farm or BuildingType.PumpkinFarm or BuildingType.FishingHut
-            or BuildingType.FisherHut or BuildingType.StorageHouse => 25,
+            or BuildingType.StorageHouse => 25,
         BuildingType.Barracks or BuildingType.ArcheryRange or BuildingType.Dockyard
             or BuildingType.TownSquare or BuildingType.CartWorkshop or BuildingType.DruidHut
             or BuildingType.Smithy or BuildingType.Meadery or BuildingType.Sawmill
@@ -110,7 +110,6 @@ public static class BuildingCatalogue
             [BuildingType.StorageHouse] = 1,
             [BuildingType.Farm] = 1,
             [BuildingType.FishingHut] = 2,
-            [BuildingType.FisherHut] = 2,
             [BuildingType.Tower] = 3,
             [BuildingType.PumpkinFarm] = 4,
             [BuildingType.Barracks] = 5,
@@ -153,7 +152,6 @@ public static class BuildingCatalogue
         BuildingType.Farm,
         BuildingType.PumpkinFarm,
         BuildingType.FishingHut,
-        BuildingType.FisherHut,
     };
 
     /// <summary>
@@ -272,7 +270,6 @@ public static class BuildingCatalogue
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
             BuildingType.Barracks => Barracks(level),
-            BuildingType.FisherHut => FisherHut(level),
             // Grass qualifies terrain-wise, but only a hex that is itself a
             // Straight/Bend river tile is actually buildable — see
             // BuildingDefinition.RequiresRiverShape. Unlocks at LH 20 behind
@@ -666,21 +663,6 @@ public static class BuildingCatalogue
         Cost = LevelOneProducerCost * CostFactor(level),
         BuildDuration = Duration(3, level),
         ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 40, 0), level),
-        RequiresCoastalWater = true,
-    };
-
-    /// <summary>
-    /// A second, later coastal food producer alongside <see cref="FishingHut"/> —
-    /// same shape (RequiresCoastalWater, the hex under it stays plain
-    /// <see cref="World.Terrain.Sea"/>), just its own cost/production tier.
-    /// </summary>
-    private static BuildingDefinition FisherHut(int level) => new()
-    {
-        Type = BuildingType.FisherHut,
-        Level = level,
-        Cost = LevelOneProducerCost * CostFactor(level),
-        BuildDuration = Duration(3, level),
-        ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 42, 0), level),
         RequiresCoastalWater = true,
     };
 

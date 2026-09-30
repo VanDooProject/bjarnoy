@@ -41,11 +41,10 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   dockyard: 'dockyard',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
-  fisherhut: 'fisherhut',
   // Fishing Hut used to fall back to a legacy single-level composite
   // (`fishinghutbuilding`, no per-level art) — the pack's real, leveled
-  // fisherman's-hut art (already used for the separate FisherHut building)
-  // is the newer, better look, so both share the same family now.
+  // fisherman's-hut art (the `fisherhut` art family, which was once also a
+  // separate building) is the newer, better look.
   fishinghut: 'fisherhut',
   // A Sawmill is never actually on plain ground (placing one requires a
   // river shape — BuildingCatalogue.SawmillRiverShapes), so the preview

@@ -107,10 +107,8 @@ const EXCLUDED_VARIANTS_BY_TYPE: Partial<Record<string, ReadonlySet<RiverVariant
  * bubble), this is a fixed property of the hex itself: a hex that will
  * never grow a matching river should not offer the bubble at all, so
  * callers filter it out of the category rather than rendering it locked.
- * Every other buildable type has no such requirement (Fisher Hut moved to
- * the water category instead — see `RingMenu`'s `WATER_CATEGORY` — since
- * it's now built on coastal water itself, exactly like Fishing Hut/
- * Dockyard, with no separate check needed).
+ * Every other buildable type has no such requirement (the water buildings —
+ * see `isWaterOnlyBuilding` — need coastal water, checked separately).
  */
 export function riverBuildingAllowedHere(
   type: string,
@@ -147,4 +145,26 @@ export function formatMissingResources(cost: ResourceLine, stock: ResourceLine):
   return RESOURCE_KEYS.filter((key) => cost[key] > stock[key])
     .map((key) => `${Math.ceil(cost[key] - stock[key])} ${resourceName(key)}`)
     .join(', ');
+}
+
+/**
+ * Buildings that stand directly on a coastal-water hex instead of on land
+ * (matches BuildingDefinition.RequiresCoastalWater on the backend). The one
+ * place the frontend decides this: placement (`WorldModel.placeBuilding`)
+ * and the building modal's "can this hex be inspected/upgraded" check both
+ * read it, so a new water building is covered everywhere by adding it here.
+ */
+const WATER_ONLY_BUILDINGS: ReadonlySet<string> = new Set(['fishinghut', 'dockyard', 'shrineofnjord']);
+
+export function isWaterOnlyBuilding(type: string | undefined): boolean {
+  return type !== undefined && WATER_ONLY_BUILDINGS.has(type);
+}
+
+/**
+ * Whether the building modal treats a tile as buildable/upgradeable: any
+ * non-sea tile, or a sea tile that already carries a water building (open
+ * water itself is never offered as an empty build target).
+ */
+export function tileIsBuildable(tile: { terrain: string; buildingType?: string }): boolean {
+  return tile.terrain !== 'sea' || isWaterOnlyBuilding(tile.buildingType);
 }

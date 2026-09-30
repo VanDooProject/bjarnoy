@@ -30,6 +30,7 @@ const world = useWorldStore();
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 import { buildingArt, terrainArt } from '../../lib/map/buildingArt';
+import { tileIsBuildable } from '../../lib/map/ringCatalogue';
 import AtlasSprite from '../AtlasSprite.vue';
 
 const props = defineProps<{
@@ -197,14 +198,13 @@ const art = computed(() => {
   const { buildingType, buildingLevel, terrain } = props.tile;
   return (buildingType ? buildingArt(buildingType, buildingLevel ?? 1) : undefined) ?? terrainArt(terrain);
 });
-// Open water is otherwise unbuildable, but a fishing hut already standing
+// Open water is otherwise unbuildable, but a water building (fishing hut,
+// dockyard, shrine of Njörd — see `isWaterOnlyBuilding`) already standing
 // on a coastal-water tile still has to be inspectable/upgradeable here —
 // this only ever sees such a tile with a building on it already (nothing in
 // this modal's own `build` flow offers water as a target), so it can't be
 // mistaken for turning open water buildable from empty.
-const buildable = computed(
-  () => props.tile.terrain !== 'sea' || props.tile.buildingType === 'fishinghut' || props.tile.buildingType === 'shrineofnjord',
-);
+const buildable = computed(() => tileIsBuildable(props.tile));
 
 const name = computed(() =>
   props.tile.buildingType ? buildingName(props.tile.buildingType) : terrainName(props.tile.terrain),

@@ -23,8 +23,7 @@ const PREVIEW_LEVEL: Record<string, number> = {
   dockyard: 7,
   greatstorehouse: 4,
   barracks: 2,
-  fisherhut: 2,
-  // Shares FisherHut's art family now — see buildingArt.ts's
+  // Shares the fisherhut art family — see buildingArt.ts's
   // BUILDING_ART_FAMILIES.
   fishinghut: 2,
   // Flat/inland family only — same simplification buildingArt.ts's preview
@@ -47,7 +46,6 @@ const TYPE_LABELS: Record<string, string> = {
   archeryrange: 'Archery range',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great storehouse',
-  fisherhut: 'Fisher hut',
   townsquare: 'Town square',
   cropmill: 'Crop mill',
   druidhut: "Druid's hut",
@@ -130,7 +128,6 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   shrineofullr: 'religion',
   shrineofnjord: 'religion',
   fishinghut: 'water',
-  fisherhut: 'water',
   dockyard: 'water',
 };
 

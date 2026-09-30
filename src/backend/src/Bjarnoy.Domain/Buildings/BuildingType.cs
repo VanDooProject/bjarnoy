@@ -93,12 +93,13 @@ public enum BuildingType
     Barracks = 14,
 
     /// <summary>
-    /// Food, on grass — a third food-producer variant alongside
-    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/>. Unlike
-    /// <see cref="FishingHut"/> it doesn't stand on water itself, but its
-    /// hex must be adjacent to some (see
-    /// <see cref="BuildingDefinition.RequiresAdjacentToWater"/>). Flat/inland
-    /// art only.
+    /// <b>Obsolete — merged into <see cref="FishingHut"/></b>
+    /// (<c>docs/design/economy.md</c>). The value stays in the enum only
+    /// because persisted rows store the integer; it has no definition in
+    /// <see cref="BuildingCatalogue"/>, is not in
+    /// <see cref="BuildingCatalogue.AllTypes"/>, cannot be built, and a stored
+    /// FisherHut (or queued order for one) becomes a FishingHut at the same
+    /// hex and level when its settlement is loaded.
     /// </summary>
     FisherHut = 15,
 

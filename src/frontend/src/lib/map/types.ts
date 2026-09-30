@@ -285,7 +285,6 @@ export interface Tile {
     | 'dockyard'
     | 'greatstorehouse'
     | 'barracks'
-    | 'fisherhut'
     | 'sawmill'
     | 'shrineofullr'
     | 'shrineofnjord'

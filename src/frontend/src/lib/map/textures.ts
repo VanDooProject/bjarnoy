@@ -139,13 +139,12 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   archeryrange: 'archeryrange',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
-  // Shares FisherHut's leveled family now — the legacy 'fishinghutbuilding'
+  // Uses the leveled `fisherhut` art family now — the legacy 'fishinghutbuilding'
   // composite (still in the pack, no longer referenced) had no per-level
   // art at all. See buildingArt.ts's matching docs-page choice.
   fishinghut: 'fisherhut',
   tower: 'towerbuilding',
   dockyard: 'dockyard',
-  fisherhut: 'fisherhut',
   // A Sawmill is never actually on grass (the backend requires a river
   // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
   // deliberately no plain 'sawmill' entry here for the grass/inland family
