@@ -167,11 +167,22 @@ jobs:
           test "$live" = 1
           echo "::endgroup::"
 
+          # Creating a world is admin-only (POST /api/v1/admin/worlds), and so
+          # is /api/v1/info on a main or release build (DiagnosticsOptions), so
+          # the container seeds an admin from ADMIN_BOOTSTRAP_* above and the
+          # smoke test logs in as it first — which also proves admin bootstrap
+          # and JWT signing work in the image.
+          token=$(curl -fsS -X POST http://localhost:8080/api/v1/auth/login \
+            -H 'content-type: application/json' \
+            -d '{"userName":"smoke-admin","password":"smoke-admin-password-not-for-production"}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+
           echo "::group::the running image says what it was built from"
           # An image that cannot say which commit it is defeats the point of
           # having the endpoint at all, so prove the build args reached it
-          # rather than leaving every field at "unknown".
-          curl -fsS http://localhost:8080/api/v1/info -o /tmp/info.json
+          # rather than leaving every field at "unknown". Asked as the admin:
+          # anonymously it is a 401 on every build that pushes (main, tags).
+          curl -fsS http://localhost:8080/api/v1/info -H "Authorization: Bearer $token" -o /tmp/info.json
           cat /tmp/info.json
           echo
           python3 - <<'PY'
@@ -185,18 +196,13 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::the API works against the migrated database"
-          # Creating a world is admin-only (POST /api/v1/admin/worlds), so the
-          # container seeds an admin from ADMIN_BOOTSTRAP_* above and the smoke
-          # test logs in as it first — which also proves admin bootstrap and
-          # JWT signing work in the image.
-          token=$(curl -fsS -X POST http://localhost:8080/api/v1/auth/login \
-            -H 'content-type: application/json' \
-            -d '{"userName":"smoke-admin","password":"smoke-admin-password-not-for-production"}' \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+          # Radius 400, not smaller: since island shape v3 an island that could
+          # cross the world edge is not generated at all, so a small world is
+          # an empty sea (409) — 400 is still well under a second to generate.
           curl -fsS -X POST http://localhost:8080/api/v1/admin/worlds \
             -H 'content-type: application/json' \
             -H "Authorization: Bearer $token" \
-            -d '{"name":"smoke-test-world","seed":7,"radius":30,"maxPlayers":10}' \
+            -d '{"name":"smoke-test-world","seed":7,"radius":400,"maxPlayers":10}' \
             -o /tmp/created.json
           world_id=$(python3 -c 'import json; print(json.load(open("/tmp/created.json"))["id"])')
           # The public game-client config for that world carries islandCount.
@@ -231,7 +237,9 @@ jobs:
           # Chunk of the plot, on the same doubled-row layout as FogChunkLayout:
           # u = q, v = 2r + q, 64-texel chunks, floor division.
           u, v = plot["q"], 2 * plot["r"] + plot["q"]
-          open('/tmp/chunk.txt', 'w').write(f"{u // 64} {v // 64}")
+          # Newline-terminated: `read` returns 1 on a line without one, which
+          # under `set -e` ended the whole smoke test with no message at all.
+          open('/tmp/chunk.txt', 'w').write(f"{u // 64} {v // 64}\n")
           PY
           curl -fsS -X POST "http://localhost:8080/api/v1/worlds/$world_id/settlements" \
             -H 'content-type: application/json' \
