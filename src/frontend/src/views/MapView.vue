@@ -924,6 +924,10 @@ function riverShapeAt(coord: AxialCoord): string | undefined {
   return world.model.getRiverTile(coord.q, coord.r)?.shape;
 }
 
+function riverWidthAt(coord: AxialCoord): string | undefined {
+  return world.model.getRiverTile(coord.q, coord.r)?.width;
+}
+
 // Only meaningful once riverShapeAt(coord) has a shape at all — see
 // riverBuildingAllowedHere's own riverVariant parameter.
 function riverVariantAt(coord: AxialCoord): RiverVariant | undefined {
@@ -994,7 +998,7 @@ const ringCategories = computed<RingCategory[]>(() => {
     label: t(`hud.ringMenu.categories.${category.id}`),
     color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
     buildings: category.buildings
-      .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord), riverVariantAt(coord)))
+      .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)))
       .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
       .map((b) => ringBuildingFor(b.type, coord)),
   }));

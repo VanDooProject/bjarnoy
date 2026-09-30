@@ -134,10 +134,10 @@ internal static class CampGenerator
             CampFamilyInfo? info;
             if (riverByHex.TryGetValue(coord, out var river))
             {
-                // Only a plain Straight river-width tile may hold bearrapids; every other
-                // river tile (and every wasted lava tile) is out.
-                // TODO(streams PR): "River width only, not stream" once streams exist.
-                if (wasted || river.Shape != RiverTileShape.Straight)
+                // Only a plain Straight river-width tile may hold bearrapids (a stream or a
+                // widening tile has no bearrapids art); every other river tile (and every wasted
+                // lava tile) is out.
+                if (wasted || river.Shape != RiverTileShape.Straight || river.Width != RiverWidth.River)
                 {
                     continue;
                 }

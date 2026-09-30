@@ -12,6 +12,8 @@ import {
 
 export interface Landmass {
   tiles: number;
+  /** Every land hex of the landmass, sorted by (q, r) - only when `collectTiles` was asked for. */
+  tileList?: { q: number; r: number }[];
   /** Lowest (q, r) hex — how the backend orders islands. */
   lowest: { q: number; r: number };
   /** Bounding box of the landmass in axial (q, r), for drawing only the islands a window shows. */
@@ -20,7 +22,7 @@ export interface Landmass {
 
 const key = (q: number, r: number) => `${q},${r}`;
 
-export function findLandmasses(world: WorldSeed, wasted = false): { landmasses: Landmass[]; shapes: IslandShape[] } {
+export function findLandmasses(world: WorldSeed, wasted = false, collectTiles = false): { landmasses: Landmass[]; shapes: IslandShape[] } {
   const isLand = wasted
     ? (q: number, r: number) => wastedTerrainAt(q, r, world) !== 'sea'
     : (q: number, r: number) => terrainAt(q, r, world) !== 'sea';
@@ -38,6 +40,7 @@ export function findLandmasses(world: WorldSeed, wasted = false): { landmasses: 
 
         let tiles = 1;
         let lowest = { q: start.q, r: start.r };
+        const tileList = collectTiles ? [{ q: start.q, r: start.r }] : undefined;
         const bounds = { minQ: start.q, maxQ: start.q, minR: start.r, maxR: start.r };
         visited.add(key(start.q, start.r));
         const stack = [start];
@@ -53,6 +56,7 @@ export function findLandmasses(world: WorldSeed, wasted = false): { landmasses: 
             }
             visited.add(k);
             tiles++;
+            tileList?.push({ q: n.q, r: n.r });
             if (n.q < bounds.minQ) bounds.minQ = n.q;
             if (n.q > bounds.maxQ) bounds.maxQ = n.q;
             if (n.r < bounds.minR) bounds.minR = n.r;
@@ -61,7 +65,8 @@ export function findLandmasses(world: WorldSeed, wasted = false): { landmasses: 
             stack.push(n);
           }
         }
-        landmasses.push({ tiles, lowest, bounds });
+        if (tileList) tileList.sort((a, b) => a.q - b.q || a.r - b.r);
+        landmasses.push({ tiles, lowest, tileList, bounds });
       }
     }
   }

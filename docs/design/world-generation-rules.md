@@ -11,7 +11,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Cell-based generation that scales to radius 4000 | Implemented (island-shape PR) |
 | Preview tool | Implemented (island-shape PR; later layers arrive with their features) |
 | Fog: chunked explored store and mask delivery; default radius 4000 | Planned |
-| Rivers and streams | Planned |
+| Rivers and streams; coherent mountain ranges | Implemented (streams PR); bog entry planned |
 | Bog and lakes | Planned |
 | Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps wait for bog) |
 
@@ -40,9 +40,15 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 
 ## Rivers and streams
 
-*All planned.*
+*Implemented (streams PR) except the bog entry, which arrives with the bog. Mechanics:
+[`river-generation.md`](./river-generation.md#streams-springs-merging-and-late-widening).*
 
-- More rivers per island; streams should more often combine into bigger rivers.
+- More rivers per island; streams should more often combine into bigger rivers. *Implemented as drainage
+  networks: a few outlets on bays per island, a noisy shortest-path drainage field over (tile, arrival
+  direction) states, one spring per 500 land tiles (1-24) following the field, tributaries joining at Ys the art
+  can draw (including a stream into a river at the wide Y). Seeds 1-8 at radius 1000: about 15 rivers per island
+  with rivers, over half of them tributaries, mean spring-to-mouth length ~33 tiles; see the doc for the
+  knobs and the measurements.*
 - A new river starts as a small stream and stays small for the first half of its run. It widens only where two
   streams join, or on a straight tile chosen at random within the second half of the stream's run before it
   must be river-width (sea mouth, bog, meeting a river). Never in the first half, and not always at the very
@@ -50,9 +56,10 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
   enough river-width tiles for the river buildings (Sawmill, Crop Mill, Hammerschmiede).
 - Springs are chosen as far apart from each other as possible so there are few parallel river runs.
 
-Known limitation of the current collision rule (relevant to the rework): about 2% of river mouths at
-production scale are inland, where a third river was dropped at a confluence that already had two inflows
-("merge two, drop the third").
+The old collision rule's limitation (about 2% of river mouths inland, a third river dropped at a full
+confluence: "merge two, drop the third") is gone for green islands: merging is decided while tracing and only
+into a tile whose Y the art can draw, so every path ends at a sea mouth or a confluence with an outflow
+(`RiverStreamTests` asserts it). Lava rivers keep the old rule.
 
 ## Bog and lakes
 
@@ -84,5 +91,5 @@ weak camps are fine nearby.
 ## Tooling
 
 A repo dev tool renders world previews from the real TS generator, with a legend and layer toggles
-(rivers/streams, bog/lakes, wasted, camps). *Implemented: `scripts/worldgen-preview/` with the `terrain` and
-`wasted` layers and a stats footer (see its README); `camps` is implemented; `rivers` and `bog` arrive with their features.*
+(rivers/streams, bog/lakes, wasted, camps). *Implemented: `scripts/worldgen-preview/` with the `terrain`, `wasted`, `rivers`
+and `camps` layers and a stats footer (see its README); `bog` arrives with its feature.*

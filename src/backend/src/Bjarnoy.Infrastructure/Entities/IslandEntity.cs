@@ -115,12 +115,14 @@ public readonly record struct HexPoint(int Q, int R);
 /// plain numeric index, not the enums themselves, so this type (and its
 /// converter) never has to change shape when the domain enums do.
 /// </summary>
-public readonly record struct RiverTileRecord(int Q, int R, int Shape, IReadOnlyList<int> InDirections, int? OutDirection)
+public readonly record struct RiverTileRecord(
+    int Q, int R, int Shape, IReadOnlyList<int> InDirections, int? OutDirection, int Width = 0)
 {
     public bool Equals(RiverTileRecord other) =>
         Q == other.Q
         && R == other.R
         && Shape == other.Shape
+        && Width == other.Width
         && OutDirection == other.OutDirection
         && InDirections.SequenceEqual(other.InDirections);
 
@@ -130,6 +132,7 @@ public readonly record struct RiverTileRecord(int Q, int R, int Shape, IReadOnly
         hash.Add(Q);
         hash.Add(R);
         hash.Add(Shape);
+        hash.Add(Width);
         hash.Add(OutDirection);
         foreach (var direction in InDirections)
         {

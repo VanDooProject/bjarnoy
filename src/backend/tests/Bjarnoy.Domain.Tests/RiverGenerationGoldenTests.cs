@@ -55,10 +55,22 @@ public class RiverGenerationGoldenTests
                 expected.InDirections.SequenceEqual(got.InDirections.Select(d => d.ToWireName())),
                 $"{scenario.Name}: river tile #{i} ({expected.Q},{expected.R}) inDirections mismatch — expected [{string.Join(",", expected.InDirections)}], got [{string.Join(",", got.InDirections.Select(d => d.ToWireName()))}].");
             Assert.True(
+                expected.Width == WidthWireName(got.Width),
+                $"{scenario.Name}: river tile #{i} ({expected.Q},{expected.R}) width mismatch — expected {expected.Width}, got {WidthWireName(got.Width)}.");
+            Assert.True(
                 expected.OutDirection == got.OutDirection?.ToWireName(),
                 $"{scenario.Name}: river tile #{i} ({expected.Q},{expected.R}) outDirection mismatch — expected {expected.OutDirection ?? "null"}, got {got.OutDirection?.ToWireName() ?? "null"}.");
         }
     }
+
+    private static string WidthWireName(RiverWidth width) => width switch
+    {
+        RiverWidth.River => "river",
+        RiverWidth.Stream => "stream",
+        RiverWidth.Widen => "widen",
+        RiverWidth.RiverStream => "riverstream",
+        _ => throw new InvalidOperationException($"Unknown width {width}"),
+    };
 
     private static string ShapeWireName(RiverTileShape shape) => shape switch
     {
@@ -143,5 +155,7 @@ public class RiverGenerationGoldenTests
         public List<string> InDirections { get; set; } = [];
 
         public string? OutDirection { get; set; }
+
+        public string Width { get; set; } = "river";
     }
 }

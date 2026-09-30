@@ -494,14 +494,40 @@ public sealed class TerrainSampler
             return Terrain.Sand;
         }
 
-        var rockiness = ValueNoise.Sample(coord.Q, coord.R, _options.Seed + 2, 2.5);
-
-        if (depth < _options.MountainThreshold && rockiness > _options.MountainRockiness)
+        if (depth < _options.MountainThreshold && MountainField(coord.Q, coord.R) > _options.MountainRockiness)
         {
             return Terrain.Mountain;
         }
 
-        return rockiness > _options.ForestRockiness ? Terrain.Forest : Terrain.Grass;
+        return ValueNoise.Sample(coord.Q, coord.R, _options.Seed + 2, ForestPatchScale) > _options.ForestRockiness
+            ? Terrain.Forest
+            : Terrain.Grass;
+    }
+
+    /// <summary>Wavelength (hexes) of the forest/grass patch noise — mirrors the frontend's <c>FOREST_PATCH_SCALE</c>.</summary>
+    public const double ForestPatchScale = 6;
+
+    /// <summary>Wavelength of the coarse ridge field that shapes mountain ranges.</summary>
+    public const double RangeScale = 10;
+
+    /// <summary>Wavelength of the fine term that roughens a range's edge.</summary>
+    public const double RangeDetailScale = 2.5;
+
+    /// <summary>Weight of the fine term in <see cref="MountainField"/>.</summary>
+    public const double RangeDetailWeight = 0.12;
+
+    /// <summary>
+    /// The field a hex inside an island's core must beat <c>MountainRockiness</c> in to be a
+    /// mountain: ridged (1 - |2n - 1|) coarse value noise puts high values along long winding
+    /// lines - the range crests - and a small fine term keeps a range's edge from being a
+    /// smooth blob. Mirrors the frontend's <c>mountainField</c>.
+    /// </summary>
+    public double MountainField(int q, int r)
+    {
+        var n = ValueNoise.Sample(q, r, _options.Seed + 5, RangeScale);
+        var ridge = 1 - Math.Abs((2 * n) - 1);
+        var fine = ValueNoise.Sample(q, r, _options.Seed + 7, RangeDetailScale);
+        return ((1 - RangeDetailWeight) * ridge) + (RangeDetailWeight * fine);
     }
 
     /// <summary>

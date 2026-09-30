@@ -86,6 +86,8 @@ export interface RiverTileResponse {
   shape: 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth' | 'bend60';
   inDirections: string[];
   outDirection: string | null;
+  /** `river` (default when absent), `stream` (half width) or `widen` (stream in, river out) or `riverstream` (a wide-Y join of a river and a stream). */
+  width?: 'river' | 'stream' | 'widen' | 'riverstream';
 }
 
 /**

@@ -20,7 +20,7 @@ One shared table, mirrored by `Camp.cs` (`CampFamilies.All`) and `campPlacement.
 
 The bog camps are in the table but are **not placed yet**: bog terrain lands in a later PR
 (`TODO(bog PR)` in `CampGenerator.PlaceCore` / `placeCamps`). Bearrapids goes on a river tile of shape
-`Straight` only; a later PR adds "river width only, not stream" (`TODO(streams PR)`). Wasted islands get
+`Straight` and **River width** only (not a stream, widening or river-stream tile). Wasted islands get
 fenrirbrood only.
 
 ## Placement

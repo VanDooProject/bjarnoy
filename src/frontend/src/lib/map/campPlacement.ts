@@ -215,10 +215,9 @@ export function placeCamps(
     let orientation: TileOrientation | null = null;
     const river = riverByHex.get(coordKey(coord));
     if (river) {
-      // Only a plain straight river tile may hold bearrapids; every other river tile (and
-      // every wasted lava tile) is out.
-      // TODO(streams PR): "River width only, not stream" once streams exist.
-      if (wasted || river.shape !== 'straight') continue;
+      // Only a plain straight river-width tile may hold bearrapids (a stream or a widening tile
+      // has no bearrapids art); every other river tile (and every wasted lava tile) is out.
+      if (wasted || river.shape !== 'straight' || (river.width ?? 'river') !== 'river') continue;
       info = familyFor('riverStraight');
       const direction = river.inDirections.length > 0 ? river.inDirections[0]! : river.outDirection;
       if (!direction) continue;

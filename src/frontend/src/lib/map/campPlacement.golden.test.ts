@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/camp-placement-golden.json';
 import { coordKey, type AxialCoord } from '../hex/coords';
 import { placeCamps } from './campPlacement';
-import type { RiverTile, RiverTileShape, Terrain, TileOrientation } from './types';
+import type { RiverTile, RiverTileShape, RiverWidth, Terrain, TileOrientation } from './types';
 
 interface Scenario {
   name: string;
@@ -17,7 +17,7 @@ interface Scenario {
   islandIndex: number;
   wasted: boolean;
   tiles: [number, number, Terrain][];
-  rivers: { q: number; r: number; shape: RiverTileShape; inDirections: TileOrientation[]; outDirection: TileOrientation | null }[];
+  rivers: { q: number; r: number; shape: RiverTileShape; inDirections: TileOrientation[]; outDirection: TileOrientation | null; width: RiverWidth }[];
   giants: [number, number][];
   camps: { q: number; r: number; family: string; level: number; orientation: TileOrientation | null }[];
 }

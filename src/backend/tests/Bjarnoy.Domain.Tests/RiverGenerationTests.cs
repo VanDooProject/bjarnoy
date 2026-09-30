@@ -271,7 +271,7 @@ public class RiverGenerationTests
     }
 
     [Fact]
-    public void Springs_never_outnumber_qualifying_mountain_clusters()
+    public void Lava_islands_get_at_most_one_spring_per_cluster_and_green_islands_stay_under_the_cap()
     {
         foreach (var seed in new[] { 1, 7, 12345 })
         {
@@ -286,11 +286,17 @@ public class RiverGenerationTests
                     continue;
                 }
 
-                var qualifyingClusters = CountQualifyingMountainClusters(
-                    island.Tiles, island.IsWasted ? sampler.WastedTerrainAt : sampler.TerrainAt);
-                Assert.True(
-                    springCount <= qualifyingClusters,
-                    $"seed {seed} island {island.Index}: {springCount} springs but only {qualifyingClusters} mountain clusters of 2+ tiles");
+                if (island.IsWasted)
+                {
+                    var qualifyingClusters = CountQualifyingMountainClusters(island.Tiles, sampler.WastedTerrainAt);
+                    Assert.True(
+                        springCount <= qualifyingClusters,
+                        $"seed {seed} island {island.Index}: {springCount} springs but only {qualifyingClusters} mountain clusters of 2+ tiles");
+                }
+                else
+                {
+                    Assert.True(springCount <= world.Options.MaxSpringsPerIsland, $"seed {seed} island {island.Index}: {springCount} springs");
+                }
             }
         }
     }

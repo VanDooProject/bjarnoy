@@ -95,13 +95,18 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
   // ---- the map --------------------------------------------------------------------
   const sampleStart = performance.now();
   const map = new Uint8Array(mapW * mapH * 3);
-  const cache = s >= 2 ? new Map<number, Rgb>() : null;
-  const colourOf = (q: number, r: number): Rgb => {
+  // Layers that draw inside a hex (lines, marks) see each pixel's own offset, so their colours cannot be cached per hex.
+  const subhex = layers.some((l) => l.subhex);
+  const fine = s >= 3;
+  const layerLines: string[] = [];
+  for (const layer of layers) layerLines.push(...(layer.prepare?.(world, options.window) ?? []));
+  const cache = s >= 2 && !subhex ? new Map<number, Rgb>() : null;
+  const colourOf = (q: number, r: number, dx = 0, dy = 0): Rgb => {
     const cacheKey = cache ? q * 262144 + r : 0;
     const hit = cache?.get(cacheKey);
     if (hit) return hit;
     let colour: Rgb = TERRAIN_COLOURS.sea;
-    for (const layer of layers) colour = layer.colourAt(q, r, world) ?? colour;
+    for (const layer of layers) colour = layer.colourAt(q, r, world, dx, dy, fine) ?? colour;
     if (hexDistance({ q: 0, r: 0 }, { q, r }) > options.radius) {
       colour = [
         Math.round(colour[0] * OUTSIDE_WORLD_TINT),
@@ -122,7 +127,10 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
       const fq = (2 / 3) * x;
       const fr = (-x / 3 + (SQRT3 / 3) * y);
       const { q, r } = hexAt(fq, fr);
-      let colour = colourOf(q, r);
+      // The pixel's offset from its hex centre, in circumradius units (flat-top: x = 1.5 q, y = sqrt3 (r + q / 2)).
+      const dx = x - 1.5 * q;
+      const dy = y - SQRT3 * (r + q / 2);
+      let colour = colourOf(q, r, dx, dy);
       const fs = -fq - fr;
       const dist = Math.max(Math.abs(fq), Math.abs(fr), Math.abs(fs));
       if (Math.abs(dist - (options.radius + 0.5)) < band) colour = RADIUS_OUTLINE;
@@ -149,6 +157,7 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
   const statsLines: string[] = [
     `SEED ${options.seed}  RADIUS ${options.radius}  WINDOW ${win.q},${win.r} SIZE ${win.size}  ${s.toFixed(2)} PX/HEX  LAYERS ${options.layers.join('+')}`,
   ];
+  statsLines.push(...layerLines);
   if (options.stats) {
     const scanStart = performance.now();
     const green = findLandmasses(world);

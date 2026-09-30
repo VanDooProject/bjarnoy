@@ -131,6 +131,62 @@ public sealed record WorldGenerationOptions
     public double RiverMeanderWeight { get; init; } = 0.35;
 
     /// <summary>
+    /// Land tiles an island needs per river spring: an island gets
+    /// <c>round(land / RiverTilesPerSpring)</c> springs, at least 1 and at most
+    /// <see cref="MaxSpringsPerIsland"/>. See <c>docs/design/river-generation.md</c>.
+    /// </summary>
+    public int RiverTilesPerSpring { get; init; } = 500;
+
+    /// <summary>Most springs (and so rivers) one island gets.</summary>
+    public int MaxSpringsPerIsland { get; init; } = 24;
+
+    /// <summary>Springs are picked farthest-first; picking stops once the best is closer than this (hexes) to a chosen one.</summary>
+    public int MinSpringSpacing { get; init; } = 8;
+
+    /// <summary>
+    /// Land tiles an island needs per river outlet (a mouth the whole drainage network of that
+    /// part of the island runs to): <c>round(land / OutletTilesPer)</c>, at least 1, at most
+    /// <see cref="MaxOutlets"/>.
+    /// </summary>
+    public int OutletTilesPer { get; init; } = 2000;
+
+    /// <summary>Most outlets one island gets.</summary>
+    public int MaxOutlets { get; init; } = 12;
+
+    /// <summary>Outlets are picked farthest-first among bays; picking stops once the best is closer than this (hexes) to a chosen one.</summary>
+    public int MinOutletSpacing { get; init; } = 25;
+
+    /// <summary>Weight of the per-tile noise in a drainage step's cost (<c>1 + DrainageNoise * noise</c>): larger meanders the network more.</summary>
+    public double DrainageNoise { get; init; } = 1.5;
+
+    /// <summary>Weight of the smooth valley noise (wavelength <see cref="ValleyScale"/>) in a drainage step's cost: coherent valleys make rivers bend and wander.</summary>
+    public double ValleyNoise { get; init; } = 6.0;
+
+    /// <summary>Wavelength in hexes of the valley noise.</summary>
+    public double ValleyScale { get; init; } = 4.0;
+
+    /// <summary>Extra drainage cost of a mountain tile: rivers go round ranges rather than across them.</summary>
+    public double MountainCost { get; init; } = 2.0;
+
+    /// <summary>Drainage cost of a 60 degree turn (a Bend tile).</summary>
+    public double BendCost { get; init; } = 0.03;
+
+    /// <summary>Drainage cost of a 120 degree turn (a Bend60 tile).</summary>
+    public double SharpBendCost { get; init; } = 1.0;
+
+    /// <summary>
+    /// How much longer (in drainage cost) a tributary's way via a drawable junction with an earlier river may be than
+    /// running to an outlet on its own and still be taken: larger merges more eagerly.
+    /// </summary>
+    public double MergeSlack { get; init; } = 6.0;
+
+    /// <summary>Drainage cost within which a tributary looks for a trunk to join (about 1.4 per hex).</summary>
+    public double MergeReach { get; init; } = 20.0;
+
+    /// <summary>Drainage cost a junction search takes off a wide-Y junction into a river-width trunk (a stream joining there needs no widening first).</summary>
+    public double RiverStreamBonus { get; init; } = 3.0;
+
+    /// <summary>
     /// Subtracted from a candidate step's score when it would turn 120° off
     /// straight-ahead (a <see cref="RiverTileShape.Bend60"/> tile) rather than
     /// continue straight or take the gentler 60°-off <see cref="RiverTileShape.Bend"/>
@@ -181,6 +237,21 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(MinimumIslandTiles);
         ArgumentOutOfRangeException.ThrowIfLessThan(MinRiverLength, 2);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverMeanderWeight);
+        ArgumentOutOfRangeException.ThrowIfLessThan(RiverTilesPerSpring, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MaxSpringsPerIsland, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(MinSpringSpacing);
+        ArgumentOutOfRangeException.ThrowIfLessThan(OutletTilesPer, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MaxOutlets, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(MinOutletSpacing);
+        ArgumentOutOfRangeException.ThrowIfNegative(DrainageNoise);
+        ArgumentOutOfRangeException.ThrowIfNegative(ValleyNoise);
+        ArgumentOutOfRangeException.ThrowIfLessThan(ValleyScale, 1.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(MountainCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(BendCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(SharpBendCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(MergeSlack);
+        ArgumentOutOfRangeException.ThrowIfNegative(MergeReach);
+        ArgumentOutOfRangeException.ThrowIfNegative(RiverStreamBonus);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);

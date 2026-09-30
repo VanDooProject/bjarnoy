@@ -37,7 +37,7 @@ surrounding tiles in frame, so occlusion against neighbouring forest/
 building art is checkable), `settlement_giant_orientations` (one screenshot
 per camera rotation the giant can render in:
 `settlement_giant_orientations_<CAM>.png` for each of `E`/`NE`/`NW`/`W`/
-`SW`/`SE`), and `settlement_fog_debug` (opens `?debug=1`'s `FogDebugPanel`).
+`SW`/`SE`), and `settlement_river_<kind>` (`settlement_river` for all: lifts the fog, finds the nearest stream, widening straight, stream confluence, delta mouth and plain river tile on the home island, pans there, zooms in and shoots each; kinds the island lacks are skipped), and `settlement_fog_debug` (opens `?debug=1`'s `FogDebugPanel`).
 Pass stop names as extra args to take only some of them, e.g.:
 
 ```
