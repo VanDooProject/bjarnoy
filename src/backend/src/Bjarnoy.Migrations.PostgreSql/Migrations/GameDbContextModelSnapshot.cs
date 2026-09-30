@@ -563,6 +563,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Camps")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("CentreQ")
                         .HasColumnType("integer");
 

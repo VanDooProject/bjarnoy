@@ -224,7 +224,8 @@ public sealed record PreviewIslandResponse(
     IReadOnlyList<TileCoordinate> StartPositions,
     IReadOnlyList<RiverTileResponse> RiverTiles,
     IReadOnlyList<GiantResponse> Giants,
-    bool Wasted)
+    bool Wasted,
+    IReadOnlyList<CampResponse> Camps)
 {
     public static PreviewIslandResponse From(GeneratedIsland island)
     {
@@ -239,7 +240,8 @@ public sealed record PreviewIslandResponse(
             [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
             [.. island.RiverTiles.Select(RiverTileResponse.FromDomain)],
             [.. island.Giants.Select(GiantResponse.FromDomain)],
-            island.IsWasted);
+            island.IsWasted,
+            [.. island.Camps.Select(CampResponse.FromDomain)]);
     }
 }
 

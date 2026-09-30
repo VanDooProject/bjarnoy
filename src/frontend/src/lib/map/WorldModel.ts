@@ -9,6 +9,7 @@ import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
 import { cropAllowedHere, isWaterOnlyBuilding, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
+import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
 import { validateTradeRatio } from '../trade/tradeRatio';
@@ -333,6 +334,13 @@ export class WorldModel {
    * server's authoritative giants directly.
    */
   private giantPlacedIslands = new Set<string>();
+  /**
+   * Wildlife camps by hex (see `setCamps`, `campAt`), populated by
+   * `placeGiantsForIsland` (demo mode) and `setCamps` (live mode). Kept beside
+   * the materialised `Tile.camp` for the same reason `giantAnchorByHex` is:
+   * `findLandfall` and the build rule read it without materialising tiles.
+   */
+  private campByHex = new Map<string, NonNullable<Tile['camp']> & { q: number; r: number }>();
 
   constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
@@ -422,6 +430,24 @@ export class WorldModel {
       if (seen.has(key)) continue;
       seen.add(key);
       if (hexDistance(coord, anchor) < StartPositionExclusionRadius + 1) return true;
+    }
+    return false;
+  }
+
+  /** The wildlife camp standing on `coord`, or `undefined`. */
+  campAt(coord: AxialCoord) {
+    return this.campByHex.get(coordKey(coord));
+  }
+
+  /**
+   * Whether `coord` is within `GuardRange + StartPositionMargin` of a strong
+   * camp — the same exclusion `WorldGenerator.FindStartPositions` (backend)
+   * enforces, so `findLandfall` steers a demo-mode landfall clear of one. Weak
+   * camps do not matter.
+   */
+  private isNearAnyStrongCamp(coord: AxialCoord): boolean {
+    for (const camp of this.campByHex.values()) {
+      if (camp.strong && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
     }
     return false;
   }
@@ -852,6 +878,8 @@ export class WorldModel {
         // `giantAnchorByHex` already reflects the island's giants by the
         // time this scan happens.
         if (this.isNearAnyGiantAnchor(c)) continue;
+        // Wildlife camps: never land within a strong camp's guard range + margin.
+        if (this.isNearAnyStrongCamp(c)) continue;
         firstLand ??= c;
         if (this.isGoodStartCandidate(c)) return c;
       }
@@ -1394,6 +1422,9 @@ export class WorldModel {
     // since a giant whose whole 7-hex footprint *is* fully enclosed reads as
     // claimed but must still refuse building on it.
     if (tile.giant) return false;
+    // A wildlife camp hex is not buildable for now (camp gameplay - clearing
+    // it - comes later).
+    if (tile.camp) return false;
     // Every other building needs dry land; the fishing hut, dockyard and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
@@ -1594,6 +1625,51 @@ export class WorldModel {
         orientation: this.getTile(p.anchor.q, p.anchor.r).orientation ?? 'SE',
       })),
     );
+
+    // Wildlife camps, after giants and before any start position — the backend's
+    // own order (`WorldGenerator.Generate`). Same island index and the same
+    // river/giant inputs, so a demo island gets the camps a live one would.
+    const campPlacements = placeCamps(
+      islandTiles,
+      (c) => this.terrainOf(c.q, c.r),
+      riverTiles,
+      placements.map((p) => p.anchor),
+      worldSeed,
+      islandIndex,
+      wasted,
+    );
+    this.setCamps(
+      campPlacements.map((p) => ({
+        family: p.family,
+        coord: p.coord,
+        level: p.level,
+        orientation: p.orientation ?? this.getTile(p.coord.q, p.coord.r).orientation ?? 'SE',
+      })),
+    );
+  }
+
+  /**
+   * Tags each camp's hex with `Tile.camp`. Live mode feeds it the server's
+   * authoritative camps (`IslandResponse.camps`); demo mode feeds it
+   * `placeCamps` output. Idempotent and additive, like `setGiants`: a hex that
+   * already has a camp is left untouched. Strength and guard range are derived
+   * from the shared family table, so they cannot disagree with the server.
+   */
+  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]) {
+    for (const camp of camps) {
+      const tile = this.getTile(camp.coord.q, camp.coord.r);
+      if (tile.camp) continue;
+      const strong = isStrongCampFamily(camp.family);
+      const strength: CampStrength = strong ? 'strong' : 'weak';
+      tile.camp = {
+        family: camp.family,
+        level: camp.level,
+        orientation: camp.orientation,
+        strong,
+        guardRange: guardRange(camp.level, strength),
+      };
+      this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
+    }
   }
 
   /**

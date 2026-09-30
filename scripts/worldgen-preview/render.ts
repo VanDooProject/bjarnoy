@@ -5,12 +5,16 @@
 import { hexDistance } from '../../src/frontend/src/lib/hex/coords';
 import { DEFAULT_GENERATION, type WorldGenerationConstants } from '../../src/frontend/src/lib/map/worldGenerator';
 import { drawText, GLYPH_HEIGHT, textWidth } from './font';
+import { drawMarker } from './marks';
 import {
   legendFor,
   OUTSIDE_WORLD_TINT,
   RADIUS_OUTLINE,
   resolveLayers,
   TERRAIN_COLOURS,
+  type MarkerShape,
+  type OverlayCanvas,
+  type PreviewContext,
   type Rgb,
 } from './layers';
 import { findLandmasses, sizeDistribution } from './landmasses';
@@ -128,6 +132,17 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
       map[o + 2] = colour[2];
     }
   }
+  // Layers that draw things bigger than a hex (camp markers and rings) paint over the finished map.
+  const context: PreviewContext = { world, radius: options.radius, window: win, windowed: options.window !== undefined };
+  const canvas: OverlayCanvas = {
+    scale: s,
+    toPixel: (q, r) => ({
+      x: (1.5 * q - cx) * s + mapW / 2 - 0.5,
+      y: (SQRT3 * (r + q / 2) - cy) * s + mapH / 2 - 0.5,
+    }),
+    marker: (x, y, shape, radius, colour) => drawMarker(map, mapW, mapH, x, y, shape, radius, colour),
+  };
+  for (const layer of layers) layer.overlay?.(canvas, context);
   const sampleMs = performance.now() - sampleStart;
 
   // ---- stats ----------------------------------------------------------------------
@@ -156,6 +171,8 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
     statsLines.push(`MS  TERRAIN SAMPLING ${sampleMs.toFixed(0)}  (STATS SKIPPED)`);
   }
 
+  for (const layer of layers) statsLines.push(...(layer.stats?.(context) ?? []));
+
   // ---- compose: map, legend strip, stats footer -------------------------------------
   const width = Math.max(mapW, MIN_IMAGE_WIDTH);
   const lineHeight = GLYPH_HEIGHT * TEXT_SCALE + 6;
@@ -163,7 +180,7 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
 
   const legendEntries = options.legend ? legendFor(options.layers) : [];
   // Lay the legend out first to know how tall the strip is.
-  const legendPlacements: { x: number; y: number; label: string; colour: Rgb }[] = [];
+  const legendPlacements: { x: number; y: number; label: string; colour: Rgb; shape?: MarkerShape }[] = [];
   let lx = 10;
   let ly = 8;
   for (const entry of legendEntries) {
@@ -172,7 +189,7 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
       lx = 10;
       ly += swatch + 6;
     }
-    legendPlacements.push({ x: lx, y: ly, label: entry.label, colour: entry.colour });
+    legendPlacements.push({ x: lx, y: ly, label: entry.label, colour: entry.colour, shape: entry.shape });
     lx += entryWidth;
   }
   const legendHeight = options.legend ? ly + swatch + 8 : 0;
@@ -185,7 +202,11 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
   for (let y = 0; y < mapH; y++) rgb.set(map.subarray(y * mapW * 3, (y + 1) * mapW * 3), (y * width + mapX) * 3);
 
   for (const p of legendPlacements) {
-    fillRect(rgb, width, p.x, mapH + p.y, swatch, swatch, p.colour);
+    if (p.shape) {
+      drawMarker(rgb, width, height, p.x + swatch / 2 - 0.5, mapH + p.y + swatch / 2 - 0.5, p.shape, swatch / 2 - (p.shape === 'ring' ? 1 : 0), p.colour);
+    } else {
+      fillRect(rgb, width, p.x, mapH + p.y, swatch, swatch, p.colour);
+    }
     drawText(rgb, width, height, p.x + swatch + 6, mapH + p.y + 1, p.label, TEXT_COLOUR, TEXT_SCALE);
   }
   statsLines.forEach((line, i) => {

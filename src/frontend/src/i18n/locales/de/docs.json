@@ -315,7 +315,7 @@
   "wildlifeCamps": {
     "title": "Wildtierlager",
     "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber in der Nähe eines bewachten Lagers wird kein Turm gebaut. Auf einer großen Insel räumst du die Lager, die im Weg sind, und baust dort, wo das Land frei ist.",
-    "status": "Demnächst: Die Grafik für alle neun Lager ist fertig; die Regeln unten beschreiben, wie sie sich spielen werden, sobald Lager im Spiel sind.",
+    "status": "Lager erscheinen jetzt auf der Karte, bewacht, auf dem Untergrund, zu dem sie gehören. Räumen, Beute und die Turmregel unten kommen noch; die Moorlager folgen mit den Moorlanden.",
     "rules": {
       "heading": "Wie ein Lager funktioniert",
       "towers": "Ein bewachtes Lager hält das Land um sich herum: In seiner Reichweite kann kein Turm gebaut werden (die Wölfe fressen die Bauleute). Außerhalb dieser Reichweite kann auf der Insel gebaut werden.",

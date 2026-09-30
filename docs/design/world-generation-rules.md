@@ -13,7 +13,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Fog: chunked explored store and mask delivery; default radius 4000 | Planned |
 | Rivers and streams | Planned |
 | Bog and lakes | Planned |
-| Wildlife camps | Planned |
+| Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps wait for bog) |
 
 ## World and islands
 
@@ -71,8 +71,8 @@ production scale are inland, where a third river was dropped at a confluence tha
 
 ## Wildlife camps
 
-*All planned.* Spawn and render only for now (no gameplay yet). Every island can get camps (all islands can
-be start islands). Camps are placed before start positions; start positions keep away from strong camps,
+*Implemented (except the bog camps, which need bog terrain): see [`wildlife-camps.md`](./wildlife-camps.md).* Spawn and render only for now (no gameplay yet). Every island of 60 or more land tiles gets camps (islets below that get none); a small island whose
+only start positions sit inside a strong camp's guard range is simply not a start island. Camps are placed before start positions; start positions keep away from strong camps,
 weak camps are fine nearby.
 
 - Strong (will block towers later): wolves, bears, boars, Fenrir.
@@ -85,4 +85,4 @@ weak camps are fine nearby.
 
 A repo dev tool renders world previews from the real TS generator, with a legend and layer toggles
 (rivers/streams, bog/lakes, wasted, camps). *Implemented: `scripts/worldgen-preview/` with the `terrain` and
-`wasted` layers and a stats footer (see its README); `rivers`, `bog` and `camps` arrive with their features.*
+`wasted` layers and a stats footer (see its README); `camps` is implemented; `rivers` and `bog` arrive with their features.*

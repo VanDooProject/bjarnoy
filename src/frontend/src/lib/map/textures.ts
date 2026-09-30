@@ -40,6 +40,7 @@ import {
   type AtlasPageProgress,
   type LoadedAtlas,
 } from './atlas';
+import type { CampFamily } from './campPlacement';
 import {
   classifyGiantClips,
   classifyGiantFrames,
@@ -102,7 +103,8 @@ export type TextureKey =
   | 'deadforest'
   | 'blacksand'
   | 'wastedmountain'
-  | 'taintedwater';
+  | 'taintedwater'
+  | CampFamily;
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
@@ -166,6 +168,17 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   deadforest: 'deadforest',
   blacksand: 'blacksand',
   wastedmountain: 'mountaintile_jagged',
+  // Wildlife camps (3D_assets hextile120-128): a top on the ground tile's own base, level000
+  // cleared / level001 guarded. Bearrapids also carries its own river base per level.
+  wolfden: 'wolfden',
+  boarwallow: 'boarwallow',
+  bearrapids: 'bearrapids',
+  fenrirbrood: 'fenrirbrood',
+  sealhaulout: 'sealhaulout',
+  eagleeyrie: 'eagleeyrie',
+  moosemire: 'moosemire',
+  beaverlodge: 'beaverlodge',
+  cranedance: 'cranedance',
   // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
   // own doc comment for why this key exists at all despite `WorldModel`
   // itself never producing a wasted open-sea tile today.
@@ -1348,13 +1361,59 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   return base![orientation];
 }
 
+/**
+ * A camp's art level: every camp is guarded for now (`level001`, animated); the cleared
+ * state (`level000`, static) arrives with camp gameplay.
+ */
+const CAMP_GUARDED_LEVEL = 1;
+
+/** The texture key and art-level index a tile's top layer resolves to: a camp's own family (guarded level), a building's level, or a terrain variant. */
+function topKeyAndIndex(tile: Tile, riverArt?: RiverArt): { key: TextureKey; index: number } {
+  if (tile.camp && !riverArt) return { key: tile.camp.family as CampFamily, index: CAMP_GUARDED_LEVEL };
+  const key = textureKeyFor(tile, riverArt);
+  if (tile.camp && riverArt?.key === tile.camp.family) return { key, index: CAMP_GUARDED_LEVEL };
+  return { key, index: tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0) };
+}
+
+/**
+ * Which art rotation a camp renders with, and (bearrapids only) its river art override.
+ *
+ * The guarded art ships only the one to three rotations that show its animals best (3D_assets
+ * `docs/wildlife-camps.md`, "Kept orientations"), which are read off the loaded frames rather
+ * than typed out: the tile's own orientation is mapped onto them by modulo, in
+ * `TILE_ORIENTATIONS` order. A bearrapids camp stands on its river, so it keeps its channel: a
+ * straight channel is the same picture 180 degrees round (orientation index mod 3), and the
+ * kept rotation with the river's own index mod 3 is used. Returns `undefined` when the tile has
+ * no camp, or a bearrapids camp is not on a straight river tile (drawn as plain river then).
+ */
+export function campArtFor(
+  textures: TileTextures,
+  tile: Tile,
+  river: RiverTile | undefined,
+): { orientation: TileOrientation; riverArt?: RiverArt } | undefined {
+  const camp = tile.camp;
+  if (!camp) return undefined;
+  const family = camp.family as CampFamily;
+  const kept = TILE_ORIENTATIONS.filter((o) => textures.top[family]?.[o]?.[CAMP_GUARDED_LEVEL] !== undefined);
+
+  if (family === 'bearrapids') {
+    if (!river || river.shape !== 'straight' || river.wasted) return undefined;
+    const channel = riverArtFor(river, null).orientation;
+    const channelClass = TILE_ORIENTATIONS.indexOf(channel) % 3;
+    const orientation = kept.find((o) => TILE_ORIENTATIONS.indexOf(o) % 3 === channelClass) ?? channel;
+    return { orientation, riverArt: { key: 'bearrapids', orientation } };
+  }
+
+  if (kept.length === 0) return { orientation: camp.orientation };
+  return { orientation: kept[TILE_ORIENTATIONS.indexOf(camp.orientation) % kept.length]! };
+}
+
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
 export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture | undefined {
-  const key = textureKeyFor(tile, riverArt);
+  const { key, index } = topKeyAndIndex(tile, riverArt);
   const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
-  const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
   return pickIndexed(arr, index);
 }
 
@@ -1366,11 +1425,10 @@ export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: Riv
  * given tile is showing.
  */
 export function topAnimFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): TileAnimClip | undefined {
-  const key = textureKeyFor(tile, riverArt);
+  const { key, index } = topKeyAndIndex(tile, riverArt);
   const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
-  const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
   // Resolved through the same `pickIndexedEntry` walk as `topTextureFor`
   // (not a plain `clampIndex`) so the two always agree on which rung is
   // actually showing — including while only `buildings-level1` has loaded

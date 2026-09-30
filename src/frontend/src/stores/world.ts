@@ -543,6 +543,19 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
+      // Server-generated wildlife camps (see `IslandResponse.camps`): the server is
+      // authoritative on where they stand, their family, level and rotation; this
+      // only tags the tiles for rendering (`WorldModel.setCamps`).
+      this.model.setCamps(
+        this.islands.flatMap((island) =>
+          (island.camps ?? []).map((camp) => ({
+            family: camp.family,
+            coord: { q: camp.q, r: camp.r },
+            level: camp.level,
+            orientation: camp.orientation as TileOrientation,
+          })),
+        ),
+      );
       this.liveReady = true;
       // Fog-gated (ExploredAreaService): for a caller with an existing realm
       // (a returning/claimed player), this pulls in their own settlements and

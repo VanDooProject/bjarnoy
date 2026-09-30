@@ -145,6 +145,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             island.Property(i => i.Giants)
                 .HasConversion(new GiantListConverter())
                 .Metadata.SetValueComparer(GiantListConverter.Comparer);
+
+            island.Property(i => i.Camps)
+                .HasConversion(new CampListConverter())
+                .Metadata.SetValueComparer(CampListConverter.Comparer);
         });
 
         modelBuilder.Entity<SettlementEntity>(settlement =>

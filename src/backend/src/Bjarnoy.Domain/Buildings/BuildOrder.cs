@@ -126,6 +126,12 @@ public enum BuildRejection
     /// The first storage house and upgrades are never refused for this reason.
     /// </summary>
     StorageHouseTooLow,
+
+    /// <summary>
+    /// A wildlife camp stands on the hex — never buildable while the camp is there. Every camp
+    /// counts as guarded for now (no clearing yet), see <c>docs/design/wildlife-camps.md</c>.
+    /// </summary>
+    HexOccupiedByCamp,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

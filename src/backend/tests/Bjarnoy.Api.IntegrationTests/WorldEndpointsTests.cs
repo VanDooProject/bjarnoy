@@ -162,6 +162,31 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     }
 
     [Fact]
+    public async Task Camps_survive_the_round_trip_through_the_text_encoded_column()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(seed: 9, radius: 300);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(islands);
+        var camps = islands.SelectMany(i => i.Camps).ToList();
+        Assert.NotEmpty(camps);
+        Assert.All(camps, c => Assert.Contains(c.Orientation, new[] { "E", "NE", "NW", "W", "SW", "SE" }));
+        Assert.All(camps, c => Assert.InRange(c.Level, 1, 5));
+
+        // What the API serves is exactly what the generator placed: family, hex, level, rotation,
+        // and the strength / guard range derived from the shared family table.
+        var expected = world.Islands.Where(i => !i.IsWasted)
+            .SelectMany(i => i.Camps.Select(c => (i.Index, Response: CampResponse.From(c))))
+            .ToList();
+        var actual = islands.SelectMany(i => i.Camps.Select(c => (i.Index, Response: c))).ToList();
+        Assert.Equal(expected, actual);
+        Assert.All(camps, c => Assert.Equal(c.Strong, c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood"));
+    }
+
+    [Fact]
     public async Task Wasted_islands_are_hidden_until_the_endboss_triggers()
     {
         using var client = _fixture.CreateClient();

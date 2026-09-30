@@ -38,6 +38,8 @@
     "clickToOpen": "CLICK TO OPEN",
     "clickToBuildHere": "Click to build here",
     "claimedGround": "Claimed ground",
+    "campStrong": "Strong camp",
+    "campWeak": "Weak camp",
     "unclaimed": "Unclaimed",
     "ownedByOther": "{owner}'s {name}",
     "river": "River",

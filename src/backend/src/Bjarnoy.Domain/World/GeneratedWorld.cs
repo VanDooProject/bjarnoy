@@ -53,6 +53,12 @@ public sealed record GeneratedIsland
     public required IReadOnlyList<Giant> Giants { get; init; }
 
     /// <summary>
+    /// This island's wildlife camps. Empty for an island with no tile a camp can stand on.
+    /// See <see cref="CampGenerator"/> and <c>docs/design/wildlife-camps.md</c>.
+    /// </summary>
+    public IReadOnlyList<Camp> Camps { get; init; } = [];
+
+    /// <summary>
     /// True for an island generated from the wasted-island terrain layer
     /// (see <see cref="TerrainSampler.WastedTerrainAt"/>): hidden as sea
     /// until the world's endboss triggers, no start positions, its rivers
