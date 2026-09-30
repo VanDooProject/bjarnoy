@@ -25,6 +25,12 @@ const PAGES: DocPage[] = [
     titleKey: 'docs.hub.pages.wastedLands.title',
     descriptionKey: 'docs.hub.pages.wastedLands.description',
   },
+  {
+    to: '/docs/wildlife-camps',
+    titleKey: 'docs.hub.pages.wildlifeCamps.title',
+    descriptionKey: 'docs.hub.pages.wildlifeCamps.description',
+  },
+  { to: '/docs/bog-lands', titleKey: 'docs.hub.pages.bogLands.title', descriptionKey: 'docs.hub.pages.bogLands.description' },
   { to: '/showcase', titleKey: 'docs.hub.pages.showcase.title', descriptionKey: 'docs.hub.pages.showcase.description' },
 ];
 </script>

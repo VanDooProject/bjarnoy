@@ -17,6 +17,14 @@
         "title": "Ödlande",
         "description": "Das Endspiel: Utgard, die Inseln, die aus dem Meer steigen, und woraus sie bestehen."
       },
+      "wildlifeCamps": {
+        "title": "Wildtierlager",
+        "description": "Die Tiere, die unbesiedelte Inseln bewachen: jedes Lager, bewacht und geräumt, und was das Räumen bewirkt."
+      },
+      "bogLands": {
+        "title": "Moorland",
+        "description": "Moosboden, Bäche und Moorseen, wo Raseneisenerz gegraben und Lehm gestochen wird."
+      },
       "showcase": {
         "title": "Showcase",
         "description": "Ein spielerfokussiertes Pitch für das Spiel, plus ein Blick unter die Haube für alle, die wissen wollen, wie es gebaut ist."
@@ -302,6 +310,166 @@
       "bend": "Biegung",
       "bend60": "Enge Biegung",
       "spring": "Quelle"
+    }
+  },
+  "wildlifeCamps": {
+    "title": "Wildtierlager",
+    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber die Insel bleibt wild, bis jedes Lager darauf geräumt ist.",
+    "status": "Demnächst: Die Grafik für alle neun Lager ist fertig; die Regeln unten beschreiben, wie sie sich spielen werden, sobald Lager im Spiel sind.",
+    "rules": {
+      "heading": "Wie ein Lager funktioniert",
+      "towers": "Solange ein Lager auf einer Insel bewacht ist, wird dort kein Turm gebaut (die Wölfe fressen die Bauleute), und dein Reich kann nicht auf die Insel wachsen, bis sie geräumt ist.",
+      "states": "Ein Lager hat zwei Zustände: bewacht, mit seinen Tieren, und geräumt. Ein halb geräumtes oder neu besetztes Lager gilt weiter als bewacht.",
+      "building": "Ein geräumtes Lager bringt Beute. Danach kannst du auf seinem Feld bauen, und das Gebäude ersetzt das Lager, solange es steht.",
+      "respawn": "Die Tiere kehren erst zurück, wenn auf dem Feld kein Gebäude steht und es außerhalb jedes Reichs liegt. Ein geräumtes Lager innerhalb eines Reichs bleibt geräumt.",
+      "neverBuilt": "Der Adlerhorst auf seiner Brandungssäule und Fenrirs Brut in den Ödlanden werden nie bebaut: Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück."
+    },
+    "camps": {
+      "heading": "Die Lager",
+      "body": "Ein Lager für jede Bodenart der Karte. Schalte ein Lager zwischen bewacht und geräumt um und dreh es in die sechs Richtungen, in die eine Kachel schauen kann.",
+      "rotations": "Ein bewachtes Lager hat nur Grafik für die Richtungen, aus denen seine Tiere am besten zu sehen sind; die anderen sind ausgegraut, und auf der Karte wird das Lager in eine dieser Richtungen gedreht. Ein geräumtes Lager kann in jede Richtung schauen."
+    },
+    "state": {
+      "label": "Zustand",
+      "guarded": "Bewacht",
+      "cleared": "Geräumt"
+    },
+    "camera": "Richtung",
+    "notKept": "Bewachte Grafik gibt es nur für die Richtungen, aus denen die Tiere am besten zu sehen sind",
+    "grounds": {
+      "grass": "Gras",
+      "river": "Fluss",
+      "sand": "Sand",
+      "forest": "Wald",
+      "mountain": "Berg",
+      "wasteland": "Ödland",
+      "bog": "Moor"
+    },
+    "list": {
+      "wolfden": {
+        "name": "Wolfsbau",
+        "guards": "Ein Wolf heult auf der Felskuppe, zwei Wölfe streifen umher, dazu zwei Welpen."
+      },
+      "bearrapids": {
+        "name": "Bärenstromschnelle",
+        "guards": "Ein Bär fischt von einem Felsen im Fluss, ein Bär mit Jungem am Nordufer, ein weiteres Junges am anderen Ufer."
+      },
+      "sealhaulout": {
+        "name": "Robbenbank",
+        "guards": "Fünf Robben sonnen sich auf Felsplatten und Sand, zwei robben sich voran, dazu drei weiße Junge."
+      },
+      "boarwallow": {
+        "name": "Wildschweinsuhle",
+        "guards": "Zwei Keiler liegen im Schlamm, einer hält Wache, dazu drei gestreifte Frischlinge."
+      },
+      "eagleeyrie": {
+        "name": "Adlerhorst",
+        "guards": "Ein Adler und zwei Junge im Nest auf einer Brandungssäule, während der Partner darüber kreist."
+      },
+      "fenrirbrood": {
+        "name": "Fenrirs Brut",
+        "guards": "Schwarze Wölfe mit glühenden Augen auf Aschegrund: einer hält Wache, zwei streifen umher, dazu zwei Welpen."
+      },
+      "moosemire": {
+        "name": "Elchmoor",
+        "guards": "Ein Elchbulle watet, eine Elchkuh äst, dazu zwei Kälber."
+      },
+      "beaverlodge": {
+        "name": "Biberburg",
+        "guards": "Zwei Biber schwimmen bei der Burg, zwei weitere sitzen am Ufer."
+      },
+      "cranedance": {
+        "name": "Kranichtanz",
+        "guards": "Ein tanzendes Kranichpaar, drei stehende, einer im Gehen und ein Jungvogel."
+      }
+    }
+  },
+  "bogLands": {
+    "title": "Moorland",
+    "intro": "Nasser Moosboden (altnordisch mýrr), durchzogen von trägen Bächen und dunklen Seen. Rostfarbene Quellen zeigen das Raseneisenerz, das hier gegraben wird, und an den Seeufern wird Lehm gestochen. Moore gehören zu den lebendigen Landen und grenzen an einer Feldkante an Gras.",
+    "status": "Demnächst: Die Grafik für das Moor-Set ist fertig; Welten erzeugen noch keine Moore.",
+    "looks": "Aussehen",
+    "camera": "Richtung",
+    "stage": "Stufe",
+    "ground": {
+      "heading": "Moorboden",
+      "body": "Schlichtes Moos, dazu geschmückte Varianten, die sich über eine Moorgegend mischen wie im Ödland. Die Erzquelle und die Quellkette zeigen, wo Raseneisenerz an die Oberfläche tritt.",
+      "looks": {
+        "plain": "Schlichtes Moos",
+        "mire1": "Offenes Moor 1",
+        "mire2": "Offenes Moor 2",
+        "mire3": "Offenes Moor 3",
+        "oreSeep": "Erzquelle",
+        "fen": "Niedermoor",
+        "peat": "Torfstich",
+        "copse": "Birkenhain",
+        "seepChain": "Quellkette"
+      }
+    },
+    "water": {
+      "heading": "Bäche und Moorseen",
+      "body": "Bäche haben das Profil eines Flusses und gehen nahtlos in Flüsse über; Seen sind offenes Wasser mit Uferkacheln ringsum. Alle sind Wasserkacheln.",
+      "shape": "Kachel",
+      "shapes": {
+        "creek": {
+          "name": "Bach",
+          "body": "Ein gerader Bach. Seine Varianten bringen Seggenufer oder ein Schilfbett."
+        },
+        "creekBend": {
+          "name": "Bachbiegung",
+          "body": "Ein Bach, der um 120° abbiegt. Bäche biegen nie schärfer ab und verzweigen sich nie."
+        },
+        "spring": {
+          "name": "Quelle",
+          "body": "Wo ein Bach entspringt: ein runder, aufwallender Tümpel mit einem Ring heller Steine."
+        },
+        "lake": {
+          "name": "See",
+          "body": "Offenes Wasser. Seine Varianten bringen eine kleine Insel, eine schwimmende Moosdecke, eine Schilfinsel oder eine Fischreuse."
+        },
+        "inlet": {
+          "name": "Bucht",
+          "body": "Ein Ufer mit einer Wasserkante; eine Variante hat eine Lehmbank."
+        },
+        "shore": {
+          "name": "Ufer",
+          "body": "Ein Ufer mit zwei Wasserkanten; eine Variante hat eine Lehmbank."
+        },
+        "half": {
+          "name": "Halbes Ufer",
+          "body": "Ein Ufer mit drei Wasserkanten, auf dem die Seefischerhütte steht."
+        },
+        "mouth": {
+          "name": "Bachmündung",
+          "body": "Wo ein Bach in einen See mündet, gegenüber der Wasserkante der Bucht."
+        }
+      }
+    },
+    "buildings": {
+      "heading": "Gebäude im Moor",
+      "body": "Drei Gebäude stehen auf Moorboden. Blättere durch die Stufen, die jedes beim Ausbau durchläuft.",
+      "bogoreworks": {
+        "name": "Raseneisenerz-Grube",
+        "body": "Der Eisenproduzent: von ein paar Gruben in den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute."
+      },
+      "fisherhut": {
+        "name": "Fischerhütte (See)",
+        "body": "Die Fischerhütte auf Pfählen über einem Moorseeufer. Dasselbe Gebäude wie an der Küste, mit eigener Grafik."
+      },
+      "claybrickworks": {
+        "name": "Lehmziegelei",
+        "body": "Lehm aus dem Moor, zu Ziegeln gebrannt: die erste Steinquelle eines neuen Spielers. Sie steht jetzt auf Moorboden statt auf Gras."
+      }
+    },
+    "rules": {
+      "heading": "Wie Moore angelegt sind",
+      "body": "Die Moorkacheln passen nur auf bestimmte Weise zusammen, daher folgt die Karte ein paar Regeln:",
+      "waterEdges": "Eine Moorkachel grenzt an höchstens drei Wasserkacheln, und diese liegen nebeneinander.",
+      "lakesApart": "Getrennte Seen liegen mindestens zwei Kacheln auseinander.",
+      "creeks": "Bäche verlaufen gerade oder biegen um 120° ab und enden in einer Quelle oder einer Seemündung.",
+      "mouth": "Ein Bach trifft einen See nur an einer Mündung.",
+      "weir": "Die Fischreuse gibt es nur in der Nähe einer Seefischerhütte.",
+      "landing": "Jeder Landeplatz, der einem neuen Spieler angeboten wird, hat Moor in Reichweite, denn Lehmziegelei und Raseneisenerz-Grube brauchen es beide."
     }
   }
 }
