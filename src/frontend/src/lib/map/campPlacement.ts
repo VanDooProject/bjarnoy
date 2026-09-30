@@ -34,21 +34,21 @@ export interface CampFamilyInfo {
   family: CampFamily;
   ground: CampGround;
   strength: CampStrength;
-  /** `low`: mostly low levels (weak camps); `high`: mostly high levels (strong camps). */
-  levelSkew: 'low' | 'high';
+  /** Both skews favour low levels. `quadratic`: `u^2` (weak camps); `cubic`: `u^3` (strong camps). */
+  levelSkew: 'quadratic' | 'cubic';
 }
 
 /** The shared camp family table — mirrors `CampFamilies.All`. */
 export const CAMP_FAMILIES: readonly CampFamilyInfo[] = [
-  { family: 'wolfden', ground: 'grass', strength: 'strong', levelSkew: 'high' },
-  { family: 'boarwallow', ground: 'forest', strength: 'strong', levelSkew: 'high' },
-  { family: 'bearrapids', ground: 'riverStraight', strength: 'strong', levelSkew: 'high' },
-  { family: 'fenrirbrood', ground: 'wasteland', strength: 'strong', levelSkew: 'high' },
-  { family: 'sealhaulout', ground: 'sand', strength: 'weak', levelSkew: 'low' },
-  { family: 'eagleeyrie', ground: 'mountain', strength: 'weak', levelSkew: 'low' },
-  { family: 'moosemire', ground: 'bog', strength: 'weak', levelSkew: 'low' },
-  { family: 'beaverlodge', ground: 'bog', strength: 'weak', levelSkew: 'low' },
-  { family: 'cranedance', ground: 'bog', strength: 'weak', levelSkew: 'low' },
+  { family: 'wolfden', ground: 'grass', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'boarwallow', ground: 'forest', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'bearrapids', ground: 'riverStraight', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'fenrirbrood', ground: 'wasteland', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'sealhaulout', ground: 'sand', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'eagleeyrie', ground: 'mountain', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'moosemire', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'beaverlodge', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'cranedance', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
 ];
 
 export function campFamilyInfo(family: string): CampFamilyInfo | undefined {
@@ -59,14 +59,20 @@ export function isStrongCampFamily(family: string): boolean {
   return campFamilyInfo(family)?.strength === 'strong';
 }
 
-/** One camp per this many land tiles (rounded), tuning default — mirrors `CampGenerator.CampTilesPerCamp`. */
-export const CampTilesPerCamp = 700;
+/** One strong camp per this many land tiles (rounded) — mirrors `CampGenerator.StrongCampTilesPer`. */
+export const StrongCampTilesPer = 1500;
+
+/** One weak camp per this many land tiles (rounded) — mirrors `CampGenerator.WeakCampTilesPer`. */
+export const WeakCampTilesPer = 600;
+
+/** No island gets more strong camps than this — mirrors `CampGenerator.MaxStrongCampsPerIsland`. */
+export const MaxStrongCampsPerIsland = 16;
+
+/** No island gets more weak camps than this — mirrors `CampGenerator.MaxWeakCampsPerIsland`. */
+export const MaxWeakCampsPerIsland = 24;
 
 /** An island with fewer land tiles than this gets no camp at all — mirrors `CampGenerator.MinCampIslandTiles`. */
 export const MinCampIslandTiles = 60;
-
-/** No island gets more camps than this — mirrors `CampGenerator.MaxCampsPerIsland`. */
-export const MaxCampsPerIsland = 24;
 
 /** Two camps are never closer than this many hex steps — mirrors `CampGenerator.MinCampSpacing`. */
 export const MinCampSpacing = 6;
@@ -89,18 +95,40 @@ export function guardRange(level: number, strength: CampStrength): number {
 }
 
 /** Land tiles per seal colony — mirrors `CampGenerator.SandTilesPerSealCamp` (the sand rim would otherwise win most farthest-point picks). */
-export const SandTilesPerSealCamp = 4000;
+export const SandTilesPerSealCamp = 2000;
 
 /** At most this many seal colonies per island — mirrors `CampGenerator.MaxSealCampsFor`. */
 export function maxSealCampsFor(landTileCount: number): number {
   return Math.max(1, Math.floor((2 * landTileCount + SandTilesPerSealCamp) / (2 * SandTilesPerSealCamp)));
 }
 
-/** The number of camps an island of this many land tiles is offered — mirrors `CampGenerator.CampCountFor`. */
+/** Land tiles per eagle eyrie — mirrors `CampGenerator.MountainTilesPerEyrieCamp` (mountains would otherwise take a large share of the weak budget). */
+export const MountainTilesPerEyrieCamp = 2000;
+
+/** At most this many eagle eyries per island — mirrors `CampGenerator.MaxEyrieCampsFor`. */
+export function maxEyrieCampsFor(landTileCount: number): number {
+  return Math.max(1, Math.floor((2 * landTileCount + MountainTilesPerEyrieCamp) / (2 * MountainTilesPerEyrieCamp)));
+}
+
+function budgetFor(landTileCount: number, tilesPer: number, max: number): number {
+  if (landTileCount < MinCampIslandTiles) return 0;
+  return Math.min(Math.max(Math.floor((2 * landTileCount + tilesPer) / (2 * tilesPer)), 0), max);
+}
+
+/** The strong-camp budget of an island — mirrors `CampGenerator.StrongCountFor`. */
+export function strongCountFor(landTileCount: number): number {
+  return budgetFor(landTileCount, StrongCampTilesPer, MaxStrongCampsPerIsland);
+}
+
+/** The weak-camp budget of an island — mirrors `CampGenerator.WeakCountFor`. */
+export function weakCountFor(landTileCount: number): number {
+  return budgetFor(landTileCount, WeakCampTilesPer, MaxWeakCampsPerIsland);
+}
+
+/** The most camps an island is offered (both budgets, at least one from 60 tiles) — mirrors `CampGenerator.CampCountFor`. */
 export function campCountFor(landTileCount: number): number {
   if (landTileCount < MinCampIslandTiles) return 0;
-  const rounded = Math.floor((2 * landTileCount + CampTilesPerCamp) / (2 * CampTilesPerCamp));
-  return Math.min(Math.max(rounded, 1), MaxCampsPerIsland);
+  return Math.max(1, strongCountFor(landTileCount) + weakCountFor(landTileCount));
 }
 
 /**
@@ -154,11 +182,16 @@ function pickBest(
   represented: Set<CampGround>,
   restrictToUnrepresented: boolean,
   sandFull: boolean,
+  mountainFull: boolean,
+  strongOpen: boolean,
+  weakOpen: boolean,
 ): number {
   let best = -1;
   for (let i = 0; i < candidates.length; i++) {
     if (picked[i] || minDistance[i]! < MinCampSpacing) continue;
     if (restrictToUnrepresented && represented.has(candidates[i]!.info.ground)) continue;
+    if (candidates[i]!.info.strength === 'strong' ? !strongOpen : !weakOpen) continue;
+    if (mountainFull && candidates[i]!.info.ground === 'mountain') continue;
     if (sandFull && candidates[i]!.info.ground === 'sand') continue;
     if (best < 0) {
       best = i;
@@ -173,7 +206,8 @@ function pickBest(
 
 function rollLevel(candidate: Candidate, seed: number): number {
   const u = hash2(candidate.coord.q, candidate.coord.r, seed + 313);
-  const f = candidate.info.levelSkew === 'low' ? u * u : 1 - (1 - u) * (1 - u);
+  // Weak u^2, strong u^3: only * and floor, bit-identical to C#.
+  const f = candidate.info.levelSkew === 'quadratic' ? u * u : u * u * u;
   return 1 + Math.min(MaxCampLevel - 1, Math.floor(f * MaxCampLevel));
 }
 
@@ -233,7 +267,17 @@ export function placeCamps(
     candidates.push({ coord, info, orientation, hash: hash2(coord.q, coord.r, seed + 131) });
   }
 
+  // Two budgets, one shared farthest-point sampling. An island whose budgets both round to zero
+  // still gets one camp, of either kind.
+  let strongBudget = strongCountFor(islandTiles.length);
+  let weakBudget = weakCountFor(islandTiles.length);
   const count = campCountFor(islandTiles.length);
+  if (strongBudget + weakBudget === 0) {
+    strongBudget = 1;
+    weakBudget = 1;
+  }
+  let strongUsed = 0;
+  let weakUsed = 0;
   const chosen: Candidate[] = [];
   if (candidates.length === 0) return [];
 
@@ -241,21 +285,29 @@ export function placeCamps(
   const picked: boolean[] = new Array<boolean>(candidates.length).fill(false);
   const represented = new Set<CampGround>();
   const maxSeals = maxSealCampsFor(islandTiles.length);
+  const maxEyries = maxEyrieCampsFor(islandTiles.length);
   let seals = 0;
+  let eyries = 0;
 
   while (chosen.length < count) {
     // Grounds without a camp first; once none of them has an eligible tile left, any ground.
     // (The first pick: nothing is placed, so all distances tie and the hash decides.)
     const sandFull = seals >= maxSeals;
-    let index = pickBest(candidates, minDistance, picked, represented, true, sandFull);
-    if (index < 0) index = pickBest(candidates, minDistance, picked, represented, false, sandFull);
+    const mountainFull = eyries >= maxEyries;
+    const strongOpen = strongUsed < strongBudget;
+    const weakOpen = weakUsed < weakBudget;
+    let index = pickBest(candidates, minDistance, picked, represented, true, sandFull, mountainFull, strongOpen, weakOpen);
+    if (index < 0) index = pickBest(candidates, minDistance, picked, represented, false, sandFull, mountainFull, strongOpen, weakOpen);
     if (index < 0) break;
 
     const pick = candidates[index]!;
     picked[index] = true;
     chosen.push(pick);
     represented.add(pick.info.ground);
+    if (pick.info.strength === 'strong') strongUsed++;
+    else weakUsed++;
     if (pick.info.ground === 'sand') seals++;
+    if (pick.info.ground === 'mountain') eyries++;
     for (let i = 0; i < candidates.length; i++) {
       const distance = hexDistance(candidates[i]!.coord, pick.coord);
       if (distance < minDistance[i]!) minDistance[i] = distance;

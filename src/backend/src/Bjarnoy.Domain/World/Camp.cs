@@ -28,14 +28,14 @@ public enum CampGround
     Bog,
 }
 
-/// <summary>How a family's level roll is skewed inside <c>1..MaxCampLevel</c>.</summary>
+/// <summary>How a family's level roll is skewed inside <c>1..MaxCampLevel</c>; both skews favour low levels.</summary>
 public enum CampLevelSkew
 {
-    /// <summary>Mostly low levels (weak camps).</summary>
-    Low,
+    /// <summary>Quadraticer: <c>u^2</c>, about 63% on levels 1-2 (weak camps).</summary>
+    Quadratic,
 
-    /// <summary>Mostly high levels (strong camps).</summary>
-    High,
+    /// <summary>Cubicr: <c>u^1.5</c>, about 71% on levels 1-3 (strong camps).</summary>
+    Cubic,
 }
 
 /// <summary>One row of the shared camp family table.</summary>
@@ -60,15 +60,15 @@ public static class CampFamilies
 
     public static IReadOnlyList<CampFamilyInfo> All { get; } =
     [
-        new(Wolfden, CampGround.Grass, CampStrength.Strong, CampLevelSkew.High),
-        new(Boarwallow, CampGround.Forest, CampStrength.Strong, CampLevelSkew.High),
-        new(Bearrapids, CampGround.RiverStraight, CampStrength.Strong, CampLevelSkew.High),
-        new(Fenrirbrood, CampGround.Wasteland, CampStrength.Strong, CampLevelSkew.High),
-        new(Sealhaulout, CampGround.Sand, CampStrength.Weak, CampLevelSkew.Low),
-        new(Eagleeyrie, CampGround.Mountain, CampStrength.Weak, CampLevelSkew.Low),
-        new(Moosemire, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Low),
-        new(Beaverlodge, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Low),
-        new(Cranedance, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Low),
+        new(Wolfden, CampGround.Grass, CampStrength.Strong, CampLevelSkew.Cubic),
+        new(Boarwallow, CampGround.Forest, CampStrength.Strong, CampLevelSkew.Cubic),
+        new(Bearrapids, CampGround.RiverStraight, CampStrength.Strong, CampLevelSkew.Cubic),
+        new(Fenrirbrood, CampGround.Wasteland, CampStrength.Strong, CampLevelSkew.Cubic),
+        new(Sealhaulout, CampGround.Sand, CampStrength.Weak, CampLevelSkew.Quadratic),
+        new(Eagleeyrie, CampGround.Mountain, CampStrength.Weak, CampLevelSkew.Quadratic),
+        new(Moosemire, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
+        new(Beaverlodge, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
+        new(Cranedance, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
     ];
 
     public static CampFamilyInfo? Find(string family) => All.FirstOrDefault(f => f.Family == family);
