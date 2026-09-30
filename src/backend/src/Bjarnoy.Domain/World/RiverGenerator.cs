@@ -27,6 +27,20 @@ internal static class RiverGenerator
         public int BogPocketsFilled;
         public int BogPocketSinks;
 
+        /// <summary>Islands the bog guarantee had to act on (a landing-spot candidate, no plain bog within reach of one).</summary>
+        public int BogGuaranteeIslands;
+
+        /// <summary>Of those, islands that had no bog at all after the normal pass.</summary>
+        public int BogGuaranteeWithoutBog;
+
+        /// <summary>Guaranteed bogs on a through river (relaxed site), and spawn bogs (a creek spring feeds the lake).</summary>
+        public int BogGuaranteeThrough;
+
+        public int BogGuaranteeSpawns;
+
+        /// <summary>Islands the guarantee could not help (no room inland, or no valid site).</summary>
+        public int BogGuaranteeMissed;
+
         public void Add(RiverStats other)
         {
             BogSites += other.BogSites;
@@ -35,6 +49,11 @@ internal static class RiverGenerator
             BogPocketsFound += other.BogPocketsFound;
             BogPocketsFilled += other.BogPocketsFilled;
             BogPocketSinks += other.BogPocketSinks;
+            BogGuaranteeIslands += other.BogGuaranteeIslands;
+            BogGuaranteeWithoutBog += other.BogGuaranteeWithoutBog;
+            BogGuaranteeThrough += other.BogGuaranteeThrough;
+            BogGuaranteeSpawns += other.BogGuaranteeSpawns;
+            BogGuaranteeMissed += other.BogGuaranteeMissed;
             Springs += other.Springs;
             Outlets += other.Outlets;
             Rivers += other.Rivers;
@@ -169,18 +188,23 @@ internal static class RiverGenerator
         Func<HexCoord, bool> riverLand = pocketWater.Count == 0 ? isLand : c => isLand(c) || pocketWater.Contains(c);
 
         var candidates = SpringCandidates(islandTiles, land, islandLand);
-        if (candidates.Count == 0)
+
+        // An island without mountains has no river to run through a bog, but the bog guarantee may still spawn one.
+        var guaranteeOnly = candidates.Count == 0;
+        if (guaranteeOnly && !bogs.GuaranteeApplies)
         {
             return new Result([], bogs.Classify());
         }
 
         var drainage = new Drainage(islandTiles, land, riverLand, options, seed, bogs.PocketRing);
-        if (stats is not null)
+        if (stats is not null && !guaranteeOnly)
         {
             stats.Outlets += drainage.OutletCount;
         }
 
-        var springs = PickSprings(candidates, islandTiles.Count, depthAt, drainage, options, seed);
+        var springs = guaranteeOnly
+            ? []
+            : PickSprings(candidates, islandTiles.Count, depthAt, drainage, options, seed);
         var order = springs
             .Select(spring => (Spring: spring, Cost: drainage.BestOut(drainage.Index[spring], -1, null).Cost))
             .OrderByDescending(x => x.Cost)
@@ -236,21 +260,28 @@ internal static class RiverGenerator
 
         // Bog sites: through-river lakes (the river is re-routed through them), sinks and spawns.
         var bp = new BogPaths(paths, mergedFlags);
-        bogs.PlaceSites(
-            bp,
-            trial => AssignWidths(BuildRiverTiles(trial), riverLand, seed, null, trial.RequireRiver),
-            (exit, startIn, current, blocked) =>
+        Func<BogPaths, List<RiverTile>> widthTrial = trial =>
+            AssignWidths(BuildRiverTiles(trial), riverLand, seed, null, trial.RequireRiver);
+        Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver = (exit, startIn, current, blocked) =>
+        {
+            var d2 = new Drainage(islandTiles, land, riverLand, options, seed, blocked);
+            var claims2 = new Claim?[d2.Tiles.Length];
+            for (var k = 0; k < current.Paths.Count; k++)
             {
-                var d2 = new Drainage(islandTiles, land, riverLand, options, seed, blocked);
-                var claims2 = new Claim?[d2.Tiles.Length];
-                for (var k = 0; k < current.Paths.Count; k++)
-                {
-                    Commit(d2, current.Paths[k], current.Merged[k], claims2);
-                }
+                Commit(d2, current.Paths[k], current.Merged[k], claims2);
+            }
 
-                var onPath2 = new bool[d2.Tiles.Length];
-                return TraceDrainage(d2, exit, claims2, onPath2, options, out _, startIn);
-            });
+            var onPath2 = new bool[d2.Tiles.Length];
+            return TraceDrainage(d2, exit, claims2, onPath2, options, out _, startIn);
+        };
+        if (guaranteeOnly)
+        {
+            bogs.PlaceGuaranteeOnly(bp, widthTrial, traceRiver);
+        }
+        else
+        {
+            bogs.PlaceSites(bp, widthTrial, traceRiver);
+        }
 
         var nodes = BuildRiverTiles(bp);
         var rivers = AssignWidths(nodes, riverLand, seed, stats, bp.RequireRiver);

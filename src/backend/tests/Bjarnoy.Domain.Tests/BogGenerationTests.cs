@@ -111,25 +111,53 @@ public class BogGenerationTests
     }
 
     [Fact]
-    public void Bog_sinks_and_spawns_together_stay_under_twenty_percent_of_the_bogs()
+    public void Bog_sinks_and_spawns_together_stay_under_twenty_percent_of_the_bogs_the_normal_pass_places()
     {
         var sites = 0;
         var sinks = 0;
         var spawns = 0;
+        var guaranteeSpawns = 0;
         foreach (var (_, _, island) in GreenIslands().Where(i => i.Island.BogTiles.Count > 0))
         {
             var outflows = island.BogTiles.Count(t => t.Kind == BogTileKind.Mouth && t.InDirections[0] == t.WaterEdges[0]);
             var inflows = island.BogTiles.Count(t => t.Kind == BogTileKind.Mouth && t.InDirections[0] != t.WaterEdges[0]);
 
             // Every lake on land has one outflow (a bog site); each inflow beyond the one through river is a sink
-            // (a pocket lake has only sinks); a creek spring is a spawn.
+            // (a pocket lake has only sinks); a creek spring whose creek runs out to a river is a spawn. The bog guarantee's spawn
+            // bogs (a spring that feeds the lake) are counted apart: their share is the price of the coverage, see docs/design/bog.md.
+            var feeding = island.BogTiles.Count(t => t.Kind == BogTileKind.CreekSpring && IslandFeedsLake(island, t));
+            guaranteeSpawns += feeding;
             sites += outflows;
             sinks += inflows - outflows;
-            spawns += island.BogTiles.Count(t => t.Kind == BogTileKind.CreekSpring);
+            spawns += island.BogTiles.Count(t => t.Kind == BogTileKind.CreekSpring) - feeding;
         }
 
+        // A guarantee spawn bog has one lake with one outflow, like any site: take those out of the denominator.
+        sites -= guaranteeSpawns;
         Assert.True(sites >= 25);
         Assert.True(sinks + spawns < 0.2 * sites, $"{sinks} sinks + {spawns} spawns of {sites} bogs");
+    }
+
+    private static bool IslandFeedsLake(GeneratedIsland island, BogTile spring)
+    {
+        var byCoord = island.BogTiles.ToDictionary(t => t.Coord);
+        var cur = spring;
+        for (var steps = 0; steps < 200 && cur.OutDirection is { } o; steps++)
+        {
+            if (!byCoord.TryGetValue(cur.Coord + HexCoord.Directions[(int)o], out var next))
+            {
+                return false;
+            }
+
+            if (next.Kind == BogTileKind.Lake)
+            {
+                return true;
+            }
+
+            cur = next;
+        }
+
+        return false;
     }
 
     [Fact]

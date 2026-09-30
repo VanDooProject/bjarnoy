@@ -345,6 +345,18 @@ public static class BogRules
                     break;
                 }
 
+                if (IsLake(n) && component.TryGetValue(n, out var lakeId))
+                {
+                    // A spring that feeds a lake (a guaranteed spawn bog): the river through the lake, out of its outflow mouth,
+                    // takes the water on. R8 makes sure every lake has exactly one; the link checks above follow it to the river.
+                    reachedRiver = bog.Any(m => m.Kind == BogTileKind.Mouth
+                        && m.WaterEdges.Count == 1
+                        && m.InDirections.Count == 1
+                        && (int)m.InDirections[0] == (int)m.WaterEdges[0]
+                        && Enumerable.Range(0, 6).Any(d => component.TryGetValue(Nb(m.Coord, d), out var id) && id == lakeId));
+                    break;
+                }
+
                 if (!byCoord.TryGetValue(n, out cur) || cur.Kind == BogTileKind.Lake)
                 {
                     break;

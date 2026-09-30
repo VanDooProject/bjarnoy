@@ -247,6 +247,17 @@ public sealed record WorldGenerationOptions
     /// </summary>
     public int BogReach { get; init; } = 12;
 
+    /// <summary>
+    /// The bog guarantee: a green island of at least this many land tiles that has a landing-spot candidate (terrain only: grass with
+    /// a forest and two grass neighbours, no water within two) but no plain bog within <see cref="BogReach"/> of one is given a bog
+    /// after the normal placement: a through-river site with relaxed criteria, else a small spawn bog (a creek spring feeding the
+    /// lake, the outflow traced as a river to the sea). 0 switches the guarantee off. See <c>docs/design/bog.md</c>.
+    /// </summary>
+    public int BogGuaranteeMinTiles { get; init; } = 150;
+
+    /// <summary>Radius of the disc of a guaranteed bog (its lake, shores and creeks lie inside it); smaller than <see cref="BogSiteRadius"/>.</summary>
+    public int BogGuaranteeRadius { get; init; } = 5;
+
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
     /// <summary>
@@ -272,6 +283,7 @@ public sealed record WorldGenerationOptions
         IslandCoastNoise = 0.6,
         IslandCoastNoiseScale = 16.0,
         BogReach = 0,
+        BogGuaranteeMinTiles = 0,
     };
 
     /// <summary>
@@ -323,6 +335,9 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketRadius, 2);
         ArgumentOutOfRangeException.ThrowIfNegative(BogMaxSinkReroute);
         ArgumentOutOfRangeException.ThrowIfNegative(BogReach);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogGuaranteeMinTiles);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogGuaranteeRadius, 5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(BogGuaranteeRadius, 7);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxWidth, IslandMinWidth);
