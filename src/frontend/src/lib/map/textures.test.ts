@@ -97,13 +97,46 @@ describe('riverArtFor', () => {
   });
 
   it('resolves a representable Confluence tile through confluenceOrientationOf (y_narrow), not the untransformed fallback', () => {
-    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'SE' };
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['SE', 'SW'], outDirection: 'NW' };
     const result = riverArtFor(tile, null);
 
     expect(result.shape).toBe('confluencenarrow');
     expect(result.orientation).toBe('E');
     // The untransformed fallback this used to always return.
-    expect(result.orientation).not.toBe('SE');
+    expect(result.orientation).not.toBe('NW');
+  });
+
+  it('draws two streams joining as the smallwide Y (narrow or wide) with the same rotation as the river Y', () => {
+    const narrow: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['SE', 'SW'], outDirection: 'NW', width: 'widen' };
+    expect(riverArtFor(narrow, null)).toEqual({ shape: 'widen_yn', orientation: 'E' });
+    const wide: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'E', width: 'widen' };
+    expect(riverArtFor(wide, null).shape).toBe('widen_yw');
+  });
+
+  it('picks the stream families for stream tiles, with the river tile rotation', () => {
+    const straight = riverTile('straight', 'E', 'W');
+    expect(riverArtFor({ ...straight, width: 'stream' }, null)).toEqual({
+      shape: 'small_straight',
+      orientation: riverArtFor(straight, null).orientation,
+    });
+    const bend = riverTile('bend', 'NW', 'SW');
+    expect(riverArtFor({ ...bend, width: 'stream' }, null).shape).toBe('small_bend');
+    const bend60 = riverTile('bend60', 'NE', 'NW');
+    expect(riverArtFor({ ...bend60, width: 'stream' }, null).shape).toBe('small_bend60');
+  });
+
+  it('draws a widening straight from its stream (inflow) end and a widening mouth toward the sea', () => {
+    const widen = { ...riverTile('straight', 'E', 'W'), width: 'widen' as const };
+    expect(riverArtFor(widen, null)).toEqual({ shape: 'widen_straight', orientation: 'NW' });
+    const mouth: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['E'], outDirection: null, width: 'widen' };
+    expect(riverArtFor(mouth, 'W')).toEqual({ shape: 'widen_straight', orientation: 'NW' });
+  });
+
+  it('draws a river meeting the sea head-on as a delta, but a bent mouth and a lava mouth as before', () => {
+    const mouth: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['E'], outDirection: null };
+    expect(riverArtFor(mouth, 'W')).toEqual({ shape: 'delta', orientation: 'NW' });
+    expect(riverArtFor(mouth, 'NW').shape).toBe('bend');
+    expect(riverArtFor({ ...mouth, wasted: true }, 'W').shape).toBe('straight');
   });
 
   it('resolves a Confluence tile matching the wide junction (ywide), not the narrow one', () => {
@@ -113,6 +146,7 @@ describe('riverArtFor', () => {
     const result = riverArtFor(tile, null);
 
     expect(result.shape).toBe('confluencewide');
+    expect(result.orientation).toBe('NW');
   });
 
   it('falls back to the untransformed outDirection for a Confluence angle neither asset can represent', () => {

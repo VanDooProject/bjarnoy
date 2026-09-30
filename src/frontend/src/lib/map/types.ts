@@ -124,7 +124,7 @@ export function straightOrientationOf(direction: TileOrientation): TileOrientati
 export function mouthOrientationOf(
   inDirection: TileOrientation,
   seaDirection: TileOrientation | null,
-): { shape: 'straight' | 'bend'; orientation: TileOrientation } {
+): { shape: 'straight' | 'bend' | 'bend60'; orientation: TileOrientation } {
   if (seaDirection) {
     const inIndex = TILE_ORIENTATIONS.indexOf(inDirection);
     const seaIndex = TILE_ORIENTATIONS.indexOf(seaDirection);
@@ -133,117 +133,122 @@ export function mouthOrientationOf(
     if (turn === 2) {
       return { shape: 'bend', orientation: bendOrientationOf(inDirection, seaDirection) };
     }
+    if (turn === 1) {
+      return { shape: 'bend60', orientation: bend60OrientationOf(inDirection, seaDirection) };
+    }
   }
   return { shape: 'straight', orientation: straightOrientationOf(inDirection) };
 }
 
 /**
- * The `y_narrow` confluence asset's rotation convention, pixel-sampled the
- * same way `docs/design/river-generation.md`'s "Art pack orientation
- * convention" derived Bend/Spring/Straight — `is_blue` sampling along each
- * of a rendered file's six polygon edges (inset toward centre) against
- * every orientation, not eyeballed. File `D` touches edges `1+D`, `4+D`,
- * `5+D` (mod 6) — a fixed *opposite* pair (`1+D`/`4+D`, the trunk: a
- * straight line clear across the hex) plus a third edge (`5+D`) adjacent to
- * the second of that pair, where the art shows a branch joining the trunk
- * right before it exits. Converting through `edge(d) = (3-d) mod 6` (see
- * that doc section) gives the three directions file `D` actually renders:
- * `out = (5-D) mod 6` (the far end of the trunk, where the merged flow
- * exits), `trunkIn = (2-D) mod 6` (the trunk's near end — one tributary,
- * unbranched all the way across), `branchIn = (4-D) mod 6` (the branch —
- * the other tributary, joining in right at the exit).
+ * Which neighbour a `Mouth` tile drains into, given which of its six neighbours are sea
+ * (`isSea[d]`, `neighbors()` order) and the direction its river comes in from. Prefers the sea
+ * straight ahead (opposite the inflow, the only case the delta and the smallwide straight can
+ * draw), then a 60-degree turn either way, then the hairpin. Ties break in `TILE_ORIENTATIONS`
+ * order. Mirrors what the generator assumes when it widens a mouth: it only lets a stream reach
+ * a mouth whose opposite neighbour is sea.
+ */
+export function mouthSeaDirection(inDirection: TileOrientation, isSea: readonly boolean[]): TileOrientation | null {
+  const inIndex = TILE_ORIENTATIONS.indexOf(inDirection);
+  for (const turn of [3, 2, 1]) {
+    for (let d = 0; d < 6; d++) {
+      const diff = Math.abs(inIndex - d);
+      if (isSea[d] && Math.min(diff, 6 - diff) === turn) return TILE_ORIENTATIONS[d]!;
+    }
+  }
+  for (let d = 0; d < 6; d++) if (isSea[d]) return TILE_ORIENTATIONS[d]!;
+  return null;
+}
+
+/**
+ * The stream-to-river straight (`rivertile_smallwide_bend180_island`) and the delta
+ * (`rivertile_delta`) share the plain straight's rotation - file `D` touches polygon edges `D+1`
+ * and `D+4` - but are asymmetric, and pixel-measuring the water width along each edge gives the
+ * ends: the narrow (stream) edge of the smallwide straight is `D+1`, the wide (river) edge `D+4`;
+ * the delta takes the river in on `D+1` and opens to the sea on `D+4`. Through the self-inverse
+ * edge formula the `D+1` end is direction `(2-D) mod 6`, so the file for a tile whose upstream
+ * (stream / river) inflow comes from `inDirection` is `D = (2 - inDirection) mod 6` - the plain
+ * straight's formula, but here only the *inflow* end is right (the far end is the river / sea).
+ */
+export function widenStraightOrientationOf(inDirection: TileOrientation): TileOrientation {
+  return straightOrientationOf(inDirection);
+}
+
+/** See `widenStraightOrientationOf`: the delta's river edge is `D+1`, its sea edge `D+4`. */
+export function deltaOrientationOf(inDirection: TileOrientation): TileOrientation {
+  return straightOrientationOf(inDirection);
+}
+
+/** Which of the two Y assets a confluence renders with. */
+export type ConfluenceKind = 'narrow' | 'wide';
+
+/**
+ * Which Y asset can draw a confluence with inflows `inA`/`inB` and outflow `out` (direction
+ * indices), or `null` when none can. With `o` the outflow, the narrow Y has its inflows at `o+2`
+ * and `o+3`, the wide Y at `o+2` and `o+4`; there is no mirror image of the narrow Y. The single
+ * definition the tracer's merge rule uses - mirrors `RiverConfluence.Classify` (backend); both are
+ * checked against `src/shared/confluence-representability.json`.
+ */
+export function confluenceKind(inA: number, inB: number, out: number): ConfluenceKind | null {
+  if (inA === inB || inA === out || inB === out) return null;
+  const a = (inA - out + 6) % 6;
+  const b = (inB - out + 6) % 6;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  if (lo === 2 && hi === 3) return 'narrow';
+  if (lo === 2 && hi === 4) return 'wide';
+  return null;
+}
+
+/**
+ * The Y assets' rotation convention (`y_narrow`, `ywide` and their stream twins
+ * `smallwide_y_narrow`, `smallwide_ywide`), pixel-sampled like Bend/Spring/Straight in
+ * `docs/design/river-generation.md`. File `D` touches edges `1+D`, `4+D`, `5+D` (narrow) or
+ * `1+D`, `3+D`, `5+D` (wide). The stream twins settle which edge is the outflow: the water
+ * measures river width on edge `1+D` and stream width on the other two, so the river leaves by
+ * edge `1+D` = direction `(2-D) mod 6`. The narrow Y's two inflows are then `(4-D)` and `(5-D)`
+ * (edges `5+D`, `4+D`, 60 degrees apart, "two tributaries running nearly parallel"), the wide
+ * Y's `(4-D)` and `(0-D)` (120 degrees each way). So for a known outflow `o`:
+ * `D = (2 - o) mod 6`, inflows `{o+2, o+3}` (narrow) or `{o+2, o+4}` (wide) - exactly
+ * `confluenceKind`.
  *
- * Unlike Bend/Spring, this pattern only covers *one* fixed relative
- * arrangement of (in1, in2, out) — confluences come from two independently
- * traced paths colliding (`RiverGenerator.ResolveCollisions`), so nothing
- * on the generation side constrains their angles the way an ordinary bend's
- * fixed 2-apart turn does. Most real confluences won't match this asset's
- * one rotation-class at all; this returns `null` for those (a real,
- * currently-unrepresentable case — fixing it for every possible triple
- * would mean the collision resolution itself choosing tiles that fit a
- * representable angle, not just picking a rotation after the fact), and
- * the caller falls back to its own best-effort the way `mouthOrientationOf`
- * does for its one unrepresentable angle.
- *
- * A confluence always has exactly two inflows (`RiverGenerator`'s own
- * `ins.Count >= 2` classification), but `outDirection` can be absent — a
- * confluence that also sits at the coast, with nothing downstream to point
- * at. Without a real `out` to anchor the trunk's far end, this instead
- * looks for any rotation whose three touched directions cover both real
- * inflows (in either trunk/branch role), so the picture is at least
- * hydrologically coherent even though which slot is nominally "out" is
- * arbitrary in that case.
+ * (An earlier pass took the narrow Y's outflow to be edge `4+D`, which no measurement can tell
+ * apart on an all-river tile; the stream twins can.)
  */
 export function confluenceOrientationOf(
   inDirections: readonly TileOrientation[],
   outDirection: TileOrientation | null,
 ): TileOrientation | null {
-  const ins = inDirections.map((d) => TILE_ORIENTATIONS.indexOf(d));
-
-  if (outDirection) {
-    const outIndex = TILE_ORIENTATIONS.indexOf(outDirection);
-    const d = (5 - outIndex + 6) % 6;
-    const trunkIn = (2 - d + 6) % 6;
-    const branchIn = (4 - d + 6) % 6;
-    if (ins.length === 2 && ins.includes(trunkIn) && ins.includes(branchIn)) {
-      return TILE_ORIENTATIONS[d]!;
-    }
-    return null;
-  }
-
-  for (let d = 0; d < 6; d++) {
-    const out = (5 - d + 6) % 6;
-    const trunkIn = (2 - d + 6) % 6;
-    const branchIn = (4 - d + 6) % 6;
-    const touched = new Set([out, trunkIn, branchIn]);
-    if (ins.every((i) => touched.has(i))) {
-      return TILE_ORIENTATIONS[d]!;
-    }
-  }
-  return null;
+  return confluenceFileFor(inDirections, outDirection, 'narrow');
 }
 
-/**
- * The `y_wide` confluence asset's rotation convention — a second, later-
- * added junction (`VanDooProject/3d_assets`' asset-inventory.md: "the
- * **second** junction and the other way to pick three edges... every pair
- * 120 degrees apart... three arms radiating rather than two turned toward
- * each other"), pixel-sampled the same way as `confluenceOrientationOf`
- * above. File `D` touches edges `1+D`, `3+D`, `5+D` (mod 6) — every other
- * edge, evenly spaced, unlike `y_narrow`'s opposite-pair-plus-branch.
- * Converting through `edge(d) = (3-d) mod 6` gives directions `{(2-D),
- * (0-D), (4-D)} mod 6` — three directions each exactly 2 apart (120°) from
- * both others, with no distinguished "trunk" or "branch": since the three
- * arms are geometrically identical and evenly spaced, the whole pattern
- * repeats every 2 steps of `D` (only two distinct pictures exist, at even
- * and odd `D`) and any of the three real directions can fill any of the
- * three touched slots.
- *
- * A real (in1, in2, out) triple matches only when all three directions are
- * mutually 120° apart — the two possible sets on a six-direction wheel are
- * `{E, NW, SW}` and `{NE, W, SE}` — which `confluenceOrientationOf`'s
- * opposite-pair-anchored `y_narrow` pattern can never itself satisfy (a
- * 120°-only spacing never contains an opposite, 180°-apart pair), so the two
- * functions' representable triples never overlap: a caller can safely try
- * this one as a second, independent chance after `y_narrow`'s fails.
- */
+/** `confluenceOrientationOf` for the `ywide` family; see there. */
 export function confluenceWideOrientationOf(
   inDirections: readonly TileOrientation[],
   outDirection: TileOrientation | null,
 ): TileOrientation | null {
-  const known = [...inDirections, ...(outDirection ? [outDirection] : [])].map((d) =>
-    TILE_ORIENTATIONS.indexOf(d),
-  );
-  if (known.length < 2) return null;
+  return confluenceFileFor(inDirections, outDirection, 'wide');
+}
 
-  for (let d = 0; d < 6; d++) {
-    const touched = new Set([(2 - d + 6) % 6, (0 - d + 6) % 6, (4 - d + 6) % 6]);
-    if (known.every((i) => touched.has(i))) {
-      return TILE_ORIENTATIONS[d]!;
-    }
+function confluenceFileFor(
+  inDirections: readonly TileOrientation[],
+  outDirection: TileOrientation | null,
+  kind: ConfluenceKind,
+): TileOrientation | null {
+  if (inDirections.length !== 2) return null;
+  const a = TILE_ORIENTATIONS.indexOf(inDirections[0]!);
+  const b = TILE_ORIENTATIONS.indexOf(inDirections[1]!);
+  // A confluence stored without an outflow (a row from before merge-aware tracing dropped the
+  // third river at a full confluence): any outflow that makes the Y drawable will do.
+  const candidates = outDirection ? [TILE_ORIENTATIONS.indexOf(outDirection)] : [0, 1, 2, 3, 4, 5];
+  for (const o of candidates) {
+    if (confluenceKind(a, b, o) === kind) return TILE_ORIENTATIONS[(2 - o + 6) % 6]!;
   }
   return null;
 }
+
+/** How wide the water is on a river hex; mirrors the backend's `RiverWidth`. */
+export type RiverWidth = 'river' | 'stream' | 'widen';
 
 export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
@@ -386,6 +391,11 @@ export interface RiverTile {
   shape: RiverTileShape;
   inDirections: TileOrientation[];
   outDirection: TileOrientation | null;
+  /**
+   * `'river'` (the default when absent: every tile of a lava stream and of a world stored before
+   * streams), `'stream'` (half width on every edge) or `'widen'` (stream in, river out).
+   */
+  width?: RiverWidth;
   /** True for a lava stream on a wasted island — renders with the lavastream art families instead of rivertile. */
   wasted?: boolean;
 }

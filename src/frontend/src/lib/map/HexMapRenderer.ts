@@ -3526,7 +3526,7 @@ export class HexMapRenderer {
         // Only a Mouth's orientation actually needs this (see
         // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
         // for every other shape.
-        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
         // Likewise, only a Spring's art actually branches on this.
         const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
         // Only straight/bend/bend60 (and never a wasted/lava tile — see
@@ -3640,7 +3640,7 @@ export class HexMapRenderer {
         continue;
       }
 
-      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
       const { segments, springDot } = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
 
       for (const { from, control, to } of segments) {

@@ -30,6 +30,7 @@ import {
 import { generateRivers } from './riverGenerator';
 import {
   emptyResources,
+  mouthSeaDirection,
   TILE_ORIENTATIONS,
   type CartShipment,
   type IslandLabel,
@@ -687,12 +688,14 @@ export class WorldModel {
    * in `TILE_ORIENTATIONS` order — arbitrary among ties, but a `Mouth` only
    * ever needs one.
    */
-  seaFacingDirectionOf(coord: AxialCoord): TileOrientation | null {
+  seaFacingDirectionOf(coord: AxialCoord, inDirection?: TileOrientation): TileOrientation | null {
     const dirs = neighbors(coord);
-    for (let i = 0; i < dirs.length; i++) {
-      if (this.getTile(dirs[i].q, dirs[i].r).terrain === 'sea') return TILE_ORIENTATIONS[i];
-    }
-    return null;
+    const isSea = dirs.map((d) => this.getTile(d.q, d.r).terrain === 'sea');
+    // With the river's inflow known, prefer the sea straight ahead (the only angle the delta and
+    // the widening mouth draw), then a bend, then the hairpin - see `mouthSeaDirection`.
+    if (inDirection) return mouthSeaDirection(inDirection, isSea);
+    const first = isSea.indexOf(true);
+    return first < 0 ? null : TILE_ORIENTATIONS[first]!;
   }
 
   /**
@@ -1408,7 +1411,7 @@ export class WorldModel {
     // riverBuildingArtFor reads this same own-hex river tile to pick which
     // composite (and orientation) to render.
     const riverAtHex = this.getRiverTile(at.q, at.r);
-    if (type && !riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined)) {
+    if (type && !riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined, riverAtHex?.width)) {
       return false;
     }
     // PumpkinFarm is only buildable on a Pumpkin-soil island (matches

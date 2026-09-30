@@ -27,6 +27,7 @@ interface RiverScenario {
     shape: RiverTileShape;
     inDirections: TileOrientation[];
     outDirection: TileOrientation | null;
+    width: 'river' | 'stream' | 'widen';
     wasted: boolean;
   }[];
 }

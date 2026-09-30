@@ -55,10 +55,12 @@ import {
   bendOrientationOf,
   confluenceOrientationOf,
   confluenceWideOrientationOf,
+  deltaOrientationOf,
   mouthOrientationOf,
   springOrientationOf,
   straightOrientationOf,
   TILE_ORIENTATIONS,
+  widenStraightOrientationOf,
 } from './types';
 
 export const TILE_ART_NATIVE_W = 200;
@@ -248,7 +250,20 @@ type RiverArtShape =
   | 'springcorrie'
   | 'springsaddleback'
   | 'confluencenarrow'
-  | 'confluencewide';
+  | 'confluencewide'
+  // Stream width (half the river's), same crossings and rotation convention as their river twins.
+  | 'small_straight'
+  | 'small_straight_meander'
+  | 'small_bend'
+  | 'small_bend_meander'
+  | 'small_bend60'
+  | 'small_bend60_loop'
+  // Stream in, river out: the widening straight, and the Y where two streams join.
+  | 'widen_straight'
+  | 'widen_yn'
+  | 'widen_yw'
+  // A river meeting the sea head-on.
+  | 'delta';
 
 // Exported (only) so textures.test.ts can guard the family name a shape
 // resolves to, the same reason riverArtFor below is exported.
@@ -283,6 +298,19 @@ export const RIVER_FAMILY: Record<RiverArtShape, string> = {
   // reaching for one.
   confluencenarrow: 'rivertile_y_narrow',
   confluencewide: 'rivertile_ywide',
+  // The stream set (3D_assets docs/river-tiles.md, "The stream set"): `_small_` is stream width
+  // on every edge, `_smallwide_` mixes stream and river. Names carry the crossing (bend180 is the
+  // straight, bend120 the bend, bend60 the hairpin).
+  small_straight: 'rivertile_small_bend180',
+  small_straight_meander: 'rivertile_small_bend180_meander',
+  small_bend: 'rivertile_small_bend120',
+  small_bend_meander: 'rivertile_small_bend120_meander',
+  small_bend60: 'rivertile_small_bend60',
+  small_bend60_loop: 'rivertile_small_bend60_loop',
+  widen_straight: 'rivertile_smallwide_bend180_island',
+  widen_yn: 'rivertile_smallwide_y_narrow',
+  widen_yw: 'rivertile_smallwide_ywide',
+  delta: 'rivertile_delta',
 };
 
 /** The lava-river shapes that have a dedicated wasted-island art family — see `TileTextures.lavaRiverBase`/`lavaRiverTop`'s own doc comment for why this doesn't cover every `RiverArtShape`. */
@@ -1434,30 +1462,61 @@ export function riverArtFor(
   seaDirection: TileOrientation | null,
   springShape: 'corrie' | 'saddleback' = 'corrie',
 ): { shape: RiverArtShape; orientation: TileOrientation } {
+  const width = river.width ?? 'river';
+  const stream = width === 'stream';
   if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
-    return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
+    return {
+      shape: stream ? 'small_bend' : 'bend',
+      orientation: bendOrientationOf(river.inDirections[0], river.outDirection),
+    };
   }
   if (river.shape === 'bend60' && river.outDirection && river.inDirections[0]) {
-    return { shape: 'bend60', orientation: bend60OrientationOf(river.inDirections[0], river.outDirection) };
+    return {
+      shape: stream ? 'small_bend60' : 'bend60',
+      orientation: bend60OrientationOf(river.inDirections[0], river.outDirection),
+    };
   }
   if (river.shape === 'spring' && river.outDirection) {
     const shape = springShape === 'saddleback' ? 'springsaddleback' : 'springcorrie';
     return { shape, orientation: springOrientationOf(river.outDirection) };
   }
   if (river.shape === 'confluence') {
+    // Two streams meeting: the smallwide Y (river out); otherwise the river Y.
     const narrow = confluenceOrientationOf(river.inDirections, river.outDirection);
-    if (narrow) return { shape: 'confluencenarrow', orientation: narrow };
+    if (narrow) return { shape: width === 'widen' ? 'widen_yn' : 'confluencenarrow', orientation: narrow };
     const wide = confluenceWideOrientationOf(river.inDirections, river.outDirection);
-    if (wide) return { shape: 'confluencewide', orientation: wide };
+    if (wide) return { shape: width === 'widen' ? 'widen_yw' : 'confluencewide', orientation: wide };
     const orientation = river.outDirection ?? river.inDirections[0] ?? 'SE';
     return { shape: 'confluencenarrow', orientation };
   }
   if (river.shape === 'mouth' && river.inDirections[0]) {
-    return mouthOrientationOf(river.inDirections[0], seaDirection);
+    const inDirection = river.inDirections[0];
+    // A stream that reaches the sea head-on widens on the mouth tile itself (the generator only
+    // allows that when the sea is straight ahead).
+    if (width === 'widen') return { shape: 'widen_straight', orientation: widenStraightOrientationOf(inDirection) };
+    // A river meeting the sea head-on is a delta (green islands: it is sand-based art).
+    if (!river.wasted && seaDirection) {
+      const inIndex = TILE_ORIENTATIONS.indexOf(inDirection);
+      if (TILE_ORIENTATIONS.indexOf(seaDirection) === (inIndex + 3) % 6) {
+        return { shape: 'delta', orientation: deltaOrientationOf(inDirection) };
+      }
+    }
+    return mouthOrientationOf(inDirection, seaDirection);
   }
 
+  if (width === 'widen') {
+    const inDirection = river.inDirections[0] ?? (river.outDirection ? oppositeOf(river.outDirection) : null);
+    return { shape: 'widen_straight', orientation: inDirection ? widenStraightOrientationOf(inDirection) : 'SE' };
+  }
   const direction = river.inDirections[0] ?? river.outDirection;
-  return { shape: 'straight', orientation: direction ? straightOrientationOf(direction) : 'SE' };
+  return {
+    shape: stream ? 'small_straight' : 'straight',
+    orientation: direction ? straightOrientationOf(direction) : 'SE',
+  };
+}
+
+function oppositeOf(direction: TileOrientation): TileOrientation {
+  return TILE_ORIENTATIONS[(TILE_ORIENTATIONS.indexOf(direction) + 3) % 6]!;
 }
 
 /**
@@ -1485,6 +1544,8 @@ export function riverBuildingArtFor(buildingType: string, river: RiverTile): Riv
   // and CropMillRiverShapes) — checking the raw shape here keeps this in
   // lockstep with riverBuildingAllowedHere instead of accidentally drawing
   // river-building art on a shape it was never actually built on.
+  // Their art is river width: a stream or widening hex has no building art.
+  if ((river.width ?? 'river') !== 'river') return undefined;
   if (buildingType === 'sawmill') {
     if (river.shape !== 'straight' && river.shape !== 'bend' && river.shape !== 'bend60') return undefined;
   } else if (buildingType === 'cropmill') {
@@ -1512,6 +1573,10 @@ const VARIANT_SHAPE: Partial<Record<RiverArtShape, Partial<Record<Exclude<RiverV
   straight: { meander: 'straight_meander', island: 'straight_island' },
   bend: { meander: 'bend_meander', island: 'bend_island' },
   bend60: { loop: 'bend60_loop' },
+  // Streams have the meander and loop cuts but no gravel-bar island: an `island` roll draws plain.
+  small_straight: { meander: 'small_straight_meander' },
+  small_bend: { meander: 'small_bend_meander' },
+  small_bend60: { loop: 'small_bend60_loop' },
 };
 
 /**
