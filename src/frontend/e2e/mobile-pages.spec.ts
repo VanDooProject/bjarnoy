@@ -135,3 +135,24 @@ test.describe('account pages on a phone', { tag: '@g2' }, () => {
     });
   }
 });
+
+test.describe('messages on a phone', { tag: '@g2' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  // /messages had no link back into the game at all, and a conversation
+  // that failed to load dropped its "Back to messages" with the rest of the
+  // thread — dead ends on a phone with no browser back button on screen.
+  test('the inbox and a failed conversation both offer a way back', async ({ page, adminAuth }) => {
+    await adminAuth.loginAsPlayer('e2e-player');
+    await page.goto('/messages/someone-else');
+    const toInbox = page.getByRole('link', { name: 'Back to messages' });
+    await expectFullyInViewport(page, toInbox, 'Back to messages');
+    await toInbox.click();
+    await expect(page).toHaveURL(/\/messages$/);
+
+    const toGame = page.getByRole('link', { name: '← Back' });
+    await expectFullyInViewport(page, toGame, 'Back to the game');
+    await toGame.click();
+    await expect(page).not.toHaveURL(/\/messages/);
+  });
+});
