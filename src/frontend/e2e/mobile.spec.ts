@@ -274,12 +274,13 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
     await expect(page.locator('.hud-bar')).toHaveCount(0);
     await expect(page.locator('.settlement-bubble')).toHaveCount(0);
 
+    // On phones the demo badge is a small tag in the bottom-left corner,
+    // well away from the landfall banner at the top.
     const badge = page.locator('.demo-badge');
     if (await badge.isVisible()) {
       const badgeBox = (await badge.boundingBox())!;
-      expect(badgeBox.y, 'demo badge should sit near the top edge, not a stale bar offset').toBeLessThan(40);
-      // The landfall banner reserves the badge's row instead of sliding up
-      // underneath it now that there's no bar between them.
+      expect(badgeBox.x, 'demo tag should hug the left edge').toBeLessThan(12);
+      expect(badgeBox.y + badgeBox.height, 'demo tag should hug the bottom edge').toBeGreaterThan(PHONE.height - 30);
       await expect(settlement.banner).toBeVisible();
       await expectNoOverlap(settlement.banner, badge, 'demo badge covers the landfall banner');
     }
@@ -301,13 +302,13 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
   });
 });
 
-// z-layering: the phone settlement bubble and demo badge are fixed layers
-// outside the HUD bar. They used to sit at z 41 / 1000 and painted over the
-// bar's own popovers (ProfileNudge) and over the open queue drawer.
+// z-layering: the phone settlement bubble is a fixed layer outside the HUD
+// bar. It used to sit at z 41 and painted over the bar's own popovers
+// (ProfileNudge) and over the open queue drawer.
 test.describe('phone overlay layering', { tag: '@g1' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
-  test('the profile nudge paints above the settlement bubble and the demo badge', async ({ page }) => {
+  test('the profile nudge paints above the settlement bubble', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
@@ -315,10 +316,6 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
     await expect(settlement.profileNudge).toBeVisible();
 
     await expectPaintsAbove(settlement.profileNudge, page.locator('.settlement-bubble'), 'settlement bubble paints over the profile nudge');
-    const badge = page.locator('.demo-badge');
-    if (await badge.isVisible()) {
-      await expectPaintsAbove(settlement.profileNudge, badge, 'demo badge paints over the profile nudge');
-    }
   });
 
   test('the open queue drawer paints above the settlement bubble', async ({ page }) => {

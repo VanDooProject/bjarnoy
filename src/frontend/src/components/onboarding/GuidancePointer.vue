@@ -42,11 +42,9 @@ import { useMediaQuery } from '../../composables/useMediaQuery';
 import { arrowTipOffset, HEX_TARGET_RADIUS_PX } from '../../lib/map/guidanceArrowGeometry';
 import { placeChip, type ChipSide } from '../../lib/map/guidanceChipPlacement';
 import {
-  DEMO_BADGE_ROW_PX,
   isSettlementBubbleShown,
   SETTLEMENT_BUBBLE_ROW_PX,
 } from '../../composables/hudSettlementBubbleState';
-import { DEMO_MODE } from '../../config';
 
 const props = withDefaults(
   defineProps<{
@@ -130,11 +128,9 @@ function tick() {
 
   const arrowRect = rotate.getBoundingClientRect();
   const anchorStyles = getComputedStyle(anchor);
-  // On phones the settlement bubble (and, in demo mode, the demo badge)
-  // stack in rows just below the bar — keep the chip clear of those too.
-  const overlayRows = isMobile.value
-    ? (isSettlementBubbleShown.value ? SETTLEMENT_BUBBLE_ROW_PX : 0) + (DEMO_MODE ? DEMO_BADGE_ROW_PX : 0)
-    : 0;
+  // On phones the settlement bubble sits in a row just below the bar —
+  // keep the chip clear of it too.
+  const overlayRows = isMobile.value && isSettlementBubbleShown.value ? SETTLEMENT_BUBBLE_ROW_PX : 0;
   const safe = {
     left: 8,
     top: insetPx(anchorStyles, '--hud-inset-top') + 8 + overlayRows,

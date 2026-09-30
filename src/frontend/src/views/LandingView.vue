@@ -50,7 +50,7 @@ import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
-import { DEMO_BADGE_ROW_PX, isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
+import { isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY, TOUCH_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
@@ -435,10 +435,6 @@ const hudInsetTopPxLanding = computed(() =>
 const hudInsetBottomPxLanding = computed(() =>
   !hideBarForTutorial.value && hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0,
 );
-// With the bar unmounted for the tutorial, the demo badge drops to the top
-// edge (DemoModeBadge.vue) — the landfall banner below reserves its row
-// rather than sliding up underneath it.
-const overlayRowTopPx = computed(() => (DEMO_MODE && hideBarForTutorial.value ? DEMO_BADGE_ROW_PX : 0));
 
 watch(ringScreen, (screen) => {
   if (!screen) ringLaneSpots.value = {};
@@ -888,7 +884,6 @@ watch(
     :style="{
       '--hud-inset-top': hudInsetTopPxLanding + 'px',
       '--hud-inset-bottom': hudInsetBottomPxLanding + 'px',
-      '--overlay-row-top': overlayRowTopPx + 'px',
     }"
   >
     <!-- Deliberately outside the SettlementCanvas v-if below: it has to show
@@ -1200,6 +1195,9 @@ h1 {
     height: 40px;
     font-size: 12px;
     gap: 12px;
+    /* Lifts the line clear of the "Demo" tag in the bottom-left corner. */
+    padding-bottom: 10px;
+    box-sizing: border-box;
   }
   /* The checklist tray (OnboardingChecklist's root, which carries this
      view's scope attribute) docks right above the footer rather than on

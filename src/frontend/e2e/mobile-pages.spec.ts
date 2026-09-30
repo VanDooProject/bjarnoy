@@ -188,3 +188,23 @@ test.describe('landscape phone gets the phone HUD', { tag: '@g2' }, () => {
     expect(offscreen).toEqual([]);
   });
 });
+
+test.describe('demo tag on a phone', { tag: '@g2' }, () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  // Demo mode is local development only; on a phone it is a small "Demo"
+  // tag in the bottom-left corner, not a pill competing with the HUD rows —
+  // and it must not sit on the landing page's own footer line either.
+  test('is a short tag in the bottom-left corner, clear of the landing footer', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.openLanding(page);
+    const tag = page.locator('.demo-badge');
+    await expect(tag).toHaveText(/^demo$/i);
+    const box = (await tag.boundingBox())!;
+    expect(box.x).toBeLessThan(8);
+    expect(box.y + box.height).toBeGreaterThan(PHONE.height - 8);
+    const footerText = page.locator('.footer > span').first();
+    const footerBox = (await footerText.boundingBox())!;
+    expect(box.y, 'demo tag overlaps the footer text').toBeGreaterThanOrEqual(footerBox.y + footerBox.height);
+  });
+});

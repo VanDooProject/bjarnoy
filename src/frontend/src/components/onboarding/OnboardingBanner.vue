@@ -119,11 +119,8 @@ const isTouch = useMediaQuery(TOUCH_QUERY);
   .body {
     flex: 1 1 100%;
   }
-  /* `--overlay-row-top`: extra rows LandingView reserves above the banner
-     (the demo badge, once the tutorial has unmounted the bar it normally
-     sits under). */
   .banner.landfall {
-    top: calc(var(--hud-inset-top, 64px) + 12px + var(--overlay-row-top, 0px));
+    top: calc(var(--hud-inset-top, 64px) + 12px);
   }
   .banner.complete {
     bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));

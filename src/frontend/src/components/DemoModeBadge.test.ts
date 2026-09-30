@@ -54,32 +54,33 @@ describe('DemoModeBadge', () => {
     wrapper.unmount();
   });
 
-  it('becomes a bubble positioned below a top-docked mobile bar', async () => {
+  it('shows the full sentence on desktop', () => {
+    const wrapper = mountBadge();
+    expect(wrapper.get('.demo-badge').text()).toBe(enDemoModeBadge.label);
+    wrapper.unmount();
+  });
+
+  it('shrinks to a short tag in the bottom-left corner on a phone', async () => {
     stubCompactMediaQuery(true);
     const wrapper = mountBadge();
     await wrapper.vm.$nextTick();
 
     const badge = wrapper.get('.demo-badge');
     expect(badge.classes()).toContain('demo-badge--compact');
-    expect(badge.attributes('style')).toContain('top: 72px');
+    expect(badge.text()).toBe(enDemoModeBadge.short);
+    expect(badge.attributes('title')).toBe(enDemoModeBadge.title);
+    expect(badge.attributes('style')).toContain('bottom: calc(2px');
     wrapper.unmount();
   });
 
-  it('stays near the top when the bar is docked at the bottom instead', async () => {
+  it('sits above the bar when the bar is docked at the bottom', async () => {
     stubCompactMediaQuery(true);
-    // Extra fix found while screenshotting finding #13: this reads TopBar's
-    // own *effective* "am I actually rendered at the bottom edge" signal
-    // (written by TopBar.vue) rather than the raw hudPrefs preference — a
-    // bar that isn't drag/docking-aware at all (a docked page, or the
-    // pre-founding landing bar) always sits at the top regardless of the
-    // stored preference, so setting the preference alone here would no
-    // longer reflect what any real page actually does with it.
     isHudBarAtBottom.value = true;
 
     const wrapper = mountBadge();
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.get('.demo-badge').attributes('style')).toContain('top: 8px');
+    expect(wrapper.get('.demo-badge').attributes('style')).toContain('bottom: calc(66px');
     wrapper.unmount();
   });
 
@@ -107,19 +108,17 @@ describe('DemoModeBadge', () => {
     wrapper.unmount();
   });
 
-  // Mobile tutorial focus: LandingView.vue unmounts its founded-branch
-  // TopBar entirely on phones while the guided build steps run. TopBar's
-  // own onBeforeUnmount resets `hudBarHeightPx` back to its 64px *default*,
-  // not to 0, so without `isHudBarMounted` this badge would still park
-  // itself 64px + 8px down, as if a default-height bar were still there.
-  it('sits at the bare top edge, not a stale bar offset, once the bar is unmounted', async () => {
+  // A bar that is unmounted (LandingView's tutorial focus) leaves a stale
+  // 64px default in hudBarHeightPx — it must not lift the tag off the edge.
+  it('ignores a stale bar height once the bar is unmounted', async () => {
     stubCompactMediaQuery(true);
+    isHudBarAtBottom.value = true;
     isHudBarMounted.value = false;
 
     const wrapper = mountBadge();
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.get('.demo-badge').attributes('style')).toContain('top: 8px');
+    expect(wrapper.get('.demo-badge').attributes('style')).toContain('bottom: calc(2px');
     wrapper.unmount();
   });
 });

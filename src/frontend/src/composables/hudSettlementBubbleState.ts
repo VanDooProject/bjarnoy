@@ -16,8 +16,6 @@ export const isSettlementBubbleShown = ref(false);
 // ~20px content, plus a small gap). DemoModeBadge.vue stacks under it, and
 // GuidancePointer.vue keeps its label chip clear of it.
 export const SETTLEMENT_BUBBLE_ROW_PX = 40;
-// The compact (phone) demo-mode badge's own row: ~17px pill plus a gap.
-export const DEMO_BADGE_ROW_PX = 24;
 
 // A page's own bar can dock at the bottom, or it might not be a
 // drag/docking-aware bar at all (a docked docs page, or the pre-founding
