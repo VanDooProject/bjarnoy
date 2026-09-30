@@ -140,6 +140,11 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         var mouth = riverTiles.First(t => t.Shape == "mouth");
         Assert.Single(mouth.InDirections);
         Assert.Null(mouth.OutDirection);
+
+        // Width survives the round trip: a spring starts a stream, a mouth is never a stream.
+        Assert.Equal("stream", spring.Width);
+        Assert.All(riverTiles.Where(t => t.Shape == "mouth"), t => Assert.NotEqual("stream", t.Width));
+        Assert.All(riverTiles, t => Assert.Contains(t.Width, new[] { "river", "stream", "widen" }));
     }
 
     [Fact]
