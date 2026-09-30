@@ -53,7 +53,10 @@ public class CampGenerationTests
     }
 
     [Theory]
-    [InlineData(6, 1)]
+    [InlineData(0, 0)]
+    [InlineData(6, 0)]
+    [InlineData(59, 0)]
+    [InlineData(60, 1)]
     [InlineData(349, 1)]
     [InlineData(1_049, 1)]
     [InlineData(1_050, 2)]

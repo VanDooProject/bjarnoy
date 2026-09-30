@@ -13,6 +13,9 @@ internal static class CampGenerator
     /// <summary>One camp per this many land tiles (rounded), tuning default.</summary>
     public const int CampTilesPerCamp = 700;
 
+    /// <summary>An island with fewer land tiles than this gets no camp at all (islets stay camp-free), tuning default.</summary>
+    public const int MinCampIslandTiles = 60;
+
     /// <summary>No island gets more camps than this, tuning default.</summary>
     public const int MaxCampsPerIsland = 24;
 
@@ -65,9 +68,12 @@ internal static class CampGenerator
         return camps;
     }
 
-    /// <summary>The number of camps an island of this many land tiles is offered (before ground and spacing cut it down).</summary>
+    /// <summary>
+    /// The number of camps an island of this many land tiles is offered (before ground and spacing
+    /// cut it down): none below <see cref="MinCampIslandTiles"/>, otherwise clamped to <c>1..MaxCampsPerIsland</c>.
+    /// </summary>
     public static int CampCountFor(int landTileCount) =>
-        Math.Clamp(((2 * landTileCount) + CampTilesPerCamp) / (2 * CampTilesPerCamp), 1, MaxCampsPerIsland);
+        landTileCount < MinCampIslandTiles ? 0 : Math.Clamp(((2 * landTileCount) + CampTilesPerCamp) / (2 * CampTilesPerCamp), 1, MaxCampsPerIsland);
 
     /// <summary>
     /// The pure placement core. Takes only what the rules need, so a test or the golden
@@ -82,6 +88,11 @@ internal static class CampGenerator
         int islandIndex,
         bool wasted = false)
     {
+        if (islandTiles.Count < MinCampIslandTiles)
+        {
+            return [];
+        }
+
         // Large prime spacing so this draws from a noise field independent of the island's
         // rivers/giants/names, the same trick the other generators use.
         var seed = worldSeed + (islandIndex * 300_007);

@@ -62,6 +62,9 @@ export function isStrongCampFamily(family: string): boolean {
 /** One camp per this many land tiles (rounded), tuning default — mirrors `CampGenerator.CampTilesPerCamp`. */
 export const CampTilesPerCamp = 700;
 
+/** An island with fewer land tiles than this gets no camp at all — mirrors `CampGenerator.MinCampIslandTiles`. */
+export const MinCampIslandTiles = 60;
+
 /** No island gets more camps than this — mirrors `CampGenerator.MaxCampsPerIsland`. */
 export const MaxCampsPerIsland = 24;
 
@@ -87,6 +90,7 @@ export function guardRange(level: number, strength: CampStrength): number {
 
 /** The number of camps an island of this many land tiles is offered — mirrors `CampGenerator.CampCountFor`. */
 export function campCountFor(landTileCount: number): number {
+  if (landTileCount < MinCampIslandTiles) return 0;
   const rounded = Math.floor((2 * landTileCount + CampTilesPerCamp) / (2 * CampTilesPerCamp));
   return Math.min(Math.max(rounded, 1), MaxCampsPerIsland);
 }
@@ -177,6 +181,8 @@ export function placeCamps(
   islandIndex: number,
   wasted = false,
 ): CampPlacement[] {
+  if (islandTiles.length < MinCampIslandTiles) return [];
+
   // Large prime spacing so this draws from a noise field independent of the island's
   // rivers/giants/names, the same trick the other generators use.
   const seed = worldSeed + islandIndex * 300_007;
