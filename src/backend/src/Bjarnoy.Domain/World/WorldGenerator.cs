@@ -159,7 +159,8 @@ public sealed class WorldGenerator
     /// Each island's land-possible box is scanned on the even-column/even-row
     /// lattice (stride 2 in offset space) and a flood fill starts at every land
     /// sample not already inside a found landmass. A landmass shared by
-    /// overlapping cells is found once because the visited set is global. Only a
+    /// overlapping cells is found once (each box is scanned in parallel; identical landmasses
+    /// found from two boxes are merged by their lowest hex). Only a
     /// landmass narrower than the stride in both directions (a speck a few hexes
     /// across, below <see cref="WorldGenerationOptions.MinimumIslandTiles"/> for
     /// practical purposes) can slip between samples.
@@ -167,36 +168,55 @@ public sealed class WorldGenerator
     internal List<Landmass> FindLandmasses(bool wasted, CancellationToken cancellationToken)
     {
         Func<HexCoord, Terrain> terrainOf = wasted ? _sampler.WastedTerrainAt : _sampler.TerrainAt;
-        var visited = new HashSet<HexCoord>();
-        var masses = new List<Landmass>();
+        var shapes = _sampler.EnumerateIslandShapes(wasted).ToList();
+        var perShape = new List<Landmass>[shapes.Count];
 
-        foreach (var shape in _sampler.EnumerateIslandShapes(wasted))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var firstCol = shape.MinCol + (shape.MinCol & 1);
-            var firstRow = shape.MinRow + (shape.MinRow & 1);
-            for (var col = firstCol; col <= shape.MaxCol; col += 2)
+        // Each island's box is scanned on its own thread with its own visited set. A flood
+        // fill always returns the whole connected landmass, so a landmass reached from two
+        // boxes (touching islands) comes back identical from both; the merge below keeps one
+        // per lowest hex, which makes the result equal to a sequential scan.
+        Parallel.For(
+            0,
+            shapes.Count,
+            new ParallelOptions { CancellationToken = cancellationToken },
+            i =>
             {
-                for (var row = firstRow; row <= shape.MaxRow; row += 2)
+                var shape = shapes[i];
+                var visited = new HashSet<HexCoord>();
+                var found = new List<Landmass>();
+                var firstCol = shape.MinCol + (shape.MinCol & 1);
+                var firstRow = shape.MinRow + (shape.MinRow & 1);
+                for (var col = firstCol; col <= shape.MaxCol; col += 2)
                 {
-                    var coord = HexCoord.FromOddQ(new OffsetCoord(col, row));
-                    if (visited.Contains(coord))
+                    for (var row = firstRow; row <= shape.MaxRow; row += 2)
                     {
-                        continue;
-                    }
+                        var coord = HexCoord.FromOddQ(new OffsetCoord(col, row));
+                        if (visited.Contains(coord))
+                        {
+                            continue;
+                        }
 
-                    var terrain = terrainOf(coord);
-                    if (!terrain.IsLand())
-                    {
-                        continue;
+                        var terrain = terrainOf(coord);
+                        if (terrain.IsLand())
+                        {
+                            found.Add(FloodFill(coord, terrain, terrainOf, visited));
+                        }
                     }
-
-                    masses.Add(FloodFill(coord, terrain, terrainOf, visited));
                 }
+
+                perShape[i] = found;
+            });
+
+        var byLowest = new Dictionary<HexCoord, Landmass>();
+        foreach (var found in perShape)
+        {
+            foreach (var mass in found)
+            {
+                byLowest.TryAdd(mass.Lowest, mass);
             }
         }
 
+        var masses = byLowest.Values.ToList();
         masses.Sort(static (a, b) => a.Lowest.Q != b.Lowest.Q
             ? a.Lowest.Q.CompareTo(b.Lowest.Q)
             : a.Lowest.R.CompareTo(b.Lowest.R));

@@ -23,7 +23,7 @@ public class WastedTerrainGoldenTests
     [MemberData(nameof(Cases))]
     public void Matches_the_shared_golden_fixture(Scenario scenario)
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(scenario.Seed));
+        var sampler = new TerrainSampler(TestWorlds.Options(scenario.Seed));
 
         var actual = new List<(int Q, int R, string Terrain)>();
         foreach (var coord in new HexCoord(scenario.CentreQ, scenario.CentreR).WithinRadius(scenario.Radius))
@@ -61,7 +61,7 @@ public class WastedTerrainGoldenTests
     [MemberData(nameof(Cases))]
     public void TerrainAt_is_unchanged_by_the_existence_of_wasted_islands(Scenario scenario)
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(scenario.Seed));
+        var sampler = new TerrainSampler(TestWorlds.Options(scenario.Seed));
         var landWasted = 0;
 
         foreach (var coord in new HexCoord(scenario.CentreQ, scenario.CentreR).WithinRadius(scenario.Radius))

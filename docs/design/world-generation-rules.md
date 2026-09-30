@@ -17,10 +17,9 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 
 ## World and islands
 
-- The world is about 100x bigger in area than before: the default radius is **4000** once fog chunking
-  lands and **1000** until then (`WorldGenerationOptions.Radius`, currently 1000, maximum 5000).
-  *Implemented: radius 1000 default, 5000 cap, generation cost proportional to land (radius 4000 generates in
-  about 45 s on 4 cores). The 4000 default is planned with fog chunking.*
+- The world is about 100x bigger in area than before: the default radius is **4000**
+  (`WorldGenerationOptions.Radius`, maximum 5000). *Implemented, now that fog is chunked: generation cost is
+  proportional to land, not to the sea.*
 - Islands are much bigger and irregular: curved and crescent (C) spines, rough fjord-like coasts, bays and
   satellite islets. *Implemented (island shape v3).*
 - A mix of sizes: mostly **B** (~150 hexes across, 5k-15k tiles), some **A** (~80 across, 1.5k-7k tiles) and

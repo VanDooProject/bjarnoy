@@ -33,7 +33,7 @@ public class GoldenRegenerationTests
         var candidates = new List<Candidate>();
         for (var seed = 1; seed <= 40; seed++)
         {
-            var world = new WorldGenerator(WorldGenerationOptions.ForSeed(seed)).Generate(TestContext.Current.CancellationToken);
+            var world = new WorldGenerator(TestWorlds.Options(seed)).Generate(TestContext.Current.CancellationToken);
             candidates.AddRange(world.Islands.Where(i => i.RiverTiles.Count > 0).Select(i => new Candidate(seed, i)));
         }
 
@@ -59,7 +59,7 @@ public class GoldenRegenerationTests
             "Cross-language parity fixture for river generation (RiverGenerator.Generate backend / generateRivers frontend): given an island's tiles (with terrain), a world seed, an island index, and wasted/allowConfluence flags, both sides must trace the same rivers in the same order. Covers: a green island with one simple spring-to-mouth river, a green island whose traced rivers collide into a confluence, a green island whose river takes at least one sharp (bend60) turn, and a wasted island whose lava stream (allowConfluence: false) never merges. Every scenario is a real island of a real WorldGenerator.Generate() run at the default world size (the smallest one of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the river trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). RiverGenerationGoldenTests.cs (backend) and riverGenerator.golden.test.ts (frontend) each compute against this fixture using their own production river-tracing implementation, then assert the frozen `rivers` list below (order matters: sorted by (q, r), same as RiverGenerator.BuildRiverTiles's own output order).",
             options)).Append(",\n  \"scenarios\": [\n");
 
-        var sampler = (Func<int, TerrainSampler>)(seed => new TerrainSampler(WorldGenerationOptions.ForSeed(seed)));
+        var sampler = (Func<int, TerrainSampler>)(seed => new TerrainSampler(TestWorlds.Options(seed)));
         for (var s = 0; s < scenarios.Length; s++)
         {
             var (name, pick) = scenarios[s];

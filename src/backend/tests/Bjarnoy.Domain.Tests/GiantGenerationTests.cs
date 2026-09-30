@@ -66,7 +66,7 @@ public class GiantGenerationTests
     public void Generated_giants_comply_with_every_placement_rule(int seed)
     {
         var world = Generate(seed);
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(seed));
+        var sampler = new TerrainSampler(TestWorlds.Options(seed));
 
         foreach (var island in world.Islands)
         {
@@ -144,7 +144,7 @@ public class GiantGenerationTests
     public void Orientation_matches_the_sampler_at_the_anchor()
     {
         var world = Generate(TwoGiantSeed);
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(TwoGiantSeed));
+        var sampler = new TerrainSampler(TestWorlds.Options(TwoGiantSeed));
 
         var anyChecked = false;
         foreach (var island in world.Islands)

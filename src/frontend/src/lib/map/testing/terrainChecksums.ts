@@ -9,8 +9,8 @@ import { hexDistance } from '../../hex/coords';
 import { TILE_ORIENTATIONS } from '../types';
 import { DEFAULT_GENERATION, orientationAt, terrainAt, variantAt } from '../worldGenerator';
 
-/** Hexes with |q|, |r| <= extent inside the world disc, every `stride`-th q and r, q-major. */
-export const CHECKSUM_SCAN = { extent: 1000, stride: 5 } as const;
+/** Hexes with |q|, |r| <= extent inside the default world disc (radius 4000), every `stride`-th q and r, q-major. */
+export const CHECKSUM_SCAN = { extent: 4000, stride: 20 } as const;
 
 export interface TerrainChecksums {
   terrain: string;

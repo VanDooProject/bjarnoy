@@ -18,7 +18,7 @@ namespace Bjarnoy.Api.Contracts;
 public sealed record CreateWorldRequest(
     [property: Required, MinLength(3), MaxLength(100)] string Name,
     int? Seed = null,
-    [property: Range(1, WorldGenerationOptions.MaxRadius)] int Radius = 1000,
+    [property: Range(1, WorldGenerationOptions.MaxRadius)] int Radius = 4000,
     [property: Range(1, 100000)] int MaxPlayers = 500,
     WorldGenerationSettingsOverrides? Generation = null);
 

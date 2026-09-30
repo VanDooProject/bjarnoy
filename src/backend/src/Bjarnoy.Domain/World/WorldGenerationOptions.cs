@@ -11,13 +11,13 @@ public sealed record WorldGenerationOptions
 
     /// <summary>
     /// Radius of the generated sea, in hexes from the origin. The number of hexes
-    /// is <c>3r(r+1)+1</c>, so a radius of 1000 is ~3M hexes. Terrain is never
+    /// is <c>3r(r+1)+1</c>, so the default 4000 is ~48M hexes. Terrain is never
     /// enumerated hex by hex at this size: <see cref="WorldGenerator"/> walks the
     /// island cells instead. An island that could cross this radius is not
     /// generated at all (see <see cref="TerrainSampler"/>), so the world edge
     /// never cuts an island in half.
     /// </summary>
-    public int Radius { get; init; } = 1000;
+    public int Radius { get; init; } = 4000;
 
     /// <summary>
     /// Edge length, in offset columns/rows, of the grid cell each island is seeded

@@ -30,7 +30,7 @@ public class IslandGenerationTests
         {
             WorldGenerationOptions.Compact(seed, 260),
             WorldGenerationOptions.Compact(seed, 420) with { IslandChance = 1.0 },
-            WorldGenerationOptions.ForSeed(seed),
+            TestWorlds.Options(seed),
         })
         {
             var world = TestWorlds.Generate(options);

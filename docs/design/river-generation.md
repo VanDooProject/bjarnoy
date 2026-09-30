@@ -205,7 +205,7 @@ Rivers only exist on islands with a qualifying (2+ tile) mountain cluster (see "
 bigger islands mean more inland area for mountains, and therefore more islands with rivers, without any change
 to the river algorithm itself. Islands have grown twice: the original circles (2.4-5.6 hexes) were doubled,
 then reshaped; with island shape v3 (below) a typical island is ~150 hexes across (5k-15k tiles), so nearly
-every island of the default world has several rivers. The default `WorldGenerationOptions.Radius` is 1000
+every island of the default world has several rivers. The default `WorldGenerationOptions.Radius` is 4000
 (raised from 90; it may be raised to 5000, see `WorldGenerationOptions.MaxRadius`).
 
 ## Island shape v3: spine, width and fractal coast

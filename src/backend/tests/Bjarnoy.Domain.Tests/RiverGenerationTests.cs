@@ -67,7 +67,7 @@ public class RiverGenerationTests
         var inland = 0;
         foreach (var seed in new[] { 2024, 1727259606 })
         {
-            var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(seed));
+            var sampler = new TerrainSampler(TestWorlds.Options(seed));
             var world = Generate(seed);
 
             foreach (var island in world.Islands)
@@ -113,7 +113,7 @@ public class RiverGenerationTests
         var checkedAny = false;
         foreach (var seed in new[] { 3, 14, 21 })
         {
-            var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(seed));
+            var sampler = new TerrainSampler(TestWorlds.Options(seed));
             var world = Generate(seed);
             foreach (var island in world.Islands)
             {
@@ -214,7 +214,7 @@ public class RiverGenerationTests
         var checkedAny = false;
         foreach (var seed in new[] { 1, 7 })
         {
-            var options = WorldGenerationOptions.ForSeed(seed) with { SharpBendPenalty = 0 };
+            var options = TestWorlds.Options(seed) with { SharpBendPenalty = 0 };
             var world = TestWorlds.Generate(options);
 
             foreach (var island in world.Islands)
@@ -248,7 +248,7 @@ public class RiverGenerationTests
         // between, or shorter).
         foreach (var seed in new[] { 1, 7 })
         {
-            var options = WorldGenerationOptions.ForSeed(seed) with { MinRiverLength = 4 };
+            var options = TestWorlds.Options(seed) with { MinRiverLength = 4 };
             var world = TestWorlds.Generate(options);
 
             foreach (var island in world.Islands)

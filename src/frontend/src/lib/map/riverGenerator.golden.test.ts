@@ -49,7 +49,7 @@ describe('river-generation golden fixture (river generation parity)', () => {
     // via the same `worldGenerator.ts` this island's terrain itself came
     // from — agree byte-for-byte with what the backend's `TerrainSampler`
     // computed for it.
-    const world: WorldSeed = { seed: scenario.worldSeed, generation: DEFAULT_GENERATION };
+    const world: WorldSeed = { seed: scenario.worldSeed, generation: { ...DEFAULT_GENERATION, worldRadius: 1000 } };
     const depthAt = (c: AxialCoord) => (scenario.wasted ? wastedDepthAt(c.q, c.r, world) : islandDepthAt(c.q, c.r, world));
     const globalIsLand = (c: AxialCoord) => terrainAt(c.q, c.r, world) !== 'sea';
 

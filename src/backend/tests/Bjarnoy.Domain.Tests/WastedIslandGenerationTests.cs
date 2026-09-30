@@ -37,7 +37,7 @@ public class WastedIslandGenerationTests
         // Cheap (no generation): the wasted cell grid must not be so thin that most
         // worlds never see one.
         var worldsWithWasted = Enumerable.Range(1, 60).Count(seed =>
-            new TerrainSampler(WorldGenerationOptions.ForSeed(seed)).EnumerateIslandShapes(wasted: true).Any());
+            new TerrainSampler(TestWorlds.Options(seed)).EnumerateIslandShapes(wasted: true).Any());
 
         Assert.True(worldsWithWasted >= 20, $"only {worldsWithWasted} of 60 worlds have a wasted island cell");
     }

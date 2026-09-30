@@ -27,7 +27,8 @@ const fixture = goldenFixtureJson as unknown as GoldenFixture;
 
 describe('wasted-terrain golden fixture (wasted islands parity)', () => {
   it.each(fixture.scenarios)('seed=$seed: matches the shared golden fixture', (scenario: Scenario) => {
-    const world = { seed: scenario.seed, generation: DEFAULT_GENERATION };
+    // The fixture was generated for a radius-1000 world (see scripts/regen-goldens/wasted-terrain-golden.ts).
+    const world = { seed: scenario.seed, generation: { ...DEFAULT_GENERATION, worldRadius: 1000 } };
     const actual: [number, number, Terrain][] = [];
 
     for (let dq = -scenario.radius; dq <= scenario.radius; dq++) {

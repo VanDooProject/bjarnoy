@@ -79,7 +79,7 @@ export interface WorldGenerationConstants {
 
 /** `WorldGenerationOptions`'s own C# defaults — demo mode's world (no backend to ask). */
 export const DEFAULT_GENERATION: WorldGenerationConstants = {
-  worldRadius: 1000,
+  worldRadius: 4000,
   islandCellSize: 260,
   islandChance: 0.8,
   islandMinWidth: 21,

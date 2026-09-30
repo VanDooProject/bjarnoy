@@ -128,7 +128,7 @@ describe('AdminWorldsView', () => {
     expect(adminCreateWorld).toHaveBeenCalledWith({
       name: 'Alfheim',
       seed: 77,
-      radius: 60,
+      radius: 4000,
       maxPlayers: 200,
     });
     expect(wrapper.text()).toContain('Alfheim');

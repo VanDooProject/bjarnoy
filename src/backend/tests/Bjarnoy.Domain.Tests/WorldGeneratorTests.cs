@@ -232,7 +232,7 @@ public class WorldGeneratorTests
     {
         // The legacy flood fill recursed once per land hex. The default
         // production-scale world has landmasses of tens of thousands of tiles.
-        var world = new WorldGenerator(WorldGenerationOptions.ForSeed(4))
+        var world = new WorldGenerator(TestWorlds.Options(4))
             .Generate(TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(world.Islands);

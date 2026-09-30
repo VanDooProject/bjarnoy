@@ -12,12 +12,12 @@ npm run worldgen-preview -- --seed 11 --radius 1000 --out preview.png
 ```
 
 `--out` is relative to the directory you ran `npm` from. A whole radius-1000 world takes
-about 8 s; add `--no-stats` for radius 4000 (the landmass scan then costs more than the picture).
+about 8 s; a radius-4000 world (the default) takes about a minute, mostly the landmass scan: add `--no-stats` to skip it.
 
 | option | meaning |
 | --- | --- |
 | `--seed N` | world seed (default 1) |
-| `--radius N` | world radius in hexes (default 1000). It is part of the terrain: an island that could cross it is not generated |
+| `--radius N` | world radius in hexes (default 4000). It is part of the terrain: an island that could cross it is not generated |
 | `--window Q,R,SIZE` | draw only `SIZE` hexes across, centred on axial hex `(Q,R)` (default: the whole world) |
 | `--px N` | pixels per hex circumradius; default fits the map to ~1800 px wide (below 1 px a hex is sampled at its centre) |
 | `--layers a,b` | layers, drawn in order: `terrain` (default), `wasted` |

@@ -15,7 +15,7 @@ const out = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/shared/w
 const seeds = [40, 16, 6];
 
 const scenarios = seeds.map((seed) => {
-  const world = { seed, generation: DEFAULT_GENERATION };
+  const world = { seed, generation: { ...DEFAULT_GENERATION, worldRadius: 1000 } };
   const wasted = enumerateIslandShapes(world, true);
   if (wasted.length === 0) throw new Error(`seed ${seed} has no wasted islands`);
   const island = wasted.reduce((a, b) => (b.reach < a.reach ? b : a));

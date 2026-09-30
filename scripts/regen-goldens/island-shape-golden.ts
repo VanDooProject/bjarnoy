@@ -65,10 +65,14 @@ const ODD: WorldGenerationConstants = {
   mountainThreshold: 0.35,
 };
 
+// Radius 1000 keeps the fixture small (a radius-4000 world has ~280 islands); the full default
+// radius is covered by terrain-checksum-golden.json.
+const DEFAULT_1000: WorldGenerationConstants = { ...DEFAULT_GENERATION, worldRadius: 1000 };
+
 const scenarios: { name: string; seed: number; generation: WorldGenerationConstants }[] = [
-  { name: 'default_seed_11', seed: 11, generation: DEFAULT_GENERATION },
-  { name: 'default_seed_6_with_wasted_islands', seed: 6, generation: DEFAULT_GENERATION },
-  { name: 'default_negative_seed', seed: -7, generation: DEFAULT_GENERATION },
+  { name: 'default_seed_11', seed: 11, generation: DEFAULT_1000 },
+  { name: 'default_seed_6_with_wasted_islands', seed: 6, generation: DEFAULT_1000 },
+  { name: 'default_negative_seed', seed: -7, generation: DEFAULT_1000 },
   { name: 'compact_seed_4242', seed: 4242, generation: COMPACT },
   { name: 'odd_knobs_seed_99', seed: 99, generation: ODD },
 ];
