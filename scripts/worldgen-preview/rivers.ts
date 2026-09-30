@@ -4,15 +4,38 @@
 // backend's WorldGenerator finds them, indexed the way it indexes them (landmasses ordered by
 // lowest (q, r), specks under MinimumIslandTiles dropped).
 import { coordKey, neighbors } from '../../src/frontend/src/lib/hex/coords';
-import { generateRivers, emptyRiverStats, type RiverStats } from '../../src/frontend/src/lib/map/riverGenerator';
+import { generateRiversWithBogs, emptyRiverStats, type RiverStats } from '../../src/frontend/src/lib/map/riverGenerator';
+import { addViolations, checkBogRules, noViolations, type BogRuleViolations } from '../../src/frontend/src/lib/map/bogRules';
+import { bogWaterExits, lakeSizes } from './bogs';
 import { islandDepthAt, terrainAt, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
-import { TILE_ORIENTATIONS, type RiverTile } from '../../src/frontend/src/lib/map/types';
+import { TILE_ORIENTATIONS, type BogTile, type RiverTile } from '../../src/frontend/src/lib/map/types';
 import { findLandmasses } from './landmasses';
 
 const MINIMUM_ISLAND_TILES = 6; // WorldGenerationOptions.MinimumIslandTiles' default
 
+/** One island's bogland, for the `bog` layer's footer and the acceptance statistics. */
+export interface BogIsland {
+  index: number;
+  land: number;
+  tiles: number;
+  /** Sizes of its lakes (a pocket lake included). */
+  lakes: number[];
+  /** Through-river bogs placed (lakes on land, one outflow each). */
+  sites: number;
+  sinks: number;
+  spawns: number;
+  pocketsFound: number;
+  pocketsFilled: number;
+  pocketSinks: number;
+  violations: BogRuleViolations;
+}
+
 export interface RiverField {
   tiles: Map<string, RiverTile>;
+  /** Every bog tile of every island the field covers. */
+  bogs: Map<string, BogTile>;
+  bogIslands: BogIsland[];
+  bogViolations: BogRuleViolations;
   islands: number;
   islandsWithRivers: number;
   stats: RiverStats;
@@ -34,13 +57,28 @@ export interface Window {
   size: number;
 }
 
+let cache: { key: string; field: RiverField } | null = null;
+
 export function computeRivers(world: WorldSeed, window?: Window): RiverField {
+  // The rivers and bog layers both want this field: compute it once per (world, window).
+  const cacheKey = JSON.stringify([world.seed, world.generation, window ?? null]);
+  if (cache?.key === cacheKey) return cache.field;
+  const field = computeRiversUncached(world, window);
+  cache = { key: cacheKey, field };
+  return field;
+}
+
+function computeRiversUncached(world: WorldSeed, window?: Window): RiverField {
   const started = performance.now();
   const { landmasses } = findLandmasses(world, false, true);
   const kept = landmasses.filter((l) => l.tiles >= MINIMUM_ISLAND_TILES);
   const isLand = (c: { q: number; r: number }) => terrainAt(c.q, c.r, world) !== 'sea';
   const stats = emptyRiverStats();
   const tiles = new Map<string, RiverTile>();
+  const bogs = new Map<string, BogTile>();
+  const bogIslands: BogIsland[] = [];
+  let bogViolations = noViolations();
+  const exitOf = new Map<string, string | null>();
   let islandsWithRivers = 0;
 
   kept.forEach((island, index) => {
@@ -49,7 +87,8 @@ export function computeRivers(world: WorldSeed, window?: Window): RiverField {
       const reach = window.size; // generous: any island touching the window's box
       if (!list.some((t) => Math.abs(t.q - window.q) <= reach && Math.abs(t.r - window.r) <= reach)) return;
     }
-    const rivers = generateRivers(
+    const islandStats = emptyRiverStats();
+    const { rivers, bogs: islandBogs } = generateRiversWithBogs(
       list,
       (c) => terrainAt(c.q, c.r, world),
       (c) => islandDepthAt(c.q, c.r, world),
@@ -58,21 +97,51 @@ export function computeRivers(world: WorldSeed, window?: Window): RiverField {
       index,
       false,
       true,
-      stats,
+      islandStats,
     );
+    for (const k of Object.keys(stats) as (keyof RiverStats)[]) stats[k] += islandStats[k];
     if (rivers.length > 0) islandsWithRivers++;
     for (const t of rivers) tiles.set(coordKey(t), t);
+    if (islandBogs.length > 0 || islandStats.pocketsFound > 0) {
+      const violations = checkBogRules(islandBogs, rivers, (c) => terrainAt(c.q, c.r, world));
+      bogViolations = addViolations(bogViolations, violations);
+      for (const t of islandBogs) bogs.set(coordKey(t), t);
+      for (const [k, v] of bogWaterExits(islandBogs)) exitOf.set(k, v);
+      bogIslands.push({
+        index,
+        land: list.length,
+        tiles: islandBogs.length,
+        lakes: lakeSizes(islandBogs),
+        sites: islandStats.sites,
+        sinks: islandStats.sinks,
+        spawns: islandStats.spawns,
+        pocketsFound: islandStats.pocketsFound,
+        pocketsFilled: islandStats.pocketsFilled,
+        pocketSinks: islandStats.pocketSinks,
+        violations,
+      });
+    }
   });
 
   // Follow every river to its end: root = the tile it ends on.
   const rootOf = new Map<string, string>();
+  // Rivers whose water ends in a lake without an outflow (sunk into an enclosed pocket): a legitimate end, not an inland mouth.
+  const sank = new Set<string>();
   const endOf = (t: RiverTile): RiverTile => {
     let cur = t;
     for (let guard = 0; cur.outDirection && guard < 100000; guard++) {
       const d = TILE_ORIENTATIONS.indexOf(cur.outDirection);
       const n = neighbors(cur)[d]!;
-      const next = tiles.get(coordKey(n));
-      if (!next) break;
+      let next = tiles.get(coordKey(n));
+      if (!next) {
+        // A river may hand its water to a bog creek: follow it through the lake to the river it feeds (or to its end in a pocket).
+        const back = exitOf.get(coordKey(n));
+        next = back ? tiles.get(back) : undefined;
+        if (!next) {
+          if (exitOf.has(coordKey(n)) && back === null) sank.add(coordKey(cur));
+          break;
+        }
+      }
       cur = next;
     }
     return cur;
@@ -92,7 +161,7 @@ export function computeRivers(world: WorldSeed, window?: Window): RiverField {
     }
     if (t.shape === 'spring') {
       const end = endOf(t);
-      if (end.shape !== 'mouth' || !neighbors(end).some((n) => !isLand(n))) inlandMouths++;
+      if (!sank.has(coordKey(end)) && (end.shape !== 'mouth' || !neighbors(end).some((n) => !isLand(n)))) inlandMouths++;
     }
     rootOf.set(coordKey(t), coordKey(endOf(t)));
   }
@@ -108,6 +177,9 @@ export function computeRivers(world: WorldSeed, window?: Window): RiverField {
 
   return {
     tiles,
+    bogs,
+    bogIslands,
+    bogViolations,
     islands: kept.length,
     islandsWithRivers,
     stats,

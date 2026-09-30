@@ -76,6 +76,8 @@ const TERRAIN_COLORS: Record<Terrain, string> = {
   grass: '#4c7a3f',
   forest: '#2e5730',
   mountain: '#7c7466',
+  bog: '#5b6234',
+  lake: '#27445e',
 };
 
 /** A seed the backend would accept: a non-negative signed-32-bit integer. */

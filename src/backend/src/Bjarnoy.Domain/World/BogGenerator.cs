@@ -783,7 +783,13 @@ internal sealed class BogGenerator
         anchors.Sort((a, b) =>
         {
             var byScore = b.Score.CompareTo(a.Score);
-            return byScore != 0 ? byScore : Cmp(a.Tile, b.Tile);
+            if (byScore != 0)
+            {
+                return byScore;
+            }
+
+            var byTile = Cmp(a.Tile, b.Tile);
+            return byTile != 0 ? byTile : a.Path != b.Path ? a.Path.CompareTo(b.Path) : a.Index.CompareTo(b.Index);
         });
 
         var attempts = 0;

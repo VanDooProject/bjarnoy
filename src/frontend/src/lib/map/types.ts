@@ -1,4 +1,4 @@
-export type Terrain = 'sea' | 'sand' | 'grass' | 'forest' | 'mountain';
+export type Terrain = 'sea' | 'sand' | 'grass' | 'forest' | 'mountain' | 'bog' | 'lake';
 
 /**
  * Which of the tile art pack's six camera rotations a hex renders with.
@@ -91,6 +91,28 @@ export function bend60OrientationOf(inDirection: TileOrientation, outDirection: 
 export function springOrientationOf(outDirection: TileOrientation): TileOrientation {
   const outIndex = TILE_ORIENTATIONS.indexOf(outDirection);
   return TILE_ORIENTATIONS[(2 - outIndex + 6) % 6];
+}
+
+/**
+ * The bog lake shore families (`boglake_inlet`, `boglake_shore`, `boglake_half`: one, two or three
+ * contiguous water edges) and the lake `mouth` (`boglake_mouth`: an inlet with the creek on the
+ * opposite edge) are one fixed shape camera-rotated six ways. Pixel-measured against the polygon
+ * edges like the river families (`docs/design/bog.md`, "Art pack orientation convention"): file `D`
+ * carries its water on polygon edges `D+4` (inlet, mouth), `D+3` and `D+4` (shore), `D+2`, `D+3`
+ * and `D+4` (half). Through the self-inverse edge formula (`edge(d) = (3 - d) mod 6`) those are the
+ * directions `(5-D)` (inlet), `(5-D)` and `(6-D)` (shore), `(5-D)`, `(6-D)` and `(7-D)` (half), all
+ * mod 6: a run of water directions that starts at `a = (5-D) mod 6` and continues `a+1`, `a+2`. So
+ * the file a shore with water run `a, a+1, ...` needs is `D = (5 - a) mod 6`. `waterEdges` is the
+ * run in ascending cyclic order (`BogTile.waterEdges`), so its first entry is `a`.
+ */
+export function bogShoreOrientationOf(waterEdges: readonly TileOrientation[]): TileOrientation {
+  const start = TILE_ORIENTATIONS.indexOf(waterEdges[0]!);
+  return TILE_ORIENTATIONS[(5 - start + 6) % 6]!;
+}
+
+/** The `boglake_mouth` file for a mouth whose lake lies in `water`; the creek is on the opposite edge. Same convention as `bogShoreOrientationOf`. */
+export function bogMouthOrientationOf(water: TileOrientation): TileOrientation {
+  return bogShoreOrientationOf([water]);
 }
 
 /**
@@ -441,6 +463,24 @@ export interface RiverTile {
   width?: RiverWidth;
   /** True for a lava stream on a wasted island — renders with the lavastream art families instead of rivertile. */
   wasted?: boolean;
+}
+
+/** What a bog hex is — mirrors the backend's `BogTileKind` wire names. */
+export type BogTileKind = 'bog' | 'lake' | 'inlet' | 'shore' | 'half' | 'mouth' | 'creek' | 'creekspring';
+
+/**
+ * A single hex of an island's bogland, as served by the backend (`BogTileResponse`) or generated locally in demo mode
+ * (`bogGenerator.ts`). A `lake` hex reads as terrain `lake`, every other kind as terrain `bog`. `inDirections` /
+ * `outDirection` are the flow of a creek, mouth or spring (like a river tile's); `waterEdges` are the lake neighbours of
+ * a shore or mouth, a contiguous run in ascending cyclic order.
+ */
+export interface BogTile {
+  q: number;
+  r: number;
+  kind: BogTileKind;
+  inDirections: TileOrientation[];
+  outDirection: TileOrientation | null;
+  waterEdges: TileOrientation[];
 }
 
 export function emptyResources(): Resources {
