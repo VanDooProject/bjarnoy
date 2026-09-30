@@ -943,6 +943,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("ClaimedQuests")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTimeOffset?>("FeastEndsAt")
                         .HasColumnType("TEXT");
 

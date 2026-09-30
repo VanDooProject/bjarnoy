@@ -74,6 +74,9 @@
     "invalid_credentials": "Benutzername oder Passwort ist falsch.",
     "invalid_refresh_token": "Deine Sitzung ist abgelaufen — bitte melde dich erneut an.",
     "AlreadyRunning": "Hier kann nur ein Fest gleichzeitig laufen.",
-    "NoTownSquare": "Hier steht kein Dorfplatz, um ein Fest auszurichten."
+    "NoTownSquare": "Hier steht kein Dorfplatz, um ein Fest auszurichten.",
+    "AlreadyClaimed": "Diese Belohnung wurde bereits abgeholt.",
+    "NotCompleted": "Diese Aufgabe ist noch nicht erledigt.",
+    "UnknownQuest": "Diese Aufgabe gibt es nicht."
   }
 }

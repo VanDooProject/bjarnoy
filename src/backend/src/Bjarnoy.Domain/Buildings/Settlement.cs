@@ -105,6 +105,19 @@ public sealed record Settlement
     /// </summary>
     public double PendingFeastRenown { get; init; }
 
+    /// <summary>
+    /// Bitmask of the onboarding quests whose reward was already claimed
+    /// (<see cref="Quest.Mask"/>). Set once per quest, which is what makes the
+    /// reward pay exactly once.
+    /// </summary>
+    public int ClaimedQuests { get; init; }
+
+    /// <summary>
+    /// How many completed resource producers stand here (queued orders do not
+    /// count — <see cref="Buildings"/> only holds finished buildings).
+    /// </summary>
+    public int ProducerCount => Buildings.Count(b => Quests.IsProducer(b.Type));
+
     /// <summary>The level of the standing Town Square (0 when there is none).</summary>
     public int TownSquareLevel =>
         Buildings.Where(b => b.Type == BuildingType.TownSquare).Select(b => b.Level).DefaultIfEmpty(0).Max();
@@ -2033,6 +2046,52 @@ public sealed record Settlement
             : TimeSpan.FromTicks((long)(Feasts.Duration.Ticks / speedFactor));
 
         return FeastDecision.Accept(new Feast(now, now + duration, Feasts.RenownFor(townSquare)));
+    }
+
+    /// <summary>Whether the onboarding quest <paramref name="quest"/> was already claimed.</summary>
+    public bool HasClaimed(Quest quest) => (ClaimedQuests & quest.Mask) != 0;
+
+    /// <summary>
+    /// Decides whether the onboarding quest <paramref name="questId"/> may be
+    /// claimed: it must exist, not be claimed yet, and its condition must hold.
+    /// Any completed quest may be claimed, in any order. Call on an
+    /// already-settled settlement — mirrors <see cref="PlanFeast"/>.
+    /// </summary>
+    public QuestDecision PlanClaimQuest(string? questId)
+    {
+        if (Quests.Find(questId) is not { } quest)
+        {
+            return QuestDecision.Rejected(QuestRejection.UnknownQuest);
+        }
+
+        if (HasClaimed(quest))
+        {
+            return QuestDecision.Rejected(QuestRejection.AlreadyClaimed);
+        }
+
+        return quest.IsCompleted(this)
+            ? QuestDecision.Accept(quest)
+            : QuestDecision.Rejected(QuestRejection.NotCompleted);
+    }
+
+    /// <summary>
+    /// Pays <paramref name="quest"/>'s reward into the stock, clamped to
+    /// storage capacity, and marks it claimed. Call <see cref="PlanClaimQuest"/> first.
+    /// </summary>
+    public Settlement ClaimQuest(Quest quest, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(quest);
+
+        if (HasClaimed(quest) || !quest.IsCompleted(this))
+        {
+            throw new InvalidOperationException("Cannot claim a quest that is claimed or not completed; call PlanClaimQuest first.");
+        }
+
+        return this with
+        {
+            Resources = Resources.Deposit(quest.Reward, now),
+            ClaimedQuests = ClaimedQuests | quest.Mask,
+        };
     }
 
     /// <summary>Pays for <paramref name="feast"/> and starts it. Call <see cref="PlanFeast"/> first.</summary>

@@ -8,7 +8,9 @@ import deLanding from './locales/de/landing.json';
 import enWorlds from './locales/en/worlds.json';
 import deWorlds from './locales/de/worlds.json';
 import enOnboarding from './locales/en/onboarding.json';
+import enQuests from './locales/en/quests.json';
 import deOnboarding from './locales/de/onboarding.json';
+import deQuests from './locales/de/quests.json';
 import enDemoModeBadge from './locales/en/demoModeBadge.json';
 import deDemoModeBadge from './locales/de/demoModeBadge.json';
 import enLogin from './locales/en/login.json';
@@ -95,6 +97,7 @@ export const i18n = createI18n({
       landing: enLanding,
       worlds: enWorlds,
       onboarding: enOnboarding,
+      quests: enQuests,
       demoModeBadge: enDemoModeBadge,
       login: enLogin,
       register: enRegister,
@@ -133,6 +136,7 @@ export const i18n = createI18n({
       landing: deLanding,
       worlds: deWorlds,
       onboarding: deOnboarding,
+      quests: deQuests,
       demoModeBadge: deDemoModeBadge,
       login: deLogin,
       register: deRegister,

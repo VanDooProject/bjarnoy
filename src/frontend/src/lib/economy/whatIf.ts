@@ -26,7 +26,7 @@ export const DEFAULT_WHAT_IF: WhatIfKnobs = {
   costGrowth: 1.3,
   longhouseCostGrowth: 1.34,
   timeGrowth: 1.33,
-  longhouseTimeGrowth: 1.3,
+  longhouseTimeGrowth: 1.33,
   productionGrowth: 1.2,
   producerCostScale: 1,
   longhouseCostScale: 1,

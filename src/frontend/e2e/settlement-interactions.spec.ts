@@ -51,6 +51,15 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     expect(Buffer.compare(hoverA, hoverB)).not.toBe(0);
   });
 
+  test('the onboarding quest tray shows the first quest in the settlement view', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+
+    await expect(settlement.questTray).toBeVisible();
+    await expect(settlement.questTray).toContainText('Build 3 resource producers');
+    await expect(settlement.questTray.getByTestId('quest-progress')).toHaveText('0 of 6');
+  });
+
   test('clicking an empty hex inside the realm places a building', async ({ page }) => {
     // Same reasoning as the hover/panning tests above: foundSettlement()
     // plus driving a real click through the render runs close to (and on

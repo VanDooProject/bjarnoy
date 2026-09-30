@@ -51,7 +51,7 @@ For a building with level-1 values `C₁` (cost, per resource), `P₁`
 ```
 cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (Longhouse 1.34)
 production(L) = P₁ · g_p^(L−1)           g_p = 1.20
-buildTime(L)  = t₁ · g_t^(L−1) · s(LH)   g_t = 1.33  (Longhouse 1.30)
+buildTime(L)  = t₁ · g_t^(L−1) · s(LH)   g_t = 1.33
 s(LH)         = 0.97^(LH−1)              Longhouse build-speed bonus (Travian's Main Building)
 ```
 
@@ -64,7 +64,7 @@ per level: the next level is always worth building, just less obviously.
 | Building | C₁ wood/stone/food | P₁ /h | t₁ min |
 |---|---|---|---|
 | Producers (Lumberjack, Quarry, Clay, Herder, Farm, Fishing) | 50 / 40 / 15 | 40 | 3 |
-| Longhouse | 120 / 100 / 60 | +15 wood, +12 stone, +15 food per level (linear) | 3 |
+| Longhouse | 120 / 100 / 60 | +15 wood, +12 stone, +15 food per level (linear) | 1.5 |
 | Storage House | 80 / 60 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
 
 (Other buildings: same formulas, `C₁`/`t₁` set per building in the
@@ -296,6 +296,9 @@ ahead), against four targets:
 | 4 check-ins | d20.7 | d13.0 | d12.5 | d13.0 | 408k (106k, 3.9×) | Longhouse 10 (renown half a day earlier) |
 | 2 check-ins | d28.2 | d26.0 | d18.5 | d26.0 | 211k (61k, 3.4×) | Longhouse 10 |
 
+These runs predate the faster Longhouse (t₁ 1.5 min ×1.33, §3). With it, the
+4-check-ins player settles about half a day earlier (d12.35 in the lab test).
+
 Feasts are what lets an active player settle a week early. A casual player
 gains a few days at most, because the Longhouse 10 unlock is still ahead of
 their renown.
@@ -309,18 +312,42 @@ their renown.
   +15 / 12 / 15 per level.
 - **Onboarding quests pay resources** (Travian's task list), so the first
   hour keeps moving. They never hand out a finished building, so the
-  Longhouse 2 upgrade the tutorial asks for has to build fast (a couple of
-  minutes). The tutorial also walks the player through placing a Storage
-  House and upgrading the Longhouse:
+  Longhouse 2 upgrade the tutorial asks for has to build fast: the
+  Longhouse's `t₁` is 1.5 min at the shared ×1.33, so LH 2 builds in about 2
+  min. The tutorial also walks the player through placing a Storage
+  House and upgrading the Longhouse.
 
-  | Quest | Reward (wood / stone / food) |
-  |---|---|
-  | 3 producers built | 150 / 120 / 80 |
-  | Longhouse 2 | 250 / 200 / 150 |
-  | 6 producers built | 200 / 150 / 100 |
-  | Longhouse 3 | 400 / 300 / 200 |
-  | First Storage House | 200 / 200 / 200 |
-  | Longhouse 5 | 800 / 600 / 400 |
+  The quests come in this order (`Bjarnoy.Domain.Settlers.Quests`, mirrored
+  for demo mode in `src/frontend/src/lib/quests.ts`):
+
+  | # | Quest | Condition | Reward (wood / stone / food) |
+  |---|---|---|---|
+  | 1 | 3 producers built | 3 standing resource producers | 150 / 120 / 80 |
+  | 2 | Longhouse 2 | Longhouse level 2 or more | 250 / 200 / 150 |
+  | 3 | First Storage House | a standing Storage House | 200 / 200 / 200 |
+  | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
+  | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
+  | 6 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
+
+  Rules:
+
+  - **Manual claim.** A completed quest pays nothing until the player presses
+    Claim in the quest tray (`POST /settlements/{id}/quests/{questId}/claim`).
+    The tray shows the first unclaimed quest, plus any other completed one so
+    it can be claimed; quests can be claimed in any order.
+  - **Exactly once per settlement.** Each quest has a bit in the settlement's
+    claimed-quests mask, set in the same save that pays the reward, so a
+    double click or a retry gets a 409 (`AlreadyClaimed`), never a second
+    payment. A second settlement has its own list.
+  - **Only standing buildings count.** Queued and under-construction orders do
+    not; a producer is any building (other than the Longhouse) that yields
+    wood, stone, food or iron of its own, so storage, towers and the
+    radius-boost buildings (Sawmill, Crop Mill) do not.
+  - **Clamped to storage.** The reward is deposited like any other income, so
+    whatever would exceed a resource's storage capacity is lost; the tray
+    warns when a reward will not fully fit.
+  - **Never a building.** Rewards are resources only, never a finished or
+    free building.
 
 Simulated: the first 25 minutes are continuous building (9 producers, then
 LH 2 at about 13 min), LH 3 at about 1h45.
