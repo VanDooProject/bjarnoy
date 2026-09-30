@@ -89,7 +89,7 @@ internal static class RiverGenerator
         var paths = new List<List<HexCoord>>();
         foreach (var spring in springs)
         {
-            var path = TracePath(spring, islandLand, depthAt, isLand, options, seed, null, out var outcome);
+            var path = TracePath(spring, islandLand, depthAt, isLand, options, seed, null, null, out var outcome);
             if (outcome == TraceOutcome.Sea && path.Count >= options.MinRiverLength)
             {
                 paths.Add(path);
@@ -116,6 +116,7 @@ internal static class RiverGenerator
     {
         var springs = PickSprings(islandTiles, land, islandLand, depthAt, options, seed);
         var claims = new Dictionary<HexCoord, Claim>();
+        var claimDistance = new Dictionary<HexCoord, int>();
         var paths = new List<List<HexCoord>>();
         foreach (var spring in springs)
         {
@@ -124,13 +125,14 @@ internal static class RiverGenerator
                 continue;
             }
 
-            var path = TracePath(spring, islandLand, depthAt, isLand, options, seed, claims, out var outcome);
+            var path = TracePath(spring, islandLand, depthAt, isLand, options, seed, claims, claimDistance, out var outcome);
             if (outcome == TraceOutcome.Failed || path.Count < options.MinRiverLength)
             {
                 continue;
             }
 
             Commit(path, outcome == TraceOutcome.Merged, claims);
+            SpreadClaimDistance(path, claims, islandLand, options.MergeAttractionRadius, claimDistance);
             paths.Add(path);
             if (stats is not null)
             {
@@ -182,6 +184,63 @@ internal static class RiverGenerator
             }
 
             claims[tile] = new Claim { In1 = inDir, Out = outDir, Spring = i == 0 };
+        }
+    }
+
+    /// <summary>
+    /// Records, for every island tile within <paramref name="radius"/> hexes of an approach tile of
+    /// <paramref name="path"/>, its distance to the nearest one (1 = the approach tile itself). An
+    /// approach tile is a free neighbour of a plain tile of the path from which a walk could step
+    /// on and merge - where the art can draw the Y. The pull leads a tributary to the right
+    /// side of a trunk, not just near it.
+    /// </summary>
+    private static void SpreadClaimDistance(
+        List<HexCoord> path,
+        Dictionary<HexCoord, Claim> claims,
+        HashSet<HexCoord> islandLand,
+        int radius,
+        Dictionary<HexCoord, int> claimDistance)
+    {
+        var frontier = new List<HexCoord>();
+        foreach (var tile in path)
+        {
+            var claim = claims[tile];
+            if (claim.Spring || claim.In1 < 0 || claim.In2 >= 0 || claim.Out < 0)
+            {
+                continue;
+            }
+
+            for (var b = 0; b < 6; b++)
+            {
+                var approach = tile + HexCoord.Directions[b];
+                if (islandLand.Contains(approach) && !claims.ContainsKey(approach)
+                    && RiverConfluence.IsRepresentable(claim.In1, b, claim.Out)
+                    && !(claimDistance.TryGetValue(approach, out var known) && known <= 1))
+                {
+                    claimDistance[approach] = 1;
+                    frontier.Add(approach);
+                }
+            }
+        }
+
+        for (var d = 2; d <= radius && frontier.Count > 0; d++)
+        {
+            var next = new List<HexCoord>();
+            foreach (var tile in frontier)
+            {
+                foreach (var n in tile.Neighbours())
+                {
+                    if (!islandLand.Contains(n) || claims.ContainsKey(n) || (claimDistance.TryGetValue(n, out var known) && known <= d))
+                    {
+                        continue;
+                    }
+
+                    claimDistance[n] = d;
+                    next.Add(n);
+                }
+            }
+
+            frontier = next;
         }
     }
 
@@ -407,12 +466,13 @@ internal static class RiverGenerator
         WorldGenerationOptions options,
         int seed,
         Dictionary<HexCoord, Claim>? claims,
+        Dictionary<HexCoord, int>? claimDistance,
         out TraceOutcome outcome)
     {
         var path = new List<HexCoord> { spring };
         var visited = new HashSet<HexCoord> { spring };
         var frames = new Stack<TraceFrame>();
-        frames.Push(new TraceFrame(BuildCandidates(spring, path, islandLand, visited, depthAt, options, seed, claims)));
+        frames.Push(new TraceFrame(BuildCandidates(spring, path, islandLand, visited, depthAt, options, seed, claims, claimDistance)));
 
         // Each tile's candidate list is built once, when it's pushed, and
         // every candidate in it is consumed at most once before the frame is
@@ -457,7 +517,7 @@ internal static class RiverGenerator
             }
 
             path.Add(next);
-            frames.Push(new TraceFrame(BuildCandidates(next, path, islandLand, visited, depthAt, options, seed, claims)));
+            frames.Push(new TraceFrame(BuildCandidates(next, path, islandLand, visited, depthAt, options, seed, claims, claimDistance)));
         }
 
         outcome = TraceOutcome.Failed;
@@ -504,7 +564,8 @@ internal static class RiverGenerator
         Func<HexCoord, double?> depthAt,
         WorldGenerationOptions options,
         int seed,
-        Dictionary<HexCoord, Claim>? claims)
+        Dictionary<HexCoord, Claim>? claims,
+        Dictionary<HexCoord, int>? claimDistance)
     {
         var neighbours = tile.Neighbours();
 
@@ -560,6 +621,10 @@ internal static class RiverGenerator
             if (merge)
             {
                 score += options.MergeBonus;
+            }
+            else if (claimDistance is not null && claimDistance.TryGetValue(neighbour, out var pull))
+            {
+                score += options.MergeAttraction * (options.MergeAttractionRadius - pull + 1) / options.MergeAttractionRadius;
             }
 
             if (i == sharpTurnA || i == sharpTurnB)

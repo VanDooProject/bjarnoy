@@ -147,6 +147,16 @@ public sealed record WorldGenerationOptions
     public double MergeBonus { get; init; } = 0.35;
 
     /// <summary>
+    /// Pull of earlier rivers on a walk: a step within <see cref="MergeAttractionRadius"/> hexes of
+    /// a tile of an earlier river scores up to this much more, growing linearly as it gets closer,
+    /// so tributaries drift toward a trunk instead of running to their own coast.
+    /// </summary>
+    public double MergeAttraction { get; init; } = 0.3;
+
+    /// <summary>Reach (hexes) of <see cref="MergeAttraction"/>.</summary>
+    public int MergeAttractionRadius { get; init; } = 12;
+
+    /// <summary>
     /// Subtracted from a candidate step's score when it would turn 120° off
     /// straight-ahead (a <see cref="RiverTileShape.Bend60"/> tile) rather than
     /// continue straight or take the gentler 60°-off <see cref="RiverTileShape.Bend"/>
@@ -201,6 +211,8 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxSpringsPerIsland, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(MinSpringSpacing);
         ArgumentOutOfRangeException.ThrowIfNegative(MergeBonus);
+        ArgumentOutOfRangeException.ThrowIfNegative(MergeAttraction);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MergeAttractionRadius, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);

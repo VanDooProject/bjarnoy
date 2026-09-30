@@ -255,7 +255,7 @@ describe('confluenceOrientationOf', () => {
   });
 
   it('returns null for a triple the asset cannot draw (the mirror image)', () => {
-    expect(confluenceOrientationOf(['E', 'NE'], 'SW')).toBeNull();
+    expect(confluenceOrientationOf(['E', 'NE'], 'NW')).toBeNull();
     expect(confluenceOrientationOf(['SE', 'E'], 'NW')).toBeNull();
   });
 

@@ -46,6 +46,10 @@ export const MAX_SPRINGS_PER_ISLAND = 16;
 export const MIN_SPRING_SPACING = 10;
 /** Score bonus for a step that merges into an existing river — mirrors `WorldGenerationOptions.MergeBonus`. */
 export const MERGE_BONUS = 0.35;
+/** Pull of earlier rivers on a walk: up to this much extra score within `MERGE_ATTRACTION_RADIUS` hexes of one — mirrors `WorldGenerationOptions.MergeAttraction`. */
+export const MERGE_ATTRACTION = 0.3;
+/** Reach (hexes) of `MERGE_ATTRACTION` — mirrors `WorldGenerationOptions.MergeAttractionRadius`. */
+export const MERGE_ATTRACTION_RADIUS = 12;
 
 /** Counters a caller can pass to `generateRivers` to see what the tracer did (the preview tool, tests). */
 export interface RiverStats {
@@ -150,6 +154,7 @@ function buildCandidates(
   depthAt: (c: AxialCoord) => number | null,
   seed: number,
   claims: Map<string, Claim> | null,
+  claimDistance: Map<string, number> | null,
 ): AxialCoord[] {
   const ns = neighbors(tile);
 
@@ -193,6 +198,10 @@ function buildCandidates(
     const noise = hash2(neighbour.q, neighbour.r, seed + 43);
     let score = depth + RIVER_MEANDER_WEIGHT * noise;
     if (merge) score += MERGE_BONUS;
+    else {
+      const pull = claimDistance?.get(key);
+      if (pull !== undefined) score += (MERGE_ATTRACTION * (MERGE_ATTRACTION_RADIUS - pull + 1)) / MERGE_ATTRACTION_RADIUS;
+    }
     if (i === sharpTurnA || i === sharpTurnB) score -= SHARP_BEND_PENALTY;
 
     (depth >= currentDepth ? forward : fallback).push({ coord: neighbour, score });
@@ -231,11 +240,12 @@ function tracePath(
   isLand: (c: AxialCoord) => boolean,
   seed: number,
   claims: Map<string, Claim> | null,
+  claimDistance: Map<string, number> | null,
 ): { path: AxialCoord[]; outcome: TraceOutcome } {
   const path: AxialCoord[] = [spring];
   const visited = new Set<string>([coordKey(spring)]);
   const frames: TraceFrame[] = [
-    { candidates: buildCandidates(spring, path, islandLand, visited, depthAt, seed, claims), nextIndex: 0 },
+    { candidates: buildCandidates(spring, path, islandLand, visited, depthAt, seed, claims, claimDistance), nextIndex: 0 },
   ];
 
   // Each tile's candidate list is built once, when it's pushed, and every
@@ -274,7 +284,7 @@ function tracePath(
     visited.add(nextKey);
 
     path.push(next);
-    frames.push({ candidates: buildCandidates(next, path, islandLand, visited, depthAt, seed, claims), nextIndex: 0 });
+    frames.push({ candidates: buildCandidates(next, path, islandLand, visited, depthAt, seed, claims, claimDistance), nextIndex: 0 });
   }
 
   return { path, outcome: 'failed' };
@@ -533,6 +543,49 @@ function assignWidths(
   return nodes.filter((n) => !n.removed).map((n) => nodeToTile(n, n.width, false));
 }
 
+/** Mirrors `RiverGenerator.SpreadClaimDistance`: distance to the nearest tile a walk could merge from. */
+function spreadClaimDistance(
+  path: AxialCoord[],
+  claims: Map<string, Claim>,
+  islandLand: Set<string>,
+  claimDistance: Map<string, number>,
+): void {
+  let frontier: AxialCoord[] = [];
+  for (const tile of path) {
+    const claim = claims.get(coordKey(tile))!;
+    if (claim.spring || claim.in1 < 0 || claim.in2 >= 0 || claim.out < 0) continue;
+    const ns = neighbors(tile);
+    for (let b = 0; b < 6; b++) {
+      const approach = ns[b]!;
+      const k = coordKey(approach);
+      if (
+        islandLand.has(k) &&
+        !claims.has(k) &&
+        confluenceKind(claim.in1, b, claim.out) !== null &&
+        !((claimDistance.get(k) ?? 99) <= 1)
+      ) {
+        claimDistance.set(k, 1);
+        frontier.push(approach);
+      }
+    }
+  }
+
+  for (let d = 2; d <= MERGE_ATTRACTION_RADIUS && frontier.length > 0; d++) {
+    const next: AxialCoord[] = [];
+    for (const tile of frontier) {
+      for (const n of neighbors(tile)) {
+        const k = coordKey(n);
+        if (!islandLand.has(k) || claims.has(k)) continue;
+        const known = claimDistance.get(k);
+        if (known !== undefined && known <= d) continue;
+        claimDistance.set(k, d);
+        next.push(n);
+      }
+    }
+    frontier = next;
+  }
+}
+
 /**
  * Springs by farthest-point sampling — mirrors `RiverGenerator.PickSprings`: candidates are
  * mountain tiles of clusters of at least two that sit on a range edge and do not touch the sea
@@ -650,7 +703,7 @@ export function generateRivers(
 
     const paths: AxialCoord[][] = [];
     for (const spring of springs) {
-      const { path, outcome } = tracePath(spring, islandLand, depthAt, isLand, seed, null);
+      const { path, outcome } = tracePath(spring, islandLand, depthAt, isLand, seed, null, null);
       if (outcome === 'sea' && path.length >= MIN_RIVER_LENGTH) paths.push(path);
     }
 
@@ -660,11 +713,12 @@ export function generateRivers(
 
   const springs = pickSprings(islandTiles, terrainOf, islandLand, depthAt, seed);
   const claims = new Map<string, Claim>();
+  const claimDistance = new Map<string, number>();
   const paths: AxialCoord[][] = [];
   for (const spring of springs) {
     if (claims.has(coordKey(spring))) continue;
 
-    const { path, outcome } = tracePath(spring, islandLand, depthAt, isLand, seed, claims);
+    const { path, outcome } = tracePath(spring, islandLand, depthAt, isLand, seed, claims, claimDistance);
     if (outcome === 'failed' || path.length < MIN_RIVER_LENGTH) continue;
 
     const merged = outcome === 'merged';
@@ -678,6 +732,7 @@ export function generateRivers(
       }
       claims.set(coordKey(tile), { in1: inDir, in2: -1, out: outDir, spring: i === 0 });
     }
+    spreadClaimDistance(path, claims, islandLand, claimDistance);
     paths.push(path);
     if (stats) {
       stats.rivers++;
