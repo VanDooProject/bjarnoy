@@ -491,26 +491,41 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
   };
 }
 
+/** Width of `word` in em (at a 1px font size), letter spacing not included. */
+export type WordEmWidth = (word: string) => number;
+
+/**
+ * Rough per-glyph estimate for the UI font's semibold weight (uppercase is
+ * wider) — only for environments with no canvas to measure with (unit
+ * tests); the browser passes `measureWordEm` below instead.
+ */
+export const estimateWordEm: WordEmWidth = (word) =>
+  [...word].reduce((sum, ch) => sum + (ch === ch.toUpperCase() && ch !== ch.toLowerCase() ? 0.7 : 0.56), 0);
+
 /**
  * Font size for a label inside a round bubble of `diameter` px: `basePx`,
  * shrunk just enough that the label's longest word fits on one line.
- * Without it a single long word ("Watchtower", "LONGHOUSE", German
+ * Without it a single long word ("Watchtower", "GRASSLAND", German
  * "Holzfällerhütte") either overflowed the circle or — with
  * `overflow-wrap: anywhere` as the fallback — split mid-word
- * ("Watchtowe"/"r"). Glyph widths are an estimate for the UI font's
- * semibold weight (uppercase is wider), deliberately on the generous side.
+ * ("Watchtowe"/"r").
  */
 export function bubbleLabelFontPx(
   label: string,
   diameter: number,
   basePx: number,
-  { uppercase = false, letterSpacingEm = 0.02, minPx = 6.5 } = {},
+  {
+    uppercase = false,
+    letterSpacingEm = 0.02,
+    minPx = 6.5,
+    // The bubble's own 2px side padding, plus a little for the round edge.
+    availablePx = diameter - 6,
+    wordEm = estimateWordEm,
+  }: { uppercase?: boolean; letterSpacingEm?: number; minPx?: number; availablePx?: number; wordEm?: WordEmWidth } = {},
 ): number {
-  const longest = label.split(/\s+/).reduce((max, word) => Math.max(max, [...word].length), 0);
-  if (longest === 0) return basePx;
-  // The bubble's own 2px side padding, plus a little for the round edge.
-  const available = diameter - 6;
-  const glyphEm = (uppercase ? 0.7 : 0.56) + letterSpacingEm;
-  const fitting = available / (longest * glyphEm);
+  const words = (uppercase ? label.toUpperCase() : label).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return basePx;
+  const widestEm = Math.max(...words.map((word) => wordEm(word) + [...word].length * letterSpacingEm));
+  const fitting = availablePx / widestEm;
   return Math.floor(Math.max(minPx, Math.min(basePx, fitting)) * 10) / 10;
 }

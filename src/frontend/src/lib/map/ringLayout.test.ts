@@ -295,6 +295,13 @@ describe('bubbleLabelFontPx', () => {
     expect(upper).toBeLessThan(lower);
   });
 
+  it('sizes by the measured width when one is given, not the estimate', () => {
+    const wide = bubbleLabelFontPx('Grassland', HUB, 10.5, { wordEm: (w) => w.length * 0.9 });
+    const narrow = bubbleLabelFontPx('Grassland', HUB, 10.5, { wordEm: (w) => w.length * 0.5 });
+    expect(wide).toBeLessThan(narrow);
+    expect(9 * (0.9 + 0.02) * wide).toBeLessThanOrEqual(HUB - 6);
+  });
+
   it('never goes below the readable floor', () => {
     expect(bubbleLabelFontPx('Holzfällerhüttenerweiterung', BUB2, 9)).toBe(6.5);
   });

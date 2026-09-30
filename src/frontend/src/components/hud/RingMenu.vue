@@ -41,6 +41,8 @@ import {
   NOTE_W,
   type Rect,
   bubbleLabelFontPx,
+  estimateWordEm,
+  type WordEmWidth,
 } from '../../lib/map/ringLayout';
 
 export interface RingAction {
@@ -284,6 +286,38 @@ const costChips = computed(() => {
 
 const hubLabel = computed(() => (atRoot.value ? props.terrainLabel : t('hud.ringMenu.buildHub')));
 const hubSub = computed(() => (atRoot.value ? props.coordLabel : props.terrainLabel));
+// Real glyph widths of the UI font for bubbleLabelFontPx — a per-glyph
+// estimate was right on one machine and a whole letter short on CI's
+// Chromium. OffscreenCanvas shares the document's loaded fonts; where it
+// doesn't exist (jsdom) the estimate stands in.
+const measureCtx = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(1, 1).getContext('2d') : null;
+const wordEmCache = new Map<string, number>();
+function wordEmAt(weight: number): WordEmWidth {
+  if (!measureCtx) return estimateWordEm;
+  const family = getComputedStyle(document.body).fontFamily || 'sans-serif';
+  return (word) => {
+    const key = `${weight}|${family}|${word}`;
+    let em = wordEmCache.get(key);
+    if (em === undefined) {
+      measureCtx.font = `${weight} 100px ${family}`;
+      em = measureCtx.measureText(word).width / 100;
+      wordEmCache.set(key, em);
+    }
+    return em;
+  };
+}
+const bubbleFont = (label: string, diameter: number, basePx: number) =>
+  `${bubbleLabelFontPx(label, diameter, basePx, { wordEm: wordEmAt(700) })}px`;
+// `.hub-label` is capped at 84% of the hub (see its CSS), uppercase, 0.06em tracking.
+const hubLabelFont = computed(
+  () =>
+    `${bubbleLabelFontPx(hubLabel.value, HUB, 10.5, {
+      uppercase: true,
+      letterSpacingEm: 0.06,
+      availablePx: HUB * 0.84 - 2,
+      wordEm: wordEmAt(700),
+    })}px`,
+);
 
 function goUp() {
   if (path.value.length) {
@@ -384,7 +418,7 @@ function onBackdropPointerDown(e: PointerEvent) {
       :title="atRoot ? undefined : t('hud.ringMenu.back')"
       @click="goUp"
     >
-      <span class="hub-label" :style="{ fontSize: `${bubbleLabelFontPx(hubLabel, HUB, 10.5, { uppercase: true, letterSpacingEm: 0.06 })}px` }">{{ hubLabel }}</span>
+      <span class="hub-label" :style="{ fontSize: hubLabelFont }">{{ hubLabel }}</span>
       <span v-if="hubSub" class="hub-sub">{{ hubSub }}</span>
     </button>
 
@@ -402,7 +436,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         top: `${entry.y}px`,
         width: `${layout.collapsed ? DOT : BUB1}px`,
         height: `${layout.collapsed ? DOT : BUB1}px`,
-        fontSize: `${bubbleLabelFontPx(entry.item.label, BUB1, entry.item.label.length > 7 ? 8.2 : 9.2)}px`,
+        fontSize: bubbleFont(entry.item.label, BUB1, entry.item.label.length > 7 ? 8.2 : 9.2),
         '--tint': entry.color,
       }"
       :aria-disabled="entry.item.disabled || undefined"
@@ -433,7 +467,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         top: `${b.y}px`,
         width: `${BUB2}px`,
         height: `${BUB2}px`,
-        fontSize: `${bubbleLabelFontPx(b.building.label, BUB2, b.building.label.length > 7 ? 8.4 : 9.4)}px`,
+        fontSize: bubbleFont(b.building.label, BUB2, b.building.label.length > 7 ? 8.4 : 9.4),
         '--tint': b.color,
       }"
       :title="b.building.lock"
