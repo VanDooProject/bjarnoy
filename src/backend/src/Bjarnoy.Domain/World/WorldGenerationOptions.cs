@@ -131,6 +131,22 @@ public sealed record WorldGenerationOptions
     public double RiverMeanderWeight { get; init; } = 0.35;
 
     /// <summary>
+    /// Land tiles an island needs per river spring: an island gets
+    /// <c>round(land / RiverTilesPerSpring)</c> springs, at least 1 and at most
+    /// <see cref="MaxSpringsPerIsland"/>. See <c>docs/design/river-generation.md</c>.
+    /// </summary>
+    public int RiverTilesPerSpring { get; init; } = 900;
+
+    /// <summary>Most springs (and so rivers) one island gets.</summary>
+    public int MaxSpringsPerIsland { get; init; } = 16;
+
+    /// <summary>Springs are picked farthest-first; picking stops once the best is closer than this (hexes) to a chosen one.</summary>
+    public int MinSpringSpacing { get; init; } = 10;
+
+    /// <summary>Score bonus for a step that merges a tributary into an existing river (where the art can draw the Y).</summary>
+    public double MergeBonus { get; init; } = 0.35;
+
+    /// <summary>
     /// Subtracted from a candidate step's score when it would turn 120° off
     /// straight-ahead (a <see cref="RiverTileShape.Bend60"/> tile) rather than
     /// continue straight or take the gentler 60°-off <see cref="RiverTileShape.Bend"/>
@@ -181,6 +197,10 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(MinimumIslandTiles);
         ArgumentOutOfRangeException.ThrowIfLessThan(MinRiverLength, 2);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverMeanderWeight);
+        ArgumentOutOfRangeException.ThrowIfLessThan(RiverTilesPerSpring, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MaxSpringsPerIsland, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(MinSpringSpacing);
+        ArgumentOutOfRangeException.ThrowIfNegative(MergeBonus);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);

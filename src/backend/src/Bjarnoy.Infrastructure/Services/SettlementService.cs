@@ -1468,7 +1468,9 @@ public sealed class SettlementService(
         {
             if (tile.Q == coord.Q && tile.R == coord.R)
             {
-                return (RiverTileShape)tile.Shape;
+                // Stream and widening tiles are not buildable river: the Sawmill/Crop
+                // Mill art is river width, so a stream hex reads as "no river here".
+                return tile.Width == (int)RiverWidth.River ? (RiverTileShape)tile.Shape : null;
             }
         }
 

@@ -330,13 +330,20 @@ public sealed record PlotSuggestionResponse(
 /// The orientation this tile's river flows out toward, or <see langword="null"/> for a mouth (or
 /// a confluence that's also a river's mouth).
 /// </param>
+/// <param name="Width">
+/// <c>river</c>, <c>stream</c> (stream width on every edge) or <c>widen</c> (stream in, river out).
+/// </param>
 public sealed record RiverTileResponse(
     int Q,
     int R,
     string Shape,
     IReadOnlyList<string> InDirections,
-    string? OutDirection)
+    string? OutDirection,
+    string Width = "river")
 {
+    // Indexed by RiverWidth's int values: what river width the hex is drawn at.
+    private static readonly string[] WidthNames = ["river", "stream", "widen"];
+
     // Indexed by RiverTileShape's own int values — bend60 sits last (not next
     // to bend) because RiverTileShape.Bend60's doc comment explains why it
     // was appended rather than inserted.
@@ -352,14 +359,16 @@ public sealed record RiverTileResponse(
         tile.Coord.R,
         ShapeNames[(int)tile.Shape],
         [.. tile.InDirections.Select(d => d.ToWireName())],
-        tile.OutDirection?.ToWireName());
+        tile.OutDirection?.ToWireName(),
+        WidthNames[(int)tile.Width]);
 
     public static RiverTileResponse From(RiverTileRecord tile) => new(
         tile.Q,
         tile.R,
         ShapeNames[tile.Shape],
         [.. tile.InDirections.Select(d => ((TileOrientation)d).ToWireName())],
-        tile.OutDirection is { } outDirection ? ((TileOrientation)outDirection).ToWireName() : null);
+        tile.OutDirection is { } outDirection ? ((TileOrientation)outDirection).ToWireName() : null,
+        WidthNames[tile.Width]);
 }
 
 /// <param name="Terrain">
