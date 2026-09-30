@@ -43,23 +43,28 @@ export interface WorldSummaryResponse {
 
 /** Mirrors `WorldGenerationResponse` — see that record's own doc comments for field semantics. */
 export interface WorldGenerationResponse {
+  /** The world radius: an island that could cross it is not generated, so terrain depends on it. */
+  worldRadius: number;
   islandCellSize: number;
   islandChance: number;
-  islandMinRadius: number;
-  islandMaxRadius: number;
+  islandMinWidth: number;
+  islandMaxWidth: number;
+  islandMinSegments: number;
+  islandMaxSegments: number;
+  islandMinElongation: number;
+  islandMaxElongation: number;
+  islandMinBend: number;
+  islandMaxBend: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
+  islandCoastNoise: number;
+  islandCoastNoiseScale: number;
+  islandSmallShare: number;
+  islandLargeShare: number;
   beachThreshold: number;
   mountainThreshold: number;
   mountainRockiness: number;
   forestRockiness: number;
-  islandMinLobes: number;
-  islandMaxLobes: number;
-  islandMaxElongation: number;
-  islandBendiness: number;
-  islandLobeBlend: number;
-  islandLobeMinScale: number;
-  islandLobeMaxScale: number;
-  islandCoastWarp: number;
-  islandCoastWarpScale: number;
 }
 
 /** Mirrors `WorldMovementResponse` — see that record's own doc comments for field semantics. */
@@ -513,20 +518,25 @@ export interface AdminWorldResponse {
 export interface WorldGenerationSettings {
   islandCellSize: number;
   islandChance: number;
-  islandMinRadius: number;
-  islandMaxRadius: number;
+  islandMinWidth: number;
+  islandMaxWidth: number;
+  islandMinSegments: number;
+  islandMaxSegments: number;
+  islandMinElongation: number;
+  islandMaxElongation: number;
+  islandMinBend: number;
+  islandMaxBend: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
+  islandCoastNoise: number;
+  islandCoastNoiseScale: number;
+  islandSmallShare: number;
+  islandLargeShare: number;
   beachThreshold: number;
   mountainThreshold: number;
   mountainRockiness: number;
   forestRockiness: number;
   minimumIslandTiles: number;
-  islandMinLobes: number;
-  islandMaxLobes: number;
-  islandMaxElongation: number;
-  islandBendiness: number;
-  islandLobeBlend: number;
-  islandCoastWarp: number;
-  islandCoastWarpScale: number;
 }
 
 /**
@@ -537,20 +547,25 @@ export interface WorldGenerationSettings {
 export interface WorldGenerationSettingsOverrides {
   islandCellSize?: number;
   islandChance?: number;
-  islandMinRadius?: number;
-  islandMaxRadius?: number;
+  islandMinWidth?: number;
+  islandMaxWidth?: number;
+  islandMinSegments?: number;
+  islandMaxSegments?: number;
+  islandMinElongation?: number;
+  islandMaxElongation?: number;
+  islandMinBend?: number;
+  islandMaxBend?: number;
+  islandCoastWarp?: number;
+  islandCoastWarpScale?: number;
+  islandCoastNoise?: number;
+  islandCoastNoiseScale?: number;
+  islandSmallShare?: number;
+  islandLargeShare?: number;
   beachThreshold?: number;
   mountainThreshold?: number;
   mountainRockiness?: number;
   forestRockiness?: number;
   minimumIslandTiles?: number;
-  islandMinLobes?: number;
-  islandMaxLobes?: number;
-  islandMaxElongation?: number;
-  islandBendiness?: number;
-  islandLobeBlend?: number;
-  islandCoastWarp?: number;
-  islandCoastWarpScale?: number;
 }
 
 /**
@@ -592,6 +607,9 @@ export interface PreviewIslandResponse {
   tileCount: number;
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
+  giants: GiantResponse[];
+  /** True for an island generated from the wasted-island terrain layer (its river tiles are lava streams). */
+  wasted: boolean;
 }
 
 export interface WorldSeedPreviewResponse {
@@ -601,6 +619,8 @@ export interface WorldSeedPreviewResponse {
   islandCount: number;
   landTileCount: number;
   islands: PreviewIslandResponse[];
+  /** The full generation constants (world radius included) the candidate was generated with. */
+  generation: WorldGenerationResponse;
 }
 
 /**

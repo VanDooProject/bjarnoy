@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it, vi } from 'vitest';
+import { generationResponse } from '../lib/map/testing/generationFixture';
 
 // Issue #40 phase 4: `refreshArmies` now also pulls the host's guest-army
 // view (`GET /settlements/{id}/guests`) in the same tick as the owner's own
@@ -849,7 +850,7 @@ describe('useWorldStore newestWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     };
     getWorld.mockReset().mockResolvedValue(fullWorld);
@@ -911,7 +912,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
@@ -955,7 +956,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockRejectedValue(new Error('network error'));
@@ -994,7 +995,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: true,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
@@ -1205,7 +1206,7 @@ describe('useWorldStore fetchFogMask', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
@@ -1350,7 +1351,7 @@ describe('useWorldStore joinWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     };
   }

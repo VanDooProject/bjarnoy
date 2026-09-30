@@ -134,7 +134,7 @@ describe('AdminIslandLabView', () => {
     await cellSizeInput.setValue(99);
     await wrapper.find('[data-testid="reset-generation"]').trigger('click');
 
-    expect((cellSizeInput.element as HTMLInputElement).value).toBe('36');
+    expect((cellSizeInput.element as HTMLInputElement).value).toBe('260');
   });
 
   it('toggling the docs section shows and hides its explanation', async () => {
@@ -156,13 +156,13 @@ describe('AdminIslandLabView', () => {
     const variantIds = wrapper.findAll('[data-testid="island-lab-variant"]');
     expect(variantIds).toHaveLength(2);
 
-    // Target the second variant, then apply the baseline preset to it.
+    // Target the second variant, then apply the compact preset to it.
     await targetSelect.setValue((targetSelect.element as HTMLSelectElement).options[1].value);
-    await wrapper.find('[data-testid="preset-baseline"]').trigger('click');
+    await wrapper.find('[data-testid="preset-compact"]').trigger('click');
 
     const cellSizeInputs = wrapper.findAll('[data-testid^="lab-gen-"][data-testid$="-islandCellSize"]');
-    expect((cellSizeInputs[0].element as HTMLInputElement).value).toBe('36');
-    expect((cellSizeInputs[1].element as HTMLInputElement).value).toBe('23');
+    expect((cellSizeInputs[0].element as HTMLInputElement).value).toBe('260');
+    expect((cellSizeInputs[1].element as HTMLInputElement).value).toBe('90');
   });
 
   it('applying a preset with a single variant open needs no target selector', async () => {
@@ -173,10 +173,10 @@ describe('AdminIslandLabView', () => {
     await flushPromises();
 
     expect(wrapper.find('[data-testid="preset-target"]').exists()).toBe(false);
-    await wrapper.find('[data-testid="preset-baseline"]').trigger('click');
+    await wrapper.find('[data-testid="preset-compact"]').trigger('click');
 
     const cellSizeInput = wrapper.find('[data-testid^="lab-gen-"][data-testid$="-islandCellSize"]');
-    expect((cellSizeInput.element as HTMLInputElement).value).toBe('23');
+    expect((cellSizeInput.element as HTMLInputElement).value).toBe('90');
   });
 
   it('resetting a variant view restores its default pan/zoom', async () => {

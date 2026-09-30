@@ -15,6 +15,7 @@ import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import WorldMapCanvas from '../components/map/WorldMapCanvas.vue';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
+import { hexDistance } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
@@ -26,10 +27,11 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // Same seed stores/world.ts's own demo model uses (DEMO_SEED) — a familiar,
 // known-good archipelago rather than a fresh roll on every page load.
 const DEFAULT_SEED = 20260824;
-// Generous enough to show a real spread of islands in the hero frame without
-// paying DEMO_MASK_RADIUS's full fog-mask cost (this page never fogs — see
+// The whole default world: islands are ~150 hexes across and ~100+ apart, so a
+// small disc around the origin is usually open sea. Listing the labels costs
+// nothing like DEMO_MASK_RADIUS's fog mask (this page never fogs — see
 // `heroModel` below, no settlement is ever owned by the "showcase" player id).
-const SHOWCASE_RADIUS = 40;
+const SHOWCASE_RADIUS = DEFAULT_GENERATION.worldRadius;
 const PLAYER_ID = 'showcase';
 
 const seed = ref(DEFAULT_SEED);
@@ -61,8 +63,13 @@ function reroll() {
 const villageModel = computed(() => markRaw(buildHeroModel(seed.value)));
 const islandCenter = computed(() => {
   const islands = enumerateIslands({ seed: seed.value, generation: DEFAULT_GENERATION }, SHOWCASE_RADIUS);
-  const first = islands[0];
-  return first ? { q: first.q, r: first.r } : { q: 0, r: 0 };
+  // The island nearest the origin, which is where the world-mode camera starts.
+  const nearest = islands.reduce<(typeof islands)[number] | undefined>(
+    (best, island) =>
+      !best || hexDistance({ q: 0, r: 0 }, island) < hexDistance({ q: 0, r: 0 }, best) ? island : best,
+    undefined,
+  );
+  return nearest ? { q: nearest.q, r: nearest.r } : { q: 0, r: 0 };
 });
 
 // The world-mode camera always starts at (0, 0), which for most seeds is open
