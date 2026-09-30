@@ -1,7 +1,7 @@
 # Bogs, bog ore and the Hammerschmiede (game side)
 
 Status: **implemented**: bog terrain, creeks and lakes (bog PR), the bog buildings, the lake
-props and the landing-spot rule (bog buildings PR). The art was built in
+props, the landing-spot rule and the bog guarantee (bog buildings PR). The art was built in
 `VanDooProject/3D_assets` as the **bog set** (PRs #115, #116; design
 session: https://claude.ai/code/session_01KeZX9kzmCwKuGbwBo4BEBo). Its
 contract, the tile list and the map rules live in that repo's
@@ -65,6 +65,19 @@ grass at a hex edge, like the wasteland does.
 3. **Sinks and spawns.** A bog may sink an extra river (`BogSinkChance`) or spawn one from a creek spring
    (`BogSpawnChance`), both below 20%; a sink is tried before a spawn.
 4. **Moss region** last, around the lake, creeks and the anchor; it never touches sea or sand (R7).
+5. **The bog guarantee** (bog buildings PR), after everything above. An island of at least `BogGuaranteeMinTiles` (150) land tiles that has a
+   landing-spot candidate by terrain alone (grass with a forest and two grass neighbours, no water within two; giants and strong camps do
+   not exist yet at this point) but no candidate with plain bog moss within `BogReach` is given a bog. Anchors are tried best-covered first
+   (most candidates within reach), and a bog that would leave no candidate covered is rolled back (the generator snapshots its state):
+   a. a **through-river site with relaxed criteria** (disc radius `BogGuaranteeRadius` 5, lake of 3 to 8, river tiles from 2 after the
+      spring to 3 before the mouth), the same `TryPlaceSite` as the normal pass;
+   b. otherwise a **spawn bog** on river-free inland grass or forest: a small lake, a creek from a spring inside the disc (at least three
+      from the lake) into one mouth, and a creek out of another mouth to a tile just outside the disc where a normal river starts, traced
+      to the sea (or a trunk) by the drainage tracer, so exactly one river runs through the lake and it is the spawned one. Rules R1-R11
+      hold as for any site; R9 accepts a spring whose creek ends in a lake that has its outflow;
+   c. otherwise the island is left as it is: no room. Rule R7 keeps every lake tile, shore and creek more than two hexes from sand and
+      sea, on grass or forest, and a lake with its shore ring needs about 6 hexes of such ground across.
+   Islands without mountains (no river candidates at all) take path b too. The guarantee rolls no sinks or spawns of its own.
 
 Creeks are routed by a BFS over (tile, heading) with turns {0, +60, -60}: only straight tiles and 60-degree bends
 (see the tile kinds in `BogTileKind`). Giants, camps and start positions see bog through `BogTerrain.Overlay`; bog
@@ -79,11 +92,40 @@ migration `AddIslandBogTiles` for Sqlite and PostgreSql; the API serves `IslandR
 Knobs (`WorldGenerationOptions`, defaults): `BogTilesPerSite` 6000, `BogMaxSites` 3 (at least 1), `BogSiteRadius` 7,
 `BogLargeIslandTiles` 15000, `BogLakeMax` 12, `BogLakeMaxLarge` 18, `BogMinFromSpring` 4, `BogMinFromMouth` 6,
 `BogSinkChance` 0.15, `BogSpawnChance` 0.05, `BogPocketMinTiles` 3, `BogPocketMaxTiles` 400,
-`BogPocketRadius` 4, `BogMaxSinkReroute` 12.
+`BogPocketRadius` 4, `BogMaxSinkReroute` 12, `BogGuaranteeMinTiles` 150 (0 = off; the compact test preset has it off),
+`BogGuaranteeRadius` 5. The client mirrors are the `BOG_*` constants in `bogGenerator.ts`.
 
-Measured over seeds 1-8 at radius 1000: 273 islands, 95 with a bog (87 of the islands of 3000+ tiles); 124
-through-river bogs, 165 lakes (median 7 tiles, max 176); sinks 3.2%, spawns 7.3%; 48 pockets found, 41 filled;
-no inland river mouths; R1-R11 violations 0 (`BogRuleViolations` / `bogRules.ts`, counted by the preview tool).
+Measured over seeds 1-8 at radius 1000 (273 green islands), before and after the guarantee (`scripts/worldgen-preview/bog-stats.ts`
+and the Domain tests; landing spots as `FindStartPositions` finds them, "no bog rule" being the same call with `BogReach` 0):
+
+| | before the guarantee | with the guarantee |
+|---|---|---|
+| islands with a bog | 94 | 146 |
+| green islands with a landing candidate (no bog rule) | 176 | 176 |
+| ... of them with a bog | 94 | 144 |
+| islands with landing spots (bog rule on) | 94 | 144 |
+| landing spots, bog rule off / on | 90 536 / 13 617 | 90 057 / 15 396 |
+| bogs by the normal pass (through-river, incl. sinks and rolled spawns) | 124 | 124 |
+| bogs by the guarantee: through-river / spawn | - | 20 / 32 |
+| sinks, % of all 176 bogs (pockets excluded) | 3.2% (of 124) | 2.3% |
+| rolled spawns, % of all bogs | 7.3% (of 124) | 5.1% |
+| guarantee spawns, % of all bogs | - | 18.2% |
+| all spawns, % of all bogs | 7.3% | **23.3%** (over the owner's 20%, see below) |
+| R1-R11 violations, inland river mouths | 0, 0 | 0, 0 |
+| `Generate()` radius 4000, seed 1 (Release, 4 cores) | 12.8 s, 225 islands with a bog | 12.7 s, 386 islands with a bog |
+
+The guarantee acted on 63 islands: 20 got a relaxed through-river site, 32 a spawn bog, 11 nothing. The 176 - 144 = 32 islands with a
+candidate and no bog are 21 islands under `BogGuaranteeMinTiles` (no lower island was ever helped when the threshold was 34) and those
+11, of 150 to 354 tiles: the smallest island the guarantee helped has 190 tiles. Each of the 11 is narrow or mountainous: its land is
+at most 2 to 8 hexes from the coast, and its grass and forest more than two hexes in from sand and sea (R7) is too little for a lake with
+its shore ring. Normal-pass numbers are unchanged: 124 through-river bogs, 165 lakes before (217 now), 48 pockets found, 41 filled.
+
+**The 20% rule.** The owner's rule is that a bog spawns or sinks a river as an exception, below 20%. The rolled sinks and spawns
+together are 7.4% of all bogs and 10.5% of the normal pass's, unchanged. A guarantee spawn bog is a bog that spawns a river by
+construction, so with them the spawn share is 23.3% of all bogs. Ways to bring it down: cover fewer islands (raise
+`BogGuaranteeMinTiles`; the smallest island helped has 190 tiles) or make the relaxed through-river site succeed more often (it reaches 20
+of 52 bogs; on the rest no river passes the site's disc in a way that satisfies the single-path and R11 checks, and loosening the
+river-tile margins and the disc test moved it by one island). The owner decided more bogs; whether 23.3% is acceptable is theirs to confirm.
 
 ## Art pack orientation convention
 
@@ -149,19 +191,22 @@ client that knows the same buildings draws the same lake:
 - Bog creeks don't count as rivers for the river buildings.
 - "Bog in reach of every start" is guaranteed by the **landing spots**: a
   new player is never offered a landing spot (start position) without bog
-  in reach. An island without bog simply gets no landing spots. This rule
-  is only about where new players land; where later settlements are founded
-  is up to the player. *Implemented* (`WorldGenerationOptions.BogReach`,
-  default 12, 0 = off; `WorldGenerator.FindStartPositions`; the demo mirror
-  is `WorldModel.hasPlainBogInReach`): a spot needs a **plain-bog** tile
-  (moss; a shore or creek does not count) within 12 hexes. Measured over
-  seeds 1-8 at radius 1000 (273 green islands): landing spots 90 536 to
-  13 617; islands with any spot 176 to 94; of the 176 islands that had
-  spots, 82 lost all of them, every one an island with no plain bog at all
-  (179 of the 273 islands have none; the 100 islands of 3 000+ tiles
-  keep spots on 87). Raising the reach does not bring those islands back
-  (reach 20 and 30 keep 94), only more spots on the islands that have bog.
-  The compact test preset switches the rule off (its islands are too small for bog).
+  in reach. This rule is only about where new players land; where later
+  settlements are founded is up to the player. *Implemented*
+  (`WorldGenerationOptions.BogReach`, default 12, 0 = off;
+  `WorldGenerator.FindStartPositions`; the demo mirror is
+  `WorldModel.hasPlainBogInReach`): a spot needs a **plain-bog** tile (moss; a
+  shore or creek does not count) within 12 hexes. Without more, 82 of the 176
+  islands that had landing spots (seeds 1-8, radius 1000) lost all of them,
+  every one an island with no plain bog at all (179 of the 273 islands have
+  none; raising the reach to 20 or 30 does not help).
+- **More bogs** (owner decision): every island big enough to hold landing spots gets
+  at least one bog, by the guarantee in "Implemented generation", step 5, so the
+  rule above no longer empties islands. Islands with a landing candidate and a bog:
+  94 to 144 of 176; landing spots 13 617 to 15 396. The islands left are
+  narrow or mountainous (no inland room for a lake, R7) or under 150 tiles.
+  The compact test preset switches the rule and the guarantee off (its islands are too
+  small for bog).
 
 ## Agent prompt (game side)
 

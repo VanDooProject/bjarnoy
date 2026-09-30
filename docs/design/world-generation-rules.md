@@ -74,8 +74,13 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   edge; inflow = outflow tile); a fish weir only near a lake fisher hut; no walkways.
 - Buildings in scope: bog-ore works (iron), Clay Brickworks on bog (the grass version is dropped), Fishing Hut
   on a bog-lake half shore, Hammerschmiede on a bog creek; landing spots need bog in reach. *Implemented (bog buildings PR)*:
-  see [`bog.md`](./bog.md), "Buildings" and "Decisions" (the landing-spot rule keeps spots on 94 of the 273 islands
-  of seeds 1-8 at radius 1000: islands without any plain bog get none).
+  see [`bog.md`](./bog.md), "Buildings" and "Decisions".
+- More bogs (owner decision): every island of 150 or more land tiles that has a landing-spot candidate gets at least one bog, so the
+  landing-spot rule keeps spots on 144 of the 273 islands of seeds 1-8 at radius 1000 (94 without the guarantee; 176 have a candidate).
+  The bog comes from a relaxed through-river site first, else a small **spawn bog** (a creek spring feeds the lake, its outflow is traced
+  as a river to the sea, so one river still runs through the lake). Consequence for the 20% rule above: rolled sinks and spawns are
+  7.4% of all bogs, but the guarantee's spawn bogs (18.2% of all bogs) spawn a river by construction, 23.3% together. Islands with no
+  inland room stay without bog. See [`bog.md`](./bog.md), "Implemented generation" step 5.
 
 ## Wildlife camps
 
