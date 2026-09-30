@@ -209,6 +209,60 @@ if (wantStopPrefix('settlement_giant_orientations') && giantAnchor) {
   }
 }
 
+// Rivers and streams (see docs/design/river-generation.md): demo mode traces the home island's
+// rivers on founding (WorldModel.placeGiantsForIsland). Rivers sit anywhere on the ~150-hex island,
+// far outside the ~10-hex demo vision, so this lifts the fog (the same flags FogDebugPanel flips),
+// finds the nearest tile of each kind (a stream, the widening straight, a stream confluence, a
+// delta mouth, a plain river) and shoots each. Kinds the island does not have are skipped.
+if (wantStopPrefix('settlement_river')) {
+  await page.evaluate(() => {
+    const f = window.__fogDebug;
+    f.maskUnknown = false;
+    f.maskOutOfSight = false;
+    f.terrainCull = false;
+  });
+  const found = await page.evaluate(() => {
+    const store = window.__demoWorld();
+    const settlement = store.model.getSettlement(store.selectedSettlementId);
+    const kinds = {
+      stream: (t) => t.width === 'stream' && (t.shape === 'straight' || t.shape === 'bend'),
+      widen: (t) => t.width === 'widen' && t.shape === 'straight',
+      confluence: (t) => t.shape === 'confluence' && t.width === 'widen',
+      delta: (t) => t.shape === 'mouth' && t.width === 'river',
+      river: (t) => t.width === 'river' && t.shape === 'straight',
+    };
+    const best = {};
+    const R = 130;
+    for (let dq = -R; dq <= R; dq++) {
+      for (let dr = Math.max(-R, -dq - R); dr <= Math.min(R, -dq + R); dr++) {
+        const tile = store.model.getRiverTile(settlement.q + dq, settlement.r + dr);
+        if (!tile) continue;
+        const d = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(-dq - dr));
+        for (const [kind, test] of Object.entries(kinds)) {
+          if (test(tile) && (!best[kind] || best[kind].d > d)) best[kind] = { d, at: { q: tile.q, r: tile.r } };
+        }
+      }
+    }
+    return best;
+  });
+  console.log('River tiles found', JSON.stringify(found));
+  for (const [kind, { at }] of Object.entries(found)) {
+    if (!wantStop(`settlement_river_${kind}`) && requestedStops.length > 0 && !requestedStops.includes('settlement_river')) continue;
+    await page.evaluate((coord) => window.__settlementRenderer?.()?.panTo(coord), at);
+    await page.waitForTimeout(300);
+    // Zoom in on the tile: a stream is half a river wide and only reads up close.
+    await page.mouse.move(720, 450);
+    for (let i = 0; i < 6; i++) {
+      await page.mouse.wheel(0, -300);
+      await page.waitForTimeout(80);
+    }
+    await page.waitForTimeout(400);
+    await forceRebuild(page);
+    await page.waitForTimeout(800);
+    await shootAlways(page, `settlement_river_${kind}`);
+  }
+}
+
 // The fog debug panel (?debug=1, see FogDebugPanel.vue) toggles individual
 // fog mechanisms — flip one on/off from the panel itself rather than the
 // console hook, to check the panel's own forceRebuild wiring, not just the

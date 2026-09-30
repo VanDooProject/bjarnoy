@@ -35,7 +35,7 @@ form (`depth < MountainThreshold`). So "high elevation" is *low* depth and "funn
 the same island; a `null`-depth (sea) neighbour is never a step target — reaching a tile adjacent to one is
 the stop condition instead (the river mouth).
 
-## Spring placement (density rule)
+## Spring placement (density rule) — lava islands only; green islands: see "Streams, springs, merging and late widening"
 
 1. Within an island, flood-fill its mountain tiles into connected clusters (mountain-to-mountain adjacency
    only).
@@ -82,7 +82,7 @@ After tracing, a spring's path is discarded outright if it came out shorter than
 cluster already right at the coast). That cluster's one attempt is spent — no second attempt with a
 different mountain tile in this pass.
 
-## Collisions: merge two, drop the third — never reroute
+## Collisions: merge two, drop the third — never reroute (lava islands only)
 
 Each spring routes **independently**, with no awareness of other rivers' claimed tiles while walking — two
 springs that happen to pass near each other without ever sharing a tile just render as two separate nearby
@@ -144,8 +144,8 @@ Solving each for the `D` a tile's actual direction(s) need:
 - **Bend**: the tile's `(inDirections[0], outDirection)` pair is always 2 orientation-indices apart (see "Routing" above). Let `anchor` be whichever of the two the other is `+2` from (order-independent — the *pair* determines `anchor`, not which one is in vs out). The file to use is `D = (2 - anchor) mod 6`. See `bendOrientationOf` in `types.ts`.
 - **Spring**: `D = (4 - outIndex) mod 6`. See `springOrientationOf`.
 - **Straight**: `D = (2 - index) mod 6`, using whichever of `inDirections[0]`/`outDirection` is available (either gives a valid file for the same pair). See `straightOrientationOf`.
-- **Mouth**: has no `outDirection` (it's the end of the walk) but still needs to flow visibly toward the sea, and the generator's stop condition (`RiverGenerator.TracePath` breaks as soon as *any* neighbour is sea, regardless of angle) doesn't guarantee the sea sits opposite the inflow the way `Straight` assumes. A `RiverTile` carries no terrain, so the frontend looks the sea neighbour up itself — `WorldModel.seaFacingDirectionOf`, the first sea-terrain neighbour found, in `TILE_ORIENTATIONS` order — and `mouthOrientationOf` (`types.ts`) picks the family from the resulting angle: 3 apart (opposite) uses `Straight` via the rule above; 2 apart uses `Bend` via `bendOrientationOf(inDirection, seaDirection)`, the same as an ordinary mid-river turn; 1 apart (120°) is unrepresentable by either family — nothing on the generation side prevents this angle the way the ordinary-bend 120°-turn exclusion does, since the sea isn't a tile in the walk — and falls back to the inflow-opposite `Straight` file as a documented best-effort. (This was caught after the `Bend` fix shipped: a live screenshot showed a mouth tile visibly running into forest instead of the coast — island Jarlskar, seed `783131215`, tile `(-8,4)`, inflow `NE`, actual sea neighbour `SE` — a 60°, `Bend`-representable angle that the old inflow-opposite-only logic had no way to pick.)
-- **Confluence** (`y_narrow`): re-derived in a later pass, the same way as the other three. Pixel-sampling every `rivertile_y_narrow_*_base.png` found a consistent, rotation-stable pattern: file `D` touches a fixed opposite pair (edges `1+D` and `4+D`, a "trunk" running straight across the hex) plus a third edge (`5+D`, a "branch" joining the trunk right before it exits) — three touched edges, not a simple rotated pair or pair-adjacent-to-`D` the way Bend/Spring/Straight are. Converting through `edge(d) = (3-d) mod 6` gives `out = (5-D) mod 6` (the trunk's far, branch-adjacent end), `trunkIn = (2-D) mod 6`, `branchIn = (4-D) mod 6` — see `confluenceOrientationOf` in `types.ts`. Unlike an ordinary bend, a confluence's `(in1, in2, out)` angles aren't constrained to one fixed relative arrangement — two independently traced paths collide wherever they happen to (see "Collisions" above) — so most real confluences still don't match this one representable rotation; `confluenceOrientationOf` returns `null` for those, and `riverArtFor` falls back to the same untransformed `outDirection ?? inDirections[0]` as before, the same pattern `mouthOrientationOf` already uses for its own unrepresentable angle. Fully fixing every possible triple would still mean changing collision resolution itself, not just orientation selection.
+- **Mouth**: has no `outDirection` (it's the end of the walk) but still needs to flow visibly toward the sea, and the generator's stop condition (`RiverGenerator.TracePath` breaks as soon as *any* neighbour is sea, regardless of angle) doesn't guarantee the sea sits opposite the inflow the way `Straight` assumes. A `RiverTile` carries no terrain, so the frontend looks the sea neighbour up itself — `WorldModel.seaFacingDirectionOf`, the first sea-terrain neighbour found, in `TILE_ORIENTATIONS` order — and `mouthOrientationOf` (`types.ts`) picks the family from the resulting angle: 3 apart (opposite) uses `Straight` via the rule above; 2 apart uses `Bend` via `bendOrientationOf(inDirection, seaDirection)`, the same as an ordinary mid-river turn; 1 apart (60°) now uses the `Bend60` hairpin family (`bend60OrientationOf`; before the stream PR it fell back to the inflow-opposite `Straight` file). (This was caught after the `Bend` fix shipped: a live screenshot showed a mouth tile visibly running into forest instead of the coast — island Jarlskar, seed `783131215`, tile `(-8,4)`, inflow `NE`, actual sea neighbour `SE` — a 60°, `Bend`-representable angle that the old inflow-opposite-only logic had no way to pick.)
+- **Confluence** (`y_narrow`) — *superseded: the outflow edge below was corrected by the stream twins, see "Streams, springs, merging and late widening"; on an all-river tile the outflow cannot be measured*. Re-derived in a later pass, the same way as the other three. Pixel-sampling every `rivertile_y_narrow_*_base.png` found a consistent, rotation-stable pattern: file `D` touches a fixed opposite pair (edges `1+D` and `4+D`, a "trunk" running straight across the hex) plus a third edge (`5+D`, a "branch" joining the trunk right before it exits) — three touched edges, not a simple rotated pair or pair-adjacent-to-`D` the way Bend/Spring/Straight are. Converting through `edge(d) = (3-d) mod 6` gives `out = (5-D) mod 6` (the trunk's far, branch-adjacent end), `trunkIn = (2-D) mod 6`, `branchIn = (4-D) mod 6` — see `confluenceOrientationOf` in `types.ts`. Unlike an ordinary bend, a confluence's `(in1, in2, out)` angles aren't constrained to one fixed relative arrangement — two independently traced paths collide wherever they happen to (see "Collisions" above) — so most real confluences still don't match this one representable rotation; `confluenceOrientationOf` returns `null` for those, and `riverArtFor` falls back to the same untransformed `outDirection ?? inDirections[0]` as before, the same pattern `mouthOrientationOf` already uses for its own unrepresentable angle. Fully fixing every possible triple would still mean changing collision resolution itself, not just orientation selection.
 
 "Opposite direction" means the inflow and outflow directions are 3 apart on the 6-direction wheel (`E`↔`W`,
 `NE`↔`SW`, `NW`↔`SE`) — the geometric definition of "flows straight through this hex."
@@ -199,9 +199,131 @@ ordinary (non-spring) mountain tiles still all render the single generic `mounta
 `SpringMountainShapeAt` per-coordinate, so mountains read as a mix of all four shapes the way the generation
 side already supports, remains the follow-up.
 
+## Streams, springs, merging and late widening
+
+Everything below applies to green islands; lava (wasted) rivers keep the older rules described above (one
+spring per mountain cluster, independent walks, drop-on-collision, river width) and every lava tile is
+`RiverWidth.River`. `RiverGenerator.cs` and `riverGenerator.ts` are byte-identical ports; the golden fixture
+`src/shared/river-generation-golden.json` covers a simple river, a confluence, a bend60, a widening straight,
+a stream confluence (smallwide Y), a river confluence, a widening mouth and a lava stream.
+
+### Data model
+
+`RiverTile.Width`: `River` (0, what every stored tile before streams is), `Stream` (1: half width on every
+edge) and `Widen` (2: stream in, river out). Persisted as a sixth field of the `RiverTileListConverter` token
+(older five-field rows parse as `River`), on the wire as `"width": "river" | "stream" | "widen"`. A river
+starts as a stream and widens once; what follows the widening tile is river.
+
+### Springs: more, and spread out
+
+Candidates are mountain tiles of clusters of at least two that sit on a range edge (a non-mountain land
+neighbour) and do not touch the sea; if there is none of those, any such mountain tile not touching the sea.
+`K = clamp(round(landTiles / RiverTilesPerSpring), 1, MaxSpringsPerIsland)` (900 and 16). Springs are picked
+by farthest-point sampling: the first is the most inland candidate (lowest depth, ties by the `+41` hash then
+(Q, R)); each next maximises its hex distance to the springs already picked (same tie-breaks); picking stops
+at K or when the best is closer than `MinSpringSpacing` (10). Pick order is trace priority.
+
+### Sequential, merge-aware tracing
+
+Springs are traced in priority order, each with the walk described under "Routing", and one change: tiles of
+earlier rivers are no longer invisible.
+
+- Stepping onto a claimed tile is a **merge** and ends the walk (the tributary has become part of the trunk).
+  It is only offered when the claimed tile is a plain one-inflow tile (not a spring, mouth or confluence) and
+  its `(inflow, arrival, outflow)` triple is one the art can draw: `RiverConfluence.Classify` /
+  `confluenceKind` (see the orientation section). Anything else is simply not a candidate, so the walk looks
+  elsewhere or backtracks.
+- A merge candidate scores `MergeBonus` (0.35) higher. On top of that `MergeAttraction` (0.3) pulls a walk
+  toward earlier rivers: every free tile within `MergeAttractionRadius` (12) of an *approach tile* (a free
+  neighbour of a plain trunk tile from which the merge would be drawable) scores up to that much more, linearly
+  with closeness (a breadth-first distance map spread from each committed river).
+- Nothing keeps a walk off tiles adjacent to a claimed one; parallel runs are avoided by the spring spacing,
+  and measured (the preview's "parallel runs" line).
+
+This replaces `ResolveCollisions` for green islands, which is what removes the "inland mouth" bug: a
+confluence always has an outflow, so every path ends at a mouth touching the sea or at a confluence that
+leads on to one. `RiverStreamTests.Every_river_path_ends_at_a_sea_mouth_never_inland` walks every generated
+river of six default worlds to its end.
+
+Measured (seed 11, radius 1000, 32 islands): 147 rivers on 22 islands, 1-2 merges. Farthest-first springs
+sit tens of hexes apart and the depth field runs every walk radially to its own coast, so tributaries hardly
+ever meet a trunk; at radius 4000 (seed 11) 2527 springs make 38 confluences. Raising `MergeAttraction`,
+its radius or `MaxSpringsPerIsland` moves that number (at the price of parallel runs); the levers are
+options, not code.
+
+### Width assignment
+
+After tracing, the tiles form a forest flowing to the mouths. In topological order (springs first):
+
+1. Every tile is a stream at first.
+2. A confluence whose two inflows both arrive as streams is `Widen` (the smallwide Y); everything below is
+   river.
+3. Where a branch must arrive at river width (a sea mouth, or the stream branch of a confluence whose other
+   branch is river) it **widens on a Straight tile**: with `L` the length of that stream run (spring to the
+   tile before the requirement), one Straight tile with index `>= ceil(L/2)` (and `>= 1`, never the spring) is
+   chosen uniformly by the `+47` hash of the requirement tile. Never in the first half. That tile is `Widen`,
+   everything below it up to the requirement is river.
+4. If the second half has no Straight tile: a mouth tile whose sea neighbour is opposite its inflow is itself
+   the widening tile (smallwide straight with the river edge toward the sea); at a confluence the stream branch
+   is **truncated** (dropped up to where it would join; the confluence carries on as a plain river tile); a
+   mouth that cannot widen drops its whole river. `RiverStats` counts both; the tests assert < 5% of rivers.
+5. A river-width mouth whose sea is straight ahead renders as `rivertile_delta` (below); other river mouths are
+   as before.
+
+The variant roll (`TerrainSampler.RiverVariantAt`) applies to stream tiles too (meander and loop families;
+a stream has no gravel-bar island, so an `island` roll draws plain), and never to `Widen` tiles. The river
+buildings (Sawmill, Crop Mill, and the planned Hammerschmiede) need **River**-width tiles: their art is river
+width. `BuildingCatalogue` shape gating is unchanged, but `SettlementService.RiverShapeAtAsync` reports a
+shape only for `River` tiles, and the frontend (`riverBuildingAllowedHere`, `riverBuildingArtFor`) does the same.
+
+### Art conventions of the stream set
+
+Pixel-measured exactly like the river families above (water width along each polygon edge of every `*_base`
+frame, against `edge(d) = (3 - d) mod 6`; stream width is half the river's on the same edge):
+
+| Family | File `D` touches | Ends |
+|---|---|---|
+| `rivertile_small_bend180` (+ `_meander`) | `D+1`, `D+4` | stream, same as `rivertile` (river) |
+| `rivertile_small_bend120` (+ `_meander`) | `D-1`, `D+1` | same as `rivertile_bend` |
+| `rivertile_small_bend60` (+ `_loop`) | `D`, `D+1` | same as `rivertile_bend60` |
+| `rivertile_smallwide_bend180_island` | `D+1`, `D+4` | **stream at `D+1`**, river at `D+4` |
+| `rivertile_smallwide_y_narrow` | `1+D`, `4+D`, `5+D` | **river at `1+D`**, streams at `4+D`, `5+D` |
+| `rivertile_smallwide_ywide` | `1+D`, `3+D`, `5+D` | **river at `1+D`**, streams at `3+D`, `5+D` |
+| `rivertile_delta` | `D+1`, `D+4` | river in at `D+1`, **sea at `D+4`** |
+
+So the stream families take the river families' orientation helpers unchanged. For the asymmetric ones the
+file for a tile whose upstream flow arrives from direction `i` is `D = (2 - i) mod 6`
+(`widenStraightOrientationOf`, `deltaOrientationOf`; the far end is the river / sea).
+
+**The Y's outflow.** On an all-river Y tile every touched edge has the same width, so an earlier pass could
+not tell which edge is the outflow and assumed the narrow Y's outflow was edge `4+D`. The stream twins settle
+it: the river edge is `1+D`, i.e. outflow `o = (2 - D) mod 6`, the two tributaries at `o+2` and `o+3` (narrow:
+60 degrees apart, "two tributaries running nearly parallel", matching the asset docs' `E`, `SE` streams and `W`
+river) or at `o+2` and `o+4` (wide: 120 degrees each way). `confluenceOrientationOf` /
+`confluenceWideOrientationOf` now use that for the river Y as well, so both widths share one predicate
+(`confluenceKind`, C# `RiverConfluence.Classify`), checked on both sides against
+`src/shared/confluence-representability.json` (12 of the 90 `(out, inflow pair)` rows are drawable; the mirror
+image of the narrow Y has no art).
+
+**Mouths** now also render the hairpin: a sea neighbour adjacent to the inflow direction uses `bend60` (the
+old "1 apart falls back to straight" note above is obsolete). `mouthSeaDirection` picks among several sea
+neighbours the one straight ahead, then a 60-degree turn, then the hairpin, which is the same "sea opposite the
+inflow" test the generator uses when it lets a stream reach a mouth.
+
+The spring art (`mountaintile_corrie_spring`, `_saddleback_spring`) hands over at stream width already.
+
+### Mountain ranges and forest patches (terrain)
+
+At island scale, single-hex rockiness noise gave salt-and-pepper mountains. `TerrainAt`/`terrainAt` now make a
+hex mountain when its depth is under `MountainThreshold` and `MountainField` beats `MountainRockiness`
+(unchanged knob, default 0.72): a ridged (`1 - |2n - 1|`) coarse value noise (wavelength 10, seed `+5`) so the
+crests are long winding lines, blended 88/12 with a fine wavelength-2.5 term (`+7`) so a range's edge is not a
+smooth blob. Forest versus grass uses the old `+2` noise at wavelength 6 (patches of a few to tens of hexes).
+Wasted terrain is unchanged.
+
 ## Bigger islands, more rivers
 
-Rivers only exist on islands with a qualifying (2+ tile) mountain cluster (see "Spring placement" above), so
+Rivers only exist on islands with a qualifying (2+ tile) mountain cluster (see "Spring placement" above; green islands now place several springs per island, see the streams section), so
 bigger islands mean more inland area for mountains, and therefore more islands with rivers, without any change
 to the river algorithm itself. Islands have grown twice: the original circles (2.4-5.6 hexes) were doubled,
 then reshaped; with island shape v3 (below) a typical island is ~150 hexes across (5k-15k tiles), so nearly

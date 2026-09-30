@@ -70,6 +70,17 @@ describe('towerLimitLock', () => {
   });
 });
 
+describe('riverBuildingAllowedHere on streams', () => {
+  it('only offers the river buildings on river-width tiles, never on a stream or widening hex', () => {
+    expect(riverBuildingAllowedHere('sawmill', 'straight', 'plain', 'river')).toBe(true);
+    expect(riverBuildingAllowedHere('sawmill', 'straight', 'plain')).toBe(true);
+    expect(riverBuildingAllowedHere('sawmill', 'straight', 'plain', 'stream')).toBe(false);
+    expect(riverBuildingAllowedHere('cropmill', 'straight', 'plain', 'widen')).toBe(false);
+    // Buildings with no river requirement are unaffected by the hex's width.
+    expect(riverBuildingAllowedHere('farm', undefined, 'plain', undefined)).toBe(true);
+  });
+});
+
 describe('riverBuildingAllowedHere', () => {
   it('excludes a sawmill from a hex with no river tile at all', () => {
     expect(riverBuildingAllowedHere('sawmill', undefined)).toBe(false);

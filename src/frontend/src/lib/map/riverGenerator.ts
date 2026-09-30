@@ -15,7 +15,7 @@
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import { hash2 } from './worldGenerator';
 import { confluenceKind, TILE_ORIENTATIONS } from './types';
-import type { RiverTile, RiverTileShape, RiverWidth, Terrain, TileOrientation } from './types';
+import type { RiverTile, RiverTileShape, RiverWidth, Terrain } from './types';
 
 /**
  * A traced river shorter than this (in tiles, spring to mouth inclusive) is

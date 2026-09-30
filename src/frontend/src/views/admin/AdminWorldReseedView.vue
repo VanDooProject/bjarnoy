@@ -201,6 +201,7 @@ function buildPreviewModel(result: WorldSeedPreviewResponse): WorldModel {
         shape: tile.shape,
         inDirections: tile.inDirections as TileOrientation[],
         outDirection: tile.outDirection as TileOrientation | null,
+        width: tile.width ?? 'river',
         wasted: island.wasted,
       })),
     ),

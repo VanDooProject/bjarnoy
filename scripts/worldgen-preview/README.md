@@ -20,7 +20,7 @@ about 8 s; a radius-4000 world (the default) takes about a minute, mostly the la
 | `--radius N` | world radius in hexes (default 4000). It is part of the terrain: an island that could cross it is not generated |
 | `--window Q,R,SIZE` | draw only `SIZE` hexes across, centred on axial hex `(Q,R)` (default: the whole world) |
 | `--px N` | pixels per hex circumradius; default fits the map to ~1800 px wide (below 1 px a hex is sampled at its centre) |
-| `--layers a,b` | layers, drawn in order: `terrain` (default), `wasted` |
+| `--layers a,b` | layers, drawn in order: `terrain` (default), `wasted`, `rivers` |
 | `--set k=v,...` | override generation constants, e.g. `islandChance=0.5,islandCellSize=200` |
 | `--no-legend`, `--no-stats` | drop the legend strip / skip the landmass scan |
 
@@ -28,12 +28,22 @@ The footer prints the island count, the size distribution (`<100 ... >40K` tiles
 of A/B/C island cells and timings (terrain sampling, landmass scan). Islands are found the way
 the backend's `WorldGenerator` does, so the counts agree with it.
 
+## The `rivers` layer
+
+`--layers terrain,rivers` traces every green island's rivers with the real generator
+(`riverGenerator.ts`, the byte-identical twin of the backend's) over the landmasses found and indexed the way
+`WorldGenerator` does. Streams are thin and light blue, rivers thick and dark blue, the tile where a stream
+widens a yellow dot, springs white dots, confluences magenta rings, mouths orange rings (with hexes under
+3 px the marks fill the whole hex instead). Footer lines: rivers, springs and tiles per island,
+merges, widenings, truncated branches, dropped rivers, **inland mouths (must be 0)** and the parallel-run
+metric (adjacent tiles of rivers that drain to different mouths). A `--window` only traces islands it touches.
+
 ## Adding a layer
 
 A layer is an entry in `LAYERS` in `layers.ts`: an id, a description, its legend entries and a
 `colourAt(q, r, world)` that returns a colour (or `null` to keep what the layers below drew).
 The legend strip is generated from the layers' own colour tables, so the picture and its
-legend cannot drift. Planned: `rivers`, `bog`, `camps` (added with the features that generate them).
+legend cannot drift. A layer may also declare `prepare(world, window)` (a whole-world pass; returns extra stats lines) and `subhex` (colours per pixel inside a hex, for lines and marks). Planned: `bog`, `camps` (added with the features that generate them).
 
 ## Tests
 
