@@ -6,6 +6,7 @@ import { hexDistance, type AxialCoord } from '../hex/coords';
 import {
   CAMP_FAMILIES,
   MaxCampLevel,
+  MinCampIslandTiles,
   MinCampSpacing,
   campCountFor,
   guardRange,
@@ -98,11 +99,13 @@ describe('placeCamps', () => {
   });
 
   it('a straight river tile can hold bearrapids, oriented like the plain straight river art', () => {
-    const tiles: AxialCoord[] = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }];
+    // 60 tiles (the smallest island that gets a camp), only the first three of them offer a camp.
+    const tiles: AxialCoord[] = Array.from({ length: MinCampIslandTiles }, (_, q) => ({ q, r: 0 }));
+    const terrainOf = (c: AxialCoord): Terrain => (c.q < 3 ? 'sand' : 'sea');
     const straight: RiverTile = { q: 1, r: 0, shape: 'straight', inDirections: ['W'], outDirection: 'E' };
     let sawBearrapids = false;
     for (let seed = 0; seed < 40; seed++) {
-      const [camp] = placeCamps(tiles, () => 'sand', [straight], [], seed, 0);
+      const [camp] = placeCamps(tiles, terrainOf, [straight], [], seed, 0);
       if (camp!.coord.q === 1) {
         sawBearrapids = true;
         expect(camp!.family).toBe('bearrapids');
@@ -114,6 +117,14 @@ describe('placeCamps', () => {
       }
     }
     expect(sawBearrapids).toBe(true);
+  });
+
+  it('an islet below the minimum size gets no camp, at the minimum it gets one', () => {
+    const small = block(7, () => 'sand'); // 49 tiles
+    expect(small.tiles.length).toBeLessThan(MinCampIslandTiles);
+    expect(placeCamps(small.tiles, small.terrainOf, [], [], 3, 0)).toEqual([]);
+    const enough = block(8, () => 'sand'); // 64 tiles
+    expect(placeCamps(enough.tiles, enough.terrainOf, [], [], 3, 0)).toHaveLength(1);
   });
 
   it('a wasted island only offers wasteland (wasted grass) to fenrirbrood', () => {

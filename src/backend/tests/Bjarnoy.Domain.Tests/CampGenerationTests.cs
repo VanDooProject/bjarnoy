@@ -275,11 +275,12 @@ public class CampGenerationTests
     [Fact]
     public void A_straight_river_tile_offers_bearrapids_with_the_river_orientation()
     {
-        var tiles = new List<HexCoord> { new(0, 0), new(1, 0), new(2, 0) };
-        var land = tiles.ToDictionary(t => t, _ => Terrain.Sand);
+        // 60 tiles (the smallest island that gets a camp), only the first three of them offer a camp.
+        var tiles = Enumerable.Range(0, CampGenerator.MinCampIslandTiles).Select(q => new HexCoord(q, 0)).ToList();
+        var land = tiles.Take(3).ToDictionary(t => t, _ => Terrain.Sand);
         var straight = new RiverTile(new HexCoord(1, 0), RiverTileShape.Straight, [TileOrientation.W], TileOrientation.E);
 
-        // Three tiles, so one camp; with the river tile the only non-sand candidate it must still
+        // One camp; with the river tile the only non-sand candidate it must still
         // be reachable: the first pick is hash-best, so run several seeds and check the family
         // always matches the ground it stands on.
         for (var seed = 0; seed < 30; seed++)
@@ -331,10 +332,22 @@ public class CampGenerationTests
     [Fact]
     public void An_island_with_no_qualifying_tile_gets_no_camp()
     {
-        var tiles = new List<HexCoord> { new(0, 0), new(1, 0) };
+        var tiles = Enumerable.Range(0, CampGenerator.MinCampIslandTiles).Select(q => new HexCoord(q, 0)).ToList();
         var land = tiles.ToDictionary(t => t, _ => Terrain.Forest);
 
         // A wasted island whose only land is dead forest offers no wasteland.
         Assert.Empty(CampGenerator.PlaceCore(tiles, land, [], [], 1, 0, wasted: true));
+    }
+
+    [Fact]
+    public void An_islet_below_the_minimum_size_gets_no_camp_and_one_at_the_minimum_gets_one()
+    {
+        HexCoord[] Line(int n) => [.. Enumerable.Range(0, n).Select(q => new HexCoord(q, 0))];
+
+        var islet = Line(CampGenerator.MinCampIslandTiles - 1);
+        Assert.Empty(CampGenerator.PlaceCore(islet, islet.ToDictionary(t => t, _ => Terrain.Sand), [], [], 3, 0));
+
+        var minimum = Line(CampGenerator.MinCampIslandTiles);
+        Assert.Single(CampGenerator.PlaceCore(minimum, minimum.ToDictionary(t => t, _ => Terrain.Sand), [], [], 3, 0));
     }
 }
