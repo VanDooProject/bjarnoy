@@ -14,6 +14,7 @@ import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import TradePanel from '../components/hud/TradePanel.vue';
+import QuestTray from '../components/onboarding/QuestTray.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
@@ -1282,6 +1283,7 @@ async function upgrade() {
       </template>
       <ExpansionPanel />
       <TradePanel />
+      <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
       <RingMenu

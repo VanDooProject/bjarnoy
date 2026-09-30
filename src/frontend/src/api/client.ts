@@ -357,6 +357,12 @@ export const api = {
       body: JSON.stringify({}),
       headers: ownerHeader(ownerId),
     }),
+  claimQuest: (settlementId: string, questId: string, ownerId?: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}/quests/${encodeURIComponent(questId)}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: ownerHeader(ownerId),
+    }),
   sendMessage: (body: SendMessageRequest) =>
     request<MessageResponse>('/messages', { method: 'POST', body: JSON.stringify(body) }),
   listConversations: (params?: { page?: number; pageSize?: number }) => {

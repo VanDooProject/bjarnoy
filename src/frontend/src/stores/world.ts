@@ -16,6 +16,7 @@ import type {
   TrainingOrderResponse,
   FeastOfferResponse,
   FeastResponse,
+  QuestResponse,
   RenownResponse,
   UnitStackResponse,
   WorldMovementResponse,
@@ -30,7 +31,8 @@ import {
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
-import { WorldModel } from '../lib/map/WorldModel';
+import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
+import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
 import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
 import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
@@ -117,6 +119,8 @@ export const useWorldStore = defineStore('world', {
   state: () => ({
     model: markRaw(buildDemoModel()),
     selectedSettlementId: null as string | null,
+    /** Demo mode only: bitmask of the onboarding quests already claimed (the server keeps this in live mode). */
+    demoClaimedQuests: 0,
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
     // knows it's safe to paint every rival's territory — the world map is
     // the one legitimate place that shows the whole world, unlike the
@@ -217,6 +221,10 @@ export const useWorldStore = defineStore('world', {
       feast: null as FeastResponse | null,
       nextFeast: null as FeastOfferResponse | null,
       feastFetchedAt: 0,
+      // Onboarding quests (economy.md section 7): live mode mirrors
+      // `SettlementResponse.quests`; demo mode evaluates the same list locally
+      // in `syncHud` (`lib/quests.ts`) against `demoClaimedQuests`.
+      quests: [] as QuestResponse[],
       // The account's renown progress (Town Square modal); null in demo mode
       // and until the first live read.
       renown: null as RenownResponse | null,
@@ -732,6 +740,34 @@ export const useWorldStore = defineStore('world', {
       await this.loadRenownLive();
     },
     /**
+     * Claims a completed onboarding quest's resource reward, exactly once
+     * (economy.md section 7). Live mode posts to the backend and refreshes the
+     * settlement; throws `ApiError` on rejection (not completed, already
+     * claimed). Demo mode has no backend, so it checks the same rules against
+     * the local model and pays into the local stock (clamped to storage).
+     */
+    async claimQuest(questId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      if (!DEMO_MODE) {
+        await api.claimQuest(this.selectedSettlementId, questId, this.ownerId ?? undefined);
+        await this.refreshLiveSettlement();
+        return;
+      }
+      this.syncHud();
+      const settlement = this.model.getSettlement(this.selectedSettlementId);
+      const bit = questBit(questId);
+      if (!settlement || bit < 0) throw new DemoTradeError('UnknownQuest');
+      const quest = this.hud.quests.find((q) => q.id === questId);
+      if (!quest || quest.claimed) throw new DemoTradeError('AlreadyClaimed');
+      if (!quest.completed) throw new DemoTradeError('NotCompleted');
+      const cap = this.model.storageCapForDisplay(settlement.id);
+      for (const kind of ['wood', 'stone', 'food'] as const) {
+        settlement.resources[kind] = Math.min(cap[kind], settlement.resources[kind] + quest.reward[kind]);
+      }
+      this.demoClaimedQuests |= 1 << bit;
+      this.syncHud();
+    },
+    /**
      * Live mode: reads the account's renown (total, rate, next-settlement
      * target, pending feast renown) into `hud.renown`. No-op in demo mode;
      * a failed read keeps whatever was last shown.
@@ -790,6 +826,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.feast = response.feast;
       this.hud.nextFeast = response.nextFeast;
       this.hud.feastFetchedAt = Date.now();
+      this.hud.quests = response.quests ?? [];
       this.syncHud();
     },
     /**
@@ -1009,6 +1046,8 @@ export const useWorldStore = defineStore('world', {
       this.hud.runes = [];
       this.hud.feast = null;
       this.hud.nextFeast = null;
+      this.hud.quests = [];
+      this.demoClaimedQuests = 0;
       this.hud.renown = null;
       this.hud.tradeBoard = [];
       this.hud.myTradeOffers = [];
@@ -1518,6 +1557,12 @@ export const useWorldStore = defineStore('world', {
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
       this.hud.placedBuildingTypes = this.model.listPlacedBuildings(settlement.id);
       this.hud.claimedHexes = this.model.claimedHexCount(settlement.id);
+      if (DEMO_MODE) {
+        this.hud.quests = evaluateDemoQuests(
+          { level: settlement.level, counts: this.model.countPlacedBuildingsByType(settlement.id) },
+          this.demoClaimedQuests,
+        );
+      }
       this.hud.population = this.model.populationFor(settlement.id);
       this.hud.tick += 1;
     },
