@@ -1,3 +1,4 @@
+import { FEAST_HOURS, RENOWN_BASE_THRESHOLD, feastCost, feastRenown } from './feasts';
 import type { BuildingDefinitionResponse, BuildingPrerequisiteResponse, ResourceLine } from '../../api/types';
 
 // Deterministic minute-step pacing model of ONE settlement, generic over
@@ -33,13 +34,9 @@ export const PROFILE_PRESETS: Record<ProfileId, Session[]> = {
 };
 export const DEFAULT_JOIN_TIME = '09:00';
 export const DEFAULT_PRODUCERS_AHEAD = 3;
-/** Design target for the second settlement (economy.md §6). The live game still uses 500 until the feasts PR lands. */
-export const DEFAULT_RENOWN_THRESHOLD = 55000;
+export const DEFAULT_RENOWN_THRESHOLD = RENOWN_BASE_THRESHOLD;
 export const DEFAULT_RENOWN_PER_LEVEL_HOUR = 1.0;
-/** Feast numbers, economy.md §6. */
-export const FEAST_HOURS = 12;
-export const feastCost = (townSquare: number): number => 800 * 1.25 ** (townSquare - 1);
-export const feastRenown = (townSquare: number): number => 6000 * 1.2 ** (townSquare - 1);
+export { FEAST_HOURS, feastCost, feastRenown };
 /** Growth counts as flat when a day adds less than this share of the previous day's production. */
 export const GROWTH_FLAT_FRACTION = 0.05;
 
@@ -74,6 +71,8 @@ export interface PacingParams {
   renownPerLevelHour?: number;
   /** Run Town Square feasts (needs the Town Square's unlock level in the catalogue). */
   feasts?: boolean;
+  /** Renown a feast grants at a Town Square level. Default `feastRenown` (feasts.ts). */
+  feastGain?: (townSquare: number) => number;
   /**
    * Storage houses the player may own (the first stands at level 1 from the
    * start; the rest are placed when storage runs short). A settlement may
@@ -97,6 +96,8 @@ export interface PacingResult {
   secondSettlementAt: number | null;
   /** First day (>= 3) whose production grew less than 5% over the previous 24 h; null if it never does. */
   growthFlattensAt: number | null;
+  /** Minute renown first reached the threshold; null if it never did. */
+  renownReachedAt: number | null;
   /** Renown at the end of the horizon. */
   renown: number;
   feastsHeld: number;
@@ -241,6 +242,8 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   let feastEndsAt = -1;
   let feastGrant = 0;
   let feastsHeld = 0;
+  let renownReachedAt: number | null = null;
+  const feastGain = params.feastGain ?? feastRenown;
 
   let lh = lhMax > 0 ? 1 : 0;
   // One entry per owned storage house; 0 = not built yet.
@@ -375,6 +378,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     }
     for (let r = 0; r < 4; r++) stock[r] = Math.min(capacity[r], stock[r] + rate[r] / 60);
     renown += (sumLevels * renownPerLevelHour) / 60;
+    if (renownReachedAt === null && renown >= renownThreshold) renownReachedAt = minute;
   }
 
   function startFeast(minute: number) {
@@ -385,7 +389,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     stock[1] -= cost;
     stock[2] -= cost;
     feastEndsAt = minute + FEAST_HOURS * 60;
-    feastGrant = feastRenown(ts);
+    feastGrant = feastGain(ts);
     feastsHeld++;
   }
 
@@ -483,7 +487,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     }
   }
 
-  return { lhReachedAt, secondSettlementAt, growthFlattensAt, renown, feastsHeld, series };
+  return { lhReachedAt, secondSettlementAt, growthFlattensAt, renownReachedAt, renown, feastsHeld, series };
 }
 
 function primaryResource(prod: Float64Array): number {

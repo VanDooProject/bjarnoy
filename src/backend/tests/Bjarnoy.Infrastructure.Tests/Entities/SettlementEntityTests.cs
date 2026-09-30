@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Infrastructure.Entities;
 
 namespace Bjarnoy.Infrastructure.Tests.Entities;
@@ -125,5 +126,25 @@ public class SettlementEntityTests
 
         Assert.Equal(30, domain.Buildings.Single(b => b.Type == BuildingType.Longhouse).Level);
         Assert.Equal(5, domain.Buildings.Single(b => b.Type == BuildingType.ShrineOfThor).Level);
+    }
+
+    [Fact]
+    public void A_running_feast_and_pending_feast_renown_round_trip_through_the_entity()
+    {
+        var entity = Entity();
+        var feast = new Feast(T0, T0.AddHours(12), 4025);
+        var domain = entity.ToDomain() with { Feast = feast, PendingFeastRenown = 123.5 };
+
+        entity.ApplyDomain(domain);
+        var back = entity.ToDomain();
+
+        Assert.Equal(feast, back.Feast);
+        Assert.Equal(123.5, back.PendingFeastRenown);
+
+        entity.ApplyDomain(back with { Feast = null, PendingFeastRenown = 0 });
+
+        Assert.Null(entity.ToDomain().Feast);
+        Assert.Null(entity.FeastEndsAt);
+        Assert.Equal(0, entity.FeastRenownGain);
     }
 }

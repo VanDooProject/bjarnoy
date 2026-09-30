@@ -61,6 +61,7 @@ import type {
   ProfileResponse,
   ProposeTreatyRequest,
   QueueBuildRequest,
+  FeastResponse,
   RenownResponse,
   ReportMessageRequest,
   ReportProfileRequest,
@@ -348,6 +349,12 @@ export const api = {
     request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  holdFeast: (settlementId: string, ownerId?: string) =>
+    request<FeastResponse>(`/settlements/${settlementId}/feast`, {
+      method: 'POST',
+      body: JSON.stringify({}),
       headers: ownerHeader(ownerId),
     }),
   sendMessage: (body: SendMessageRequest) =>

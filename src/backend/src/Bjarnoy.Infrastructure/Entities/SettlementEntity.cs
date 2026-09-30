@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -112,6 +113,22 @@ public class SettlementEntity
 
     public List<RuneInstanceEntity> Runes { get; set; } = [];
 
+    /// <summary>Game instant the running Town Square feast began; null when none runs.</summary>
+    public DateTimeOffset? FeastStartedAt { get; set; }
+
+    /// <summary>Game instant the running feast ends and grants its renown.</summary>
+    public DateTimeOffset? FeastEndsAt { get; set; }
+
+    /// <summary>Renown the running feast grants when it ends.</summary>
+    public double FeastRenownGain { get; set; }
+
+    /// <summary>
+    /// Renown from finished feasts not yet moved onto the owner's account
+    /// (<see cref="Settlement.PendingFeastRenown"/>); <c>RenownService</c>
+    /// transfers and zeroes it.
+    /// </summary>
+    public double PendingFeastRenown { get; set; }
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
@@ -186,6 +203,10 @@ public class SettlementEntity
                 PerUnitDuration = o.PerUnitDuration,
             }),
         ],
+        Feast = FeastStartedAt is { } startedAt && FeastEndsAt is { } endsAt
+            ? new Feast(startedAt, endsAt, FeastRenownGain)
+            : null,
+        PendingFeastRenown = PendingFeastRenown,
         Runes =
         [
             .. Runes.OrderBy(r => r.Id).Select(r => new RuneInstance
@@ -226,6 +247,11 @@ public class SettlementEntity
         CapacityFood = pool.Capacity.Food;
         CapacityIron = pool.Capacity.Iron;
         SettledAt = pool.SettledAt;
+
+        FeastStartedAt = settlement.Feast?.StartedAt;
+        FeastEndsAt = settlement.Feast?.EndsAt;
+        FeastRenownGain = settlement.Feast?.RenownGain ?? 0;
+        PendingFeastRenown = settlement.PendingFeastRenown;
 
         SyncBuildings(settlement);
         SyncQueue(settlement);

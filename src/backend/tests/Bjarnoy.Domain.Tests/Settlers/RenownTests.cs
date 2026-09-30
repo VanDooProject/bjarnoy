@@ -64,10 +64,10 @@ public class RenownTests
 
     [Theory]
     [InlineData(1, 0)]
-    [InlineData(2, 500)]
-    [InlineData(3, 1000)]
-    [InlineData(4, 2000)]
-    [InlineData(5, 4000)]
+    [InlineData(2, 55_000)]
+    [InlineData(3, 110_000)]
+    [InlineData(4, 220_000)]
+    [InlineData(5, 440_000)]
     public void RequiredFor_follows_the_documented_escalating_curve(int settlementNumber, double expected)
     {
         Assert.Equal(expected, RenownThresholds.RequiredFor(settlementNumber));
@@ -83,16 +83,16 @@ public class RenownTests
     [Fact]
     public void AllowsAnotherSettlement_is_false_below_threshold_and_true_at_or_above_it()
     {
-        Assert.False(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 499));
-        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 500));
-        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 501));
+        Assert.False(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 54_999));
+        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 55_000));
+        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 55_001));
     }
 
     [Fact]
     public void AllowsAnotherSettlement_scales_with_existing_settlement_count()
     {
-        // Holding 2 settlements already, the 3rd needs 1000.
-        Assert.False(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 2, renownTotal: 999));
-        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 2, renownTotal: 1000));
+        // Holding 2 settlements already, the 3rd needs 110 000.
+        Assert.False(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 2, renownTotal: 109_999));
+        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 2, renownTotal: 110_000));
     }
 }

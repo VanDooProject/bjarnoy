@@ -1,6 +1,7 @@
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -88,6 +89,25 @@ public sealed record Settlement
     /// is that shrine's hex) or sitting unslotted in storage.
     /// </summary>
     public IReadOnlyList<RuneInstance> Runes { get; init; } = [];
+
+    /// <summary>
+    /// The Town Square feast in progress, if any (<see cref="Feasts"/>). One at
+    /// a time per settlement; it does not occupy a construction slot.
+    /// </summary>
+    public Feast? Feast { get; init; }
+
+    /// <summary>
+    /// Renown from feasts that have ended but not yet been moved onto the
+    /// owner's account. <see cref="SettleTo"/> ends a due feast into this
+    /// figure, so no settle path can lose it; the infrastructure layer's
+    /// <c>RenownService</c> then transfers it and zeroes it in one save, which
+    /// is what makes the credit happen exactly once.
+    /// </summary>
+    public double PendingFeastRenown { get; init; }
+
+    /// <summary>The level of the standing Town Square (0 when there is none).</summary>
+    public int TownSquareLevel =>
+        Buildings.Where(b => b.Type == BuildingType.TownSquare).Select(b => b.Level).DefaultIfEmpty(0).Max();
 
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
@@ -543,8 +563,19 @@ public sealed record Settlement
         queue = afterDrop.Queue.ToList();
         var droppedAny = queue.Count(o => o.IsWaiting) != beforeWaiting;
 
+        // A feast whose time has come ends into PendingFeastRenown, whichever
+        // caller happens to settle the settlement first.
+        var feast = Feast;
+        var pendingRenown = PendingFeastRenown;
+        var feastEnded = feast is not null && feast.IsComplete(now);
+        if (feastEnded)
+        {
+            pendingRenown += feast!.RenownGain;
+            feast = null;
+        }
+
         var changed = completedBuilds.Count > 0 || completedTraining.Count > 0 || deaths.Count > 0
-            || guestDeaths.Count > 0 || rateIsStale || promotedAny || droppedAny;
+            || guestDeaths.Count > 0 || rateIsStale || promotedAny || droppedAny || feastEnded;
         if (!changed)
         {
             return new SettleResult(this, Changed: false, [], [], [], []);
@@ -557,6 +588,8 @@ public sealed record Settlement
             Queue = queue,
             TrainingQueue = trainingQueue,
             Resources = resources,
+            Feast = feast,
+            PendingFeastRenown = pendingRenown,
         };
 
         return new SettleResult(settled, Changed: true, completedBuilds, completedTraining, deaths, guestDeaths);
@@ -1964,6 +1997,59 @@ public sealed record Settlement
         }
 
         return this with { Resources = paid, TrainingQueue = [.. TrainingQueue, order] };
+    }
+
+    /// <summary>
+    /// Decides whether a Town Square feast may start now (<see cref="Feasts"/>):
+    /// a Town Square must stand, no other feast may be running, and the
+    /// available stock must cover the cost, which is set by the Town Square's
+    /// level. Call on an already-settled settlement — mirrors
+    /// <see cref="PlanTrain"/>.
+    /// </summary>
+    /// <param name="speedFactor">
+    /// The world's <c>SpeedFactor</c> — divides the feast's duration the same
+    /// way it divides build and training times.
+    /// </param>
+    public FeastDecision PlanFeast(DateTimeOffset now, double speedFactor = 1.0)
+    {
+        var townSquare = TownSquareLevel;
+        if (townSquare <= 0)
+        {
+            return FeastDecision.Rejected(FeastRejection.NoTownSquare);
+        }
+
+        if (Feast is { } running && !running.IsComplete(now))
+        {
+            return FeastDecision.Rejected(FeastRejection.AlreadyRunning);
+        }
+
+        if (!CanAffordAvailable(Feasts.CostFor(townSquare), now))
+        {
+            return FeastDecision.Rejected(FeastRejection.NotEnoughResources);
+        }
+
+        var duration = speedFactor == 1.0
+            ? Feasts.Duration
+            : TimeSpan.FromTicks((long)(Feasts.Duration.Ticks / speedFactor));
+
+        return FeastDecision.Accept(new Feast(now, now + duration, Feasts.RenownFor(townSquare)));
+    }
+
+    /// <summary>Pays for <paramref name="feast"/> and starts it. Call <see cref="PlanFeast"/> first.</summary>
+    public Settlement StartFeast(Feast feast, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(feast);
+
+        if (!TrySpendAvailable(Feasts.CostFor(TownSquareLevel), now, out var paid))
+        {
+            throw new InvalidOperationException("Cannot start a feast that is not affordable; call PlanFeast first.");
+        }
+
+        // A finished feast still sitting here (nothing settled first) must not
+        // be overwritten with its renown unpaid.
+        var carried = Feast is { } finished && finished.IsComplete(now) ? finished.RenownGain : 0;
+
+        return this with { Resources = paid, Feast = feast, PendingFeastRenown = PendingFeastRenown + carried };
     }
 
     /// <summary>

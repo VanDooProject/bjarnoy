@@ -12,6 +12,7 @@ import {
   FALLBACK_SETTLER_COST,
   PROFILE_PRESETS,
   type PacingParams,
+  type Session,
 } from './pacingSim';
 import { def, group } from './testFixtures';
 import type { BuildingDefinitionResponse } from '../../api/types';
@@ -385,8 +386,8 @@ describe('feasts', () => {
   it('uses the design formulas', () => {
     expect(feastCost(1)).toBe(800);
     expect(feastCost(3)).toBeCloseTo(1250, 6);
-    expect(feastRenown(1)).toBe(6000);
-    expect(feastRenown(2)).toBeCloseTo(7200, 6);
+    expect(feastRenown(1)).toBe(3500);
+    expect(feastRenown(2)).toBeCloseTo(4025, 6);
   });
 
   it('starts nothing without the option, or before the Town Square unlock level', () => {
@@ -398,12 +399,17 @@ describe('feasts', () => {
   it('grants the renown only after 12 hours, one feast at a time', () => {
     const early = simulatePacing(group(cat()), feastParams({ horizonDays: 0.4 }));
     expect(early.feastsHeld).toBe(1);
-    expect(early.renown).toBeLessThan(6000);
+    expect(early.renown).toBeLessThan(3500);
     const later = simulatePacing(group(cat()), feastParams({ horizonDays: 0.6 }));
-    expect(later.renown).toBeGreaterThanOrEqual(6000);
+    expect(later.renown).toBeGreaterThanOrEqual(3500);
     // Three windows of 12 h fit into 1.5 days of continuous play, not 2160.
     const long = simulatePacing(group(cat()), feastParams({ horizonDays: 1.5 }));
     expect(long.feastsHeld).toBe(3);
+  });
+
+  it('takes the feast gain from the params', () => {
+    const r = simulatePacing(group(cat()), feastParams({ horizonDays: 0.6, feastGain: () => 123456 }));
+    expect(r.renown).toBeGreaterThanOrEqual(123456);
   });
 
   it('needs the stock to cover the feast', () => {
@@ -419,6 +425,50 @@ describe('feasts', () => {
     // First session at elapsed 11 h; the 12 h feast ends at 23 h, the next session is at 35 h.
     expect(r.feastsHeld).toBe(2);
     expect(simulatePacing(group(cat()), feastParams({ horizonDays: 2, sessions: [] })).feastsHeld).toBe(0);
+  });
+});
+
+describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
+  const byType = group(catalogueSnapshot.data as BuildingDefinitionResponse[]);
+  const run = (sessions: Session[], feasts: boolean, horizonDays = 60) =>
+    simulatePacing(byType, {
+      startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
+      horizonDays,
+      producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+      settlerCost: settlerCostFrom(undefined),
+      settleType: 'cartworkshop',
+      storageCount: 2,
+      joinTime: '09:00',
+      producersAhead: 3,
+      sessions,
+      feasts,
+    });
+  const day = (minute: number | null) => (minute ?? Infinity) / 1440;
+
+  it('the active player founds the 2nd settlement around day 6 with feasts and around day 13 without', () => {
+    const withFeasts = run(PROFILE_PRESETS.active, true);
+    const without = run(PROFILE_PRESETS.active, false);
+    expect(day(withFeasts.secondSettlementAt)).toBeGreaterThan(4.5);
+    expect(day(withFeasts.secondSettlementAt)).toBeLessThan(6.6);
+    expect(day(without.secondSettlementAt)).toBeGreaterThan(13);
+    expect(day(without.secondSettlementAt)).toBeLessThan(14.5);
+  });
+
+  it('renown, not the Longhouse 10 unlock, is what binds the active player with feasts', () => {
+    const r = run(PROFILE_PRESETS.active, true);
+    expect(day(r.renownReachedAt)).toBeGreaterThan(day(r.lhReachedAt[10] ?? null) + 1);
+  });
+
+  it('the 4-check-ins player still settles around day 13 with feasts', () => {
+    const r = run(PROFILE_PRESETS.checkins4, true);
+    expect(day(r.secondSettlementAt)).toBeGreaterThan(12.5);
+    expect(day(r.secondSettlementAt)).toBeLessThan(15);
+  });
+
+  it('feasts multiply day-30 renown by 3-6x, so the later thresholds still mean something', () => {
+    const ratio = run(PROFILE_PRESETS.active, true, 30).renown / run(PROFILE_PRESETS.active, false, 30).renown;
+    expect(ratio).toBeGreaterThan(3);
+    expect(ratio).toBeLessThan(6);
   });
 });
 

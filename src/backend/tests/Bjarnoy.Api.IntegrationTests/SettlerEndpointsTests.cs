@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
@@ -270,18 +271,19 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.Equal(1, renown!.SettlementCount);
-        Assert.Equal(500, renown.RequiredForNextSettlement);
+        Assert.Equal(55_000, renown.RequiredForNextSettlement);
         Assert.False(renown.CanFoundAnother);
     }
 
     [Fact]
-    public async Task Renown_accrues_over_time_from_building_levels_and_eventually_allows_another_settlement()
+    public async Task Renown_accrues_over_time_from_building_levels_but_buildings_alone_do_not_reach_the_second_settlement_soon()
     {
         using var client = Client();
         var (worldId, _, player, _) = await SetUpPlayerReadyToExpandAsync(client);
         Authorize(client, player.AccessToken);
 
-        // Longhouse level 5 => 5 renown/hour; 100 hours clears the 500 threshold.
+        // Longhouse level 5 + a Cart Workshop => 6 renown/hour; 100 hours is
+        // hundreds of renown, nowhere near the 55 000 the 2nd settlement needs.
         _factory.Time.Advance(TimeSpan.FromHours(100));
         await RefreshAsync(client, player.RefreshToken);
 
@@ -289,7 +291,161 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.True(renown!.Total >= 500);
-        Assert.True(renown.CanFoundAnother);
+        Assert.True(renown.Total < 55_000);
+        Assert.False(renown.CanFoundAnother);
+    }
+
+    [Fact]
+    public async Task Renown_reports_its_hourly_rate_and_the_renown_a_running_feast_still_owes()
+    {
+        using var client = Client();
+        var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+        await PlaceTownSquareAsync(client, settlement.Id, adminToken, player.AccessToken);
+
+        var before = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        var current = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+
+        // One renown per standing building level per hour.
+        Assert.Equal(current!.Buildings.Sum(b => b.Level) * RenownAccount.PointsPerLevelPerHour, before!.PerHour);
+        Assert.True(before.PerHour > 0);
+        Assert.Equal(0, before.PendingFeastRenown);
+
+        var started = await client.PostAsync($"/api/v1/settlements/{settlement.Id}/feast", null, Ct);
+        Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
+
+        var during = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(Feasts.RenownFor(3), during!.PendingFeastRenown, 3);
+
+        _factory.Time.Advance(TimeSpan.FromHours(13));
+        var auth = await RefreshAsync(client, player.RefreshToken);
+        var after = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(0, after!.PendingFeastRenown);
+        Assert.True(after.Total >= Feasts.RenownFor(3));
+        Assert.NotNull(auth);
+    }
+
+    private async Task GrantRenownAsync(Guid userId, double total)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var user = await db.Users.SingleAsync(u => u.Id == userId, Ct);
+        user.RenownTotal = total;
+        await db.SaveChangesAsync(Ct);
+    }
+
+    /// <summary>Places a level-3 Town Square (an admin bypass of its prerequisites) and returns to the player's token.</summary>
+    private async Task PlaceTownSquareAsync(HttpClient client, Guid settlementId, string adminToken, string playerToken)
+    {
+        Authorize(client, adminToken);
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{settlementId}/layout", SqliteApiFixture.StrictJson, Ct);
+        var hex = layout!.Hexes.Last(h => !h.IsCentre && h.Building is null && h.Terrain == "grass");
+        var placed = await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{settlementId}/buildings/{hex.Q}/{hex.R}",
+            new PlaceBuildingRequest("townsquare", 3), Ct);
+        Assert.True(placed.IsSuccessStatusCode, await placed.Content.ReadAsStringAsync(Ct));
+        Authorize(client, playerToken);
+    }
+
+    [Fact]
+    public async Task A_feast_needs_a_town_square()
+    {
+        using var client = Client();
+        var (_, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        Authorize(client, player.AccessToken);
+
+        var response = await client.PostAsync($"/api/v1/settlements/{settlement.Id}/feast", null, Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("NoTownSquare", await response.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_feast_is_paid_up_front_shown_on_the_settlement_and_refused_while_one_is_running()
+    {
+        using var client = Client();
+        var (_, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+        await PlaceTownSquareAsync(client, settlement.Id, adminToken, player.AccessToken);
+
+        var before = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Null(before!.Feast);
+        Assert.Equal(3, before.NextFeast!.TownSquareLevel);
+        Assert.Equal(1250, before.NextFeast.Cost.Wood, 3);
+        Assert.Equal(12 * 3600, before.NextFeast.DurationSeconds, 3);
+
+        var started = await client.PostAsync($"/api/v1/settlements/{settlement.Id}/feast", null, Ct);
+        Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
+
+        var during = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.NotNull(during!.Feast);
+        Assert.Equal(before.NextFeast.RenownGain, during.Feast!.RenownGain, 3);
+        Assert.True(during.Resources.Stock.Wood <= before.Resources.Stock.Wood - 1250 + 1);
+
+        var second = await client.PostAsync($"/api/v1/settlements/{settlement.Id}/feast", null, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Contains("AlreadyRunning", await second.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_finished_feast_credits_its_renown_exactly_once()
+    {
+        using var client = Client();
+        var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+        await PlaceTownSquareAsync(client, settlement.Id, adminToken, player.AccessToken);
+
+        var gain = Feasts.RenownFor(3);
+        var started = await client.PostAsync($"/api/v1/settlements/{settlement.Id}/feast", null, Ct);
+        Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
+
+        // Half way through: nothing granted yet (only building renown accrued).
+        _factory.Time.Advance(TimeSpan.FromHours(6));
+        var auth = await RefreshAsync(client, player.RefreshToken);
+        var midway = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(midway!.Total < gain);
+
+        _factory.Time.Advance(TimeSpan.FromHours(7));
+        await RefreshAsync(client, auth.RefreshToken);
+        var settledRead = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Null(settledRead!.Feast);
+
+        var after = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        var again = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+
+        // 13 hours of building renown is at most a few hundred; the feast adds its gain once.
+        Assert.InRange(after!.Total - midway.Total, gain, gain + 500);
+        Assert.Equal(after.Total, again!.Total);
+    }
+
+    [Fact]
+    public async Task A_feast_that_ended_without_anyone_reading_the_settlement_still_credits_its_renown()
+    {
+        using var client = Client();
+        var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+        await PlaceTownSquareAsync(client, settlement.Id, adminToken, player.AccessToken);
+        await client.PostAsync($"/api/v1/settlements/{settlement.Id}/feast", null, Ct);
+
+        _factory.Time.Advance(TimeSpan.FromHours(13));
+        await RefreshAsync(client, player.RefreshToken);
+
+        // Only the renown endpoint is read: it must find the finished feast itself.
+        var renown = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.True(renown!.Total >= Feasts.RenownFor(3));
     }
 
     [Fact]
@@ -323,7 +479,9 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         var afterTraining = await TrainThreeSettlerCrewsAsync(client, settlement.Id, player.RefreshToken);
 
-        // Clear the renown threshold for a 2nd settlement.
+        // Clear the renown threshold for a 2nd settlement (feasts and buildings
+        // are covered on their own above; 55 000 renown is weeks of play).
+        await GrantRenownAsync(player.User.Id, RenownThresholds.RequiredFor(2));
         _factory.Time.Advance(TimeSpan.FromHours(100));
         var afterRenownWait = await RefreshAsync(client, afterTraining.RefreshToken);
         await client.GetFromJsonAsync<RenownResponse>($"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);

@@ -266,6 +266,10 @@ public sealed class ArmyService(
                 .AccrueAsync(settlement.UserId, settlement.WorldId, now, cancellationToken)
                 .ConfigureAwait(false);
             renownAndSlotAllowed = RenownThresholds.AllowsAnotherSettlement(existingSettlementCount, renownTotal);
+            // AccrueAsync just moved this settlement's finished-feast renown onto
+            // the account and zeroed it on the tracked entity; the domain
+            // snapshot taken before that must not write it back.
+            settled = settled with { PendingFeastRenown = 0 };
 
             var claimedSettlements = await _settlementService
                 .GetClaimedSettlementsAsync(settlement.WorldId, cancellationToken)

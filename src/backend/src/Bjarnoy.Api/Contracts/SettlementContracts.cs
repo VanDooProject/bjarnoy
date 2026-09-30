@@ -171,6 +171,30 @@ public sealed record TrainingOrderResponse(
 /// </param>
 public sealed record ConstructionResponse(int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex);
 
+/// <summary>A Town Square feast in progress (economy.md section 6).</summary>
+/// <param name="EndsAtGameTime">When the feast ends and grants its renown.</param>
+/// <param name="EndsInSeconds">Null while the world's clock is frozen.</param>
+/// <param name="RenownGain">Renown the account gains when it ends.</param>
+public sealed record FeastResponse(
+    DateTimeOffset StartedAtGameTime,
+    DateTimeOffset EndsAtGameTime,
+    double? EndsInSeconds,
+    double RenownGain)
+{
+    public static FeastResponse From(Feast feast, GameClock clock, DateTimeOffset gameNow) => new(
+        feast.StartedAt,
+        feast.EndsAt,
+        clock.FreezesTime ? null : Math.Max(0, (feast.EndsAt - gameNow).TotalSeconds),
+        feast.RenownGain);
+}
+
+/// <summary>What holding a feast here would cost and grant, at the standing Town Square's level.</summary>
+public sealed record FeastOfferResponse(
+    int TownSquareLevel,
+    ResourceLine Cost,
+    double DurationSeconds,
+    double RenownGain);
+
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -188,6 +212,8 @@ public sealed record SettlementResponse(
     IReadOnlyList<UnitStackResponse> Garrison,
     IReadOnlyList<TrainingOrderResponse> TrainingQueue,
     IReadOnlyList<RuneInstanceResponse> Runes,
+    FeastResponse? Feast,
+    FeastOfferResponse? NextFeast,
     WorldClockResponse World)
 {
     public static SettlementResponse From(
@@ -268,6 +294,14 @@ public sealed record SettlementResponse(
                 o.PerUnitDuration.TotalSeconds * o.Count))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
                 r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
+            domain.Feast is { } feast && !feast.IsComplete(gameNow) ? FeastResponse.From(feast, clock, gameNow) : null,
+            domain.TownSquareLevel > 0
+                ? new FeastOfferResponse(
+                    domain.TownSquareLevel,
+                    ResourceLine.From(Feasts.CostFor(domain.TownSquareLevel)),
+                    Feasts.Duration.TotalSeconds / speedFactor,
+                    Feasts.RenownFor(domain.TownSquareLevel))
+                : null,
             WorldClockResponse.From(clock, gameNow));
     }
 }
@@ -370,13 +404,23 @@ public sealed record SettlementViewResponse(
 /// count it is measured against and the threshold for one more — everything
 /// a "found another settlement" UI needs in one call.
 /// </summary>
-public sealed record RenownResponse(double Total, int SettlementCount, double RequiredForNextSettlement, bool CanFoundAnother)
+public sealed record RenownResponse(
+    double Total,
+    int SettlementCount,
+    double RequiredForNextSettlement,
+    bool CanFoundAnother,
+    double PerHour,
+    double PendingFeastRenown)
 {
-    public static RenownResponse From(double total, int settlementCount) => new(
+    /// <param name="perHour">Renown per hour the buildings currently accrue (feasts excluded).</param>
+    /// <param name="pendingFeastRenown">Renown running feasts (and uncollected ones) will still add.</param>
+    public static RenownResponse From(double total, int settlementCount, double perHour = 0, double pendingFeastRenown = 0) => new(
         total,
         settlementCount,
         RenownThresholds.RequiredFor(settlementCount + 1),
-        RenownThresholds.AllowsAnotherSettlement(settlementCount, total));
+        RenownThresholds.AllowsAnotherSettlement(settlementCount, total),
+        perHour,
+        pendingFeastRenown);
 }
 
 public sealed record UnitDefinitionResponse(

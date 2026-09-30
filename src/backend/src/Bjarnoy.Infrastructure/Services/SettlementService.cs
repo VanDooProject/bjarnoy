@@ -64,6 +64,11 @@ public sealed record CancelBuildResult(CancelBuildRejection Rejection, bool Worl
     public bool Accepted => Rejection == CancelBuildRejection.None && !WorldPaused;
 }
 
+public sealed record FeastResult(FeastRejection Rejection, Feast? Feast = null, bool WorldPaused = false)
+{
+    public bool Accepted => Rejection == FeastRejection.None && Feast is not null;
+}
+
 public sealed record TrainResult(TrainRejection Rejection, TrainingOrder? Order = null, bool WorldPaused = false)
 {
     public bool Accepted => Rejection == TrainRejection.None && Order is not null;
@@ -1235,6 +1240,47 @@ public sealed class SettlementService(
             settlementId, count, unitType, decision.Order!.CompletesAt);
 
         return new TrainResult(TrainRejection.None, decision.Order);
+    }
+
+    /// <summary>Starts a Town Square feast, charging its cost up front (economy.md section 6).</summary>
+    public async Task<FeastResult> StartFeastAsync(Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new FeastResult(FeastRejection.NoTownSquare);
+        }
+
+        var clock = settlement.World.ToClock();
+        if (!clock.AllowsCommands)
+        {
+            return new FeastResult(FeastRejection.None, null, WorldPaused: true);
+        }
+
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        // Settle first so the decision sees the stock as of now, and a feast
+        // that just ended is already off the settlement.
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+
+        var decision = settled.PlanFeast(now, settlement.World.SpeedFactor);
+        if (!decision.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
+                .ConfigureAwait(false);
+            return new FeastResult(decision.Rejection);
+        }
+
+        settlement.ApplyDomain(settled.StartFeast(decision.Feast!, now));
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Settlement {Id} started a feast, ending {EndsAt} for {Renown} renown.",
+            settlementId, decision.Feast!.EndsAt, decision.Feast.RenownGain);
+
+        return new FeastResult(FeastRejection.None, decision.Feast);
     }
 
     /// <summary>

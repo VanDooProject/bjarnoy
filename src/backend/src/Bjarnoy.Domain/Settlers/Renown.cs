@@ -79,13 +79,13 @@ public sealed record RenownAccount
 public static class RenownThresholds
 {
     /// <summary>Renown required to found the 2nd settlement — the base of the escalating curve.</summary>
-    public const double BaseThreshold = 500;
+    public const double BaseThreshold = 55_000;
 
     /// <summary>
     /// Renown required, at dispatch time, to found the
     /// <paramref name="settlementNumber"/>th settlement (2, 3, 4, …) — the 1st
     /// is free (see the type-level remarks). <c>BaseThreshold × 2^(n-2)</c>:
-    /// 500 for the 2nd, 1000 for the 3rd, 2000 for the 4th, and so on.
+    /// 55 000 for the 2nd, 110 000 for the 3rd, 220 000 for the 4th, and so on.
     /// </summary>
     public static double RequiredFor(int settlementNumber)
     {

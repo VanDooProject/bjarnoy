@@ -72,6 +72,8 @@
     "authentication_required": "You need to be signed in for that.",
     "premium_required": "This action requires Premium.",
     "invalid_credentials": "Wrong username or password.",
-    "invalid_refresh_token": "Your session has expired — please sign in again."
+    "invalid_refresh_token": "Your session has expired — please sign in again.",
+    "AlreadyRunning": "Only one feast can run at a time here.",
+    "NoTownSquare": "There is no Town Square standing here to hold a feast."
   }
 }

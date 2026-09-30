@@ -943,6 +943,15 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTimeOffset?>("FeastEndsAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("FeastRenownGain")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTimeOffset?>("FeastStartedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("FoundedAt")
                         .HasColumnType("TEXT");
 
@@ -963,6 +972,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
+
+                    b.Property<double>("PendingFeastRenown")
+                        .HasColumnType("REAL");
 
                     b.Property<double>("RateFood")
                         .HasColumnType("REAL");

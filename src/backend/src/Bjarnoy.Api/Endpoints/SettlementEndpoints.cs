@@ -4,6 +4,7 @@ using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
@@ -76,6 +77,13 @@ public static class SettlementEndpoints
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
+        settlements.MapPost("/{settlementId:guid}/feast", HoldFeast)
+            .WithName("HoldFeast")
+            .WithSummary("Starts a Town Square feast, charging its cost immediately; it grants renown when it ends.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
@@ -447,6 +455,37 @@ public static class SettlementEndpoints
         return TypedResults.Conflict(problem);
     }
 
+    private static async Task<Results<Accepted<FeastResponse>, NotFound, Conflict<ProblemDetails>>> HoldFeast(
+        Guid settlementId,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.StartFeastAsync(settlementId, cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        if (result.Accepted)
+        {
+            var feast = result.Feast!;
+            return TypedResults.Accepted(
+                $"/api/v1/settlements/{settlementId}",
+                new FeastResponse(feast.StartedAt, feast.EndsAt, (feast.EndsAt - feast.StartedAt).TotalSeconds, feast.RenownGain));
+        }
+
+        var problem = new ProblemDetails
+        {
+            Title = "The feast was refused.",
+            Detail = DescribeFeast(result.Rejection),
+            Status = StatusCodes.Status409Conflict,
+        };
+        problem.Extensions["rejection"] = result.Rejection.ToString();
+
+        return TypedResults.Conflict(problem);
+    }
+
     private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> SlotRune(
         Guid settlementId,
         Guid runeId,
@@ -694,6 +733,15 @@ public static class SettlementEndpoints
             "Raise a storage house to level 10 before building another.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
+        _ => "Refused.",
+    };
+
+    private static string DescribeFeast(FeastRejection rejection) => rejection switch
+    {
+        FeastRejection.NoTownSquare => "A feast needs a standing Town Square.",
+        FeastRejection.AlreadyRunning => "A feast is already running in this settlement.",
+        FeastRejection.NotEnoughResources =>
+            "Not enough resources (some may be reserved for queued construction).",
         _ => "Refused.",
     };
 
