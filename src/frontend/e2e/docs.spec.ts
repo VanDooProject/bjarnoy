@@ -181,11 +181,12 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     const animated = page.locator('.wildlife-camps .card .animated-camp[data-animated="true"]');
     expect(await animated.count()).toBeGreaterThan(0);
     await expect(page.locator('.wildlife-camps .card [data-testid="guard-range"]')).toHaveCount(total);
-    // Every camp gives food; iron only from strong camps, wood from the beaver lodge.
+    // Every camp gives food and every strong camp iron; the camps' own extras and larger shares come on top.
     await expect(page.locator('.wildlife-camps .card [data-loot="food"]')).toHaveCount(total);
-    await expect(page.locator('#camp-wolfden [data-loot="iron"]')).toHaveCount(1);
+    const strongCards = page.locator('.card:has([data-strength="strong"])');
+    await expect(strongCards.locator('[data-loot="iron"]')).toHaveCount(await strongCards.count());
     await expect(page.locator('#camp-beaverlodge [data-loot="wood"]')).toHaveCount(1);
-    await expect(page.locator('.card:has([data-strength="weak"]) [data-loot="iron"]')).toHaveCount(0);
+    await expect(page.locator('#camp-boarwallow [data-loot="food"][data-more="true"]')).toHaveCount(1);
 
     const all = page.getByTestId('state-switch');
     await all.getByRole('button', { name: 'Cleared', exact: true }).click();

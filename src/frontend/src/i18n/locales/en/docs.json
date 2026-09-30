@@ -352,9 +352,12 @@
     "loot": {
       "label": "Loot",
       "food": "Food",
-      "iron": "Iron",
+      "stone": "Stone",
       "wood": "Wood",
-      "note": "Clearing a camp pays loot: food from the hunt, iron from the gear of earlier settlers a strong pack has eaten, and a little wood where the camp is built of timber. How much grows with the camp's level; the amounts are still to be set."
+      "iron": "Iron",
+      "more": "{kind} ++",
+      "moreHint": "A larger share of this than other camps pay",
+      "note": "Clearing a camp pays loot. Every camp gives food from the hunt and a strong camp adds iron, the gear of earlier settlers its pack has eaten; some camps add what their ground holds, and ++ marks a camp's biggest share. How much grows with the camp's level; the amounts are still to be set."
     },
     "camera": "Facing",
     "notKept": "Guarded art only exists for the directions that show the animals best",

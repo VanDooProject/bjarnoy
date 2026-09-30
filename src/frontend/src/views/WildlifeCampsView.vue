@@ -78,16 +78,35 @@ function rangeOf(strength: CampStrength): { min: number; max: number; levels: nu
 }
 
 // Loot kinds only - the amounts are not designed yet (docs/design/wildlife-camps.md, "Loot").
-// Every camp gives food, a strong camp adds iron, and the two camps built of
-// timber (the otters' drift logs, the beavers' lodge) add a little wood.
-type Loot = 'food' | 'iron' | 'wood';
-const WOOD_CAMPS: readonly CampId[] = ['otterslide', 'beaverlodge'];
-function lootOf(camp: CampEntry): Loot[] {
-  return [
-    'food',
-    ...(camp.strength === 'strong' ? (['iron'] as const) : []),
-    ...(WOOD_CAMPS.includes(camp.id) ? (['wood'] as const) : []),
-  ];
+// The base rule: every camp gives food and a strong camp adds iron. On top,
+// each camp's own extras from the design roster (#334's brainstorm): stone
+// from the bears' rapids and the eyrie's crag, wood from the wolves' forest
+// edge, the beavers' lodge and the otters' drift logs. `more` marks the kind
+// a camp pays a larger share of (the roster's "++"): the boars' and the
+// moose's meat, Fenrir's iron.
+type Loot = 'food' | 'stone' | 'wood' | 'iron';
+interface LootShare {
+  kind: Loot;
+  more?: boolean;
+}
+const LOOT_EXTRAS: Record<CampId, LootShare[]> = {
+  wolfden: [{ kind: 'wood' }],
+  boarwallow: [{ kind: 'food', more: true }],
+  bearrapids: [{ kind: 'stone' }],
+  moosemire: [{ kind: 'food', more: true }],
+  eagleeyrie: [{ kind: 'stone' }, { kind: 'iron' }],
+  fenrirbrood: [{ kind: 'iron', more: true }],
+  beaverlodge: [{ kind: 'wood' }],
+  otterslide: [{ kind: 'wood' }],
+};
+const LOOT_ORDER: Loot[] = ['food', 'stone', 'wood', 'iron'];
+function lootOf(camp: CampEntry): LootShare[] {
+  const shares = new Map<Loot, LootShare>([['food', { kind: 'food' }]]);
+  if (camp.strength === 'strong') shares.set('iron', { kind: 'iron' });
+  for (const extra of LOOT_EXTRAS[camp.id] ?? []) {
+    shares.set(extra.kind, { kind: extra.kind, more: extra.more || shares.get(extra.kind)?.more });
+  }
+  return LOOT_ORDER.flatMap((kind) => (shares.has(kind) ? [shares.get(kind)!] : []));
 }
 
 function hasClip(id: CampId, camera: TileOrientation): boolean {
@@ -246,8 +265,20 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
             <p>{{ t(`docs.wildlifeCamps.list.${camp.id}.guards`) }}</p>
             <p class="loot" data-testid="loot">
               <span class="pills-label">{{ $t('docs.wildlifeCamps.loot.label') }}</span>
-              <span v-for="kind in lootOf(camp)" :key="kind" class="loot-kind" :data-loot="kind">
-                {{ t(`docs.wildlifeCamps.loot.${kind}`) }}
+              <span
+                v-for="share in lootOf(camp)"
+                :key="share.kind"
+                class="loot-kind"
+                :class="{ more: share.more }"
+                :data-loot="share.kind"
+                :data-more="share.more ? 'true' : undefined"
+                :title="share.more ? t('docs.wildlifeCamps.loot.moreHint') : undefined"
+              >
+                {{
+                  share.more
+                    ? t('docs.wildlifeCamps.loot.more', { kind: t(`docs.wildlifeCamps.loot.${share.kind}`) })
+                    : t(`docs.wildlifeCamps.loot.${share.kind}`)
+                }}
               </span>
             </p>
             <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
@@ -366,6 +397,11 @@ h2 {
   align-items: center;
   gap: 6px;
   margin: 0 0 6px;
+}
+.loot-kind.more {
+  color: #20160a;
+  background: var(--gold);
+  font-weight: 700;
 }
 .loot-kind {
   font-size: 12px;

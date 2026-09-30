@@ -352,9 +352,12 @@
     "loot": {
       "label": "Beute",
       "food": "Nahrung",
-      "iron": "Eisen",
+      "stone": "Stein",
       "wood": "Holz",
-      "note": "Ein geräumtes Lager bringt Beute: Nahrung von der Jagd, Eisen aus der Ausrüstung früherer Siedler, die ein starkes Rudel gefressen hat, und etwas Holz, wo das Lager aus Holz gebaut ist. Wie viel, hängt von der Stufe des Lagers ab; die Mengen stehen noch nicht fest."
+      "iron": "Eisen",
+      "more": "{kind} ++",
+      "moreHint": "Davon gibt es hier mehr als bei anderen Lagern",
+      "note": "Ein geräumtes Lager bringt Beute. Jedes Lager gibt Nahrung von der Jagd, ein starkes Lager zusätzlich Eisen aus der Ausrüstung früherer Siedler, die sein Rudel gefressen hat; manche Lager geben dazu, was ihr Boden hergibt, und ++ markiert den größten Anteil eines Lagers. Wie viel, hängt von der Stufe des Lagers ab; die Mengen stehen noch nicht fest."
     },
     "camera": "Richtung",
     "notKept": "Bewachte Grafik gibt es nur für die Richtungen, aus denen die Tiere am besten zu sehen sind",
