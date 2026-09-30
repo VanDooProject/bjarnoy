@@ -6,6 +6,7 @@ import AdminWorldsView from './AdminWorldsView.vue';
 import type { AdminWorldResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
 import adminWorlds from '../../i18n/locales/en/adminWorlds.json';
+import { generationSettings } from '../../lib/map/testing/generationFixture';
 
 const { adminListWorlds, adminCreateWorld, adminUpdateWorldSettings, adminSetWorldRunState } = vi.hoisted(
   () => ({
@@ -41,24 +42,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
     seed: 1234,
-    generation: {
-      islandCellSize: 20,
-      islandChance: 0.45,
-      islandMinRadius: 4.8,
-      islandMaxRadius: 11.2,
-      islandMinLobes: 2,
-      islandMaxLobes: 4,
-      islandMaxElongation: 1.0,
-      islandBendiness: 1.6,
-      islandLobeBlend: 0.25,
-      islandCoastWarp: 1.5,
-      islandCoastWarpScale: 5.0,
-      beachThreshold: 0.82,
-      mountainThreshold: 0.4,
-      mountainRockiness: 0.72,
-      forestRockiness: 0.52,
-      minimumIslandTiles: 6,
-    },
+    generation: generationSettings(),
     ...overrides,
   };
 }
@@ -144,7 +128,7 @@ describe('AdminWorldsView', () => {
     expect(adminCreateWorld).toHaveBeenCalledWith({
       name: 'Alfheim',
       seed: 77,
-      radius: 60,
+      radius: 4000,
       maxPlayers: 200,
     });
     expect(wrapper.text()).toContain('Alfheim');

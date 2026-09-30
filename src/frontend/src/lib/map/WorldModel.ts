@@ -4,7 +4,7 @@
 // tile map that can span thousands of hexes as the camera roams. The
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
-import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
 import { cropAllowedHere, isWaterOnlyBuilding, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
@@ -155,7 +155,7 @@ export const PREVIEW_ISLAND_RADIUS = 7;
 // fill. Hitting the bound falls back to the pre-L5 hexDistance-disc rule
 // (still `PREVIEW_ISLAND_RADIUS`) instead of drawing a silently-truncated
 // island.
-export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 24;
+export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 200;
 
 // Demo mode's `placeGiantsForIsland` needs the landfall's *whole* island
 // (giant placement rules — size thresholds, spacing — care about the real
@@ -166,7 +166,7 @@ export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 24;
 // island" below) rather than getting its due giants. Generous rather than
 // unbounded for the same "must not hang on a pathological seed" reason
 // `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` itself gives.
-const GIANT_ISLAND_FLOOD_MAX_RADIUS = 60;
+const GIANT_ISLAND_FLOOD_MAX_RADIUS = 400;
 
 /**
  * Iterative flood fill (an explicit queue, not recursion — the same "one
@@ -195,9 +195,10 @@ export function floodFillLandmass(
   if (!isLand(start)) return [];
   const seen = new Set<string>([coordKey(start)]);
   const tiles: AxialCoord[] = [start];
-  const queue: AxialCoord[] = [start];
-  while (queue.length) {
-    const c = queue.shift()!;
+  // `tiles` doubles as the queue (breadth-first: every tile is appended once and read once
+  // via `head`), so a 40k-tile island costs O(n) rather than O(n^2) `Array.shift`s.
+  for (let head = 0; head < tiles.length; head++) {
+    const c = tiles[head];
     for (const n of neighbors(c)) {
       const k = coordKey(n);
       if (seen.has(k)) continue;
@@ -205,7 +206,6 @@ export function floodFillLandmass(
       if (!isLand(n)) continue;
       if (hexDistance(start, n) > maxRadius) return null;
       tiles.push(n);
-      queue.push(n);
     }
   }
   return tiles;
@@ -446,23 +446,23 @@ export class WorldModel {
   islandFootprint(island: IslandLabel): AxialCoord[] {
     const cached = this.islandFootprintCache.get(island.id);
     if (cached) return cached;
-    const MAX_FOOTPRINT_TILES = 200;
+    // A hard backstop against runaway growth, sized for the largest islands (a C-class island is
+    // 15k-40k tiles): the label has to clear the island's real bottom edge, so a cap that cut the
+    // flood short would put the name inside the island. Only explored islands are ever measured
+    // (the renderer skips fogged labels), and the result is cached.
+    const MAX_FOOTPRINT_TILES = 100_000;
     const start = { q: island.q, r: island.r };
     const tiles: AxialCoord[] = [];
     if (this.isLand(start.q, start.r)) {
       const seen = new Set<string>([coordKey(start)]);
-      const queue: AxialCoord[] = [start];
       tiles.push(start);
-      while (queue.length && tiles.length < MAX_FOOTPRINT_TILES) {
-        const c = queue.shift()!;
-        for (const n of neighbors(c)) {
+      // `tiles` doubles as the breadth-first queue (read via `head`): O(n), no Array.shift.
+      for (let head = 0; head < tiles.length && tiles.length < MAX_FOOTPRINT_TILES; head++) {
+        for (const n of neighbors(tiles[head])) {
           const k = coordKey(n);
           if (seen.has(k)) continue;
           seen.add(k);
-          if (this.isLand(n.q, n.r)) {
-            tiles.push(n);
-            queue.push(n);
-          }
+          if (this.isLand(n.q, n.r)) tiles.push(n);
         }
       }
     }
@@ -838,10 +838,12 @@ export class WorldModel {
    * failing outright — better than refusing to land at all on a world too
    * small or too rocky to offer a "good" spot.
    */
-  findLandfall(near: AxialCoord, maxRadius = 40): AxialCoord | null {
+  findLandfall(near: AxialCoord, maxRadius = 400): AxialCoord | null {
     let firstLand: AxialCoord | null = null;
     for (let radius = 0; radius <= maxRadius; radius++) {
-      for (const c of hexesInRadius(near, radius)) {
+      // Ring by ring (not the whole disc again per radius): islands are ~150 hexes across
+      // and ~100+ hexes apart, so the nearest land can be far from a click in open sea.
+      for (const c of hexRing(near, radius)) {
         if (!this.isLand(c.q, c.r)) continue;
         // Giant placement v2: never land within a giant's own start-position
         // exclusion — mirrors `WorldGenerator.FindStartPositions` (backend)

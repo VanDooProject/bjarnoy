@@ -35,7 +35,7 @@ import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
 import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
 import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
-import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
+import { buildDemoFogMask, demoMaskBounds } from '../lib/map/fog/demoFogMask';
 import {
   FOG_CHUNK_SIZE,
   FogChunkCache,
@@ -49,7 +49,7 @@ import {
   type ChunkRange,
 } from '../lib/map/fog/fogChunks';
 import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
-import { toTexel, worldMaskBounds, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
+import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
@@ -133,7 +133,7 @@ export class AlreadyFoundedError extends Error {
 function buildDemoModel(): WorldModel {
   const model = new WorldModel(DEMO_SEED);
   if (DEMO_MODE) {
-    model.setIslands(enumerateIslands({ seed: DEMO_SEED, generation: DEFAULT_GENERATION }, DEMO_MASK_RADIUS));
+    model.setIslands(enumerateIslands({ seed: DEMO_SEED, generation: DEFAULT_GENERATION }, DEFAULT_GENERATION.worldRadius));
   }
   return model;
 }
@@ -1824,7 +1824,7 @@ export const useWorldStore = defineStore('world', {
       // mask (generateCells' nested texel loop, then an OffscreenCanvas
       // PNG encode/decode round trip through convertToBlob/createImageBitmap)
       // is real synchronous+CPU work, not a network wait — measured at
-      // several *seconds* against DEMO_MASK_RADIUS on a loaded machine,
+      // several *seconds* on a loaded machine,
       // i.e. comparable to or longer than LIVE_POLL_MS itself. With no
       // guard, the interval fires again before the previous bake finishes,
       // so a second bake's cell loop runs concurrently with the first —
@@ -1846,15 +1846,16 @@ export const useWorldStore = defineStore('world', {
       fogPerfStats.maskFetchInFlight = true;
       const startedAt = performance.now();
       try {
-        const bitmap = await buildDemoFogMask(this.model);
+        const bounds = demoMaskBounds(this.model);
+        const bitmap = await buildDemoFogMask(this.model, bounds);
         if (!bitmap) return;
         // Recorded only once a bake actually produced a mask, so a bail-out
         // (no settlement yet) doesn't suppress the first real bake.
         this.demoFogSignature = signature;
         this.fogMaskBitmap?.close();
         this.fogMaskBitmap = markRaw(bitmap);
-        this.fogMaskBounds = worldMaskBounds(DEMO_MASK_RADIUS);
-        this.worldRadius = DEMO_MASK_RADIUS;
+        this.fogMaskBounds = bounds;
+        this.worldRadius = DEFAULT_GENERATION.worldRadius;
         fogPerfStats.maskVersion = 'demo';
       } finally {
         fogPerfStats.maskFetchMs = performance.now() - startedAt;

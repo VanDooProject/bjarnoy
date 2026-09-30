@@ -164,7 +164,7 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         int maxPlayers = 500,
         CancellationToken cancellationToken = default)
     {
-        var options = WorldGenerationOptions.ForSeed(seed ?? Random.Shared.Next()) with { Radius = radius };
+        var options = TestWorlds.For(seed ?? Random.Shared.Next(), radius);
         options.Validate();
 
         await using var scope = Services.CreateAsyncScope();

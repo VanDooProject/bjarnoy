@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Bjarnoy.Domain.World;
 
 /// <summary>
@@ -8,9 +10,18 @@ namespace Bjarnoy.Domain.World;
 /// <para>
 /// Islands are seeded on a coarse grid of cells in odd-q offset space (roughly
 /// square, so islands read as evenly rather than axially spread). Each cell
-/// independently hashes whether it holds an island, where its jittered centre
-/// sits and how big it is. A hex only has to look at its own cell and the eight
-/// around it, which is why classification is O(1) and needs no precomputed map.
+/// independently hashes whether it holds an island, its size class (small A,
+/// medium B, large C), its jittered centre and its shape: a bent spine of
+/// vertices with a width each plus a few satellite islets (see
+/// <see cref="IslandShape"/>). A hex only has to look at its own cell and the
+/// eight around it, which is why classification is O(1) and needs no
+/// precomputed map. An island that could cross the world radius is never
+/// generated, so the world edge does not clip islands either.
+/// </para>
+/// <para>
+/// Every number is computed with + - * / and <see cref="Math.Sqrt(double)"/>
+/// only — no trigonometry, no pow — in a fixed evaluation order, so the
+/// frontend mirror agrees to the last bit.
 /// </para>
 /// <para>
 /// The legacy <c>IslandFactoryOrganic</c> instead filled a square grid with
@@ -41,10 +52,11 @@ public sealed class TerrainSampler
     public WorldGenerationOptions Options => _options;
 
     /// <summary>
-    /// How far into the nearest island a hex sits, as a fraction of that island's
-    /// radius: 0 at the centre, 1 at the shoreline, <see langword="null"/> at sea.
+    /// How far into the nearest island a hex sits, in units of that island's local
+    /// half-width plus shoreline noise: 0 on the spine, about 1 at the shoreline,
+    /// <see langword="null"/> at sea.
     /// </summary>
-    public double? IslandDepthAt(HexCoord coord) => IslandDepthAt(coord, _options.Seed);
+    public double? IslandDepthAt(HexCoord coord) => DepthAt(coord, wasted: false);
 
     /// <summary>
     /// Extra seed offset added on top of the world seed for every wasted-island
@@ -67,190 +79,405 @@ public sealed class TerrainSampler
     /// hex also happens to sit in a green island (that exclusion is applied by
     /// <see cref="WastedTerrainAt"/>, not here).
     /// </summary>
-    public double? WastedDepthAt(HexCoord coord) => IslandDepthAt(
-        coord,
-        _options.Seed + WastedSeedOffset,
-        _options.IslandChance * WastedIslandChanceFactor,
-        excludeGreenCells: true);
+    public double? WastedDepthAt(HexCoord coord) => DepthAt(coord, wasted: true);
+
+    private readonly record struct CellKey(int Col, int Row, bool Wasted);
+
+    // Per-cell shapes are pure functions of (cell, seed kind, options), so caching
+    // them changes no result. A null value is a cell without an island.
+    private readonly ConcurrentDictionary<CellKey, IslandShape?> _shapes = new();
 
     /// <summary>
-    /// Shared implementation behind <see cref="IslandDepthAt(HexCoord)"/> and
-    /// <see cref="WastedDepthAt"/>: identical cell-grid/lobe-chain math, just
-    /// parameterised on which seed and island-chance threshold to hash
-    /// against, so wasted islands are a bit-exact mirror of green ones under a
-    /// different seed rather than a re-derived algorithm that could drift.
+    /// The island (if any) seeded in grid cell <paramref name="cellCol"/>/<paramref name="cellRow"/>:
+    /// <see langword="null"/> when the cell rolls no island, when a large neighbour
+    /// suppresses it, or when the island could cross the world radius (an island
+    /// is never clipped by the world edge — it is not generated at all).
     /// </summary>
-    /// <param name="excludeGreenCells">
-    /// When set (the wasted path only), a cell that also qualifies as a green
-    /// island cell (<c>Hash2(cell, seed) &lt;= IslandChance</c>, the world
-    /// seed, not <paramref name="seed"/>) is skipped entirely, so a wasted
-    /// island's own cell grid never overlaps a green island's cell grid.
-    /// </param>
-    private double? IslandDepthAt(
-        HexCoord coord, int seed, double? islandChanceOverride = null, bool excludeGreenCells = false)
+    /// <param name="wasted">The wasted-island grid instead of the green one.</param>
+    public IslandShape? IslandShapeAt(int cellCol, int cellRow, bool wasted = false)
     {
-        var (col, row) = coord.ToOddQ();
-        var islandChance = islandChanceOverride ?? _options.IslandChance;
-        var cellSize = _options.IslandCellSize;
-        var jitter = cellSize * 0.55;
-
-        var baseCol = (int)Math.Floor((double)col / cellSize);
-        var baseRow = (int)Math.Floor((double)row / cellSize);
-
-        // A cheap domain warp applied once per hex, before distance is measured
-        // against any island's lobes, so coastlines wobble instead of tracing
-        // perfect arcs. Zero when IslandCoastWarp is 0 (the legacy default),
-        // which keeps this identical to the un-warped sample point. Uses the
-        // same seed+53/+71 offsets as green islands: the warp noise field is
-        // shared, only the cell grid below differs by seed.
-        var px = (double)col;
-        var py = (double)row;
-        if (_options.IslandCoastWarp > 0)
+        var key = new CellKey(cellCol, cellRow, wasted);
+        if (_shapes.TryGetValue(key, out var cached))
         {
-            var warpScale = _options.IslandCoastWarpScale;
-            px += (ValueNoise.Sample(col, row, seed + 53, warpScale) - 0.5) * 2.0 * _options.IslandCoastWarp;
-            py += (ValueNoise.Sample(col, row, seed + 71, warpScale) - 0.5) * 2.0 * _options.IslandCoastWarp;
+            return cached;
         }
 
-        double? best = null;
+        // Two threads racing here both compute the same value; either may win.
+        var shape = BuildCell(cellCol, cellRow, wasted);
+        _shapes.TryAdd(key, shape);
+        return shape;
+    }
 
-        for (var dCol = -1; dCol <= 1; dCol++)
+    /// <summary>
+    /// Every island of the world, in cell order (column, then row): the cells that
+    /// hold an island whose whole footprint is inside the world radius.
+    /// </summary>
+    public IEnumerable<IslandShape> EnumerateIslandShapes(bool wasted = false)
+    {
+        var cellSize = _options.IslandCellSize;
+        var span = (_options.Radius / cellSize) + 2;
+        for (var cellCol = -span; cellCol <= span; cellCol++)
         {
-            for (var dRow = -1; dRow <= 1; dRow++)
+            for (var cellRow = -span; cellRow <= span; cellRow++)
             {
-                var cellCol = baseCol + dCol;
-                var cellRow = baseRow + dRow;
+                var shape = IslandShapeAt(cellCol, cellRow, wasted);
+                if (shape is not null)
+                {
+                    yield return shape;
+                }
+            }
+        }
+    }
 
-                if (ValueNoise.Hash2(cellCol, cellRow, seed) > islandChance)
+    private int SeedFor(bool wasted) => wasted ? _options.Seed + WastedSeedOffset : _options.Seed;
+
+    private double ChanceFor(bool wasted) =>
+        wasted ? _options.IslandChance * WastedIslandChanceFactor : _options.IslandChance;
+
+    // Whether the cell rolls an island at all. The wasted grid additionally skips every
+    // cell that is a green island cell (world seed, full chance), so a wasted island's
+    // own cell grid never overlaps a green island's.
+    private bool CellPresent(int cellCol, int cellRow, bool wasted)
+    {
+        if (ValueNoise.Hash2(cellCol, cellRow, SeedFor(wasted)) > ChanceFor(wasted))
+        {
+            return false;
+        }
+
+        return !wasted || ValueNoise.Hash2(cellCol, cellRow, _options.Seed) > _options.IslandChance;
+    }
+
+    private IslandSizeClass ClassOf(int cellCol, int cellRow, bool wasted)
+    {
+        var h = ValueNoise.Hash2(cellCol, cellRow, SeedFor(wasted) + 301);
+        return h < _options.IslandSmallShare
+            ? IslandSizeClass.Small
+            : h > 1.0 - _options.IslandLargeShare ? IslandSizeClass.Large : IslandSizeClass.Medium;
+    }
+
+    private IslandShape? BuildCell(int cellCol, int cellRow, bool wasted)
+    {
+        if (!CellPresent(cellCol, cellRow, wasted))
+        {
+            return null;
+        }
+
+        var seed = SeedFor(wasted);
+        var cls = ClassOf(cellCol, cellRow, wasted);
+
+        // A large island clears its neighbours; of two neighbouring large ones the
+        // higher roll wins. (Evaluated exactly like the frontend: `cls` is read as it
+        // stands after earlier neighbours may already have demoted it.)
+        var suppressed = false;
+        for (var dc = -1; dc <= 1; dc++)
+        {
+            for (var dr = -1; dr <= 1; dr++)
+            {
+                if (dc == 0 && dr == 0)
                 {
                     continue;
                 }
 
-                if (excludeGreenCells && ValueNoise.Hash2(cellCol, cellRow, _options.Seed) <= _options.IslandChance)
+                var nc = cellCol + dc;
+                var nr = cellRow + dr;
+                if (!CellPresent(nc, nr, wasted) || ClassOf(nc, nr, wasted) != IslandSizeClass.Large)
                 {
                     continue;
                 }
 
-                var centreCol = (cellCol * cellSize) + (cellSize / 2.0)
-                    + ((ValueNoise.Hash2(cellCol, cellRow, seed + 11) - 0.5) * jitter);
-                var centreRow = (cellRow * cellSize) + (cellSize / 2.0)
-                    + ((ValueNoise.Hash2(cellCol, cellRow, seed + 13) - 0.5) * jitter);
-                var radius = _options.IslandMinRadius
-                    + (ValueNoise.Hash2(cellCol, cellRow, seed + 17)
-                        * (_options.IslandMaxRadius - _options.IslandMinRadius));
-
-                var depth = IslandCellDepth(cellCol, cellRow, seed, centreCol, centreRow, radius, px, py);
-
-                if (depth <= 1.0 && (best is null || depth < best))
+                if (cls != IslandSizeClass.Large)
                 {
-                    best = depth;
+                    suppressed = true;
+                }
+                else if (ValueNoise.Hash2(nc, nr, seed + 307) > ValueNoise.Hash2(cellCol, cellRow, seed + 307))
+                {
+                    cls = IslandSizeClass.Medium;
                 }
             }
         }
 
-        return best;
+        return suppressed ? null : BuildShape(cellCol, cellRow, seed, cls);
     }
 
-    /// <summary>
-    /// The shortest depth a single island cell's shape gives the warped sample
-    /// point <paramref name="px"/>/<paramref name="py"/>: a chain of 1-5 lobes
-    /// (offset discs) walked out from the jittered centre along a spine that
-    /// bends by a per-island amount, smooth-blended where lobes meet so the
-    /// waist between them fills in rather than pinching to a hairline.
-    /// </summary>
-    /// <remarks>
-    /// With <see cref="WorldGenerationOptions.IslandMinLobes"/> and
-    /// <see cref="WorldGenerationOptions.IslandMaxLobes"/> both 1 this reduces
-    /// to exactly the single-disc circle the original algorithm produced
-    /// (existing worlds are migrated to those values so their shape never
-    /// changes under them — see <c>docs/design/river-generation.md</c>).
-    /// No trigonometry is used anywhere in this method: every direction is
-    /// built and rotated with plain vector arithmetic so the frontend mirror
-    /// in <c>worldGenerator.ts</c> can stay bit-for-bit identical.
-    /// </remarks>
-    private double IslandCellDepth(
-        int cellCol, int cellRow, int seed, double centreCol, double centreRow, double radius, double px, double py)
+    private IslandShape? BuildShape(int cc, int cr, int seed, IslandSizeClass cls)
     {
-        var dx0 = px - centreCol;
-        var dy0 = py - centreRow;
-        var best = Math.Sqrt((dx0 * dx0) + (dy0 * dy0)) / radius;
+        var o = _options;
+        double cs = o.IslandCellSize;
+        var jit = cs * IslandShapeConstants.Jitter;
+        var cx = (cc * cs) + (cs / 2) + ((ValueNoise.Hash2(cc, cr, seed + 11) - 0.5) * jit);
+        var cy = (cr * cs) + (cs / 2) + ((ValueNoise.Hash2(cc, cr, seed + 13) - 0.5) * jit);
+        var scale = cls == IslandSizeClass.Small
+            ? IslandShapeConstants.SmallScale
+            : cls == IslandSizeClass.Large ? IslandShapeConstants.LargeScale : 1.0;
+        var radius = scale * (o.IslandMinWidth + (ValueNoise.Hash2(cc, cr, seed + 17) * (o.IslandMaxWidth - o.IslandMinWidth)));
+        var n = o.IslandMinSegments
+            + (int)Math.Floor(ValueNoise.Hash2(cc, cr, seed + 19) * ((o.IslandMaxSegments - o.IslandMinSegments) + 1));
 
-        var minLobes = _options.IslandMinLobes;
-        var maxLobes = _options.IslandMaxLobes;
-        var lobeCount = minLobes
-            + (int)Math.Floor(ValueNoise.Hash2(cellCol, cellRow, seed + 19) * ((maxLobes - minLobes) + 1));
-
-        if (lobeCount <= 1)
-        {
-            return best;
-        }
-
-        var ax = ValueNoise.Hash2(cellCol, cellRow, seed + 23) - 0.5;
-        var ay = ValueNoise.Hash2(cellCol, cellRow, seed + 47) - 0.5;
+        var ax = ValueNoise.Hash2(cc, cr, seed + 23) - 0.5;
+        var ay = ValueNoise.Hash2(cc, cr, seed + 47) - 0.5;
         var len = Math.Sqrt((ax * ax) + (ay * ay));
-        double ux, uy;
-        if (len < 1e-9)
-        {
-            ux = 1.0;
-            uy = 0.0;
-        }
-        else
-        {
-            ux = ax / len;
-            uy = ay / len;
-        }
+        var ux = len < 1e-9 ? 1.0 : ax / len;
+        var uy = len < 1e-9 ? 0.0 : ay / len;
+        var hb = ValueNoise.Hash2(cc, cr, seed + 59);
+        var t0 = (hb < 0.5 ? -1.0 : 1.0)
+            * (o.IslandMinBend + ((o.IslandMaxBend - o.IslandMinBend) * ((hb < 0.5 ? hb : hb - 0.5) * 2)));
+        var elong = o.IslandMinElongation + ((o.IslandMaxElongation - o.IslandMinElongation) * ValueNoise.Hash2(cc, cr, seed + 61));
+        var step = radius * elong / Math.Max(1, n - 1);
 
-        var curl = (ValueNoise.Hash2(cellCol, cellRow, seed + 59) - 0.5) * 2.0;
-        var turn = curl * _options.IslandBendiness;
-        var elongFraction = ValueNoise.Hash2(cellCol, cellRow, seed + 61);
-        var spineLength = radius * _options.IslandMaxElongation * elongFraction;
-        var step = spineLength / (lobeCount - 1);
-
-        var lx = centreCol;
-        var ly = centreRow;
-        var blend = _options.IslandLobeBlend;
-
-        for (var lobe = 1; lobe < lobeCount; lobe++)
+        var px = new double[n];
+        var py = new double[n];
+        double lx = 0;
+        double ly = 0;
+        for (var k = 1; k < n; k++)
         {
+            var t = t0 * (0.5 + ValueNoise.Hash2(cc, cr, seed + 400 + k));
+            var c = (1 - (t * t)) / (1 + (t * t));
+            var s = (2 * t) / (1 + (t * t));
+            var nx = (ux * c) - (uy * s);
+            var ny = (uy * c) + (ux * s);
+            ux = nx;
+            uy = ny;
             lx += ux * step;
             ly += uy * step;
+            px[k] = lx;
+            py[k] = ly;
+        }
 
-            var lobeScale = _options.IslandLobeMinScale
-                + (ValueNoise.Hash2(cellCol, cellRow, seed + 200 + lobe)
-                    * (_options.IslandLobeMaxScale - _options.IslandLobeMinScale));
-            var lobeRadius = radius * lobeScale;
+        double mx = 0;
+        double my = 0;
+        for (var k = 0; k < n; k++)
+        {
+            mx += px[k];
+            my += py[k];
+        }
 
-            var ddx = px - lx;
-            var ddy = py - ly;
-            var lobeDepth = Math.Sqrt((ddx * ddx) + (ddy * ddy)) / lobeRadius;
+        mx /= n;
+        my /= n;
+        for (var k = 0; k < n; k++)
+        {
+            px[k] -= mx;
+            py[k] -= my;
+        }
 
-            best = SmoothMin(best, lobeDepth, blend);
+        var w = new double[n];
+        for (var k = 0; k < n; k++)
+        {
+            var f = n == 1 ? 0.0 : Math.Abs(((2.0 * k) / (n - 1)) - 1);
+            w[k] = radius * (1 - (IslandShapeConstants.Taper * f * f))
+                * (IslandShapeConstants.WidthMinScale
+                    + (ValueNoise.Hash2(cc, cr, seed + 200 + k)
+                        * (IslandShapeConstants.WidthMaxScale - IslandShapeConstants.WidthMinScale)));
+        }
 
-            // Rotate (ux, uy) by turn radians' worth of curl for the next
-            // segment, without trigonometry: u + turn * perp(u), renormalised.
-            var tx = ux - (turn * uy);
-            var ty = uy + (turn * ux);
-            var tl = Math.Sqrt((tx * tx) + (ty * ty));
-            if (tl > 1e-9)
+        var ni = (int)Math.Floor(ValueNoise.Hash2(cc, cr, seed + 300) * (IslandShapeConstants.IsletMax + 1));
+        var ix = new double[ni];
+        var iy = new double[ni];
+        var ir = new double[ni];
+        for (var i = 0; i < ni; i++)
+        {
+            var k = (int)Math.Floor(ValueNoise.Hash2(cc, cr, seed + 310 + i) * n);
+            var ox = ValueNoise.Hash2(cc, cr, seed + 320 + i) - 0.5;
+            var oy = ValueNoise.Hash2(cc, cr, seed + 330 + i) - 0.5;
+            var ol = Math.Sqrt((ox * ox) + (oy * oy));
+            if (ol == 0.0 || double.IsNaN(ol))
             {
-                ux = tx / tl;
-                uy = ty / tl;
+                ol = 1.0;
+            }
+
+            ox /= ol;
+            oy /= ol;
+            var dist = w[k] * (IslandShapeConstants.IsletDistanceMin
+                + ((IslandShapeConstants.IsletDistanceMax - IslandShapeConstants.IsletDistanceMin)
+                    * ValueNoise.Hash2(cc, cr, seed + 340 + i)));
+            ix[i] = px[k] + (ox * dist);
+            iy[i] = py[k] + (oy * dist);
+            ir[i] = w[k] * (IslandShapeConstants.IsletRadiusMin
+                + ((IslandShapeConstants.IsletRadiusMax - IslandShapeConstants.IsletRadiusMin)
+                    * ValueNoise.Hash2(cc, cr, seed + 350 + i)));
+        }
+
+        // Reach clamp: the farthest land can get from the centre must fit the 3x3 cell scan.
+        var nm = IslandShapeConstants.NoiseReachFactor(o.IslandCoastNoise);
+        double reach = 0;
+        for (var k = 0; k < n; k++)
+        {
+            reach = Math.Max(reach, Math.Sqrt((px[k] * px[k]) + (py[k] * py[k])) + (w[k] * nm));
+        }
+
+        for (var i = 0; i < ni; i++)
+        {
+            reach = Math.Max(reach, Math.Sqrt((ix[i] * ix[i]) + (iy[i] * iy[i])) + (ir[i] * nm));
+        }
+
+        var budget = IslandShapeConstants.ReachBudget(cs, o.IslandCoastWarp);
+        var factor = 1.0;
+        if (reach > budget)
+        {
+            factor = budget / reach;
+            for (var k = 0; k < n; k++)
+            {
+                px[k] *= factor;
+                py[k] *= factor;
+                w[k] *= factor;
+            }
+
+            for (var i = 0; i < ni; i++)
+            {
+                ix[i] *= factor;
+                iy[i] *= factor;
+                ir[i] *= factor;
+            }
+
+            reach = budget;
+        }
+
+        // World edge: drop the island if any of it could cross the world radius.
+        var warpSum = o.IslandCoastWarp + IslandShapeConstants.Warp2;
+        var col = (int)Math.Floor(cx + 0.5);
+        var row = (int)Math.Floor(cy + 0.5);
+        var q = col;
+        var r = row - ((col - (col & 1)) / 2);
+        var d = (Math.Abs(q) + Math.Abs(r) + Math.Abs(-q - r)) / 2;
+        if (d + (1.42 * (reach + warpSum)) > o.Radius)
+        {
+            return null;
+        }
+
+        return new IslandShape(
+            cc, cr, cx, cy, px, py, w, ix, iy, ir, reach + warpSum, cls, factor, nm, warpSum);
+    }
+
+    /// <summary>
+    /// Depth of an offset-space hex into the nearest island of the green (or
+    /// wasted) grid, or <see langword="null"/> at sea. Distance to each island in
+    /// reach is the minimum over its spine segments of distance / interpolated
+    /// half-width (islets: distance / radius), plus three octaves of shoreline noise.
+    /// </summary>
+    // Two-octave domain warp, applied once per hex before any distance is measured, so
+    // coastlines wobble (fjords, bays) instead of tracing arcs.
+    private (double X, double Y) Warp(int col, int row, int seed)
+    {
+        var o = _options;
+        double px = col;
+        double py = row;
+        px += ((ValueNoise.Sample(col, row, seed + 53, o.IslandCoastWarpScale) - 0.5) * 2 * o.IslandCoastWarp)
+            + ((ValueNoise.Sample(col, row, seed + 83, IslandShapeConstants.WarpScale2) - 0.5) * 2 * IslandShapeConstants.Warp2);
+        py += ((ValueNoise.Sample(col, row, seed + 71, o.IslandCoastWarpScale) - 0.5) * 2 * o.IslandCoastWarp)
+            + ((ValueNoise.Sample(col, row, seed + 89, IslandShapeConstants.WarpScale2) - 0.5) * 2 * IslandShapeConstants.Warp2);
+        return (px, py);
+    }
+
+    private double? DepthAt(HexCoord coord, bool wasted)
+    {
+        var (col, row) = coord.ToOddQ();
+        var o = _options;
+        var seed = SeedFor(wasted);
+
+        var (px, py) = Warp(col, row, seed);
+
+        double cs = o.IslandCellSize;
+        var baseCol = (int)Math.Floor(col / cs);
+        var baseRow = (int)Math.Floor(row / cs);
+        double? best = null;
+        for (var dc = -1; dc <= 1; dc++)
+        {
+            for (var dr = -1; dr <= 1; dr++)
+            {
+                var island = IslandShapeAt(baseCol + dc, baseRow + dr, wasted);
+                if (island is null)
+                {
+                    continue;
+                }
+
+                var qx = px - island.CentreX;
+                var qy = py - island.CentreY;
+                if ((qx * qx) + (qy * qy) > island.Reach * island.Reach)
+                {
+                    continue;
+                }
+
+                var d = NoisyDistance(island, qx, qy, col, row, seed);
+                if (d <= 1 && (best is null || d < best))
+                {
+                    best = d;
+                }
             }
         }
 
         return best;
     }
 
-    /// <summary>Polynomial smooth minimum: a hard <see cref="Math.Min"/> at <paramref name="k"/> = 0.</summary>
-    private static double SmoothMin(double a, double b, double k)
+    // Distance to the island plus three octaves of shoreline noise: what a hex's depth into
+    // this one island is (land when <= 1). `qx`/`qy` are the warped sample point relative to
+    // the island's centre.
+    private double NoisyDistance(IslandShape island, double qx, double qy, int col, int row, int seed)
     {
-        if (k <= 0.0)
+        var o = _options;
+        var d = ShapeDistance(island, qx, qy);
+        var n1 = ValueNoise.Sample(col, row, seed + 97, o.IslandCoastNoiseScale) - 0.5;
+        var n2 = ValueNoise.Sample(col, row, seed + 101, o.IslandCoastNoiseScale / 2.5) - 0.5;
+        var n3 = ValueNoise.Sample(col, row, seed + 103, o.IslandCoastNoiseScale / 6.25) - 0.5;
+        d += o.IslandCoastNoise * (n1 + (IslandShapeConstants.Octave2 * n2) + (IslandShapeConstants.Octave3 * n3));
+        return d;
+    }
+
+    /// <summary>
+    /// The depth <paramref name="island"/> alone gives <paramref name="coord"/> — no other cell's
+    /// island considered, no reach cull — or <see langword="null"/> where it is not land. Test
+    /// hook: which hexes an island claims regardless of which cells a hex scans.
+    /// </summary>
+    internal double? DepthOfShape(IslandShape island, HexCoord coord, bool wasted)
+    {
+        var (col, row) = coord.ToOddQ();
+        var (px, py) = Warp(col, row, SeedFor(wasted));
+        var d = NoisyDistance(island, px - island.CentreX, py - island.CentreY, col, row, SeedFor(wasted));
+        return d <= 1 ? d : null;
+    }
+
+    private static double ShapeDistance(IslandShape island, double qx, double qy)
+    {
+        var sx = island.SpineXArray;
+        var sy = island.SpineYArray;
+        var w = island.WidthArray;
+        var d = double.PositiveInfinity;
+        if (sx.Length == 1)
         {
-            return Math.Min(a, b);
+            d = Math.Sqrt((qx * qx) + (qy * qy)) / w[0];
         }
 
-        var h = Math.Max(k - Math.Abs(a - b), 0.0) / k;
-        return Math.Min(a, b) - (h * h * k * 0.25);
+        for (var k = 0; k < sx.Length - 1; k++)
+        {
+            var x0 = sx[k];
+            var y0 = sy[k];
+            var dx = sx[k + 1] - x0;
+            var dy = sy[k + 1] - y0;
+            var l2 = (dx * dx) + (dy * dy);
+            var t = l2 > 0 ? (((qx - x0) * dx) + ((qy - y0) * dy)) / l2 : 0.0;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            var ex = qx - (x0 + (t * dx));
+            var ey = qy - (y0 + (t * dy));
+            var v = Math.Sqrt((ex * ex) + (ey * ey)) / (w[k] + ((w[k + 1] - w[k]) * t));
+            if (v < d)
+            {
+                d = v;
+            }
+        }
+
+        var ix = island.IsletXArray;
+        var iy = island.IsletYArray;
+        var ir = island.IsletRadiusArray;
+        for (var i = 0; i < ix.Length; i++)
+        {
+            var ex = qx - ix[i];
+            var ey = qy - iy[i];
+            var v = Math.Sqrt((ex * ex) + (ey * ey)) / ir[i];
+            if (v < d)
+            {
+                d = v;
+            }
+        }
+
+        return d;
     }
 
     /// <summary>The terrain of a single hex.</summary>

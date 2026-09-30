@@ -1015,6 +1015,7 @@ watch(
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
       :target-radius="pointerTarget.targetRadius"
+      clear-below-selector=".hero--founding"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 

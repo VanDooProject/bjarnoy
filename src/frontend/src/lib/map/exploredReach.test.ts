@@ -21,13 +21,16 @@ import { describe, expect, it } from 'vitest';
 import { WorldModel } from './WorldModel';
 import { hexDistance, parseKey } from '../hex/coords';
 
+const SWEEP = 80;
+
 /** Every hex the model considers explored, as coords. */
-function exploredHexes(model: WorldModel): { q: number; r: number }[] {
+function exploredHexes(model: WorldModel, around: { q: number; r: number }): { q: number; r: number }[] {
   // `explored` is private; `isExplored` is the public read, so sweep a box
-  // comfortably larger than any settlement's reach.
+  // comfortably larger than any settlement's reach, centred on the settlement
+  // (islands are far apart: the nearest land to the origin can be 200 hexes away).
   const out: { q: number; r: number }[] = [];
-  for (let q = -80; q <= 80; q++) {
-    for (let r = -80; r <= 80; r++) {
+  for (let q = around.q - SWEEP; q <= around.q + SWEEP; q++) {
+    for (let r = around.r - SWEEP; r <= around.r + SWEEP; r++) {
       if (model.isExplored(q, r)) out.push({ q, r });
     }
   }
@@ -41,7 +44,7 @@ describe('explored hexes stay within exploredRadius of their settlement', () => 
     expect(at).not.toBeNull();
     const settlement = model.foundSettlement('p1', 'You', 'Home', at);
     const radius = model.exploredRadius(settlement);
-    const explored = exploredHexes(model);
+    const explored = exploredHexes(model, at);
 
     expect(explored.length).toBeGreaterThan(0);
     for (const hex of explored) {
@@ -68,21 +71,22 @@ describe('explored hexes stay within exploredRadius of their settlement', () => 
     model.claimTerritory(settlement.id);
 
     const radius = model.exploredRadius(settlement);
-    for (const hex of exploredHexes(model)) {
+    for (const hex of exploredHexes(model, at)) {
       expect(hexDistance(hex, { q: settlement.q, r: settlement.r }), `${hex.q},${hex.r}`).toBeLessThanOrEqual(radius);
     }
   });
 
   it('holds for several settlements at once, each against its own radius', () => {
     const model = new WorldModel(20260824);
-    const a = model.foundSettlement('p1', 'You', 'Home', model.findLandfall({ q: 0, r: 0 })!);
-    const b = model.foundSettlement('p2', 'Rival', 'Theirs', model.findLandfall({ q: 25, r: -12 })!);
+    const homeAt = model.findLandfall({ q: 0, r: 0 })!;
+    const a = model.foundSettlement('p1', 'You', 'Home', homeAt);
+    const b = model.foundSettlement('p2', 'Rival', 'Theirs', model.findLandfall({ q: homeAt.q + 25, r: homeAt.r - 12 })!);
     const radii = [
       { s: a, radius: model.exploredRadius(a) },
       { s: b, radius: model.exploredRadius(b) },
     ];
 
-    for (const hex of exploredHexes(model)) {
+    for (const hex of exploredHexes(model, homeAt)) {
       // Every explored hex must be covered by *someone*, which is what makes
       // the union of discs a superset of the explored set.
       const covered = radii.some(({ s, radius }) => hexDistance(hex, { q: s.q, r: s.r }) <= radius);
@@ -91,15 +95,14 @@ describe('explored hexes stay within exploredRadius of their settlement', () => 
   });
 
   it('keeps every stored explored key inside the swept box, so the sweep above is not missing any', () => {
-    // Guards the test itself: if a future change explored something past ±80,
+    // Guards the test itself: if a future change explored something past ±80 of the settlement,
     // the assertions above would pass by never looking at it.
     const model = new WorldModel(20260824);
     const at = model.findLandfall({ q: 0, r: 0 })!;
     const settlement = model.foundSettlement('p1', 'You', 'Home', at);
     const radius = model.exploredRadius(settlement);
-    // The sweep box has to clear the settlement's own position plus its reach.
-    expect(Math.abs(at.q) + radius).toBeLessThan(80);
-    expect(Math.abs(at.r) + radius).toBeLessThan(80);
+    // The sweep box (centred on the settlement) has to clear the settlement's reach.
+    expect(radius).toBeLessThan(SWEEP);
     expect(parseKey('3,4')).toEqual({ q: 3, r: 4 });
   });
 });

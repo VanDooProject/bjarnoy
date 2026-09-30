@@ -1445,13 +1445,16 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<bool>("FrozenIslesEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<double>("IslandBendiness")
-                        .HasColumnType("double precision");
-
                     b.Property<int>("IslandCellSize")
                         .HasColumnType("integer");
 
                     b.Property<double>("IslandChance")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandCoastNoise")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandCoastNoiseScale")
                         .HasColumnType("double precision");
 
                     b.Property<double>("IslandCoastWarp")
@@ -1460,28 +1463,34 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("IslandCoastWarpScale")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("IslandLobeBlend")
+                    b.Property<double>("IslandLargeShare")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("IslandLobeMaxScale")
-                        .HasColumnType("double precision");
-
-                    b.Property<double>("IslandLobeMinScale")
+                    b.Property<double>("IslandMaxBend")
                         .HasColumnType("double precision");
 
                     b.Property<double>("IslandMaxElongation")
                         .HasColumnType("double precision");
 
-                    b.Property<int>("IslandMaxLobes")
+                    b.Property<int>("IslandMaxSegments")
                         .HasColumnType("integer");
 
-                    b.Property<double>("IslandMaxRadius")
+                    b.Property<double>("IslandMaxWidth")
                         .HasColumnType("double precision");
 
-                    b.Property<int>("IslandMinLobes")
+                    b.Property<double>("IslandMinBend")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandMinElongation")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("IslandMinSegments")
                         .HasColumnType("integer");
 
-                    b.Property<double>("IslandMinRadius")
+                    b.Property<double>("IslandMinWidth")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandSmallShare")
                         .HasColumnType("double precision");
 
                     b.Property<bool>("JoinsClosed")

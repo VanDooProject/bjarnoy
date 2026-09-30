@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WorldModel } from '../WorldModel';
-import { buildDemoFogMask, DEMO_MASK_RADIUS } from './demoFogMask';
-import { toTexel, worldMaskBounds } from './fogMaskLayout';
+import { buildDemoFogMask, demoMaskBounds } from './demoFogMask';
+import { toTexel } from './fogMaskLayout';
 
 // The bake used to round-trip every texel through an OffscreenCanvas 2D
 // context (`putImageData` -> `convertToBlob({type: 'image/png'})` ->
@@ -76,7 +76,7 @@ describe('buildDemoFogMask', () => {
     // `convertToBlob` path handed over) — `data`/`width`/`height` is the
     // `ImageData` shape `HexMapRenderer.setFogMask`'s `Texture.from` reads.
     expect(passed).toBeInstanceOf(FakeImageData);
-    const bounds = worldMaskBounds(DEMO_MASK_RADIUS);
+    const bounds = demoMaskBounds(model);
     expect(passed.width).toBe(bounds.width);
     expect(passed.height).toBe(bounds.height);
     expect(passed.data).toBeInstanceOf(Uint8ClampedArray);
@@ -101,7 +101,7 @@ describe('buildDemoFogMask', () => {
     await buildDemoFogMask(model);
 
     expect(capturedData).not.toBeNull();
-    const bounds = worldMaskBounds(DEMO_MASK_RADIUS);
+    const bounds = demoMaskBounds(model);
     // The settlement's own hex (q:0, r:0) is explored the instant it's
     // founded (WorldModel.foundSettlement populates `explored` synchronously
     // — see that method's own comment) — so its texel's R (unknown) channel
@@ -111,5 +111,40 @@ describe('buildDemoFogMask', () => {
     expect(capturedData![homeIndex * 4 + 0]).toBe(0);
     expect(capturedData![homeIndex * 4 + 3]).toBe(255); // alpha always opaque
     vi.unstubAllGlobals();
+  });
+});
+
+describe('demoMaskBounds', () => {
+  it('follows the settlement, not the origin: a settlement 220 hexes away is inside its own window', () => {
+    const model = new WorldModel();
+    const at = { q: 150, r: -220 };
+    const settlement = model.foundSettlement('player-1', 'Player', 'Realm', at);
+
+    const bounds = demoMaskBounds(model);
+    const texel = toTexel(at);
+    const radius = model.exploredRadius(settlement);
+
+    expect(texel.u).toBeGreaterThan(bounds.minU + radius);
+    expect(texel.u).toBeLessThan(bounds.maxU - radius);
+    expect(texel.v).toBeGreaterThan(bounds.minV + 2 * radius);
+    expect(texel.v).toBeLessThan(bounds.maxV - 2 * radius);
+    // A window around the settlement, not a world-sized mask.
+    expect(bounds.width).toBeLessThan(400);
+    expect(bounds.height).toBeLessThan(800);
+    expect(bounds.minU).toBeGreaterThan(0);
+  });
+
+  it('covers every settlement', () => {
+    const model = new WorldModel();
+    model.foundSettlement('p1', 'A', 'A-hold', { q: 0, r: 0 });
+    model.foundSettlement('p2', 'B', 'B-hold', { q: 60, r: -30 });
+    const bounds = demoMaskBounds(model);
+    for (const at of [{ q: 0, r: 0 }, { q: 60, r: -30 }]) {
+      const t = toTexel(at);
+      expect(t.u).toBeGreaterThan(bounds.minU);
+      expect(t.u).toBeLessThan(bounds.maxU);
+      expect(t.v).toBeGreaterThan(bounds.minV);
+      expect(t.v).toBeLessThan(bounds.maxV);
+    }
   });
 });

@@ -1440,13 +1440,16 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<bool>("FrozenIslesEnabled")
                         .HasColumnType("INTEGER");
 
-                    b.Property<double>("IslandBendiness")
-                        .HasColumnType("REAL");
-
                     b.Property<int>("IslandCellSize")
                         .HasColumnType("INTEGER");
 
                     b.Property<double>("IslandChance")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandCoastNoise")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandCoastNoiseScale")
                         .HasColumnType("REAL");
 
                     b.Property<double>("IslandCoastWarp")
@@ -1455,28 +1458,34 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("IslandCoastWarpScale")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("IslandLobeBlend")
+                    b.Property<double>("IslandLargeShare")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("IslandLobeMaxScale")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("IslandLobeMinScale")
+                    b.Property<double>("IslandMaxBend")
                         .HasColumnType("REAL");
 
                     b.Property<double>("IslandMaxElongation")
                         .HasColumnType("REAL");
 
-                    b.Property<int>("IslandMaxLobes")
+                    b.Property<int>("IslandMaxSegments")
                         .HasColumnType("INTEGER");
 
-                    b.Property<double>("IslandMaxRadius")
+                    b.Property<double>("IslandMaxWidth")
                         .HasColumnType("REAL");
 
-                    b.Property<int>("IslandMinLobes")
+                    b.Property<double>("IslandMinBend")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandMinElongation")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("IslandMinSegments")
                         .HasColumnType("INTEGER");
 
-                    b.Property<double>("IslandMinRadius")
+                    b.Property<double>("IslandMinWidth")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandSmallShare")
                         .HasColumnType("REAL");
 
                     b.Property<bool>("JoinsClosed")

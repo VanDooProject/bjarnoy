@@ -33,7 +33,7 @@ public class RiverGenerationGoldenTests
             land[tiles[i]] = ParseTerrain(raw[2].GetString()!);
         }
 
-        var options = WorldGenerationOptions.ForSeed(scenario.WorldSeed) with { Radius = 45 };
+        var options = TestWorlds.Options(scenario.WorldSeed);
         var sampler = new TerrainSampler(options);
 
         var actual = RiverGenerator.Generate(

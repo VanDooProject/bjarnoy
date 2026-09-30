@@ -46,17 +46,22 @@ const GENERATION_FIELDS: {
   max?: number;
   step: number;
 }[] = [
-  { key: 'islandCellSize', labelKey: 'islandCellSizeLabel', min: 2, step: 1 },
+  { key: 'islandCellSize', labelKey: 'islandCellSizeLabel', min: 16, max: 4096, step: 1 },
   { key: 'islandChance', labelKey: 'islandChanceLabel', min: 0.01, max: 1, step: 0.01 },
-  { key: 'islandMinRadius', labelKey: 'islandMinRadiusLabel', min: 0.1, step: 0.1 },
-  { key: 'islandMaxRadius', labelKey: 'islandMaxRadiusLabel', min: 0.1, step: 0.1 },
-  { key: 'islandMinLobes', labelKey: 'islandMinLobesLabel', min: 1, max: 8, step: 1 },
-  { key: 'islandMaxLobes', labelKey: 'islandMaxLobesLabel', min: 1, max: 8, step: 1 },
-  { key: 'islandMaxElongation', labelKey: 'islandMaxElongationLabel', min: 0, max: 4, step: 0.05 },
-  { key: 'islandBendiness', labelKey: 'islandBendinessLabel', min: 0, max: 3, step: 0.1 },
-  { key: 'islandLobeBlend', labelKey: 'islandLobeBlendLabel', min: 0, max: 0.5, step: 0.01 },
-  { key: 'islandCoastWarp', labelKey: 'islandCoastWarpLabel', min: 0, max: 4, step: 0.1 },
-  { key: 'islandCoastWarpScale', labelKey: 'islandCoastWarpScaleLabel', min: 2, max: 12, step: 0.5 },
+  { key: 'islandMinWidth', labelKey: 'islandMinWidthLabel', min: 2, max: 200, step: 0.5 },
+  { key: 'islandMaxWidth', labelKey: 'islandMaxWidthLabel', min: 2, max: 200, step: 0.5 },
+  { key: 'islandMinSegments', labelKey: 'islandMinSegmentsLabel', min: 1, max: 24, step: 1 },
+  { key: 'islandMaxSegments', labelKey: 'islandMaxSegmentsLabel', min: 1, max: 24, step: 1 },
+  { key: 'islandMinElongation', labelKey: 'islandMinElongationLabel', min: 0, max: 20, step: 0.1 },
+  { key: 'islandMaxElongation', labelKey: 'islandMaxElongationLabel', min: 0, max: 20, step: 0.1 },
+  { key: 'islandMinBend', labelKey: 'islandMinBendLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'islandMaxBend', labelKey: 'islandMaxBendLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'islandCoastWarp', labelKey: 'islandCoastWarpLabel', min: 0, max: 60, step: 0.5 },
+  { key: 'islandCoastWarpScale', labelKey: 'islandCoastWarpScaleLabel', min: 2, max: 400, step: 0.5 },
+  { key: 'islandCoastNoise', labelKey: 'islandCoastNoiseLabel', min: 0, max: 3, step: 0.05 },
+  { key: 'islandCoastNoiseScale', labelKey: 'islandCoastNoiseScaleLabel', min: 2, max: 400, step: 0.5 },
+  { key: 'islandSmallShare', labelKey: 'islandSmallShareLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'islandLargeShare', labelKey: 'islandLargeShareLabel', min: 0, max: 1, step: 0.01 },
   { key: 'beachThreshold', labelKey: 'beachThresholdLabel', min: 0, max: 1, step: 0.01 },
   { key: 'mountainThreshold', labelKey: 'mountainThresholdLabel', min: 0, max: 1, step: 0.01 },
   { key: 'mountainRockiness', labelKey: 'mountainRockinessLabel', min: 0, max: 1, step: 0.01 },
@@ -171,12 +176,15 @@ async function runPreview() {
 /**
  * The throwaway `WorldModel` the preview renders from. Terrain itself is not
  * in the response and does not need to be: `worldGenerator.ts` derives it from
- * the seed exactly as the backend's `TerrainSampler` does, so only the islands
- * and rivers — which no client can derive — come over the wire. Islands have
- * no id here (nothing was persisted), so their index stands in as a label key.
+ * the seed and the generation constants exactly as the backend's
+ * `TerrainSampler` does — so the model is built with the constants the
+ * candidate was generated with (`result.generation`, world radius included),
+ * not the defaults — and only the islands, rivers and giants, which no client
+ * can derive, come over the wire. Islands have no id here (nothing was
+ * persisted), so their index stands in as a label key.
  */
 function buildPreviewModel(result: WorldSeedPreviewResponse): WorldModel {
-  const model = new WorldModel(result.seed);
+  const model = new WorldModel(result.seed, result.generation);
   model.setIslands(
     result.islands.map((island) => ({
       id: `preview-${island.index}`,
@@ -193,6 +201,16 @@ function buildPreviewModel(result: WorldSeedPreviewResponse): WorldModel {
         shape: tile.shape,
         inDirections: tile.inDirections as TileOrientation[],
         outDirection: tile.outDirection as TileOrientation | null,
+        wasted: island.wasted,
+      })),
+    ),
+  );
+  model.setGiants(
+    result.islands.flatMap((island) =>
+      island.giants.map((giant) => ({
+        family: giant.family,
+        anchor: { q: giant.q, r: giant.r },
+        orientation: giant.orientation as TileOrientation,
       })),
     ),
   );

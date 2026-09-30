@@ -57,7 +57,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
     private async Task<(Guid WorldId, Guid IslandId)> AddWorldAsync(GameDbContext db)
     {
         var world = new WorldEntity { Name = Unique("w"), MaxPlayers = 100 };
-        world.ApplyGenerationOptions(WorldGenerationOptions.ForSeed(1) with { Radius = 60 });
+        world.ApplyGenerationOptions(TestWorlds.For(1, 60));
         db.Worlds.Add(world);
         var island = new IslandEntity { WorldId = world.Id, Name = "Island", CentreQ = 0, CentreR = 0 };
         db.Islands.Add(island);

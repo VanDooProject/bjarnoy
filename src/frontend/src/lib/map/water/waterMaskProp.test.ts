@@ -11,18 +11,21 @@
 //
 // So this checks the two predicates agree hex for hex over a patch containing
 // open sea, coast and land, for several seeds — and, separately, that a
-// building on a prop hex suppresses the prop on both sides.
+// building on a prop hex suppresses the prop on both sides. The world is the
+// compact preset (COMPACT_GENERATION): production-size islands are ~150 hexes
+// across, too big for a 81x81 patch to hold their coast.
 import { describe, expect, it } from 'vitest';
 import { hasWaterProp } from './waterMask';
 import { WorldModel } from '../WorldModel';
-import { DEFAULT_GENERATION, generateTile, terrainAt } from '../worldGenerator';
+import { COMPACT_GENERATION, generateTile, terrainAt } from '../worldGenerator';
+import { widestIslandCentre } from '../testing/islandFinders';
 
 const NEIGHBOR_DQ = [1, 1, 0, -1, -1, 0];
 const NEIGHBOR_DR = [0, -1, -1, 0, 1, 1];
 
 /** The worker's own predicate, in the shape waterMask.worker.ts implements it. */
 function workerHasProp(seed: number, buildingHexes: Set<string>) {
-  const world = { seed, generation: DEFAULT_GENERATION };
+  const world = { seed, generation: COMPACT_GENERATION };
   const isLand = (q: number, r: number) => terrainAt(q, r, world) !== 'sea';
   const sample = (q: number, r: number) => (isLand(q, r) ? ('grass' as const) : ('sea' as const));
   return (q: number, r: number): boolean => {
@@ -38,12 +41,13 @@ function workerHasProp(seed: number, buildingHexes: Set<string>) {
 describe('the worker prop predicate against the renderer tiles', () => {
   for (const seed of [1, 12345, 20260824]) {
     it(`agrees with hasWaterProp(getTile(...)) for seed ${seed}`, () => {
-      const model = new WorldModel(seed);
+      const model = new WorldModel(seed, COMPACT_GENERATION);
+      const centre = widestIslandCentre({ seed, generation: COMPACT_GENERATION });
       const worker = workerHasProp(seed, new Set());
       let props = 0;
       let coastalSea = 0;
-      for (let q = -40; q <= 40; q++) {
-        for (let r = -40; r <= 40; r++) {
+      for (let q = centre.q - 40; q <= centre.q + 40; q++) {
+        for (let r = centre.r - 40; r <= centre.r + 40; r++) {
           const tile = model.getTile(q, r);
           const expected = hasWaterProp(tile);
           expect(worker(q, r)).toBe(expected);
@@ -59,10 +63,11 @@ describe('the worker prop predicate against the renderer tiles', () => {
 
   it('drops the prop where a building stands, on both sides', () => {
     const seed = 12345;
-    const model = new WorldModel(seed);
+    const model = new WorldModel(seed, COMPACT_GENERATION);
+    const centre = widestIslandCentre({ seed, generation: COMPACT_GENERATION });
     let target: { q: number; r: number } | null = null;
-    for (let q = -40; q <= 40 && !target; q++) {
-      for (let r = -40; r <= 40; r++) {
+    for (let q = centre.q - 40; q <= centre.q + 40 && !target; q++) {
+      for (let r = centre.r - 40; r <= centre.r + 40; r++) {
         if (hasWaterProp(model.getTile(q, r))) {
           target = { q, r };
           break;

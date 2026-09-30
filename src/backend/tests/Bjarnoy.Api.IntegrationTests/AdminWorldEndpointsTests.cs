@@ -674,11 +674,23 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
             "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
         var admin = listed!.Single(w => w.Id == world.Id);
 
-        var defaults = WorldGenerationOptions.ForSeed(world.Seed);
+        var defaults = TestWorlds.For(world.Seed);
         Assert.Equal(defaults.IslandCellSize, admin.Generation.IslandCellSize);
         Assert.Equal(defaults.IslandChance, admin.Generation.IslandChance);
-        Assert.Equal(defaults.IslandMinRadius, admin.Generation.IslandMinRadius);
-        Assert.Equal(defaults.IslandMaxRadius, admin.Generation.IslandMaxRadius);
+        Assert.Equal(defaults.IslandMinWidth, admin.Generation.IslandMinWidth);
+        Assert.Equal(defaults.IslandMaxWidth, admin.Generation.IslandMaxWidth);
+        Assert.Equal(defaults.IslandMinSegments, admin.Generation.IslandMinSegments);
+        Assert.Equal(defaults.IslandMaxSegments, admin.Generation.IslandMaxSegments);
+        Assert.Equal(defaults.IslandMinElongation, admin.Generation.IslandMinElongation);
+        Assert.Equal(defaults.IslandMaxElongation, admin.Generation.IslandMaxElongation);
+        Assert.Equal(defaults.IslandMinBend, admin.Generation.IslandMinBend);
+        Assert.Equal(defaults.IslandMaxBend, admin.Generation.IslandMaxBend);
+        Assert.Equal(defaults.IslandCoastWarp, admin.Generation.IslandCoastWarp);
+        Assert.Equal(defaults.IslandCoastWarpScale, admin.Generation.IslandCoastWarpScale);
+        Assert.Equal(defaults.IslandCoastNoise, admin.Generation.IslandCoastNoise);
+        Assert.Equal(defaults.IslandCoastNoiseScale, admin.Generation.IslandCoastNoiseScale);
+        Assert.Equal(defaults.IslandSmallShare, admin.Generation.IslandSmallShare);
+        Assert.Equal(defaults.IslandLargeShare, admin.Generation.IslandLargeShare);
         Assert.Equal(defaults.BeachThreshold, admin.Generation.BeachThreshold);
         Assert.Equal(defaults.MountainThreshold, admin.Generation.MountainThreshold);
         Assert.Equal(defaults.MountainRockiness, admin.Generation.MountainRockiness);
@@ -687,7 +699,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
-    public async Task Previewing_with_a_much_larger_island_radius_produces_fewer_bigger_islands()
+    public async Task Previewing_with_much_wider_islands_produces_fewer_bigger_islands()
     {
         using var client = _fixture.CreateClient();
         var world = await CreateWorldAsync(client);
@@ -696,30 +708,46 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         async Task<WorldSeedPreviewResponse> PreviewAsync(WorldGenerationSettingsOverrides? overrides) =>
             await (await client.PostJsonAsync(
                 $"/api/v1/admin/worlds/{world.Id}/preview-seed",
-                // Radius raised to 60 (the created world's own radius, 30, is
-                // too small to host more than one default-sized island after
-                // the island-shape retune, which breaks the "fewer islands"
-                // comparison below regardless of the override values).
-                new PreviewWorldSeedRequest(Seed: 2024, Radius: 60, Generation: overrides),
+                new PreviewWorldSeedRequest(Seed: 2024, Radius: 600, Generation: overrides),
                 Ct)).ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
 
+        // The created world is a compact one (see TestWorlds): widths 8-14 on 90-hex cells.
         var defaultSized = await PreviewAsync(overrides: null);
-        // IslandCellSize bumped 40->64: after the island-shape retune, a
-        // MaxRadius of 25 needs a bigger reach budget than CellSize 40 allows
-        // (see WorldGenerationOptions.Validate's reach-budget check).
         var bigIslands = await PreviewAsync(new WorldGenerationSettingsOverrides(
-            IslandMinRadius: 20.0, IslandMaxRadius: 25.0, IslandCellSize: 64));
+            IslandMinWidth: 20.0, IslandMaxWidth: 28.0, IslandCellSize: 200));
 
         // Same seed, only the island-size knobs changed: far fewer, much
         // bigger islands than the default-sized preview of the same seed.
         Assert.True(
             bigIslands.IslandCount < defaultSized.IslandCount,
-            $"expected fewer islands with a much larger radius, got {bigIslands.IslandCount} vs {defaultSized.IslandCount}");
+            $"expected fewer islands with much wider ones, got {bigIslands.IslandCount} vs {defaultSized.IslandCount}");
         var averageBigIslandSize = (double)bigIslands.Islands.Sum(i => i.TileCount) / bigIslands.Islands.Count;
         var averageDefaultIslandSize = (double)defaultSized.Islands.Sum(i => i.TileCount) / defaultSized.Islands.Count;
         Assert.True(
             averageBigIslandSize > averageDefaultIslandSize,
             $"expected bigger average island size, got {averageBigIslandSize} vs {averageDefaultIslandSize}");
+    }
+
+    [Fact]
+    public async Task Previewing_returns_the_generation_it_used_so_the_client_renders_that_terrain()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var preview = await (await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/preview-seed",
+            new PreviewWorldSeedRequest(
+                Seed: 2024,
+                Radius: 400,
+                Generation: new WorldGenerationSettingsOverrides(IslandMinWidth: 10.0, IslandCoastNoise: 0.5)),
+            Ct)).ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
+
+        Assert.Equal(400, preview.Generation.WorldRadius);
+        Assert.Equal(10.0, preview.Generation.IslandMinWidth);
+        Assert.Equal(0.5, preview.Generation.IslandCoastNoise);
+        // Not overridden: the world's own (compact) value.
+        Assert.Equal(TestWorlds.For(1).IslandMaxWidth, preview.Generation.IslandMaxWidth);
     }
 
     [Fact]
@@ -729,14 +757,14 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var world = await CreateWorldAsync(client);
         Authorize(client, await CreateAdminTokenAsync(client));
 
-        // Only IslandMinRadius is overridden; MinimumIslandTiles is left null
+        // Only IslandMinWidth is overridden; MinimumIslandTiles is left null
         // and should still reflect the world's own (default) value, not some
         // other fallback.
         var response = await client.PostJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/preview-seed",
             new PreviewWorldSeedRequest(
                 Seed: 2024,
-                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 6.0)),
+                Generation: new WorldGenerationSettingsOverrides(IslandMinWidth: 10.0)),
             Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -759,7 +787,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
             $"/api/v1/admin/worlds/{world.Id}/preview-seed",
             new PreviewWorldSeedRequest(
                 Seed: 2024,
-                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 10.0, IslandMaxRadius: 2.0)),
+                Generation: new WorldGenerationSettingsOverrides(IslandMinWidth: 30.0, IslandMaxWidth: 20.0)),
             Ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -773,18 +801,15 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var world = await CreateWorldAsync(client);
         Authorize(client, await CreateAdminTokenAsync(client));
 
-        // IslandMaxRadius trimmed 14.0->13.0: after the island-shape retune,
-        // 14.0 exceeds the reach budget the default IslandCellSize (36)
-        // allows (see WorldGenerationOptions.Validate's reach-budget check).
-        // Radius raised 30(world default)->60: seed 9002 at radius 30 no
-        // longer produces any islands at all with these overrides.
+        // Radius raised from the created world's own 30: at that radius the world
+        // edge rule leaves no room for any island.
         var response = await client.PostJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/reseed",
             new ReseedWorldRequest(
                 world.Name,
                 Seed: 9002,
-                Radius: 60,
-                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 6.0, IslandMaxRadius: 13.0)),
+                Radius: 400,
+                Generation: new WorldGenerationSettingsOverrides(IslandMinWidth: 10.0, IslandMaxWidth: 13.0)),
             Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -793,8 +818,8 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
             "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
         var admin = listed!.Single(w => w.Id == world.Id);
 
-        Assert.Equal(6.0, admin.Generation.IslandMinRadius);
-        Assert.Equal(13.0, admin.Generation.IslandMaxRadius);
+        Assert.Equal(10.0, admin.Generation.IslandMinWidth);
+        Assert.Equal(13.0, admin.Generation.IslandMaxWidth);
     }
 
     private async Task<IReadOnlyList<Guid>> TriggerDueEndbossesAsync()

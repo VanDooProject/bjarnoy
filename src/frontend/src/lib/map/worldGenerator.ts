@@ -3,7 +3,7 @@
 // mockup) rather than one continuous landmass. Tiles are generated on demand
 // from (q, r) and a seed, so nothing needs to be precomputed or stored for
 // the whole map — memory is bounded by hexes actually visited.
-import { axialToOddQ, hexDistance, oddQToAxial, neighbors } from '../hex/coords';
+import { axialToOddQ, hexDistance, hexRing, oddQToAxial, neighbors } from '../hex/coords';
 import { TILE_ORIENTATIONS } from './types';
 import type { IslandLabel, RiverTileShape, Terrain, Tile, TileOrientation } from './types';
 
@@ -49,19 +49,28 @@ function valueNoise(x: number, y: number, seed: number, cell: number): number {
  * terrain the server paths over, not just its own hardcoded guess at it.
  */
 export interface WorldGenerationConstants {
+  /**
+   * The world's radius in hexes. Part of the terrain function, not just of the
+   * world's bounds: an island that could cross this radius is not generated at
+   * all, so the pure per-hex function has to know it.
+   */
+  worldRadius: number;
   islandCellSize: number;
   islandChance: number;
-  islandMinRadius: number;
-  islandMaxRadius: number;
-  islandMinLobes: number;
-  islandMaxLobes: number;
+  islandMinWidth: number;
+  islandMaxWidth: number;
+  islandMinSegments: number;
+  islandMaxSegments: number;
+  islandMinElongation: number;
   islandMaxElongation: number;
-  islandBendiness: number;
-  islandLobeBlend: number;
-  islandLobeMinScale: number;
-  islandLobeMaxScale: number;
+  islandMinBend: number;
+  islandMaxBend: number;
   islandCoastWarp: number;
   islandCoastWarpScale: number;
+  islandCoastNoise: number;
+  islandCoastNoiseScale: number;
+  islandSmallShare: number;
+  islandLargeShare: number;
   beachThreshold: number;
   mountainThreshold: number;
   mountainRockiness: number;
@@ -70,166 +79,479 @@ export interface WorldGenerationConstants {
 
 /** `WorldGenerationOptions`'s own C# defaults — demo mode's world (no backend to ask). */
 export const DEFAULT_GENERATION: WorldGenerationConstants = {
-  islandCellSize: 36,
-  islandChance: 0.45,
-  islandMinRadius: 5.0,
-  islandMaxRadius: 11.5,
-  islandMinLobes: 3,
-  islandMaxLobes: 6,
-  islandMaxElongation: 2.0,
-  islandBendiness: 2.8,
-  islandLobeBlend: 0.12,
-  islandLobeMinScale: 0.32,
-  islandLobeMaxScale: 0.98,
-  islandCoastWarp: 2.8,
-  islandCoastWarpScale: 4.5,
-  beachThreshold: 0.82,
+  worldRadius: 4000,
+  islandCellSize: 260,
+  islandChance: 0.8,
+  islandMinWidth: 21,
+  islandMaxWidth: 40,
+  islandMinSegments: 5,
+  islandMaxSegments: 9,
+  islandMinElongation: 5,
+  islandMaxElongation: 8,
+  islandMinBend: 0.12,
+  islandMaxBend: 0.35,
+  islandCoastWarp: 9.5,
+  islandCoastWarpScale: 42,
+  islandCoastNoise: 1.0,
+  islandCoastNoiseScale: 49,
+  islandSmallShare: 0.3,
+  islandLargeShare: 0.12,
+  beachThreshold: 0.9,
   mountainThreshold: 0.4,
   mountainRockiness: 0.72,
   forestRockiness: 0.52,
 };
+
+/**
+ * A scaled-down archipelago — the backend's `WorldGenerationOptions.Compact(seed, 300)`:
+ * the same shape at test/dev scale (islands 5-40 hexes across on a 90-hex cell grid). Used
+ * by the island lab's preset and by tests that need coast, sea and inland terrain inside a
+ * window of a few dozen hexes (a production-size island is ~150 hexes across).
+ */
+export const COMPACT_GENERATION: WorldGenerationConstants = {
+  ...DEFAULT_GENERATION,
+  worldRadius: 300,
+  islandCellSize: 90,
+  islandMinWidth: 8,
+  islandMaxWidth: 14,
+  islandMinSegments: 3,
+  islandMaxSegments: 5,
+  islandMinElongation: 2,
+  islandMaxElongation: 4,
+  islandCoastWarp: 3,
+  islandCoastWarpScale: 14,
+  islandCoastNoise: 0.6,
+  islandCoastNoiseScale: 16,
+};
+
+/**
+ * The island-shape constants that are not admin knobs — mirrors the backend's
+ * `IslandShapeConstants` exactly.
+ */
+export const ISLAND_SHAPE = {
+  jitter: 0.55,
+  taper: 0.5,
+  widthMinScale: 0.6,
+  widthMaxScale: 1.0,
+  warp2: 3.8,
+  warpScale2: 11.4,
+  octave2: 0.7,
+  octave3: 0.45,
+  isletMax: 5,
+  isletRadiusMin: 0.3,
+  isletRadiusMax: 0.7,
+  isletDistanceMin: 1.6,
+  isletDistanceMax: 3.2,
+  smallScale: 0.55,
+  largeScale: 1.6,
+} as const;
 
 export interface WorldSeed {
   seed: number;
   generation: WorldGenerationConstants;
 }
 
-/** Polynomial smooth minimum: a hard `Math.min` at k = 0. */
-function smoothMin(a: number, b: number, k: number): number {
-  if (k <= 0) return Math.min(a, b);
-  const h = Math.max(k - Math.abs(a - b), 0) / k;
-  return Math.min(a, b) - h * h * k * 0.25;
+/** Size class of an island cell: small (A), medium (B) or large (C). */
+export type IslandSizeClass = 'small' | 'medium' | 'large';
+
+/**
+ * One island cell's shape: a bent spine of vertices with a half-width each plus a
+ * few satellite islets, all in odd-q offset space — mirrors the backend's
+ * `IslandShape`. `sx`/`sy`/`ix`/`iy` are relative to the centre `(cx, cy)`.
+ */
+export interface IslandShape {
+  cellCol: number;
+  cellRow: number;
+  cx: number;
+  cy: number;
+  sx: number[];
+  sy: number[];
+  w: number[];
+  ix: number[];
+  iy: number[];
+  ir: number[];
+  /** Farthest any land of the island can be from `(cx, cy)`, warps included. */
+  reach: number;
+  sizeClass: IslandSizeClass;
+  /** 1 unless the island was shrunk to fit its 3x3 cell block. */
+  clamp: number;
+  /** Inclusive offset-space box outside which no hex of the island can be land. */
+  minCol: number;
+  maxCol: number;
+  minRow: number;
+  maxRow: number;
+}
+
+/** How far, in half-widths, land can be from a spine point: 1 plus the largest noise contribution. */
+function noiseReachFactor(noise: number): number {
+  return 1 + noise * 0.5 * (1 + ISLAND_SHAPE.octave2 + ISLAND_SHAPE.octave3);
+}
+
+/** The farthest an island's land may be from its centre before it is shrunk to fit. */
+export function islandReachBudget(cellSize: number, warp: number): number {
+  return (1.5 - ISLAND_SHAPE.jitter / 2) * cellSize - (warp + ISLAND_SHAPE.warp2);
+}
+
+// Per-cell shapes are pure functions of (cell, seed, generation constants), so
+// caching them changes no result. The cache is keyed on the generation object and
+// re-validated against a snapshot of every constant a shape depends on, because
+// admin tooling edits a generation object in place.
+interface ShapeCache {
+  params: number[];
+  green: Map<number, Map<number, IslandShape | null>>;
+  wasted: Map<number, Map<number, IslandShape | null>>;
+}
+const shapeCaches = new WeakMap<WorldGenerationConstants, ShapeCache>();
+
+function shapeParams(gen: WorldGenerationConstants): number[] {
+  return [
+    gen.worldRadius,
+    gen.islandCellSize,
+    gen.islandChance,
+    gen.islandMinWidth,
+    gen.islandMaxWidth,
+    gen.islandMinSegments,
+    gen.islandMaxSegments,
+    gen.islandMinElongation,
+    gen.islandMaxElongation,
+    gen.islandMinBend,
+    gen.islandMaxBend,
+    gen.islandCoastWarp,
+    gen.islandCoastNoise,
+    gen.islandSmallShare,
+    gen.islandLargeShare,
+  ];
+}
+
+function shapeCacheFor(gen: WorldGenerationConstants): ShapeCache {
+  const params = shapeParams(gen);
+  let cache = shapeCaches.get(gen);
+  if (cache) {
+    let same = true;
+    for (let i = 0; i < params.length; i++) {
+      if (cache.params[i] !== params[i]) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return cache;
+  }
+  cache = { params, green: new Map(), wasted: new Map() };
+  shapeCaches.set(gen, cache);
+  return cache;
+}
+
+function cellKey(cellCol: number, cellRow: number): number {
+  return (cellCol + 1048576) * 2097152 + (cellRow + 1048576);
+}
+
+// Whether the cell rolls an island at all. The wasted grid additionally skips every
+// cell that is a green island cell (world seed, full chance), so a wasted island's own
+// cell grid never overlaps a green island's.
+function cellPresent(cellCol: number, cellRow: number, worldSeed: number, wasted: boolean, gen: WorldGenerationConstants): boolean {
+  const seed = wasted ? worldSeed + WASTED_SEED_OFFSET : worldSeed;
+  const chance = wasted ? gen.islandChance * WASTED_ISLAND_CHANCE_FACTOR : gen.islandChance;
+  if (hash2(cellCol, cellRow, seed) > chance) return false;
+  return !wasted || hash2(cellCol, cellRow, worldSeed) > gen.islandChance;
+}
+
+function cellClass(cellCol: number, cellRow: number, seed: number, gen: WorldGenerationConstants): IslandSizeClass {
+  const h = hash2(cellCol, cellRow, seed + 301);
+  return h < gen.islandSmallShare ? 'small' : h > 1 - gen.islandLargeShare ? 'large' : 'medium';
 }
 
 /**
- * The shortest depth a single island cell's shape gives the (possibly
- * domain-warped) sample point `(px, py)`: a chain of 1-5 lobes (offset
- * discs) walked out from the jittered centre along a spine that bends by a
- * per-island amount, smooth-blended where lobes meet — mirrors the
- * backend's `TerrainSampler.IslandCellDepth` exactly (down to using no
- * trigonometry, so both sides rotate the spine direction identically).
- * With `islandMinLobes`/`islandMaxLobes` both 1 this reduces to exactly the
- * single-disc circle the original algorithm produced.
+ * The island (if any) seeded in grid cell `(cellCol, cellRow)` — mirrors the backend's
+ * `TerrainSampler.IslandShapeAt`: `null` when the cell rolls no island, when a large
+ * neighbour suppresses it, or when the island could cross the world radius.
  */
-function islandCellDepth(
+export function islandShapeAt(
   cellCol: number,
   cellRow: number,
-  seed: number,
-  centerCol: number,
-  centerRow: number,
-  radius: number,
-  px: number,
-  py: number,
-  gen: WorldGenerationConstants,
-): number {
-  const dx0 = px - centerCol;
-  const dy0 = py - centerRow;
-  let best = Math.sqrt(dx0 * dx0 + dy0 * dy0) / radius;
-
-  const minLobes = gen.islandMinLobes;
-  const maxLobes = gen.islandMaxLobes;
-  const lobeCount =
-    minLobes + Math.floor(hash2(cellCol, cellRow, seed + 19) * (maxLobes - minLobes + 1));
-
-  if (lobeCount <= 1) return best;
-
-  const ax = hash2(cellCol, cellRow, seed + 23) - 0.5;
-  const ay = hash2(cellCol, cellRow, seed + 47) - 0.5;
-  const len = Math.sqrt(ax * ax + ay * ay);
-  let ux: number;
-  let uy: number;
-  if (len < 1e-9) {
-    ux = 1;
-    uy = 0;
-  } else {
-    ux = ax / len;
-    uy = ay / len;
+  world: WorldSeed,
+  wasted = false,
+): IslandShape | null {
+  const gen = world.generation;
+  const cache = shapeCacheFor(gen);
+  const seed = wasted ? world.seed + WASTED_SEED_OFFSET : world.seed;
+  const bySeed = wasted ? cache.wasted : cache.green;
+  let cells = bySeed.get(world.seed);
+  if (!cells) {
+    cells = new Map();
+    bySeed.set(world.seed, cells);
   }
-
-  const curl = (hash2(cellCol, cellRow, seed + 59) - 0.5) * 2;
-  const turn = curl * gen.islandBendiness;
-  const elongFraction = hash2(cellCol, cellRow, seed + 61);
-  const spineLength = radius * gen.islandMaxElongation * elongFraction;
-  const step = spineLength / (lobeCount - 1);
-
-  let lx = centerCol;
-  let ly = centerRow;
-  const blend = gen.islandLobeBlend;
-
-  for (let lobe = 1; lobe < lobeCount; lobe++) {
-    lx += ux * step;
-    ly += uy * step;
-
-    const lobeScale =
-      gen.islandLobeMinScale +
-      hash2(cellCol, cellRow, seed + 200 + lobe) * (gen.islandLobeMaxScale - gen.islandLobeMinScale);
-    const lobeRadius = radius * lobeScale;
-
-    const ddx = px - lx;
-    const ddy = py - ly;
-    const lobeDepth = Math.sqrt(ddx * ddx + ddy * ddy) / lobeRadius;
-
-    best = smoothMin(best, lobeDepth, blend);
-
-    // Rotate (ux, uy) by turn radians' worth of curl for the next segment,
-    // without trigonometry: u + turn * perp(u), renormalised.
-    const tx = ux - turn * uy;
-    const ty = uy + turn * ux;
-    const tl = Math.sqrt(tx * tx + ty * ty);
-    if (tl > 1e-9) {
-      ux = tx / tl;
-      uy = ty / tl;
-    }
-  }
-
-  return best;
+  const key = cellKey(cellCol, cellRow);
+  const hit = cells.get(key);
+  if (hit !== undefined) return hit;
+  const shape = buildCell(cellCol, cellRow, world.seed, seed, wasted, gen);
+  cells.set(key, shape);
+  return shape;
 }
 
-// Islands are seeded on a coarse grid of cells (in odd-q offset space, which
-// is roughly square so islands read as evenly, not axially, spread out).
-// Each cell independently rolls whether it holds an island, where its
-// (jittered) centre sits, and how big it is — all as O(1) hashes of the
-// cell's own coordinates, so a hex's terrain never depends on generating
-// its neighbours.
-function closestIsland(
-  col: number,
-  row: number,
+function buildCell(
+  cellCol: number,
+  cellRow: number,
+  worldSeed: number,
+  seed: number,
+  wasted: boolean,
+  gen: WorldGenerationConstants,
+): IslandShape | null {
+  if (!cellPresent(cellCol, cellRow, worldSeed, wasted, gen)) return null;
+  let cls = cellClass(cellCol, cellRow, seed, gen);
+
+  // A large island clears its neighbours; of two neighbouring large ones the higher roll
+  // wins. (`cls` is read as it stands after earlier neighbours may already have demoted it.)
+  let suppressed = false;
+  for (let dc = -1; dc <= 1; dc++) {
+    for (let dr = -1; dr <= 1; dr++) {
+      if (dc === 0 && dr === 0) continue;
+      const nc = cellCol + dc;
+      const nr = cellRow + dr;
+      if (!cellPresent(nc, nr, worldSeed, wasted, gen) || cellClass(nc, nr, seed, gen) !== 'large') continue;
+      if (cls !== 'large') suppressed = true;
+      else if (hash2(nc, nr, seed + 307) > hash2(cellCol, cellRow, seed + 307)) cls = 'medium';
+    }
+  }
+  return suppressed ? null : buildShape(cellCol, cellRow, seed, gen, cls);
+}
+
+function buildShape(
+  cc: number,
+  cr: number,
   seed: number,
   gen: WorldGenerationConstants,
-  islandChance = gen.islandChance,
-  excludeGreenCells = false,
-  greenSeed = seed,
-): { t: number } | null {
-  // A cheap domain warp applied once per hex, before distance is measured
-  // against any island's lobes, so coastlines wobble instead of tracing
-  // perfect arcs. Zero when islandCoastWarp is 0, which keeps this
-  // identical to the un-warped sample point. Uses the same seed+53/+71
-  // offsets as green islands: the warp noise field is shared, only the cell
-  // grid below differs by seed.
-  let px = col;
-  let py = row;
-  if (gen.islandCoastWarp > 0) {
-    const warpScale = gen.islandCoastWarpScale;
-    px += (valueNoise(col, row, seed + 53, warpScale) - 0.5) * 2 * gen.islandCoastWarp;
-    py += (valueNoise(col, row, seed + 71, warpScale) - 0.5) * 2 * gen.islandCoastWarp;
+  cls: IslandSizeClass,
+): IslandShape | null {
+  const K = ISLAND_SHAPE;
+  const cs = gen.islandCellSize;
+  const jit = cs * K.jitter;
+  const cx = cc * cs + cs / 2 + (hash2(cc, cr, seed + 11) - 0.5) * jit;
+  const cy = cr * cs + cs / 2 + (hash2(cc, cr, seed + 13) - 0.5) * jit;
+  const scale = cls === 'small' ? K.smallScale : cls === 'large' ? K.largeScale : 1;
+  const radius = scale * (gen.islandMinWidth + hash2(cc, cr, seed + 17) * (gen.islandMaxWidth - gen.islandMinWidth));
+  const n =
+    gen.islandMinSegments + Math.floor(hash2(cc, cr, seed + 19) * (gen.islandMaxSegments - gen.islandMinSegments + 1));
+
+  const ax = hash2(cc, cr, seed + 23) - 0.5;
+  const ay = hash2(cc, cr, seed + 47) - 0.5;
+  const len = Math.sqrt(ax * ax + ay * ay);
+  let ux = len < 1e-9 ? 1 : ax / len;
+  let uy = len < 1e-9 ? 0 : ay / len;
+  const hb = hash2(cc, cr, seed + 59);
+  const t0 = (hb < 0.5 ? -1 : 1) * (gen.islandMinBend + (gen.islandMaxBend - gen.islandMinBend) * ((hb < 0.5 ? hb : hb - 0.5) * 2));
+  const elong = gen.islandMinElongation + (gen.islandMaxElongation - gen.islandMinElongation) * hash2(cc, cr, seed + 61);
+  const step = (radius * elong) / Math.max(1, n - 1);
+
+  const px: number[] = new Array<number>(n).fill(0);
+  const py: number[] = new Array<number>(n).fill(0);
+  let lx = 0;
+  let ly = 0;
+  for (let k = 1; k < n; k++) {
+    const t = t0 * (0.5 + hash2(cc, cr, seed + 400 + k));
+    const c = (1 - t * t) / (1 + t * t);
+    const s = (2 * t) / (1 + t * t);
+    const nx = ux * c - uy * s;
+    const ny = uy * c + ux * s;
+    ux = nx;
+    uy = ny;
+    lx += ux * step;
+    ly += uy * step;
+    px[k] = lx;
+    py[k] = ly;
   }
 
+  let mx = 0;
+  let my = 0;
+  for (let k = 0; k < n; k++) {
+    mx += px[k];
+    my += py[k];
+  }
+  mx /= n;
+  my /= n;
+  for (let k = 0; k < n; k++) {
+    px[k] -= mx;
+    py[k] -= my;
+  }
+
+  const w: number[] = [];
+  for (let k = 0; k < n; k++) {
+    const f = n === 1 ? 0 : Math.abs((2 * k) / (n - 1) - 1);
+    w.push(radius * (1 - K.taper * f * f) * (K.widthMinScale + hash2(cc, cr, seed + 200 + k) * (K.widthMaxScale - K.widthMinScale)));
+  }
+
+  const ni = Math.floor(hash2(cc, cr, seed + 300) * (K.isletMax + 1));
+  const ix: number[] = [];
+  const iy: number[] = [];
+  const ir: number[] = [];
+  for (let i = 0; i < ni; i++) {
+    const k = Math.floor(hash2(cc, cr, seed + 310 + i) * n);
+    let ox = hash2(cc, cr, seed + 320 + i) - 0.5;
+    let oy = hash2(cc, cr, seed + 330 + i) - 0.5;
+    let ol = Math.sqrt(ox * ox + oy * oy);
+    if (ol === 0 || Number.isNaN(ol)) ol = 1;
+    ox /= ol;
+    oy /= ol;
+    const dist = w[k] * (K.isletDistanceMin + (K.isletDistanceMax - K.isletDistanceMin) * hash2(cc, cr, seed + 340 + i));
+    ix.push(px[k] + ox * dist);
+    iy.push(py[k] + oy * dist);
+    ir.push(w[k] * (K.isletRadiusMin + (K.isletRadiusMax - K.isletRadiusMin) * hash2(cc, cr, seed + 350 + i)));
+  }
+
+  // Reach clamp: the farthest land can get from the centre must fit the 3x3 cell scan.
+  const nm = noiseReachFactor(gen.islandCoastNoise);
+  let reach = 0;
+  for (let k = 0; k < n; k++) reach = Math.max(reach, Math.sqrt(px[k] * px[k] + py[k] * py[k]) + w[k] * nm);
+  for (let i = 0; i < ni; i++) reach = Math.max(reach, Math.sqrt(ix[i] * ix[i] + iy[i] * iy[i]) + ir[i] * nm);
+  const budget = islandReachBudget(cs, gen.islandCoastWarp);
+  let factor = 1;
+  if (reach > budget) {
+    factor = budget / reach;
+    for (let k = 0; k < n; k++) {
+      px[k] *= factor;
+      py[k] *= factor;
+      w[k] *= factor;
+    }
+    for (let i = 0; i < ni; i++) {
+      ix[i] *= factor;
+      iy[i] *= factor;
+      ir[i] *= factor;
+    }
+    reach = budget;
+  }
+
+  // World edge: drop the island if any of it could cross the world radius.
+  const warpSum = gen.islandCoastWarp + K.warp2;
+  const col = Math.floor(cx + 0.5);
+  const row = Math.floor(cy + 0.5);
+  const q = col;
+  const r = row - (col - (col & 1)) / 2;
+  const d = (Math.abs(q) + Math.abs(r) + Math.abs(-q - r)) / 2;
+  if (d + 1.42 * (reach + warpSum) > gen.worldRadius) return null;
+
+  // Tight box of every place land can be, for scanning (see the backend's IslandShape).
+  let minX = Number.MAX_VALUE;
+  let minY = Number.MAX_VALUE;
+  let maxX = -Number.MAX_VALUE;
+  let maxY = -Number.MAX_VALUE;
+  for (let k = 0; k < n; k++) {
+    const e = w[k] * nm;
+    minX = Math.min(minX, cx + px[k] - e);
+    maxX = Math.max(maxX, cx + px[k] + e);
+    minY = Math.min(minY, cy + py[k] - e);
+    maxY = Math.max(maxY, cy + py[k] + e);
+  }
+  for (let i = 0; i < ni; i++) {
+    const e = ir[i] * nm;
+    minX = Math.min(minX, cx + ix[i] - e);
+    maxX = Math.max(maxX, cx + ix[i] + e);
+    minY = Math.min(minY, cy + iy[i] - e);
+    maxY = Math.max(maxY, cy + iy[i] + e);
+  }
+
+  return {
+    cellCol: cc,
+    cellRow: cr,
+    cx,
+    cy,
+    sx: px,
+    sy: py,
+    w,
+    ix,
+    iy,
+    ir,
+    reach: reach + warpSum,
+    sizeClass: cls,
+    clamp: factor,
+    minCol: Math.floor(minX - warpSum),
+    maxCol: Math.ceil(maxX + warpSum),
+    minRow: Math.floor(minY - warpSum),
+    maxRow: Math.ceil(maxY + warpSum),
+  };
+}
+
+/**
+ * Every island of the world in cell order (column, then row): the cells that hold an
+ * island whose whole footprint is inside the world radius — mirrors the backend's
+ * `TerrainSampler.EnumerateIslandShapes`.
+ */
+export function enumerateIslandShapes(world: WorldSeed, wasted = false): IslandShape[] {
+  const gen = world.generation;
+  const span = Math.floor(gen.worldRadius / gen.islandCellSize) + 2;
+  const shapes: IslandShape[] = [];
+  for (let cellCol = -span; cellCol <= span; cellCol++) {
+    for (let cellRow = -span; cellRow <= span; cellRow++) {
+      const shape = islandShapeAt(cellCol, cellRow, world, wasted);
+      if (shape) shapes.push(shape);
+    }
+  }
+  return shapes;
+}
+
+function shapeDistance(is: IslandShape, qx: number, qy: number): number {
+  const { sx, sy, w } = is;
+  let d = Infinity;
+  if (sx.length === 1) d = Math.sqrt(qx * qx + qy * qy) / w[0];
+  for (let k = 0; k < sx.length - 1; k++) {
+    const x0 = sx[k];
+    const y0 = sy[k];
+    const dx = sx[k + 1] - x0;
+    const dy = sy[k + 1] - y0;
+    const l2 = dx * dx + dy * dy;
+    let t = l2 > 0 ? ((qx - x0) * dx + (qy - y0) * dy) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const ex = qx - (x0 + t * dx);
+    const ey = qy - (y0 + t * dy);
+    const v = Math.sqrt(ex * ex + ey * ey) / (w[k] + (w[k + 1] - w[k]) * t);
+    if (v < d) d = v;
+  }
+  for (let i = 0; i < is.ix.length; i++) {
+    const ex = qx - is.ix[i];
+    const ey = qy - is.iy[i];
+    const v = Math.sqrt(ex * ex + ey * ey) / is.ir[i];
+    if (v < d) d = v;
+  }
+  return d;
+}
+
+/**
+ * Depth of offset-space hex `(col, row)` into the nearest island of the green (or
+ * wasted) grid, `null` at sea — mirrors the backend's `TerrainSampler.DepthAt`.
+ * Distance to each island in reach is the minimum over its spine segments of
+ * distance / interpolated half-width (islets: distance / radius), plus three
+ * octaves of shoreline noise.
+ */
+function closestIsland(col: number, row: number, world: WorldSeed, wasted: boolean): { t: number } | null {
+  const gen = world.generation;
+  const seed = wasted ? world.seed + WASTED_SEED_OFFSET : world.seed;
+
+  // Two-octave domain warp, applied once per hex before any distance is measured, so
+  // coastlines wobble (fjords, bays) instead of tracing arcs.
+  let px = col;
+  let py = row;
+  px +=
+    (valueNoise(col, row, seed + 53, gen.islandCoastWarpScale) - 0.5) * 2 * gen.islandCoastWarp +
+    (valueNoise(col, row, seed + 83, ISLAND_SHAPE.warpScale2) - 0.5) * 2 * ISLAND_SHAPE.warp2;
+  py +=
+    (valueNoise(col, row, seed + 71, gen.islandCoastWarpScale) - 0.5) * 2 * gen.islandCoastWarp +
+    (valueNoise(col, row, seed + 89, ISLAND_SHAPE.warpScale2) - 0.5) * 2 * ISLAND_SHAPE.warp2;
+
+  const cs = gen.islandCellSize;
+  const baseCol = Math.floor(col / cs);
+  const baseRow = Math.floor(row / cs);
   let best: { t: number } | null = null;
-  for (let dcx = -1; dcx <= 1; dcx++) {
-    for (let dcy = -1; dcy <= 1; dcy++) {
-      const cellCol = Math.floor(col / gen.islandCellSize) + dcx;
-      const cellRow = Math.floor(row / gen.islandCellSize) + dcy;
-      if (hash2(cellCol, cellRow, seed) > islandChance) continue;
-      if (excludeGreenCells && hash2(cellCol, cellRow, greenSeed) <= gen.islandChance) continue;
-      const jitter = gen.islandCellSize * 0.55;
-      const centerCol =
-        cellCol * gen.islandCellSize + gen.islandCellSize / 2 + (hash2(cellCol, cellRow, seed + 11) - 0.5) * jitter;
-      const centerRow =
-        cellRow * gen.islandCellSize + gen.islandCellSize / 2 + (hash2(cellCol, cellRow, seed + 13) - 0.5) * jitter;
-      const radius =
-        gen.islandMinRadius + hash2(cellCol, cellRow, seed + 17) * (gen.islandMaxRadius - gen.islandMinRadius);
-      const t = islandCellDepth(cellCol, cellRow, seed, centerCol, centerRow, radius, px, py, gen);
-      if (t <= 1 && (!best || t < best.t)) best = { t };
+  for (let dc = -1; dc <= 1; dc++) {
+    for (let dr = -1; dr <= 1; dr++) {
+      const is = islandShapeAt(baseCol + dc, baseRow + dr, world, wasted);
+      if (!is) continue;
+      const qx = px - is.cx;
+      const qy = py - is.cy;
+      if (qx * qx + qy * qy > is.reach * is.reach) continue;
+      let d = shapeDistance(is, qx, qy);
+      const n1 = valueNoise(col, row, seed + 97, gen.islandCoastNoiseScale) - 0.5;
+      const n2 = valueNoise(col, row, seed + 101, gen.islandCoastNoiseScale / 2.5) - 0.5;
+      const n3 = valueNoise(col, row, seed + 103, gen.islandCoastNoiseScale / 6.25) - 0.5;
+      d += gen.islandCoastNoise * (n1 + ISLAND_SHAPE.octave2 * n2 + ISLAND_SHAPE.octave3 * n3);
+      if (d <= 1 && (!best || d < best.t)) best = { t: d };
     }
   }
   return best;
@@ -262,10 +584,9 @@ export function wastedTerrainAt(q: number, r: number, world: WorldSeed): Terrain
 
   // Never on a green island: this guarantees wasted land can never fuse
   // with (or hide inside) a green island's own footprint.
-  if (closestIsland(col, row, world.seed, gen)) return 'sea';
+  if (closestIsland(col, row, world, false)) return 'sea';
 
-  const wastedSeed = world.seed + WASTED_SEED_OFFSET;
-  const island = closestIsland(col, row, wastedSeed, gen, gen.islandChance * WASTED_ISLAND_CHANCE_FACTOR, true, world.seed);
+  const island = closestIsland(col, row, world, true);
   if (!island) return 'sea';
 
   // Nor may it touch green land through any of its six neighbours — this is
@@ -289,7 +610,7 @@ export function wastedTerrainAt(q: number, r: number, world: WorldSeed): Terrain
  */
 export function islandDepthAt(q: number, r: number, world: WorldSeed): number | null {
   const { col, row } = axialToOddQ({ q, r });
-  const island = closestIsland(col, row, world.seed, world.generation);
+  const island = closestIsland(col, row, world, false);
   return island ? island.t : null;
 }
 
@@ -301,17 +622,7 @@ export function islandDepthAt(q: number, r: number, world: WorldSeed): number | 
  */
 export function wastedDepthAt(q: number, r: number, world: WorldSeed): number | null {
   const { col, row } = axialToOddQ({ q, r });
-  const gen = world.generation;
-  const wastedSeed = world.seed + WASTED_SEED_OFFSET;
-  const island = closestIsland(
-    col,
-    row,
-    wastedSeed,
-    gen,
-    gen.islandChance * WASTED_ISLAND_CHANCE_FACTOR,
-    true,
-    world.seed,
-  );
+  const island = closestIsland(col, row, world, true);
   return island ? island.t : null;
 }
 
@@ -343,43 +654,44 @@ function islandNameFor(cellCol: number, cellRow: number, seed: number): string {
  * in `stores/world.ts`, which calls that and feeds the response straight
  * into `WorldModel.setIslands`), so without this the world map's island-name
  * labels (`HexMapRenderer`'s `worldModel.listIslands()` loop) simply have
- * nothing to draw in demo mode. Replays `closestIsland`'s own per-cell roll
- * to find each island's jittered centre rather than inventing a second
- * scheme, so a demo island's label always sits over the same island
- * `terrainAt`/`isLand` actually generate there.
+ * nothing to draw in demo mode. Uses the island cells' own jittered centres
+ * (`enumerateIslandShapes`) rather than inventing a second scheme, so a demo
+ * island's label always sits over the same island `terrainAt`/`isLand`
+ * actually generate there.
  */
 export function enumerateIslands(world: WorldSeed, radius: number): IslandLabel[] {
-  const gen = world.generation;
-  const cellSpan = Math.ceil(radius / gen.islandCellSize) + 1;
   const islands: IslandLabel[] = [];
-  for (let cellCol = -cellSpan; cellCol <= cellSpan; cellCol++) {
-    for (let cellRow = -cellSpan; cellRow <= cellSpan; cellRow++) {
-      if (hash2(cellCol, cellRow, world.seed) > gen.islandChance) continue;
-      const jitter = gen.islandCellSize * 0.55;
-      const centerCol =
-        cellCol * gen.islandCellSize +
-        gen.islandCellSize / 2 +
-        (hash2(cellCol, cellRow, world.seed + 11) - 0.5) * jitter;
-      const centerRow =
-        cellRow * gen.islandCellSize +
-        gen.islandCellSize / 2 +
-        (hash2(cellCol, cellRow, world.seed + 13) - 0.5) * jitter;
-      const center = oddQToAxial({ col: Math.round(centerCol), row: Math.round(centerRow) });
-      if (hexDistance({ q: 0, r: 0 }, center) > radius) continue;
-      islands.push({
-        id: `demo-${cellCol}-${cellRow}`,
-        name: islandNameFor(cellCol, cellRow, world.seed),
-        q: center.q,
-        r: center.r,
-      });
+  for (const shape of enumerateIslandShapes(world)) {
+    let center = oddQToAxial({ col: Math.floor(shape.cx + 0.5), row: Math.floor(shape.cy + 0.5) });
+    if (hexDistance({ q: 0, r: 0 }, center) > radius) continue;
+    // The middle of a crescent or a C is open water: like the backend's `CentreOf`, put the
+    // label on the land hex nearest to it (an island cell whose land eroded away entirely,
+    // or was only a speck, gets no label).
+    if (terrainAt(center.q, center.r, world) === 'sea') {
+      const land = nearestLandWithin(center, Math.ceil(shape.reach), world);
+      if (!land) continue;
+      center = land;
     }
+    islands.push({
+      id: `demo-${shape.cellCol}-${shape.cellRow}`,
+      name: islandNameFor(shape.cellCol, shape.cellRow, world.seed),
+      q: center.q,
+      r: center.r,
+    });
   }
   return islands;
 }
 
+function nearestLandWithin(from: { q: number; r: number }, maxRadius: number, world: WorldSeed): { q: number; r: number } | null {
+  for (let ring = 1; ring <= maxRadius; ring++) {
+    for (const c of hexRing(from, ring)) if (terrainAt(c.q, c.r, world) !== 'sea') return c;
+  }
+  return null;
+}
+
 export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
   const { col, row } = axialToOddQ({ q, r });
-  const island = closestIsland(col, row, world.seed, world.generation);
+  const island = closestIsland(col, row, world, false);
   if (!island) return 'sea';
   if (island.t > world.generation.beachThreshold) return 'sand';
   const rockiness = valueNoise(q, r, world.seed + 2, 2.5);

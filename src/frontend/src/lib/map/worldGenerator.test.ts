@@ -33,32 +33,44 @@ describe('soilAt', () => {
 });
 
 describe('enumerateIslands', () => {
-  it('finds at least one island within a modest radius of the origin', () => {
-    const islands = enumerateIslands(SEED, 30);
-    expect(islands.length).toBeGreaterThan(0);
+  // A production-size world: islands ~150 hexes across, ~100+ apart.
+  const WORLD_RADIUS = DEFAULT_GENERATION.worldRadius;
+
+  it('finds islands across the world', () => {
+    const islands = enumerateIslands(SEED, WORLD_RADIUS);
+    expect(islands.length).toBeGreaterThan(5);
   });
 
-  it('only returns islands within the requested radius', () => {
-    const radius = 30;
-    for (const island of enumerateIslands(SEED, radius)) {
-      expect(hexDistance({ q: 0, r: 0 }, island)).toBeLessThanOrEqual(radius);
+  it('only returns islands whose cell centre is within the requested radius', () => {
+    const near = enumerateIslands(SEED, 400);
+    const all = enumerateIslands(SEED, WORLD_RADIUS);
+    expect(near.length).toBeGreaterThan(0);
+    expect(near.length).toBeLessThan(all.length);
+    // Every island that is left is one the full list has too.
+    const allIds = new Set(all.map((i) => i.id));
+    for (const island of near) expect(allIds.has(island.id)).toBe(true);
+  });
+
+  it('never puts an island beyond the world radius: the world edge drops an island rather than cutting it', () => {
+    for (const island of enumerateIslands(SEED, WORLD_RADIUS * 2)) {
+      expect(hexDistance({ q: 0, r: 0 }, island)).toBeLessThanOrEqual(WORLD_RADIUS);
     }
   });
 
   it('gives every island a distinct id and a non-empty name', () => {
-    const islands = enumerateIslands(SEED, 40);
+    const islands = enumerateIslands(SEED, WORLD_RADIUS);
     const ids = new Set(islands.map((i) => i.id));
     expect(ids.size).toBe(islands.length);
     for (const island of islands) expect(island.name.length).toBeGreaterThan(0);
   });
 
   it('is deterministic for the same seed and radius', () => {
-    expect(enumerateIslands(SEED, 30)).toEqual(enumerateIslands(SEED, 30));
+    expect(enumerateIslands(SEED, WORLD_RADIUS)).toEqual(enumerateIslands(SEED, WORLD_RADIUS));
   });
 
-  it('places each island centre on actual land, so WorldModel.islandFootprint has something to measure', () => {
+  it('places each island label on actual land (a crescent\'s middle is water), so WorldModel.islandFootprint has something to measure', () => {
     const model = new WorldModel(SEED.seed, SEED.generation);
-    const islands = enumerateIslands(SEED, 30);
+    const islands = enumerateIslands(SEED, WORLD_RADIUS);
     expect(islands.length).toBeGreaterThan(0);
     for (const island of islands) {
       expect(model.isLand(island.q, island.r)).toBe(true);

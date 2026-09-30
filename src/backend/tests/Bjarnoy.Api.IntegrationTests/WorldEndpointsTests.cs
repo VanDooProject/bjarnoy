@@ -146,10 +146,10 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     public async Task Giants_survive_the_round_trip_through_the_text_encoded_column()
     {
         using var client = _fixture.CreateClient();
-        // Seed/radius known (Bjarnoy.Domain.Tests.GiantGenerationTests) to
-        // place two giants on one island, so this doesn't depend on getting
+        // Compact-world seed found by scanning seeds 1-400: places six giants,
+        // all mountain giants (no shrine), so this doesn't depend on getting
         // lucky with the default.
-        var world = await CreateWorldAsync(seed: 55, radius: 90);
+        var world = await CreateWorldAsync(seed: 9, radius: 300);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -165,10 +165,10 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     public async Task Wasted_islands_are_hidden_until_the_endboss_triggers()
     {
         using var client = _fixture.CreateClient();
-        // Seed/radius known (Bjarnoy.Domain.Tests.WastedIslandGenerationTests)
-        // to place two wasted islands with lava rivers and giants, so this
-        // doesn't depend on getting lucky with the default.
-        var world = await CreateWorldAsync(seed: 61, radius: 90);
+        // Compact-world seed found by scanning seeds 1-400: places wasted
+        // islands with lava rivers and giants, so this doesn't depend on
+        // getting lucky with the default.
+        var world = await CreateWorldAsync(seed: 2, radius: 300);
         var wastedCount = world.Islands.Count(i => i.IsWasted);
         Assert.True(wastedCount > 0, "expected the fixture seed to actually place wasted islands");
 

@@ -7,14 +7,20 @@ using Bjarnoy.Infrastructure.World;
 namespace Bjarnoy.Api.Contracts;
 
 /// <param name="Seed">
-/// Omit to have one drawn at random. The seed is the world: it is enough to
-/// reproduce every hex of terrain.
+/// Omit to have one drawn at random. The seed is the world: with the generation
+/// constants it is enough to reproduce every hex of terrain.
+/// </param>
+/// <param name="Generation">
+/// Overrides for the island/mountain generation constants — any field left
+/// <see langword="null"/> keeps the library default (see
+/// <see cref="WorldGenerationSettingsOverrides"/>). Omit entirely for the default world.
 /// </param>
 public sealed record CreateWorldRequest(
     [property: Required, MinLength(3), MaxLength(100)] string Name,
     int? Seed = null,
-    [property: Range(1, 1000)] int Radius = 60,
-    [property: Range(1, 100000)] int MaxPlayers = 500);
+    [property: Range(1, WorldGenerationOptions.MaxRadius)] int Radius = 4000,
+    [property: Range(1, 100000)] int MaxPlayers = 500,
+    WorldGenerationSettingsOverrides? Generation = null);
 
 public sealed record WorldResponse(
     Guid Id,
@@ -162,46 +168,54 @@ public sealed record WorldMembershipResponse(Guid WorldId, string? SettlementId,
 /// options (<c>POST /api/v1/admin/worlds/{id}/preview-seed</c>).
 /// </summary>
 public sealed record WorldGenerationResponse(
+    int WorldRadius,
     int IslandCellSize,
     double IslandChance,
-    double IslandMinRadius,
-    double IslandMaxRadius,
+    double IslandMinWidth,
+    double IslandMaxWidth,
+    int IslandMinSegments,
+    int IslandMaxSegments,
+    double IslandMinElongation,
+    double IslandMaxElongation,
+    double IslandMinBend,
+    double IslandMaxBend,
+    double IslandCoastWarp,
+    double IslandCoastWarpScale,
+    double IslandCoastNoise,
+    double IslandCoastNoiseScale,
+    double IslandSmallShare,
+    double IslandLargeShare,
     double BeachThreshold,
     double MountainThreshold,
     double MountainRockiness,
-    double ForestRockiness,
-    int IslandMinLobes,
-    int IslandMaxLobes,
-    double IslandMaxElongation,
-    double IslandBendiness,
-    double IslandLobeBlend,
-    double IslandLobeMinScale,
-    double IslandLobeMaxScale,
-    double IslandCoastWarp,
-    double IslandCoastWarpScale)
+    double ForestRockiness)
 {
     public static WorldGenerationResponse From(WorldGenerationOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         return new WorldGenerationResponse(
+            options.Radius,
             options.IslandCellSize,
             options.IslandChance,
-            options.IslandMinRadius,
-            options.IslandMaxRadius,
+            options.IslandMinWidth,
+            options.IslandMaxWidth,
+            options.IslandMinSegments,
+            options.IslandMaxSegments,
+            options.IslandMinElongation,
+            options.IslandMaxElongation,
+            options.IslandMinBend,
+            options.IslandMaxBend,
+            options.IslandCoastWarp,
+            options.IslandCoastWarpScale,
+            options.IslandCoastNoise,
+            options.IslandCoastNoiseScale,
+            options.IslandSmallShare,
+            options.IslandLargeShare,
             options.BeachThreshold,
             options.MountainThreshold,
             options.MountainRockiness,
-            options.ForestRockiness,
-            options.IslandMinLobes,
-            options.IslandMaxLobes,
-            options.IslandMaxElongation,
-            options.IslandBendiness,
-            options.IslandLobeBlend,
-            options.IslandLobeMinScale,
-            options.IslandLobeMaxScale,
-            options.IslandCoastWarp,
-            options.IslandCoastWarpScale);
+            options.ForestRockiness);
     }
 }
 

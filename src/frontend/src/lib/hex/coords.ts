@@ -101,3 +101,33 @@ export function hexesInRadius(center: AxialCoord, radius: number): AxialCoord[] 
   }
   return out;
 }
+
+/**
+ * The hexes at exactly `radius` steps from `center`, in a fixed order (starting due
+ * east-ish and walking round). `hexesInRadius` returns whole discs, which is
+ * quadratic when called for every radius in turn; scanning outward ring by ring is
+ * linear in the area covered.
+ */
+export function hexRing(center: AxialCoord, radius: number): AxialCoord[] {
+  if (radius === 0) return [{ q: center.q, r: center.r }];
+  const out: AxialCoord[] = [];
+  // Start at the corner `radius` steps in direction 4 (-1, +1), then walk the six sides.
+  let q = center.q - radius;
+  let r = center.r + radius;
+  const sides = [
+    { q: 1, r: 0 },
+    { q: 1, r: -1 },
+    { q: 0, r: -1 },
+    { q: -1, r: 0 },
+    { q: -1, r: 1 },
+    { q: 0, r: 1 },
+  ];
+  for (const side of sides) {
+    for (let step = 0; step < radius; step++) {
+      out.push({ q, r });
+      q += side.q;
+      r += side.r;
+    }
+  }
+  return out;
+}

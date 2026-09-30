@@ -49,21 +49,24 @@ public sealed class FieldBattleServiceTests : IDisposable
     /// </summary>
     private static WorldGenerationOptions LandOptions => new()
     {
-        Seed = 1,
+        // Seed 14 is one where the discs of the cells around the origin cover every
+        // hex within 30 of it (WorldGeneratorTests.The_all_land_test_options_cover_the_origin
+        // guards this with the same numbers; re-search a seed if the island shape changes):
+        // one 100-hex-wide disc per 100-hex cell (a single-vertex spine, no islets
+        // possible to matter, no warp, no coast noise, every cell an island), so the
+        // ground around the origin is plain grass — no sea, sand, forest or mountain.
+        Seed = 14,
         Radius = 500,
-        // IslandCellSize bumped 2->250 and the multi-lobe/warp fields zeroed
-        // out: with the island-shape retune, the reach-budget check (see
-        // WorldGenerationOptions.Validate) scales with IslandMaxElongation/
-        // IslandLobeMaxScale/IslandCoastWarp, none of which this all-land
-        // hack cares about (it just wants huge overlapping plain circles).
-        IslandCellSize = 250,
+        IslandCellSize = 100,
         IslandChance = 1.0,
-        IslandMinRadius = 1000,
-        IslandMaxRadius = 1000,
-        IslandMaxElongation = 0.0,
-        IslandLobeMinScale = 0.3,
-        IslandLobeMaxScale = 0.3,
+        IslandMinWidth = 100.0,
+        IslandMaxWidth = 100.0,
+        IslandMinSegments = 1,
+        IslandMaxSegments = 1,
         IslandCoastWarp = 0.0,
+        IslandCoastNoise = 0.0,
+        IslandSmallShare = 0.0,
+        IslandLargeShare = 0.0,
         BeachThreshold = 1.0,
         MountainThreshold = 0.0,
         MountainRockiness = 2.0,

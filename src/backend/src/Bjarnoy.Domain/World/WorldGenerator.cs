@@ -33,166 +33,242 @@ public sealed class WorldGenerator
     public TerrainSampler Sampler => _sampler;
 
     /// <summary>
-    /// Generates the whole world. Cost is one terrain sample per hex in the sea,
-    /// i.e. <c>3r(r+1)+1</c> samples for radius <c>r</c>.
+    /// Generates the whole world. Terrain is never sampled hex by hex over the
+    /// sea: the island cells that hold an island are enumerated
+    /// (<see cref="TerrainSampler.EnumerateIslandShapes"/>), each island's
+    /// footprint box is scanned at stride 2 for land, and every landmass found is
+    /// flood-filled on demand. Cost scales with the land, not with the radius.
     /// </summary>
     public GeneratedWorld Generate(CancellationToken cancellationToken = default)
     {
-        var land = ClassifyLand(cancellationToken);
-        var islands = new List<GeneratedIsland>();
-        var visited = new HashSet<HexCoord>();
         var usedNames = new HashSet<string>(StringComparer.Ordinal);
 
-        // Scanning in sorted order (rather than in hash-set order) is what makes
-        // island indices stable for a given seed.
-        foreach (var coord in land.Keys.OrderBy(c => c.Q).ThenBy(c => c.R))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
+        var greenMasses = FindLandmasses(wasted: false, cancellationToken);
+        var green = BuildIslands(greenMasses, firstIndex: 0, wasted: false, cancellationToken);
 
-            if (!visited.Add(coord))
-            {
-                continue;
-            }
-
-            var tiles = FloodFill(coord, land, visited);
-            if (tiles.Count < _options.MinimumIslandTiles)
-            {
-                continue;
-            }
-
-            var index = islands.Count;
-            var riverTiles = RiverGenerator.Generate(tiles, land, _sampler, _options, index);
-            var riverTileSet = riverTiles.Select(t => t.Coord).ToHashSet();
-            var giants = GiantGenerator.Generate(tiles, land, _sampler, _options, index, riverTileSet);
-            var startPositions = FindStartPositions(tiles, land, giants);
-            islands.Add(new GeneratedIsland
-            {
-                Index = index,
-                Name = NextUniqueName(index, usedNames),
-                Tiles = tiles,
-                Centre = CentreOf(tiles),
-                StartPositions = startPositions,
-                RiverTiles = riverTiles,
-                Giants = giants,
-                IsWasted = false,
-            });
-        }
-
-        // Wasted islands: classified and flood-filled the same way as green
-        // islands, over the same world radius, using WastedTerrainAt instead
+        // Wasted islands: found and flood-filled the same way as green
+        // islands, over the wasted island cells, using WastedTerrainAt instead
         // of TerrainAt. Appended after every green island so indices/names
         // continue from where the green scan left off. No start positions
         // (wasted islands can never be founded on) and no shrine — a wasted
         // island's rivers are lava streams (RiverGenerator's allowConfluence:
         // false mode) and its "shrine" giant is a single Utgard.
-        var wastedLand = ClassifyWastedLand(cancellationToken);
-        var wastedVisited = new HashSet<HexCoord>();
+        var wastedMasses = FindLandmasses(wasted: true, cancellationToken);
+        var wasted = BuildIslands(wastedMasses, firstIndex: green.Count, wasted: true, cancellationToken);
 
-        foreach (var coord in wastedLand.Keys.OrderBy(c => c.Q).ThenBy(c => c.R))
+        // Names are handed out in index order, sequentially, because a name can
+        // depend on the ones already taken.
+        var islands = new List<GeneratedIsland>(green.Count + wasted.Count);
+        foreach (var island in green.Concat(wasted))
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!wastedVisited.Add(coord))
-            {
-                continue;
-            }
-
-            var tiles = FloodFill(coord, wastedLand, wastedVisited);
-            if (tiles.Count < _options.MinimumIslandTiles)
-            {
-                continue;
-            }
-
-            var index = islands.Count;
-            var riverTiles = RiverGenerator.Generate(
-                tiles, wastedLand, _sampler, _options, index, wasted: true, allowConfluence: false);
-            var riverTileSet = riverTiles.Select(t => t.Coord).ToHashSet();
-            var giants = GiantGenerator.Generate(tiles, wastedLand, _sampler, _options, index, riverTileSet, wasted: true);
-            islands.Add(new GeneratedIsland
-            {
-                Index = index,
-                Name = NextUniqueName(index, usedNames),
-                Tiles = tiles,
-                Centre = CentreOf(tiles),
-                StartPositions = [],
-                RiverTiles = riverTiles,
-                Giants = giants,
-                IsWasted = true,
-            });
+            islands.Add(island with { Name = NextUniqueName(island.Index, usedNames) });
         }
 
         return new GeneratedWorld
         {
             Options = _options,
             Islands = islands,
-            LandTileCount = land.Count,
+            LandTileCount = greenMasses.Sum(m => m.Land.Count),
         };
     }
 
-    private Dictionary<HexCoord, Terrain> ClassifyWastedLand(CancellationToken cancellationToken)
+    /// <summary>
+    /// Turns landmasses (already in index order) into islands, dropping specks below
+    /// <see cref="WorldGenerationOptions.MinimumIslandTiles"/>. The per-island work
+    /// (rivers, giants, start positions) is independent between islands, so it runs in
+    /// parallel; results land in an array slot per island, so the output order is the
+    /// index order whatever the scheduling.
+    /// </summary>
+    private List<GeneratedIsland> BuildIslands(
+        List<Landmass> masses, int firstIndex, bool wasted, CancellationToken cancellationToken)
     {
-        var land = new Dictionary<HexCoord, Terrain>();
+        var kept = masses.Where(m => m.Land.Count >= _options.MinimumIslandTiles).ToList();
+        var built = new GeneratedIsland[kept.Count];
 
-        foreach (var coord in HexCoord.Origin.WithinRadius(_options.Radius))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var terrain = _sampler.WastedTerrainAt(coord);
-            if (terrain.IsLand())
+        Parallel.For(
+            0,
+            kept.Count,
+            new ParallelOptions { CancellationToken = cancellationToken },
+            i =>
             {
-                land[coord] = terrain;
-            }
-        }
+                var index = firstIndex + i;
+                var land = kept[i].Land;
+                var tiles = kept[i].SortedTiles();
+                IReadOnlyList<RiverTile> riverTiles;
+                IReadOnlyList<Giant> giants;
+                IReadOnlyList<HexCoord> startPositions;
+                if (wasted)
+                {
+                    riverTiles = RiverGenerator.Generate(
+                        tiles, land, _sampler, _options, index, wasted: true, allowConfluence: false);
+                    giants = GiantGenerator.Generate(
+                        tiles, land, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet(), wasted: true);
+                    startPositions = [];
+                }
+                else
+                {
+                    riverTiles = RiverGenerator.Generate(tiles, land, _sampler, _options, index);
+                    giants = GiantGenerator.Generate(
+                        tiles, land, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet());
+                    startPositions = FindStartPositions(tiles, land, giants);
+                }
 
-        return land;
+                built[i] = new GeneratedIsland
+                {
+                    Index = index,
+                    Name = string.Empty,
+                    Tiles = tiles,
+                    Centre = CentreOf(tiles),
+                    StartPositions = startPositions,
+                    RiverTiles = riverTiles,
+                    Giants = giants,
+                    IsWasted = wasted,
+                };
+            });
+
+        return [.. built];
     }
 
-    private Dictionary<HexCoord, Terrain> ClassifyLand(CancellationToken cancellationToken)
+    /// <summary>One connected landmass: its land hexes (with terrain) and its lowest (Q, R) hex.</summary>
+    internal sealed class Landmass
     {
-        var land = new Dictionary<HexCoord, Terrain>();
-
-        foreach (var coord in HexCoord.Origin.WithinRadius(_options.Radius))
+        public Landmass(Dictionary<HexCoord, Terrain> land, HexCoord lowest)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var terrain = _sampler.TerrainAt(coord);
-            if (terrain.IsLand())
-            {
-                land[coord] = terrain;
-            }
+            Land = land;
+            Lowest = lowest;
         }
 
-        return land;
+        public Dictionary<HexCoord, Terrain> Land { get; }
+
+        public HexCoord Lowest { get; }
+
+        /// <summary>The land hexes in (Q, R) order, so island tile lists never depend on discovery order.</summary>
+        public List<HexCoord> SortedTiles()
+        {
+            var tiles = new List<HexCoord>(Land.Keys);
+            tiles.Sort(static (a, b) => a.Q != b.Q ? a.Q.CompareTo(b.Q) : a.R.CompareTo(b.R));
+            return tiles;
+        }
     }
 
     /// <summary>
-    /// Collects the landmass reachable from <paramref name="start"/>. Iterative
-    /// with an explicit stack: the legacy version recursed once per land hex,
-    /// which overflows on any island worth playing on.
+    /// Every landmass of the green (or wasted) islands, ordered by the lowest
+    /// (Q, R) hex each contains, so island indices are stable for a seed.
     /// </summary>
-    private static List<HexCoord> FloodFill(
+    /// <remarks>
+    /// Each island's land-possible box is scanned on the even-column/even-row
+    /// lattice (stride 2 in offset space) and a flood fill starts at every land
+    /// sample not already inside a found landmass. A landmass shared by
+    /// overlapping cells is found once (each box is scanned in parallel; identical landmasses
+    /// found from two boxes are merged by their lowest hex). Only a
+    /// landmass narrower than the stride in both directions (a speck a few hexes
+    /// across, below <see cref="WorldGenerationOptions.MinimumIslandTiles"/> for
+    /// practical purposes) can slip between samples.
+    /// </remarks>
+    internal List<Landmass> FindLandmasses(bool wasted, CancellationToken cancellationToken)
+    {
+        Func<HexCoord, Terrain> terrainOf = wasted ? _sampler.WastedTerrainAt : _sampler.TerrainAt;
+        var shapes = _sampler.EnumerateIslandShapes(wasted).ToList();
+        var perShape = new List<Landmass>[shapes.Count];
+
+        // Each island's box is scanned on its own thread with its own visited set. A flood
+        // fill always returns the whole connected landmass, so a landmass reached from two
+        // boxes (touching islands) comes back identical from both; the merge below keeps one
+        // per lowest hex, which makes the result equal to a sequential scan.
+        Parallel.For(
+            0,
+            shapes.Count,
+            new ParallelOptions { CancellationToken = cancellationToken },
+            i =>
+            {
+                var shape = shapes[i];
+                var visited = new HashSet<HexCoord>();
+                var found = new List<Landmass>();
+                var firstCol = shape.MinCol + (shape.MinCol & 1);
+                var firstRow = shape.MinRow + (shape.MinRow & 1);
+                for (var col = firstCol; col <= shape.MaxCol; col += 2)
+                {
+                    for (var row = firstRow; row <= shape.MaxRow; row += 2)
+                    {
+                        var coord = HexCoord.FromOddQ(new OffsetCoord(col, row));
+                        if (visited.Contains(coord))
+                        {
+                            continue;
+                        }
+
+                        var terrain = terrainOf(coord);
+                        if (terrain.IsLand())
+                        {
+                            found.Add(FloodFill(coord, terrain, terrainOf, visited));
+                        }
+                    }
+                }
+
+                perShape[i] = found;
+            });
+
+        var byLowest = new Dictionary<HexCoord, Landmass>();
+        foreach (var found in perShape)
+        {
+            foreach (var mass in found)
+            {
+                byLowest.TryAdd(mass.Lowest, mass);
+            }
+        }
+
+        var masses = byLowest.Values.ToList();
+        masses.Sort(static (a, b) => a.Lowest.Q != b.Lowest.Q
+            ? a.Lowest.Q.CompareTo(b.Lowest.Q)
+            : a.Lowest.R.CompareTo(b.Lowest.R));
+        return masses;
+    }
+
+    /// <summary>
+    /// Collects the landmass reachable from <paramref name="start"/>, sampling
+    /// terrain on demand. Iterative with an explicit stack: the legacy version
+    /// recursed once per land hex, which overflows on any island worth playing on.
+    /// </summary>
+    private static Landmass FloodFill(
         HexCoord start,
-        Dictionary<HexCoord, Terrain> land,
+        Terrain startTerrain,
+        Func<HexCoord, Terrain> terrainOf,
         HashSet<HexCoord> visited)
     {
-        var tiles = new List<HexCoord>();
+        var land = new Dictionary<HexCoord, Terrain> { [start] = startTerrain };
+        var sea = new HashSet<HexCoord>();
+        var lowest = start;
         var pending = new Stack<HexCoord>();
+        visited.Add(start);
         pending.Push(start);
 
         while (pending.TryPop(out var coord))
         {
-            tiles.Add(coord);
-
             foreach (var neighbour in coord.Neighbours())
             {
-                if (land.ContainsKey(neighbour) && visited.Add(neighbour))
+                if (visited.Contains(neighbour) || sea.Contains(neighbour))
                 {
-                    pending.Push(neighbour);
+                    continue;
                 }
+
+                var terrain = terrainOf(neighbour);
+                if (!terrain.IsLand())
+                {
+                    sea.Add(neighbour);
+                    continue;
+                }
+
+                visited.Add(neighbour);
+                land[neighbour] = terrain;
+                if (neighbour.Q < lowest.Q || (neighbour.Q == lowest.Q && neighbour.R < lowest.R))
+                {
+                    lowest = neighbour;
+                }
+
+                pending.Push(neighbour);
             }
         }
 
-        return tiles;
+        return new Landmass(land, lowest);
     }
 
     /// <summary>
