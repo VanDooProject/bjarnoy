@@ -95,6 +95,7 @@ public sealed class WorldGenerator
                 var land = kept[i].Land;
                 var tiles = kept[i].SortedTiles();
                 IReadOnlyList<RiverTile> riverTiles;
+                IReadOnlyList<BogTile> bogTiles = [];
                 IReadOnlyList<Giant> giants;
                 IReadOnlyList<Camp> camps;
                 IReadOnlyList<HexCoord> startPositions;
@@ -109,13 +110,21 @@ public sealed class WorldGenerator
                 }
                 else
                 {
-                    riverTiles = RiverGenerator.Generate(tiles, land, _sampler, _options, index);
+                    var generated = RiverGenerator.GenerateWithBogs(tiles, land, _sampler, _options, index);
+                    riverTiles = generated.Rivers;
+                    bogTiles = generated.Bogs;
+
+                    // Giants, camps and start positions see the bogland as terrain: they never stand on a bog or a
+                    // lake, and only plain bog moss can hold a (bog) camp.
+                    var terrainLand = BogTerrain.Overlay(land, bogTiles);
                     giants = GiantGenerator.Generate(
-                        tiles, land, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet());
+                        tiles, terrainLand, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet());
                     // Camps are placed before start positions; start positions keep away
                     // from the strong ones (weak camps are fine next to a spot).
-                    camps = CampGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants);
-                    startPositions = FindStartPositions(tiles, land, giants, camps);
+                    camps = CampGenerator.Generate(
+                        tiles, terrainLand, _sampler, _options, index, riverTiles, giants,
+                        plainBog: BogTerrain.PlainBog(bogTiles));
+                    startPositions = FindStartPositions(tiles, terrainLand, giants, camps);
                 }
 
                 built[i] = new GeneratedIsland
@@ -126,6 +135,7 @@ public sealed class WorldGenerator
                     Centre = CentreOf(tiles),
                     StartPositions = startPositions,
                     RiverTiles = riverTiles,
+                    BogTiles = bogTiles,
                     Giants = giants,
                     Camps = camps,
                     IsWasted = wasted,

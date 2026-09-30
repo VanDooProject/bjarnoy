@@ -24,7 +24,7 @@ public enum CampGround
     /// <summary>Grass on a wasted island (the wasteland art family).</summary>
     Wasteland,
 
-    /// <summary>Plain bog ground. Bog terrain lands in a later PR: no camp is placed on it yet.</summary>
+    /// <summary>Plain bog moss (not a lake, shore, mouth or creek); the family is picked by hash among moosemire, beaverlodge and cranedance.</summary>
     Bog,
 }
 

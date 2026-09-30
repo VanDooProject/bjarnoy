@@ -413,7 +413,7 @@ public sealed record Army
         // which is exactly what "shoreline" means (see Shoreline.IsShoreline);
         // any other land hex fails as UnreachableLeg below instead.
         var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found;
-        if (!skipDestinationTerrainCheck && terrainAt(destination).IsLand() != isLandUnit)
+        if (!skipDestinationTerrainCheck && !terrainAt(destination).IsTraversable(isLandUnit))
         {
             return DispatchDecision.Rejected(isFleet
                 ? DispatchRejection.DestinationNotSea
@@ -422,7 +422,7 @@ public sealed record Army
 
         foreach (var waypoint in waypoints)
         {
-            if (terrainAt(waypoint).IsLand() != isLandUnit)
+            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
             {
                 return DispatchDecision.Rejected(isFleet
                     ? DispatchRejection.WaypointNotSea
@@ -1202,7 +1202,7 @@ public sealed record Army
         var movement = inTransit.Movement;
         var isLandUnit = army.Stacks.Count == 0 || army.Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
 
-        if (terrainAt(destination).IsLand() != isLandUnit)
+        if (!terrainAt(destination).IsTraversable(isLandUnit))
         {
             return FieldOrderResult.Rejected(isLandUnit
                 ? FieldOrderRejection.DestinationNotLand
@@ -1211,7 +1211,7 @@ public sealed record Army
 
         foreach (var waypoint in waypoints)
         {
-            if (terrainAt(waypoint).IsLand() != isLandUnit)
+            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
             {
                 return FieldOrderResult.Rejected(isLandUnit
                     ? FieldOrderRejection.WaypointNotLand
@@ -1393,7 +1393,7 @@ public sealed record Army
         // are never mixed (PlanDispatch guarantees it at dispatch time).
         var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
 
-        if (terrainAt(coord).IsLand() != isLandUnit)
+        if (!terrainAt(coord).IsTraversable(isLandUnit))
         {
             return null;
         }
