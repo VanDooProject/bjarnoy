@@ -3513,9 +3513,9 @@ export class HexMapRenderer {
       }
       // A wildlife camp (see campPlacement.ts) is an animated topping on the hex's own
       // ground: the ground's base, the camp's guarded (level 1) art on top, its tile
-      // rotation mapped onto the rotations that art ships (campArtFor). A bearrapids
-      // camp stands on its river tile and brings its own river base with it. A camp
-      // whose art cannot be resolved (a bearrapids off a straight river) falls through
+      // rotation mapped onto the rotations that art ships (campArtFor). A river camp
+      // (bears, otters) stands on its river tile and brings its own river base with it. A camp
+      // whose art cannot be resolved (a river camp off a straight river) falls through
       // and draws as plain ground.
       if (tile.camp) {
         const campArt = campArtFor(textures, tile, river);

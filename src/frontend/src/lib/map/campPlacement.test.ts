@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { hexDistance, type AxialCoord } from '../hex/coords';
 import {
   CAMP_FAMILIES,
+  campFamilyInfo,
   MaxCampLevel,
   MinCampIslandTiles,
   MinCampSpacing,
@@ -35,8 +36,8 @@ describe('camp family table', () => {
   it('has the owner-decided strengths', () => {
     const strong = CAMP_FAMILIES.filter((f) => f.strength === 'strong').map((f) => f.family).sort();
     const weak = CAMP_FAMILIES.filter((f) => f.strength === 'weak').map((f) => f.family).sort();
-    expect(strong).toEqual(['bearrapids', 'boarwallow', 'fenrirbrood', 'wolfden']);
-    expect(weak).toEqual(['beaverlodge', 'cranedance', 'eagleeyrie', 'moosemire', 'sealhaulout']);
+    expect(strong).toEqual(['bearrapids', 'boarwallow', 'eagleeyrie', 'fenrirbrood', 'moosemire', 'walrushaulout', 'wolfden']);
+    expect(weak).toEqual(['beaverlodge', 'cranedance', 'deerglade', 'harewarren', 'otterslide', 'sealhaulout']);
     expect(isStrongCampFamily('wolfden')).toBe(true);
     expect(isStrongCampFamily('sealhaulout')).toBe(false);
     expect(isStrongCampFamily('nonsense')).toBe(false);
@@ -95,11 +96,16 @@ describe('placeCamps', () => {
     const { tiles, terrainOf } = block(60, (_q, r) => (['grass', 'forest', 'sand', 'mountain'] as const)[Math.floor(r / 15)]!);
     const placed = placeCamps(tiles, terrainOf, [], [], 5, 2);
 
-    // The weak budget (6) is cut to the seal and eyrie caps (2 + 2).
-    const expectedWeak = Math.min(weakCountFor(tiles.length), maxSealCampsFor(tiles.length) + maxEyrieCampsFor(tiles.length));
-    expect(placed).toHaveLength(strongCountFor(tiles.length) + expectedWeak);
+    // Grass and forest hold a strong and a weak camp each, so both budgets fill; the sand cap counts
+    // seals and walruses together, the mountain cap eyries.
+    expect(placed).toHaveLength(strongCountFor(tiles.length) + weakCountFor(tiles.length));
     expect(placed.filter((p) => isStrongCampFamily(p.family))).toHaveLength(strongCountFor(tiles.length));
-    expect(new Set(placed.slice(0, 4).map((p) => p.family)).size).toBe(4);
+    expect(placed.filter((p) => campFamilyInfo(p.family)!.ground === 'sand').length).toBeLessThanOrEqual(
+      maxSealCampsFor(tiles.length),
+    );
+    expect(placed.filter((p) => p.family === 'eagleeyrie').length).toBeLessThanOrEqual(maxEyrieCampsFor(tiles.length));
+    // The first four camps take the four grounds.
+    expect(new Set(placed.slice(0, 4).map((p) => campFamilyInfo(p.family)!.ground)).size).toBe(4);
     for (const p of placed) {
       expect(p.level).toBeGreaterThanOrEqual(1);
       expect(p.level).toBeLessThanOrEqual(MaxCampLevel);
@@ -112,17 +118,18 @@ describe('placeCamps', () => {
   });
 
   it('rolls levels low: strong u^3 (~59/15/11/9/7 %), weak u^2 (~45/19/14/12/11 %)', () => {
-    const tally = (ground: 'grass' | 'sand', seeds: number) => {
+    // Grass pooled over the wolf dens (strong), sand over the seal colonies (weak).
+    const tally = (ground: 'grass' | 'sand', family: string, seeds: number) => {
       const { tiles, terrainOf } = block(100, () => ground);
       const counts = [0, 0, 0, 0, 0, 0];
       for (let seed = 0; seed < seeds; seed++) {
-        for (const p of placeCamps(tiles, terrainOf, [], [], seed, 1)) counts[p.level]!++;
+        for (const p of placeCamps(tiles, terrainOf, [], [], seed, 1)) if (p.family === family) counts[p.level]!++;
       }
       const total = counts.reduce((a, b) => a + b, 0);
       return { total, share: counts.slice(1).map((c) => c / total) };
     };
-    const strong = tally('grass', 200);
-    const weak = tally('sand', 400);
+    const strong = tally('grass', 'wolfden', 200);
+    const weak = tally('sand', 'sealhaulout', 400);
     const expectedStrong = [0.585, 0.152, 0.106, 0.085, 0.072];
     const expectedWeak = [0.447, 0.185, 0.143, 0.119, 0.106];
     expect(strong.total).toBeGreaterThan(1000);
@@ -147,7 +154,7 @@ describe('placeCamps', () => {
     for (const p of placed) expect(blocked.has(`${p.coord.q},${p.coord.r}`)).toBe(false);
   });
 
-  it('a straight river tile can hold bearrapids, oriented like the plain straight river art', () => {
+  it('a straight river tile can hold bearrapids or otterslide, oriented like the plain straight river art', () => {
     // 60 tiles (the smallest island that gets a camp), only the first three of them offer a camp.
     const tiles: AxialCoord[] = Array.from({ length: MinCampIslandTiles }, (_, q) => ({ q, r: 0 }));
     const terrainOf = (c: AxialCoord): Terrain => (c.q < 3 ? 'sand' : 'sea');
@@ -157,11 +164,11 @@ describe('placeCamps', () => {
       const [camp] = placeCamps(tiles, terrainOf, [straight], [], seed, 0);
       if (camp!.coord.q === 1) {
         sawBearrapids = true;
-        expect(camp!.family).toBe('bearrapids');
+        expect(['bearrapids', 'otterslide']).toContain(camp!.family);
         // straightOrientationOf('W') = TILE_ORIENTATIONS[(2 - 3 + 6) % 6] = 'SE'
         expect(camp!.orientation).toBe('SE');
       } else {
-        expect(camp!.family).toBe('sealhaulout');
+        expect(['sealhaulout', 'walrushaulout']).toContain(camp!.family);
         expect(camp!.orientation).toBeNull();
       }
     }

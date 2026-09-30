@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
-import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
+import { findAtlasClip, findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import { KEY_FAMILY, type TextureKey } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
+import { CAMP_FAMILIES, MaxCampLevel, guardRange, type CampGround, type CampStrength } from '../lib/map/campPlacement';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -18,29 +21,35 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // that state is read off the showcase atlas rather than typed out here — a
 // re-rated camp picks up its new rotations with the next art drop.
 
-type Ground = 'grass' | 'river' | 'sand' | 'forest' | 'mountain' | 'wasteland' | 'bog';
-type CampId =
-  | 'wolfden'
-  | 'bearrapids'
-  | 'sealhaulout'
-  | 'boarwallow'
-  | 'eagleeyrie'
-  | 'fenrirbrood'
-  | 'moosemire'
-  | 'beaverlodge'
-  | 'cranedance';
+// Which camps exist, their ground and whether they are strong or weak come
+// from the game's own family table (`CAMP_FAMILIES`, the TS mirror of
+// `CampFamilies.All`), so the badges and filters here always say what world
+// generation actually places.
+type Ground = CampGround;
+type CampId = string;
+interface CampEntry {
+  id: CampId;
+  ground: Ground;
+  strength: CampStrength;
+}
 
-const CAMPS: { id: CampId; ground: Ground }[] = [
-  { id: 'wolfden', ground: 'grass' },
-  { id: 'bearrapids', ground: 'river' },
-  { id: 'sealhaulout', ground: 'sand' },
-  { id: 'boarwallow', ground: 'forest' },
-  { id: 'eagleeyrie', ground: 'mountain' },
-  { id: 'fenrirbrood', ground: 'wasteland' },
-  { id: 'moosemire', ground: 'bog' },
-  { id: 'beaverlodge', ground: 'bog' },
-  { id: 'cranedance', ground: 'bog' },
-];
+// A family only gets a card once its art is in the atlas.
+const CAMPS: CampEntry[] = CAMP_FAMILIES.map((f) => ({ id: f.family, ground: f.ground, strength: f.strength })).filter(
+  (c) => TILE_ORIENTATIONS.some((cam) => frameFor(c.id, cam, false)),
+);
+
+const STRENGTHS: CampStrength[] = ['strong', 'weak'];
+// Grounds in the order the family table first mentions them, only those with a camp on the page.
+const GROUNDS: Ground[] = [...new Set(CAMPS.map((c) => c.ground))];
+const strengthFilter = ref<CampStrength | 'all'>('all');
+const groundFilter = ref<Ground | 'all'>('all');
+const shownCamps = computed(() =>
+  CAMPS.filter(
+    (c) =>
+      (strengthFilter.value === 'all' || c.strength === strengthFilter.value) &&
+      (groundFilter.value === 'all' || c.ground === groundFilter.value),
+  ),
+);
 
 const BOX_H = 238;
 function fit(frame: AtlasFrameRect | undefined, boxHeight: number): { width: string } | undefined {
@@ -50,8 +59,55 @@ function fit(frame: AtlasFrameRect | undefined, boxHeight: number): { width: str
   };
 }
 
+// The art a camp is drawn with - the map's own alias (`KEY_FAMILY`): the walrus haul-out
+// borrows the seal haul-out's art until its own is rendered.
+function artOf(id: CampId): string {
+  return KEY_FAMILY[id as TextureKey] ?? id;
+}
+
 function frameFor(id: CampId, camera: TileOrientation, guarded: boolean): AtlasFrameRect | undefined {
-  return findAtlasFrame('showcase', `${id}_${camera}_level00${guarded ? 1 : 0}`);
+  return findAtlasFrame('showcase', `${artOf(id)}_${camera}_level00${guarded ? 1 : 0}`);
+}
+
+/** The hexes a camp of this strength guards at level 1 and at the top level (`guardRange`, the game's own formula). */
+function rangeOf(strength: CampStrength): { min: number; max: number; levels: number } {
+  return { min: guardRange(1, strength), max: guardRange(MaxCampLevel, strength), levels: MaxCampLevel };
+}
+
+// Loot kinds only - the amounts are not designed yet (docs/design/wildlife-camps.md, "Loot").
+// The base rule: every camp gives food and a strong camp adds iron. On top,
+// each camp's own extras from the design roster (#334's brainstorm): stone
+// from the bears' rapids and the eyrie's crag, wood from the wolves' forest
+// edge, the beavers' lodge and the otters' drift logs. `more` marks the kind
+// a camp pays a larger share of (the roster's "++"): the boars' and the
+// moose's meat, Fenrir's iron.
+type Loot = 'food' | 'stone' | 'wood' | 'iron';
+interface LootShare {
+  kind: Loot;
+  more?: boolean;
+}
+const LOOT_EXTRAS: Record<CampId, LootShare[]> = {
+  wolfden: [{ kind: 'wood' }],
+  boarwallow: [{ kind: 'food', more: true }],
+  bearrapids: [{ kind: 'stone' }],
+  moosemire: [{ kind: 'food', more: true }],
+  eagleeyrie: [{ kind: 'stone' }, { kind: 'iron' }],
+  fenrirbrood: [{ kind: 'iron', more: true }],
+  beaverlodge: [{ kind: 'wood' }],
+  otterslide: [{ kind: 'wood' }],
+};
+const LOOT_ORDER: Loot[] = ['food', 'stone', 'wood', 'iron'];
+function lootOf(camp: CampEntry): LootShare[] {
+  const shares = new Map<Loot, LootShare>([['food', { kind: 'food' }]]);
+  if (camp.strength === 'strong') shares.set('iron', { kind: 'iron' });
+  for (const extra of LOOT_EXTRAS[camp.id] ?? []) {
+    shares.set(extra.kind, { kind: extra.kind, more: extra.more || shares.get(extra.kind)?.more });
+  }
+  return LOOT_ORDER.flatMap((kind) => (shares.has(kind) ? [shares.get(kind)!] : []));
+}
+
+function hasClip(id: CampId, camera: TileOrientation): boolean {
+  return !!findAtlasClip('buildings-anim', `${artOf(id)}_${camera}_level001`);
 }
 
 function keptCameras(id: CampId): TileOrientation[] {
@@ -78,6 +134,18 @@ function setGuarded(id: CampId, guarded: boolean): void {
   state.guarded = guarded;
   const kept = keptCameras(id);
   if (guarded && !kept.includes(state.camera) && kept[0]) state.camera = kept[0];
+}
+
+// The page-wide switch: every camp at once. A camp's own pills still change
+// just that camp, and the switch then shows neither state as active.
+const allState = computed<'guarded' | 'cleared' | null>(() => {
+  const states = CAMPS.map((c) => view[c.id].guarded);
+  if (states.every(Boolean)) return 'guarded';
+  if (states.every((g) => !g)) return 'cleared';
+  return null;
+});
+function setAll(guarded: boolean): void {
+  for (const c of CAMPS) setGuarded(c.id, guarded);
 }
 
 function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
@@ -114,18 +182,103 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
       <section id="camps">
         <h2>{{ $t('docs.wildlifeCamps.camps.heading') }}</h2>
         <p>{{ $t('docs.wildlifeCamps.camps.body') }}</p>
+        <p>{{ $t('docs.wildlifeCamps.strength.help') }}</p>
+        <p>{{ $t('docs.wildlifeCamps.loot.note') }}</p>
+        <div class="filters">
+          <div class="pills" data-testid="state-switch">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.state.all') }}</span>
+            <button type="button" class="pill" :class="{ active: allState === 'guarded' }" @click="setAll(true)">
+              {{ $t('docs.wildlifeCamps.state.guarded') }}
+            </button>
+            <button type="button" class="pill" :class="{ active: allState === 'cleared' }" @click="setAll(false)">
+              {{ $t('docs.wildlifeCamps.state.cleared') }}
+            </button>
+          </div>
+          <div class="pills" data-testid="strength-filter">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.strength.label') }}</span>
+            <button
+              type="button"
+              class="pill"
+              :class="{ active: strengthFilter === 'all' }"
+              @click="strengthFilter = 'all'"
+            >
+              {{ $t('docs.wildlifeCamps.filters.all') }}
+            </button>
+            <button
+              v-for="strength in STRENGTHS"
+              :key="strength"
+              type="button"
+              class="pill"
+              :class="{ active: strengthFilter === strength }"
+              @click="strengthFilter = strength"
+            >
+              {{ t(`docs.wildlifeCamps.strength.${strength}`) }}
+            </button>
+          </div>
+          <div class="pills" data-testid="ground-filter">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.filters.ground') }}</span>
+            <button
+              type="button"
+              class="pill"
+              :class="{ active: groundFilter === 'all' }"
+              @click="groundFilter = 'all'"
+            >
+              {{ $t('docs.wildlifeCamps.filters.all') }}
+            </button>
+            <button
+              v-for="ground in GROUNDS"
+              :key="ground"
+              type="button"
+              class="pill"
+              :class="{ active: groundFilter === ground }"
+              @click="groundFilter = ground"
+            >
+              {{ t(`docs.wildlifeCamps.grounds.${ground}`) }}
+            </button>
+          </div>
+        </div>
+        <p v-if="shownCamps.length === 0" class="empty">{{ $t('docs.wildlifeCamps.filters.none') }}</p>
         <div class="cards">
-          <div v-for="camp in CAMPS" :id="`camp-${camp.id}`" :key="camp.id" class="card">
+          <div v-for="camp in shownCamps" :id="`camp-${camp.id}`" :key="camp.id" class="card">
             <h3>{{ t(`docs.wildlifeCamps.list.${camp.id}.name`) }}</h3>
-            <span class="ground">{{ t(`docs.wildlifeCamps.grounds.${camp.ground}`) }}</span>
+            <div class="tags">
+              <span class="ground">{{ t(`docs.wildlifeCamps.grounds.${camp.ground}`) }}</span>
+              <span class="strength" :class="camp.strength" :data-strength="camp.strength">
+                {{ t(`docs.wildlifeCamps.strength.${camp.strength}`) }}
+              </span>
+            </div>
             <div class="art-box">
+              <AnimatedCamp
+                v-if="view[camp.id].guarded && hasClip(camp.id, view[camp.id].camera)"
+                :family="artOf(camp.id)"
+                :orientation="view[camp.id].camera"
+              />
               <AtlasSprite
-                v-if="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)"
+                v-else-if="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)"
                 :frame="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)!"
                 :style="fit(frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded), BOX_H)"
               />
             </div>
             <p>{{ t(`docs.wildlifeCamps.list.${camp.id}.guards`) }}</p>
+            <p class="loot" data-testid="loot">
+              <span class="pills-label">{{ $t('docs.wildlifeCamps.loot.label') }}</span>
+              <span
+                v-for="share in lootOf(camp)"
+                :key="share.kind"
+                class="loot-kind"
+                :class="{ more: share.more }"
+                :data-loot="share.kind"
+                :data-more="share.more ? 'true' : undefined"
+                :title="share.more ? t('docs.wildlifeCamps.loot.moreHint') : undefined"
+              >
+                {{
+                  share.more
+                    ? t('docs.wildlifeCamps.loot.more', { kind: t(`docs.wildlifeCamps.loot.${share.kind}`) })
+                    : t(`docs.wildlifeCamps.loot.${share.kind}`)
+                }}
+              </span>
+            </p>
+            <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
             <div class="pills">
               <span class="pills-label">{{ $t('docs.wildlifeCamps.state.label') }}</span>
               <button
@@ -232,9 +385,58 @@ h2 {
   font-size: 13px;
   line-height: 1.5;
 }
+.filters {
+  margin: 12px 0 4px;
+}
+.card p.loot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.loot-kind.more {
+  color: #20160a;
+  background: var(--gold);
+  font-weight: 700;
+}
+.loot-kind {
+  font-size: 12px;
+  color: var(--text);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--panel-border);
+}
+.card p.range {
+  color: var(--text);
+  font-size: 12px;
+}
+.empty {
+  font-style: italic;
+}
+.tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+.strength {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.strength.strong {
+  color: #e0715c;
+}
+.strength.weak {
+  color: #7fc4c9;
+}
 .ground {
   display: inline-block;
-  margin: 4px 0 10px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;

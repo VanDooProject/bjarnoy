@@ -127,7 +127,8 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
   test('wildlife camps page scrolls and shows guarded art only for kept rotations', async ({ page }) => {
     await page.goto('/docs/wildlife-camps');
     const view = new ScrollableView(page, '.wildlife-camps');
-    const lastCard = page.locator('#camp-cranedance');
+    const cards = page.locator('.wildlife-camps .card');
+    const lastCard = cards.last();
     await lastCard.waitFor();
     const { scrollHeight, clientHeight } = await view.metrics();
     expect(scrollHeight).toBeGreaterThan(clientHeight);
@@ -135,8 +136,11 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await expect(lastCard).toBeInViewport();
     expect(await view.noHorizontalOverflow()).toBe(true);
 
-    // Every camp shows art, guarded by default.
-    await expect(page.locator('.wildlife-camps .card .atlas-sprite')).toHaveCount(9);
+    // A card only exists once its art is in the atlas, so every card shows art.
+    const count = await cards.count();
+    expect(count).toBeGreaterThanOrEqual(9);
+    // (a still frame, or the animated guarded camp)
+    await expect(page.locator('.wildlife-camps .card .art-box > *')).toHaveCount(count);
 
     // The eyrie's guarded state only ships its SW rotation; cleared, it turns every way.
     const eyrie = page.locator('#camp-eagleeyrie');
@@ -144,6 +148,59 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await expect(eyrie.getByRole('button', { name: 'SE', exact: true })).toBeDisabled();
     await eyrie.getByRole('button', { name: 'Cleared' }).click();
     await expect(eyrie.getByRole('button', { name: 'SE', exact: true })).toBeEnabled();
+  });
+
+  test('wildlife camps page filters by strength and ground', async ({ page }) => {
+    await page.goto('/docs/wildlife-camps');
+    const cards = page.locator('.wildlife-camps .card');
+    await cards.first().waitFor();
+    const total = await cards.count();
+
+    const strength = page.getByTestId('strength-filter');
+    await strength.getByRole('button', { name: 'Strong', exact: true }).click();
+    const strong = await cards.count();
+    expect(strong).toBeGreaterThan(0);
+    await expect(cards.locator('[data-strength="weak"]')).toHaveCount(0);
+    await strength.getByRole('button', { name: 'Weak', exact: true }).click();
+    await expect(cards.locator('[data-strength="strong"]')).toHaveCount(0);
+    expect(strong + (await cards.count())).toBe(total);
+
+    await strength.getByRole('button', { name: 'All', exact: true }).click();
+    await page.getByTestId('ground-filter').getByRole('button', { name: 'Bog', exact: true }).click();
+    await expect(cards).toHaveCount(3);
+    await expect(page.locator('#camp-wolfden')).toHaveCount(0);
+  });
+
+  test('wildlife camps page animates guarded camps and switches every camp at once', async ({ page }) => {
+    await page.goto('/docs/wildlife-camps');
+    const cards = page.locator('.wildlife-camps .card');
+    await cards.first().waitFor();
+    const total = await cards.count();
+
+    // Guarded by default: every camp with a clip plays it.
+    const animated = page.locator('.wildlife-camps .card .animated-camp[data-animated="true"]');
+    expect(await animated.count()).toBeGreaterThan(0);
+    await expect(page.locator('.wildlife-camps .card [data-testid="guard-range"]')).toHaveCount(total);
+    // Every camp gives food and every strong camp iron; the camps' own extras and larger shares come on top.
+    await expect(page.locator('.wildlife-camps .card [data-loot="food"]')).toHaveCount(total);
+    const strongCards = page.locator('.card:has([data-strength="strong"])');
+    await expect(strongCards.locator('[data-loot="iron"]')).toHaveCount(await strongCards.count());
+    await expect(page.locator('#camp-beaverlodge [data-loot="wood"]')).toHaveCount(1);
+    await expect(page.locator('#camp-boarwallow [data-loot="food"][data-more="true"]')).toHaveCount(1);
+
+    const all = page.getByTestId('state-switch');
+    await all.getByRole('button', { name: 'Cleared', exact: true }).click();
+    await expect(animated).toHaveCount(0);
+    await expect(cards.getByRole('button', { name: 'Cleared', exact: true }).and(page.locator('.active'))).toHaveCount(
+      total,
+    );
+
+    await all.getByRole('button', { name: 'Guarded', exact: true }).click();
+    expect(await animated.count()).toBeGreaterThan(0);
+
+    // A camp's own pill takes it out of step, so the page-wide switch shows neither state.
+    await page.locator('#camp-wolfden').getByRole('button', { name: 'Cleared', exact: true }).click();
+    await expect(all.locator('.active')).toHaveCount(0);
   });
 
   test('bog lands page scrolls and every stage and look has art', async ({ page }) => {

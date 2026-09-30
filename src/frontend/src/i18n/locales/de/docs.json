@@ -328,24 +328,47 @@
     },
     "camps": {
       "heading": "Die Lager",
-      "body": "Ein Lager für jede Bodenart der Karte. Schalte ein Lager zwischen bewacht und geräumt um und dreh es in die sechs Richtungen, in die eine Kachel schauen kann.",
+      "body": "Jede Bodenart hat ihre eigenen Lager, ein starkes und manchmal ein schwaches. Filtere sie nach Stärke oder Boden, schalte ein Lager zwischen bewacht und geräumt um und dreh es in die sechs Richtungen, in die eine Kachel schauen kann.",
       "rotations": "Ein bewachtes Lager hat nur Grafik für die Richtungen, aus denen seine Tiere am besten zu sehen sind; die anderen sind ausgegraut, und auf der Karte wird das Lager in eine dieser Richtungen gedreht. Ein geräumtes Lager kann in jede Richtung schauen."
     },
     "state": {
+      "all": "Alle Lager",
       "label": "Zustand",
       "guarded": "Bewacht",
       "cleared": "Geräumt"
+    },
+    "strength": {
+      "label": "Stärke",
+      "strong": "Stark",
+      "weak": "Schwach",
+      "help": "Starke Lager würfeln hohe Stufen und halten einen weiten Landstrich; kein neuer Spieler landet in ihrer Nähe. Schwache Lager würfeln niedrig und halten nur ihre nächsten Felder: die ersten, sicheren Kämpfe eines neuen Spielers."
+    },
+    "filters": {
+      "all": "Alle",
+      "ground": "Boden",
+      "none": "Kein Lager passt zu diesen Filtern."
+    },
+    "range": "Bewacht {min} bis {max} Felder um sich, je nach Stufe (1 bis {levels}).",
+    "loot": {
+      "label": "Beute",
+      "food": "Nahrung",
+      "stone": "Stein",
+      "wood": "Holz",
+      "iron": "Eisen",
+      "more": "{kind} ++",
+      "moreHint": "Davon gibt es hier mehr als bei anderen Lagern",
+      "note": "Ein geräumtes Lager bringt Beute. Jedes Lager gibt Nahrung von der Jagd, ein starkes Lager zusätzlich Eisen aus der Ausrüstung früherer Siedler, die sein Rudel gefressen hat; manche Lager geben dazu, was ihr Boden hergibt, und ++ markiert den größten Anteil eines Lagers. Wie viel, hängt von der Stufe des Lagers ab; die Mengen stehen noch nicht fest."
     },
     "camera": "Richtung",
     "notKept": "Bewachte Grafik gibt es nur für die Richtungen, aus denen die Tiere am besten zu sehen sind",
     "grounds": {
       "grass": "Gras",
-      "river": "Fluss",
       "sand": "Sand",
       "forest": "Wald",
       "mountain": "Berg",
       "wasteland": "Ödland",
-      "bog": "Moor"
+      "bog": "Moor",
+      "riverStraight": "Fluss"
     },
     "list": {
       "wolfden": {
@@ -359,6 +382,10 @@
       "sealhaulout": {
         "name": "Robbenbank",
         "guards": "Fünf Robben sonnen sich auf Felsplatten und Sand, zwei robben sich voran, dazu drei weiße Junge."
+      },
+      "walrushaulout": {
+        "name": "Walross-Liegeplatz",
+        "guards": "Walrossbullen mit langen Stoßzähnen am Ufer, einer richtet sich zum Kampf auf, zwischen den Knochen ihrer Beute. Bis zur eigenen Grafik mit der Robben-Grafik gezeichnet."
       },
       "boarwallow": {
         "name": "Wildschweinsuhle",
@@ -383,6 +410,18 @@
       "cranedance": {
         "name": "Kranichtanz",
         "guards": "Ein tanzendes Kranichpaar, drei stehende, einer im Gehen und ein Jungvogel."
+      },
+      "deerglade": {
+        "name": "Hirschlichtung",
+        "guards": "Ein Hirsch an der Salzlecke, zwei äsende Hirschkühe und ein geflecktes Kalb."
+      },
+      "harewarren": {
+        "name": "Hasenbau",
+        "guards": "Zwei Hasen sitzen aufrecht auf dem Hügel des Baus, drei hoppeln um ihn herum, einer äst."
+      },
+      "otterslide": {
+        "name": "Otterrutsche",
+        "guards": "Ein Otter schwimmt, einer liegt mit einem Fisch auf dem Treibholz, einer läuft am Ufer und einer wartet am Bau."
       }
     }
   },

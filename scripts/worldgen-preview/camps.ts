@@ -36,7 +36,11 @@ export const CAMP_MARKERS: Partial<Record<CampFamily, MarkerShape>> = {
   bearrapids: 'diamond',
   fenrirbrood: 'triangle',
   sealhaulout: 'hollowDisc',
+  walrushaulout: 'hollowDiamond',
   eagleeyrie: 'triangleDown',
+  harewarren: 'cross',
+  deerglade: 'hollowSquare',
+  otterslide: 'x',
 };
 
 export interface PreviewCamp {

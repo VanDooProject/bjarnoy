@@ -1411,6 +1411,11 @@ describe('wildlife camps', () => {
     expect(topTextureFor(textures, { q: 0, r: 0, terrain: 'grass', orientation: 'SE' })).toBeUndefined();
   });
 
+  it('the walrus haul-out is drawn with the seal haul-out art until its own exists', () => {
+    expect(KEY_FAMILY.walrushaulout).toBe('sealhaulout');
+    expect(KEY_FAMILY.otterslide).toBe('otterslide');
+  });
+
   describe('bearrapids on a river', () => {
     const straight = (inDirection: Tile['orientation'], outDirection: Tile['orientation']): RiverTile => ({
       q: 0,
@@ -1418,6 +1423,15 @@ describe('wildlife camps', () => {
       shape: 'straight',
       inDirections: [inDirection!],
       outDirection: outDirection!,
+    });
+
+    it('the otter slide is a river camp like the bear rapids: it keeps its channel and brings its own river base', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'otterslide', ['E', 'NE', 'SE']);
+      const art = campArtFor(textures, campTile('otterslide', 'E', 'grass'), straight('W', 'E'));
+      expect(art?.orientation).toBe('SE');
+      expect(art?.riverArt).toEqual({ key: 'otterslide', orientation: 'SE' });
+      expect(campArtFor(textures, campTile('otterslide', 'E'), undefined)).toBeUndefined();
     });
 
     it('keeps its channel: the kept rotation with the river\'s own index mod 3 (a straight channel is symmetric)', () => {

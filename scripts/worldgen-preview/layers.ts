@@ -13,7 +13,7 @@ import { campsLayer } from './camps';
 export type Rgb = readonly [number, number, number];
 
 /** How a legend swatch / map marker is drawn; a plain colour hex when absent. */
-export type MarkerShape = 'disc' | 'square' | 'diamond' | 'triangle' | 'triangleDown' | 'cross' | 'x' | 'hollowSquare' | 'hollowDisc' | 'ring';
+export type MarkerShape = 'disc' | 'square' | 'diamond' | 'triangle' | 'triangleDown' | 'cross' | 'x' | 'hollowSquare' | 'hollowDisc' | 'hollowDiamond' | 'ring';
 
 export interface LegendEntry {
   label: string;

@@ -47,12 +47,16 @@
     "wolfden": "Wolfsbau",
     "bearrapids": "Bärenstromschnelle",
     "sealhaulout": "Robbenbank",
+    "walrushaulout": "Walross-Liegeplatz",
     "boarwallow": "Wildschweinsuhle",
     "eagleeyrie": "Adlerhorst",
     "fenrirbrood": "Fenrirs Brut",
     "moosemire": "Elchmoor",
     "beaverlodge": "Biberburg",
-    "cranedance": "Kranichtanz"
+    "cranedance": "Kranichtanz",
+    "harewarren": "Hasenbau",
+    "deerglade": "Hirschlichtung",
+    "otterslide": "Otterrutsche"
   },
   "terrain": {
     "sea": "Offenes Wasser",
