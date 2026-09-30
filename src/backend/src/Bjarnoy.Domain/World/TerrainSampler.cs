@@ -41,12 +41,30 @@ namespace Bjarnoy.Domain.World;
 public sealed class TerrainSampler
 {
     private readonly WorldGenerationOptions _options;
+    private readonly IReadOnlyDictionary<HexCoord, Terrain>? _overlay;
 
     public TerrainSampler(WorldGenerationOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
         _options = options;
+    }
+
+    private TerrainSampler(WorldGenerationOptions options, IReadOnlyDictionary<HexCoord, Terrain> overlay)
+    {
+        _options = options;
+        _overlay = overlay;
+    }
+
+    /// <summary>
+    /// A sampler that answers <see cref="Terrain.Bog"/> or <see cref="Terrain.Lake"/> for the hexes in <paramref name="overlay"/>
+    /// (an island's persisted bog, see <see cref="BogTerrain"/>) and the seed's own terrain for everything else. World generation
+    /// always runs on the plain sampler; this is for the game rules that read terrain afterwards.
+    /// </summary>
+    public TerrainSampler WithBogOverlay(IReadOnlyDictionary<HexCoord, Terrain> overlay)
+    {
+        ArgumentNullException.ThrowIfNull(overlay);
+        return overlay.Count == 0 ? this : new TerrainSampler(_options, overlay);
     }
 
     public WorldGenerationOptions Options => _options;
@@ -483,6 +501,17 @@ public sealed class TerrainSampler
     /// <summary>The terrain of a single hex.</summary>
     public Terrain TerrainAt(HexCoord coord)
     {
+        if (_overlay is not null && _overlay.TryGetValue(coord, out var overlaid))
+        {
+            return overlaid;
+        }
+
+        return SeedTerrainAt(coord);
+    }
+
+    /// <summary>The terrain the seed alone gives a hex (never a bog or a lake).</summary>
+    public Terrain SeedTerrainAt(HexCoord coord)
+    {
         var depth = IslandDepthAt(coord);
         if (depth is null)
         {
@@ -759,6 +788,13 @@ public sealed class TerrainSampler
         [Terrain.Grass] = 4,
         [Terrain.Forest] = 3,
         [Terrain.Mountain] = 4,
+
+        // Bog: the plain moss plus variant001-008 (open mire x3, ore seep, fen, peat cuttings, birch copse, seep chain).
+        [Terrain.Bog] = 9,
+
+        // Lake: the plain water plus variant001-003 (islet, moss mat, reed island). variant004 (fish weir), 005 (ore boat)
+        // and 006 (fishing boat) are placed by the buildings that use them, never rolled here.
+        [Terrain.Lake] = 4,
     };
 
     /// <summary>

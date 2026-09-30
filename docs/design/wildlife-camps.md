@@ -28,9 +28,9 @@ camp is still to be drawn) - owner decisions: the eyrie, the walrus and the moos
 haul-out has no art of its own yet and is drawn with the seal haul-out's (`KEY_FAMILY` in `textures.ts`).
 A ground with several families offers one candidate per family on each tile (see Placement, step 2), so
 the two budgets decide which one a tile gets.
-The moose mire is the bog's strong camp, the beaver lodge and the crane dance its weak ones.
-The bog camps are in the table but are **not placed yet**: bog terrain lands in a later PR
-(`TODO(bog PR)` in `CampGenerator.PlaceCore` / `placeCamps`). Bearrapids goes on a river tile of shape
+The bog camps are placed on plain bog tiles (moss that is not a shore, creek or lake; `plainBog` in
+`CampGenerator.PlaceCore` / `placeCamps`): the moose mire from the strong budget, the beaver lodge or the
+crane dance (whichever candidate's hash wins) from the weak one. Bearrapids goes on a river tile of shape
 `Straight` and **River width** only (not a stream, widening or river-stream tile). Wasted islands get
 fenrirbrood only. Otterslide takes the same river tiles as bearrapids and brings its own river base, like it.
 
@@ -64,7 +64,7 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
    interior camps, so without the cap farthest-point sampling gave seals about 45% of all camps.
    **Eyrie cap**, the same for mountains: at most `MaxEyrieCampsFor(land)` = `max(1, round(land /
    MountainTilesPerEyrieCamp))` eagle eyries per island (`MountainTilesPerEyrieCamp` 2000); with only the seal
-   cap they were 44% of all camps. A budget the caps and grounds cannot fill stays unfilled (bog camps come with the bog PR).
+   cap they were 44% of all camps. A budget the caps and grounds cannot fill stays unfilled and is never turned into the other kind.
 4. **Level**: rolled per camp in `1..MaxCampLevel` from a hash `u`, low for every family so few start
    positions are lost: weak `1 + floor(u^2 * 5)`, strong `1 + floor(u^3 * 5)` (only `*` and `floor`, so C# and
    TS are bit-identical; `CampLevelSkew.Quadratic` / `Cubic`). Resulting distribution (level 1 to 5):
@@ -111,9 +111,10 @@ cap. Tried on the way with the single budget: strong `u^1.5` -17.8%, strong `u^2
 would have given -10.7%; the owner asked for fewer strong and more weak camps instead, which keeps the margin at 2.
 Seed 11 at radius 1000 (32 islands, 23 with camps): 254 camps (102 strong, 152 weak: sealhaulout 79,
 eagleeyrie 73, wolfden 45, boarwallow 39, bearrapids 18). With the weak hare, deer and otter camps and
-the eyrie and walrus strong: 314 camps (100 strong, 214 weak: deerglade 91, harewarren 70, sealhaulout 46,
-walrushaulout 33, eagleeyrie 23, wolfden 21, boarwallow 15, bearrapids 8, otterslide 7). The weak budget now
-fills; the start-position numbers above predate this change and were not re-measured.
+the eyrie and walrus strong: 314 camps (100 strong, 214 weak: deerglade 88, harewarren 71, sealhaulout 47,
+walrushaulout 32, wolfden 23, eagleeyrie 22, boarwallow 16, otterslide 8, bearrapids 7; the preview does not
+generate bog, so no bog camps). The weak budget now fills; the start-position numbers above predate this
+change and were not re-measured.
 
 Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `StrongCampTilesPer` 1500, `WeakCampTilesPer` 600, `MaxStrongCampsPerIsland` 16, `MaxWeakCampsPerIsland` 24,
 `MinCampIslandTiles` 60, `SandTilesPerSealCamp` 2000, `MountainTilesPerEyrieCamp` 2000, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two

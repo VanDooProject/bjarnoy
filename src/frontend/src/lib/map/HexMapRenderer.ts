@@ -125,6 +125,8 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   grass: 0x4e7a3a,
   forest: 0x365e2f,
   mountain: 0x5f6b6d,
+  bog: 0x5b6234, // the moss: duller and yellower than the grass, like the art
+  lake: 0x27445e, // dark slate blue, the bog water's own colour
 };
 
 // zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()

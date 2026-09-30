@@ -63,7 +63,9 @@
     "sand": "Shore",
     "grass": "Grassland",
     "forest": "Forest",
-    "mountain": "Mountain"
+    "mountain": "Mountain",
+    "bog": "Bogland",
+    "lake": "Bog lake"
   },
   "wastedTerrain": {
     "wasteland": "Wasteland",

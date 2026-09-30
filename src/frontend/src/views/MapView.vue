@@ -644,7 +644,7 @@ const WATER_CATEGORY: BuildCategory = {
   id: 'water',
   buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'shrineofnjord' }],
 };
-const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
+const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog', BuildCategory[]> = {
   grass: [
     { id: 'housing', buildings: [{ type: 'hut' }] },
     {
@@ -688,10 +688,14 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
   sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }],
   mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
+  // Bogland has its own buildings (bog-ore works, Clay Brickworks), which come with the next change.
+  bog: [],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
   if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY] : [];
+  // A bog lake is water nothing is built on (the lake Fisher Hut comes with the bog buildings).
+  if (tile.terrain === 'lake') return [];
   return BUILD_CATEGORIES[tile.terrain];
 }
 
@@ -829,7 +833,7 @@ const rootActions = computed<RingAction[]>(() => {
     return actions;
   }
   if (isMineTile.value) {
-    const buildableSea = tile.terrain !== 'sea' || tile.isCoastalWater;
+    const buildableSea = (tile.terrain !== 'sea' && tile.terrain !== 'lake') || tile.isCoastalWater;
     // A giant hex is never buildable, claimed or not — its own art fully
     // occupies the ground there (mirrors WorldModel.placeBuilding's own
     // `tile.giant` refusal). Checked ahead of the open-water hint since a

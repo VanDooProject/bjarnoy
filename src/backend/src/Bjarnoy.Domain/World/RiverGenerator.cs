@@ -20,9 +20,21 @@ internal static class RiverGenerator
         public int RiverStreamJoins;
         public int TruncatedBranches;
         public int DroppedRivers;
+        public int BogSites;
+        public int BogSinks;
+        public int BogSpawns;
+        public int BogPocketsFound;
+        public int BogPocketsFilled;
+        public int BogPocketSinks;
 
         public void Add(RiverStats other)
         {
+            BogSites += other.BogSites;
+            BogSinks += other.BogSinks;
+            BogSpawns += other.BogSpawns;
+            BogPocketsFound += other.BogPocketsFound;
+            BogPocketsFilled += other.BogPocketsFilled;
+            BogPocketSinks += other.BogPocketSinks;
             Springs += other.Springs;
             Outlets += other.Outlets;
             Rivers += other.Rivers;
@@ -34,7 +46,24 @@ internal static class RiverGenerator
         }
     }
 
+    /// <summary>A green island's rivers together with the bogland (lakes, creeks, moss) placed among them.</summary>
+    internal sealed record Result(IReadOnlyList<RiverTile> Rivers, IReadOnlyList<BogTile> Bogs);
+
     public static IReadOnlyList<RiverTile> Generate(
+        IReadOnlyList<HexCoord> islandTiles,
+        Dictionary<HexCoord, Terrain> land,
+        TerrainSampler sampler,
+        WorldGenerationOptions options,
+        int islandIndex,
+        bool wasted = false,
+        bool allowConfluence = true,
+        RiverStats? stats = null) =>
+        GenerateWithBogs(islandTiles, land, sampler, options, islandIndex, wasted, allowConfluence, stats).Rivers;
+
+    /// <summary>
+    /// Like <see cref="Generate"/>, and also returns the island's bogland. Bogs exist only on green islands (never on lava islands).
+    /// </summary>
+    public static Result GenerateWithBogs(
         IReadOnlyList<HexCoord> islandTiles,
         Dictionary<HexCoord, Terrain> land,
         TerrainSampler sampler,
@@ -68,7 +97,7 @@ internal static class RiverGenerator
 
         if (wasted || !allowConfluence)
         {
-            return GenerateLegacy(islandTiles, land, islandLand, depthAt, isLand, options, seed, wasted, allowConfluence);
+            return new Result(GenerateLegacy(islandTiles, land, islandLand, depthAt, isLand, options, seed, wasted, allowConfluence), []);
         }
 
         return GenerateGreen(islandTiles, land, islandLand, depthAt, isLand, options, seed, stats);
@@ -122,7 +151,7 @@ internal static class RiverGenerator
     /// when the natural meeting is not drawable. Then a width pass (stream -> widening -> river).
     /// See <c>docs/design/river-generation.md</c>.
     /// </summary>
-    private static IReadOnlyList<RiverTile> GenerateGreen(
+    private static Result GenerateGreen(
         IReadOnlyList<HexCoord> islandTiles,
         Dictionary<HexCoord, Terrain> land,
         HashSet<HexCoord> islandLand,
@@ -132,13 +161,20 @@ internal static class RiverGenerator
         int seed,
         RiverStats? stats)
     {
+        // Enclosed sea pockets become bog lakes with a bog ring before any river is traced: the drainage
+        // network treats the lake as land it cannot enter and the ring as blocked.
+        var bogs = new BogGenerator(islandTiles, land, islandLand, isLand, options, seed, stats);
+        bogs.FindPockets();
+        var pocketWater = bogs.PocketWater;
+        Func<HexCoord, bool> riverLand = pocketWater.Count == 0 ? isLand : c => isLand(c) || pocketWater.Contains(c);
+
         var candidates = SpringCandidates(islandTiles, land, islandLand);
         if (candidates.Count == 0)
         {
-            return [];
+            return new Result([], bogs.Classify());
         }
 
-        var drainage = new Drainage(islandTiles, land, isLand, options, seed);
+        var drainage = new Drainage(islandTiles, land, riverLand, options, seed, bogs.PocketRing);
         if (stats is not null)
         {
             stats.Outlets += drainage.OutletCount;
@@ -156,6 +192,7 @@ internal static class RiverGenerator
         var claims = new Claim?[drainage.Tiles.Length];
         var onPath = new bool[drainage.Tiles.Length];
         var paths = new List<List<HexCoord>>();
+        var mergedFlags = new List<bool>();
         foreach (var spring in order)
         {
             if (claims[drainage.Index[spring]] is not null)
@@ -181,6 +218,7 @@ internal static class RiverGenerator
 
             Commit(drainage, path, merged, claims);
             paths.Add(path);
+            mergedFlags.Add(merged);
             if (stats is not null)
             {
                 stats.Rivers++;
@@ -196,8 +234,27 @@ internal static class RiverGenerator
             stats.Springs += springs.Count;
         }
 
-        var nodes = BuildRiverTiles(paths);
-        return AssignWidths(nodes, isLand, seed, stats);
+        // Bog sites: through-river lakes (the river is re-routed through them), sinks and spawns.
+        var bp = new BogPaths(paths, mergedFlags);
+        bogs.PlaceSites(
+            bp,
+            trial => AssignWidths(BuildRiverTiles(trial), riverLand, seed, null, trial.RequireRiver),
+            (exit, startIn, current, blocked) =>
+            {
+                var d2 = new Drainage(islandTiles, land, riverLand, options, seed, blocked);
+                var claims2 = new Claim?[d2.Tiles.Length];
+                for (var k = 0; k < current.Paths.Count; k++)
+                {
+                    Commit(d2, current.Paths[k], current.Merged[k], claims2);
+                }
+
+                var onPath2 = new bool[d2.Tiles.Length];
+                return TraceDrainage(d2, exit, claims2, onPath2, options, out _, startIn);
+            });
+
+        var nodes = BuildRiverTiles(bp);
+        var rivers = AssignWidths(nodes, riverLand, seed, stats, bp.RequireRiver);
+        return new Result(rivers, bogs.Classify());
     }
 
     /// <summary>What a legacy walk ended on.</summary>
@@ -271,7 +328,8 @@ internal static class RiverGenerator
             Dictionary<HexCoord, Terrain> land,
             Func<HexCoord, bool> isLand,
             WorldGenerationOptions options,
-            int seed)
+            int seed,
+            HashSet<HexCoord>? blocked = null)
         {
             BendCost = options.BendCost;
             SharpBendCost = options.SharpBendCost;
@@ -289,22 +347,37 @@ internal static class RiverGenerator
             Dist = new double[n * 6];
             Array.Fill(Dist, double.PositiveInfinity);
             var coastal = new bool[n];
+            var isBlocked = new bool[n];
+            if (blocked is not null)
+            {
+                for (var i = 0; i < n; i++)
+                {
+                    isBlocked[i] = blocked.Contains(Tiles[i]);
+                }
+            }
+
             for (var i = 0; i < n; i++)
             {
                 var ns = Tiles[i].Neighbours();
                 for (var d = 0; d < 6; d++)
                 {
-                    Neighbour[(i * 6) + d] = Index.TryGetValue(ns[d], out var idx) ? idx : -1;
+                    // Water never flows into a blocked tile (a bog): it is as good as not being there.
+                    Neighbour[(i * 6) + d] = Index.TryGetValue(ns[d], out var idx) && !isBlocked[idx] ? idx : -1;
                 }
 
                 // Neighbours that are island tiles are land without asking the (costly) sampler.
                 coastal[i] = false;
                 for (var d = 0; d < 6 && !coastal[i]; d++)
                 {
-                    coastal[i] = Neighbour[(i * 6) + d] < 0 && !isLand(ns[d]);
+                    coastal[i] = !Index.ContainsKey(ns[d]) && !isLand(ns[d]);
                 }
 
-                Interior[i] = !coastal[i];
+                if (isBlocked[i])
+                {
+                    coastal[i] = false;
+                }
+
+                Interior[i] = !coastal[i] && !isBlocked[i];
                 Step[i] = 1.0
                     + (options.DrainageNoise * ValueNoise.Hash2(Tiles[i].Q, Tiles[i].R, seed + 53))
                     + (options.ValleyNoise * ValueNoise.Sample(Tiles[i].Q, Tiles[i].R, seed + 61, options.ValleyScale))
@@ -590,7 +663,8 @@ internal static class RiverGenerator
         Claim?[] claims,
         bool[] onPath,
         WorldGenerationOptions options,
-        out bool merged)
+        out bool merged,
+        int startIn = -1)
     {
         merged = false;
         var path = new List<HexCoord> { spring };
@@ -600,7 +674,7 @@ internal static class RiverGenerator
         onPath[current] = true;
         try
         {
-            var inDir = -1;
+            var inDir = startIn;
             var guard = drainage.Tiles.Length * 2;
             Func<int, bool> taken = i => claims[i] is not null || onPath[i];
             var anyClaims = claims.Any(c => c is not null);
@@ -1303,7 +1377,12 @@ internal static class RiverGenerator
         return survivors;
     }
 
-    private static List<Node> BuildRiverTiles(List<List<HexCoord>> paths)
+    private static List<Node> BuildRiverTiles(BogPaths bp) => BuildRiverTiles(bp.Paths, bp.ForcedOut, bp.BogIn);
+
+    private static List<Node> BuildRiverTiles(
+        List<List<HexCoord>> paths,
+        Dictionary<HexCoord, int>? forcedOut = null,
+        Dictionary<HexCoord, int>? bogIn = null)
     {
         var inDirections = new Dictionary<HexCoord, List<TileOrientation>>();
         var outDirection = new Dictionary<HexCoord, TileOrientation>();
@@ -1337,13 +1416,44 @@ internal static class RiverGenerator
             }
         }
 
+        // A river handing its water to a bog creek flows out toward it; one coming out of a creek flows in from it.
+        if (forcedOut is not null)
+        {
+            foreach (var kv in forcedOut)
+            {
+                if (allTiles.Contains(kv.Key))
+                {
+                    outDirection[kv.Key] = (TileOrientation)kv.Value;
+                }
+            }
+        }
+
+        if (bogIn is not null)
+        {
+            foreach (var kv in bogIn)
+            {
+                if (!allTiles.Contains(kv.Key))
+                {
+                    continue;
+                }
+
+                if (!inDirections.TryGetValue(kv.Key, out var list))
+                {
+                    list = [];
+                    inDirections[kv.Key] = list;
+                }
+
+                list.Add((TileOrientation)kv.Value);
+            }
+        }
+
         var result = new List<Node>();
         foreach (var tile in allTiles.OrderBy(t => t.Q).ThenBy(t => t.R))
         {
             var ins = inDirections.TryGetValue(tile, out var list) ? list.Select(d => (int)d).ToList() : [];
             var hasOut = outDirection.TryGetValue(tile, out var outDir);
             var outIndex = hasOut ? (int)outDir : -1;
-            result.Add(new Node(tile, ShapeOf(ins, outIndex), ins, outIndex));
+            result.Add(new Node(tile, ShapeOf(ins, outIndex), ins, outIndex) { BogIn = bogIn is not null && bogIn.ContainsKey(tile) });
         }
 
         return result;
@@ -1389,6 +1499,9 @@ internal static class RiverGenerator
         public bool OutRiver { get; set; }
         public bool Removed { get; set; }
 
+        /// <summary>The (single) inflow comes out of a bog creek, not out of another river tile.</summary>
+        public bool BogIn { get; set; }
+
         public RiverTile ToTile(RiverWidth width) => new(
             Coord,
             Shape,
@@ -1404,11 +1517,13 @@ internal static class RiverGenerator
     /// second half of its stream run, and is truncated when that half has none.
     /// </summary>
     private static List<RiverTile> AssignWidths(
-        List<Node> nodes, Func<HexCoord, bool> isLand, int seed, RiverStats? stats)
+        List<Node> nodes, Func<HexCoord, bool> isLand, int seed, RiverStats? stats, HashSet<HexCoord>? requireRiver = null)
     {
         var byCoord = nodes.ToDictionary(n => n.Coord);
-        var pending = nodes.ToDictionary(n => n.Coord, n => n.Ins.Count);
-        var queue = new Queue<Node>(nodes.Where(n => n.Ins.Count == 0));
+
+        // A tile fed by a bog creek starts a river-width run: the creek is river width.
+        var pending = nodes.ToDictionary(n => n.Coord, n => n.Ins.Count - (n.BogIn ? 1 : 0));
+        var queue = new Queue<Node>(nodes.Where(n => n.Ins.Count - (n.BogIn ? 1 : 0) == 0));
 
         Node Upstream(Node n, int dir) => byCoord[n.Coord + HexCoord.Directions[dir]];
 
@@ -1420,7 +1535,7 @@ internal static class RiverGenerator
             while (true)
             {
                 chain.Add(cur);
-                if (cur.Ins.Count == 0)
+                if (cur.Ins.Count == 0 || cur.BogIn)
                 {
                     break;
                 }
@@ -1477,6 +1592,12 @@ internal static class RiverGenerator
         while (queue.Count > 0)
         {
             var v = queue.Dequeue();
+            if (v.BogIn)
+            {
+                v.Width = RiverWidth.River;
+                v.OutRiver = true;
+            }
+            else
             switch (v.Shape)
             {
                 case RiverTileShape.Spring:
@@ -1591,13 +1712,24 @@ internal static class RiverGenerator
                     var up = Upstream(v, v.Ins[0]);
                     v.Width = up.OutRiver ? RiverWidth.River : RiverWidth.Stream;
                     v.OutRiver = up.OutRiver;
+
+                    // A river handing its water to a bog creek must be river width there: widen upstream, or drop the branch.
+                    if (!v.OutRiver && requireRiver is not null && requireRiver.Contains(v.Coord))
+                    {
+                        var chain = Chain(v);
+                        if (!TryWiden(chain, v.Coord))
+                        {
+                            Remove(chain);
+                        }
+                    }
+
                     break;
                 }
             }
 
-            if (v.Out >= 0 && !v.Removed)
+            // A tile that hands its water to a bog creek has no next river tile.
+            if (v.Out >= 0 && !v.Removed && byCoord.TryGetValue(v.Coord + HexCoord.Directions[v.Out], out var next))
             {
-                var next = byCoord[v.Coord + HexCoord.Directions[v.Out]];
                 if (--pending[next.Coord] == 0)
                 {
                     queue.Enqueue(next);

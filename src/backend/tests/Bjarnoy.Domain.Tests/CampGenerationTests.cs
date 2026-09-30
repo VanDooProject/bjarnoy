@@ -157,6 +157,14 @@ public class CampGenerationTests
                 }
 
                 Assert.False(rivers.ContainsKey(camp.Coord), where);
+                if (camp.Family is CampFamilies.Moosemire or CampFamilies.Beaverlodge or CampFamilies.Cranedance)
+                {
+                    // Bog camps stand on plain bog moss only: not a lake, shore, mouth, creek or spring.
+                    Assert.False(island.IsWasted, where);
+                    Assert.Contains(island.BogTiles, t => t.Coord == camp.Coord && t.Kind == BogTileKind.Bog);
+                    continue;
+                }
+
                 var expected = camp.Family switch
                 {
                     CampFamilies.Wolfden or CampFamilies.Harewarren => Terrain.Grass,
@@ -178,11 +186,18 @@ public class CampGenerationTests
     }
 
     [Fact]
-    public void Bog_camps_are_defined_but_not_placed_yet()
+    public void Bog_camps_stand_only_on_plain_bog_moss_the_moose_strong_the_beavers_and_cranes_weak()
     {
         var bog = new[] { CampFamilies.Moosemire, CampFamilies.Beaverlodge, CampFamilies.Cranedance };
         Assert.All(bog, f => Assert.Equal(CampGround.Bog, CampFamilies.Find(f)!.Ground));
-        Assert.DoesNotContain(Islands().SelectMany(i => i.Island.Camps), c => bog.Contains(c.Family));
+        Assert.Equal(CampStrength.Strong, CampFamilies.Find(CampFamilies.Moosemire)!.Strength);
+        Assert.Equal(CampStrength.Weak, CampFamilies.Find(CampFamilies.Beaverlodge)!.Strength);
+        Assert.Equal(CampStrength.Weak, CampFamilies.Find(CampFamilies.Cranedance)!.Strength);
+
+        var placed = Islands(wasted: false).SelectMany(i => i.Island.Camps.Select(c => (i.Island, Camp: c))).Where(x => bog.Contains(x.Camp.Family)).ToList();
+        Assert.True(placed.Count >= 5, $"only {placed.Count} bog camps across eight worlds");
+        Assert.All(placed, x => Assert.Contains(x.Island.BogTiles, t => t.Coord == x.Camp.Coord && t.Kind == BogTileKind.Bog));
+        Assert.Equal(bog.Length, placed.Select(x => x.Camp.Family).Distinct().Count());
     }
 
     [Fact]

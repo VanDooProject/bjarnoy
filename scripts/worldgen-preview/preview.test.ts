@@ -55,7 +55,8 @@ describe('png encoder', () => {
 describe('legend', () => {
   it('is built from the same colour table the terrain layer paints with', () => {
     const entries = legendFor(['terrain']);
-    for (const [terrain, colour] of Object.entries(TERRAIN_COLOURS)) {
+    // (bog and lake are placed per island, so they are the bog layer's, not the terrain layer's.)
+    for (const [terrain, colour] of Object.entries(TERRAIN_COLOURS).filter(([t]) => t !== 'bog' && t !== 'lake')) {
       expect(entries.find((e) => e.label === terrain)?.colour).toEqual(colour);
     }
     expect(entries.some((e) => e.label === 'world radius')).toBe(true);
@@ -89,6 +90,26 @@ describe('rivers layer', () => {
     expect(line).toBeDefined();
     expect(line).toContain('INLAND MOUTHS 0');
     expect(result.statsLines.some((l) => l.startsWith('RIVERS'))).toBe(true);
+  });
+});
+
+describe('bog layer', () => {
+  const options = { seed: 11, radius: 1000, window: { q: -728, r: 204, size: 60 }, hexPixels: 6, layers: ['terrain', 'rivers', 'bog'], legend: true, stats: false };
+
+  it('draws the lake, lists every bog kind in the legend and reports zero violations of every rule', () => {
+    const plain = renderPreview({ ...options, layers: ['terrain', 'rivers'] });
+    const withBog = renderPreview(options);
+    expect(withBog.png.equals(plain.png)).toBe(false);
+    expect(legendFor(['bog']).map((e) => e.label)).toEqual(
+      expect.arrayContaining(['bog moss', 'bog lake', 'inlet (1 lake edge)', 'shore (2)', 'half shore (3)', 'creek', 'lake mouth', 'creek spring']),
+    );
+    const line = withBog.statsLines.find((l) => l.startsWith('RULE VIOLATIONS'))!;
+    expect(line).toBeDefined();
+    expect(line).toMatch(/TOTAL 0$/);
+    for (const rule of ['R1', 'R2', 'R3', 'R4', 'R7', 'R8', 'R9', 'R10', 'R11']) expect(line).toMatch(new RegExp(`${rule} [^ ]*.* 0`));
+    expect(withBog.statsLines.find((l) => l.startsWith('BOG ON'))).toMatch(/LAKES [1-9]/);
+    // A river through the lake is not an inland mouth.
+    expect(withBog.statsLines.find((l) => l.startsWith('MERGES'))).toContain('INLAND MOUTHS 0');
   });
 });
 

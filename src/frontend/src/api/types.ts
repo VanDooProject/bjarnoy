@@ -91,6 +91,20 @@ export interface RiverTileResponse {
 }
 
 /**
+ * Mirrors `BogTileResponse` — one hex of an island's bogland (see `lib/map/bogGenerator.ts` and
+ * `docs/design/bog.md`). A `lake` hex is terrain `lake`, every other kind terrain `bog`; `inDirections`/
+ * `outDirection` are the flow of a creek, mouth or spring, `waterEdges` the lake neighbours of a shore or mouth.
+ */
+export interface BogTileResponse {
+  q: number;
+  r: number;
+  kind: 'bog' | 'lake' | 'inlet' | 'shore' | 'half' | 'mouth' | 'creek' | 'creekspring';
+  inDirections: string[];
+  outDirection: string | null;
+  waterEdges: string[];
+}
+
+/**
  * Mirrors `GiantResponse` — a 7-hex giant feature (anchor + its six
  * neighbours, see `lib/map/giantTiles.ts`'s `giantCoverage`) the server
  * generated with the world. `orientation` is the wire name
@@ -130,6 +144,8 @@ export interface IslandResponse {
   riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
   camps: CampResponse[];
+  /** This island's bogland (empty when it has none). */
+  bogTiles: BogTileResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
 }
@@ -641,6 +657,7 @@ export interface PreviewIslandResponse {
   riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
   camps: CampResponse[];
+  bogTiles: BogTileResponse[];
   /** True for an island generated from the wasted-island terrain layer (its river tiles are lava streams). */
   wasted: boolean;
 }

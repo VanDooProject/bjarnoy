@@ -63,7 +63,9 @@
     "sand": "Ufer",
     "grass": "Grasland",
     "forest": "Wald",
-    "mountain": "Gebirge"
+    "mountain": "Gebirge",
+    "bog": "Moorland",
+    "lake": "Moorsee"
   },
   "wastedTerrain": {
     "wasteland": "Ödland",

@@ -16,7 +16,7 @@ import type { RiverTile, Terrain, TileOrientation } from './types';
 
 export type CampStrength = 'weak' | 'strong';
 
-/** Which ground a camp family is placed on. `bog` has no terrain yet (a later PR), so no camp is placed there. */
+/** Which ground a camp family is placed on. `bog` is plain bog moss only (not a lake, shore, mouth or creek). */
 export type CampGround = 'grass' | 'forest' | 'sand' | 'mountain' | 'riverStraight' | 'wasteland' | 'bog';
 
 export type CampFamily =
@@ -167,7 +167,7 @@ interface Candidate {
 /** Hash salt between a ground's families — mirrors `CampGenerator.FamilyHashSalt`. */
 const FamilyHashSalt = 7919;
 
-/** The families placed on a (non-bog) ground, in table order — mirrors `CampGenerator.FamiliesFor`. */
+/** The families placed on a ground, in table order — mirrors `CampGenerator.FamiliesFor`. */
 function familiesFor(ground: CampGround): CampFamilyInfo[] {
   return CAMP_FAMILIES.filter((f) => f.ground === ground);
 }
@@ -238,6 +238,7 @@ export function placeCamps(
   worldSeed: number,
   islandIndex: number,
   wasted = false,
+  plainBog: ReadonlySet<string> | null = null,
 ): CampPlacement[] {
   if (islandTiles.length < MinCampIslandTiles) return [];
 
@@ -271,10 +272,15 @@ export function placeCamps(
       if (!direction) continue;
       orientation = straightOrientationOf(direction);
     } else {
-      // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) gets moosemire or
-      // beaverlodge / cranedance like sand gets walrus or seals below; bog terrain does not exist yet.
-      const ground = groundOf(terrainOf(coord), wasted);
-      families = ground ? familiesFor(ground) : [];
+      const terrain = terrainOf(coord);
+      if (terrain === 'bog') {
+        // Only plain bog moss (not a lake, shore, mouth or creek) holds a camp: the moose mire (strong) or
+        // the beaver lodge / crane dance (weak), one candidate each (below).
+        families = plainBog !== null && plainBog.has(coordKey(coord)) ? familiesFor('bog') : [];
+      } else {
+        const ground = groundOf(terrain, wasted);
+        families = ground ? familiesFor(ground) : [];
+      }
     }
 
     // One candidate per family the ground holds (sand: the walrus, strong, and the seals, weak), so

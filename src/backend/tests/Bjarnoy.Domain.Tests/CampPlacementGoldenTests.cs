@@ -36,7 +36,9 @@ public class CampPlacementGoldenTests
             ParseWidth(r.Width))).ToList();
         var giants = scenario.Giants.Select(g => new HexCoord(g[0], g[1])).ToList();
 
-        var actual = CampGenerator.PlaceCore(tiles, land, rivers, giants, scenario.WorldSeed, scenario.IslandIndex, scenario.Wasted);
+        var plainBog = scenario.PlainBog.Select(b => new HexCoord(b[0], b[1])).ToHashSet();
+
+        var actual = CampGenerator.PlaceCore(tiles, land, rivers, giants, scenario.WorldSeed, scenario.IslandIndex, scenario.Wasted, plainBog);
 
         Assert.Equal(scenario.Camps.Count, actual.Count);
         for (var i = 0; i < scenario.Camps.Count; i++)
@@ -58,6 +60,8 @@ public class CampPlacementGoldenTests
         "grass" => Terrain.Grass,
         "forest" => Terrain.Forest,
         "mountain" => Terrain.Mountain,
+        "bog" => Terrain.Bog,
+        "lake" => Terrain.Lake,
         _ => throw new InvalidOperationException($"Unknown terrain wire name '{wireName}'."),
     };
 
@@ -129,6 +133,9 @@ public class CampPlacementGoldenTests
         public List<RiverDto> Rivers { get; set; } = [];
 
         public List<int[]> Giants { get; set; } = [];
+
+        /// <summary>The hexes of plain bog moss (the only bog a camp stands on); a tile's terrain is <c>bog</c> for every bog hex.</summary>
+        public List<int[]> PlainBog { get; set; } = [];
 
         public List<CampDto> Camps { get; set; } = [];
 

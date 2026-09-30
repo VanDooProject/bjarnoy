@@ -80,10 +80,11 @@ internal static class CampGenerator
         int islandIndex,
         IReadOnlyList<RiverTile> riverTiles,
         IReadOnlyList<Giant> giants,
-        bool wasted = false)
+        bool wasted = false,
+        IReadOnlySet<HexCoord>? plainBog = null)
     {
         var placements = PlaceCore(
-            islandTiles, land, riverTiles, giants.Select(g => g.Anchor).ToList(), options.Seed, islandIndex, wasted);
+            islandTiles, land, riverTiles, giants.Select(g => g.Anchor).ToList(), options.Seed, islandIndex, wasted, plainBog);
 
         var camps = new List<Camp>(placements.Count);
         foreach (var placement in placements)
@@ -122,7 +123,8 @@ internal static class CampGenerator
         IReadOnlyList<HexCoord> giantAnchors,
         int worldSeed,
         int islandIndex,
-        bool wasted = false)
+        bool wasted = false,
+        IReadOnlySet<HexCoord>? plainBog = null)
     {
         if (islandTiles.Count < MinCampIslandTiles)
         {
@@ -179,9 +181,16 @@ internal static class CampGenerator
             }
             else
             {
-                // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) gets moosemire or
-                // beaverlodge / cranedance like sand gets walrus or seals below; bog terrain does not exist yet.
-                families = GroundOf(terrain, wasted) is { } ground ? FamiliesFor(ground) : [];
+                if (terrain == Terrain.Bog)
+                {
+                    // Only plain bog moss (not a lake, shore, mouth or creek) holds a camp: the moose mire
+                    // (strong) or the beaver lodge / crane dance (weak), one candidate each (below).
+                    families = plainBog is not null && plainBog.Contains(coord) ? FamiliesFor(CampGround.Bog) : [];
+                }
+                else
+                {
+                    families = GroundOf(terrain, wasted) is { } ground ? FamiliesFor(ground) : [];
+                }
             }
 
             // One candidate per family the ground holds (sand: the walrus, strong, and the
@@ -383,7 +392,7 @@ internal static class CampGenerator
     /// <summary>Hash salt between a ground's families (see the candidate loop in <see cref="PlaceCore"/>).</summary>
     private const int FamilyHashSalt = 7919;
 
-    /// <summary>The families placed on a (non-bog) ground, in table order.</summary>
+    /// <summary>The families placed on a ground, in table order.</summary>
     private static IReadOnlyList<CampFamilyInfo> FamiliesFor(CampGround ground) =>
         CampFamilies.All.Where(f => f.Ground == ground).ToList();
 

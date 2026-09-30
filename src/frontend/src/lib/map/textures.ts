@@ -49,7 +49,7 @@ import {
   type GiantPart,
   type GiantTextureMap,
 } from './giantTiles';
-import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
+import type { BogTile, RiverTile, Terrain, Tile, TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
   bend60OrientationOf,
@@ -58,6 +58,8 @@ import {
   confluenceWideOrientationOf,
   deltaOrientationOf,
   mouthOrientationOf,
+  bogMouthOrientationOf,
+  bogShoreOrientationOf,
   springOrientationOf,
   straightOrientationOf,
   TILE_ORIENTATIONS,
@@ -107,6 +109,15 @@ export type TextureKey =
   | 'blacksand'
   | 'wastedmountain'
   | 'taintedwater'
+  // Bogland art (3D_assets hextile109-117): `bog` and `lake` are the plain moss and open water (a `Terrain` each);
+  // the shores, mouth and creeks are told apart by the hex's `BogTile` kind (`bogTextureKey`).
+  | 'bogcreek'
+  | 'bogcreekbend'
+  | 'bogcreekspring'
+  | 'lakeinlet'
+  | 'lakeshore'
+  | 'lakehalf'
+  | 'lakemouth'
   | CampFamily;
 
 type OrientationMap<T> = Record<TileOrientation, T>;
@@ -191,6 +202,18 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // own doc comment for why this key exists at all despite `WorldModel`
   // itself never producing a wasted open-sea tile today.
   taintedwater: 'taintedwater',
+  // The bog set (3D_assets docs/bog-tiles.md): moss ground, open lake, the three shores (1, 2 or 3 water edges), the
+  // mouth (an inlet with the creek on the opposite edge) and the creeks. Every family has a base plus numbered
+  // variants; see `normalizeBogFrames` for how they are lined up.
+  bog: 'bog',
+  lake: 'boglake',
+  bogcreek: 'bogcreek',
+  bogcreekbend: 'bogcreek_bend',
+  bogcreekspring: 'bogcreek_spring',
+  lakeinlet: 'boglake_inlet',
+  lakeshore: 'boglake_shore',
+  lakehalf: 'boglake_half',
+  lakemouth: 'boglake_mouth',
 };
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
@@ -518,6 +541,46 @@ export function renumberTopVariants<T>(frames: FamilyFrame<T>[]): FamilyFrame<T>
   return result;
 }
 
+/**
+ * The bog set's texture keys, each backed by a family that numbers its variants `variant001`... with no `variant000`
+ * (the plain frame is index 0): `normalizeBogFrames` renames them to the contiguous numbering
+ * `classifyFamilyFrames` needs (`variantNNN` is index `NNN + 1`, so `variant001` becomes `variant000`).
+ */
+export const BOG_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
+  'bog',
+  'lake',
+  'bogcreek',
+  'bogcreekbend',
+  'bogcreekspring',
+  'lakeinlet',
+  'lakeshore',
+  'lakehalf',
+  'lakemouth',
+]);
+
+/**
+ * How many of a bog family's variants the game shows. The lake's `variant004` (fish weir), `variant005` (ore boat) and
+ * `variant006` (fishing boat) are placed by the buildings that use them (a lake Fisher Hut, the bog-ore works), never
+ * rolled for a plain lake tile, so they are dropped here; every other family shows all it has.
+ */
+const BOG_MAX_VARIANT: Partial<Record<TextureKey, number>> = { lake: 3 };
+
+const BOG_FRAME_RE = /^(.+)_(NE|NW|SW|SE|E|W)(?:_variant(\d{3}))?(_base)?$/;
+
+/** Lines a bog family's frames up for `classifyFamilyFrames` — see `BOG_TEXTURE_KEYS`. Exported for the tests. */
+export function normalizeBogFrames<T>(frames: FamilyFrame<T>[], maxVariant = Number.POSITIVE_INFINITY): FamilyFrame<T>[] {
+  const result: FamilyFrame<T>[] = [];
+  for (const frame of frames) {
+    const match = BOG_FRAME_RE.exec(frame.name);
+    if (!match) continue;
+    const variant = match[3] === undefined ? 0 : Number(match[3]);
+    if (variant > maxVariant) continue;
+    const suffix = variant === 0 ? '' : `_variant${String(variant - 1).padStart(3, '0')}`;
+    result.push({ name: `${match[1]}_${match[2]}${suffix}${match[4] ?? ''}`, layer: frame.layer, value: frame.value });
+  }
+  return result;
+}
+
 /** One family's atlas frame, narrowed to what `classifyFamilyFrames` needs — generic over the frame's resolved value so it can be unit tested with plain strings instead of real `Texture`s (see `textures.test.ts`). */
 export interface FamilyFrame<T> {
   name: string;
@@ -791,7 +854,10 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
   const top: TileTextures['top'] = {};
   const animTop: TileTextures['animTop'] = {};
   for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
-    const frames = collapseLetteredLevels(framesOfFamily(merged, family));
+    const rawFrames = framesOfFamily(merged, family);
+    const frames = BOG_TEXTURE_KEYS.has(key)
+      ? normalizeBogFrames(rawFrames, BOG_MAX_VARIANT[key])
+      : collapseLetteredLevels(rawFrames);
     const keySparse = sparse && !TERRAIN_TEXTURE_KEYS.has(key);
     const classified = classifyFamilyFrames(GAPPY_VARIANT_FAMILIES.has(family) ? renumberTopVariants(frames) : frames, {
       sparse: keySparse,
@@ -919,6 +985,7 @@ const TERRAIN_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
   'deadforest',
   'blacksand',
   'wastedmountain',
+  ...BOG_TEXTURE_KEYS,
 ]);
 
 function mergeKeyed<V>(a: Partial<Record<TextureKey, V>>, b: Partial<Record<TextureKey, V>>): Partial<Record<TextureKey, V>> {
@@ -1308,7 +1375,77 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.buildingType === 'sawmill') return 'sawmillriver';
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
+  if (tile.bog) return bogTextureKey(tile.bog);
   return tile.terrain;
+}
+
+/**
+ * The texture key of a bog hex: moss and open water are the `bog` / `lake` terrain keys, the shores and the mouth
+ * are told apart by how many lake edges they carry, and a creek is straight or a bend by its in and out directions
+ * (a straight crossing has them opposite; the game only ever makes Straight and 60-degree Bend creeks).
+ */
+export function bogTextureKey(bog: BogTile): TextureKey {
+  switch (bog.kind) {
+    case 'bog':
+      return 'bog';
+    case 'lake':
+      return 'lake';
+    case 'inlet':
+      return 'lakeinlet';
+    case 'shore':
+      return 'lakeshore';
+    case 'half':
+      return 'lakehalf';
+    case 'mouth':
+      return 'lakemouth';
+    case 'creekspring':
+      return 'bogcreekspring';
+    case 'creek': {
+      const inIndex = bog.inDirections[0] ? TILE_ORIENTATIONS.indexOf(bog.inDirections[0]) : -1;
+      const outIndex = bog.outDirection ? TILE_ORIENTATIONS.indexOf(bog.outDirection) : -1;
+      return inIndex >= 0 && outIndex >= 0 && (inIndex + 3) % 6 === outIndex ? 'bogcreek' : 'bogcreekbend';
+    }
+  }
+}
+
+/**
+ * The art rotation of a bog hex, from the pixel-measured conventions of each family (`types.ts`, and
+ * `docs/design/bog.md`'s "Art pack orientation convention"): the shores and the mouth by where their water is,
+ * the creeks exactly like the river crossings they are (straight, bend) and the mountain springs (spring). Moss and
+ * open water have no direction, so they keep the tile's own cosmetic rotation (`fallback`).
+ */
+export function bogOrientationFor(bog: BogTile, fallback: TileOrientation): TileOrientation {
+  switch (bog.kind) {
+    case 'bog':
+    case 'lake':
+      return fallback;
+    case 'inlet':
+    case 'shore':
+    case 'half':
+      return bog.waterEdges.length > 0 ? bogShoreOrientationOf(bog.waterEdges) : fallback;
+    case 'mouth':
+      return bog.waterEdges[0] ? bogMouthOrientationOf(bog.waterEdges[0]) : fallback;
+    case 'creekspring':
+      return bog.outDirection ? springOrientationOf(bog.outDirection) : fallback;
+    case 'creek': {
+      const inDirection = bog.inDirections[0];
+      const outDirection = bog.outDirection;
+      if (!inDirection || !outDirection) return fallback;
+      return bogTextureKey(bog) === 'bogcreek' ? straightOrientationOf(inDirection) : bendOrientationOf(inDirection, outDirection);
+    }
+  }
+}
+
+/** The rotation a tile renders with: a river's or bog's own art rotation where it has one, else the tile's cosmetic one. */
+function tileOrientationFor(tile: Tile, riverArt?: RiverArt): TileOrientation {
+  if (riverArt) return riverArt.orientation;
+  const own = tile.orientation ?? 'SE';
+  return tile.bog && !tile.buildingType && !tile.camp ? bogOrientationFor(tile.bog, own) : own;
+}
+
+/** A bog family's variant slot for a tile: its hashed variant, wrapped onto however many the family has (creeks have 2, shores 1-2, ...). */
+function bogVariantIn<T>(tile: Tile, arr: readonly T[]): number {
+  return arr.length <= 1 ? 0 : (tile.variant ?? 0) % arr.length;
 }
 
 /** Clamps an index into `[0, length)` — the shared fallback for both terrain variants and building levels: an index the art pack doesn't have falls back to its richest known one. */
@@ -1367,7 +1504,7 @@ function pickIndexed<T>(arr: (T | undefined)[] | undefined, index: number): T | 
  * already included.
  */
 export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture {
-  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
+  const orientation = tileOrientationFor(tile, riverArt);
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
     const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
@@ -1384,7 +1521,12 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   }
   const key = textureKeyFor(tile, riverArt);
   const indexed = textures.baseIndexed[key];
-  if (indexed) {
+  if (indexed && BOG_TEXTURE_KEYS.has(key)) {
+    // A bog family's base differs per variant (its submerged props), not per building level.
+    const arr = indexed[orientation];
+    if (arr.length > 0) return arr[bogVariantIn(tile, arr)]!;
+  }
+  if (indexed && !BOG_TEXTURE_KEYS.has(key)) {
     const picked = pickIndexed(indexed[orientation], tile.buildingLevel ?? 1);
     if (picked !== undefined) return picked;
   }
@@ -1451,9 +1593,10 @@ export function campArtFor(
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
 export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture | undefined {
   const { key, index } = topKeyAndIndex(tile, riverArt);
-  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
+  const orientation = tileOrientationFor(tile, riverArt);
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
+  if (BOG_TEXTURE_KEYS.has(key)) return arr[bogVariantIn(tile, arr)];
   return pickIndexed(arr, index);
 }
 
@@ -1466,9 +1609,11 @@ export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: Riv
  */
 export function topAnimFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): TileAnimClip | undefined {
   const { key, index } = topKeyAndIndex(tile, riverArt);
-  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
+  const orientation = tileOrientationFor(tile, riverArt);
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
+  // Bog art has no animated toppings of its own on a plain tile (the boats are placed by the buildings that use them).
+  if (BOG_TEXTURE_KEYS.has(key)) return undefined;
   // Resolved through the same `pickIndexedEntry` walk as `topTextureFor`
   // (not a plain `clampIndex`) so the two always agree on which rung is
   // actually showing — including while only `buildings-level1` has loaded

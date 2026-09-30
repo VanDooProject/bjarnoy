@@ -78,6 +78,7 @@ const PREVIEW = {
       riverTiles: [{ q: -119, r: -125, shape: 'spring', inDirections: [], outDirection: 'E' }],
       giants: [],
       camps: [],
+      bogTiles: [],
       wasted: false,
     },
     {
@@ -90,6 +91,7 @@ const PREVIEW = {
       riverTiles: [],
       giants: [],
       camps: [],
+      bogTiles: [],
       wasted: false,
     },
   ],

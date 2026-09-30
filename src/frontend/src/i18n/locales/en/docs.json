@@ -315,7 +315,7 @@
   "wildlifeCamps": {
     "title": "Wildlife camps",
     "intro": "Unclaimed islands are not empty. Wolves, bears, seals and worse hold them, each pack in a camp of its own. You may land and settle, but no tower goes up near a guarded camp, so on a big island you clear the camps in your way and build where the land is free.",
-    "status": "Camps now appear on the map, guarded, on the ground each one belongs to. Clearing them, their loot and the tower rule below are still to come; the bog camps arrive with the bog lands.",
+    "status": "Camps now appear on the map, guarded, on the ground each one belongs to. Clearing them, their loot and the tower rule below are still to come; the bog camps (moose mire, beaver lodge, crane dance) stand on plain bog moss.",
     "rules": {
       "heading": "How a camp works",
       "towers": "A guarded camp holds the land around it: no tower can be built within its range (the wolves eat the builders). Beyond that range the island is open to build on.",
@@ -428,7 +428,7 @@
   "bogLands": {
     "title": "Bog lands",
     "intro": "Wet moss ground (Old Norse mýrr), cut by slow creeks and dark lakes. Rust-coloured seeps mark the bog iron that is dug here, and clay is cut from the lake shores. Bogs are part of the living lands and meet grass at a hex edge.",
-    "status": "Coming soon: the art for the bog set is finished; bogs are not generated in worlds yet.",
+    "status": "Bogs now appear in worlds: a lake with a river running through it on most big islands, and a lake with a bog ring where an island encloses a pocket of sea. The bog buildings (the bog-ore works, the Clay Brickworks on bog and the lake Fisher Hut) are still to come.",
     "looks": "Look",
     "camera": "Facing",
     "stage": "Stage",
@@ -510,7 +510,9 @@
       "creeks": "Creeks run straight or bend 120°, and end in a spring or a lake mouth.",
       "mouth": "A creek meets a lake only at a mouth.",
       "weir": "The fish weir only appears near a lake Fisher Hut.",
-      "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it."
+      "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
+      "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
+      "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
     }
   }
 }
