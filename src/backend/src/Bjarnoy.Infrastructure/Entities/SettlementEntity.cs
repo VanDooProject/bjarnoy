@@ -119,6 +119,10 @@ public class SettlementEntity
     public ResourceAmounts Capacity =>
         new(CapacityWood, CapacityStone, CapacityFood, CapacityIron);
 
+    /// <summary>Maps a removed type that was merged into another onto its successor.</summary>
+    private static BuildingType Merged(BuildingType type) =>
+        type == BuildingType.FisherHut ? BuildingType.FishingHut : type;
+
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Settlement ToDomain() => new()
     {
@@ -137,12 +141,14 @@ public class SettlementEntity
         // BuildingType.MagicTower) has no catalogue definition any more, so it
         // is dropped here rather than lingering as a building nothing can
         // total, upgrade or render; its queued orders go with it.
+        // A stored FisherHut (merged into FishingHut) is converted, not
+        // dropped: same hex, same level, same queued target level.
         Buildings =
         [
             .. Buildings
-                .Where(b => BuildingCatalogue.MaxLevelFor(b.Type) > 0)
+                .Where(b => BuildingCatalogue.MaxLevelFor(Merged(b.Type)) > 0)
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
-                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(b.Type)))),
+                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), Merged(b.Type), Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(Merged(b.Type))))),
         ],
         Queue =
         [
@@ -151,12 +157,12 @@ public class SettlementEntity
             // QueuedAt — deterministic queue order is what makes SettleTo's
             // same-hex contiguity rule (issue #158 stage 1d) correct with no
             // extra bookkeeping.
-            .. Queue.Where(o => BuildingCatalogue.MaxLevelFor(o.Type) > 0)
+            .. Queue.Where(o => BuildingCatalogue.MaxLevelFor(Merged(o.Type)) > 0)
                 .OrderBy(o => o.StartedAt ?? DateTimeOffset.MaxValue).ThenBy(o => o.QueuedAt).ThenBy(o => o.Id)
                 .Select(o => new BuildOrder
                 {
                     Id = o.Id,
-                    Type = o.Type,
+                    Type = Merged(o.Type),
                     TargetLevel = o.TargetLevel,
                     Coord = new HexCoord(o.Q, o.R),
                     QueuedAt = o.QueuedAt,

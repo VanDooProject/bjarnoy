@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -156,5 +156,24 @@ describe('formatMissingResources', () => {
     const cost = { wood: 10, stone: 10, food: 10, iron: 10 };
     const stock = { wood: 10, stone: 10, food: 10, iron: 10 };
     expect(formatMissingResources(cost, stock)).toBe('');
+  });
+});
+
+describe('isWaterOnlyBuilding / tileIsBuildable', () => {
+  it.each(['fishinghut', 'dockyard', 'shrineofnjord'])('treats %s as a coastal-water building', (type) => {
+    expect(isWaterOnlyBuilding(type)).toBe(true);
+    expect(tileIsBuildable({ terrain: 'sea', buildingType: type })).toBe(true);
+  });
+
+  it('does not treat land buildings or the removed fisherhut as water buildings', () => {
+    expect(isWaterOnlyBuilding('farm')).toBe(false);
+    expect(isWaterOnlyBuilding('fisherhut')).toBe(false);
+    expect(isWaterOnlyBuilding(undefined)).toBe(false);
+  });
+
+  it('keeps empty open water and land-building-on-sea unbuildable, land always buildable', () => {
+    expect(tileIsBuildable({ terrain: 'sea' })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'sea', buildingType: 'farm' })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass' })).toBe(true);
   });
 });

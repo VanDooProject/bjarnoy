@@ -102,13 +102,6 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
     });
   });
 
-  it('fisherhut ignores terrain adjacency, like farm/pumpkinfarm', () => {
-    expect(buildingStatsFor('fisherhut', 1, 6)).toEqual({
-      output: { kind: 'resourceRate', resource: 'food', amount: 42 },
-      workers: { cap: 4 },
-    });
-  });
-
   it('sawmill has no production of its own — it boosts Lumberjack within range instead', () => {
     expect(buildingStatsFor('sawmill', 1, 0)).toEqual({
       modifier: { kind: 'radiusBoost', percent: 5, range: 1, resource: 'wood' },

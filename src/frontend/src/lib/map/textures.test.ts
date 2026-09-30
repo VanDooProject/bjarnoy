@@ -1207,12 +1207,12 @@ describe('level-1-first loading: sparse top/baseIndexed arrays', () => {
     expect(merged.top.hut?.SE).toEqual(['hut-level0', 'hut-level1', 'hut-level2']);
   });
 
-  it('baseIndexed resolves the same way (a leveled base, e.g. fisherhut)', () => {
+  it('baseIndexed resolves the same way (a leveled base, e.g. fishinghut)', () => {
     const textures = emptyTileTextures();
-    textures.baseIndexed.fisherhut = orientationMap([undefined, 'fisherhut-base-1'] as unknown as never);
-    const tile: Tile = { q: 0, r: 0, terrain: 'sea', orientation: 'SE', buildingType: 'fisherhut', buildingLevel: 3 };
+    textures.baseIndexed.fishinghut = orientationMap([undefined, 'fishinghut-base-1'] as unknown as never);
+    const tile: Tile = { q: 0, r: 0, terrain: 'sea', orientation: 'SE', buildingType: 'fishinghut', buildingLevel: 3 };
 
-    expect(baseTextureFor(textures, tile)).toBe('fisherhut-base-1');
+    expect(baseTextureFor(textures, tile)).toBe('fishinghut-base-1');
   });
 
   it('topAnimFor resolves the same rung topTextureFor picked, not a plain clamp', () => {

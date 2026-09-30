@@ -100,7 +100,6 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'farm':
     case 'pumpkinfarm':
     case 'fishinghut':
-    case 'fisherhut':
     case 'storagehouse':
       return 25;
     case 'barracks':
@@ -211,16 +210,6 @@ export function buildingStatsFor(
     // UnitCatalogue's doc comment on the backend for the exact split).
     case 'barracks':
       return { modifier: { kind: 'trainsLandTroops' } };
-    // A third food-producer variant alongside Farm/PumpkinFarm — same
-    // fixed-field shape, no terrain/adjacency boost (mirrors those two's
-    // exclusion from BuildingCatalogue.cs's Boosts table).
-    case 'fisherhut': {
-      const workersCap = level * 4;
-      return {
-        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(42, level) },
-        workers: { cap: workersCap },
-      };
-    }
     // No production of its own — boosts every Lumberjack within its level's
     // range instead (see radiusBoostPercent/radiusBoostRange above).
     case 'sawmill':
@@ -357,7 +346,6 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   farm: PRODUCER_COST,
   pumpkinfarm: PRODUCER_COST,
   fishinghut: PRODUCER_COST,
-  fisherhut: PRODUCER_COST,
   lumberjack: PRODUCER_COST,
   quarry: PRODUCER_COST,
   claybrickworks: PRODUCER_COST,

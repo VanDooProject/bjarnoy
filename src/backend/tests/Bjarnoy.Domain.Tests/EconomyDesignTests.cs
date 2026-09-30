@@ -16,7 +16,7 @@ public class EconomyDesignTests
     [
         (BuildingType.Lumberjack, 1), (BuildingType.Quarry, 1), (BuildingType.ClayBrickworks, 1),
         (BuildingType.StorageHouse, 1), (BuildingType.Farm, 1),
-        (BuildingType.FishingHut, 2), (BuildingType.FisherHut, 2),
+        (BuildingType.FishingHut, 2),
         (BuildingType.Tower, 3),
         (BuildingType.PumpkinFarm, 4),
         (BuildingType.Barracks, 5),
@@ -35,7 +35,7 @@ public class EconomyDesignTests
     private static readonly BuildingType[] Producers =
     [
         BuildingType.Lumberjack, BuildingType.Quarry, BuildingType.ClayBrickworks, BuildingType.Farm,
-        BuildingType.PumpkinFarm, BuildingType.FishingHut, BuildingType.FisherHut,
+        BuildingType.PumpkinFarm, BuildingType.FishingHut,
     ];
 
     private static double Sum(ResourceAmounts a) => a.Wood + a.Stone + a.Food + a.Iron;
@@ -164,7 +164,6 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Farm, 25)]
     [InlineData(BuildingType.PumpkinFarm, 25)]
     [InlineData(BuildingType.FishingHut, 25)]
-    [InlineData(BuildingType.FisherHut, 25)]
     [InlineData(BuildingType.StorageHouse, 25)]
     [InlineData(BuildingType.Barracks, 20)]
     [InlineData(BuildingType.ArcheryRange, 20)]
@@ -454,6 +453,29 @@ public class EconomyDesignTests
         Assert.Null(BuildingCatalogue.TryGet(BuildingType.MagicTower, 1));
         Assert.Equal(7, (int)BuildingType.MagicTower); // persisted ints must not shift
         Assert.Equal(8, (int)BuildingType.PumpkinFarm);
+    }
+
+    [Fact]
+    public void The_fisher_hut_is_merged_into_the_fishing_hut_but_keeps_its_persisted_value()
+    {
+        Assert.DoesNotContain(BuildingType.FisherHut, BuildingCatalogue.AllTypes);
+        Assert.Equal(0, BuildingCatalogue.MaxLevelFor(BuildingType.FisherHut));
+        Assert.Null(BuildingCatalogue.TryGet(BuildingType.FisherHut, 1));
+        Assert.DoesNotContain(BuildingType.FisherHut, BuildingCatalogue.StorageCappedProducers);
+        Assert.Equal(15, (int)BuildingType.FisherHut); // persisted ints must not shift
+    }
+
+    [Fact]
+    public void The_fisher_hut_can_no_longer_be_built()
+    {
+        var settlement = SettlementWith(10);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.FisherHut, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: true);
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(BuildRejection.UnknownBuildingLevel, decision.Rejection);
     }
 
     [Fact]
