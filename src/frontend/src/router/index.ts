@@ -162,6 +162,16 @@ export const router = createRouter({
       component: () => import('../views/WastedLandsView.vue'),
     },
     {
+      path: '/docs/wildlife-camps',
+      name: 'wildlife-camps-docs',
+      component: () => import('../views/WildlifeCampsView.vue'),
+    },
+    {
+      path: '/docs/bog-lands',
+      name: 'bog-lands-docs',
+      component: () => import('../views/BogLandsView.vue'),
+    },
+    {
       path: '/admin',
       component: () => import('../views/admin/AdminLayout.vue'),
       meta: { requiresAdmin: true },

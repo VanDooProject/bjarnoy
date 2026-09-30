@@ -17,6 +17,7 @@ const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
 const getSettlement = vi.fn();
+const claimQuest = vi.fn();
 const getSettlementView = vi.fn();
 const getFogChunks = vi.fn();
 const decodeChunkPng = vi.fn();
@@ -70,6 +71,7 @@ async function loadStoreModule(demoMode: boolean) {
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
       getShipments: (...args: unknown[]) => getShipments(...args),
       getSettlement: (...args: unknown[]) => getSettlement(...args),
+      claimQuest: (...args: unknown[]) => claimQuest(...args),
       getSettlementView: (...args: unknown[]) => getSettlementView(...args),
       getFogChunks: (...args: unknown[]) => getFogChunks(...args),
       getPlotSuggestion: (...args: unknown[]) => getPlotSuggestion(...args),
@@ -1703,5 +1705,124 @@ describe('useWorldStore poll failure reporting', () => {
     await store.fetchFogMask();
     expect(connection.issues.fogMask).toBeUndefined();
     warn.mockRestore();
+  });
+});
+
+describe('useWorldStore claimQuest (onboarding quests)', () => {
+  const quest = (id: string, completed: boolean, claimed = false) => ({
+    id,
+    completed,
+    claimed,
+    reward: { wood: 250, stone: 200, food: 150, iron: 0 },
+  });
+
+  function settlementResponse(quests: unknown[], wood: number) {
+    return {
+      id: 'settlement-1',
+      longhouseLevel: 2,
+      resources: {
+        stock: { wood, stone: 0, food: 0, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+      },
+      buildings: [],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+      quests,
+    };
+  }
+
+  function register(store: Awaited<ReturnType<typeof loadStoreModule>>, level = 1) {
+    store.model.registerSettlement({
+      id: 'settlement-1',
+      ownerId: 'player-1',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: 0,
+      r: 0,
+      level,
+      resources: { wood: 100, stone: 100, food: 100, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      capacity: { wood: 500, stone: 500, food: 500, iron: 500 },
+      foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+  }
+
+  it('live: posts the claim, then refreshes the settlement so the quest reads claimed', async () => {
+    claimQuest.mockReset().mockResolvedValue(undefined);
+    getSettlement.mockReset().mockResolvedValue(
+      settlementResponse([quest('longhouse2', true, true)], 500),
+    );
+    const store = await loadStoreModule(false);
+    register(store, 2);
+    store.ownerId = 'player-1';
+
+    await store.claimQuest('longhouse2');
+
+    expect(claimQuest).toHaveBeenCalledWith('settlement-1', 'longhouse2', 'player-1');
+    expect(getSettlement).toHaveBeenCalledTimes(1);
+    expect(store.hud.quests).toEqual([quest('longhouse2', true, true)]);
+    expect(store.hud.resources.wood).toBe(500);
+  });
+
+  it('live: a rejected claim propagates and does not refresh', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+    claimQuest.mockReset().mockRejectedValue(new MockedApiError(409, { rejection: 'AlreadyClaimed' }));
+    getSettlement.mockReset();
+    register(store);
+
+    await expect(store.claimQuest('longhouse2')).rejects.toMatchObject({ problem: { rejection: 'AlreadyClaimed' } });
+    expect(getSettlement).not.toHaveBeenCalled();
+  });
+
+  it('live: mirrors the quest list of the settlement response', async () => {
+    getSettlement.mockReset().mockResolvedValue(
+      settlementResponse([quest('producers3', false), quest('longhouse2', true)], 0),
+    );
+    const store = await loadStoreModule(false);
+    register(store);
+
+    await store.refreshLiveSettlement();
+
+    expect(store.hud.quests.map((q) => q.id)).toEqual(['producers3', 'longhouse2']);
+  });
+
+  it('demo: a quest is not claimable until its condition holds', async () => {
+    claimQuest.mockReset();
+    const store = await loadStoreModule(true);
+    register(store, 1);
+    store.syncHud();
+
+    await expect(store.claimQuest('longhouse2')).rejects.toMatchObject({ rejection: 'NotCompleted' });
+    expect(claimQuest).not.toHaveBeenCalled();
+  });
+
+  it('demo: claiming pays the reward locally, clamped to storage, exactly once', async () => {
+    const store = await loadStoreModule(true);
+    register(store, 2);
+    store.syncHud();
+    expect(store.hud.quests.find((q) => q.id === 'longhouse2')).toMatchObject({ completed: true, claimed: false });
+
+    await store.claimQuest('longhouse2');
+
+    // 100 + 250 wood, 100 + 200 stone, 100 + 150 food; all within the 500 cap.
+    expect(store.hud.resources).toMatchObject({ wood: 350, stone: 300, food: 250 });
+    expect(store.hud.quests.find((q) => q.id === 'longhouse2')?.claimed).toBe(true);
+    await expect(store.claimQuest('longhouse2')).rejects.toMatchObject({ rejection: 'AlreadyClaimed' });
+    expect(store.hud.resources.wood).toBe(350);
+  });
+
+  it('demo: the reward is clamped to the storage capacity', async () => {
+    const store = await loadStoreModule(true);
+    register(store, 3);
+    store.model.getSettlement('settlement-1')!.resources = { wood: 400, stone: 400, food: 400, iron: 0 };
+    store.syncHud();
+
+    await store.claimQuest('longhouse2');
+
+    expect(store.hud.resources).toMatchObject({ wood: 500, stone: 500, food: 500 });
   });
 });

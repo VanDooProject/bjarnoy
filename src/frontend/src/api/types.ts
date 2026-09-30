@@ -258,6 +258,18 @@ export interface FeastOfferResponse {
   renownGain: number;
 }
 
+/**
+ * An onboarding quest and where the settlement stands on it (economy.md
+ * section 7). Mirrors `QuestResponse`; the reward is wood/stone/food, paid
+ * once per settlement on claim and clamped to storage.
+ */
+export interface QuestResponse {
+  id: string;
+  completed: boolean;
+  claimed: boolean;
+  reward: ResourceLine;
+}
+
 export interface SettlementResponse {
   id: string;
   worldId: string;
@@ -280,6 +292,8 @@ export interface SettlementResponse {
   feast: FeastResponse | null;
   /** Cost and gain of the next feast; null without a Town Square. */
   nextFeast: FeastOfferResponse | null;
+  /** The onboarding quests, in presentation order. */
+  quests: QuestResponse[];
   world: WorldClockResponse;
 }
 
