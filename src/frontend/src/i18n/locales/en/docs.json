@@ -332,6 +332,7 @@
       "rotations": "A guarded camp only has art for the directions that show its animals best; the other directions are greyed out, and on the map the camp is turned to one of those. A cleared camp can face any direction."
     },
     "state": {
+      "all": "All camps",
       "label": "State",
       "guarded": "Guarded",
       "cleared": "Cleared"
@@ -347,6 +348,7 @@
       "ground": "Ground",
       "none": "No camp matches these filters."
     },
+    "range": "Guards {min} to {max} hexes around it, by its level (1 to {levels}).",
     "camera": "Facing",
     "notKept": "Guarded art only exists for the directions that show the animals best",
     "grounds": {

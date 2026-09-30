@@ -332,6 +332,7 @@
       "rotations": "Ein bewachtes Lager hat nur Grafik für die Richtungen, aus denen seine Tiere am besten zu sehen sind; die anderen sind ausgegraut, und auf der Karte wird das Lager in eine dieser Richtungen gedreht. Ein geräumtes Lager kann in jede Richtung schauen."
     },
     "state": {
+      "all": "Alle Lager",
       "label": "Zustand",
       "guarded": "Bewacht",
       "cleared": "Geräumt"
@@ -347,6 +348,7 @@
       "ground": "Boden",
       "none": "Kein Lager passt zu diesen Filtern."
     },
+    "range": "Bewacht {min} bis {max} Felder um sich, je nach Stufe (1 bis {levels}).",
     "camera": "Richtung",
     "notKept": "Bewachte Grafik gibt es nur für die Richtungen, aus denen die Tiere am besten zu sehen sind",
     "grounds": {

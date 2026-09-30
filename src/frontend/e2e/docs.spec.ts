@@ -139,7 +139,8 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     // A card only exists once its art is in the atlas, so every card shows art.
     const count = await cards.count();
     expect(count).toBeGreaterThanOrEqual(9);
-    await expect(page.locator('.wildlife-camps .card .atlas-sprite')).toHaveCount(count);
+    // (a still frame, or the animated guarded camp)
+    await expect(page.locator('.wildlife-camps .card .art-box > *')).toHaveCount(count);
 
     // The eyrie's guarded state only ships its SW rotation; cleared, it turns every way.
     const eyrie = page.locator('#camp-eagleeyrie');
@@ -168,6 +169,32 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await page.getByTestId('ground-filter').getByRole('button', { name: 'Bog', exact: true }).click();
     await expect(cards).toHaveCount(3);
     await expect(page.locator('#camp-wolfden')).toHaveCount(0);
+  });
+
+  test('wildlife camps page animates guarded camps and switches every camp at once', async ({ page }) => {
+    await page.goto('/docs/wildlife-camps');
+    const cards = page.locator('.wildlife-camps .card');
+    await cards.first().waitFor();
+    const total = await cards.count();
+
+    // Guarded by default: every camp with a clip plays it.
+    const animated = page.locator('.wildlife-camps .card .animated-camp[data-animated="true"]');
+    expect(await animated.count()).toBeGreaterThan(0);
+    await expect(page.locator('.wildlife-camps .card [data-testid="guard-range"]')).toHaveCount(total);
+
+    const all = page.getByTestId('state-switch');
+    await all.getByRole('button', { name: 'Cleared', exact: true }).click();
+    await expect(animated).toHaveCount(0);
+    await expect(cards.getByRole('button', { name: 'Cleared', exact: true }).and(page.locator('.active'))).toHaveCount(
+      total,
+    );
+
+    await all.getByRole('button', { name: 'Guarded', exact: true }).click();
+    expect(await animated.count()).toBeGreaterThan(0);
+
+    // A camp's own pill takes it out of step, so the page-wide switch shows neither state.
+    await page.locator('#camp-wolfden').getByRole('button', { name: 'Cleared', exact: true }).click();
+    await expect(all.locator('.active')).toHaveCount(0);
   });
 
   test('bog lands page scrolls and every stage and look has art', async ({ page }) => {

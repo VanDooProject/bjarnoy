@@ -6,9 +6,10 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
-import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
+import { findAtlasClip, findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
-import { CAMP_FAMILIES, type CampGround, type CampStrength } from '../lib/map/campPlacement';
+import { CAMP_FAMILIES, MaxCampLevel, guardRange, type CampGround, type CampStrength } from '../lib/map/campPlacement';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -71,6 +72,15 @@ function frameFor(id: CampId, camera: TileOrientation, guarded: boolean): AtlasF
   return findAtlasFrame('showcase', `${id}_${camera}_level00${guarded ? 1 : 0}`);
 }
 
+/** The hexes a camp of this strength guards at level 1 and at the top level (`guardRange`, the game's own formula). */
+function rangeOf(strength: CampStrength): { min: number; max: number; levels: number } {
+  return { min: guardRange(1, strength), max: guardRange(MaxCampLevel, strength), levels: MaxCampLevel };
+}
+
+function hasClip(id: CampId, camera: TileOrientation): boolean {
+  return !!findAtlasClip('buildings-anim', `${id}_${camera}_level001`);
+}
+
 function keptCameras(id: CampId): TileOrientation[] {
   return TILE_ORIENTATIONS.filter((cam) => frameFor(id, cam, true));
 }
@@ -95,6 +105,18 @@ function setGuarded(id: CampId, guarded: boolean): void {
   state.guarded = guarded;
   const kept = keptCameras(id);
   if (guarded && !kept.includes(state.camera) && kept[0]) state.camera = kept[0];
+}
+
+// The page-wide switch: every camp at once. A camp's own pills still change
+// just that camp, and the switch then shows neither state as active.
+const allState = computed<'guarded' | 'cleared' | null>(() => {
+  const states = CAMPS.map((c) => view[c.id].guarded);
+  if (states.every(Boolean)) return 'guarded';
+  if (states.every((g) => !g)) return 'cleared';
+  return null;
+});
+function setAll(guarded: boolean): void {
+  for (const c of CAMPS) setGuarded(c.id, guarded);
 }
 
 function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
@@ -133,6 +155,15 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
         <p>{{ $t('docs.wildlifeCamps.camps.body') }}</p>
         <p>{{ $t('docs.wildlifeCamps.strength.help') }}</p>
         <div class="filters">
+          <div class="pills" data-testid="state-switch">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.state.all') }}</span>
+            <button type="button" class="pill" :class="{ active: allState === 'guarded' }" @click="setAll(true)">
+              {{ $t('docs.wildlifeCamps.state.guarded') }}
+            </button>
+            <button type="button" class="pill" :class="{ active: allState === 'cleared' }" @click="setAll(false)">
+              {{ $t('docs.wildlifeCamps.state.cleared') }}
+            </button>
+          </div>
           <div class="pills" data-testid="strength-filter">
             <span class="pills-label">{{ $t('docs.wildlifeCamps.strength.label') }}</span>
             <button
@@ -187,13 +218,19 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
               </span>
             </div>
             <div class="art-box">
+              <AnimatedCamp
+                v-if="view[camp.id].guarded && hasClip(camp.id, view[camp.id].camera)"
+                :family="camp.id"
+                :orientation="view[camp.id].camera"
+              />
               <AtlasSprite
-                v-if="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)"
+                v-else-if="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)"
                 :frame="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)!"
                 :style="fit(frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded), BOX_H)"
               />
             </div>
             <p>{{ t(`docs.wildlifeCamps.list.${camp.id}.guards`) }}</p>
+            <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
             <div class="pills">
               <span class="pills-label">{{ $t('docs.wildlifeCamps.state.label') }}</span>
               <button
@@ -302,6 +339,10 @@ h2 {
 }
 .filters {
   margin: 12px 0 4px;
+}
+.card p.range {
+  color: var(--text);
+  font-size: 12px;
 }
 .empty {
   font-style: italic;
