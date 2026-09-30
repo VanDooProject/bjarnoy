@@ -11,6 +11,10 @@ import AdminIslandLabView from './AdminIslandLabView.vue';
 import { createTestI18n } from '../../test/i18n';
 import adminIslandLab from '../../i18n/locales/en/adminIslandLab.json';
 
+// The lab opens fully zoomed out (~320 hexes across, so a ~150-hex island fits): every redraw
+// samples ~100k hexes per variant, which a loaded CI runner can take a few seconds over.
+vi.setConfig({ testTimeout: 30_000 });
+
 function stubCanvasContext() {
   const clearRect = vi.fn();
   const fillRect = vi.fn();
