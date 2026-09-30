@@ -467,6 +467,7 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.Sawmill)]
     [InlineData(BuildingType.CropMill)]
+    [InlineData(BuildingType.Hammerschmiede)]
     public void A_radius_boost_producer_has_no_production_of_its_own(BuildingType type)
     {
         for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
@@ -591,7 +592,9 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.CropMill, Terrain.Grass)]
     [InlineData(BuildingType.DruidHut, Terrain.Grass)]
     [InlineData(BuildingType.CartWorkshop, Terrain.Grass)]
-    [InlineData(BuildingType.ClayBrickworks, Terrain.Grass)]
+    [InlineData(BuildingType.ClayBrickworks, Terrain.Bog)]
+    [InlineData(BuildingType.BogOreWorks, Terrain.Bog)]
+    [InlineData(BuildingType.Hammerschmiede, Terrain.Bog)]
     public void A_new_land_building_only_allows_its_own_terrain(BuildingType type, Terrain allowed)
     {
         Assert.True(BuildingCatalogue.Get(type, 1).AllowsTerrain(allowed));

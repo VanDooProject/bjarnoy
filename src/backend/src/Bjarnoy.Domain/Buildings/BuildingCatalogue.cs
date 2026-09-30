@@ -35,7 +35,7 @@ public static class BuildingCatalogue
     /// <summary>
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and
-    /// Storage House 25; military/civic buildings and the mills 20; Tower and
+    /// Storage House 25 (the bog-ore works too); military/civic buildings and the mills (the Hammerschmiede too) 20; Tower and
     /// Great Storehouse 10; shrines 5. Unknown/removed types return 0.
     /// </summary>
     public static int MaxLevelFor(BuildingType type) => type switch
@@ -43,11 +43,11 @@ public static class BuildingCatalogue
         BuildingType.Longhouse => 30,
         BuildingType.Lumberjack or BuildingType.Quarry or BuildingType.ClayBrickworks
             or BuildingType.Farm or BuildingType.PumpkinFarm or BuildingType.FishingHut
-            or BuildingType.StorageHouse => 25,
+            or BuildingType.BogOreWorks or BuildingType.StorageHouse => 25,
         BuildingType.Barracks or BuildingType.ArcheryRange or BuildingType.Dockyard
             or BuildingType.TownSquare or BuildingType.CartWorkshop or BuildingType.DruidHut
             or BuildingType.Smithy or BuildingType.Meadery or BuildingType.Sawmill
-            or BuildingType.CropMill => 20,
+            or BuildingType.CropMill or BuildingType.Hammerschmiede => 20,
         BuildingType.Tower or BuildingType.GreatStorehouse => 10,
         BuildingType.ShrineOfThor or BuildingType.ShrineOfFreyja
             or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord => 5,
@@ -111,6 +111,7 @@ public static class BuildingCatalogue
             [BuildingType.Tower] = 3,
             [BuildingType.PumpkinFarm] = 4,
             [BuildingType.Barracks] = 5,
+            [BuildingType.BogOreWorks] = 6,
             [BuildingType.TownSquare] = 6,
             [BuildingType.Dockyard] = 8,
             [BuildingType.ArcheryRange] = 9,
@@ -121,6 +122,7 @@ public static class BuildingCatalogue
             [BuildingType.GreatStorehouse] = 15,
             [BuildingType.Sawmill] = 20,
             [BuildingType.CropMill] = 20,
+            [BuildingType.Hammerschmiede] = 20,
             [BuildingType.ShrineOfUllr] = 25,
             [BuildingType.ShrineOfFreyja] = 25,
             [BuildingType.ShrineOfNjord] = 25,
@@ -150,6 +152,7 @@ public static class BuildingCatalogue
         BuildingType.Farm,
         BuildingType.PumpkinFarm,
         BuildingType.FishingHut,
+        BuildingType.BogOreWorks,
     };
 
     /// <summary>
@@ -209,6 +212,7 @@ public static class BuildingCatalogue
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 15)],
             [BuildingType.Sawmill] = [new(BuildingType.Lumberjack, 10)],
             [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
+            [BuildingType.Hammerschmiede] = [new(BuildingType.BogOreWorks, 10)],
             [BuildingType.ShrineOfUllr] = [new(BuildingType.Sawmill, 5)],
             [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
             [BuildingType.ShrineOfNjord] = [new(BuildingType.Dockyard, 10)],
@@ -307,7 +311,21 @@ public static class BuildingCatalogue
                 Producer(type, level, SandOrGrass, ResourceAmounts.Zero, SmallBuildingCost, 4),
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),
-            BuildingType.ClayBrickworks => Producer(type, level, Grass, new ResourceAmounts(0, Stone: 36, 0, 0)),
+            // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
+            BuildingType.ClayBrickworks =>
+                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 36, 0, 0))
+                    with { RequiresBogKind = PlainBogOnly },
+            // Iron, on plain bog moss only (not a shore, mouth, creek or lake). Its own P1 is tuned in the Economy lab
+            // (docs/design/economy.md section 8); terrain boost in Boosts, the Hammerschmiede's radius boost below.
+            BuildingType.BogOreWorks =>
+                Producer(type, level, Bog, new ResourceAmounts(0, 0, 0, Iron: BogOreWorksIronAtLevelOne))
+                    with { RequiresBogKind = PlainBogOnly },
+            // A hammer mill on a bog creek. Like the Sawmill it produces nothing and raises the producers within its range
+            // (RadiusBoostTargets): the bog-ore works. TODO(art): bog-creek Hammerschmiede - for now the frontend draws the
+            // river hammer mill on the creek.
+            BuildingType.Hammerschmiede =>
+                Producer(type, level, Bog, ResourceAmounts.Zero, SmallBuildingCost, 4)
+                    with { RequiresBogKind = CreekOnly },
             _ => null,
         };
 
@@ -468,6 +486,19 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };
     private static readonly IReadOnlySet<Terrain> SandOrGrass = new HashSet<Terrain> { Terrain.Sand, Terrain.Grass };
     private static readonly IReadOnlySet<Terrain> Sea = new HashSet<Terrain> { Terrain.Sea };
+    private static readonly IReadOnlySet<Terrain> Bog = new HashSet<Terrain> { Terrain.Bog };
+
+    /// <summary>Bog and lake hexes: what boosts a bog-ore works (the bog around it, its creeks and lakes) and a lake fishing hut (the lake).</summary>
+    private static readonly IReadOnlySet<Terrain> BogOrLake = new HashSet<Terrain> { Terrain.Bog, Terrain.Lake };
+
+    private static readonly IReadOnlySet<Terrain> SeaOrLake = new HashSet<Terrain> { Terrain.Sea, Terrain.Lake };
+
+    private static readonly IReadOnlySet<BogTileKind> PlainBogOnly = new HashSet<BogTileKind> { BogTileKind.Bog };
+    private static readonly IReadOnlySet<BogTileKind> CreekOnly = new HashSet<BogTileKind> { BogTileKind.Creek };
+    private static readonly IReadOnlySet<BogTileKind> HalfShoreOnly = new HashSet<BogTileKind> { BogTileKind.Half };
+
+    /// <summary>Iron per hour of a level-1 bog-ore works (<c>docs/design/economy.md</c> section 8); the Economy lab numbers are in that page.</summary>
+    public const double BogOreWorksIronAtLevelOne = 40;
 
     /// <summary>
     /// Terrain-bound producers boosted by their matching neighbour terrain.
@@ -483,7 +514,10 @@ public static class BuildingCatalogue
             // The hut itself already stands on coastal water; more open sea
             // around it (rather than the land it backs onto) is what makes a
             // fishing spot better.
-            [BuildingType.FishingHut] = new(Sea, PerTilePercent: 0.10, CapPercent: 0.50),
+            // A lake Fishing Hut (on a half shore) counts the lake hexes around it the way the coastal one counts sea.
+            [BuildingType.FishingHut] = new(SeaOrLake, PerTilePercent: 0.10, CapPercent: 0.50),
+            // The bog around a bog-ore works: any bog hex (moss, shore, creek, spring, mouth) or lake water.
+            [BuildingType.BogOreWorks] = new(BogOrLake, PerTilePercent: 0.10, CapPercent: 0.50),
             // Sawmill no longer has an entry here — it produces nothing of
             // its own to boost with terrain any more, see RadiusBoostTargets
             // below for its replacement mechanic (boosting Lumberjack
@@ -504,6 +538,7 @@ public static class BuildingCatalogue
         {
             [BuildingType.Sawmill] = new HashSet<BuildingType> { BuildingType.Lumberjack },
             [BuildingType.CropMill] = new HashSet<BuildingType> { BuildingType.Farm },
+            [BuildingType.Hammerschmiede] = new HashSet<BuildingType> { BuildingType.BogOreWorks },
         };
 
     /// <summary>
@@ -662,6 +697,8 @@ public static class BuildingCatalogue
         BuildDuration = Duration(3, level),
         ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 40, 0), level),
         RequiresCoastalWater = true,
+        // Also on a lake's half shore (three water edges), drawn with the lake art.
+        LakeShoreKinds = HalfShoreOnly,
     };
 
     /// <summary>
