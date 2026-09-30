@@ -102,6 +102,20 @@ Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `StrongCampTile
 `MinCampIslandTiles` 60, `SandTilesPerSealCamp` 2000, `MountainTilesPerEyrieCamp` 2000, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
 guard-range formulas above.
 
+## Loot (kinds only)
+
+Clearing a camp pays loot (`economy.md` section 10). The owner's kinds, with the amounts still open (#334):
+
+| Camps | Loot |
+|---|---|
+| every camp | food, from the hunt |
+| strong camps | food and **iron**: the gear of earlier settlers the pack ate, among the bones |
+| otter slide, beaver lodge | also a little **wood** (drift logs, the lodge's gnawed timber) |
+
+Amounts grow with the camp's level, a strong camp's several times a weak one's. The eagle eyrie and Fenrir's
+brood are never built on, so their loot is a one-off prize. Nothing reads this yet: the docs page
+(`WildlifeCampsView.vue`, `lootOf`) shows the kinds per card and is the only consumer.
+
 ## Data, API and art
 
 - `GeneratedIsland.Camps` (`Camp`: coord, family, level, orientation; `Strong` and `GuardRange` derived),

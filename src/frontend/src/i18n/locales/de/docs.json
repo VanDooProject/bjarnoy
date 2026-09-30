@@ -349,6 +349,13 @@
       "none": "Kein Lager passt zu diesen Filtern."
     },
     "range": "Bewacht {min} bis {max} Felder um sich, je nach Stufe (1 bis {levels}).",
+    "loot": {
+      "label": "Beute",
+      "food": "Nahrung",
+      "iron": "Eisen",
+      "wood": "Holz",
+      "note": "Ein geräumtes Lager bringt Beute: Nahrung von der Jagd, Eisen aus der Ausrüstung früherer Siedler, die ein starkes Rudel gefressen hat, und etwas Holz, wo das Lager aus Holz gebaut ist. Wie viel, hängt von der Stufe des Lagers ab; die Mengen stehen noch nicht fest."
+    },
     "camera": "Richtung",
     "notKept": "Bewachte Grafik gibt es nur für die Richtungen, aus denen die Tiere am besten zu sehen sind",
     "grounds": {

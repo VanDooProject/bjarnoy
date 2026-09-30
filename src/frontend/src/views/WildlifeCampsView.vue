@@ -77,6 +77,19 @@ function rangeOf(strength: CampStrength): { min: number; max: number; levels: nu
   return { min: guardRange(1, strength), max: guardRange(MaxCampLevel, strength), levels: MaxCampLevel };
 }
 
+// Loot kinds only - the amounts are not designed yet (docs/design/wildlife-camps.md, "Loot").
+// Every camp gives food, a strong camp adds iron, and the two camps built of
+// timber (the otters' drift logs, the beavers' lodge) add a little wood.
+type Loot = 'food' | 'iron' | 'wood';
+const WOOD_CAMPS: readonly CampId[] = ['otterslide', 'beaverlodge'];
+function lootOf(camp: CampEntry): Loot[] {
+  return [
+    'food',
+    ...(camp.strength === 'strong' ? (['iron'] as const) : []),
+    ...(WOOD_CAMPS.includes(camp.id) ? (['wood'] as const) : []),
+  ];
+}
+
 function hasClip(id: CampId, camera: TileOrientation): boolean {
   return !!findAtlasClip('buildings-anim', `${id}_${camera}_level001`);
 }
@@ -154,6 +167,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
         <h2>{{ $t('docs.wildlifeCamps.camps.heading') }}</h2>
         <p>{{ $t('docs.wildlifeCamps.camps.body') }}</p>
         <p>{{ $t('docs.wildlifeCamps.strength.help') }}</p>
+        <p>{{ $t('docs.wildlifeCamps.loot.note') }}</p>
         <div class="filters">
           <div class="pills" data-testid="state-switch">
             <span class="pills-label">{{ $t('docs.wildlifeCamps.state.all') }}</span>
@@ -230,6 +244,12 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
               />
             </div>
             <p>{{ t(`docs.wildlifeCamps.list.${camp.id}.guards`) }}</p>
+            <p class="loot" data-testid="loot">
+              <span class="pills-label">{{ $t('docs.wildlifeCamps.loot.label') }}</span>
+              <span v-for="kind in lootOf(camp)" :key="kind" class="loot-kind" :data-loot="kind">
+                {{ t(`docs.wildlifeCamps.loot.${kind}`) }}
+              </span>
+            </p>
             <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
             <div class="pills">
               <span class="pills-label">{{ $t('docs.wildlifeCamps.state.label') }}</span>
@@ -339,6 +359,20 @@ h2 {
 }
 .filters {
   margin: 12px 0 4px;
+}
+.card p.loot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.loot-kind {
+  font-size: 12px;
+  color: var(--text);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--panel-border);
 }
 .card p.range {
   color: var(--text);

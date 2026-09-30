@@ -181,6 +181,11 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     const animated = page.locator('.wildlife-camps .card .animated-camp[data-animated="true"]');
     expect(await animated.count()).toBeGreaterThan(0);
     await expect(page.locator('.wildlife-camps .card [data-testid="guard-range"]')).toHaveCount(total);
+    // Every camp gives food; iron only from strong camps, wood from the beaver lodge.
+    await expect(page.locator('.wildlife-camps .card [data-loot="food"]')).toHaveCount(total);
+    await expect(page.locator('#camp-wolfden [data-loot="iron"]')).toHaveCount(1);
+    await expect(page.locator('#camp-beaverlodge [data-loot="wood"]')).toHaveCount(1);
+    await expect(page.locator('.card:has([data-strength="weak"]) [data-loot="iron"]')).toHaveCount(0);
 
     const all = page.getByTestId('state-switch');
     await all.getByRole('button', { name: 'Cleared', exact: true }).click();

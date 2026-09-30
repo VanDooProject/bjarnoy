@@ -349,6 +349,13 @@
       "none": "No camp matches these filters."
     },
     "range": "Guards {min} to {max} hexes around it, by its level (1 to {levels}).",
+    "loot": {
+      "label": "Loot",
+      "food": "Food",
+      "iron": "Iron",
+      "wood": "Wood",
+      "note": "Clearing a camp pays loot: food from the hunt, iron from the gear of earlier settlers a strong pack has eaten, and a little wood where the camp is built of timber. How much grows with the camp's level; the amounts are still to be set."
+    },
     "camera": "Facing",
     "notKept": "Guarded art only exists for the directions that show the animals best",
     "grounds": {
