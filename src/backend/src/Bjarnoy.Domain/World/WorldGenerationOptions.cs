@@ -240,13 +240,21 @@ public sealed record WorldGenerationOptions
     /// <summary>A river passing within this many hexes of a pocket lake is sunk into it (the nearest one at least).</summary>
     public int BogMaxSinkReroute { get; init; } = 12;
 
+    /// <summary>
+    /// A landing spot (start position) needs a plain bog tile (moss, not a shore, creek or lake) within this many hexes: the
+    /// Clay Brickworks (the start's stone) and the bog-ore works (its iron) stand on it. An island without bog gets no landing
+    /// spots. 0 switches the rule off. See <c>docs/design/bog.md</c>, "Decisions".
+    /// </summary>
+    public int BogReach { get; init; } = 12;
+
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
     /// <summary>
     /// A scaled-down archipelago — islands of roughly 5-40 hexes across on a 90-hex
     /// cell grid — for tests, previews and small dev worlds. Same algorithm and
     /// shape as the production-scale default, just smaller, so a world of radius
-    /// 120-200 already holds a handful of islands with mountains and rivers.
+    /// 120-200 already holds a handful of islands with mountains and rivers. Islands this small hold no bog,
+    /// so the landing spots' bog-in-reach rule (<see cref="BogReach"/>) is off: they would have none.
     /// </summary>
     public static WorldGenerationOptions Compact(int seed, int radius = 150) => new()
     {
@@ -263,6 +271,7 @@ public sealed record WorldGenerationOptions
         IslandCoastWarpScale = 14.0,
         IslandCoastNoise = 0.6,
         IslandCoastNoiseScale = 16.0,
+        BogReach = 0,
     };
 
     /// <summary>
@@ -313,6 +322,7 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketMaxTiles, BogPocketMinTiles);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketRadius, 2);
         ArgumentOutOfRangeException.ThrowIfNegative(BogMaxSinkReroute);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogReach);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxWidth, IslandMinWidth);
