@@ -9,7 +9,10 @@ import {
   MinCampIslandTiles,
   MinCampSpacing,
   campCountFor,
+  strongCountFor,
+  weakCountFor,
   maxSealCampsFor,
+  maxEyrieCampsFor,
   guardRange,
   isStrongCampFamily,
   placeCamps,
@@ -53,27 +56,37 @@ describe('guardRange / campCountFor', () => {
   });
 
   it.each([
-    [0, 0],
-    [6, 0],
-    [59, 0],
-    [60, 1],
-    [349, 1],
-    [1049, 1],
-    [1050, 2],
-    [7000, 10],
-    [16800, 24],
-    [40000, 24],
-  ])('%i land tiles -> %i camps', (tiles, expected) => {
-    expect(campCountFor(tiles)).toBe(expected);
+    [0, 0, 0, 0],
+    [59, 0, 0, 0],
+    [60, 0, 0, 1],
+    [224, 0, 0, 1],
+    [300, 0, 1, 1],
+    [900, 1, 2, 3],
+    [4500, 3, 8, 11],
+    [24000, 16, 24, 40],
+    [40000, 16, 24, 40],
+  ])('%i land tiles -> strong %i, weak %i, total %i', (tiles, strong, weak, total) => {
+    expect(strongCountFor(tiles)).toBe(strong);
+    expect(weakCountFor(tiles)).toBe(weak);
+    expect(campCountFor(tiles)).toBe(total);
   });
 
   it.each([
     [60, 1],
-    [5999, 1],
-    [6000, 2],
-    [14000, 4],
+    [2999, 1],
+    [3000, 2],
+    [14000, 7],
   ])('%i land tiles -> at most %i seal colonies', (tiles, expected) => {
     expect(maxSealCampsFor(tiles)).toBe(expected);
+  });
+
+  it.each([
+    [60, 1],
+    [2999, 1],
+    [3000, 2],
+    [14000, 7],
+  ])('%i land tiles -> at most %i eagle eyries', (tiles, expected) => {
+    expect(maxEyrieCampsFor(tiles)).toBe(expected);
   });
 });
 
@@ -82,7 +95,10 @@ describe('placeCamps', () => {
     const { tiles, terrainOf } = block(60, (_q, r) => (['grass', 'forest', 'sand', 'mountain'] as const)[Math.floor(r / 15)]!);
     const placed = placeCamps(tiles, terrainOf, [], [], 5, 2);
 
-    expect(placed).toHaveLength(campCountFor(tiles.length));
+    // The weak budget (6) is cut to the seal and eyrie caps (2 + 2).
+    const expectedWeak = Math.min(weakCountFor(tiles.length), maxSealCampsFor(tiles.length) + maxEyrieCampsFor(tiles.length));
+    expect(placed).toHaveLength(strongCountFor(tiles.length) + expectedWeak);
+    expect(placed.filter((p) => isStrongCampFamily(p.family))).toHaveLength(strongCountFor(tiles.length));
     expect(new Set(placed.slice(0, 4).map((p) => p.family)).size).toBe(4);
     for (const p of placed) {
       expect(p.level).toBeGreaterThanOrEqual(1);
@@ -94,6 +110,29 @@ describe('placeCamps', () => {
       }
     }
   });
+
+  it('rolls levels low: strong u^3 (~59/15/11/9/7 %), weak u^2 (~45/19/14/12/11 %)', () => {
+    const tally = (ground: 'grass' | 'sand', seeds: number) => {
+      const { tiles, terrainOf } = block(100, () => ground);
+      const counts = [0, 0, 0, 0, 0, 0];
+      for (let seed = 0; seed < seeds; seed++) {
+        for (const p of placeCamps(tiles, terrainOf, [], [], seed, 1)) counts[p.level]!++;
+      }
+      const total = counts.reduce((a, b) => a + b, 0);
+      return { total, share: counts.slice(1).map((c) => c / total) };
+    };
+    const strong = tally('grass', 200);
+    const weak = tally('sand', 400);
+    const expectedStrong = [0.585, 0.152, 0.106, 0.085, 0.072];
+    const expectedWeak = [0.447, 0.185, 0.143, 0.119, 0.106];
+    expect(strong.total).toBeGreaterThan(1000);
+    expect(weak.total).toBeGreaterThan(500);
+    for (let i = 0; i < 5; i++) {
+      expect(Math.abs(strong.share[i]! - expectedStrong[i]!)).toBeLessThan(0.05);
+      expect(Math.abs(weak.share[i]! - expectedWeak[i]!)).toBeLessThan(0.07);
+    }
+    // 600 placements on a 100x100 block: ~3.5 s alone, more under the full suite's parallel load.
+  }, 30_000);
 
   it('keeps off giant footprints and every river tile that is not a straight one', () => {
     const { tiles, terrainOf } = block(40, () => 'grass');

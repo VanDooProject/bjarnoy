@@ -36,8 +36,8 @@ public class CampGenerationTests
 
         Assert.Equal(["bearrapids", "boarwallow", "fenrirbrood", "wolfden"], strong);
         Assert.Equal(["beaverlodge", "cranedance", "eagleeyrie", "moosemire", "sealhaulout"], weak);
-        Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Strong), f => Assert.Equal(CampLevelSkew.High, f.LevelSkew));
-        Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Weak), f => Assert.Equal(CampLevelSkew.Low, f.LevelSkew));
+        Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Strong), f => Assert.Equal(CampLevelSkew.Cubic, f.LevelSkew));
+        Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Weak), f => Assert.Equal(CampLevelSkew.Quadratic, f.LevelSkew));
     }
 
     [Theory]
@@ -53,26 +53,47 @@ public class CampGenerationTests
     }
 
     [Theory]
-    [InlineData(0, 0)]
-    [InlineData(6, 0)]
-    [InlineData(59, 0)]
-    [InlineData(60, 1)]
-    [InlineData(349, 1)]
-    [InlineData(1_049, 1)]
-    [InlineData(1_050, 2)]
-    [InlineData(7_000, 10)]
-    [InlineData(16_800, 24)]
-    [InlineData(40_000, 24)]
-    public void Camp_count_is_the_island_land_over_the_tiles_per_camp_clamped(int landTiles, int expected) =>
-        Assert.Equal(expected, CampGenerator.CampCountFor(landTiles));
+    [InlineData(0, 0, 0, 0)]
+    [InlineData(59, 0, 0, 0)]
+    [InlineData(60, 0, 0, 1)]
+    [InlineData(224, 0, 0, 1)]
+    [InlineData(300, 0, 1, 1)]
+    [InlineData(900, 1, 2, 3)]
+    [InlineData(4_500, 3, 8, 11)]
+    [InlineData(24_000, 16, 24, 40)]
+    [InlineData(40_000, 16, 24, 40)]
+    public void Camp_budgets_are_the_island_land_over_the_tiles_per_camp_clamped_per_kind(int landTiles, int strong, int weak, int total)
+    {
+        Assert.Equal(strong, CampGenerator.StrongCountFor(landTiles));
+        Assert.Equal(weak, CampGenerator.WeakCountFor(landTiles));
+        Assert.Equal(total, CampGenerator.CampCountFor(landTiles));
+    }
 
     [Theory]
     [InlineData(60, 1)]
-    [InlineData(5_999, 1)]
-    [InlineData(6_000, 2)]
-    [InlineData(14_000, 4)]
+    [InlineData(2_999, 1)]
+    [InlineData(3_000, 2)]
+    [InlineData(14_000, 7)]
     public void Seal_colonies_are_capped_per_island_land(int landTiles, int expected) =>
         Assert.Equal(expected, CampGenerator.MaxSealCampsFor(landTiles));
+
+    [Theory]
+    [InlineData(60, 1)]
+    [InlineData(2_999, 1)]
+    [InlineData(3_000, 2)]
+    [InlineData(14_000, 7)]
+    public void Eagle_eyries_are_capped_per_island_land(int landTiles, int expected) =>
+        Assert.Equal(expected, CampGenerator.MaxEyrieCampsFor(landTiles));
+
+    [Fact]
+    public void No_island_holds_more_eagle_eyries_than_its_cap()
+    {
+        foreach (var (seed, _, island) in Islands())
+        {
+            var eyries = island.Camps.Count(c => c.Family == "eagleeyrie");
+            Assert.True(eyries <= CampGenerator.MaxEyrieCampsFor(island.TileCount), $"seed {seed} island {island.Index}: {eyries} eyries");
+        }
+    }
 
     [Fact]
     public void No_island_holds_more_seal_colonies_than_its_cap()
@@ -91,6 +112,8 @@ public class CampGenerationTests
         foreach (var (seed, _, island) in Islands())
         {
             Assert.True(island.Camps.Count <= CampGenerator.CampCountFor(island.TileCount), $"seed {seed} island {island.Index}");
+            Assert.True(island.Camps.Count(c => c.Strong) <= Math.Max(1, CampGenerator.StrongCountFor(island.TileCount)), $"seed {seed} island {island.Index}: strong budget");
+            Assert.True(island.Camps.Count(c => !c.Strong) <= Math.Max(1, CampGenerator.WeakCountFor(island.TileCount)), $"seed {seed} island {island.Index}: weak budget");
             for (var i = 0; i < island.Camps.Count; i++)
             {
                 for (var j = i + 1; j < island.Camps.Count; j++)
@@ -242,16 +265,89 @@ public class CampGenerationTests
     }
 
     [Fact]
-    public void Levels_skew_high_for_strong_camps_and_low_for_weak_ones()
+    public void Levels_skew_low_for_every_family_and_strong_camps_sit_on_levels_one_to_three()
     {
         var camps = Islands(wasted: false).SelectMany(i => i.Island.Camps).ToList();
         var strong = camps.Where(c => c.Strong).Select(c => c.Level).ToList();
         var weak = camps.Where(c => !c.Strong).Select(c => c.Level).ToList();
 
-        Assert.True(strong.Count > 20 && weak.Count > 5, $"strong {strong.Count}, weak {weak.Count}");
-        Assert.True(strong.Average() > weak.Average() + 0.8, $"strong {strong.Average():F2} vs weak {weak.Average():F2}");
-        Assert.True(strong.Average() > 3.0);
-        Assert.True(weak.Average() < 3.0);
+        Assert.True(strong.Count > 200 && weak.Count > 100, $"strong {strong.Count}, weak {weak.Count}");
+        // Expected: strong ~85% on levels 1-3 (guard 3-5), weak ~63% on levels 1-2 (guard 1-2).
+        Assert.True(strong.Count(l => l <= 3) > 0.78 * strong.Count, $"strong on 1-3: {strong.Count(l => l <= 3)} of {strong.Count}");
+        Assert.True(weak.Count(l => l <= 2) > 0.52 * weak.Count, $"weak on 1-2: {weak.Count(l => l <= 2)} of {weak.Count}");
+        Assert.True(strong.Average() < 2.4, $"strong mean {strong.Average():F2}");
+        Assert.True(weak.Average() < 2.6, $"weak mean {weak.Average():F2}");
+        // Higher levels stay possible but rare.
+        Assert.Contains(5, strong);
+        Assert.Contains(5, weak);
+        Assert.True(strong.Count(l => l >= 4) < 0.25 * strong.Count);
+    }
+
+    [Fact]
+    public void The_level_roll_follows_the_documented_distribution_on_many_seeds()
+    {
+        // A synthetic 100 x 100 grass block over many seeds: every camp is strong (wolfden).
+        var tiles = new List<HexCoord>();
+        for (var q = 0; q < 100; q++)
+        {
+            for (var r = 0; r < 100; r++)
+            {
+                tiles.Add(new HexCoord(q, r));
+            }
+        }
+
+        var land = tiles.ToDictionary(t => t, _ => Terrain.Grass);
+        var counts = new int[CampGenerator.MaxCampLevel + 1];
+        for (var seed = 0; seed < 200; seed++)
+        {
+            foreach (var p in CampGenerator.PlaceCore(tiles, land, [], [], seed, 1))
+            {
+                counts[p.Level]++;
+            }
+        }
+
+        var total = counts.Sum();
+        Assert.True(total > 1_000, $"total {total}");
+        // Strong is u^3: P(level k) = (k/5)^(1/3) - ((k-1)/5)^(1/3) = 58.5, 15.2, 10.6, 8.5, 7.2 percent.
+        double[] expected = [0.585, 0.152, 0.106, 0.085, 0.072];
+        for (var level = 1; level <= CampGenerator.MaxCampLevel; level++)
+        {
+            Assert.InRange((double)counts[level] / total, expected[level - 1] - 0.04, expected[level - 1] + 0.04);
+        }
+    }
+
+    [Fact]
+    public void Weak_camps_roll_u_squared_levels_on_many_seeds()
+    {
+        // A synthetic 100 x 100 sand block: every camp is a weak seal colony (capped per island, so
+        // many islands of a fixed index would repeat; vary the seed and take the pooled levels).
+        var tiles = new List<HexCoord>();
+        for (var q = 0; q < 100; q++)
+        {
+            for (var r = 0; r < 100; r++)
+            {
+                tiles.Add(new HexCoord(q, r));
+            }
+        }
+
+        var land = tiles.ToDictionary(t => t, _ => Terrain.Sand);
+        var counts = new int[CampGenerator.MaxCampLevel + 1];
+        for (var seed = 0; seed < 400; seed++)
+        {
+            foreach (var p in CampGenerator.PlaceCore(tiles, land, [], [], seed, 1))
+            {
+                counts[p.Level]++;
+            }
+        }
+
+        var total = counts.Sum();
+        Assert.True(total > 200, $"total {total}");
+        // Weak is u^2: P(level k) = sqrt(k/5) - sqrt((k-1)/5) = 44.7, 18.5, 14.3, 11.9, 10.6 percent.
+        double[] expected = [0.447, 0.185, 0.143, 0.119, 0.106];
+        for (var level = 1; level <= CampGenerator.MaxCampLevel; level++)
+        {
+            Assert.InRange((double)counts[level] / total, expected[level - 1] - 0.07, expected[level - 1] + 0.07);
+        }
     }
 
     [Fact]
@@ -283,7 +379,8 @@ public class CampGenerationTests
         var placed = CampGenerator.PlaceCore(tiles, land, rivers, [giantAnchor], seed(), 3);
         var blocked = Giant.Footprint(giantAnchor).Concat(rivers.Select(r => r.Coord)).ToHashSet();
 
-        Assert.Equal(CampGenerator.CampCountFor(tiles.Count), placed.Count);
+        // All grass: only the strong budget can be filled, the weak one stays empty.
+        Assert.Equal(CampGenerator.StrongCountFor(tiles.Count), placed.Count);
         Assert.All(placed, p => Assert.DoesNotContain(p.Coord, blocked));
         Assert.All(placed, p => Assert.Equal(CampFamilies.Wolfden, p.Family));
 
@@ -343,8 +440,45 @@ public class CampGenerationTests
 
         var placed = CampGenerator.PlaceCore(tiles, land, [], [], 5, 2);
 
-        Assert.Equal(CampGenerator.CampCountFor(tiles.Count), placed.Count);
+        // The weak budget (6) is cut to the seal and eyrie caps (2 + 2).
+        var expectedCount = CampGenerator.StrongCountFor(tiles.Count)
+            + Math.Min(CampGenerator.WeakCountFor(tiles.Count), CampGenerator.MaxSealCampsFor(tiles.Count) + CampGenerator.MaxEyrieCampsFor(tiles.Count));
+        Assert.Equal(expectedCount, placed.Count);
         Assert.Equal(4, placed.Take(4).Select(p => p.Family).Distinct().Count());
+    }
+
+    [Fact]
+    public void Strong_and_weak_camps_fill_their_own_budgets_and_an_unused_weak_budget_is_not_turned_strong()
+    {
+        // 60 x 60: grass and forest (strong ground) above, sand and mountain (weak ground) below.
+        var tiles = new List<HexCoord>();
+        var land = new Dictionary<HexCoord, Terrain>();
+        for (var q = 0; q < 60; q++)
+        {
+            for (var r = 0; r < 60; r++)
+            {
+                var coord = new HexCoord(q, r);
+                tiles.Add(coord);
+                land[coord] = (r / 15) switch { 0 => Terrain.Grass, 1 => Terrain.Forest, 2 => Terrain.Sand, _ => Terrain.Mountain };
+            }
+        }
+
+        var placed = CampGenerator.PlaceCore(tiles, land, [], [], 11, 4);
+        Assert.Equal(CampGenerator.StrongCountFor(tiles.Count), placed.Count(p => CampFamilies.IsStrong(p.Family)));
+        Assert.Equal(
+            Math.Min(CampGenerator.WeakCountFor(tiles.Count), CampGenerator.MaxSealCampsFor(tiles.Count) + CampGenerator.MaxEyrieCampsFor(tiles.Count)),
+            placed.Count(p => !CampFamilies.IsStrong(p.Family)));
+
+        // The same island with no weak ground: the weak budget stays unfilled.
+        var grass = tiles.ToDictionary(t => t, _ => Terrain.Grass);
+        var onlyStrong = CampGenerator.PlaceCore(tiles, grass, [], [], 11, 4);
+        Assert.Equal(CampGenerator.StrongCountFor(tiles.Count), onlyStrong.Count);
+        Assert.All(onlyStrong, p => Assert.True(CampFamilies.IsStrong(p.Family)));
+
+        // And a 60-tile island whose budgets both round to zero still gets one camp, weak on sand, strong on forest.
+        var small = Enumerable.Range(0, CampGenerator.MinCampIslandTiles).Select(q => new HexCoord(q, 0)).ToList();
+        Assert.Equal(CampFamilies.Sealhaulout, Assert.Single(CampGenerator.PlaceCore(small, small.ToDictionary(t => t, _ => Terrain.Sand), [], [], 3, 0)).Family);
+        Assert.Equal(CampFamilies.Boarwallow, Assert.Single(CampGenerator.PlaceCore(small, small.ToDictionary(t => t, _ => Terrain.Forest), [], [], 3, 0)).Family);
     }
 
     [Fact]
