@@ -195,6 +195,13 @@ public sealed record FeastOfferResponse(
     double DurationSeconds,
     double RenownGain);
 
+/// <summary>An onboarding quest and where this settlement stands on it (economy.md section 7).</summary>
+/// <param name="Id">The quest's stable id (for example <c>longhouse2</c>).</param>
+/// <param name="Completed">Whether its condition is met right now.</param>
+/// <param name="Claimed">Whether its reward was already claimed.</param>
+/// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
+public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward);
+
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -214,6 +221,7 @@ public sealed record SettlementResponse(
     IReadOnlyList<RuneInstanceResponse> Runes,
     FeastResponse? Feast,
     FeastOfferResponse? NextFeast,
+    IReadOnlyList<QuestResponse> Quests,
     WorldClockResponse World)
 {
     public static SettlementResponse From(
@@ -302,6 +310,8 @@ public sealed record SettlementResponse(
                     Feasts.Duration.TotalSeconds / speedFactor,
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
+            [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
+                q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward)))],
             WorldClockResponse.From(clock, gameNow));
     }
 }
