@@ -9,6 +9,8 @@ import {
   MinCampIslandTiles,
   MinCampSpacing,
   campCountFor,
+  strongCountFor,
+  weakCountFor,
   maxSealCampsFor,
   guardRange,
   isStrongCampFamily,
@@ -53,24 +55,26 @@ describe('guardRange / campCountFor', () => {
   });
 
   it.each([
-    [0, 0],
-    [6, 0],
-    [59, 0],
-    [60, 1],
-    [224, 1],
-    [675, 2],
-    [4500, 10],
-    [14400, 32],
-    [40000, 32],
-  ])('%i land tiles -> %i camps', (tiles, expected) => {
-    expect(campCountFor(tiles)).toBe(expected);
+    [0, 0, 0, 0],
+    [59, 0, 0, 0],
+    [60, 0, 0, 1],
+    [224, 0, 0, 1],
+    [300, 0, 1, 1],
+    [900, 1, 2, 3],
+    [4500, 3, 8, 11],
+    [24000, 16, 24, 40],
+    [40000, 16, 24, 40],
+  ])('%i land tiles -> strong %i, weak %i, total %i', (tiles, strong, weak, total) => {
+    expect(strongCountFor(tiles)).toBe(strong);
+    expect(weakCountFor(tiles)).toBe(weak);
+    expect(campCountFor(tiles)).toBe(total);
   });
 
   it.each([
     [60, 1],
-    [5999, 1],
-    [6000, 2],
-    [14000, 4],
+    [2999, 1],
+    [3000, 2],
+    [14000, 7],
   ])('%i land tiles -> at most %i seal colonies', (tiles, expected) => {
     expect(maxSealCampsFor(tiles)).toBe(expected);
   });
@@ -82,6 +86,7 @@ describe('placeCamps', () => {
     const placed = placeCamps(tiles, terrainOf, [], [], 5, 2);
 
     expect(placed).toHaveLength(campCountFor(tiles.length));
+    expect(placed.filter((p) => isStrongCampFamily(p.family))).toHaveLength(strongCountFor(tiles.length));
     expect(new Set(placed.slice(0, 4).map((p) => p.family)).size).toBe(4);
     for (const p of placed) {
       expect(p.level).toBeGreaterThanOrEqual(1);
@@ -104,12 +109,12 @@ describe('placeCamps', () => {
       const total = counts.reduce((a, b) => a + b, 0);
       return { total, share: counts.slice(1).map((c) => c / total) };
     };
-    const strong = tally('grass', 60);
-    const weak = tally('sand', 100);
+    const strong = tally('grass', 200);
+    const weak = tally('sand', 400);
     const expectedStrong = [0.585, 0.152, 0.106, 0.085, 0.072];
     const expectedWeak = [0.447, 0.185, 0.143, 0.119, 0.106];
     expect(strong.total).toBeGreaterThan(1000);
-    expect(weak.total).toBeGreaterThan(200);
+    expect(weak.total).toBeGreaterThan(500);
     for (let i = 0; i < 5; i++) {
       expect(Math.abs(strong.share[i]! - expectedStrong[i]!)).toBeLessThan(0.05);
       expect(Math.abs(weak.share[i]! - expectedWeak[i]!)).toBeLessThan(0.07);

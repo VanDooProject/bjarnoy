@@ -32,17 +32,21 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
 `GoldenRegenerationTests`, `BJARNOY_REGEN_GOLDENS=1`).
 
 1. **Count**: an island with fewer than `MinCampIslandTiles` (60) land tiles gets **no camp** (islets stay
-   camp-free, so seal colonies do not dominate). Otherwise
-   `clamp(round(islandLand / CampTilesPerCamp), 1, MaxCampsPerIsland)`: a 60-tile island gets one camp if it
-   has a candidate, an island of 14 400+ tiles gets the cap (32).
+   camp-free). Otherwise two separate budgets: strong
+   `clamp(round(land / StrongCampTilesPer), 0, MaxStrongCampsPerIsland)` (1500 tiles each, max 16) and weak
+   `clamp(round(land / WeakCampTilesPer), 0, MaxWeakCampsPerIsland)` (600 tiles each, max 24; weak camps
+   have no start-position distance rule because they do not attack on their own). An island of 60+ tiles
+   whose budgets both round to zero still gets one camp, of either kind. A budget that the island's
+   ground cannot fill (no sand or mountain for weak, say) stays unfilled and is never turned into the other kind.
 2. **Candidates**: land tiles not on a giant footprint, not a river tile (except a straight river tile
    for bearrapids), and whose ground has a family (see the table). Mountain tiles count.
 3. **Farthest-point sampling** (like the river springs): the first pick is the hash-best candidate; each
    next pick is the candidate farthest from every camp so far, at least `MinCampSpacing` from all of them
    (ties: hash, then q, r). Weighting: while some ground the island has still has no camp, only
-   candidates on such grounds are considered, so each ground gets one before any gets a second.
+   candidates on such grounds are considered, so each ground gets one before any gets a second. Spacing is
+   shared by both kinds, but a pick is only taken from a kind (strong / weak) whose budget is not used up.
    **Seal cap**: at most `MaxSealCampsFor(land)` = `max(1, round(land / SandTilesPerSealCamp))` seal
-   colonies per island (`SandTilesPerSealCamp` 4000). The sand rim is always the ground farthest from the
+   colonies per island (`SandTilesPerSealCamp` 2000). The sand rim is always the ground farthest from the
    interior camps, so without the cap farthest-point sampling gave seals about 45% of all camps.
 4. **Level**: rolled per camp in `1..MaxCampLevel` from a hash `u`, low for every family so few start
    positions are lost: weak `1 + floor(u^2 * 5)`, strong `1 + floor(u^3 * 5)` (only `*` and `floor`, so C# and
@@ -77,19 +81,19 @@ camp), start positions on green islands:
 |---|---|---|---|---|
 | no camps | 0 | | 278 363 | 60 |
 | first camps PR (700 tiles per camp, cap 24, strong `1-(1-u)^2`) | 1 532 | 1 122 / 410 | 238 273 (-14.4%) | 85 |
-| dense (450, cap 32, strong `u^3`, weak `u^2`) | 2 277 | 1 809 / 468 | 237 493 (-14.7%) | 75 |
+| one budget (450, cap 32, strong `u^3`, weak `u^2`) | 2 277 | 1 809 / 468 | 237 493 (-14.7%) | 75 |
+| **two budgets (strong 1500 / weak 600, seal 2000)** | 2 352 | 759 / 1 593 | **260 095 (-6.6%)** | 75 |
 
 (The -11% quoted for the first camps PR was measured before the seal cap; with the cap it was -14.4%.)
-Levels of the dense set: strong L1-L5 = 1 082 / 273 / 183 / 141 / 130, weak 207 / 93 / 61 / 60 / 47. Families:
-wolfden 816, boarwallow 690, sealhaulout 283, bearrapids 195, eagleeyrie 185, fenrirbrood 108. Tried and
-rejected on the way: strong `u^1.5` (`u * sqrt(u)`) 228 757 start positions (-17.8%, 82 islands without),
-strong `u^2` 232 964 (-16.3%, 77); a `StartPositionMargin` of 1 instead of 2 would give 244 782 with `u^2` and
-248 632 with `u^3` (-10.7%), but it changes the start rule and was not taken. Seed 11 at radius 1000
-(32 islands, 23 with camps): 286 camps (226 strong, 60 weak: wolfden 115, boarwallow 81, sealhaulout 39,
-bearrapids 30, eagleeyrie 21).
+Two-budget set: families eagleeyrie 1 038, sealhaulout 555, wolfden 336, boarwallow 274, bearrapids 115,
+fenrirbrood 34; strong levels L1-L5 = 460 / 114 / 74 / 52 / 59, weak 694 / 304 / 245 / 200 / 150. Tried on the
+way with the single budget: strong `u^1.5` -17.8%, strong `u^2` -16.3%, `StartPositionMargin` 1 would have
+given -10.7%; the owner asked for fewer strong and more weak camps instead, which keeps the margin at 2.
+Seed 11 at radius 1000 (32 islands, 23 with camps): 314 camps (102 strong, 212 weak: eagleeyrie 133,
+sealhaulout 79, wolfden 45, boarwallow 39, bearrapids 18).
 
-Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `CampTilesPerCamp` 450,
-`MinCampIslandTiles` 60, `SandTilesPerSealCamp` 4000, `MaxCampsPerIsland` 32, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
+Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `StrongCampTilesPer` 1500, `WeakCampTilesPer` 600, `MaxStrongCampsPerIsland` 16, `MaxWeakCampsPerIsland` 24,
+`MinCampIslandTiles` 60, `SandTilesPerSealCamp` 2000, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
 guard-range formulas above.
 
 ## Data, API and art

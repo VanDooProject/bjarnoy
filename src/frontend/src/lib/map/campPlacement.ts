@@ -59,14 +59,20 @@ export function isStrongCampFamily(family: string): boolean {
   return campFamilyInfo(family)?.strength === 'strong';
 }
 
-/** One camp per this many land tiles (rounded), tuning default — mirrors `CampGenerator.CampTilesPerCamp`. */
-export const CampTilesPerCamp = 450;
+/** One strong camp per this many land tiles (rounded) — mirrors `CampGenerator.StrongCampTilesPer`. */
+export const StrongCampTilesPer = 1500;
+
+/** One weak camp per this many land tiles (rounded) — mirrors `CampGenerator.WeakCampTilesPer`. */
+export const WeakCampTilesPer = 600;
+
+/** No island gets more strong camps than this — mirrors `CampGenerator.MaxStrongCampsPerIsland`. */
+export const MaxStrongCampsPerIsland = 16;
+
+/** No island gets more weak camps than this — mirrors `CampGenerator.MaxWeakCampsPerIsland`. */
+export const MaxWeakCampsPerIsland = 24;
 
 /** An island with fewer land tiles than this gets no camp at all — mirrors `CampGenerator.MinCampIslandTiles`. */
 export const MinCampIslandTiles = 60;
-
-/** No island gets more camps than this — mirrors `CampGenerator.MaxCampsPerIsland`. */
-export const MaxCampsPerIsland = 32;
 
 /** Two camps are never closer than this many hex steps — mirrors `CampGenerator.MinCampSpacing`. */
 export const MinCampSpacing = 6;
@@ -89,18 +95,32 @@ export function guardRange(level: number, strength: CampStrength): number {
 }
 
 /** Land tiles per seal colony — mirrors `CampGenerator.SandTilesPerSealCamp` (the sand rim would otherwise win most farthest-point picks). */
-export const SandTilesPerSealCamp = 4000;
+export const SandTilesPerSealCamp = 2000;
 
 /** At most this many seal colonies per island — mirrors `CampGenerator.MaxSealCampsFor`. */
 export function maxSealCampsFor(landTileCount: number): number {
   return Math.max(1, Math.floor((2 * landTileCount + SandTilesPerSealCamp) / (2 * SandTilesPerSealCamp)));
 }
 
-/** The number of camps an island of this many land tiles is offered — mirrors `CampGenerator.CampCountFor`. */
+function budgetFor(landTileCount: number, tilesPer: number, max: number): number {
+  if (landTileCount < MinCampIslandTiles) return 0;
+  return Math.min(Math.max(Math.floor((2 * landTileCount + tilesPer) / (2 * tilesPer)), 0), max);
+}
+
+/** The strong-camp budget of an island — mirrors `CampGenerator.StrongCountFor`. */
+export function strongCountFor(landTileCount: number): number {
+  return budgetFor(landTileCount, StrongCampTilesPer, MaxStrongCampsPerIsland);
+}
+
+/** The weak-camp budget of an island — mirrors `CampGenerator.WeakCountFor`. */
+export function weakCountFor(landTileCount: number): number {
+  return budgetFor(landTileCount, WeakCampTilesPer, MaxWeakCampsPerIsland);
+}
+
+/** The most camps an island is offered (both budgets, at least one from 60 tiles) — mirrors `CampGenerator.CampCountFor`. */
 export function campCountFor(landTileCount: number): number {
   if (landTileCount < MinCampIslandTiles) return 0;
-  const rounded = Math.floor((2 * landTileCount + CampTilesPerCamp) / (2 * CampTilesPerCamp));
-  return Math.min(Math.max(rounded, 1), MaxCampsPerIsland);
+  return Math.max(1, strongCountFor(landTileCount) + weakCountFor(landTileCount));
 }
 
 /**
@@ -154,11 +174,14 @@ function pickBest(
   represented: Set<CampGround>,
   restrictToUnrepresented: boolean,
   sandFull: boolean,
+  strongOpen: boolean,
+  weakOpen: boolean,
 ): number {
   let best = -1;
   for (let i = 0; i < candidates.length; i++) {
     if (picked[i] || minDistance[i]! < MinCampSpacing) continue;
     if (restrictToUnrepresented && represented.has(candidates[i]!.info.ground)) continue;
+    if (candidates[i]!.info.strength === 'strong' ? !strongOpen : !weakOpen) continue;
     if (sandFull && candidates[i]!.info.ground === 'sand') continue;
     if (best < 0) {
       best = i;
@@ -235,7 +258,17 @@ export function placeCamps(
     candidates.push({ coord, info, orientation, hash: hash2(coord.q, coord.r, seed + 131) });
   }
 
+  // Two budgets, one shared farthest-point sampling. An island whose budgets both round to zero
+  // still gets one camp, of either kind.
+  let strongBudget = strongCountFor(islandTiles.length);
+  let weakBudget = weakCountFor(islandTiles.length);
   const count = campCountFor(islandTiles.length);
+  if (strongBudget + weakBudget === 0) {
+    strongBudget = 1;
+    weakBudget = 1;
+  }
+  let strongUsed = 0;
+  let weakUsed = 0;
   const chosen: Candidate[] = [];
   if (candidates.length === 0) return [];
 
@@ -249,14 +282,18 @@ export function placeCamps(
     // Grounds without a camp first; once none of them has an eligible tile left, any ground.
     // (The first pick: nothing is placed, so all distances tie and the hash decides.)
     const sandFull = seals >= maxSeals;
-    let index = pickBest(candidates, minDistance, picked, represented, true, sandFull);
-    if (index < 0) index = pickBest(candidates, minDistance, picked, represented, false, sandFull);
+    const strongOpen = strongUsed < strongBudget;
+    const weakOpen = weakUsed < weakBudget;
+    let index = pickBest(candidates, minDistance, picked, represented, true, sandFull, strongOpen, weakOpen);
+    if (index < 0) index = pickBest(candidates, minDistance, picked, represented, false, sandFull, strongOpen, weakOpen);
     if (index < 0) break;
 
     const pick = candidates[index]!;
     picked[index] = true;
     chosen.push(pick);
     represented.add(pick.info.ground);
+    if (pick.info.strength === 'strong') strongUsed++;
+    else weakUsed++;
     if (pick.info.ground === 'sand') seals++;
     for (let i = 0; i < candidates.length; i++) {
       const distance = hexDistance(candidates[i]!.coord, pick.coord);

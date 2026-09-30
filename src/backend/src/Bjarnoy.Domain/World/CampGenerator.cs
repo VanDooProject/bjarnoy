@@ -3,21 +3,28 @@ namespace Bjarnoy.Domain.World;
 /// <summary>
 /// Places wildlife camps on an island: candidate tiles by ground, then farthest-point
 /// sampling (like the river springs) with a minimum spacing, weighted so every ground the
-/// island has gets a camp before any ground gets a second. Pure and seed-derived, called
+/// island has gets a camp before any ground gets a second, and a pick only from a kind (strong / weak)
+/// whose budget is not used up. Pure and seed-derived, called
 /// once per island from <see cref="WorldGenerator.Generate"/> after giants and before
 /// start positions. Mirrored bit for bit by <c>src/frontend/src/lib/map/campPlacement.ts</c>.
 /// See <c>docs/design/wildlife-camps.md</c>.
 /// </summary>
 internal static class CampGenerator
 {
-    /// <summary>One camp per this many land tiles (rounded), tuning default.</summary>
-    public const int CampTilesPerCamp = 450;
+    /// <summary>One strong camp per this many land tiles (rounded), tuning default.</summary>
+    public const int StrongCampTilesPer = 1500;
+
+    /// <summary>One weak camp per this many land tiles (rounded), tuning default. Weak camps have no start-position distance rule.</summary>
+    public const int WeakCampTilesPer = 600;
+
+    /// <summary>No island gets more strong camps than this, tuning default.</summary>
+    public const int MaxStrongCampsPerIsland = 16;
+
+    /// <summary>No island gets more weak camps than this, tuning default.</summary>
+    public const int MaxWeakCampsPerIsland = 24;
 
     /// <summary>An island with fewer land tiles than this gets no camp at all (islets stay camp-free), tuning default.</summary>
     public const int MinCampIslandTiles = 60;
-
-    /// <summary>No island gets more camps than this, tuning default.</summary>
-    public const int MaxCampsPerIsland = 32;
 
     /// <summary>Two camps are never closer than this many hex steps, tuning default.</summary>
     public const int MinCampSpacing = 6;
@@ -26,7 +33,7 @@ internal static class CampGenerator
     /// Land tiles per seal colony: an island's sand rim is always the farthest ground from its
     /// interior camps, so without a cap farthest-point sampling hands most picks to seals.
     /// </summary>
-    public const int SandTilesPerSealCamp = 4000;
+    public const int SandTilesPerSealCamp = 2000;
 
     /// <summary>At most this many seal colonies on an island of <paramref name="landTileCount"/> tiles (rounded, at least 1).</summary>
     public static int MaxSealCampsFor(int landTileCount) =>
@@ -78,12 +85,21 @@ internal static class CampGenerator
         return camps;
     }
 
+    /// <summary>The strong-camp budget of an island: none below <see cref="MinCampIslandTiles"/>, else <c>clamp(round(land / StrongCampTilesPer), 0, MaxStrongCampsPerIsland)</c>.</summary>
+    public static int StrongCountFor(int landTileCount) =>
+        landTileCount < MinCampIslandTiles ? 0 : Math.Clamp(((2 * landTileCount) + StrongCampTilesPer) / (2 * StrongCampTilesPer), 0, MaxStrongCampsPerIsland);
+
+    /// <summary>The weak-camp budget of an island: none below <see cref="MinCampIslandTiles"/>, else <c>clamp(round(land / WeakCampTilesPer), 0, MaxWeakCampsPerIsland)</c>.</summary>
+    public static int WeakCountFor(int landTileCount) =>
+        landTileCount < MinCampIslandTiles ? 0 : Math.Clamp(((2 * landTileCount) + WeakCampTilesPer) / (2 * WeakCampTilesPer), 0, MaxWeakCampsPerIsland);
+
     /// <summary>
-    /// The number of camps an island of this many land tiles is offered (before ground and spacing
-    /// cut it down): none below <see cref="MinCampIslandTiles"/>, otherwise clamped to <c>1..MaxCampsPerIsland</c>.
+    /// The most camps an island of this many land tiles is offered (before ground and spacing cut it
+    /// down): the two budgets added, and at least one once the island has <see cref="MinCampIslandTiles"/>
+    /// (that one is strong or weak, whichever ground the island offers).
     /// </summary>
     public static int CampCountFor(int landTileCount) =>
-        landTileCount < MinCampIslandTiles ? 0 : Math.Clamp(((2 * landTileCount) + CampTilesPerCamp) / (2 * CampTilesPerCamp), 1, MaxCampsPerIsland);
+        landTileCount < MinCampIslandTiles ? 0 : Math.Max(1, StrongCountFor(landTileCount) + WeakCountFor(landTileCount));
 
     /// <summary>
     /// The pure placement core. Takes only what the rules need, so a test or the golden
@@ -170,7 +186,19 @@ internal static class CampGenerator
                 ValueNoise.Hash2(coord.Q, coord.R, seed + 131)));
         }
 
+        // Two budgets, one shared farthest-point sampling. An island whose budgets both round to
+        // zero still gets one camp, of either kind.
+        var strongBudget = StrongCountFor(islandTiles.Count);
+        var weakBudget = WeakCountFor(islandTiles.Count);
         var count = CampCountFor(islandTiles.Count);
+        if (strongBudget + weakBudget == 0)
+        {
+            strongBudget = 1;
+            weakBudget = 1;
+        }
+
+        var strongUsed = 0;
+        var weakUsed = 0;
         var chosen = new List<Candidate>();
         if (candidates.Count == 0)
         {
@@ -190,10 +218,12 @@ internal static class CampGenerator
             // any ground. (The first pick: nothing is placed, so all distances tie and the
             // hash decides.)
             var sandFull = seals >= maxSeals;
-            var index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: true, sandFull);
+            var strongOpen = strongUsed < strongBudget;
+            var weakOpen = weakUsed < weakBudget;
+            var index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: true, sandFull, strongOpen, weakOpen);
             if (index < 0)
             {
-                index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: false, sandFull);
+                index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: false, sandFull, strongOpen, weakOpen);
             }
 
             if (index < 0)
@@ -205,6 +235,15 @@ internal static class CampGenerator
             picked[index] = true;
             chosen.Add(pick);
             represented.Add(pick.Info.Ground);
+            if (pick.Info.Strength == CampStrength.Strong)
+            {
+                strongUsed++;
+            }
+            else
+            {
+                weakUsed++;
+            }
+
             if (pick.Info.Ground == CampGround.Sand)
             {
                 seals++;
@@ -238,7 +277,9 @@ internal static class CampGenerator
         bool[] picked,
         HashSet<CampGround> represented,
         bool restrictToUnrepresented,
-        bool sandFull)
+        bool sandFull,
+        bool strongOpen,
+        bool weakOpen)
     {
         var best = -1;
         for (var i = 0; i < candidates.Count; i++)
@@ -249,6 +290,11 @@ internal static class CampGenerator
             }
 
             if (restrictToUnrepresented && represented.Contains(candidates[i].Info.Ground))
+            {
+                continue;
+            }
+
+            if (candidates[i].Info.Strength == CampStrength.Strong ? !strongOpen : !weakOpen)
             {
                 continue;
             }
