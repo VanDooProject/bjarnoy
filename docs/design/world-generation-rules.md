@@ -43,8 +43,11 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 *All planned.*
 
 - More rivers per island; streams should more often combine into bigger rivers.
-- A new river starts as a small stream and stays small as long as possible, widening late: only where two
-  streams join, or on the last straight tile before it must be river-width (sea mouth, bog, meeting a river).
+- A new river starts as a small stream and stays small for the first half of its run. It widens only where two
+  streams join, or on a straight tile chosen at random within the second half of the stream's run before it
+  must be river-width (sea mouth, bog, meeting a river). Never in the first half, and not always at the very
+  last tile of a long run (that reads as artificial); the second half, rather than the last quarter, leaves
+  enough river-width tiles for the river buildings (Sawmill, Crop Mill, Hammerschmiede).
 - Springs are chosen as far apart from each other as possible so there are few parallel river runs.
 
 Known limitation of the current collision rule (relevant to the rework): about 2% of river mouths at
