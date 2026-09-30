@@ -102,7 +102,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
    LandingView's root from the HUD bar's measured height) say which edge the
    bar occupies and how tall it is, so the banners clear it whether it's
    docked at the top or the bottom. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .banner {
     border-radius: 16px;
     flex-wrap: wrap;

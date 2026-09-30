@@ -185,7 +185,7 @@ onMounted(() => {
 }
 /* Mobile-readiness audit: `.back` (43x17) and `.link` (20px tall) were both
    well under a comfortable touch target on a phone. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .back,
   .link {
     min-height: 44px;

@@ -303,7 +303,7 @@ watch(() => route.fullPath, closeAccountMenu);
    can't read a JS constant). Finding #8: scoped to `.hud-nav:not(.hud-nav--no-drawer)`
    so this only ever collapses the links where a drawer actually exists to
    reach them from — see the `hasDrawer` prop's own comment above. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .hud-nav:not(.hud-nav--no-drawer) .link {
     display: none;
   }
@@ -312,7 +312,7 @@ watch(() => route.fullPath, closeAccountMenu);
    avatar/account-menu leaves the phone bar everywhere, regardless of
    `hasResourceBar` — see `hasResourceBar`'s own comment above. Profile/Log
    out live in MobileHudDrawer's account section instead. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .hud-nav:not(.hud-nav--no-drawer) .account-menu {
     display: none;
   }
@@ -323,7 +323,7 @@ watch(() => route.fullPath, closeAccountMenu);
    since there's nothing else contending for that room. Its account-creation
    nudge (ProfileNudge, in its `#nudge` slot) moves along with it into
    MobileHudDrawer's account section in that one case. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .hud-nav--with-resources:not(.hud-nav--no-drawer) .returning-player-menu {
     display: none;
   }

@@ -325,7 +325,7 @@ watch(() => route.fullPath, close);
    single line of text. Same breakpoint as lib/breakpoints.ts's
    HUD_COMPACT_MAX_WIDTH — plain CSS here can't read that JS constant, so it
    has to be repeated as a literal (see that file's own comment). */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .trigger {
     max-width: 132px;
     min-height: 44px;

@@ -202,7 +202,7 @@ async function onSubmit() {
 }
 /* Mobile-readiness audit: `.back` and `.link` were both well under a
    comfortable touch target on a phone. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .back,
   .link {
     min-height: 44px;

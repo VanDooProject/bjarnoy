@@ -1153,7 +1153,7 @@ h1 {
    hero has to span full-width below the mobile header instead of a fixed
    left offset, and the footer has to shrink so it doesn't fight the
    checklist tray for the same strip of screen at the bottom. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .hero {
     left: 20px;
     right: 20px;
@@ -1240,6 +1240,10 @@ h1 {
     font-size: 12px;
     margin-top: 6px;
     gap: 6px;
+    /* The phone rules above keep the facts on one line; in this 280px
+       column that line would run out across the island instead. */
+    flex-wrap: wrap;
+    white-space: normal;
   }
 }
 </style>
