@@ -169,3 +169,22 @@ test.describe('docs top bar on a phone', { tag: '@g2' }, () => {
     expect(await main.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
   });
 });
+
+test.describe('landscape phone gets the phone HUD', { tag: '@g2' }, () => {
+  test.use({ viewport: PHONE_LANDSCAPE, hasTouch: true, isMobile: true });
+
+  // 844px is wider than the phone breakpoint, so a phone held sideways got
+  // the desktop header (clipped resource bar), the ArmyPanel over a ~320px
+  // tall map, and a completion banner whose "Enter your settlement" sat
+  // under the profile nudge — found() clicks that CTA, so it must be
+  // reachable for this to even get to the settlement.
+  test('founding completes and the settlement shows the compact bar, not the desktop panels', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.found(page);
+    await expect(page.locator('.hud-grip')).toBeVisible();
+    await expect(page.locator('.army-panel')).toHaveCount(0);
+    const { pageScrollsSideways, offscreen } = await layoutOverflow(page);
+    expect(pageScrollsSideways).toBe(false);
+    expect(offscreen).toEqual([]);
+  });
+});
