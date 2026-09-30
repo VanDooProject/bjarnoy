@@ -192,6 +192,28 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     }
 
     [Fact]
+    public async Task Bog_tiles_survive_the_round_trip_through_the_text_encoded_column()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(seed: 9, radius: 600);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(islands);
+        static string Key(int island, BogTileResponse t) =>
+            $"{island}:{t.Q},{t.R},{t.Kind},{string.Join('+', t.InDirections)},{t.OutDirection},{string.Join('+', t.WaterEdges)}";
+        var served = islands.SelectMany(i => i.BogTiles.Select(t => (i.Index, Response: t))).ToList();
+        Assert.NotEmpty(served);
+        Assert.Contains(served, t => t.Response.Kind == "lake");
+
+        var expected = world.Islands.Where(i => !i.IsWasted)
+            .SelectMany(i => i.BogTiles.Select(t => (i.Index, Response: BogTileResponse.From(t))))
+            .ToList();
+        Assert.Equal(expected.Select(e => Key(e.Index, e.Response)), served.Select(e => Key(e.Index, e.Response)));
+    }
+
+    [Fact]
     public async Task Wasted_islands_are_hidden_until_the_endboss_triggers()
     {
         using var client = _fixture.CreateClient();
@@ -255,7 +277,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         Assert.Equal(world.Id, chunk.WorldId);
         Assert.Equal(11 * 11, chunk.Tiles.Count);
         Assert.All(chunk.Tiles, t => Assert.Contains(
-            t.Terrain, new[] { "sea", "sand", "grass", "forest", "mountain" }));
+            t.Terrain, new[] { "sea", "sand", "grass", "forest", "mountain", "bog", "lake" }));
         Assert.All(chunk.Tiles, t => Assert.InRange(t.Q, -5, 5));
         Assert.All(chunk.Tiles, t => Assert.InRange(t.R, -5, 5));
     }

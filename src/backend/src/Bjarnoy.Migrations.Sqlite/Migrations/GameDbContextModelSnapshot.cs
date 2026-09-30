@@ -558,6 +558,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("BogTiles")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Camps")
                         .IsRequired()
                         .HasColumnType("TEXT");

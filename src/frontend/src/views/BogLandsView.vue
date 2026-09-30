@@ -266,6 +266,8 @@ function buildingFrame(id: BuildingId): AtlasFrameRect | undefined {
           <li>{{ $t('docs.bogLands.rules.creeks') }}</li>
           <li>{{ $t('docs.bogLands.rules.mouth') }}</li>
           <li>{{ $t('docs.bogLands.rules.weir') }}</li>
+          <li>{{ $t('docs.bogLands.rules.river') }}</li>
+          <li>{{ $t('docs.bogLands.rules.inland') }}</li>
           <li>{{ $t('docs.bogLands.rules.landing') }}</li>
         </ol>
       </section>

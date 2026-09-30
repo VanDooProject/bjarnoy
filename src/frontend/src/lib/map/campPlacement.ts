@@ -16,7 +16,7 @@ import type { RiverTile, Terrain, TileOrientation } from './types';
 
 export type CampStrength = 'weak' | 'strong';
 
-/** Which ground a camp family is placed on. `bog` has no terrain yet (a later PR), so no camp is placed there. */
+/** Which ground a camp family is placed on. `bog` is plain bog moss only (not a lake, shore, mouth or creek). */
 export type CampGround = 'grass' | 'forest' | 'sand' | 'mountain' | 'riverStraight' | 'wasteland' | 'bog';
 
 export type CampFamily =
@@ -158,6 +158,13 @@ function familyFor(ground: CampGround): CampFamilyInfo {
   return CAMP_FAMILIES.find((f) => f.ground === ground)!;
 }
 
+/** One of the three bog camp families, by a hash of the hex (they share the bog ground) — mirrors `CampGenerator.BogFamilyFor`. */
+function bogFamilyFor(coord: AxialCoord, seed: number): CampFamilyInfo {
+  const bogFamilies = CAMP_FAMILIES.filter((f) => f.ground === 'bog');
+  const index = Math.floor(hash2(coord.q, coord.r, seed + 137) * bogFamilies.length);
+  return bogFamilies[Math.min(index, bogFamilies.length - 1)]!;
+}
+
 /** The ground a plain land tile offers a camp, or `null` when it offers none. */
 function groundOf(terrain: Terrain, wasted: boolean): CampGround | null {
   if (wasted) return terrain === 'grass' ? 'wasteland' : null;
@@ -224,6 +231,7 @@ export function placeCamps(
   worldSeed: number,
   islandIndex: number,
   wasted = false,
+  plainBog: ReadonlySet<string> | null = null,
 ): CampPlacement[] {
   if (islandTiles.length < MinCampIslandTiles) return [];
 
@@ -257,10 +265,15 @@ export function placeCamps(
       if (!direction) continue;
       orientation = straightOrientationOf(direction);
     } else {
-      // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) picks one of
-      // moosemire / beaverlodge / cranedance by hash; bog terrain does not exist yet.
-      const ground = groundOf(terrainOf(coord), wasted);
-      info = ground ? familyFor(ground) : null;
+      const terrain = terrainOf(coord);
+      if (terrain === 'bog') {
+        // Only plain bog moss (not a lake, shore, mouth or creek) holds a camp: moosemire, beaverlodge or
+        // cranedance, by hash.
+        info = plainBog !== null && plainBog.has(coordKey(coord)) ? bogFamilyFor(coord, seed) : null;
+      } else {
+        const ground = groundOf(terrain, wasted);
+        info = ground ? familyFor(ground) : null;
+      }
     }
     if (!info) continue;
 

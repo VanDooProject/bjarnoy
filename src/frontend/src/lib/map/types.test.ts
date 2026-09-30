@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   bend60OrientationOf,
   bendOrientationOf,
+  bogMouthOrientationOf,
+  bogShoreOrientationOf,
   confluenceKind,
   confluenceOrientationOf,
   confluenceWideOrientationOf,
@@ -297,5 +299,59 @@ describe('confluenceWideOrientationOf', () => {
   it('needs two inflows', () => {
     expect(confluenceWideOrientationOf(['NW'], null)).toBeNull();
     expect(confluenceWideOrientationOf([], null)).toBeNull();
+  });
+});
+
+// The bog art (bg_assets_hextile edba233: bogcreek*, boglake_inlet/shore/half/mouth): every `*_base` frame was
+// pixel-sampled along the six edges of `isoTopPoints(200, 92)` placed at y offset 140 in the 200 x 300 source (polygon
+// edge i between vertices i and i+1), water counted where a pixel is bluer than red (the bog water is dark slate blue;
+// the moss is olive), and cross-checked against `boglake` (all six edges water) and `bog` (none). The touched edges per
+// file index D (E, NE, NW, W, SW, SE) are the measurement; the helpers must reproduce them through `edge(d) = (3 - d) mod 6`.
+describe('bog art orientation convention (pixel-measured)', () => {
+  const MEASURED: Record<string, number[][]> = {
+    bogcreek: [[1, 4], [2, 5], [0, 3], [1, 4], [2, 5], [0, 3]],
+    bogcreek_bend: [[1, 5], [0, 2], [1, 3], [2, 4], [3, 5], [0, 4]],
+    bogcreek_spring: [[1], [2], [3], [4], [5], [0]],
+    boglake_inlet: [[4], [5], [0], [1], [2], [3]],
+    boglake_shore: [[3, 4], [4, 5], [0, 5], [0, 1], [1, 2], [2, 3]],
+    boglake_half: [[2, 3, 4], [3, 4, 5], [0, 4, 5], [0, 1, 5], [0, 1, 2], [1, 2, 3]],
+    boglake_mouth: [[1, 4], [2, 5], [0, 3], [1, 4], [2, 5], [0, 3]],
+  };
+  const edgeOf = (d: number) => (3 - d + 6) % 6;
+  const edgesOf = (dirs: number[]) => dirs.map(edgeOf).sort((a, b) => a - b);
+  const index = (o: TileOrientation) => TILE_ORIENTATIONS.indexOf(o);
+  const dir = (i: number) => TILE_ORIENTATIONS[(i + 6) % 6]!;
+
+  it('puts a shore of one, two or three contiguous water directions on the file that carries them', () => {
+    const families = ['boglake_inlet', 'boglake_shore', 'boglake_half'];
+    for (let length = 1; length <= 3; length++) {
+      for (let start = 0; start < 6; start++) {
+        const run = Array.from({ length }, (_, k) => dir(start + k));
+        const file = index(bogShoreOrientationOf(run));
+        expect(edgesOf(run.map(index)), `${families[length - 1]} run ${run.join(',')} -> file ${file}`).toEqual(MEASURED[families[length - 1]!]![file]);
+      }
+    }
+  });
+
+  it('puts a mouth on the file whose inlet edge is the lake and whose creek edge is opposite', () => {
+    for (let water = 0; water < 6; water++) {
+      const file = index(bogMouthOrientationOf(dir(water)));
+      expect(edgesOf([water, water + 3]), `mouth with water ${dir(water)} -> file ${file}`).toEqual(MEASURED.boglake_mouth![file]);
+      // The inlet part of a mouth is the same file as the plain inlet with that water direction.
+      expect(bogMouthOrientationOf(dir(water))).toBe(bogShoreOrientationOf([dir(water)]));
+    }
+  });
+
+  it('shares the river conventions for the creeks: straight, bend (60 degrees off straight) and spring', () => {
+    for (let d = 0; d < 6; d++) {
+      const straight = index(straightOrientationOf(dir(d)));
+      expect(edgesOf([d, d + 3]), `straight creek through ${dir(d)}`).toEqual(MEASURED.bogcreek![straight]);
+
+      const bend = index(bendOrientationOf(dir(d), dir(d + 2)));
+      expect(edgesOf([d, d + 2]), `bend creek ${dir(d)} / ${dir(d + 2)}`).toEqual(MEASURED.bogcreek_bend![bend]);
+
+      const spring = index(springOrientationOf(dir(d)));
+      expect(edgesOf([d]), `creek spring out ${dir(d)}`).toEqual(MEASURED.bogcreek_spring![spring]);
+    }
   });
 });

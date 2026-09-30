@@ -80,10 +80,11 @@ internal static class CampGenerator
         int islandIndex,
         IReadOnlyList<RiverTile> riverTiles,
         IReadOnlyList<Giant> giants,
-        bool wasted = false)
+        bool wasted = false,
+        IReadOnlySet<HexCoord>? plainBog = null)
     {
         var placements = PlaceCore(
-            islandTiles, land, riverTiles, giants.Select(g => g.Anchor).ToList(), options.Seed, islandIndex, wasted);
+            islandTiles, land, riverTiles, giants.Select(g => g.Anchor).ToList(), options.Seed, islandIndex, wasted, plainBog);
 
         var camps = new List<Camp>(placements.Count);
         foreach (var placement in placements)
@@ -122,7 +123,8 @@ internal static class CampGenerator
         IReadOnlyList<HexCoord> giantAnchors,
         int worldSeed,
         int islandIndex,
-        bool wasted = false)
+        bool wasted = false,
+        IReadOnlySet<HexCoord>? plainBog = null)
     {
         if (islandTiles.Count < MinCampIslandTiles)
         {
@@ -179,9 +181,16 @@ internal static class CampGenerator
             }
             else
             {
-                // TODO(bog PR): a plain bog tile (not lake/shore/mouth/creek) picks one of
-                // moosemire / beaverlodge / cranedance by hash; bog terrain does not exist yet.
-                info = GroundOf(terrain, wasted) is { } ground ? FamilyFor(ground) : null;
+                if (terrain == Terrain.Bog)
+                {
+                    // Only plain bog moss (not a lake, shore, mouth or creek) holds a camp: moosemire, beaverlodge or
+                    // cranedance, by hash.
+                    info = plainBog is not null && plainBog.Contains(coord) ? BogFamilyFor(coord, seed) : null;
+                }
+                else
+                {
+                    info = GroundOf(terrain, wasted) is { } ground ? FamilyFor(ground) : null;
+                }
             }
 
             if (info is null)
@@ -380,6 +389,14 @@ internal static class CampGenerator
 
     /// <summary>The family placed on a (non-bog) ground.</summary>
     private static CampFamilyInfo FamilyFor(CampGround ground) => CampFamilies.All.First(f => f.Ground == ground);
+
+    /// <summary>One of the three bog camp families, by a hash of the hex (they share the bog ground).</summary>
+    private static CampFamilyInfo BogFamilyFor(HexCoord coord, int seed)
+    {
+        var bogFamilies = CampFamilies.All.Where(f => f.Ground == CampGround.Bog).ToList();
+        var index = (int)Math.Floor(ValueNoise.Hash2(coord.Q, coord.R, seed + 137) * bogFamilies.Count);
+        return bogFamilies[Math.Min(index, bogFamilies.Count - 1)];
+    }
 
     /// <summary>
     /// The art rotation of a straight river tile flowing through <paramref name="direction"/> —

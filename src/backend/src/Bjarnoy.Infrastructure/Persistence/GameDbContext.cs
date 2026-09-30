@@ -142,6 +142,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new RiverTileListConverter())
                 .Metadata.SetValueComparer(RiverTileListConverter.Comparer);
 
+            island.Property(i => i.BogTiles)
+                .HasConversion(new BogTileListConverter())
+                .Metadata.SetValueComparer(BogTileListConverter.Comparer);
+
             island.Property(i => i.Giants)
                 .HasConversion(new GiantListConverter())
                 .Metadata.SetValueComparer(GiantListConverter.Comparer);

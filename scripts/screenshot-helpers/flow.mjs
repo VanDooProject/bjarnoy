@@ -323,6 +323,77 @@ if (wantStop('settlement_camp') || wantStopPrefix('settlement_camp')) {
   }
 }
 
+// Bogland (see src/frontend/src/lib/map/bogGenerator.ts): demo mode generates an island's bog with its
+// rivers (WorldModel.placeGiantsForIsland). The home island may have none (only islands with room for a
+// lake get one), so this stop first lets the model place the nearest other islands until one has a bog,
+// then shoots, mist off and zoomed in: the bog with its lake (`settlement_bog`), a lake mouth
+// (`settlement_bog_mouth`) and a creek (`settlement_bog_creek`); kinds the island lacks are skipped.
+if (wantStopPrefix('settlement_bog')) {
+  const found = await page.evaluate(() => {
+    const store = window.__demoWorld();
+    const model = store.model;
+    const home = model.getSettlement(store.selectedSettlementId);
+    const list = () => model.listBogTiles();
+    let generatedFor = 0;
+    if (list().length === 0) {
+      // The islands nearest home first: land hex near each island's centre, then the whole island's generation.
+      const dist = (a, b) => Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(-a.q - a.r + b.q + b.r));
+      const islands = [...model.listIslands()].sort((x, y) => dist(x, home) - dist(y, home));
+      for (const island of islands) {
+        if (list().length > 0 || generatedFor >= 40) break;
+        let land = null;
+        for (let ring = 0; ring < 60 && !land; ring++) {
+          for (let dq = -ring; dq <= ring && !land; dq++) {
+            for (let dr = Math.max(-ring, -dq - ring); dr <= Math.min(ring, -dq + ring) && !land; dr++) {
+              if (Math.max(Math.abs(dq), Math.abs(dr), Math.abs(-dq - dr)) !== ring) continue;
+              if (model.isLand(island.q + dq, island.r + dr)) land = { q: island.q + dq, r: island.r + dr };
+            }
+          }
+        }
+        if (!land) continue;
+        model.placeGiantsForIsland(land, model.seed);
+        generatedFor++;
+      }
+    }
+    const tiles = list();
+    const pick = (kind) => {
+      let best = null;
+      for (const t of tiles) {
+        if (t.kind !== kind) continue;
+        const d = Math.max(Math.abs(t.q - home.q), Math.abs(t.r - home.r), Math.abs(-t.q - t.r + home.q + home.r));
+        if (!best || d < best.d) best = { q: t.q, r: t.r, kind, d };
+      }
+      return best;
+    };
+    return { total: tiles.length, generatedFor, lake: pick('lake'), mouth: pick('mouth'), creek: pick('creek'), spring: pick('creekspring'), half: pick('half') };
+  });
+  console.log('Bog found:', JSON.stringify(found));
+  if (found.total === 0) throw new Error('no bog generated for the islands around home');
+  const shootBog = async (at, name) => {
+    await page.evaluate((target) => {
+      const fog = window.__fogDebug;
+      fog.maskUnknown = false;
+      fog.maskOutOfSight = false;
+      fog.terrainCull = false;
+      window.__settlementRenderer?.()?.panTo(target);
+    }, { q: at.q, r: at.r });
+    await page.waitForTimeout(300);
+    await page.mouse.move(720, 450);
+    for (let i = 0; i < 5; i++) {
+      await page.mouse.wheel(0, -300);
+      await page.waitForTimeout(120);
+    }
+    await page.waitForTimeout(400);
+    await forceRebuild(page);
+    await page.waitForTimeout(2500);
+    await shootAlways(page, name);
+  };
+  if (found.lake && wantStop('settlement_bog')) await shootBog(found.lake, 'settlement_bog');
+  if (found.mouth && wantStop('settlement_bog_mouth')) await shootBog(found.mouth, 'settlement_bog_mouth');
+  if (found.creek && wantStop('settlement_bog_creek')) await shootBog(found.creek, 'settlement_bog_creek');
+  if (found.spring && wantStop('settlement_bog_spring')) await shootBog(found.spring, 'settlement_bog_spring');
+}
+
 // The fog debug panel (?debug=1, see FogDebugPanel.vue) toggles individual
 // fog mechanisms — flip one on/off from the panel itself rather than the
 // console hook, to check the panel's own forceRebuild wiring, not just the

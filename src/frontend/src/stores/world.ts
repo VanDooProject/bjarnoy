@@ -422,7 +422,7 @@ export const useWorldStore = defineStore('world', {
     // hexPath.ts) for the same reason worldGenerator.ts's constants moved
     // out — a live world's numbers always take priority once fetched.
     movementRules: {
-      land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0 },
+      land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0, bog: 2.0 },
       sea: { sea: 1.0 },
       riverCrossingCost: 8.0,
     } as WorldMovementResponse,
@@ -528,6 +528,20 @@ export const useWorldStore = defineStore('world', {
             outDirection: tile.outDirection as TileOrientation | null,
             width: tile.width ?? 'river',
             wasted: island.wasted,
+          })),
+        ),
+      );
+      // Server-generated bogland (see `IslandResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
+      // terrain the seed alone cannot give, so it goes in before anything that reads terrain (giants, camps).
+      this.model.setBogTiles(
+        this.islands.flatMap((island) =>
+          (island.bogTiles ?? []).map((tile) => ({
+            q: tile.q,
+            r: tile.r,
+            kind: tile.kind,
+            inDirections: tile.inDirections as TileOrientation[],
+            outDirection: tile.outDirection as TileOrientation | null,
+            waterEdges: tile.waterEdges as TileOrientation[],
           })),
         ),
       );

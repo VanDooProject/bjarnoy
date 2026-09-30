@@ -167,7 +167,7 @@ public static class AdminSettlementEndpoints
 
         var (entity, _) = found.Value;
         var domain = entity.ToDomain();
-        var sampler = new TerrainSampler(entity.World!.ToGenerationOptions());
+        var sampler = await settlements.GetSamplerAsync(entity.World!, cancellationToken);
         var giants = await settlements.LoadGiantIndexAsync(entity.WorldId, cancellationToken);
 
         // The editor paints the whole claimed territory, not just the

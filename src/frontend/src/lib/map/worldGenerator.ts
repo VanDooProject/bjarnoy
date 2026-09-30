@@ -788,7 +788,7 @@ const NEIGHBOR_COS = [0, 1, 2, 3, 4, 5].map((i) => Math.cos(i * (Math.PI / 3)));
 const NEIGHBOR_SIN = [0, 1, 2, 3, 4, 5].map((i) => Math.sin(i * (Math.PI / 3)));
 
 /** Seed-stable cosmetic rotation for tiles that don't face anything in particular. */
-function defaultOrientation(q: number, r: number, world: WorldSeed): TileOrientation {
+export function defaultOrientation(q: number, r: number, world: WorldSeed): TileOrientation {
   const h = hash2(q, r, world.seed + 29);
   const index = Math.min(5, Math.floor(h * 6));
   return TILE_ORIENTATIONS[index];
@@ -816,6 +816,11 @@ const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
   grass: 4,
   forest: 3,
   mountain: 4,
+  // Bog: the plain moss plus variant001-008; lake: the plain water plus variant001-003 (islet, moss mat, reed
+  // island — the fish weir and the two boats are placed by the buildings that use them, never rolled). Mirrors
+  // `TerrainSampler.VariantCounts`.
+  bog: 9,
+  lake: 4,
 };
 
 /**
@@ -880,6 +885,18 @@ export function variantAt(q: number, r: number, world: WorldSeed): number {
   const count = VARIANT_COUNTS[terrainAt(q, r, world)] ?? 1;
   if (count <= 1) return 0;
   const index = Math.floor(h * count);
+  return index >= count ? count - 1 : index;
+}
+
+/**
+ * The variant index a hex of `terrain` shows — `variantAt`'s roll (same salt and formula) for a terrain the seed alone
+ * does not give: bog and lake come from an island's bogland overlay, so `variantAt` (which asks the seed's own terrain)
+ * cannot answer for them.
+ */
+export function variantForTerrain(q: number, r: number, world: WorldSeed, terrain: Terrain): number {
+  const count = VARIANT_COUNTS[terrain] ?? 1;
+  if (count <= 1) return 0;
+  const index = Math.floor(hash2(q, r, world.seed + 31) * count);
   return index >= count ? count - 1 : index;
 }
 
