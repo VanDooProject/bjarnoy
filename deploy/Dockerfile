@@ -100,7 +100,7 @@ VOLUME /data
 #
 # libfontconfig1: SkiaSharp's native libSkiaSharp.so links against
 # libfontconfig.so.1, which this image does not have, so dlopen fails and every
-# fog-mask request 500s with "/app/liblibSkiaSharp: cannot open shared object
+# fog-chunks request 500s with "/app/liblibSkiaSharp: cannot open shared object
 # file" — a message that reads like a missing native asset but is really a
 # missing dependency *of* one (the asset publishes fine, see
 # runtimes/linux-x64/native/). Nothing here renders text, so

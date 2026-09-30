@@ -774,31 +774,33 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("placed_buildings", (string)null);
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredChunkEntity", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("Bits")
-                        .IsRequired()
-                        .HasColumnType("BLOB");
 
                     b.Property<string>("OwnerId")
-                        .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("ChunkU")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ChunkV")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte[]>("Bits")
+                        .HasColumnType("BLOB");
+
+                    b.Property<bool>("IsFull")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("WorldId")
-                        .HasColumnType("TEXT");
+                    b.HasKey("WorldId", "OwnerId", "ChunkU", "ChunkV");
 
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorldId", "OwnerId")
-                        .IsUnique();
-
-                    b.ToTable("player_explored", (string)null);
+                    b.ToTable("player_explored_chunks", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
@@ -1757,7 +1759,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Settlement");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredChunkEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
                         .WithMany()

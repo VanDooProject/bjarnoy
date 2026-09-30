@@ -15,7 +15,7 @@ namespace Bjarnoy.Infrastructure.Services;
 /// anonymous-play read — <see cref="GetOwnershipAsync"/> (the ownership
 /// endpoint filters), <see cref="FindByUserAsync"/> and
 /// <see cref="FindByOwnerAsync"/> (the caller-realm resolver behind
-/// <c>GET .../membership</c>, <c>.../fog-mask</c> and <c>.../plot-suggestion</c>).
+/// <c>GET .../membership</c>, <c>.../fog-chunks</c> and <c>.../plot-suggestion</c>).
 /// </summary>
 /// <remarks>
 /// <para>

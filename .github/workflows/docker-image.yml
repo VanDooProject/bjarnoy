@@ -209,18 +209,47 @@ jobs:
           grep -q 'smoke-test-world' /tmp/worlds.json
           echo "::endgroup::"
 
-          echo "::group::the fog mask renders (SkiaSharp's native library loads)"
+          echo "::group::the fog chunks render (SkiaSharp's native library loads)"
           # This is the one endpoint that reaches native code, and it only
           # breaks in a container: libSkiaSharp.so links against
           # libfontconfig.so.1, which the aspnet base image does not carry, so
           # every request 500'd with "/app/liblibSkiaSharp: cannot open shared
-          # object file" while every test on a normal machine passed.
-          curl -fsS -o /tmp/fog.png \
+          # object file" while every test on a normal machine passed. A chunk
+          # is only encoded when the player has something in reach of it, so
+          # found a settlement first and ask for the chunk it stands in.
+          curl -fsS "http://localhost:8080/api/v1/worlds/$world_id/islands" -o /tmp/islands.json
+          python3 - "$world_id" <<'PY'
+          import json, sys
+          world_id = sys.argv[1]
+          islands = json.load(open('/tmp/islands.json'))
+          island = next(i for i in islands if i["startPositions"])
+          plot = island["startPositions"][0]
+          json.dump({
+              "islandId": island["id"], "q": plot["q"], "r": plot["r"],
+              "name": "Smokestead", "ownerName": "Smoke", "ownerId": "player_smoke-test",
+          }, open('/tmp/found.json', 'w'))
+          # Chunk of the plot, on the same doubled-row layout as FogChunkLayout:
+          # u = q, v = 2r + q, 64-texel chunks, floor division.
+          u, v = plot["q"], 2 * plot["r"] + plot["q"]
+          open('/tmp/chunk.txt', 'w').write(f"{u // 64} {v // 64}")
+          PY
+          curl -fsS -X POST "http://localhost:8080/api/v1/worlds/$world_id/settlements" \
+            -H 'content-type: application/json' \
+            -d @/tmp/found.json -o /dev/null
+          read cu cv < /tmp/chunk.txt
+          curl -fsS -o /tmp/fog.json \
             -H 'X-Owner-Id: player_smoke-test' \
-            "http://localhost:8080/api/v1/worlds/$world_id/fog-mask"
-          # A PNG, not an error page that happens to be 200.
-          python3 -c 'import sys; sys.exit(0 if open("/tmp/fog.png","rb").read(8) == b"\x89PNG\r\n\x1a\n" else 1)'
-          echo "fog mask: $(wc -c < /tmp/fog.png) bytes of PNG"
+            "http://localhost:8080/api/v1/worlds/$world_id/fog-chunks?cuMin=$cu&cuMax=$cu&cvMin=$cv&cvMax=$cv"
+          # A real PNG in the settlement's chunk, not an empty chunk or an
+          # error page that happens to be 200.
+          python3 - <<'PY'
+          import base64, json, sys
+          chunk = json.load(open('/tmp/fog.json'))["chunks"][0]
+          png = chunk["png"]
+          assert png, "the settlement's own chunk must not be empty"
+          assert base64.b64decode(png)[:8] == b"\x89PNG\r\n\x1a\n", "chunk is not a PNG"
+          print(f"fog chunk: {len(png)} base64 chars of PNG")
+          PY
           echo "::endgroup::"
 
   # Tagging v* is what "cutting a release" means for this repo: the build job

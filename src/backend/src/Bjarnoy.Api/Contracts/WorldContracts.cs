@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.World;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -364,6 +365,54 @@ public sealed record TileResponse(int Q, int R, string Terrain, bool IsCoastalWa
             tile.IsCoastalWater,
             tile.Orientation.ToWireName(),
             tile.Variant);
+}
+
+/// <summary>
+/// One chunk of the fog mask (map-fog-v2.md §3).
+/// </summary>
+/// <param name="Cu">Chunk column, <c>floor(texelU / ChunkSize)</c>.</param>
+/// <param name="Cv">Chunk row, <c>floor(texelV / ChunkSize)</c>.</param>
+/// <param name="Version">
+/// Changes exactly when this chunk's pixels would; <c>"0"</c> for an empty
+/// chunk. Lets the client skip decoding a chunk it already holds.
+/// </param>
+/// <param name="Png">
+/// Base64 of a <c>ChunkSize</c> x <c>ChunkSize</c> RGBA8 PNG (R = unknown
+/// ramp, G = out-of-sight ramp, B = noise seed — §2.2), or <c>null</c> for an
+/// empty chunk: fully unknown, nothing explored and no vision source in
+/// reach, so nothing is encoded or sent.
+/// </param>
+public sealed record FogChunkResponse(int Cu, int Cv, string Version, string? Png);
+
+/// <summary>
+/// <c>GET /worlds/{id}/fog-chunks</c>: every chunk of the requested inclusive
+/// rectangle, row-major (<c>cv</c> outer, <c>cu</c> inner). JSON with
+/// base64 PNGs rather than a bespoke binary framing: a chunk PNG is a few
+/// hundred bytes to a few KB, the batch is a few dozen chunks, and the
+/// base64 overhead is dwarfed by not needing a second parser on either side.
+/// </summary>
+/// <param name="ChunkSize">Texels per chunk edge; the client refuses a value it wasn't built for.</param>
+public sealed record FogChunksResponse(
+    int ChunkSize,
+    int CuMin,
+    int CuMax,
+    int CvMin,
+    int CvMax,
+    IReadOnlyList<FogChunkResponse> Chunks)
+{
+    public static FogChunksResponse From(int cuMin, int cuMax, int cvMin, int cvMax, IReadOnlyList<FogChunk> chunks)
+    {
+        ArgumentNullException.ThrowIfNull(chunks);
+
+        return new FogChunksResponse(
+            FogChunkLayout.ChunkSize,
+            cuMin,
+            cuMax,
+            cvMin,
+            cvMax,
+            [.. chunks.Select(c => new FogChunkResponse(
+                c.Coord.U, c.Coord.V, c.Version, c.Png is null ? null : Convert.ToBase64String(c.Png)))]);
+    }
 }
 
 public sealed record TileChunkResponse(

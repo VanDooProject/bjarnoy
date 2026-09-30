@@ -8,7 +8,7 @@ namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
 /// <see cref="Bjarnoy.Api.Auth.CallerRealmResolver"/>: whether
-/// <c>GET .../membership</c>, <c>.../fog-mask</c> and <c>.../plot-suggestion</c>
+/// <c>GET .../membership</c>, <c>.../fog-chunks</c> and <c>.../plot-suggestion</c>
 /// (GET and DELETE) resolve the right realm once accounts and JWTs enter the
 /// anonymous-play picture that <c>X-Owner-Id</c> alone used to be enough for —
 /// a claimed player logging in from a browser that never founded anything
@@ -142,10 +142,11 @@ public sealed class RealmResolutionEndpointsTests : IAsyncLifetime
         Assert.Null(membershipBody.SettlementId);
         Assert.Null(membershipBody.SettlementName);
 
-        var fogMask = await client.GetAsync($"/api/v1/worlds/{worldId}/fog-mask", Ct);
-        Assert.Equal(HttpStatusCode.Forbidden, fogMask.StatusCode);
-        var fogMaskError = await fogMask.ReadStrictAsync<AuthErrorResponse>(Ct);
-        Assert.Equal("not_owner", fogMaskError.Error);
+        var fogChunks = await client.GetAsync(
+            $"/api/v1/worlds/{worldId}/fog-chunks?cuMin=0&cuMax=0&cvMin=0&cvMax=0", Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, fogChunks.StatusCode);
+        var fogChunksError = await fogChunks.ReadStrictAsync<AuthErrorResponse>(Ct);
+        Assert.Equal("not_owner", fogChunksError.Error);
 
         var plotSuggestion = await client.GetAsync($"/api/v1/worlds/{worldId}/plot-suggestion", Ct);
         Assert.Equal(HttpStatusCode.Forbidden, plotSuggestion.StatusCode);
@@ -248,7 +249,7 @@ public sealed class RealmResolutionEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Fog_mask_via_JWT_from_a_new_browser_resolves_to_the_original_owner()
+    public async Task Fog_chunks_via_JWT_from_a_new_browser_resolve_to_the_original_owner()
     {
         using var client = Client();
         var worldId = await CreateWorldAsync(client);
@@ -262,9 +263,10 @@ public sealed class RealmResolutionEndpointsTests : IAsyncLifetime
         Authorize(client, auth.AccessToken);
         client.DefaultRequestHeaders.Add("X-Owner-Id", Unique("new-browser"));
 
-        var response = await client.GetAsync($"/api/v1/worlds/{worldId}/fog-mask", Ct);
+        var response = await client.GetAsync(
+            $"/api/v1/worlds/{worldId}/fog-chunks?cuMin=-1&cuMax=1&cvMin=-1&cvMax=1", Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("image/png", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
     }
 }

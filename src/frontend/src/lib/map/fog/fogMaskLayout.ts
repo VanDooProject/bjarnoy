@@ -13,7 +13,7 @@
 // formulas as the C# version, this reconstructs exactly what the server
 // would compute, with no extra request.
 import type { AxialCoord } from '../../hex/coords';
-import { axialToOddQ, hexesInRadius, oddQToAxial } from '../../hex/coords';
+import { axialToOddQ, oddQToAxial } from '../../hex/coords';
 import type { FogMaskPlacement } from './FogMaskLayer';
 
 export interface MaskTexel {
@@ -66,58 +66,27 @@ export function diagonalNeighboursForInterpolation(texel: MaskTexel): MaskTexel[
 }
 
 /**
+ * A texel rectangle as a `MaskBounds`, half-open on the high edge.
+ */
+export function maskBounds(minU: number, minV: number, maxU: number, maxV: number): MaskBounds {
+  return { minU, minV, maxU, maxV, width: maxU - minU, height: maxV - minV };
+}
+
+/**
  * The whole-world texel bounding box for a world of the given `radius` —
  * mirrors FogMaskLayout.WorldBounds exactly, padding by one texel on every
  * side so every even-parity (real-hex) texel's odd-parity interpolation
  * neighbours are included too.
- */
-/**
- * `worldMaskBounds` results by radius.
  *
- * The function is pure but walks `hexesInRadius`, which is ~25k coords at the
- * live world's radius of 90 and allocates one object each — measured at a few
- * milliseconds. It is called at least twice per fog-mask cycle (once inside
- * the bake, once again via `fogMaskPlacement`) for a radius that changes
- * approximately never, so the whole thing is answered from here after the
- * first call. A handful of entries at most, one per distinct world radius.
+ * Closed form, O(1) (as on the backend): with `u = q` and `v = 2r + q`, a hex
+ * disc of radius R spans `u in [-R, R]` and `v in [-2R, 2R]`. It used to walk
+ * `hexesInRadius`, ~48M coords at radius 4000.
  */
-const boundsByRadius = new Map<number, MaskBounds>();
-
 export function worldMaskBounds(radius: number): MaskBounds {
   if (radius < 0) throw new RangeError('radius must not be negative');
-  const cached = boundsByRadius.get(radius);
-  if (cached) return cached;
-
-  let minU = Infinity;
-  let minV = Infinity;
-  let maxU = -Infinity;
-  let maxV = -Infinity;
-
-  for (const hex of hexesInRadius({ q: 0, r: 0 }, radius)) {
-    const { u, v } = toTexel(hex);
-    if (u < minU) minU = u;
-    if (u > maxU) maxU = u;
-    if (v < minV) minV = v;
-    if (v > maxV) maxV = v;
-  }
-
-  const boundsMinU = minU - 1;
-  const boundsMinV = minV - 1;
-  const boundsMaxU = maxU + 2;
-  const boundsMaxV = maxV + 2;
-
-  // Frozen: it is handed out to every caller from the cache above, and a
-  // mutation by one of them would silently follow the rest.
-  const bounds = Object.freeze({
-    minU: boundsMinU,
-    minV: boundsMinV,
-    maxU: boundsMaxU,
-    maxV: boundsMaxV,
-    width: boundsMaxU - boundsMinU,
-    height: boundsMaxV - boundsMinV,
-  });
-  boundsByRadius.set(radius, bounds);
-  return bounds;
+  // Frozen: callers pass a bounds around (fogMaskPlacement, the renderer) and
+  // none of them may mutate it under the others.
+  return Object.freeze(maskBounds(-radius - 1, -2 * radius - 1, radius + 2, 2 * radius + 2));
 }
 
 /**
@@ -141,8 +110,14 @@ export function worldMaskBounds(radius: number): MaskBounds {
  * ten-hex airbrush that was invisible; against a shaped vision edge it is a
  * quarter-hex offset between the fog boundary and the ground it hides.
  */
-export function fogMaskPlacement(radius: number, tileWidth: number, tileHeight: number): FogMaskPlacement {
-  const bounds = worldMaskBounds(radius);
+export function fogMaskPlacement(
+  radiusOrBounds: number | MaskBounds,
+  tileWidth: number,
+  tileHeight: number,
+): FogMaskPlacement {
+  // A number is a whole-world mask (demo mode); a bounds is any texel
+  // rectangle — the chunk window a live mask is stitched into (fogChunks.ts).
+  const bounds = typeof radiusOrBounds === 'number' ? worldMaskBounds(radiusOrBounds) : radiusOrBounds;
   return {
     scale: [1 / (0.75 * tileWidth * bounds.width), 2 / (tileHeight * bounds.height)],
     offset: [(-bounds.minU - 1 / 6) / bounds.width, (-bounds.minV - 0.5) / bounds.height],

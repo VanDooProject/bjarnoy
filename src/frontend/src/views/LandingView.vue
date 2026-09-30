@@ -859,10 +859,19 @@ async function foundHere(coord: AxialCoord) {
 // isFogActive() flips true. Watching both together covers the renderer not
 // existing yet on the tick a mask resolves.
 watch(
-  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.worldRadius],
-  ([renderer, bitmap, radius]) => {
-    if (renderer && bitmap && radius !== null) renderer.setFogMask(radius, bitmap);
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds],
+  ([renderer, bitmap, bounds]) => {
+    if (renderer && bitmap && bounds) renderer.setFogMask(bounds, bitmap);
   },
+);
+
+// Fog chunks are fetched for the ground the camera actually sees (§3): the
+// renderer reports which chunks that is as it pans/zooms, the store debounces
+// and refetches only once the view leaves the window it already holds.
+watch(
+  () => canvasRef.value?.renderer,
+  (renderer) => renderer?.setFogViewportListener((range) => world.requestFogViewport(range)),
+  { immediate: true },
 );
 
 // Live mode: same "a fresh settlement snapshot arrived, force a redraw"
