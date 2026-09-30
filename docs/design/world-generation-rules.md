@@ -12,7 +12,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Preview tool | Implemented (island-shape PR; later layers arrive with their features) |
 | Fog: chunked explored store and mask delivery; default radius 4000 | Planned |
 | Rivers and streams; coherent mountain ranges | Implemented (streams PR, bog entry in the bog PR) |
-| Bog and lakes | Implemented (bog PR); see [`bog.md`](./bog.md) |
+| Bog and lakes, bog buildings, landing spots with bog in reach | Implemented (bog PR, bog buildings PR); see [`bog.md`](./bog.md) |
 | Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps in the bog PR) |
 
 ## World and islands
@@ -72,8 +72,10 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   separate lakes are at least 2 tiles apart; creeks are straight or a 120-degree bend only, and end in a
   spring or a lake mouth; a creek meets a lake only at a mouth (inlet shore with the creek opposite its water
   edge; inflow = outflow tile); a fish weir only near a lake fisher hut; no walkways.
-- Buildings in scope: bog-ore works (iron), Clay Brickworks on bog (the grass version is dropped), Fisher Hut
-  on a bog-lake shore; landing spots need bog in reach.
+- Buildings in scope: bog-ore works (iron), Clay Brickworks on bog (the grass version is dropped), Fishing Hut
+  on a bog-lake half shore, Hammerschmiede on a bog creek; landing spots need bog in reach. *Implemented (bog buildings PR)*:
+  see [`bog.md`](./bog.md), "Buildings" and "Decisions" (the landing-spot rule keeps spots on 94 of the 273 islands
+  of seeds 1-8 at radius 1000: islands without any plain bog get none).
 
 ## Wildlife camps
 

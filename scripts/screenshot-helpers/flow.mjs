@@ -392,6 +392,86 @@ if (wantStopPrefix('settlement_bog')) {
   if (found.mouth && wantStop('settlement_bog_mouth')) await shootBog(found.mouth, 'settlement_bog_mouth');
   if (found.creek && wantStop('settlement_bog_creek')) await shootBog(found.creek, 'settlement_bog_creek');
   if (found.spring && wantStop('settlement_bog_spring')) await shootBog(found.spring, 'settlement_bog_spring');
+
+  // The bog buildings (docs/design/bog.md, "Buildings"): a second demo settlement is founded on plain moss next to a lake
+  // shore and a creek, at Longhouse 25, and the buildings are placed through the real placement rules (WorldModel.placeBuilding):
+  // bog-ore works and Clay Brickworks on moss, the Fishing Hut on the lake's half shores, the Hammerschmiede on a creek.
+  // `settlement_bog_buildings` shoots the whole site (with the fish weir / boats the huts and works ask for on the lake);
+  // `settlement_bog_oreworks`, `_clay`, `_lakehut` and `_hammer` shoot each building close up. Skipped when the island has no
+  // shore (half) and creek within reach of plain moss.
+  if (['settlement_bog_buildings', 'settlement_bog_oreworks', 'settlement_bog_clay', 'settlement_bog_lakehut', 'settlement_bog_hammer'].some(wantStop)) {
+    const site = await page.evaluate(() => {
+      const store = window.__demoWorld();
+      const model = store.model;
+      const dist = (a, b) => Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(-a.q - a.r + b.q + b.r));
+      const tiles = model.listBogTiles();
+      const plain = tiles.filter((t) => t.kind === 'bog');
+      const halves = tiles.filter((t) => t.kind === 'half');
+      const creeks = tiles.filter((t) => t.kind === 'creek');
+      // The plain moss hex with the most half shores and creeks within its claim (radius 3), preferring more of each.
+      let best = null;
+      for (const p of plain) {
+        const h = halves.filter((t) => dist(p, t) <= 3).length;
+        const c = creeks.filter((t) => dist(p, t) <= 3).length;
+        const m = plain.filter((t) => dist(p, t) <= 3 && !(t.q === p.q && t.r === p.r)).length;
+        if (h === 0 || c === 0 || m < 3) continue;
+        const score = Math.min(h, 2) * 100 + Math.min(c, 2) * 50 + Math.min(m, 6);
+        if (!best || score > best.score) best = { q: p.q, r: p.r, score, h, c, m };
+      }
+      if (!best) return null;
+      const settlement = model.foundSettlement('shots', 'Shots', 'Bogholm', best);
+      settlement.level = 25;
+      model.claimTerritory(settlement.id);
+      const placed = { oreworks: [], clay: [], lakehut: [], hammer: [], refused: [] };
+      const put = (list, type, level, bucket, max) => {
+        for (const t of list) {
+          if (placed[bucket].length >= max) break;
+          if (dist(best, t) > 3) continue;
+          if (model.placeBuilding(settlement.id, t, type)) {
+            model.getTile(t.q, t.r).buildingLevel = level;
+            placed[bucket].push({ q: t.q, r: t.r });
+          } else placed.refused.push({ type, q: t.q, r: t.r });
+        }
+      };
+      const others = plain.filter((t) => !(t.q === best.q && t.r === best.r));
+      put(halves, 'fishinghut', 4, 'lakehut', 3);
+      put(creeks, 'hammerschmiede', 2, 'hammer', 2);
+      put(others, 'bogoreworks', 6, 'oreworks', 3);
+      put(others.filter((t) => !placed.oreworks.some((o) => o.q === t.q && o.r === t.r)), 'claybrickworks', 5, 'clay', 2);
+      // A grass building on bog must be refused: the rule of the domain, checked live here.
+      const grassRefused = model.placeBuilding(settlement.id, others.find((t) => !model.getTile(t.q, t.r).buildingType) ?? best, 'farm') === false;
+      const lakeHexes = tiles.filter((t) => t.kind === 'lake' && dist(best, t) <= 8);
+      const props = lakeHexes.map((t) => ({ q: t.q, r: t.r, prop: model.lakePropAt(t.q, t.r) })).filter((t) => t.prop);
+      return { site: best, placed, grassRefused, props, lakeHexes: lakeHexes.length };
+    });
+    console.log('Bog buildings site:', JSON.stringify(site));
+    if (!site) throw new Error('no plain bog hex with a lake half shore and a creek within reach on the bog islands');
+    const shootAt = async (at, name, wheel = 5) => {
+      await page.evaluate((target) => {
+        const fog = window.__fogDebug;
+        fog.maskUnknown = false;
+        fog.maskOutOfSight = false;
+        fog.terrainCull = false;
+        window.__settlementRenderer?.()?.panTo(target);
+      }, at);
+      await page.waitForTimeout(300);
+      await page.mouse.move(720, 450);
+      for (let i = 0; i < wheel; i++) {
+        await page.mouse.wheel(0, -300);
+        await page.waitForTimeout(120);
+      }
+      await page.waitForTimeout(400);
+      await forceRebuild(page);
+      await page.waitForTimeout(3000);
+      await shootAlways(page, name);
+    };
+    if (wantStop('settlement_bog_buildings')) await shootAt(site.site, 'settlement_bog_buildings', 3);
+    const first = (list) => list[0];
+    if (wantStop('settlement_bog_oreworks') && first(site.placed.oreworks)) await shootAt(first(site.placed.oreworks), 'settlement_bog_oreworks', 4);
+    if (wantStop('settlement_bog_clay') && first(site.placed.clay)) await shootAt(first(site.placed.clay), 'settlement_bog_clay', 4);
+    if (wantStop('settlement_bog_lakehut') && first(site.placed.lakehut)) await shootAt(first(site.placed.lakehut), 'settlement_bog_lakehut', 4);
+    if (wantStop('settlement_bog_hammer') && first(site.placed.hammer)) await shootAt(first(site.placed.hammer), 'settlement_bog_hammer', 4);
+  }
 }
 
 // The fog debug panel (?debug=1, see FogDebugPanel.vue) toggles individual

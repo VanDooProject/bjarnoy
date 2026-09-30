@@ -847,17 +847,21 @@ const rootActions = computed<RingAction[]>(() => {
     // giant is always land, so `buildableSea` alone would otherwise show
     // "Build" as available on it.
     const blockedByGiant = !!tile.giant;
+    // A bog shore, mouth or spring takes no building at all (only plain moss, a creek and a half shore do).
+    const bareBog = tile.terrain === 'bog' && categoriesFor(tile).length === 0;
     return [
       { id: 'details', label: t('hud.ringMenu.actions.details') },
       {
         id: 'build',
         label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea || blockedByGiant,
+        disabled: !buildableSea || blockedByGiant || bareBog,
         hint: blockedByGiant
           ? t('hud.ringMenu.actions.giantOccupied')
-          : buildableSea
-            ? undefined
-            : t('hud.ringMenu.actions.openWater'),
+          : bareBog
+            ? t('hud.ringMenu.actions.bogNothingHere')
+            : buildableSea
+              ? undefined
+              : t('hud.ringMenu.actions.openWater'),
       },
       sendArmyAction(tile),
     ];

@@ -101,7 +101,8 @@
       "trainUnits": "Einheiten ausbilden",
       "build": "Bauen",
       "openWater": "Offenes Wasser",
-      "giantOccupied": "Von einem Riesenwahrzeichen belegt"
+      "giantOccupied": "Von einem Riesenwahrzeichen belegt",
+      "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",

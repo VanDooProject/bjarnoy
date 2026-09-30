@@ -101,7 +101,8 @@
       "trainUnits": "Train units",
       "build": "Build",
       "openWater": "Open water",
-      "giantOccupied": "Occupied by a giant landmark"
+      "giantOccupied": "Occupied by a giant landmark",
+      "bogNothingHere": "Nothing can be built on this bog hex"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
