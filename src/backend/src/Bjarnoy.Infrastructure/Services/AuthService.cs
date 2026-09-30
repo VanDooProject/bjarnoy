@@ -128,15 +128,18 @@ public sealed class AuthService(
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // RealmDirectory's per-settlement and per-(world,owner) cache entries
-        // for every settlement just claimed above are now stale (UserId
-        // changed from Abandoned to this new account) — flush each affected
-        // world so the next lookup re-reads the real, now-claimed row rather
-        // than serving the unclaimed one for up to RealmDirectory's sliding
-        // expiration. Done after SaveChangesAsync succeeds, not before: an
-        // invalidation ahead of a failed save would have nothing to correct.
+        // for every settlement just claimed above are stale once this commits
+        // (UserId changed from Abandoned to this new account) — flush each
+        // affected world so the next lookup re-reads the real, now-claimed row
+        // rather than serving the unclaimed one for up to RealmDirectory's
+        // sliding expiration. Deferred to after the commit, not run right after
+        // SaveChangesAsync: /auth/register runs in a unit of work that commits
+        // only after this method returns, and a concurrent read in between
+        // would re-cache the stale Abandoned ownership. A failed or retried
+        // attempt drops the callback, so it never invalidates for nothing.
         foreach (var worldId in claimedWorldIds)
         {
-            RealmDirectory.InvalidateWorld(worldId);
+            _dbContext.OnCommitted(() => RealmDirectory.InvalidateWorld(worldId));
         }
 
         return new AuthResult(AuthOutcome.Success, user, raw);

@@ -99,25 +99,61 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     /// <summary>The transaction this context began for the unit of work, if any.</summary>
     private IDbContextTransaction? _unitOfWorkTransaction;
 
-    /// <summary>Commits the unit of work's transaction, if this context began one.</summary>
+    /// <summary>Actions queued by <see cref="OnCommitted"/> for the current attempt.</summary>
+    private readonly List<Action> _afterCommit = [];
+
+    /// <summary>
+    /// Runs <paramref name="action"/> once the current unit of work has
+    /// committed — for side effects that must not be visible before the data
+    /// they describe is (a cache invalidation: a concurrent reader between an
+    /// early invalidation and the commit would re-cache the stale rows).
+    /// </summary>
+    /// <remarks>
+    /// Inside a unit of work the action is queued and runs after
+    /// <see cref="CommitUnitOfWorkAsync"/> succeeds — also when the attempt
+    /// never opened a transaction. A rolled-back or retried attempt drops its
+    /// queue (the retry registers its own). Outside a unit of work there is no
+    /// later commit to wait for, so it runs immediately.
+    /// </remarks>
+    public void OnCommitted(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        if (UnitOfWorkActive)
+        {
+            _afterCommit.Add(action);
+        }
+        else
+        {
+            action();
+        }
+    }
+
+    /// <summary>Commits the unit of work's transaction, if this context began one, then runs the <see cref="OnCommitted"/> actions.</summary>
     internal async Task CommitUnitOfWorkAsync(CancellationToken cancellationToken)
     {
         var transaction = _unitOfWorkTransaction;
         _unitOfWorkTransaction = null;
-        if (transaction is null)
+        if (transaction is not null)
         {
-            return;
+            await using (transaction.ConfigureAwait(false))
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
 
-        await using (transaction.ConfigureAwait(false))
+        var actions = _afterCommit.ToArray();
+        _afterCommit.Clear();
+        foreach (var action in actions)
         {
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            action();
         }
     }
 
-    /// <summary>Rolls back (by disposing) the unit of work's transaction, if this context began one.</summary>
+    /// <summary>Rolls back (by disposing) the unit of work's transaction, if this context began one, and drops the <see cref="OnCommitted"/> actions.</summary>
     internal async Task RollbackUnitOfWorkAsync()
     {
+        _afterCommit.Clear();
         var transaction = _unitOfWorkTransaction;
         _unitOfWorkTransaction = null;
         if (transaction is not null)
@@ -138,7 +174,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     /// </remarks>
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        BumpSettlementVersions();
+        BumpConcurrencyTokens();
         if (UnitOfWorkActive && _unitOfWorkTransaction is null && Database.CurrentTransaction is null)
         {
             _unitOfWorkTransaction = Database.BeginTransaction();
@@ -151,7 +187,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     public override async Task<int> SaveChangesAsync(
         bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        BumpSettlementVersions();
+        BumpConcurrencyTokens();
         if (UnitOfWorkActive && _unitOfWorkTransaction is null && Database.CurrentTransaction is null)
         {
             _unitOfWorkTransaction = await Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -164,9 +200,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     /// Gives every settlement that is about to be written a fresh
     /// <see cref="SettlementEntity.Version"/> — including one whose only change
     /// is a child row (building, queue order, garrison stack, training order,
-    /// rune), which EF would otherwise not touch at all.
+    /// rune), which EF would otherwise not touch at all — and every modified
+    /// trade offer a fresh <see cref="TradeOfferEntity.Version"/>.
     /// </summary>
-    private void BumpSettlementVersions()
+    private void BumpConcurrencyTokens()
     {
         ChangeTracker.DetectChanges();
 
@@ -182,6 +219,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             {
                 case SettlementEntity settlement when entry.State == EntityState.Modified:
                     touched.Add(settlement.Id);
+                    break;
+                case TradeOfferEntity when entry.State == EntityState.Modified:
+                    entry.Property(nameof(TradeOfferEntity.Version)).CurrentValue = Guid.NewGuid();
                     break;
                 case PlacedBuildingEntity child:
                     touched.Add(child.SettlementId);
@@ -761,6 +801,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             offer.Property(o => o.OfferedResource).HasConversion<int>();
             offer.Property(o => o.RequestedResource).HasConversion<int>();
             offer.Property(o => o.State).HasConversion<int>();
+
+            // Two settlements' deliveries complete one offer; see
+            // TradeOfferEntity.Version. Bumped in SaveChanges.
+            offer.Property(o => o.Version).IsConcurrencyToken();
 
             offer.HasOne<SettlementEntity>().WithMany()
                 .HasForeignKey(o => o.PosterSettlementId)
