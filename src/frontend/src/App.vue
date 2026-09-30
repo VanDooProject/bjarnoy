@@ -7,6 +7,7 @@ import DemoModeBadge from './components/DemoModeBadge.vue';
 import ProfileModal from './components/profile/ProfileModal.vue';
 import LeaderboardModal from './components/leaderboard/LeaderboardModal.vue';
 import GuildModal from './components/guild/GuildModal.vue';
+import ReportsModal from './components/reports/ReportsModal.vue';
 import { useActivityHeartbeat } from './composables/useActivityHeartbeat';
 import { isModalRouteName } from './lib/modalRoute';
 
@@ -19,10 +20,10 @@ useActivityHeartbeat();
 const route = useRoute();
 const router = useRouter();
 
-// The modal routes (own-profile/profile/leaderboards/guild) render as a
-// modal over whatever page was showing before — see lib/modalRoute.ts and
-// each modal component (ProfileModal.vue/LeaderboardModal.vue/
-// GuildModal.vue). Every other route renders through <router-view> exactly
+// The modal routes (own-profile/profile/leaderboards/guild/reports/
+// report-detail) render as a modal over whatever page was showing before —
+// see lib/modalRoute.ts and each modal component (ProfileModal.vue/
+// LeaderboardModal.vue/GuildModal.vue/ReportsModal.vue). Every other route renders through <router-view> exactly
 // as before.
 const isModalRoute = computed(() => isModalRouteName(route.name));
 
@@ -36,6 +37,9 @@ const ModalComponent = computed(() => {
       return LeaderboardModal;
     case 'guild':
       return GuildModal;
+    case 'reports':
+    case 'report-detail':
+      return ReportsModal;
     default:
       return null;
   }
