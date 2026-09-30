@@ -67,6 +67,11 @@ const props = withDefaults(
     targetRadius?: number;
     /** Which side of the arrow the label chip sits on. */
     chipSide?: 'left' | 'right';
+    /**
+     * CSS selector of a block (the landing hero) the chip must stay below on phones, where that
+     * block spans the width: the chip's `above` slot is otherwise only kept clear of the HUD.
+     */
+    clearBelowSelector?: string;
   }>(),
   { angle: 38, targetRadius: HEX_TARGET_RADIUS_PX, chipSide: 'left' },
 );
@@ -135,9 +140,14 @@ function tick() {
   const overlayRows = isMobile.value
     ? (isSettlementBubbleShown.value ? SETTLEMENT_BUBBLE_ROW_PX : 0) + (DEMO_MODE ? DEMO_BADGE_ROW_PX : 0)
     : 0;
+  let clearBelow = 0;
+  if (isMobile.value && props.clearBelowSelector) {
+    const block = document.querySelector(props.clearBelowSelector);
+    if (block) clearBelow = block.getBoundingClientRect().bottom + 6;
+  }
   const safe = {
     left: 8,
-    top: insetPx(anchorStyles, '--hud-inset-top') + 8 + overlayRows,
+    top: Math.max(insetPx(anchorStyles, '--hud-inset-top') + 8 + overlayRows, clearBelow),
     right: window.innerWidth - 8,
     bottom: window.innerHeight - insetPx(anchorStyles, '--hud-inset-bottom') - 8,
   };
