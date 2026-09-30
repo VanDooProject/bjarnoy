@@ -296,6 +296,9 @@ ahead), against four targets:
 | 4 check-ins | d20.7 | d13.0 | d12.5 | d13.0 | 408k (106k, 3.9×) | Longhouse 10 (renown half a day earlier) |
 | 2 check-ins | d28.2 | d26.0 | d18.5 | d26.0 | 211k (61k, 3.4×) | Longhouse 10 |
 
+These runs predate the faster Longhouse (t₁ 1.5 min ×1.33, §3). With it, the
+4-check-ins player settles about half a day earlier (d12.35 in the lab test).
+
 Feasts are what lets an active player settle a week early. A casual player
 gains a few days at most, because the Longhouse 10 unlock is still ahead of
 their renown.
