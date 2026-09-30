@@ -297,7 +297,7 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(RiverStreamBonus);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogTilesPerSite, 1);
-        ArgumentOutOfRangeException.ThrowIfNegative(BogMaxSites);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogMaxSites, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogSiteRadius, 5);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSiteRadius, 20);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogLargeIslandTiles, 1);

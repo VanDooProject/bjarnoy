@@ -11,9 +11,9 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Cell-based generation that scales to radius 4000 | Implemented (island-shape PR) |
 | Preview tool | Implemented (island-shape PR; later layers arrive with their features) |
 | Fog: chunked explored store and mask delivery; default radius 4000 | Planned |
-| Rivers and streams; coherent mountain ranges | Implemented (streams PR); bog entry planned |
-| Bog and lakes | Planned |
-| Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps wait for bog) |
+| Rivers and streams; coherent mountain ranges | Implemented (streams PR, bog entry in the bog PR) |
+| Bog and lakes | Implemented (bog PR); see [`bog.md`](./bog.md) |
+| Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps in the bog PR) |
 
 ## World and islands
 
@@ -26,8 +26,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
   a few **C** (~250 across, 15k-40k tiles). *Implemented: size classes with 30% A, 12% C (of cells), the
   rest B; large islands clear their neighbouring cells.*
 - O-shaped islands are fine. An enclosed inner water pocket, not connected to the open sea, is filled with
-  bog and a lake, and rivers sink into it. *Planned (bog and lakes); the generator may already produce
-  such pockets.*
+  bog and a lake, and rivers sink into it. *Implemented (bog PR): a pocket too thin or touching open sea stays sea.*
 - Islands are never cut off at cell ("chunk") borders or at the world edge: an island that could cross the
   world radius is not generated. *Implemented: the reach clamp keeps every island inside the 3x3 cell block a
   hex scans, and an island whose centre distance plus 1.42x its reach exceeds the radius is dropped, which is
@@ -63,7 +62,7 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
 
 ## Bog and lakes
 
-*All planned.*
+*Implemented (bog PR): see [`bog.md`](./bog.md) for the algorithm, knobs and measured stats. The rules below hold as R1-R11 checks (`BogRules.cs`, `bogRules.ts`, preview tool).*
 
 - Always one river hits the bogland and runs through its lake.
 - Bogland may spawn or sink rivers as an exception (below 20% chance); the best use is to sink an
@@ -78,7 +77,7 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
 
 ## Wildlife camps
 
-*Implemented (except the bog camps, which need bog terrain): see [`wildlife-camps.md`](./wildlife-camps.md).* Spawn and render only for now (no gameplay yet). Every island of 60 or more land tiles gets camps (islets below that get none); a small island whose
+*Implemented (bog camps too, on plain bog tiles): see [`wildlife-camps.md`](./wildlife-camps.md).* Spawn and render only for now (no gameplay yet). Every island of 60 or more land tiles gets camps (islets below that get none); a small island whose
 only start positions sit inside a strong camp's guard range is simply not a start island. Camps are placed before start positions; start positions keep away from strong camps,
 weak camps are fine nearby.
 
@@ -92,4 +91,4 @@ weak camps are fine nearby.
 
 A repo dev tool renders world previews from the real TS generator, with a legend and layer toggles
 (rivers/streams, bog/lakes, wasted, camps). *Implemented: `scripts/worldgen-preview/` with the `terrain`, `wasted`, `rivers`
-and `camps` layers and a stats footer (see its README); `bog` arrives with its feature.*
+`camps` and `bog` layers and a stats footer with per-rule violation counts (see its README).*

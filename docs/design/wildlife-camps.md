@@ -18,8 +18,8 @@ One shared table, mirrored by `Camp.cs` (`CampFamilies.All`) and `campPlacement.
 | eagleeyrie | mountain | weak | quadratic |
 | moosemire / beaverlodge / cranedance | plain bog | weak | quadratic |
 
-The bog camps are in the table but are **not placed yet**: bog terrain lands in a later PR
-(`TODO(bog PR)` in `CampGenerator.PlaceCore` / `placeCamps`). Bearrapids goes on a river tile of shape
+The bog camps are placed on plain bog tiles (moss that is not a shore, creek or lake; `plainBog` in
+`CampGenerator.PlaceCore` / `placeCamps`, family by `BogFamilyFor`) within the weak budget. Bearrapids goes on a river tile of shape
 `Straight` and **River width** only (not a stream, widening or river-stream tile). Wasted islands get
 fenrirbrood only.
 
@@ -50,7 +50,7 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
    interior camps, so without the cap farthest-point sampling gave seals about 45% of all camps.
    **Eyrie cap**, the same for mountains: at most `MaxEyrieCampsFor(land)` = `max(1, round(land /
    MountainTilesPerEyrieCamp))` eagle eyries per island (`MountainTilesPerEyrieCamp` 2000); with only the seal
-   cap they were 44% of all camps. A weak budget the caps and grounds cannot fill stays unfilled (bog camps come with the bog PR).
+   cap they were 44% of all camps. A weak budget the caps and grounds cannot fill stays unfilled (bog camps count against the same weak budget).
 4. **Level**: rolled per camp in `1..MaxCampLevel` from a hash `u`, low for every family so few start
    positions are lost: weak `1 + floor(u^2 * 5)`, strong `1 + floor(u^3 * 5)` (only `*` and `floor`, so C# and
    TS are bit-identical; `CampLevelSkew.Quadratic` / `Cubic`). Resulting distribution (level 1 to 5):
