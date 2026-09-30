@@ -19,7 +19,7 @@
       },
       "wildlifeCamps": {
         "title": "Wildtierlager",
-        "description": "Die Tiere, die unbesiedelte Inseln bewachen: jedes Lager, bewacht und geräumt, und was das Räumen bewirkt."
+        "description": "Die Tiere, die das Land auf unbesiedelten Inseln halten: jedes Lager, bewacht und geräumt, wie weit es reicht und was das Räumen bewirkt."
       },
       "bogLands": {
         "title": "Moorland",
@@ -314,11 +314,13 @@
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",
-    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber die Insel bleibt wild, bis jedes Lager darauf geräumt ist.",
+    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber in der Nähe eines bewachten Lagers wird kein Turm gebaut. Auf einer großen Insel räumst du die Lager, die im Weg sind, und baust dort, wo das Land frei ist.",
     "status": "Demnächst: Die Grafik für alle neun Lager ist fertig; die Regeln unten beschreiben, wie sie sich spielen werden, sobald Lager im Spiel sind.",
     "rules": {
       "heading": "Wie ein Lager funktioniert",
-      "towers": "Solange ein Lager auf einer Insel bewacht ist, wird dort kein Turm gebaut (die Wölfe fressen die Bauleute), und dein Reich kann nicht auf die Insel wachsen, bis sie geräumt ist.",
+      "towers": "Ein bewachtes Lager hält das Land um sich herum: In seiner Reichweite kann kein Turm gebaut werden (die Wölfe fressen die Bauleute). Außerhalb dieser Reichweite kann auf der Insel gebaut werden.",
+      "range": "Wie weit ein Lager reicht, hängt von seiner Stufe ab, die beim Erscheinen des Lagers zufällig ausgewürfelt wird. Ein starkes Lager kann einen weiten Landstrich halten, ein schwaches nur die nächsten Felder.",
+      "bigIslands": "Eine kleine Insel kann ganz von einem Lager gehalten werden. Auf einer großen Insel kannst du nur die Lager räumen, die im Weg sind, und dort Türme bauen, wo das Land dann frei ist.",
       "states": "Ein Lager hat zwei Zustände: bewacht, mit seinen Tieren, und geräumt. Ein halb geräumtes oder neu besetztes Lager gilt weiter als bewacht.",
       "building": "Ein geräumtes Lager bringt Beute. Danach kannst du auf seinem Feld bauen, und das Gebäude ersetzt das Lager, solange es steht.",
       "respawn": "Die Tiere kehren erst zurück, wenn auf dem Feld kein Gebäude steht und es außerhalb jedes Reichs liegt. Ein geräumtes Lager innerhalb eines Reichs bleibt geräumt.",
