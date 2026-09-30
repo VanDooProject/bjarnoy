@@ -77,6 +77,24 @@ public class CampGenerationTests
     public void Seal_colonies_are_capped_per_island_land(int landTiles, int expected) =>
         Assert.Equal(expected, CampGenerator.MaxSealCampsFor(landTiles));
 
+    [Theory]
+    [InlineData(60, 1)]
+    [InlineData(2_999, 1)]
+    [InlineData(3_000, 2)]
+    [InlineData(14_000, 7)]
+    public void Eagle_eyries_are_capped_per_island_land(int landTiles, int expected) =>
+        Assert.Equal(expected, CampGenerator.MaxEyrieCampsFor(landTiles));
+
+    [Fact]
+    public void No_island_holds_more_eagle_eyries_than_its_cap()
+    {
+        foreach (var (seed, _, island) in Islands())
+        {
+            var eyries = island.Camps.Count(c => c.Family == "eagleeyrie");
+            Assert.True(eyries <= CampGenerator.MaxEyrieCampsFor(island.TileCount), $"seed {seed} island {island.Index}: {eyries} eyries");
+        }
+    }
+
     [Fact]
     public void No_island_holds_more_seal_colonies_than_its_cap()
     {
@@ -422,7 +440,10 @@ public class CampGenerationTests
 
         var placed = CampGenerator.PlaceCore(tiles, land, [], [], 5, 2);
 
-        Assert.Equal(CampGenerator.CampCountFor(tiles.Count), placed.Count);
+        // The weak budget (6) is cut to the seal and eyrie caps (2 + 2).
+        var expectedCount = CampGenerator.StrongCountFor(tiles.Count)
+            + Math.Min(CampGenerator.WeakCountFor(tiles.Count), CampGenerator.MaxSealCampsFor(tiles.Count) + CampGenerator.MaxEyrieCampsFor(tiles.Count));
+        Assert.Equal(expectedCount, placed.Count);
         Assert.Equal(4, placed.Take(4).Select(p => p.Family).Distinct().Count());
     }
 
@@ -444,7 +465,9 @@ public class CampGenerationTests
 
         var placed = CampGenerator.PlaceCore(tiles, land, [], [], 11, 4);
         Assert.Equal(CampGenerator.StrongCountFor(tiles.Count), placed.Count(p => CampFamilies.IsStrong(p.Family)));
-        Assert.Equal(CampGenerator.WeakCountFor(tiles.Count), placed.Count(p => !CampFamilies.IsStrong(p.Family)));
+        Assert.Equal(
+            Math.Min(CampGenerator.WeakCountFor(tiles.Count), CampGenerator.MaxSealCampsFor(tiles.Count) + CampGenerator.MaxEyrieCampsFor(tiles.Count)),
+            placed.Count(p => !CampFamilies.IsStrong(p.Family)));
 
         // The same island with no weak ground: the weak budget stays unfilled.
         var grass = tiles.ToDictionary(t => t, _ => Terrain.Grass);

@@ -12,6 +12,7 @@ import {
   strongCountFor,
   weakCountFor,
   maxSealCampsFor,
+  maxEyrieCampsFor,
   guardRange,
   isStrongCampFamily,
   placeCamps,
@@ -78,6 +79,15 @@ describe('guardRange / campCountFor', () => {
   ])('%i land tiles -> at most %i seal colonies', (tiles, expected) => {
     expect(maxSealCampsFor(tiles)).toBe(expected);
   });
+
+  it.each([
+    [60, 1],
+    [2999, 1],
+    [3000, 2],
+    [14000, 7],
+  ])('%i land tiles -> at most %i eagle eyries', (tiles, expected) => {
+    expect(maxEyrieCampsFor(tiles)).toBe(expected);
+  });
 });
 
 describe('placeCamps', () => {
@@ -85,7 +95,9 @@ describe('placeCamps', () => {
     const { tiles, terrainOf } = block(60, (_q, r) => (['grass', 'forest', 'sand', 'mountain'] as const)[Math.floor(r / 15)]!);
     const placed = placeCamps(tiles, terrainOf, [], [], 5, 2);
 
-    expect(placed).toHaveLength(campCountFor(tiles.length));
+    // The weak budget (6) is cut to the seal and eyrie caps (2 + 2).
+    const expectedWeak = Math.min(weakCountFor(tiles.length), maxSealCampsFor(tiles.length) + maxEyrieCampsFor(tiles.length));
+    expect(placed).toHaveLength(strongCountFor(tiles.length) + expectedWeak);
     expect(placed.filter((p) => isStrongCampFamily(p.family))).toHaveLength(strongCountFor(tiles.length));
     expect(new Set(placed.slice(0, 4).map((p) => p.family)).size).toBe(4);
     for (const p of placed) {

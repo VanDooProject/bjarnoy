@@ -2553,9 +2553,7 @@
         {"q": 62, "r": -155, "family": "wolfden", "level": 2, "orientation": null},
         {"q": 76, "r": -238, "family": "sealhaulout", "level": 1, "orientation": null},
         {"q": 53, "r": -192, "family": "bearrapids", "level": 3, "orientation": "NE"},
-        {"q": 102, "r": -168, "family": "eagleeyrie", "level": 4, "orientation": null},
-        {"q": 59, "r": -175, "family": "eagleeyrie", "level": 3, "orientation": null},
-        {"q": 78, "r": -153, "family": "eagleeyrie", "level": 2, "orientation": null}
+        {"q": 102, "r": -168, "family": "eagleeyrie", "level": 4, "orientation": null}
       ]
     },
     {

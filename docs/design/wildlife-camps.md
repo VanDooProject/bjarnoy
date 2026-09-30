@@ -48,6 +48,9 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
    **Seal cap**: at most `MaxSealCampsFor(land)` = `max(1, round(land / SandTilesPerSealCamp))` seal
    colonies per island (`SandTilesPerSealCamp` 2000). The sand rim is always the ground farthest from the
    interior camps, so without the cap farthest-point sampling gave seals about 45% of all camps.
+   **Eyrie cap**, the same for mountains: at most `MaxEyrieCampsFor(land)` = `max(1, round(land /
+   MountainTilesPerEyrieCamp))` eagle eyries per island (`MountainTilesPerEyrieCamp` 2000); with only the seal
+   cap they were 44% of all camps. A weak budget the caps and grounds cannot fill stays unfilled (bog camps come with the bog PR).
 4. **Level**: rolled per camp in `1..MaxCampLevel` from a hash `u`, low for every family so few start
    positions are lost: weak `1 + floor(u^2 * 5)`, strong `1 + floor(u^3 * 5)` (only `*` and `floor`, so C# and
    TS are bit-identical; `CampLevelSkew.Quadratic` / `Cubic`). Resulting distribution (level 1 to 5):
@@ -82,18 +85,21 @@ camp), start positions on green islands:
 | no camps | 0 | | 278 363 | 60 |
 | first camps PR (700 tiles per camp, cap 24, strong `1-(1-u)^2`) | 1 532 | 1 122 / 410 | 238 273 (-14.4%) | 85 |
 | one budget (450, cap 32, strong `u^3`, weak `u^2`) | 2 277 | 1 809 / 468 | 237 493 (-14.7%) | 75 |
-| **two budgets (strong 1500 / weak 600, seal 2000)** | 2 352 | 759 / 1 593 | **260 095 (-6.6%)** | 75 |
+| two budgets (strong 1500 / weak 600, seal cap 2000) | 2 352 | 759 / 1 593 | 260 095 (-6.6%) | 75 |
+| **two budgets + eyrie cap 2000** | 1 819 | 759 / 1 060 | **260 095 (-6.6%)** | 75 |
 
 (The -11% quoted for the first camps PR was measured before the seal cap; with the cap it was -14.4%.)
-Two-budget set: families eagleeyrie 1 038, sealhaulout 555, wolfden 336, boarwallow 274, bearrapids 115,
-fenrirbrood 34; strong levels L1-L5 = 460 / 114 / 74 / 52 / 59, weak 694 / 304 / 245 / 200 / 150. Tried on the
-way with the single budget: strong `u^1.5` -17.8%, strong `u^2` -16.3%, `StartPositionMargin` 1 would have
-given -10.7%; the owner asked for fewer strong and more weak camps instead, which keeps the margin at 2.
-Seed 11 at radius 1000 (32 islands, 23 with camps): 314 camps (102 strong, 212 weak: eagleeyrie 133,
-sealhaulout 79, wolfden 45, boarwallow 39, bearrapids 18).
+Two budgets without the eyrie cap: eagleeyrie 1 038, sealhaulout 555, wolfden 336, boarwallow 274, bearrapids 115,
+fenrirbrood 34 (eyries 44% of all camps). With the eyrie cap: sealhaulout 555, eagleeyrie 505, wolfden 336,
+boarwallow 274, bearrapids 115, fenrirbrood 34; strong levels L1-L5 = 460 / 114 / 74 / 52 / 59, weak
+452 / 203 / 167 / 133 / 105. Weak camps have no distance rule, so the start positions do not change with the
+cap. Tried on the way with the single budget: strong `u^1.5` -17.8%, strong `u^2` -16.3%, `StartPositionMargin` 1
+would have given -10.7%; the owner asked for fewer strong and more weak camps instead, which keeps the margin at 2.
+Seed 11 at radius 1000 (32 islands, 23 with camps): 254 camps (102 strong, 152 weak: sealhaulout 79,
+eagleeyrie 73, wolfden 45, boarwallow 39, bearrapids 18).
 
 Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `StrongCampTilesPer` 1500, `WeakCampTilesPer` 600, `MaxStrongCampsPerIsland` 16, `MaxWeakCampsPerIsland` 24,
-`MinCampIslandTiles` 60, `SandTilesPerSealCamp` 2000, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
+`MinCampIslandTiles` 60, `SandTilesPerSealCamp` 2000, `MountainTilesPerEyrieCamp` 2000, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
 guard-range formulas above.
 
 ## Data, API and art

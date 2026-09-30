@@ -39,6 +39,16 @@ internal static class CampGenerator
     public static int MaxSealCampsFor(int landTileCount) =>
         Math.Max(1, ((2 * landTileCount) + SandTilesPerSealCamp) / (2 * SandTilesPerSealCamp));
 
+    /// <summary>
+    /// Land tiles per eagle eyrie: mountains are big and often the farthest ground from the
+    /// other camps, so without a cap they take a large share of the weak budget.
+    /// </summary>
+    public const int MountainTilesPerEyrieCamp = 2000;
+
+    /// <summary>At most this many eagle eyries on an island of <paramref name="landTileCount"/> tiles (rounded, at least 1).</summary>
+    public static int MaxEyrieCampsFor(int landTileCount) =>
+        Math.Max(1, ((2 * landTileCount) + MountainTilesPerEyrieCamp) / (2 * MountainTilesPerEyrieCamp));
+
     /// <summary>Camp levels are rolled in <c>1..MaxCampLevel</c>, tuning default.</summary>
     public const int MaxCampLevel = 5;
 
@@ -210,7 +220,9 @@ internal static class CampGenerator
         var picked = new bool[candidates.Count];
         var represented = new HashSet<CampGround>();
         var maxSeals = MaxSealCampsFor(islandTiles.Count);
+        var maxEyries = MaxEyrieCampsFor(islandTiles.Count);
         var seals = 0;
+        var eyries = 0;
 
         while (chosen.Count < count)
         {
@@ -218,12 +230,13 @@ internal static class CampGenerator
             // any ground. (The first pick: nothing is placed, so all distances tie and the
             // hash decides.)
             var sandFull = seals >= maxSeals;
+            var mountainFull = eyries >= maxEyries;
             var strongOpen = strongUsed < strongBudget;
             var weakOpen = weakUsed < weakBudget;
-            var index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: true, sandFull, strongOpen, weakOpen);
+            var index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: true, sandFull, mountainFull, strongOpen, weakOpen);
             if (index < 0)
             {
-                index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: false, sandFull, strongOpen, weakOpen);
+                index = PickBest(candidates, minDistance, picked, represented, restrictToUnrepresented: false, sandFull, mountainFull, strongOpen, weakOpen);
             }
 
             if (index < 0)
@@ -247,6 +260,11 @@ internal static class CampGenerator
             if (pick.Info.Ground == CampGround.Sand)
             {
                 seals++;
+            }
+
+            if (pick.Info.Ground == CampGround.Mountain)
+            {
+                eyries++;
             }
 
             for (var i = 0; i < candidates.Count; i++)
@@ -278,6 +296,7 @@ internal static class CampGenerator
         HashSet<CampGround> represented,
         bool restrictToUnrepresented,
         bool sandFull,
+        bool mountainFull,
         bool strongOpen,
         bool weakOpen)
     {
@@ -295,6 +314,11 @@ internal static class CampGenerator
             }
 
             if (candidates[i].Info.Strength == CampStrength.Strong ? !strongOpen : !weakOpen)
+            {
+                continue;
+            }
+
+            if (mountainFull && candidates[i].Info.Ground == CampGround.Mountain)
             {
                 continue;
             }

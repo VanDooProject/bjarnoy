@@ -102,6 +102,14 @@ export function maxSealCampsFor(landTileCount: number): number {
   return Math.max(1, Math.floor((2 * landTileCount + SandTilesPerSealCamp) / (2 * SandTilesPerSealCamp)));
 }
 
+/** Land tiles per eagle eyrie — mirrors `CampGenerator.MountainTilesPerEyrieCamp` (mountains would otherwise take a large share of the weak budget). */
+export const MountainTilesPerEyrieCamp = 2000;
+
+/** At most this many eagle eyries per island — mirrors `CampGenerator.MaxEyrieCampsFor`. */
+export function maxEyrieCampsFor(landTileCount: number): number {
+  return Math.max(1, Math.floor((2 * landTileCount + MountainTilesPerEyrieCamp) / (2 * MountainTilesPerEyrieCamp)));
+}
+
 function budgetFor(landTileCount: number, tilesPer: number, max: number): number {
   if (landTileCount < MinCampIslandTiles) return 0;
   return Math.min(Math.max(Math.floor((2 * landTileCount + tilesPer) / (2 * tilesPer)), 0), max);
@@ -174,6 +182,7 @@ function pickBest(
   represented: Set<CampGround>,
   restrictToUnrepresented: boolean,
   sandFull: boolean,
+  mountainFull: boolean,
   strongOpen: boolean,
   weakOpen: boolean,
 ): number {
@@ -182,6 +191,7 @@ function pickBest(
     if (picked[i] || minDistance[i]! < MinCampSpacing) continue;
     if (restrictToUnrepresented && represented.has(candidates[i]!.info.ground)) continue;
     if (candidates[i]!.info.strength === 'strong' ? !strongOpen : !weakOpen) continue;
+    if (mountainFull && candidates[i]!.info.ground === 'mountain') continue;
     if (sandFull && candidates[i]!.info.ground === 'sand') continue;
     if (best < 0) {
       best = i;
@@ -276,16 +286,19 @@ export function placeCamps(
   const picked: boolean[] = new Array<boolean>(candidates.length).fill(false);
   const represented = new Set<CampGround>();
   const maxSeals = maxSealCampsFor(islandTiles.length);
+  const maxEyries = maxEyrieCampsFor(islandTiles.length);
   let seals = 0;
+  let eyries = 0;
 
   while (chosen.length < count) {
     // Grounds without a camp first; once none of them has an eligible tile left, any ground.
     // (The first pick: nothing is placed, so all distances tie and the hash decides.)
     const sandFull = seals >= maxSeals;
+    const mountainFull = eyries >= maxEyries;
     const strongOpen = strongUsed < strongBudget;
     const weakOpen = weakUsed < weakBudget;
-    let index = pickBest(candidates, minDistance, picked, represented, true, sandFull, strongOpen, weakOpen);
-    if (index < 0) index = pickBest(candidates, minDistance, picked, represented, false, sandFull, strongOpen, weakOpen);
+    let index = pickBest(candidates, minDistance, picked, represented, true, sandFull, mountainFull, strongOpen, weakOpen);
+    if (index < 0) index = pickBest(candidates, minDistance, picked, represented, false, sandFull, mountainFull, strongOpen, weakOpen);
     if (index < 0) break;
 
     const pick = candidates[index]!;
@@ -295,6 +308,7 @@ export function placeCamps(
     if (pick.info.strength === 'strong') strongUsed++;
     else weakUsed++;
     if (pick.info.ground === 'sand') seals++;
+    if (pick.info.ground === 'mountain') eyries++;
     for (let i = 0; i < candidates.length; i++) {
       const distance = hexDistance(candidates[i]!.coord, pick.coord);
       if (distance < minDistance[i]!) minDistance[i] = distance;
