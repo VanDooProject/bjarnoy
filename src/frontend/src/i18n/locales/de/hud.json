@@ -185,7 +185,18 @@
     "feastEndsIn": "Das Fest endet in {time} und bringt +{renown} Ruhm.",
     "feastPaused": "Ein Fest läuft (die Weltuhr ist angehalten).",
     "feastDemo": "Feste brauchen eine Live-Welt; die Demo vergibt keinen Ruhm.",
-    "feastError": "Das Fest konnte nicht ausgerichtet werden."
+    "feastError": "Das Fest konnte nicht ausgerichtet werden.",
+    "renownProgress": "Ruhm {total} / {required} für Siedlung Nr. {n}",
+    "renownRate": "+{rate} Ruhm pro Stunde durch deine Gebäude",
+    "renownEnough": "Du hast bereits genug Ruhm für deine nächste Siedlung.",
+    "renownMissing": "Noch {missing} Ruhm fehlen",
+    "renownEta": "Etwa {time} bei dieser Rate (ohne Feste)",
+    "renownEtaFeast": "Etwa {time} mit dem laufenden Fest",
+    "renownNoRate": "Es sammelt sich noch kein Ruhm an.",
+    "renownEtaDays": "{days} d {hours} h",
+    "renownEtaHours": "{hours} h {minutes} min",
+    "renownEtaMinutes": "{minutes} min",
+    "renownDemo": "Der Ruhmfortschritt braucht eine Live-Welt."
   },
   "trainingModal": {
     "title": "Einheiten ausbilden",

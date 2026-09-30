@@ -185,7 +185,18 @@
     "feastEndsIn": "Feast ends in {time}, granting +{renown} renown.",
     "feastPaused": "A feast is running (the world clock is paused).",
     "feastDemo": "Feasts need a live world; the demo has no renown to grant.",
-    "feastError": "Could not hold a feast."
+    "feastError": "Could not hold a feast.",
+    "renownProgress": "Renown {total} / {required} for settlement no. {n}",
+    "renownRate": "+{rate} renown per hour from your buildings",
+    "renownEnough": "You already have enough renown for your next settlement.",
+    "renownMissing": "{missing} renown still missing",
+    "renownEta": "About {time} at this rate (without feasts)",
+    "renownEtaFeast": "About {time} counting the running feast",
+    "renownNoRate": "No renown is accruing yet.",
+    "renownEtaDays": "{days} d {hours} h",
+    "renownEtaHours": "{hours} h {minutes} min",
+    "renownEtaMinutes": "{minutes} min",
+    "renownDemo": "Renown progress needs a live world."
   },
   "trainingModal": {
     "title": "Train units",

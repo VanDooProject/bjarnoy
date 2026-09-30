@@ -65,10 +65,7 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
             return 0;
         }
 
-        var totalLevels = await _dbContext.Settlements
-            .Where(s => s.UserId == userId && s.WorldId == worldId)
-            .SelectMany(s => s.Buildings)
-            .SumAsync(b => (int?)b.Level, cancellationToken).ConfigureAwait(false) ?? 0;
+        var totalLevels = await CountBuildingLevelsAsync(userId, worldId, cancellationToken).ConfigureAwait(false);
 
         var feastRenown = await CollectFeastRenownAsync(userId, worldId, now, cancellationToken).ConfigureAwait(false);
 
@@ -87,6 +84,40 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
         }
 
         return settled.Total;
+    }
+
+    /// <summary>Total building levels across the player's settlements in <paramref name="worldId"/> — what renown accrues against.</summary>
+    private async Task<int> CountBuildingLevelsAsync(Guid userId, Guid worldId, CancellationToken cancellationToken) =>
+        await _dbContext.Settlements
+            .Where(s => s.UserId == userId && s.WorldId == worldId)
+            .SelectMany(s => s.Buildings)
+            .SumAsync(b => (int?)b.Level, cancellationToken).ConfigureAwait(false) ?? 0;
+
+    /// <summary>
+    /// Renown per hour the player currently accrues from buildings in
+    /// <paramref name="worldId"/> (total building levels ×
+    /// <see cref="RenownAccount.PointsPerLevelPerHour"/>), feasts excluded.
+    /// </summary>
+    public async Task<double> GetPerHourAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default) =>
+        await CountBuildingLevelsAsync(userId, worldId, cancellationToken).ConfigureAwait(false)
+        * RenownAccount.PointsPerLevelPerHour;
+
+    /// <summary>
+    /// Renown still to arrive from feasts: the gain of every feast still
+    /// running across the player's settlements in <paramref name="worldId"/>
+    /// plus any finished-but-uncollected <see cref="SettlementEntity.PendingFeastRenown"/>.
+    /// Read-only; <see cref="AccrueAsync(Guid, Guid, DateTimeOffset, CancellationToken)"/>
+    /// is what credits it.
+    /// </summary>
+    public async Task<double> GetPendingFeastRenownAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var rows = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => s.UserId == userId && s.WorldId == worldId)
+            .Select(s => new { s.PendingFeastRenown, s.FeastEndsAt, s.FeastRenownGain })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return rows.Sum(r => r.PendingFeastRenown + (r.FeastEndsAt is not null ? r.FeastRenownGain : 0));
     }
 
     /// <summary>

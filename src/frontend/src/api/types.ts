@@ -333,6 +333,10 @@ export interface RenownResponse {
   settlementCount: number;
   requiredForNextSettlement: number;
   canFoundAnother: boolean;
+  /** Renown per hour the standing building levels accrue (feasts excluded). */
+  perHour: number;
+  /** Renown running (or uncollected) feasts will still add. */
+  pendingFeastRenown: number;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/TradeContracts.cs — see

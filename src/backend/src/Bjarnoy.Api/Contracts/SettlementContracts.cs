@@ -404,13 +404,23 @@ public sealed record SettlementViewResponse(
 /// count it is measured against and the threshold for one more — everything
 /// a "found another settlement" UI needs in one call.
 /// </summary>
-public sealed record RenownResponse(double Total, int SettlementCount, double RequiredForNextSettlement, bool CanFoundAnother)
+public sealed record RenownResponse(
+    double Total,
+    int SettlementCount,
+    double RequiredForNextSettlement,
+    bool CanFoundAnother,
+    double PerHour,
+    double PendingFeastRenown)
 {
-    public static RenownResponse From(double total, int settlementCount) => new(
+    /// <param name="perHour">Renown per hour the buildings currently accrue (feasts excluded).</param>
+    /// <param name="pendingFeastRenown">Renown running feasts (and uncollected ones) will still add.</param>
+    public static RenownResponse From(double total, int settlementCount, double perHour = 0, double pendingFeastRenown = 0) => new(
         total,
         settlementCount,
         RenownThresholds.RequiredFor(settlementCount + 1),
-        RenownThresholds.AllowsAnotherSettlement(settlementCount, total));
+        RenownThresholds.AllowsAnotherSettlement(settlementCount, total),
+        perHour,
+        pendingFeastRenown);
 }
 
 public sealed record UnitDefinitionResponse(

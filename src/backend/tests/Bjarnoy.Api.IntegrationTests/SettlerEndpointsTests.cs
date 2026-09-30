@@ -295,6 +295,40 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         Assert.False(renown.CanFoundAnother);
     }
 
+    [Fact]
+    public async Task Renown_reports_its_hourly_rate_and_the_renown_a_running_feast_still_owes()
+    {
+        using var client = Client();
+        var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+        await PlaceTownSquareAsync(client, settlement.Id, adminToken, player.AccessToken);
+
+        var before = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        var current = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+
+        // One renown per standing building level per hour.
+        Assert.Equal(current!.Buildings.Sum(b => b.Level) * RenownAccount.PointsPerLevelPerHour, before!.PerHour);
+        Assert.True(before.PerHour > 0);
+        Assert.Equal(0, before.PendingFeastRenown);
+
+        var started = await client.PostAsync($"/api/v1/settlements/{settlement.Id}/feast", null, Ct);
+        Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
+
+        var during = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(Feasts.RenownFor(3), during!.PendingFeastRenown, 3);
+
+        _factory.Time.Advance(TimeSpan.FromHours(13));
+        var auth = await RefreshAsync(client, player.RefreshToken);
+        var after = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(0, after!.PendingFeastRenown);
+        Assert.True(after.Total >= Feasts.RenownFor(3));
+        Assert.NotNull(auth);
+    }
+
     private async Task GrantRenownAsync(Guid userId, double total)
     {
         await using var scope = _factory.Services.CreateAsyncScope();

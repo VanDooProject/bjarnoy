@@ -16,6 +16,7 @@ import type {
   TrainingOrderResponse,
   FeastOfferResponse,
   FeastResponse,
+  RenownResponse,
   UnitStackResponse,
   WorldMovementResponse,
 } from '../api/types';
@@ -216,6 +217,9 @@ export const useWorldStore = defineStore('world', {
       feast: null as FeastResponse | null,
       nextFeast: null as FeastOfferResponse | null,
       feastFetchedAt: 0,
+      // The account's renown progress (Town Square modal); null in demo mode
+      // and until the first live read.
+      renown: null as RenownResponse | null,
       // Issue #53: a settlement's rune inventory, refreshed the same way as
       // the build queue above — always empty in demo mode, since shrines and
       // runes have no local WorldModel simulation, only the live backend.
@@ -725,6 +729,20 @@ export const useWorldStore = defineStore('world', {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
       await api.holdFeast(this.selectedSettlementId, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
+      await this.loadRenownLive();
+    },
+    /**
+     * Live mode: reads the account's renown (total, rate, next-settlement
+     * target, pending feast renown) into `hud.renown`. No-op in demo mode;
+     * a failed read keeps whatever was last shown.
+     */
+    async loadRenownLive() {
+      if (DEMO_MODE || !this.worldId) return;
+      try {
+        this.hud.renown = await api.getRenown(this.worldId);
+      } catch {
+        // Transient hiccup: the modal keeps its last figures.
+      }
     },
     /**
      * Pulls the settlement's current resources/level/buildings/garrison/
@@ -991,6 +1009,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.runes = [];
       this.hud.feast = null;
       this.hud.nextFeast = null;
+      this.hud.renown = null;
       this.hud.tradeBoard = [];
       this.hud.myTradeOffers = [];
       this.hud.shipments = [];

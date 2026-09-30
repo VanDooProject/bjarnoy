@@ -14,6 +14,7 @@ import { DEMO_MODE } from '../../config';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { FEAST_HOURS, feastCost, feastRenown } from '../../lib/economy/feasts';
 import { formatCountdown } from '../../composables/useQueueOrders';
+import { formatFullNumber } from '../../lib/hud/compactNumber';
 import { useWorldStore } from '../../stores/world';
 import {
   BOOST_TERRAIN,
@@ -26,7 +27,7 @@ import {
 } from '../../lib/map/buildingEconomy';
 
 const world = useWorldStore();
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 import { buildingArt, terrainArt } from '../../lib/map/buildingArt';
 import AtlasSprite from '../AtlasSprite.vue';
@@ -127,12 +128,50 @@ const nowMs = ref(Date.now());
 let feastTimer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
   feastTimer = setInterval(() => (nowMs.value = Date.now()), 1000);
+  if (isTownSquare.value && props.mine && !DEMO_MODE) void world.loadRenownLive();
 });
 onBeforeUnmount(() => clearInterval(feastTimer));
 const feastRemaining = computed(() => {
   const f = runningFeast.value;
   if (!f || f.endsInSeconds === null) return null;
   return Math.max(0, f.endsInSeconds - (nowMs.value - world.hud.feastFetchedAt) / 1000);
+});
+
+// Renown progress towards the next settlement. Live worlds only: the demo has
+// no renown, so nothing is shown there rather than invented numbers.
+const renown = computed(() => (DEMO_MODE ? null : world.hud.renown));
+const fmt = (value: number) => formatFullNumber(value, locale.value);
+/** "13 d 6 h", "4 h 12 min", "12 min". */
+function formatEta(seconds: number): string {
+  const totalMin = Math.max(1, Math.round(seconds / 60));
+  const days = Math.floor(totalMin / 1440);
+  const hours = Math.floor((totalMin % 1440) / 60);
+  const minutes = totalMin % 60;
+  if (days > 0) return t('hud.buildingModal.renownEtaDays', { days, hours });
+  if (hours > 0) return t('hud.buildingModal.renownEtaHours', { hours, minutes });
+  return t('hud.buildingModal.renownEtaMinutes', { minutes });
+}
+const renownProgress = computed(() => {
+  const r = renown.value;
+  if (!r) return null;
+  const missing = Math.max(0, r.requiredForNextSettlement - r.total);
+  const feastSeconds = runningFeast.value ? feastRemaining.value : null;
+  const hasFeast = r.pendingFeastRenown > 0 && feastSeconds !== null;
+  let eta: number | null = null;
+  let etaWithFeast: number | null = null;
+  if (!r.canFoundAnother && r.perHour > 0) eta = (missing / r.perHour) * 3600;
+  if (!r.canFoundAnother && hasFeast) {
+    const atFeast = r.total + (r.perHour * feastSeconds) / 3600;
+    if (atFeast >= r.requiredForNextSettlement) etaWithFeast = eta;
+    else if (atFeast + r.pendingFeastRenown >= r.requiredForNextSettlement) etaWithFeast = feastSeconds;
+    else if (r.perHour > 0) etaWithFeast = ((missing - r.pendingFeastRenown) / r.perHour) * 3600;
+  }
+  return {
+    fraction: r.requiredForNextSettlement > 0 ? Math.min(1, r.total / r.requiredForNextSettlement) : 1,
+    missing,
+    eta,
+    etaWithFeast: hasFeast && etaWithFeast !== null && etaWithFeast !== eta ? etaWithFeast : null,
+  };
 });
 
 const feastDisabledReason = computed(() => {
@@ -390,6 +429,33 @@ const actionLabel = computed(() => {
             <dt>{{ t('hud.buildingModal.feastGain') }}</dt>
             <dd data-testid="feast-gain">{{ t('hud.buildingModal.feastRenown', { renown: Math.round(feastOffer.renownGain) }) }}</dd>
           </dl>
+          <div v-if="renown && renownProgress" class="renown-progress" data-testid="renown-progress">
+            <div class="renown-line" data-testid="renown-line">
+              {{
+                t('hud.buildingModal.renownProgress', {
+                  total: fmt(renown.total),
+                  required: fmt(renown.requiredForNextSettlement),
+                  n: renown.settlementCount + 1,
+                })
+              }}
+            </div>
+            <div class="renown-bar" role="progressbar" :aria-valuenow="Math.round(renownProgress.fraction * 100)" aria-valuemin="0" aria-valuemax="100">
+              <div class="renown-bar-fill" :style="{ width: `${renownProgress.fraction * 100}%` }" />
+            </div>
+            <div class="desc" data-testid="renown-rate">{{ t('hud.buildingModal.renownRate', { rate: fmt(renown.perHour) }) }}</div>
+            <div v-if="renown.canFoundAnother" class="desc" data-testid="renown-enough">{{ t('hud.buildingModal.renownEnough') }}</div>
+            <template v-else>
+              <div class="desc" data-testid="renown-missing">{{ t('hud.buildingModal.renownMissing', { missing: fmt(renownProgress.missing) }) }}</div>
+              <div v-if="renownProgress.eta !== null" class="desc" data-testid="renown-eta">
+                {{ t('hud.buildingModal.renownEta', { time: formatEta(renownProgress.eta) }) }}
+              </div>
+              <div v-else class="desc" data-testid="renown-eta">{{ t('hud.buildingModal.renownNoRate') }}</div>
+              <div v-if="renownProgress.etaWithFeast !== null" class="desc" data-testid="renown-eta-feast">
+                {{ t('hud.buildingModal.renownEtaFeast', { time: formatEta(renownProgress.etaWithFeast) }) }}
+              </div>
+            </template>
+          </div>
+          <p v-else-if="DEMO_MODE" class="desc" data-testid="renown-demo">{{ t('hud.buildingModal.renownDemo') }}</p>
           <p v-if="runningFeast && !DEMO_MODE" class="feast-running" data-testid="feast-countdown">
             {{
               feastRemaining === null
@@ -582,6 +648,23 @@ const actionLabel = computed(() => {
 .feast-running {
   margin: 8px 0;
   color: var(--gold);
+}
+.renown-progress {
+  margin: 8px 0;
+}
+.renown-line {
+  color: var(--gold);
+}
+.renown-bar {
+  height: 6px;
+  margin: 4px 0;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.renown-bar-fill {
+  height: 100%;
+  background: var(--gold);
 }
 .feast .afford-note {
   margin-top: 8px;
