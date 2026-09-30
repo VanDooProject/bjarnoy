@@ -583,6 +583,9 @@ const actionLabel = computed(() => {
   margin: 8px 0;
   color: var(--gold);
 }
+.feast .afford-note {
+  margin-top: 8px;
+}
 .feast .primary {
   margin-top: 4px;
 }
