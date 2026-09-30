@@ -242,6 +242,20 @@ export function checkBogRules(
         reachedRiver = true;
         break;
       }
+      const lakeId = component.get(coordKey(n));
+      if (lakeId !== undefined) {
+        // A spring that feeds a lake (a guaranteed spawn bog): the river through the lake, out of its outflow mouth, takes the water on.
+        // R8 makes sure every lake has exactly one; the link checks above follow it to the river.
+        reachedRiver = bog.some(
+          (m) =>
+            m.kind === 'mouth' &&
+            m.waterEdges.length === 1 &&
+            m.inDirections.length === 1 &&
+            m.inDirections[0] === m.waterEdges[0] &&
+            Array.from({ length: 6 }, (_, d) => d).some((d) => component.get(coordKey(nb(m, d))) === lakeId),
+        );
+        break;
+      }
       cur = byCoord.get(coordKey(n));
       if (!cur || cur.kind === 'lake') break;
     }
