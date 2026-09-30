@@ -248,7 +248,8 @@ public sealed record IslandResponse(
     IReadOnlyList<TileCoordinate> StartPositions,
     IReadOnlyList<RiverTileResponse> RiverTiles,
     IReadOnlyList<GiantResponse> Giants,
-    bool Wasted)
+    bool Wasted,
+    IReadOnlyList<CampResponse> Camps)
 {
     public static IslandResponse From(IslandEntity island)
     {
@@ -264,8 +265,35 @@ public sealed record IslandResponse(
             [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
             [.. island.RiverTiles.Select(RiverTileResponse.From)],
             [.. island.Giants.Select(GiantResponse.From)],
-            island.IsWasted);
+            island.IsWasted,
+            [.. island.Camps.Select(CampResponse.From)]);
     }
+}
+
+/// <summary>
+/// A wildlife camp — see <see cref="Bjarnoy.Domain.World.Camp"/> and <c>docs/design/wildlife-camps.md</c>.
+/// Spawn and render only for now; every camp is guarded.
+/// </summary>
+/// <param name="Family">The tile-art family, e.g. <c>"wolfden"</c>.</param>
+/// <param name="Q">Hex column.</param>
+/// <param name="R">Hex row.</param>
+/// <param name="Level">Rolled at spawn, 1 to 5; sets <paramref name="GuardRange"/>.</param>
+/// <param name="Orientation">The tile's own orientation wire name (a bearrapids camp follows its river).</param>
+/// <param name="Strong">Whether the camp will block towers once camp gameplay lands.</param>
+/// <param name="GuardRange">How many hex steps around the camp it guards.</param>
+public sealed record CampResponse(string Family, int Q, int R, int Level, string Orientation, bool Strong, int GuardRange)
+{
+    public static CampResponse From(CampRecord camp) => FromDomain(new Camp(
+        new HexCoord(camp.Q, camp.R), camp.Family, camp.Level, (TileOrientation)camp.Orientation));
+
+    public static CampResponse FromDomain(Camp camp) => new(
+        camp.Family,
+        camp.Coord.Q,
+        camp.Coord.R,
+        camp.Level,
+        camp.Orientation.ToWireName(),
+        camp.Strong,
+        camp.GuardRange);
 }
 
 /// <summary>A 7-hex giant feature — see <see cref="Bjarnoy.Domain.World.Giant"/> and the territory rule.</summary>

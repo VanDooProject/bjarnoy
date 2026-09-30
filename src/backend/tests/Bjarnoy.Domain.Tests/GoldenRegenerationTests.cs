@@ -83,6 +83,80 @@ public class GoldenRegenerationTests
         File.WriteAllText(SharedPath("river-generation-golden.json"), sb.ToString());
     }
 
+    [Fact]
+    public void Regenerate_camp_placement_golden()
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable(EnvVar) == "1", $"set {EnvVar}=1 to regenerate");
+
+        var candidates = new List<Candidate>();
+        for (var seed = 1; seed <= 40; seed++)
+        {
+            var world = new WorldGenerator(TestWorlds.Options(seed)).Generate(TestContext.Current.CancellationToken);
+            candidates.AddRange(world.Islands.Where(i => i.Camps.Count > 0).Select(i => new Candidate(seed, i)));
+        }
+
+        Candidate Smallest(string what, Func<Candidate, bool> filter) =>
+            candidates.Where(filter).OrderBy(c => c.Island.TileCount).ThenBy(c => c.Seed).FirstOrDefault()
+            ?? throw new InvalidOperationException($"no candidate island for '{what}' in seeds 1-40");
+
+        var scenarios = new (string Name, Candidate Pick)[]
+        {
+            ("green_island_single_camp", Smallest("single", c => !c.Island.IsWasted && c.Island.Camps.Count == 1)),
+            ("green_island_mixed_with_bearrapids", Smallest("mixed", c => !c.Island.IsWasted
+                && c.Island.Camps.Count >= 4
+                && c.Island.Camps.Any(k => k.Family == CampFamilies.Bearrapids)
+                && c.Island.Camps.Select(k => k.Family).Distinct().Count() >= 4)),
+            ("green_island_with_giants", Smallest("giants", c => !c.Island.IsWasted
+                && c.Island.Giants.Count >= 1 && c.Island.Camps.Count >= 3)),
+            ("wasted_island_fenrir_only", Smallest("wasted", c => c.Island.IsWasted && c.Island.Camps.Count >= 2)),
+        };
+
+        var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        var sb = new StringBuilder();
+        sb.Append("{\n  \"_comment\": ").Append(JsonSerializer.Serialize(
+            "Cross-language parity fixture for wildlife camp placement (CampGenerator.PlaceCore backend / placeCamps frontend): given a real island's tiles (with terrain), its river tiles, its giants' anchors, a world seed, an island index and the wasted flag, both sides must place the same camps in the same order (family, level, and - for bearrapids only, which follows its river - orientation). Covers: a small island that gets exactly one camp, a mixed island whose camps take at least four families including a bearrapids on a straight river tile, an island whose giants' footprints are kept clear, and a wasted island that only gets fenrirbrood on wasteland. Every scenario is a real island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). CampPlacementGoldenTests.cs (backend) and campPlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `camps` list (order matters: it is the placement order).",
+            options)).Append(",\n  \"scenarios\": [\n");
+
+        for (var s = 0; s < scenarios.Length; s++)
+        {
+            var (name, pick) = scenarios[s];
+            var island = pick.Island;
+            var terrain = new TerrainSampler(TestWorlds.Options(pick.Seed));
+            sb.Append("    {\n");
+            sb.Append($"      \"name\": \"{name}\",\n      \"worldSeed\": {pick.Seed},\n      \"islandIndex\": {island.Index},\n");
+            sb.Append($"      \"wasted\": {(island.IsWasted ? "true" : "false")},\n");
+            sb.Append("      \"tiles\": [\n");
+            sb.Append(string.Join(",\n", island.Tiles.Select(t =>
+                $"        [{t.Q}, {t.R}, \"{(island.IsWasted ? terrain.WastedTerrainAt(t) : terrain.TerrainAt(t)).ToWireName()}\"]")));
+            sb.Append("\n      ],\n      \"rivers\": [\n");
+            sb.Append(string.Join(",\n", island.RiverTiles.Select(t =>
+                "        {\"q\": " + t.Coord.Q + ", \"r\": " + t.Coord.R + ", \"shape\": \"" + ShapeName(t.Shape) + "\", \"inDirections\": ["
+                + string.Join(", ", t.InDirections.Select(d => $"\"{d.ToWireName()}\"")) + "], \"outDirection\": "
+                + (t.OutDirection is { } o ? $"\"{o.ToWireName()}\"" : "null") + "}")));
+            sb.Append("\n      ],\n      \"giants\": [\n");
+            sb.Append(string.Join(",\n", island.Giants.Select(g => $"        [{g.Anchor.Q}, {g.Anchor.R}]")));
+            sb.Append("\n      ],\n      \"camps\": [\n");
+
+            // The frozen expectation is the placement core's own output (Generate adds the
+            // sampler orientation for every camp that is not on a river).
+            var placements = CampGenerator.PlaceCore(
+                island.Tiles,
+                island.Tiles.ToDictionary(t => t, t => island.IsWasted ? terrain.WastedTerrainAt(t) : terrain.TerrainAt(t)),
+                island.RiverTiles,
+                island.Giants.Select(g => g.Anchor).ToList(),
+                pick.Seed,
+                island.Index,
+                island.IsWasted);
+            sb.Append(string.Join(",\n", placements.Select(p =>
+                "        {\"q\": " + p.Coord.Q + ", \"r\": " + p.Coord.R + ", \"family\": \"" + p.Family + "\", \"level\": " + p.Level
+                + ", \"orientation\": " + (p.Orientation is { } o ? $"\"{o.ToWireName()}\"" : "null") + "}")));
+            sb.Append("\n      ]\n    }").Append(s < scenarios.Length - 1 ? ",\n" : "\n");
+        }
+
+        sb.Append("  ]\n}\n");
+        File.WriteAllText(SharedPath("camp-placement-golden.json"), sb.ToString());
+    }
+
     private static string ShapeName(RiverTileShape shape) => shape switch
     {
         RiverTileShape.Spring => "spring",
