@@ -330,9 +330,13 @@ this document is checked.
 | 4 check-ins | four short sessions a day (e.g. 08, 12, 17, 21) |
 | 2 check-ins | two short sessions a day (08, 20) |
 
-A check-in is a **short session** (about 10 minutes), not a whole hour
-online. The lab still models check-ins as whole hours, which flatters the
-check-in profiles; minute-level sessions are on the roadmap.
+A check-in is a **short session** (10 minutes), not a whole hour online: a
+profile is a list of daily `{start, minutes}` sessions and the player only
+acts inside them, starting at a join time (default 09:00). The lab also has a
+24 h reference profile and an editable custom schedule, a *producers ahead of
+the Longhouse* strategy setting, a what-if panel (growth factors and level-1
+values, shown dashed next to the live catalogue) and a second-settlement
+check (renown, optional feasts).
 
 ### What the simulator showed
 
@@ -419,12 +423,8 @@ tune, not settled numbers.
 
 Open work, in rough order. Each is its own PR.
 
-1. **Economy lab:** the player profiles above with short (minute-level)
-   check-ins and an editable schedule; a what-if panel (growth factors,
-   level-1 values, founding stock) shown next to the live catalogue; a
-   strategy setting for how far producers run ahead of the Longhouse; and a
-   second settlement, to check when each profile can settle against when its
-   first settlement's growth flattens.
+1. ~~**Economy lab:** session-based profiles, what-if panel, producers-ahead
+   strategy and second settlement.~~ Done.
 2. **Feasts and renown** (§6): Town Square feasts, and the renown threshold
    for the 2nd settlement at 55 000.
 3. **Tutorial** (§7): placing a Storage House and upgrading the Longhouse,

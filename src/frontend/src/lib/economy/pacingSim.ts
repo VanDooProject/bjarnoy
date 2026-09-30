@@ -7,19 +7,45 @@ import type { BuildingDefinitionResponse, BuildingPrerequisiteResponse, Resource
 
 export type Resource = 'wood' | 'stone' | 'food' | 'iron';
 export const RESOURCES: readonly Resource[] = ['wood', 'stone', 'food', 'iron'];
-export type Profile = 'always' | 'casual';
+
+/** One daily online window: it starts at `start` ('HH:MM') and lasts `minutes` (may run past midnight). */
+export interface Session {
+  start: string;
+  minutes: number;
+}
+export type ProfileId = 'active' | 'checkins4' | 'checkins2' | 'always24';
 
 /** BuildingCatalogue.BaseStorageCapacity (ResourceAmounts.Uniform(500)). */
 export const BASE_STORAGE_CAPACITY = 500;
 /** BuildingCatalogue.FoundingStock: what a new settlement starts with. */
-export const FOUNDING_STOCK: ResourceLine = { wood: 300, stone: 300, food: 200, iron: 0 };
+export const FOUNDING_STOCK: ResourceLine = { wood: 700, stone: 700, food: 700, iron: 0 };
 /** Fallback for 3 x SettlerCrew.trainingCost when the unit catalogue has no settlercrew row. */
 export const FALLBACK_SETTLER_COST: ResourceLine = { wood: 600, stone: 450, food: 300, iron: 300 };
 export const DEFAULT_PRODUCER_COUNTS: Record<string, number> = { lumberjack: 3, quarry: 3, farm: 3 };
-/** Hours of the day (0-23) the `casual` profile is online, for every minute of that hour. */
-export const CASUAL_HOURS: readonly number[] = [7, 12, 18, 19, 20, 21, 22];
+
+const check = (start: string): Session => ({ start, minutes: 10 });
+/** Daily schedules (design §9). `always24` is a reference line, not a realistic player. */
+export const PROFILE_PRESETS: Record<ProfileId, Session[]> = {
+  active: [{ start: '07:00', minutes: 960 }],
+  checkins4: [check('08:00'), check('12:00'), check('17:00'), check('21:00')],
+  checkins2: [check('08:00'), check('20:00')],
+  always24: [{ start: '00:00', minutes: 1440 }],
+};
+export const DEFAULT_JOIN_TIME = '09:00';
+export const DEFAULT_PRODUCERS_AHEAD = 3;
+/** Design target for the second settlement (economy.md §6). The live game still uses 500 until the feasts PR lands. */
+export const DEFAULT_RENOWN_THRESHOLD = 55000;
+export const DEFAULT_RENOWN_PER_LEVEL_HOUR = 1.0;
+/** Feast numbers, economy.md §6. */
+export const FEAST_HOURS = 12;
+export const feastCost = (townSquare: number): number => 800 * 1.25 ** (townSquare - 1);
+export const feastRenown = (townSquare: number): number => 6000 * 1.2 ** (townSquare - 1);
+/** Growth counts as flat when a day adds less than this share of the previous day's production. */
+export const GROWTH_FLAT_FRACTION = 0.05;
 
 const LONGHOUSE = 'longhouse';
+const TOWN_SQUARE = 'townsquare';
+const TOWN_SQUARE_MAX_LEVEL = 10;
 const STORAGE = 'storagehouse';
 const STORAGE_FULL_FRACTION = 0.85;
 /** BuildingCatalogue.AdditionalStorageHouseLevel: another storage house needs one at this level. */
@@ -33,7 +59,21 @@ export interface PacingParams {
   settlerCost: ResourceLine;
   /** Settlers count as affordable once this type's level-1 definition is placeable and stock covers settlerCost. */
   settleType: string;
-  profile: Profile;
+  /** Daily online windows; outside them nothing starts. */
+  sessions: Session[];
+  /** Time of day ('HH:MM') the player founds the settlement, on day 0. Default 09:00. */
+  joinTime?: string;
+  /**
+   * How many levels producers may run ahead of the Longhouse. 0 keeps them
+   * level with it; Infinity limits them by storage alone. Default 3.
+   */
+  producersAhead?: number;
+  /** Renown needed for the second settlement. Default 55 000. */
+  renownThreshold?: number;
+  /** Renown per standing building level per hour. Default 1. */
+  renownPerLevelHour?: number;
+  /** Run Town Square feasts (needs the Town Square's unlock level in the catalogue). */
+  feasts?: boolean;
   /**
    * Storage houses the player may own (the first stands at level 1 from the
    * start; the rest are placed when storage runs short). A settlement may
@@ -53,7 +93,13 @@ export interface PacingSeries {
 export interface PacingResult {
   /** Minute a Longhouse level finished; level 1 is 0. Levels never reached are absent. */
   lhReachedAt: Record<number, number>;
-  settlersReadyAt: number | null;
+  /** Minute the second settlement is possible: Cart Workshop placeable, renown reached, settlers affordable. */
+  secondSettlementAt: number | null;
+  /** First day (>= 3) whose production grew less than 5% over the previous 24 h; null if it never does. */
+  growthFlattensAt: number | null;
+  /** Renown at the end of the horizon. */
+  renown: number;
+  feastsHeld: number;
   series: PacingSeries;
 }
 
@@ -62,9 +108,34 @@ export function constructionSlotsFor(longhouseLevel: number): number {
   return 2 + Math.max(0, Math.floor((longhouseLevel - 5) / 5));
 }
 
-export function isOnline(profile: Profile, minute: number): boolean {
-  if (profile === 'always') return true;
-  return CASUAL_HOURS.includes(Math.floor(minute / 60) % 24);
+/** 'HH:MM' -> minutes since midnight. Unparseable input gives 0. */
+export function parseClock(text: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
+  if (!m) return 0;
+  return (Math.min(23, Number(m[1])) * 60 + Math.min(59, Number(m[2]))) % 1440;
+}
+
+/** For each minute of the day, whether any session covers it (sessions may wrap past midnight). */
+export function onlineMask(sessions: Session[]): Uint8Array {
+  const mask = new Uint8Array(1440);
+  for (const s of sessions) {
+    const start = parseClock(s.start);
+    const len = Math.min(1440, Math.max(0, Math.floor(s.minutes)));
+    for (let i = 0; i < len; i++) mask[(start + i) % 1440] = 1;
+  }
+  return mask;
+}
+
+/** Is the player online at this minute of the day? */
+export function isOnline(sessions: Session[], minuteOfDay: number): boolean {
+  return onlineMask(sessions)[((Math.floor(minuteOfDay) % 1440) + 1440) % 1440] === 1;
+}
+
+/** Total production per hour (wood + stone + food) in the series on the given day (0-based, from joining). */
+export function productionOnDay(result: PacingResult, day: number): number | null {
+  const i = day * 24;
+  if (i >= result.series.minute.length) return null;
+  return result.series.rate.wood[i] + result.series.rate.stone[i] + result.series.rate.food[i];
 }
 
 /** Default settler cost: 3 x the SettlerCrew training cost, or the fallback when unavailable. */
@@ -156,6 +227,20 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     }
   }
   const standingBest = new Map<string, number>();
+  const mask = onlineMask(params.sessions);
+  const joinMinute = parseClock(params.joinTime ?? DEFAULT_JOIN_TIME);
+  const ahead = params.producersAhead ?? DEFAULT_PRODUCERS_AHEAD;
+  const renownThreshold = params.renownThreshold ?? DEFAULT_RENOWN_THRESHOLD;
+  const renownPerLevelHour = params.renownPerLevelHour ?? DEFAULT_RENOWN_PER_LEVEL_HOUR;
+  // Feasts need a Town Square; the sim never builds one but assumes it stands, at
+  // level min(10, lh - unlock + 1), from the Longhouse level its level 1 unlocks at.
+  const tsUnlock = defsOf(TOWN_SQUARE)[0]?.reqLh;
+  const feastsOn = !!params.feasts && tsUnlock !== undefined;
+  let renown = 0;
+  let sumLevels = 0;
+  let feastEndsAt = -1;
+  let feastGrant = 0;
+  let feastsHeld = 0;
 
   let lh = lhMax > 0 ? 1 : 0;
   // One entry per owned storage house; 0 = not built yet.
@@ -188,8 +273,11 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       storageBest = Math.max(storageBest, level);
     }
     standingBest.clear();
+    sumLevels = lh;
+    for (const level of storageLevels) sumLevels += level;
     for (let i = 0; i < pLevel.length; i++) {
       addDef(pDefs[i][pLevel[i] - 1]);
+      sumLevels += pLevel[i];
       if ((standingBest.get(pType[i]) ?? 0) < pLevel[i]) standingBest.set(pType[i], pLevel[i]);
     }
     if (lh > 0) standingBest.set(LONGHOUSE, lh);
@@ -229,7 +317,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   const horizon = Math.max(0, Math.floor(params.horizonDays * 1440));
   const lhReachedAt: Record<number, number> = {};
   if (lh > 0) lhReachedAt[lh] = 0;
-  let settlersReadyAt: number | null = null;
+  let secondSettlementAt: number | null = null;
   const series: PacingSeries = {
     minute: [],
     lh: [],
@@ -237,7 +325,11 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   };
 
   for (let minute = 0; minute <= horizon; minute++) {
-    // 1. complete finished jobs
+    // 1. complete finished jobs and feasts
+    if (feastEndsAt >= 0 && feastEndsAt <= minute) {
+      renown += feastGrant;
+      feastEndsAt = -1;
+    }
     let changed = false;
     for (let j = jobs.length - 1; j >= 0; j--) {
       const job = jobs[j];
@@ -261,13 +353,15 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
 
     // 2. the player acts: at most one start per minute
     const slots = constructionSlotsFor(lh);
-    if (!lhBusy && usedSlots < slots && isOnline(params.profile, minute)) {
-      startOne(minute, slots);
+    const online = mask[(joinMinute + minute) % 1440] === 1;
+    if (online) {
+      if (!lhBusy && usedSlots < slots) startOne(minute, slots);
+      if (feastsOn && feastEndsAt < 0 && lh >= tsUnlock!) startFeast(minute);
     }
 
-    // 3. settlers
-    if (settlersReadyAt === null && settleDef && placeable(settleDef, false)) {
-      if (stock[0] >= sc[0] && stock[1] >= sc[1] && stock[2] >= sc[2] && stock[3] >= sc[3]) settlersReadyAt = minute;
+    // 3. second settlement: Cart Workshop placeable, renown reached, settlers affordable
+    if (secondSettlementAt === null && renown >= renownThreshold && settleDef && placeable(settleDef, false)) {
+      if (stock[0] >= sc[0] && stock[1] >= sc[1] && stock[2] >= sc[2] && stock[3] >= sc[3]) secondSettlementAt = minute;
     }
 
     // 4. sample, then accrue one minute of production
@@ -280,6 +374,19 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       series.rate.iron.push(rate[3]);
     }
     for (let r = 0; r < 4; r++) stock[r] = Math.min(capacity[r], stock[r] + rate[r] / 60);
+    renown += (sumLevels * renownPerLevelHour) / 60;
+  }
+
+  function startFeast(minute: number) {
+    const ts = Math.max(1, Math.min(TOWN_SQUARE_MAX_LEVEL, lh - tsUnlock! + 1));
+    const cost = feastCost(ts);
+    if (stock[0] < cost || stock[1] < cost || stock[2] < cost) return;
+    stock[0] -= cost;
+    stock[1] -= cost;
+    stock[2] -= cost;
+    feastEndsAt = minute + FEAST_HOURS * 60;
+    feastGrant = feastRenown(ts);
+    feastsHeld++;
   }
 
   function startOne(minute: number, slots: number) {
@@ -293,7 +400,12 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       const next = lhDefs[lh];
       lhWanted = placeable(next, true);
       for (let i = 0; lhWanted && i < pLevel.length; i++) {
-        if (pLevel[i] < Math.min(lh, pDefs[i].length)) lhWanted = false;
+        if (pLevel[i] >= Math.min(lh + ahead, pDefs[i].length)) continue;
+        // A producer that cannot move (next level unplaceable or too big to store) is not waited for.
+        const up = pDefs[i][pLevel[i]];
+        let blocked = !placeable(up, true);
+        for (let r = 0; !blocked && r < 4; r++) if (up.cost[r] > capacity[r]) blocked = true;
+        if (!blocked) lhWanted = false;
       }
       if (lhWanted && jobs.length === 0 && affordable(next)) {
         spend(next);
@@ -341,7 +453,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       if (pBusy[i]) continue;
       const defs = pDefs[i];
       const level = pLevel[i];
-      if (level >= defs.length) continue;
+      if (level >= defs.length || level >= lh + ahead) continue;
       const next = defs[level];
       const gain = next.prodTotal - defs[level - 1].prodTotal;
       if (gain <= 0 || !placeable(next, true) || !affordable(next) || usedSlots + next.slotCost > slots) continue;
@@ -361,7 +473,17 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     }
   }
 
-  return { lhReachedAt, settlersReadyAt, series };
+  let growthFlattensAt: number | null = null;
+  const total = (h: number) => series.rate.wood[h] + series.rate.stone[h] + series.rate.food[h];
+  for (let day = 3; day * 24 < series.minute.length; day++) {
+    const before = total((day - 1) * 24);
+    if (total(day * 24) < before * (1 + GROWTH_FLAT_FRACTION)) {
+      growthFlattensAt = day;
+      break;
+    }
+  }
+
+  return { lhReachedAt, secondSettlementAt, growthFlattensAt, renown, feastsHeld, series };
 }
 
 function primaryResource(prod: Float64Array): number {
