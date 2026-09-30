@@ -239,6 +239,33 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_world_speed_change_racing_a_build_is_retried_and_keeps_both_effects()
+    {
+        var p = await SetUpAsync();
+        var cost = await FarmCostAsync(p.Client);
+        var before = (await GetSettlement(p.Client, p.Settlement.Id))!.Resources.Stock;
+
+        // The speed retune reads (and rewrites) every settlement in the world;
+        // right after that read, a player queues a build on one of them.
+        HttpResponseMessage? competing = null;
+        _injector.ArmOnce(async () => competing = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]));
+        var patch = await p.Admin.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{p.WorldId}/settings", new UpdateWorldSettingsRequest { SpeedFactor = 7 }, Ct);
+
+        Assert.True(_injector.Fired > 0, "the race was never injected");
+        Assert.Equal(HttpStatusCode.Accepted, competing!.StatusCode);
+        Assert.True(patch.IsSuccessStatusCode, await patch.Content.ReadAsStringAsync(Ct));
+
+        var world = await patch.Content.ReadFromJsonAsync<AdminWorldResponse>(SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(7, world!.SpeedFactor);
+
+        var after = (await GetSettlement(p.Client, p.Settlement.Id))!;
+        Assert.Single(after.Queue);
+        Assert.Equal(before.Wood - cost.Wood, after.Resources.Stock.Wood, 3);
+        Assert.Equal(before.Stone - cost.Stone, after.Resources.Stock.Stone, 3);
+    }
+
+    [Fact]
     public async Task A_request_that_loses_the_race_every_time_gets_a_409_instead_of_overwriting()
     {
         var p = await SetUpAsync();

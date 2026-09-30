@@ -118,7 +118,7 @@ public sealed class ConcurrencyRetryPolicyTests
     }
 
     [Fact]
-    public async Task The_world_admin_endpoints_are_left_out_because_the_reseed_opens_its_own_transaction()
+    public async Task Only_the_world_reseed_is_left_out_because_it_opens_its_own_transaction()
     {
         var mapped = await MapEndpointsAsync();
 
@@ -127,6 +127,12 @@ public sealed class ConcurrencyRetryPolicyTests
             .Select(e => e.Key)
             .ToList();
 
-        Assert.Empty(wrapped);
+        // The settings PATCH rewrites every settlement in the world (speed
+        // retune), so it races player writes and must be retried.
+        Assert.Contains("PATCH /api/v1/admin/worlds/{worldId:guid}/settings", wrapped);
+        Assert.DoesNotContain("POST /api/v1/admin/worlds/{worldId:guid}/reseed", wrapped);
+        Assert.False(
+            HasRetry(mapped["POST /api/v1/admin/worlds/{worldId:guid}/reseed"]),
+            "the reseed commits its own transaction and must stay unwrapped");
     }
 }
