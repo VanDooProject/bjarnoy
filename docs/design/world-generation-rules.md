@@ -71,8 +71,8 @@ production scale are inland, where a third river was dropped at a confluence tha
 
 ## Wildlife camps
 
-*Implemented (except the bog camps, which need bog terrain): see [`wildlife-camps.md`](./wildlife-camps.md).* Spawn and render only for now (no gameplay yet). Every island can get camps (all islands can
-be start islands). Camps are placed before start positions; start positions keep away from strong camps,
+*Implemented (except the bog camps, which need bog terrain): see [`wildlife-camps.md`](./wildlife-camps.md).* Spawn and render only for now (no gameplay yet). Every island of 60 or more land tiles gets camps (islets below that get none); a small island whose
+only start positions sit inside a strong camp's guard range is simply not a start island. Camps are placed before start positions; start positions keep away from strong camps,
 weak camps are fine nearby.
 
 - Strong (will block towers later): wolves, bears, boars, Fenrir.

@@ -31,8 +31,10 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
 (`CampPlacementGoldenTests`, `campPlacement.golden.test.ts`; regenerate with
 `GoldenRegenerationTests`, `BJARNOY_REGEN_GOLDENS=1`).
 
-1. **Count** = `clamp(round(islandLand / CampTilesPerCamp), 1, MaxCampsPerIsland)`. A 6-tile islet gets
-   one camp if it has a candidate; an island of 16 800+ tiles gets the cap.
+1. **Count**: an island with fewer than `MinCampIslandTiles` (60) land tiles gets **no camp** (islets stay
+   camp-free, so seal colonies do not dominate). Otherwise
+   `clamp(round(islandLand / CampTilesPerCamp), 1, MaxCampsPerIsland)`: a 60-tile island gets one camp if it
+   has a candidate, an island of 16 800+ tiles gets the cap.
 2. **Candidates**: land tiles not on a giant footprint, not a river tile (except a straight river tile
    for bearrapids), and whose ground has a family (see the table). Mountain tiles count.
 3. **Farthest-point sampling** (like the river springs): the first pick is the hash-best candidate; each
@@ -49,13 +51,21 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
 `GuardRange(level, strength)`: weak `1 + floor(level / 2)` (1 to 3 hexes), strong `2 + level` (3 to 7).
 A start position is dropped when its distance to a **strong** camp is at most `GuardRange + 2`
 (`StartPositionMargin`); weak camps may sit next to a spot. Camps are placed first, so an island
-with strong camps everywhere can lose start positions; that is the owner's decision.
-Measured on seeds 1-8 at radius 1000 (273 green islands, 1 535 camps, 712 strong): start positions
-fell from 278 363 to 248 938 (-11%); 60 islands had none before, 95 have none now (35 islands lost all
-of theirs, mostly small ones a single strong camp can hold whole).
+with strong camps everywhere can lose start positions.
+
+**Decided (owner):** a small island where one strong camp's guard range removes every start position is
+simply not a start island. That is kept as is: there is no fallback that keeps a spot near a camp, and no
+exemption for small islands.
+
+Measured on seeds 1-8 at radius 1000 (273 green islands, 15 wasted, 1 532 camps, 752 strong; the 76 islands
+under 60 tiles have none): start positions fell from 278 363 to 248 965 (-11%); 60 green islands had none
+before, 85 have none now (25 islands lost all of theirs, mostly small ones a single strong camp can hold
+whole). Camp families over the same seeds: sealhaulout 653, wolfden 314, boarwallow 241, eagleeyrie 127,
+bearrapids 125, fenrirbrood 72. Seed 11 at radius 1000 (32 islands, 9 under 60 tiles, 23 with camps): 193
+camps (87 strong): sealhaulout 89, wolfden 36, boarwallow 31, bearrapids 20, eagleeyrie 17.
 
 Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `CampTilesPerCamp` 700,
-`MaxCampsPerIsland` 24, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
+`MinCampIslandTiles` 60, `MaxCampsPerIsland` 24, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
 guard-range formulas above.
 
 ## Data, API and art
@@ -65,6 +75,11 @@ guard-range formulas above.
   islands have none until a reseed), sent as `IslandResponse.camps` and in the admin preview island.
 - Client: `WorldModel.setCamps` tags `Tile.camp`; demo mode places camps in `placeGiantsForIsland`; a
   camp hex is not buildable; `findLandfall` avoids strong camps.
+- Build rule, also enforced server-side: `Settlement.PlanBuild` refuses a hex that holds a camp with
+  `BuildRejection.HexOccupiedByCamp` (HTTP 409, `rejection: "HexOccupiedByCamp"`), checked right after the
+  giant rule via `CampIndex` (`SettlementService.LoadCampIndexAsync`). Every camp counts as guarded for now
+  (`TODO(camp gameplay PR)`: only a guarded camp will block once clearing exists). The admin god-mode
+  building edit is not gated.
 - Render: the ground's own base plus the camp's guarded (`level001`) animated top from the
   `buildings-anim` atlas (bearrapids also brings its river base). The guarded art ships only one to
   three rotations; the tile orientation is mapped onto those (read off the atlas) by modulo in
