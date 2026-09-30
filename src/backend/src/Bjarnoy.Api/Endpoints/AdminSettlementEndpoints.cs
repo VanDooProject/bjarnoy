@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Shrines;
@@ -38,41 +39,50 @@ public static class AdminSettlementEndpoints
 
         settlements.MapGet("/{settlementId:guid}", Get)
             .WithName("AdminGetSettlement")
-            .WithSummary("A settlement's detail as of now, stocks settled.");
+            .WithSummary("A settlement's detail as of now, stocks settled.")
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/resources", GrantResources)
             .WithName("AdminGrantResources")
-            .WithSummary("Grants (or, with negative values, removes) resources, settling first.");
+            .WithSummary("Grants (or, with negative values, removes) resources, settling first.")
+            .WithConcurrencyRetry();
 
         settlements.MapPut("/{settlementId:guid}/buildings/{q:int}/{r:int}/level", SetBuildingLevel)
             .WithName("AdminSetBuildingLevel")
-            .WithSummary("Sets a placed building's level directly, recomputing rates like a normal build completion.");
+            .WithSummary("Sets a placed building's level directly, recomputing rates like a normal build completion.")
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/runes", GrantRune)
             .WithName("AdminGrantRune")
             .WithSummary(
                 "Grants an unslotted rune to a settlement's storage — a stand-in for a real acquisition "
-                    + "source (issue #53), which does not exist yet.");
+                    + "source (issue #53), which does not exist yet.")
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/queue/complete", CompleteQueues)
             .WithName("AdminCompleteQueues")
-            .WithSummary("Instant build: finishes everything queued right now, through the ordinary completion path.");
+            .WithSummary("Instant build: finishes everything queued right now, through the ordinary completion path.")
+            .WithConcurrencyRetry();
 
         settlements.MapGet("/{settlementId:guid}/layout", GetLayout)
             .WithName("AdminGetSettlementLayout")
-            .WithSummary("Every claimed hex with its terrain and what stands on it — the graphical editor's canvas.");
+            .WithSummary("Every claimed hex with its terrain and what stands on it — the graphical editor's canvas.")
+            .WithConcurrencyRetry();
 
         settlements.MapPut("/{settlementId:guid}/buildings/{q:int}/{r:int}", PlaceBuilding)
             .WithName("AdminPlaceBuilding")
-            .WithSummary("Places, re-types or re-levels a building on a claimed hex, bypassing cost and queue.");
+            .WithSummary("Places, re-types or re-levels a building on a claimed hex, bypassing cost and queue.")
+            .WithConcurrencyRetry();
 
         settlements.MapDelete("/{settlementId:guid}/buildings/{q:int}/{r:int}", RazeBuilding)
             .WithName("AdminRazeBuilding")
-            .WithSummary("Razes whatever stands on a hex. The longhouse cannot be razed.");
+            .WithSummary("Razes whatever stands on a hex. The longhouse cannot be razed.")
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/garrison", AdjustGarrison)
             .WithName("AdminAdjustGarrison")
-            .WithSummary("Creates (or, with a negative count, removes) garrison units directly.");
+            .WithSummary("Creates (or, with a negative count, removes) garrison units directly.")
+            .WithConcurrencyRetry();
 
         return app;
     }

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.World;
@@ -40,7 +41,8 @@ public static class AdminWorldEndpoints
 
         worlds.MapPatch("/{worldId:guid}/settings", UpdateSettings)
             .WithName("AdminUpdateWorldSettings")
-            .WithSummary("Updates a world's speed factor, start date, stop-join toggle, and endboss instant.");
+            .WithSummary("Updates a world's speed factor, start date, stop-join toggle, and endboss instant.")
+            .WithConcurrencyRetry();
 
         worlds.MapPost("/{worldId:guid}/run-state", SetRunState)
             .WithName("AdminSetWorldRunState")

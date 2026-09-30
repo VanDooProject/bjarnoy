@@ -375,11 +375,30 @@ public sealed class TradeService(
         }
 
         settlement.ApplyDomain(settled);
+
+        // Touch every offer whose shipment lands here, in the same save. The
+        // poster's and the acceptor's settlements deliver in separate requests;
+        // without a shared row each would mark only its own shipment (in its
+        // own uncommitted transaction under READ COMMITTED), see the other one
+        // still undelivered in TryCompleteOfferAsync, and neither would
+        // complete the offer, leaving it Accepted forever. Both writing the
+        // offer row makes the second writer wait on the row lock, fail its
+        // version check and be retried by ConcurrentWriteExecutor, this time
+        // seeing both deliveries.
+        var offerIds = due.Select(s => s.OfferId).Distinct().ToList();
+        var offers = await _dbContext.TradeOffers
+            .Where(o => offerIds.Contains(o.Id))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var offer in offers)
+        {
+            offer.Version = Guid.NewGuid();
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} received {Count} shipment(s).", settlementId, due.Count);
 
-        foreach (var offerId in due.Select(s => s.OfferId).Distinct())
+        foreach (var offerId in offerIds)
         {
             await TryCompleteOfferAsync(offerId, cancellationToken).ConfigureAwait(false);
         }

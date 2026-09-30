@@ -176,7 +176,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, IMemoryCache ca
             {
                 await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (DbUpdateException) when (inserting)
+            catch (DbUpdateException ex) when (inserting && !ConcurrentWriteExecutor.IsRetryable(ex))
             {
                 // Two concurrent fog-mask requests for a brand-new player both
                 // saw no row and both inserted; the unique index let one win.

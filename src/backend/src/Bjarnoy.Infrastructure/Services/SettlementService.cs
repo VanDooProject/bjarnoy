@@ -401,7 +401,7 @@ public sealed class SettlementService(
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             // Two requests raced (same plot, or the same player founding
             // twice). The unique indexes are what actually decided it, so

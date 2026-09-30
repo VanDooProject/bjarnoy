@@ -129,6 +129,18 @@ public class SettlementEntity
     /// </summary>
     public double PendingFeastRenown { get; set; }
 
+    /// <summary>
+    /// Optimistic-concurrency token (issue #341). Every request loads the
+    /// whole settlement, acts on a domain snapshot and writes it all back, so
+    /// without a token two overlapping requests silently overwrite each
+    /// other's stock, queue and garrison. <c>GameDbContext</c> replaces it with
+    /// a fresh value whenever the settlement <em>or any of its child rows</em>
+    /// changes, so a save from a stale read fails with
+    /// <c>DbUpdateConcurrencyException</c> and <c>ConcurrentWriteExecutor</c>
+    /// re-runs the request against fresh state.
+    /// </summary>
+    public Guid Version { get; set; }
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);

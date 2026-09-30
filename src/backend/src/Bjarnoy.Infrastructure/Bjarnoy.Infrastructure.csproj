@@ -23,6 +23,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Lets the persistence tests assert ConcurrentWriteExecutor's retry
+         classification and unit-of-work state directly. -->
+    <InternalsVisibleTo Include="Bjarnoy.Infrastructure.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Bjarnoy.Domain\Bjarnoy.Domain.csproj" />
   </ItemGroup>
 

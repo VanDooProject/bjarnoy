@@ -1,5 +1,6 @@
 using Bjarnoy.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Bjarnoy.Infrastructure.Persistence;
 
@@ -88,6 +89,175 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<PlayerExploredEntity> PlayerExplored => Set<PlayerExploredEntity>();
 
+    /// <summary>
+    /// Set by <see cref="ConcurrentWriteExecutor"/> while it runs a request as
+    /// one unit of work. While set, the first <c>SaveChanges</c> lazily opens
+    /// a transaction (see <see cref="SaveChangesAsync(bool, CancellationToken)"/>).
+    /// </summary>
+    internal bool UnitOfWorkActive { get; set; }
+
+    /// <summary>The transaction this context began for the unit of work, if any.</summary>
+    private IDbContextTransaction? _unitOfWorkTransaction;
+
+    /// <summary>Actions queued by <see cref="OnCommitted"/> for the current attempt.</summary>
+    private readonly List<Action> _afterCommit = [];
+
+    /// <summary>
+    /// Runs <paramref name="action"/> once the current unit of work has
+    /// committed — for side effects that must not be visible before the data
+    /// they describe is (a cache invalidation: a concurrent reader between an
+    /// early invalidation and the commit would re-cache the stale rows).
+    /// </summary>
+    /// <remarks>
+    /// Inside a unit of work the action is queued and runs after
+    /// <see cref="CommitUnitOfWorkAsync"/> succeeds — also when the attempt
+    /// never opened a transaction. A rolled-back or retried attempt drops its
+    /// queue (the retry registers its own). Outside a unit of work there is no
+    /// later commit to wait for, so it runs immediately.
+    /// </remarks>
+    public void OnCommitted(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        if (UnitOfWorkActive)
+        {
+            _afterCommit.Add(action);
+        }
+        else
+        {
+            action();
+        }
+    }
+
+    /// <summary>Commits the unit of work's transaction, if this context began one, then runs the <see cref="OnCommitted"/> actions.</summary>
+    internal async Task CommitUnitOfWorkAsync(CancellationToken cancellationToken)
+    {
+        var transaction = _unitOfWorkTransaction;
+        _unitOfWorkTransaction = null;
+        if (transaction is not null)
+        {
+            await using (transaction.ConfigureAwait(false))
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var actions = _afterCommit.ToArray();
+        _afterCommit.Clear();
+        foreach (var action in actions)
+        {
+            action();
+        }
+    }
+
+    /// <summary>Rolls back (by disposing) the unit of work's transaction, if this context began one, and drops the <see cref="OnCommitted"/> actions.</summary>
+    internal async Task RollbackUnitOfWorkAsync()
+    {
+        _afterCommit.Clear();
+        var transaction = _unitOfWorkTransaction;
+        _unitOfWorkTransaction = null;
+        if (transaction is not null)
+        {
+            await transaction.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Two things happen here that every settlement write depends on, see
+    /// <see cref="SettlementEntity.Version"/> (issue #341): the settlement's
+    /// concurrency token is bumped, and — inside a unit of work — a
+    /// transaction is opened on demand so a request that saves several times
+    /// commits all-or-nothing. It is lazy on purpose: a read-only request never
+    /// saves, so it never holds a transaction (on SQLite that would be a
+    /// whole-database write lock).
+    /// </remarks>
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        BumpConcurrencyTokens();
+        if (UnitOfWorkActive && _unitOfWorkTransaction is null && Database.CurrentTransaction is null)
+        {
+            _unitOfWorkTransaction = Database.BeginTransaction();
+        }
+
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    /// <inheritdoc cref="SaveChanges(bool)"/>
+    public override async Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        BumpConcurrencyTokens();
+        if (UnitOfWorkActive && _unitOfWorkTransaction is null && Database.CurrentTransaction is null)
+        {
+            _unitOfWorkTransaction = await Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Gives every settlement that is about to be written a fresh
+    /// <see cref="SettlementEntity.Version"/> — including one whose only change
+    /// is a child row (building, queue order, garrison stack, training order,
+    /// rune), which EF would otherwise not touch at all — and every modified
+    /// trade offer a fresh <see cref="TradeOfferEntity.Version"/>.
+    /// </summary>
+    private void BumpConcurrencyTokens()
+    {
+        ChangeTracker.DetectChanges();
+
+        var touched = new HashSet<Guid>();
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            {
+                continue;
+            }
+
+            switch (entry.Entity)
+            {
+                case SettlementEntity settlement when entry.State == EntityState.Modified:
+                    touched.Add(settlement.Id);
+                    break;
+                case TradeOfferEntity when entry.State == EntityState.Modified:
+                    entry.Property(nameof(TradeOfferEntity.Version)).CurrentValue = Guid.NewGuid();
+                    break;
+                case PlacedBuildingEntity child:
+                    touched.Add(child.SettlementId);
+                    break;
+                case BuildOrderEntity child:
+                    touched.Add(child.SettlementId);
+                    break;
+                case UnitStackEntity child:
+                    touched.Add(child.SettlementId);
+                    break;
+                case TrainingOrderEntity child:
+                    touched.Add(child.SettlementId);
+                    break;
+                case RuneInstanceEntity child:
+                    touched.Add(child.SettlementId);
+                    break;
+            }
+        }
+
+        if (touched.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SettlementEntity>())
+        {
+            // Added/Deleted settlements carry no stale read to protect; a
+            // parent that is not tracked cannot be bumped (nothing loaded it).
+            if (entry.State is EntityState.Unchanged or EntityState.Modified
+                && touched.Contains(entry.Entity.Id))
+            {
+                entry.Property(s => s.Version).CurrentValue = Guid.NewGuid();
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -155,6 +325,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             settlement.Property(s => s.Name).HasMaxLength(100).IsRequired();
             settlement.Property(s => s.OwnerName).HasMaxLength(100).IsRequired();
             settlement.Property(s => s.OwnerId).HasMaxLength(200).IsRequired();
+
+            // Optimistic concurrency (issue #341): every write loads the whole
+            // settlement and writes it back, so without a token the last
+            // save silently wins. Bumped in SaveChanges, including for
+            // child-row-only changes.
+            settlement.Property(s => s.Version).IsConcurrencyToken();
 
             // One settlement per hex per world: two players cannot found on the
             // same plot, and the database is what makes that a race-proof rule
@@ -625,6 +801,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             offer.Property(o => o.OfferedResource).HasConversion<int>();
             offer.Property(o => o.RequestedResource).HasConversion<int>();
             offer.Property(o => o.State).HasConversion<int>();
+
+            // Two settlements' deliveries complete one offer; see
+            // TradeOfferEntity.Version. Bumped in SaveChanges.
+            offer.Property(o => o.Version).IsConcurrencyToken();
 
             offer.HasOne<SettlementEntity>().WithMany()
                 .HasForeignKey(o => o.PosterSettlementId)
