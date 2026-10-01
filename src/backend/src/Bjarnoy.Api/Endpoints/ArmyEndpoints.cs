@@ -352,7 +352,7 @@ public static class ArmyEndpoints
                 RetargetFoundingRejection.NotAFoundingMission => "This army is not on a founding mission.",
                 RetargetFoundingRejection.NothingToRetarget =>
                     "The convoy is already returning, already home, or arrived home during this settle.",
-                RetargetFoundingRejection.TargetNotReachable => "No route exists to the new target hex.",
+                RetargetFoundingRejection.TargetNotReachable => NoLandRoute,
                 RetargetFoundingRejection.InsufficientProvisionsForRoundTrip =>
                     "The provisions remaining would not cover the round trip to the new target.",
                 _ => "Refused.",
@@ -409,6 +409,9 @@ public static class ArmyEndpoints
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
     }
 
+    /// <summary>Why a land army has no route: mountains and wide rivers stop it (streams and open land do not).</summary>
+    private const string NoLandRoute = "No land route: mountains and wide rivers can't be crossed.";
+
     private static ProblemDetails FieldOrderProblem(FieldOrderRejection rejection)
     {
         var problem = new ProblemDetails
@@ -424,7 +427,7 @@ public static class ArmyEndpoints
                 FieldOrderRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
                 FieldOrderRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
                 FieldOrderRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
-                FieldOrderRejection.UnreachableLeg => "No route exists for one or more legs of the new journey.",
+                FieldOrderRejection.UnreachableLeg => NoLandRoute,
                 FieldOrderRejection.InsufficientProvisionsForRoundTrip =>
                     "The provisions remaining would not cover the round trip to the new destination.",
                 FieldOrderRejection.PremiumRequired =>
@@ -574,7 +577,7 @@ public static class ArmyEndpoints
                 DispatchRejection.InsufficientResources => "Not enough food to load the requested provisions (some may be reserved for queued construction).",
                 DispatchRejection.DestinationNotLand => "The destination is not land; sea pathing is not supported yet.",
                 DispatchRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
-                DispatchRejection.UnreachableLeg => "No land route exists for one or more legs of the journey.",
+                DispatchRejection.UnreachableLeg => NoLandRoute,
                 DispatchRejection.InsufficientProvisionsForRoundTrip =>
                     "The loaded provisions would not cover the full round trip's upkeep.",
                 DispatchRejection.TargetSettlementRequired => "This mission requires a target settlement.",

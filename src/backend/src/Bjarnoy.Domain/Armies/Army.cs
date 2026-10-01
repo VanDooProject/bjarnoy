@@ -251,6 +251,17 @@ public sealed record Army
     /// every <see cref="HexPathfinder"/> call this makes. <see langword="null"/>
     /// (the default) prices no hex as a river.
     /// </param>
+    /// <param name="walls">
+    /// The palisade rules for this army's owner (<see cref="PalisadeIndex.ForOwner"/>): every wall hex blocks, a gate of the owner's
+    /// passes, a half-open end costs <see cref="HexPathfinder.HalfOpenEndCost"/>. <see langword="null"/> (the default) means no wall.
+    /// Threaded alongside <c>isRiver</c>/<c>isWideRiver</c> into every route and travel-time query of this method, and into the
+    /// same-named parameter of the other planning methods here.
+    /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide and so impassable to a land army, threaded alongside
+    /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
+    /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         IReadOnlyList<UnitStack> requestedUnits,
@@ -268,7 +279,9 @@ public sealed record Army
         bool renownAndSlotAllowed = true,
         double speedFactor = 1.0,
         Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
         IGiantIndex? giants = null,
+        WallRules? walls = null,
         HexCoord? targetCampCoord = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
@@ -466,7 +479,7 @@ public sealed record Army
 
         for (var i = 0; i < stops.Count - 1; i++)
         {
-            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
+            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
             if (leg is null || leg.Count == 0)
             {
                 return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
@@ -480,15 +493,15 @@ public sealed record Army
         var speed = stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
 
-        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit, isRiver);
+        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
         if (returnPath is null || returnPath.Count == 0)
         {
             return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
 
         // Every mission, Support included, needs the full round trip: a guest
         // does not burn its own provisions while hosted (Settlement.SettleTo
@@ -965,9 +978,16 @@ public sealed record Army
     /// convoy prices river crossings exactly like every other movement.
     /// <see langword="null"/> (the default) charges no river penalty.
     /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide and so impassable to a land army, threaded alongside
+    /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
+    /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
+    /// </param>
     public static RetargetFoundingResult RetargetFounding(
         Army army, HexCoord newTarget, DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt,
-        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -1001,13 +1021,13 @@ public sealed record Army
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver);
+        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
         if (path is null || path.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver);
+        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
         if (returnPath is null || returnPath.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
@@ -1015,8 +1035,8 @@ public sealed record Army
 
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
 
         var provisionsNow = army.ProvisionsAt(now);
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
@@ -1120,9 +1140,16 @@ public sealed record Army
     /// the recall route's <see cref="HexPathfinder"/> call. <see langword="null"/>
     /// (the default) prices no hex as a river.
     /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide and so impassable to a land army, threaded alongside
+    /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
+    /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
+    /// </param>
     public Army? Recall(
         DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt, HexCoord? currentHex = null,
-        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -1147,14 +1174,14 @@ public sealed record Army
         // this army's own recall route needs.
         var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
 
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver);
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
         if (path is null || path.Count == 0)
         {
             return null;
         }
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
 
         // ProvisionsAt returns the raw Provisions field for anything other
         // than InTransit — including Supporting, which is exactly right here:
@@ -1197,12 +1224,14 @@ public sealed record Army
     /// <returns>
     /// <see langword="null"/> only if no route home exists at all — should
     /// not happen in practice for an army that was already mid-journey
-    /// (issue #159's river-crossing case aside, no hex on a reachable route is
-    /// ever itself unreachable), but handled defensively rather than throwing.
+    /// (it came from home over land it was allowed to walk, and the same
+    /// rules price the way back), but handled defensively rather than throwing.
     /// </returns>
     public Army ForceFieldRetreat(
         DateTimeOffset battleInstant, HexCoord fromHex, HexCoord home, Func<HexCoord, Terrain> terrainAt,
-        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -1212,12 +1241,12 @@ public sealed record Army
         // route already crossed fromHex), but rather than throw, it is left
         // standing exactly where it fought — still immune, just going
         // nowhere — a safe degenerate case rather than a crash.
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver) is { Count: > 0 } found
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen) is { Count: > 0 } found
             ? found
             : (List<HexCoord>)[fromHex];
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
 
         var retreatMovement = new Movement.Movement
         {
@@ -1279,6 +1308,7 @@ public sealed record Army
     /// </param>
     /// <param name="home">The army's home settlement's own hex — needed to price the new return leg, exactly as <see cref="Recall"/> needs it.</param>
     /// <param name="isRiver">Optional river-tile lookup (issue #159 part A), threaded into every <see cref="HexPathfinder"/> call this makes.</param>
+    /// <param name="isWideRiver">Optional wide-river lookup (impassable to a land army), threaded alongside <paramref name="isRiver"/>.</param>
     public static FieldOrderResult PlanFieldOrder(
         Army army,
         IReadOnlyList<HexCoord> waypoints,
@@ -1288,7 +1318,9 @@ public sealed record Army
         Func<HexCoord, Terrain> terrainAt,
         bool isPremium,
         double speedFactor = 1.0,
-        Func<HexCoord, bool>? isRiver = null)
+        Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(waypoints);
@@ -1350,7 +1382,7 @@ public sealed record Army
             fullPath = [fromHex];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
+                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
                 if (leg is null || leg.Count == 0)
                 {
                     return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1371,7 +1403,7 @@ public sealed record Army
             fullPath = [.. movement.Path];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
+                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
                 if (leg is null || leg.Count == 0)
                 {
                     return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1381,7 +1413,7 @@ public sealed record Army
             }
         }
 
-        var returnPath = HexPathfinder.FindPath(destination, home, terrainAt, isLandUnit, isRiver);
+        var returnPath = HexPathfinder.FindPath(destination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
         if (returnPath is null || returnPath.Count == 0)
         {
             return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1389,8 +1421,8 @@ public sealed record Army
 
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
 
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
         if (provisionsAtDeparture < totalFoodNeeded)
@@ -1483,9 +1515,16 @@ public sealed record Army
     /// the fresh return route's <see cref="HexPathfinder"/> call.
     /// <see langword="null"/> (the default) prices no hex as a river.
     /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide and so impassable to a land army, threaded alongside
+    /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
+    /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
+    /// </param>
     public Army? TeleportTo(
         HexCoord coord, HexCoord home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt,
-        double? provisions = null, double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double? provisions = null, double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -1498,13 +1537,13 @@ public sealed record Army
             return null;
         }
 
-        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit, isRiver);
+        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
         if (returnPath is null || returnPath.Count == 0)
         {
             return null;
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
         var provisionsNow = provisions is { } given ? Math.Max(0, given) : ProvisionsAt(now);
 
         var movement = Movement.Movement.Create(

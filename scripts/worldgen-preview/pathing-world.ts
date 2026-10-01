@@ -41,8 +41,9 @@ export function riverArms(tile: RiverTile, riverAt: (c: { q: number; r: number }
   return arms;
 }
 
-export const isWideRiverTile = (tile: RiverTile, riverAt: (c: { q: number; r: number }) => RiverTile | undefined): boolean =>
-  riverArms(tile, riverAt).river >= 2;
+/** The game's own wide-river rule (riverGenerator.ts, mirrored by RiverGenerator.IsWideRiver on the backend), re-exported for the preview tool and its tests. */
+export { isWideRiverTile } from '../../src/frontend/src/lib/map/riverGenerator';
+import { isWideRiverTile } from '../../src/frontend/src/lib/map/riverGenerator';
 
 export interface PathingWorld {
   field: RiverField;

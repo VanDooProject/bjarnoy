@@ -49,6 +49,7 @@ import {
   type GiantPart,
   type GiantTextureMap,
 } from './giantTiles';
+import { PALISADE_FAMILY, isRefusal, palisadeTileFor, type PalisadePiece } from './palisadeTiles';
 import type { BogTile, RiverTile, Terrain, Tile, TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
@@ -127,6 +128,14 @@ export type TextureKey =
   // like the Sawmill's river keys these are texture-lookup keys, not wire building types.
   | 'fisherhutlake'
   | 'hammerschmiedebend'
+  // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
+  // texture-lookup keys, not wire building types (the wire types are `palisade` and `palisadegate`).
+  | 'palisadestraight'
+  | 'palisadebend60'
+  | 'palisadebend120'
+  | 'palisadegatepiece'
+  | 'palisadeend'
+  | 'palisadeendcoast'
   | CampFamily;
 
 type OrientationMap<T> = Record<TileOrientation, T>;
@@ -236,7 +245,45 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // The river hammer mill stands in for a bog-creek Hammerschmiede for now (TODO(art): bog-creek Hammerschmiede).
   hammerschmiede: 'hammerschmiede',
   hammerschmiedebend: 'hammerschmiede_bend',
+  // The palisade wall set (3D_assets docs/wall-tiles.md): one family per piece; level000 is the construction site, level001+ the finished stages.
+  palisadestraight: PALISADE_FAMILY.straight180,
+  palisadebend60: PALISADE_FAMILY.bend60,
+  palisadebend120: PALISADE_FAMILY.bend120,
+  palisadegatepiece: PALISADE_FAMILY.gate180,
+  palisadeend: PALISADE_FAMILY.end,
+  palisadeendcoast: PALISADE_FAMILY.end_coast,
 };
+
+/** The texture key of each palisade piece. */
+export const PALISADE_TEXTURE_KEY: Record<PalisadePiece, TextureKey> = {
+  straight180: 'palisadestraight',
+  bend60: 'palisadebend60',
+  bend120: 'palisadebend120',
+  gate180: 'palisadegatepiece',
+  end: 'palisadeend',
+  end_coast: 'palisadeendcoast',
+};
+
+/** The land wall pieces: they stand on their hex's own ground (the sea end brings its own coastal base). */
+const LAND_WALL_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
+  'palisadestraight',
+  'palisadebend60',
+  'palisadebend120',
+  'palisadegatepiece',
+  'palisadeend',
+]);
+
+/**
+ * The art a palisade or gate hex draws: the piece and the camera file the wall resolver (`palisadeTiles.ts`) picks from which of the
+ * hex's six neighbours are wall hexes, as the `RiverArt` override `baseTextureFor`/`topTextureFor` take (the same way a river building
+ * brings its own orientation). A hex the resolver cannot draw (no wall neighbour yet, or an admin-built branch) is an `end` (a sea end on
+ * water) facing east: a post that is not joined to anything.
+ */
+export function palisadeArtFor(input: { wallNeighbours: readonly boolean[]; coastalWater: boolean; gate: boolean }): RiverArt {
+  const resolved = palisadeTileFor(input);
+  if (!isRefusal(resolved)) return { key: PALISADE_TEXTURE_KEY[resolved.piece], orientation: resolved.dir };
+  return { key: PALISADE_TEXTURE_KEY[input.coastalWater ? 'end_coast' : 'end'], orientation: 'E' };
+}
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
 const COASTAL_FAMILY = 'coastalwatertile';
@@ -1598,6 +1645,12 @@ function pickIndexed<T>(arr: (T | undefined)[] | undefined, index: number): T | 
  * already included.
  */
 export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture {
+  // A land wall hex keeps its own ground: the terrain's base (grass, forest floor without the trees, sand, bog moss) as that hex would be drawn
+  // plain, in the hex's own rotation so it blends with its neighbours; only the wall's top is drawn over it.
+  if (riverArt && LAND_WALL_KEYS.has(riverArt.key)) {
+    // `variant: 0`: the plain base, never a bog variant's own props.
+    return baseTextureFor(textures, { ...tile, buildingType: undefined, buildingLevel: undefined, variant: 0 });
+  }
   const orientation = tileOrientationFor(tile, riverArt);
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
     const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
@@ -1621,7 +1674,7 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
     if (arr.length > 0) return arr[bogVariantIn(tile, arr)]!;
   }
   if (indexed && !BOG_TEXTURE_KEYS.has(key)) {
-    const picked = pickIndexed(indexed[orientation], tile.buildingLevel ?? 1);
+    const picked = pickIndexed(indexed[orientation], (tile.buildingLevel ?? 1));
     if (picked !== undefined) return picked;
   }
   // A building with no art of its own in the pack (e.g. Lumberjack/Quarry —

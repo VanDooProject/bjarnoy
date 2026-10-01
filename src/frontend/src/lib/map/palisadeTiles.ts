@@ -23,7 +23,7 @@
 // Rules the owner decided (see scripts/worldgen-preview/README.md, "pathing"):
 //   - walls do not branch: no hex has three or more wall neighbours;
 //   - a gate exists only on a straight;
-//   - no wall on a river hex (any width) or on a mountain, lake or bog;
+//   - no wall on a river hex (any width) or on a mountain, lake or bog (plain bog moss excepted);
 //   - at the coast a wall ends in `palisade_end_coast` on a coastal water hex.
 import { coordKey, neighbors, type AxialCoord } from '../hex/coords';
 import { TILE_ORIENTATIONS, type Terrain, type TileOrientation } from './types';
@@ -133,6 +133,8 @@ export interface PlacementContext {
   isRiver(c: AxialCoord): boolean;
   /** Optional: a wide river (also refused, and also a river). */
   isWideRiver?(c: AxialCoord): boolean;
+  /** Optional: a bog hex that is plain moss (not a shore, mouth, creek or lake): the one bog a wall may stand on. */
+  isPlainBog?(c: AxialCoord): boolean;
 }
 
 /** The wall as placed: hex keys of every wall hex (a sea end included) and which of them are gates. */
@@ -188,7 +190,8 @@ export function canPlacePalisade(
   const terrain = ctx.terrainAt(coord);
   if (ctx.isRiver(coord) || ctx.isWideRiver?.(coord)) return refuse('notAllowedOnTerrain');
   const water = terrain === 'sea';
-  if (!water && !WALKABLE_WALL_TERRAIN.has(terrain)) return refuse('notAllowedOnTerrain');
+  const plainBog = terrain === 'bog' && (ctx.isPlainBog?.(coord) ?? false);
+  if (!water && !plainBog && !WALKABLE_WALL_TERRAIN.has(terrain)) return refuse('notAllowedOnTerrain');
   if (water && gate) return refuse('notAllowedOnTerrain');
 
   const isUpgrade = gate && existing.walls.has(key) && !(existing.gates?.has(key) ?? false);

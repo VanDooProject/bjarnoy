@@ -13,6 +13,8 @@ import { apiErrorMessage } from '../../i18n/apiErrors';
 import { resourceName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
 import { rewardOverflows } from '../../lib/quests';
+import { useMediaQuery } from '../../composables/useMediaQuery';
+import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { QuestResponse } from '../../api/types';
 
 const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -27,6 +29,14 @@ const unclaimed = computed(() => known.value.filter((q) => !q.claimed));
 const claimedCount = computed(() => known.value.length - unclaimed.value.length);
 const current = computed<QuestResponse | undefined>(() => unclaimed.value[0]);
 const alsoReady = computed(() => unclaimed.value.slice(1).filter((q) => q.completed));
+
+// Phones: the tray is a round quest button until tapped open — the full card
+// covered a third of a landscape screen. The dot says a reward is waiting to
+// be claimed (there is always an open quest while the tray exists at all).
+const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
+const expanded = ref(false);
+const collapsed = computed(() => isCompact.value && !expanded.value);
+const hasReady = computed(() => unclaimed.value.some((q) => q.completed));
 
 const busyId = ref<string | null>(null);
 const error = ref<string | null>(null);
@@ -50,12 +60,36 @@ async function claim(q: QuestResponse) {
 </script>
 
 <template>
-  <aside v-if="current" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
+  <button
+    v-if="current && collapsed"
+    type="button"
+    class="quest-toggle"
+    data-testid="quest-toggle"
+    :aria-label="t('quests.open')"
+    :title="t('quests.title')"
+    @click="expanded = true"
+  >
+    <svg class="quest-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M18 17V6a2 2 0 0 0-2-2H5" />
+      <path d="M8 20h11a2 2 0 0 0 2-2v-.5a.5.5 0 0 0-.5-.5H10.5a.5.5 0 0 0-.5.5v.5a2 2 0 1 1-4 0V6a2 2 0 1 0-4 0v1.5a.5.5 0 0 0 .5.5H6" />
+      <path d="M10 9h5M10 12.5h5" />
+    </svg>
+    <span v-if="hasReady" class="quest-dot" data-testid="quest-ready-dot" aria-hidden="true" />
+  </button>
+  <aside v-else-if="current" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
     <div class="quest-header">
       <span class="quest-heading">{{ t('quests.title') }}</span>
       <span class="quest-progress" data-testid="quest-progress">
         {{ t('quests.progress', { done: claimedCount, total: known.length }) }}
       </span>
+      <button
+        v-if="isCompact"
+        type="button"
+        class="quest-collapse"
+        data-testid="quest-collapse"
+        :aria-label="t('quests.collapse')"
+        @click="expanded = false"
+      />
     </div>
 
     <div class="quest-current" :class="{ 'is-ready': current.completed }" data-testid="quest-current" :data-quest-id="current.id">
@@ -140,6 +174,7 @@ async function claim(q: QuestResponse) {
   color: var(--text);
 }
 .quest-progress {
+  margin-left: auto;
   font-size: 12px;
   color: var(--muted);
 }
@@ -269,5 +304,69 @@ async function claim(q: QuestResponse) {
   .quest-footer {
     margin-top: 6px;
   }
+}
+/* Phones: the collapsed tray, a round quest button in the same corner. */
+.quest-toggle {
+  position: absolute;
+  /* The corner itself, not right of the landscape rail like the open card:
+     the rail's column ends well above it. */
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  /* 20px, not 12: clear of the demo-mode tag in the very corner. */
+  bottom: calc(20px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
+  z-index: 10;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(6, 12, 16, 0.94);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.quest-icon {
+  width: 22px;
+  height: 22px;
+}
+.quest-icon path {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.quest-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e5533d;
+  box-shadow: 0 0 0 2px rgba(6, 12, 16, 0.94);
+}
+/* The open card's collapse control: a CSS-drawn chevron (no raw text). */
+.quest-collapse {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  margin: -6px -6px -6px 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  position: relative;
+}
+.quest-collapse::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translate(-50%, -70%) rotate(45deg);
 }
 </style>

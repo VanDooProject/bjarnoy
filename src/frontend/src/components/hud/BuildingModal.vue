@@ -277,6 +277,10 @@ function formatModifier(modifier: BuildingModifier): string {
               : 'hud.hoverTooltip.domainFood',
         ),
       });
+    case 'palisadeWall':
+      return t('hud.hoverTooltip.modifierPalisadeWall');
+    case 'palisadeGate':
+      return t('hud.hoverTooltip.modifierPalisadeGate');
   }
 }
 

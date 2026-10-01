@@ -128,7 +128,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |
 | 5 | Barracks | Tower 3 |
 | 6 | Town Square (feasts, §6), Bog-ore works (iron, §8) | — |
-| 7 | Palisade* | Tower 5 |
+| 7 | Palisade / Palisade Gate (one card, the wall) | Tower 5 |
 | 8 | Dockyard | Fishing Hut 5 |
 | 9 | Archery Range | Barracks 5 |
 | 10 | Cart Workshop (settlers) | Town Square 3 |
@@ -220,9 +220,69 @@ merging them later.
 
 ### Palisade
 
-A wall piece on a land hex. It blocks movement: nothing passes except
-friendly troops through a gate piece. It has 3 levels, and siege or fire
-takes a level off at a time until it is gone.
+The settlement's wall, built **one hex at a time** (`BuildingType.Palisade` 30 and
+`BuildingType.PalisadeGate` 31, wire ids `palisade` and `palisadegate`; they share
+one tech-tree card, "Palisade / Gate", in the LH 7 row). It unlocks at Longhouse 7
+behind a level-5 Tower, and has **3 levels**. Per hex it costs `C₁ = 40 wood /
+10 stone`, no food, and takes `t₁ = 2 min` at level 1, with the standard growth
+(cost ×1.30 and time ×1.33 per level). It has no production, storage or claim.
+
+**Placement** (`Settlement.PlanBuild`, `Palisades/PalisadeRules.cs`; the frontend
+mirrors it in `palisadeTiles.ts`, and `src/shared/palisade-golden.json` keeps the
+two in step):
+
+- On a land hex inside the settlement's claim: grass, forest, sand or **plain bog moss**
+  (`BogTileKind.Bog`). Not mountain, a bog shore, mouth, creek or lake, any river tile
+  (a stream or a wide river), or an occupied hex. A wall hex keeps its own ground
+  (grass, forest floor without the trees, sand or bog moss) under the wall piece.
+- Or on a **coastal-water hex** inside the claim, as the wall's **sea end**: it must
+  touch exactly one land wall hex, and it can never be a gate.
+- **Walls never branch**: no hex may end up with three or more wall neighbours,
+  counting the new hex and the existing ones (`BuildRejection.PalisadeWouldBranch`).
+  Queued wall orders count as wall hexes too. A gate and a plain wall count the same
+  as wall hexes for neighbour and branch purposes.
+- A **gate** only stands where its piece resolves to a straight (two opposite wall
+  neighbours), and that must stay true after any later placement
+  (`BuildRejection.GateNotOnStraight`).
+
+**Pieces.** The piece a wall hex draws follows its wall neighbours (3D_assets
+`docs/wall-tiles.md`): a straight (`palisade_straight180`), a gate
+(`palisade_gate180`), a 60-degree bend (`palisade_bend60`, which only exists in a
+triangle, since a fourth hex would branch), a 120-degree bend
+(`palisade_bend120`), a land end with one neighbour (`palisade_end`) and the sea end
+(`palisade_end_coast`). Each is drawn from the camera file that turns it onto its
+neighbours, and a hex re-resolves when a neighbour is added or removed. A foundation (level 0)
+draws art `level000`, the construction site; game levels 1-3 draw `level001`-`level003`,
+and a level the atlas does not have yet shows the richest rung it has (level 3 shows
+`level002` until the fourth stage is rendered).
+
+**Movement** (land armies; fleets are unaffected). The rules apply in this order in
+`HexPathfinder` and in the frontend's `hexPath.ts`: wide river and mountain
+impassable, then stream flat 9, then half-open end 3, then blocked (unless a friendly
+gate), then the terrain cost.
+
+- Every wall hex **blocks every army, the owner's included**. Only standing hexes
+  count (level 1 or more): a foundation does not block.
+- A **gate** passes only its **owner's** armies (the same settlement owner), at the
+  normal terrain cost. Anyone else is stopped like at any wall hex.
+- A **land end** (a plain palisade hex with exactly one wall neighbour) is **half open**:
+  every army crosses it at a flat cost of 3 in place of the terrain cost (bog's 2 included). If it touches
+  a mountain or a wide river it is a **sealed end** and blocks like any wall hex, so a
+  wall run up to a river or a mountain still seals.
+- The **sea end** stays sea, impassable to land armies, so a wall that ends in one
+  seals up to the water. A wall whose last hex is a plain land end next to open sea
+  does not: a hex grid has no diagonal moves, so the sea end would add nothing there,
+  and the half-open end is the way through.
+- A lone wall hex with no neighbour blocks and is walked round.
+
+Routes are priced the same on both sides (`river-pathing-golden.json`: walls, a gate
+for friend and foe, a half-open end and a sealed end), the dispatch is refused when no
+land route is left, and the range tint applies the same rules for the selected
+settlement's owner.
+
+**Not built yet.** Siege and fire take a level off a wall hex at a time until it is
+gone; nothing does yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
+The admin building editor places a wall hex without the placement rules.
 
 ## 6. Settling and renown
 

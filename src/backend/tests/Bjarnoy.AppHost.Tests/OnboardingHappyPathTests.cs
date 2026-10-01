@@ -147,15 +147,13 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         Assert.Contains(settlementAfterCompletion!.Buildings, b => b.Type == "reindeerherder");
         Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack");
 
-        var completionBanner = page.GetByTestId("onboarding-banner");
-        await Assertions.Expect(completionBanner).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await page.GetByTestId("onboarding-continue").ClickAsync();
-        await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
-
         // --- Profile nudge -> a real /register form -----------------------------
+        // Onboarding complete: the "Name your jarl" nudge is the one call to
+        // action on the landing page — the completion banner waits until it
+        // is answered — so registration starts straight from here.
         var profileNudgeCta = page.GetByTestId("profile-nudge-cta");
         await Assertions.Expect(profileNudgeCta).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await Assertions.Expect(page.GetByTestId("onboarding-banner")).ToHaveCountAsync(0);
         await profileNudgeCta.ClickAsync();
         await Assertions.Expect(page).ToHaveURLAsync(
             new Regex(@"/register$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });

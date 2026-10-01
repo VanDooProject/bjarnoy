@@ -60,6 +60,8 @@
     "bogoreworks": "Raseneisenerz-Grube",
     "hammerschmiede": "Hammerschmiede",
     "odinstatue": "Odin-Statue",
+    "palisade": "Palisade",
+    "palisadegate": "Palisaden-Tor",
     "reindeerherder": "Rentierhirte"
   },
   "techTree": {
@@ -96,6 +98,8 @@
       "lumberjack": "Fällt Holz auf bewaldetem Grund — das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm — die Knochen jeder Festung.",
       "odinstatue": "Odins Statue auf Gras, ab Langhaus 25 hinter einer Druidenhütte der Stufe 10. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (10 % auf Stufe 5). Raben: Ihr Gebiet, ihre Türme und ihre Heere sehen pro Stufe 2 Ringe weiter (10 auf Stufe 5). Zählt als der eine Schrein der Siedlung.",
+      "palisade": "Ein Feld der Siedlungsmauer, auf Gras, Wald oder Sand im eigenen Gebiet, ab Langhaus 7 hinter einem Turm der Stufe 5 (Palisade und Tor teilen sich eine Karte im Technologiebaum). Mauern verzweigen sich nie: Kein Feld darf drei Nachbarn der Mauer haben. Welches Teil gezeichnet wird, Gerade, Kurve oder Ende, richtet sich nach den Nachbarfeldern der Mauer. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers; ein einzelnes Mauerende (ein Nachbar) ist nur halb offen und jede Armee überquert es für pauschal 3, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, das Meer bleibt. Feuer und Belagerung nehmen ihr später Stufen.",
+      "palisadegate": "Ein Mauerfeld mit Tor, nur wo die Mauer zwischen zwei gegenüberliegenden Mauerfeldern gerade verläuft. Die Armeen des Besitzers passieren es zu den normalen Geländekosten; jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Gleiche Freischaltung, Voraussetzung, Stufen und Kosten wie die Palisade, auf einer Karte im Technologiebaum.",
       "reindeerherder": "Eine Hirtenhütte und ein Rentiergehege auf offenem Grasland — das erste Nahrungsgebäude der Siedlung, von Anfang an verfügbar.",
       "farm": "Zieht Nahrung auf offenem Grasland und hält den Tisch des Langhauses gefüllt. Auf jeder Insel baubar, unabhängig vom Boden, ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 (er und die Kürbisfarm teilen sich eine Karte im Technologiebaum).",
       "storagehouse": "Zusätzlicher Platz für die Ernte auf Gras, damit ein volles Lager die Produktion nie stoppt.",

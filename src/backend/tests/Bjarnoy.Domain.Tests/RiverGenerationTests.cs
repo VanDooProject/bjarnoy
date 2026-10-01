@@ -378,8 +378,16 @@ public class RiverGenerationTests
 
                 foreach (var tile in island.RiverTiles)
                 {
+                    // Mountains are impassable to land armies and a river over one costs a flat crossing
+                    // regardless of the terrain, so neither a mountain tile nor a mountain bank measures
+                    // the terrain-plus-penalty trade-off this guard is about.
+                    if (sampler.TerrainAt(tile.Coord) == Terrain.Mountain)
+                    {
+                        continue;
+                    }
+
                     var banks = tile.Coord.Neighbours()
-                        .Where(n => sampler.IsLand(n) && !riverCoords.Contains(n))
+                        .Where(n => sampler.IsLand(n) && !riverCoords.Contains(n) && sampler.TerrainAt(n) != Terrain.Mountain)
                         .Take(2)
                         .ToList();
 

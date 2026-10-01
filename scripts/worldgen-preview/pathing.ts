@@ -140,7 +140,7 @@ export interface RouteResult {
   label: string;
   path: AxialCoord[] | null;
   cost: number | null;
-  /** The same pair under the backend's current rules (no new restrictions, no wall). */
+  /** The same pair under the pre-rules costs (wide rivers and mountains passable at terrain + river cost, no wall). */
   before: { length: number; cost: number } | null;
   /** Why there is no route when there is none for a reason other than the rules (an endpoint that is not land). */
   note?: string;
@@ -241,7 +241,10 @@ export function runScenario(scn: Scenario, pw?: PathingWorld): ScenarioRun {
   const { wall, refused } = placeWall(scn, world2);
   const tiles = resolveWall(wall, world2.terrainAt, parseKey);
 
-  const old: PathContext = { ...pathContext(world2), restrictions: undefined };
+  const old: PathContext = {
+    ...pathContext(world2),
+    restrictions: { wideRiversImpassable: false, mountainsImpassable: false, streamsIgnoreTerrain: false },
+  };
   const routes: RouteResult[] = (scn.routes ?? []).map((route, i) => {
     const from = pair(route.from);
     const to = pair(route.to);
