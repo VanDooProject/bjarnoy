@@ -89,7 +89,7 @@ function peak(cx: number, cy: number): string {
 function waves(cx: number, cy: number): string {
   return [-3, 3].map((dy) => `M${cx - 7} ${cy + dy} q2.5 -3 5 0 t5 0 t5 0`).join(' ');
 }
-/** A wide river: two banks running across the hex. A stream is the same as a single thin line. */
+/** A wide river: two waves running across the hex. A stream is a single thinner one. */
 function river(cx: number, cy: number): string {
   return [-4, 4].map((dy) => `M${cx - 9} ${cy + dy} q4.5 -4 9 0 t9 0`).join(' ');
 }
@@ -99,7 +99,7 @@ function stream(cx: number, cy: number): string {
 function marks(ground: Ground, cx: number, cy: number): { d: string; cls: string } | null {
   if (ground === 'mountain') return { d: peak(cx, cy), cls: 'peak' };
   if (ground === 'water') return { d: waves(cx, cy), cls: 'waves' };
-  if (ground === 'river') return { d: river(cx, cy), cls: 'waves' };
+  if (ground === 'river') return { d: river(cx, cy), cls: 'stream wide' };
   if (ground === 'stream') return { d: stream(cx, cy), cls: 'stream' };
   return null;
 }
@@ -214,6 +214,7 @@ svg {
   stroke-width: 1;
 }
 .cell.grass,
+.cell.river,
 .cell.stream {
   fill: #3d5a2e;
 }
@@ -226,8 +227,10 @@ svg {
 .cell.water {
   fill: #2f6f9e;
 }
-.cell.river {
-  fill: #1f5580;
+/* Rivers and streams are just the wave on green: no border. */
+.cell.river,
+.cell.stream {
+  stroke: none;
 }
 .peak,
 .waves,
@@ -247,6 +250,10 @@ path.stream {
 path.stream {
   stroke: #7fc0ea;
   stroke-width: 2.5;
+}
+/* A wide river is the stream's wave drawn twice, thicker. */
+path.stream.wide {
+  stroke-width: 3.5;
 }
 /* The wall is a line through the middle of its hexes; a gate is a gap in it between two posts. */
 .wall {
