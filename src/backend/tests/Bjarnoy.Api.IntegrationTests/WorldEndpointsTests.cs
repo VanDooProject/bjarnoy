@@ -198,7 +198,9 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     public async Task Bog_tiles_survive_the_round_trip_through_the_text_encoded_column()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(seed: 9, radius: 600);
+        // Compact-world seed found by scanning seeds 1-40 (after the island-density change, seed 9 has no bog left):
+        // 394 bog tiles with 20 lake tiles, so this doesn't depend on getting lucky with the default.
+        var world = await CreateWorldAsync(seed: 1, radius: 600);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
