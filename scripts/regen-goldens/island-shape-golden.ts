@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { oddQToAxial } from '../../src/frontend/src/lib/hex/coords';
 import {
+  COMPACT_GENERATION,
   DEFAULT_GENERATION,
   enumerateIslandShapes,
   islandDepthAt,
@@ -23,22 +24,8 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const out = resolve(here, '../../src/shared/island-shape-golden.json');
 
-// Same numbers as WorldGenerationOptions.Compact(seed, radius).
-const COMPACT: WorldGenerationConstants = {
-  ...DEFAULT_GENERATION,
-  worldRadius: 300,
-  islandCellSize: 90,
-  islandMinWidth: 8,
-  islandMaxWidth: 14,
-  islandMinSegments: 3,
-  islandMaxSegments: 5,
-  islandMinElongation: 2,
-  islandMaxElongation: 4,
-  islandCoastWarp: 3,
-  islandCoastWarpScale: 14,
-  islandCoastNoise: 0.6,
-  islandCoastNoiseScale: 16,
-};
+// Same numbers as WorldGenerationOptions.Compact(seed, 300).
+const COMPACT: WorldGenerationConstants = { ...COMPACT_GENERATION, worldRadius: 300 };
 
 // Odd knobs on purpose: every island parameter differs from the default, so a knob that
 // one side forgets to read shows up as a mismatch.
@@ -47,6 +34,8 @@ const ODD: WorldGenerationConstants = {
   worldRadius: 1500,
   islandCellSize: 180,
   islandChance: 0.9,
+  islandMaxReach: 260,
+  islandMinGap: 11,
   islandMinWidth: 12,
   islandMaxWidth: 27,
   islandMinSegments: 2,
@@ -69,12 +58,27 @@ const ODD: WorldGenerationConstants = {
 // radius is covered by terrain-checksum-golden.json.
 const DEFAULT_1000: WorldGenerationConstants = { ...DEFAULT_GENERATION, worldRadius: 1000 };
 
+// A world created before the island-density change: 260-hex cells, the one-ring reach budget
+// (islandMaxReach 0), no min-gap rule (islandMinGap 0) and the old 0.12 large share - the
+// legacy path must not drift.
+const LEGACY_1000: WorldGenerationConstants = {
+  ...DEFAULT_GENERATION,
+  worldRadius: 1000,
+  islandCellSize: 260,
+  islandMaxReach: 0,
+  islandMinGap: 0,
+  islandLargeShare: 0.12,
+};
+
 const scenarios: { name: string; seed: number; generation: WorldGenerationConstants }[] = [
   { name: 'default_seed_11', seed: 11, generation: DEFAULT_1000 },
   { name: 'default_seed_6_with_wasted_islands', seed: 6, generation: DEFAULT_1000 },
   { name: 'default_negative_seed', seed: -7, generation: DEFAULT_1000 },
   { name: 'compact_seed_4242', seed: 4242, generation: COMPACT },
   { name: 'odd_knobs_seed_99', seed: 99, generation: ODD },
+  { name: 'legacy_density_seed_11', seed: 11, generation: LEGACY_1000 },
+  // Legacy wasted islands, one of them crowding a green island: min gap 0 must keep it.
+  { name: 'legacy_density_seed_2_with_wasted_islands', seed: 2, generation: LEGACY_1000 },
 ];
 
 function mulberry32(a: number) {

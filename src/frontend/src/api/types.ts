@@ -47,6 +47,8 @@ export interface WorldGenerationResponse {
   worldRadius: number;
   islandCellSize: number;
   islandChance: number;
+  islandMaxReach: number;
+  islandMinGap: number;
   islandMinWidth: number;
   islandMaxWidth: number;
   islandMinSegments: number;
@@ -588,6 +590,8 @@ export interface WorldGenerationSettings {
   mountainRockiness: number;
   forestRockiness: number;
   minimumIslandTiles: number;
+  islandMaxReach: number;
+  islandMinGap: number;
 }
 
 /**
@@ -617,6 +621,8 @@ export interface WorldGenerationSettingsOverrides {
   mountainRockiness?: number;
   forestRockiness?: number;
   minimumIslandTiles?: number;
+  islandMaxReach?: number;
+  islandMinGap?: number;
 }
 
 /**

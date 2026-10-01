@@ -21,14 +21,37 @@ public sealed record WorldGenerationOptions
 
     /// <summary>
     /// Edge length, in offset columns/rows, of the grid cell each island is seeded
-    /// in. Larger cells mean fewer, further-apart islands. Also the hard reach
-    /// budget of every island: an island's land never leaves the 3x3 block of
-    /// cells around its own, so an island is shrunk (never cut) to fit.
+    /// in. Larger cells mean fewer, further-apart islands. A hex scans the cells
+    /// around its own out to <see cref="IslandShapeConstants.ScanSpan"/> rings, so an
+    /// island's land never leaves that block (see <see cref="IslandMaxReach"/>).
+    /// The default 150 (from 260), with <see cref="IslandMinGap"/> and the lower
+    /// <see cref="IslandLargeShare"/>, holds about twice the islands of the first
+    /// radius-4000 worlds at the same island sizes (see docs/design/world-generation-rules.md).
     /// </summary>
-    public int IslandCellSize { get; init; } = 260;
+    public int IslandCellSize { get; init; } = 150;
 
     /// <summary>Probability that a given cell holds an island at all.</summary>
     public double IslandChance { get; init; } = 0.8;
+
+    /// <summary>
+    /// The farthest, in hexes, an island's land may be from its centre (the warps not
+    /// counted) before the island is shrunk (never cut) to fit. A hex scans as many rings
+    /// of cells as that needs (<see cref="IslandShapeConstants.ScanSpan"/>), so island
+    /// size no longer depends on <see cref="IslandCellSize"/>. 0 is the legacy rule of
+    /// worlds created before it: the budget of one ring of cells,
+    /// <c>(1.5 - Jitter/2) * IslandCellSize - warps</c> (305.2 at 260-hex cells, which the
+    /// default 305 keeps).
+    /// </summary>
+    public double IslandMaxReach { get; init; } = 305.0;
+
+    /// <summary>
+    /// Sea, in hexes, every island keeps between its nominal coast (spine capsules at their
+    /// half-widths and islets at their radii, before the shoreline noise) and the nominal
+    /// coast of any neighbour that outranks it — the larger class, then the higher roll.
+    /// An island too close to an outranking neighbour is not generated, which is what keeps
+    /// denser cells from fusing islands into blobs. 0 switches the rule off (legacy worlds).
+    /// </summary>
+    public double IslandMinGap { get; init; } = 24.0;
 
     /// <summary>
     /// Smallest and largest half-width, in hexes, of a class-B island's body
@@ -89,9 +112,10 @@ public sealed record WorldGenerationOptions
     /// <summary>
     /// Probability that an island cell holds a large (C) island. A large island
     /// clears the cells around it, so this is also the share of the map given
-    /// to open sea around the big ones.
+    /// to open sea around the big ones. 0.07 (from 0.12) on the denser 150-hex cells
+    /// keeps C at about 15% of the islands, as it was on 260-hex cells.
     /// </summary>
-    public double IslandLargeShare { get; init; } = 0.12;
+    public double IslandLargeShare { get; init; } = 0.07;
 
     /// <summary>
     /// Fraction of an island's radius, measured from its centre, beyond which
@@ -261,7 +285,7 @@ public sealed record WorldGenerationOptions
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
     /// <summary>
-    /// A scaled-down archipelago — islands of roughly 5-40 hexes across on a 90-hex
+    /// A scaled-down archipelago — islands of roughly 5-40 hexes across on a 66-hex
     /// cell grid — for tests, previews and small dev worlds. Same algorithm and
     /// shape as the production-scale default, just smaller, so a world of radius
     /// 120-200 already holds a handful of islands with mountains and rivers. Islands this small hold no bog,
@@ -271,7 +295,9 @@ public sealed record WorldGenerationOptions
     {
         Seed = seed,
         Radius = radius,
-        IslandCellSize = 90,
+        IslandCellSize = 66,
+        IslandMaxReach = 103.0,
+        IslandMinGap = 8.0,
         IslandMinWidth = 8.0,
         IslandMaxWidth = 14.0,
         IslandMinSegments = 3,
@@ -386,16 +412,33 @@ public sealed record WorldGenerationOptions
                 nameof(IslandCoastWarp));
         }
 
-        // The reach clamp shrinks every island to (1.5 - jitter/2) cells minus the warps;
-        // a cell too small for the warps alone has no room for any island.
-        if (IslandShapeConstants.ReachBudget(IslandCellSize, IslandCoastWarp) <= 0.0)
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandMaxReach);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxReach, 2000.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandMinGap);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMinGap, 400.0);
+
+        // The legacy reach clamp shrinks every island to (1.5 - jitter/2) cells minus the
+        // warps; a cell too small for the warps alone has no room for any island.
+        if (IslandShapeConstants.ReachBudget(this) <= 0.0)
         {
             throw new ArgumentException(
                 $"{nameof(IslandCellSize)} ({IslandCellSize}) is too small for the coastline warp " +
                 $"({nameof(IslandCoastWarp)} {IslandCoastWarp}).",
                 nameof(IslandCellSize));
         }
+
+        // Every hex scans (2 * span + 1)^2 cells: keep that bounded.
+        if (IslandShapeConstants.ScanSpan(this) > MaxScanSpan)
+        {
+            throw new ArgumentException(
+                $"{nameof(IslandCellSize)} ({IslandCellSize}) is too small for {nameof(IslandMaxReach)} " +
+                $"({IslandMaxReach}): a hex would have to scan more than {MaxScanSpan} rings of cells.",
+                nameof(IslandCellSize));
+        }
     }
+
+    /// <summary>The most rings of cells around its own a hex may have to scan for islands.</summary>
+    public const int MaxScanSpan = 3;
 
     /// <summary>The largest <see cref="Radius"/> <see cref="Validate"/> accepts.</summary>
     public const int MaxRadius = 5000;

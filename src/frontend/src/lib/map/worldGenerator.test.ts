@@ -5,7 +5,16 @@
 // exercises `enumerateIslands`, demo mode's own island list, directly.
 import { describe, expect, it } from 'vitest';
 import { hexDistance } from '../hex/coords';
-import { DEFAULT_GENERATION, enumerateIslands, generateTile, soilAt, wastedVariantAt, type WorldSeed } from './worldGenerator';
+import {
+  DEFAULT_GENERATION,
+  enumerateIslands,
+  enumerateIslandShapes,
+  generateTile,
+  islandsTooClose,
+  soilAt,
+  wastedVariantAt,
+  type WorldSeed,
+} from './worldGenerator';
 import { WorldModel } from './WorldModel';
 
 const SEED: WorldSeed = { seed: 20260824, generation: DEFAULT_GENERATION };
@@ -118,5 +127,28 @@ describe('wastedVariantAt', () => {
   it('uses both frames of dead forest and black sand', () => {
     expect(histogram('forest')).toHaveLength(2);
     expect(histogram('sand')).toHaveLength(2);
+  });
+});
+
+describe('wasted islands and the min gap', () => {
+  it('keeps every kept wasted island the min gap away from green islands and from each other', () => {
+    for (const seed of [1, 2]) {
+      const world: WorldSeed = { seed, generation: DEFAULT_GENERATION };
+      const gap = DEFAULT_GENERATION.islandMinGap;
+      const green = enumerateIslandShapes(world, false);
+      const wasted = enumerateIslandShapes(world, true);
+      expect(wasted.length).toBeGreaterThanOrEqual(5);
+      for (const w of wasted) {
+        expect(green.some((g) => islandsTooClose(w, g, gap))).toBe(false);
+        expect(wasted.some((o) => o !== w && islandsTooClose(w, o, gap))).toBe(false);
+      }
+    }
+  });
+
+  it('drops nothing on a legacy world (min gap 0): wasted islands there still crowd green ones', () => {
+    const generation = { ...DEFAULT_GENERATION, islandCellSize: 260, islandMaxReach: 0, islandMinGap: 0, islandLargeShare: 0.12 };
+    const world: WorldSeed = { seed: 1, generation };
+    const green = enumerateIslandShapes(world, false);
+    expect(enumerateIslandShapes(world, true).some((w) => green.some((g) => islandsTooClose(w, g, 24)))).toBe(true);
   });
 });

@@ -3,6 +3,7 @@
  "title": "a five-hex wall from a mountain to a wide river seals the land behind it: no route in",
  "seed": 11,
  "radius": 1000,
+ "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
  "window": {
   "q": -36,
   "r": -332,

@@ -422,11 +422,12 @@ evaluation order, so .NET and JS agree on every double; `src/shared/island-shape
 `scripts/regen-goldens/island-shape-golden.ts` from the TypeScript) is asserted exactly by
 `IslandShapeGoldenTests` and `islandShape.golden.test.ts`.
 
-Islands sit on a grid of `IslandCellSize` cells (default 260) in odd-q offset space. Per cell, all seed-hashed
+Islands sit on a grid of `IslandCellSize` cells (default 150; 260 before the island-density change, see
+[`world-generation-rules.md`](./world-generation-rules.md#island-density)) in odd-q offset space. Per cell, all seed-hashed
 off the cell's own coordinates:
 
 1. **Presence**: `hash < IslandChance` (default 0.8).
-2. **Size class**: A (small, `hash < IslandSmallShare` = 0.3), C (large, `hash > 1 - IslandLargeShare` = 0.12)
+2. **Size class**: A (small, `hash < IslandSmallShare` = 0.3), C (large, `hash > 1 - IslandLargeShare` = 0.07)
    or B. Widths scale by 0.55 / 1 / 1.6. Roughly: B ~150 hexes across (5k-15k tiles), A ~80 (1.5k-7k), C ~250
    (15k-40k). A large island clears the eight cells around it; of two neighbouring large ones the higher
    `+307` roll wins and the loser is demoted to B. (Evaluated exactly like the frontend: a large cell demoted
@@ -441,14 +442,28 @@ off the cell's own coordinates:
    on the island centre. Per-vertex width is the tapered width (tips `1 - 0.5 f^2`) times a `0.6..1` jitter.
 6. **Islets**: up to 5 discs, 0.3-0.7 of a vertex's width in radius, 1.6-3.2 widths off a random vertex.
 7. **Reach clamp**: the farthest land can get from the centre (`spine offset + width * noise factor`, islets
-   included) must fit the 3x3 cell block every hex scans, `(1.5 - 0.55/2) * cellSize - warps`; a bigger island
-   is scaled down uniformly (never cut). `IslandShape.ClampFactor` records it.
+   included) must fit `IslandMaxReach` (305); a bigger island is scaled down uniformly (never cut).
+   `IslandShape.ClampFactor` records it. A hex scans `ScanSpan` rings of cells around its own - the fewest
+   with `(span + 0.5 - 0.55/2) * cellSize >= IslandMaxReach + warps` (2, a 5x5 block, at 150-hex cells) - so
+   the clamp is also what keeps an island inside the block that scans it. A legacy world (`IslandMaxReach` 0)
+   keeps the old one-ring budget `(1.5 - 0.55/2) * cellSize - warps` and a 3x3 scan.
 8. **World edge**: if the hex distance of the rounded centre plus `1.42 * (reach + warps)` exceeds the world
    radius the cell holds **no island**. An island is never clipped by the edge; it is not generated. This makes
    the pure terrain function depend on the world radius, which is why the radius travels with the generation
    constants (`WorldGenerationResponse.WorldRadius`).
+9. **Min gap**: the island is not generated either if its nominal coast (spine segments as capsules at the
+   wider of their two vertex widths, islets as discs; no noise) comes within `IslandMinGap` (24) hexes of the
+   nominal coast of a neighbour **candidate** (steps 1-7, ignoring the edge and this rule) that outranks it:
+   larger class first, then the higher `+307` roll. Segment distance is the minimum of the four
+   point-to-segment distances, or 0 when the segments cross (sign test). Cells up to `GapSpan` rings away are
+   checked, the last ring whose centres can still be within `2 * IslandMaxReach + IslandMinGap` (4 at the
+   defaults). `IslandMinGap` 0 (legacy worlds) switches the rule off.
 
-A hex first gets a **two-octave domain warp** (amplitude `IslandCoastWarp` = 9.5 / wavelength
+A hex only measures the islands its cell's scan block holds whose land box overlaps that cell (cached per cell,
+`TerrainSampler.IslandsNear` / `islandsNear`; same answer as measuring the whole block, since an island cannot make
+a hex outside its box land), and a cell with none skips the warp below entirely - which is why sampling the
+denser 5x5 scan is cheaper per hex than the old 3x3 one was (2.5 s against 6.2 s for the preview tool's seed-1
+window). A hex that does have islands near first gets a **two-octave domain warp** (amplitude `IslandCoastWarp` = 9.5 / wavelength
 `IslandCoastWarpScale` = 42, plus a fixed 3.8 / 11.4 octave) for fjords, bays and headlands, then its depth into
 each island in reach is the minimum over spine segments of `distance / interpolated width` (islets:
 `distance / radius`), plus **three octaves of shoreline noise** (`IslandCoastNoise` = 1.0 at wavelength
@@ -465,7 +480,8 @@ landmass it finds once (a global visited set, so touching islands are one landma
 their lowest (Q, R) tile for stable island indices; those under `MinimumIslandTiles` are dropped; rivers, giants
 and start positions are computed per island in parallel (results land in per-island slots, so ordering is
 deterministic). Reference timings on a 4-core sandbox (seed 11): radius 1000 ~2 s (32 islands, 150k land hexes),
-radius 4000 ~45 s (762 landmasses, 2.75M land hexes). Only a landmass narrower than the stride in both
+radius 4000 ~45 s (762 landmasses, 2.75M land hexes) before the island-density change; at the denser
+default, ~34 s against ~22 s for the legacy settings in the same run (1462 landmasses, 5.0M land hexes). Only a landmass narrower than the stride in both
 directions could slip between scan samples; `IslandGenerationTests` compares the result with a brute-force scan
 of every hex.
 
@@ -477,13 +493,16 @@ bend 0-1, warp 0-60 / scale 2-400, noise 0-3 / scale 2-400, shares >= 0 and summ
 
 - **Warp fold-safety**: `1.5 * (warp / warpScale + warp2 / warpScale2) < 1`, covering both warp octaves -
   otherwise the warp could fold the sample space onto itself and detach slivers of land.
-- **Room for the warps**: the reach budget `(1.5 - 0.275) * cellSize - (warp + warp2)` must be positive.
+- **Room for the warps**: the reach budget (`IslandMaxReach`, or on a legacy world
+  `(1.5 - 0.275) * cellSize - (warp + warp2)`) must be positive.
+- **Bounded scan**: `ScanSpan` must be at most 3 (a 7x7 block), so a small cell size cannot make every hex scan
+  dozens of cells; `IslandMaxReach` is 0-2000 and `IslandMinGap` 0-400.
 
 There is no reach-budget rejection any more: the clamp shrinks a too-big island instead.
 
 ### Admin-tunable
 
-`IslandCellSize`, `IslandChance`, `IslandMin/MaxWidth`, `IslandMin/MaxSegments`, `IslandMin/MaxElongation`,
+`IslandCellSize`, `IslandChance`, `IslandMaxReach`, `IslandMinGap`, `IslandMin/MaxWidth`, `IslandMin/MaxSegments`, `IslandMin/MaxElongation`,
 `IslandMin/MaxBend`, `IslandCoastWarp`/`Scale`, `IslandCoastNoise`/`Scale`, `IslandSmallShare`,
 `IslandLargeShare`, plus the beach/mountain thresholds and rockiness, are persisted per world (`WorldEntity`
 columns), sent to the client in `WorldGenerationResponse` and overridable in the admin reseed form and lab.

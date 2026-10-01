@@ -3,6 +3,7 @@
  "title": "wall from a wide river to the sea, ending in the sea-end piece, seals the corner: the enemy cannot enter, the friendly army walks through the gate",
  "seed": 11,
  "radius": 1000,
+ "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
  "window": {
   "q": 205,
   "r": -650,
