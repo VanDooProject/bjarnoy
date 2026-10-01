@@ -514,5 +514,13 @@
       "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal fließt ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
       "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Ring aus Moor, und die Flüsse in der Nähe münden in ihn."
     }
+  },
+  "animations": {
+    "play": "Animationen abspielen",
+    "paused": {
+      "reducedMotion": "Animationen sind angehalten, weil dein Gerät reduzierte Bewegung wünscht.",
+      "saveData": "Animationen sind angehalten, weil dein Browser Daten spart.",
+      "off": "Animationen sind auf diesem Gerät ausgeschaltet."
+    }
   }
 }
