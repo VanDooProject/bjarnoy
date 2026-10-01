@@ -214,7 +214,9 @@ public sealed record PreviewWorldSeedRequest(
 /// this different from the <see cref="IslandResponse"/> the live map reads.
 /// <see cref="Generation"/> is the full set of constants (world radius included)
 /// the candidate was generated with, so the client renders exactly that terrain
-/// instead of the defaults.
+/// instead of the defaults. <see cref="Review"/> is the candidate's world review
+/// (cut-off land, missing bogs, islands without landing spots, broken generator
+/// guarantees), so the admin can tell a seed worth switching away from.
 /// </summary>
 public sealed record WorldSeedPreviewResponse(
     Guid WorldId,
@@ -223,7 +225,8 @@ public sealed record WorldSeedPreviewResponse(
     int IslandCount,
     int LandTileCount,
     IReadOnlyList<PreviewIslandResponse> Islands,
-    WorldGenerationResponse Generation);
+    WorldGenerationResponse Generation,
+    WorldReviewResponse Review);
 
 /// <inheritdoc cref="WorldSeedPreviewResponse"/>
 public sealed record PreviewIslandResponse(

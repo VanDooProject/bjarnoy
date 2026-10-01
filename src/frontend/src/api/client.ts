@@ -52,6 +52,8 @@ import type {
   ReseedWorldRequest,
   ReseedWorldResponse,
   WorldSeedPreviewResponse,
+  ReviewWorldSeedsRequest,
+  WorldSeedReviewResponse,
   PagedConversationsResponse,
   PagedMessagesResponse,
   PagedReportsResponse,
@@ -464,6 +466,11 @@ export const api = {
   // the world, which is why its body carries the re-typed world name.
   adminPreviewWorldSeed: (worldId: string, body: PreviewWorldSeedRequest) =>
     request<WorldSeedPreviewResponse>(`/admin/worlds/${worldId}/preview-seed`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminReviewWorldSeeds: (worldId: string, body: ReviewWorldSeedsRequest) =>
+    request<WorldSeedReviewResponse>(`/admin/worlds/${worldId}/review-seeds`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

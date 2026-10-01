@@ -680,6 +680,81 @@ export interface WorldSeedPreviewResponse {
   islands: PreviewIslandResponse[];
   /** The full generation constants (world radius included) the candidate was generated with. */
   generation: WorldGenerationResponse;
+  /** The candidate's world review: cut-off land, missing bogs, islands without landing spots, broken generator guarantees. */
+  review: WorldReviewResponse;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminWorldReviewContracts.cs.
+
+export type WorldReviewFindingKind =
+  | 'cutOffLand'
+  | 'missingBog'
+  | 'noLandingSpots'
+  | 'bogRuleViolation'
+  | 'inlandRiverMouth'
+  | 'wastedNearGreen';
+
+export type WorldReviewSeverity = 'error' | 'warn' | 'info';
+
+/** The counts of a world review. `cutOffShare`/`worstIslandCutOffShare` are fractions (0.02 = 2%). */
+export interface WorldReviewSummary {
+  seed: number;
+  radius: number;
+  greenIslands: number;
+  wastedIslands: number;
+  landTiles: number;
+  landingSpots: number;
+  islandsWithLandingCandidate: number;
+  islandsWithoutLandingSpots: number;
+  islandsMissingBog: number;
+  /** Reported cut-off regions (at least the backend's minimum region size). */
+  cutOffRegions: number;
+  /** Every cut-off walkable hex, small regions included. */
+  cutOffTiles: number;
+  cutOffShare: number;
+  worstIslandCutOffShare: number;
+  bogRuleViolations: number;
+  inlandRiverMouths: number;
+  wastedNearGreen: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+
+export interface WorldReviewFinding {
+  kind: WorldReviewFindingKind;
+  severity: WorldReviewSeverity;
+  /** The island's index in the preview (`PreviewIslandResponse.index`). */
+  island: number;
+  /** A representative hex the preview map can centre on. */
+  q: number;
+  r: number;
+  /** Hexes involved (a cut-off region's size, a violation count, a distance), or 0. */
+  size: number;
+  /** A short English description from the backend. */
+  message: string;
+}
+
+export interface WorldReviewResponse {
+  summary: WorldReviewSummary;
+  /** Worst first. */
+  findings: WorldReviewFinding[];
+}
+
+/** Reviews `count` (at most 8) consecutive seeds from `seedFrom`; radius/generation as in `PreviewWorldSeedRequest`. */
+export interface ReviewWorldSeedsRequest {
+  seedFrom: number;
+  count?: number;
+  radius?: number;
+  generation?: WorldGenerationSettingsOverrides;
+}
+
+export interface WorldSeedReviewResponse {
+  worldId: string;
+  radius: number;
+  /** Best first: fewest errors, then warnings, then cut-off land, then most landing spots. */
+  seeds: WorldReviewSummary[];
+  generation: WorldGenerationResponse;
 }
 
 /**
