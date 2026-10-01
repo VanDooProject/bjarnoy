@@ -11,7 +11,7 @@
 // rule being measured; lakes never are. A walkable hex that is not in the island's largest walkable
 // region is *unreachable* (cut off by wide rivers and mountains); hexes that are impassable
 // themselves are counted apart, as `blocked`. Three rule sets are measured: the owner's (wide rivers =
-// width `river` + mountains), the same with `widen` and `riverstream` hexes also impassable (the
+// river and `riverstream` Y tiles + mountains), the same with `widen` and `riverstream` hexes also impassable (the
 // ambiguity: a confluence tile is a gap in an otherwise wide line), and the old rules (rivers never block;
 // only lakes cut an island).
 import { coordKey, neighbors } from '../../src/frontend/src/lib/hex/coords';
@@ -43,11 +43,11 @@ export const RULE_SETS: readonly RuleSet[] = [
     walkable: (pw, c) => pw.terrainAt(c) !== 'lake' && LAND.has(pw.terrainAt(c)),
   },
   {
-    label: 'decided: wide rivers (width river) + mountains impassable',
+    label: 'decided: wide rivers (river and riverstream Y tiles) + mountains impassable',
     walkable: (pw, c) => LAND.has(pw.terrainAt(c)) && pw.terrainAt(c) !== 'mountain' && !pw.isWideRiver(c),
   },
   {
-    label: 'decided + widen/riverstream hexes also impassable',
+    label: 'decided + widen tiles also impassable',
     walkable: (pw, c) => {
       if (!LAND.has(pw.terrainAt(c)) || pw.terrainAt(c) === 'mountain') return false;
       const t = pw.riverAt(c);

@@ -153,8 +153,12 @@ The shipped scenarios, all on seed 11 at radius 1000:
 - **`bend60` only exists in a triangle.** Its two edges are adjacent, so the two neighbours it joins are neighbours of each
   other, and each of the three hexes then has exactly two wall neighbours. A bend60 can never be part of an open line (a
   fourth hex would branch); in `f-every-piece` it is two three-hex triangles. Likewise two wall arms one hex apart branch.
-- **A `widen` or `riverstream` hex is crossable** under "wide = width `river`": it is a gap in an otherwise wide line (a stream
-  joining a river). `pathing-stats.ts` measures that variant too; it adds about 0.1 points of unreachable land.
+- **Which river tiles are wide** (owner's rule): a tile that carries a stream is crossable at the stream cost (+8), except a Y
+  where a stream joins a wide river (`riverstream`), which is part of the river and impassable. Derived from arm widths in
+  `pathing-world.ts` (`riverArms`): a tile is wide when at least two of its arms are river width (an in-arm is river width when
+  the upstream tile flows out as river, the out-arm when the tile itself does; a mouth's sea side is its out-arm). So `river`
+  tiles and `riverstream` Ys are wide; a `widen` tile (stream in, river out), a stream-stream confluence and plain stream tiles
+  stay crossable. Making `widen` impassable too changes little (rule set 2 in the statistics).
 - **Mountains are 15.6 % of all land**, so making them impassable cuts islands apart far more than wide rivers do.
 
 ### Why land is cut off

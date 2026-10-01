@@ -3,11 +3,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { coordKey, hexDistance, neighbors, parseKey, type AxialCoord } from '../../src/frontend/src/lib/hex/coords';
 import { isRefusal, resolveWall, type PalisadePiece } from '../../src/frontend/src/lib/map/palisadeTiles';
-import type { Terrain } from '../../src/frontend/src/lib/map/types';
+import type { RiverTile, Terrain, TileOrientation } from '../../src/frontend/src/lib/map/types';
 import { canDraw } from './font';
 import { centreline, edgeMidpoint, footerLines, hexLine, parseScenario, renderScenario, runScenario, type Scenario } from './pathing';
 import { islandStats, RULE_SETS } from './pathing-stats';
-import type { PathingWorld } from './pathing-world';
+import { isWideRiverTile, riverArms, type PathingWorld } from './pathing-world';
 
 const SQRT3 = Math.sqrt(3);
 const centreOf = (c: AxialCoord): [number, number] => [1.5 * c.q, SQRT3 * (c.r + c.q / 2)];
@@ -207,5 +207,40 @@ describe('pathing-stats', () => {
     const stat = islandStats(tiles, pw, decided, 0);
     expect(stat).toMatchObject({ tiles: 8, blocked: 1, walkable: 7, unreachable: 3, components: 2 });
     expect(islandStats(tiles, pw, RULE_SETS[0]!, 0)).toMatchObject({ blocked: 0, unreachable: 0, components: 1 });
+  });
+});
+
+describe('which river tiles are wide (arm widths)', () => {
+  // Tile at (0,0); neighbour directions E (1,0), NE (1,-1), NW (0,-1), W (-1,0), SW (-1,1), SE (0,1).
+  const tile = (width: RiverTile['width'], ins: TileOrientation[], out: TileOrientation | null, shape: RiverTile['shape'] = 'straight'): RiverTile => ({
+    q: 0, r: 0, shape, inDirections: ins, outDirection: out, width,
+  });
+  const upstream = (q: number, r: number, width: RiverTile['width']): RiverTile => ({ q, r, shape: 'straight', inDirections: [], outDirection: 'W', width });
+  const at = (...tiles: RiverTile[]) => (c: { q: number; r: number }) => tiles.find((t) => t.q === c.q && t.r === c.r);
+
+  it('a stream joining a river at the Y (riverstream) is wide: part of the river', () => {
+    const y = tile('riverstream', ['NW', 'E'], 'W', 'confluence');
+    const riverAt = at(upstream(0, -1, 'stream'), upstream(1, 0, 'river'));
+    expect(riverArms(y, riverAt)).toEqual({ river: 2, stream: 1 });
+    expect(isWideRiverTile(y, riverAt)).toBe(true);
+  });
+
+  it('a widen tile (stream in, river out) and a plain stream stay crossable', () => {
+    const widen = tile('widen', ['E'], 'W');
+    expect(riverArms(widen, at(upstream(1, 0, 'stream')))).toEqual({ river: 1, stream: 1 });
+    expect(isWideRiverTile(widen, at(upstream(1, 0, 'stream')))).toBe(false);
+    const stream = tile('stream', ['E'], 'W');
+    expect(isWideRiverTile(stream, at(upstream(1, 0, 'stream')))).toBe(false);
+    // Two streams meeting where the river begins: still only the out-arm is river.
+    const meet = tile('widen', ['E', 'NW'], 'SW', 'confluence');
+    expect(isWideRiverTile(meet, at(upstream(1, 0, 'stream'), upstream(0, -1, 'stream')))).toBe(false);
+  });
+
+  it('river tiles are wide: through, with a creek or lake upstream, and at a mouth', () => {
+    expect(isWideRiverTile(tile('river', ['E'], 'W'), at(upstream(1, 0, 'river')))).toBe(true);
+    expect(isWideRiverTile(tile('river', ['E'], 'W'), at())).toBe(true);
+    expect(isWideRiverTile(tile(undefined, ['E'], null, 'mouth'), at(upstream(1, 0, 'widen')))).toBe(true);
+    // A stream reaching the sea head-on widens on the mouth tile itself: crossable.
+    expect(isWideRiverTile(tile('widen', ['E'], null, 'mouth'), at(upstream(1, 0, 'stream')))).toBe(false);
   });
 });
