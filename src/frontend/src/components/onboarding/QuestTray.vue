@@ -70,9 +70,9 @@ async function claim(q: QuestResponse) {
     @click="expanded = true"
   >
     <svg class="quest-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <polygon points="12,1.5 21.5,7 21.5,17 12,22.5 2.5,17 2.5,7" />
-      <rect x="10.6" y="6.5" width="2.8" height="7.5" rx="1.2" />
-      <circle cx="12" cy="17" r="1.6" />
+      <path d="M18 17V6a2 2 0 0 0-2-2H5" />
+      <path d="M8 20h11a2 2 0 0 0 2-2v-.5a.5.5 0 0 0-.5-.5H10.5a.5.5 0 0 0-.5.5v.5a2 2 0 1 1-4 0V6a2 2 0 1 0-4 0v1.5a.5.5 0 0 0 .5.5H6" />
+      <path d="M10 9h5M10 12.5h5" />
     </svg>
     <span v-if="hasReady" class="quest-dot" data-testid="quest-ready-dot" aria-hidden="true" />
   </button>
@@ -329,15 +329,12 @@ async function claim(q: QuestResponse) {
   width: 22px;
   height: 22px;
 }
-.quest-icon polygon {
+.quest-icon path {
   fill: none;
   stroke: var(--gold);
   stroke-width: 1.6;
+  stroke-linecap: round;
   stroke-linejoin: round;
-}
-.quest-icon rect,
-.quest-icon circle {
-  fill: var(--gold);
 }
 .quest-dot {
   position: absolute;
