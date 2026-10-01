@@ -204,6 +204,14 @@ export function buildingAllowedOnHex(
   tile: { terrain: string; isCoastalWater?: boolean; bog?: { kind: BogTileKind } },
 ): boolean {
   if (tile.terrain === 'lake') return false;
+  // A wall stands on grass, forest, sand or plain bog moss; the palisade (not the gate) also on coastal water, as the wall's sea end. Whether the
+  // hex then takes one is the wall rules' (`WorldModel.palisadePlacement`).
+  if (type === 'palisade' || type === 'palisadegate') {
+    if (tile.terrain === 'sea') return type === 'palisade' && tile.isCoastalWater === true;
+    // Plain bog moss only (not a shore, mouth, creek or lake), like the bog buildings' kind check.
+    if (tile.terrain === 'bog') return tile.bog?.kind === 'bog';
+    return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
+  }
   const bogKinds = BOG_KINDS_BY_TYPE[type];
   if (bogKinds) return tile.terrain === 'bog' && tile.bog !== undefined && bogKinds.has(tile.bog.kind);
   if (isWaterOnlyBuilding(type)) {
@@ -239,5 +247,21 @@ export function tileIsBuildable(tile: {
 }): boolean {
   // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood).
   if (tile.camp && !tile.buildingType && !campHexBuildable(tile.camp)) return false;
-  return (tile.terrain !== 'sea' && tile.terrain !== 'lake') || isWaterOnlyBuilding(tile.buildingType);
+  return (tile.terrain !== 'sea' && tile.terrain !== 'lake') || isWaterOnlyBuilding(tile.buildingType) || isWallBuilding(tile.buildingType);
+}
+
+/** The palisade and its gate: the wall hexes (`BuildingType.Palisade`/`PalisadeGate`). */
+export function isWallBuilding(type: string | undefined): boolean {
+  return type === 'palisade' || type === 'palisadegate';
+}
+
+/**
+ * The reason a wall hex can't be placed (a refusal of `WorldModel.palisadePlacement`), in the player's words, or `undefined` when it
+ * can. Like `longhouseLock` it is shown as an explained, disabled bubble: the hex is a fine place for a wall in general, just not for this
+ * one right now.
+ */
+export function palisadeLock(placement: { ok: true } | { ok: false; reason: string }): string | undefined {
+  if (placement.ok) return undefined;
+  const key = ['branch', 'gateNotStraight', 'river', 'seaEnd', 'occupied'].includes(placement.reason) ? placement.reason : 'terrain';
+  return i18n.global.t(`hud.ringMenu.palisadeLock.${key}`) as string;
 }

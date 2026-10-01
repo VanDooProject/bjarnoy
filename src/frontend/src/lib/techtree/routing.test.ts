@@ -129,14 +129,14 @@ describe('routeEdges', () => {
   });
 
   it('runs a lone level target straight across with no trunk at all', () => {
-    // Tower's only target is Barracks, on its own row, so their link is one segment.
-    const [towerCol, towerRow] = TECH_TREE_LAYOUT.tower!;
-    const y = rowY(towerRow) + CARD_H / 2;
-    const straight = segments.find((s) => s.keys.includes(edgeKey('tower', 'barracks')));
+    // The Fishing Hut's only target is the Dockyard, on its own row, so their link is one segment.
+    const [hutCol, hutRow] = TECH_TREE_LAYOUT.fishinghut!;
+    const y = rowY(hutRow) + CARD_H / 2;
+    const straight = segments.find((s) => s.keys.includes(edgeKey('fishinghut', 'dockyard')));
 
     expect(straight!.points).toEqual([
-      [columnX(towerCol) + CARD_W, y],
-      [columnX(towerCol + 1), y],
+      [columnX(hutCol) + CARD_W, y],
+      [columnX(hutCol + 1), y],
     ]);
   });
 
@@ -159,6 +159,23 @@ describe('routeEdges', () => {
     // The Weaponsmith's branch ends level with the Weaponsmith, on its left edge.
     expect(toSmithy!.points.at(-1)).toEqual([columnX(TECH_TREE_LAYOUT.smithy![0]), rowMid(smithyRow)]);
     for (const segment of segments.filter((s) => s.keys.includes(edgeKey('barracks', 'smithy')))) {
+      for (const [, y] of segment.points) expect(y).not.toBe(BYPASS_Y);
+    }
+  });
+
+  it("gives the Tower a second target, the Palisade / Gate, one row below the Barracks on its trunk", () => {
+    const toPalisade = segments.find(
+      (s) =>
+        s.keys.length === 1 &&
+        s.keys[0] === edgeKey('tower', 'palisade') &&
+        s.points.length === 2 &&
+        s.points[0]![1] === s.points[1]![1],
+    );
+    const [, palisadeRow] = TECH_TREE_LAYOUT.palisade!;
+
+    expect(toPalisade).toBeDefined();
+    expect(toPalisade!.points.at(-1)).toEqual([columnX(TECH_TREE_LAYOUT.palisade![0]), rowMid(palisadeRow)]);
+    for (const segment of segments.filter((s) => s.keys.includes(edgeKey('tower', 'palisade')))) {
       for (const [, y] of segment.points) expect(y).not.toBe(BYPASS_Y);
     }
   });

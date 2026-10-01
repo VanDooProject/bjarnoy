@@ -65,6 +65,8 @@
     "modifierShrineFavourLandAttack": "+{percent}% Angriff für Landeinheiten",
     "modifierShrineFavourShipAttack": "+{percent}% Schiffsangriff",
     "modifierOdinFavour": "-{percent}% Bauzeit, +{rings} Ringe Sichtweite",
+    "modifierPalisadeWall": "Hält jede Landarmee auf (ein einzelnes Ende ist halb offen)",
+    "modifierPalisadeGate": "Nur die Armeen des Besitzers passieren",
     "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
     "domainFood": "Nahrung",
     "domainIron": "Eisen",
@@ -77,6 +79,14 @@
   "ringMenu": {
     "shrineLimitLock": "Diese Siedlung hat bereits einen Schrein",
     "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "palisadeLock": {
+      "branch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer",
+      "gateNotStraight": "Ein Tor steht nur zwischen zwei gegenüberliegenden Mauerfeldern in einer geraden Mauer",
+      "river": "Keine Mauer auf einem Fluss",
+      "seaEnd": "Das Seeende braucht genau eine Landmauer daneben",
+      "occupied": "Hier steht schon eine Mauer",
+      "terrain": "Auf diesem Gelände kann keine Mauer stehen"
+    },
     "back": "Zurück",
     "backButton": "‹ ZURÜCK",
     "buildHub": "BAUEN",
@@ -86,6 +96,7 @@
       "military": "Militär",
       "logistics": "Logistik",
       "religion": "Schreine",
+      "defense": "Verteidigung",
       "water": "Wasser"
     },
     "actions": {

@@ -56,6 +56,8 @@
     "bogoreworks": "Bog-ore works",
     "hammerschmiede": "Hammerschmiede",
     "odinstatue": "Odin statue",
+    "palisade": "Palisade",
+    "palisadegate": "Palisade gate",
     "reindeerherder": "Reindeer herder"
   },
   "techTree": {
@@ -92,6 +94,8 @@
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
+      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it at a flat cost of 3, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. Fire and siege will take levels off it later.",
+      "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies pass it at the normal terrain cost; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest on grass, so a full warehouse never stalls production.",

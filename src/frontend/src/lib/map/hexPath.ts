@@ -36,7 +36,7 @@ export interface PathRestrictions {
    * tile costs its terrain plus `riverCrossingCost` (the pre-rules model).
    */
   streamsIgnoreTerrain?: boolean;
-  /** Extra impassable hexes (a palisade). */
+  /** Extra impassable hexes (every palisade hex; see `palisadeRestrictions`, palisadeMovement.ts). */
   blocked?(c: AxialCoord): boolean;
   /** A blocked hex this army may pass anyway (a gate, for a friendly army only; leave unset for an enemy). */
   friendlyGate?(c: AxialCoord): boolean;
@@ -72,7 +72,9 @@ export const MAX_TINT_HEXES = 4000;
 /**
  * Step cost for a land unit entering `c`, or `null` if impassable (sea, a lake, a wide river, a mountain
  * that is not also a stream, a palisade). A stream costs a flat `1.0 + riverCrossingCost` whatever
- * terrain it runs over — the C# twin is `HexPathfinder.LandStepCost`.
+ * terrain it runs over — the C# twin is `HexPathfinder.LandStepCost`, and the two apply the rules in
+ * the same order: wide river and mountain impassable -> stream flat 9 -> half-open palisade end 3 ->
+ * blocked palisade hex (unless a friendly gate) -> terrain cost.
  */
 function stepCost(c: AxialCoord, ctx: PathContext): number | null {
   const terrain = ctx.terrainAt(c);

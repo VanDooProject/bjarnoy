@@ -56,7 +56,9 @@ import {
   cropAllowedHere,
   formatBuildTime,
   formatMissingResources,
+  isWallBuilding,
   longhouseLock,
+  palisadeLock,
   riverBuildingAllowedHere,
   shrineLimitLock,
   storageHouseLock,
@@ -412,6 +414,8 @@ const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
     world.model,
     { land: world.movementRules.land, riverCrossingCost: world.movementRules.riverCrossingCost },
     speed * world.worldSpeedFactor,
+    // Walls stop every army but a gate lets its owner's through: the owner is the player who holds the selected settlement.
+    home.ownerId,
   );
   const origin = { q: home.q, r: home.r };
   const range = reachableRange(origin, origin, hoursOfFood, ctx);
@@ -652,7 +656,9 @@ type BuildableType =
   | 'cartworkshop'
   | 'claybrickworks'
   | 'bogoreworks'
-  | 'hammerschmiede';
+  | 'hammerschmiede'
+  | 'palisade'
+  | 'palisadegate';
 
 interface BuildCategory {
   id: string;
@@ -686,12 +692,20 @@ const WATER_CATEGORY: BuildCategory = {
   id: 'water',
   buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'shrineofnjord' }],
 };
+// The wall (docs/design/economy.md section 5): a palisade hex, or a gate on a hex that is a straight, on grass, forest, sand or plain bog moss. A wall
+// also ends on a coastal-water hex (BuildingDefinition.AlsoOnCoastalWater), the sea end, which is never a gate. Whether this particular hex
+// takes one is the wall rules' (WorldModel.palisadePlacement), shown as a lock on the bubble.
+const DEFENSE_CATEGORY: BuildCategory = {
+  id: 'defense',
+  buildings: [{ type: 'palisade' }, { type: 'palisadegate' }],
+};
+const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
 // ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
 // Hammerschmiede (with the river hammer-mill art for now: TODO(art) bog-creek Hammerschmiede) and a lake's half shore the
 // Fishing Hut with its lake art. Shores, mouths and springs take nothing.
 const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
-  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }],
+  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }, DEFENSE_CATEGORY],
   creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
   half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
 };
@@ -734,15 +748,16 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
         { type: 'druidhut' },
       ],
     },
+    DEFENSE_CATEGORY,
     SHRINE_CATEGORY,
   ],
-  sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }],
-  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }],
+  sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
+  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_CATEGORY],
   mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
-  if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY] : [];
+  if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY, DEFENSE_SEA_CATEGORY] : [];
   // A bog lake is water nothing is built on (the lake Fishing Hut stands on its half shore, a bog hex).
   if (tile.terrain === 'lake') return [];
   if (tile.terrain === 'bog') return (tile.bog && BOG_CATEGORIES[tile.bog.kind]) || [];
@@ -763,6 +778,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   housing: 'var(--gold)',
   resource: 'var(--food)',
   military: 'var(--iron)',
+  defense: 'var(--stone)',
   religion: 'var(--shrine)',
   logistics: 'var(--stone)',
   water: 'var(--water)',
@@ -1006,6 +1022,10 @@ function formatModifier(modifier: BuildingModifier): string {
               : 'hud.hoverTooltip.domainFood',
         ),
       });
+    case 'palisadeWall':
+      return t('hud.hoverTooltip.modifierPalisadeWall');
+    case 'palisadeGate':
+      return t('hud.hoverTooltip.modifierPalisadeGate');
   }
 }
 
@@ -1076,6 +1096,13 @@ function storageHouseLockFor(): string | undefined {
   return storageHouseLock(hexes.size, standing.map((h) => h.level));
 }
 
+// Wall orders still in the queue (live mode only; demo places instantly): the server counts them as wall hexes when it judges the next one.
+function queuedWalls(): { q: number; r: number; gate: boolean }[] {
+  return world.hud.queue
+    .filter((order) => isWallBuilding(order.building))
+    .map((order) => ({ q: order.q, r: order.r, gate: order.building === 'palisadegate' }));
+}
+
 // Odin's Wisdom for the selected settlement: the multiplier on build times shown on the ring cards.
 function wisdomFactor(): number {
   const id = world.selectedSettlementId;
@@ -1103,7 +1130,8 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
       ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
       ?? (SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined)
-      ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined),
+      ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined)
+      ?? (isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined),
     warning: type === 'tower' ? towerCampWarning(coord) : undefined,
     art: buildingArt(type, 1),
   };

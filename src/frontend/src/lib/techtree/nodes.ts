@@ -57,6 +57,10 @@ function formatModifier(modifier: BuildingModifier): string {
       return `-${modifier.buildTimePercent}% build time, +${modifier.visionRings} rings of vision`;
     case 'radiusBoost':
       return `+${modifier.percent}% ${modifier.resource === 'wood' ? 'Wood' : modifier.resource === 'iron' ? 'Iron' : 'Food'} within ${modifier.range} ${modifier.range === 1 ? 'ring' : 'rings'}`;
+    case 'palisadeWall':
+      return 'Blocks every army';
+    case 'palisadeGate':
+      return 'Only its owner\'s armies pass';
   }
 }
 
@@ -69,6 +73,8 @@ function formatModifier(modifier: BuildingModifier): string {
  */
 export const MERGED_CARDS: Readonly<Record<string, { label: string; absorbs: readonly string[] }>> = {
   farm: { label: 'Farm / Pumpkin Farm (by soil)', absorbs: ['pumpkinfarm'] },
+  // The wall hex and its gate share every number (unlock, prerequisite, levels, cost); only a gate's placement rule differs.
+  palisade: { label: 'Palisade / Gate', absorbs: ['palisadegate'] },
 };
 
 export interface TechTreeChip {

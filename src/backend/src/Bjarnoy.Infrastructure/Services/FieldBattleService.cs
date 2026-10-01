@@ -136,7 +136,10 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
         var bog = await WorldTerrain.OverlayAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
-        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers);
+        var walls = await WorldPalisades.IndexAsync(
+            _dbContext, worldId, new TerrainSampler(army.Settlement!.World!.ToGenerationOptions()).WithBogOverlay(bog).TerrainAt,
+            rivers.IsWide, cancellationToken).ConfigureAwait(false);
+        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls);
         return true;
     }
 
@@ -214,7 +217,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         ArmyEntity armyA, Army domainA, Movement movementA,
         ArmyEntity armyB, Army domainB, Movement movementB,
         HexCoord hex, DateTimeOffset at, IGiantIndex giants, IReadOnlyDictionary<HexCoord, Terrain> bog,
-        RiverIndex rivers)
+        RiverIndex rivers, PalisadeIndex walls)
     {
         var claimA = FieldBattleResolver.ClaimAt(
             hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), ToPlacedBuildings(armyA.Settlement.Buildings), giants);
@@ -233,18 +236,18 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         {
             case FieldBattleWinner.SideA:
                 updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner);
-                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, plan.LootTakenByWinner, bog, rivers);
+                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, plan.LootTakenByWinner, bog, rivers, walls);
                 break;
 
             case FieldBattleWinner.SideB:
-                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, plan.LootTakenByWinner, bog, rivers);
+                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, plan.LootTakenByWinner, bog, rivers, walls);
                 updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner);
                 break;
 
             default:
                 // A tie: no loot changes hands (issue #206 §3), both retreat.
-                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, ResourceAmounts.Zero, bog, rivers);
-                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, ResourceAmounts.Zero, bog, rivers);
+                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, ResourceAmounts.Zero, bog, rivers, walls);
+                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, ResourceAmounts.Zero, bog, rivers, walls);
                 break;
         }
 
@@ -275,7 +278,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         SettlementEntity? loserSettlement,
         Army domain, HexCoord hex, DateTimeOffset at,
         IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTakenFromThisSide,
-        IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers)
+        IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers, PalisadeIndex walls)
     {
         var loserSampler = new TerrainSampler(loserSettlement!.World!.ToGenerationOptions()).WithBogOverlay(bog);
         var home = new HexCoord(loserSettlement.CentreQ, loserSettlement.CentreR);
@@ -286,7 +289,8 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             Loot = (domain.Loot - lootTakenFromThisSide).ClampToZero(),
         };
 
-        return afterLosses.ForceFieldRetreat(at, hex, home, loserSampler.TerrainAt, loserSettlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide);
+        return afterLosses.ForceFieldRetreat(at, hex, home, loserSampler.TerrainAt, loserSettlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
+            walls.ForOwner(WorldPalisades.OwnerKeyOf(loserSettlement.UserId, loserSettlement.Id)));
     }
 
     private static IReadOnlyList<PlacedBuilding> ToPlacedBuildings(IEnumerable<PlacedBuildingEntity> buildings) =>

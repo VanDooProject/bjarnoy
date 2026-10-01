@@ -22,7 +22,10 @@ export type BuildingModifier =
   | { kind: 'coastal'; percent?: number }
   | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
   | { kind: 'odinFavour'; buildTimePercent: number; visionRings: number }
-  | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' | 'iron' };
+  | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' | 'iron' }
+  // A wall hex (docs/design/economy.md section 5): it blocks every land army; the gate lets the owner's through.
+  | { kind: 'palisadeWall' }
+  | { kind: 'palisadeGate' };
 
 /**
  * Structured (not pre-formatted) so callers in different render contexts —
@@ -93,7 +96,7 @@ export function radiusBoostRange(level: number): number {
 /**
  * Mirrors `BuildingCatalogue.MaxLevelFor` (docs/design/economy.md §4):
  * Longhouse 30; resource producers and Storage House 25; military/civic
- * buildings and the mills 20; Tower and Great Storehouse 10; shrines 5.
+ * buildings and the mills 20; Tower and Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3.
  * `hut` is demo-only (no backend entry) and gets the small-building ceiling.
  */
 export function maxLevelFor(type: BuildingKind): number {
@@ -132,6 +135,9 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'shrineofnjord':
     case 'odinstatue':
       return 5;
+    case 'palisade':
+    case 'palisadegate':
+      return 3;
     default:
       return 0;
   }
@@ -424,6 +430,11 @@ export function buildingStatsFor(
     // (Provisioner/SettlerCrew) — no storage or production of its own.
     case 'cartworkshop':
       return { modifier: { kind: 'trainsCivilianCrews' } };
+    // A wall hex: no production, it stops land armies (the gate lets only its owner's through).
+    case 'palisade':
+      return { modifier: { kind: 'palisadeWall' } };
+    case 'palisadegate':
+      return { modifier: { kind: 'palisadeGate' } };
     // No production or storage of its own yet — see BuildingType.TownSquare/
     // DruidHut's own doc comments on the backend (a future civic/rune
     // mechanic), same "no output" shape as the default case below.
@@ -476,6 +487,9 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   townsquare: { wood: 160, stone: 140, food: 40, iron: 0 },
   druidhut: { wood: 160, stone: 110, food: 80, iron: 0 },
   cartworkshop: { wood: 150, stone: 110, food: 0, iron: 0 },
+  // One wall hex, plain or gate: BuildingCatalogue.PalisadeHex.
+  palisade: { wood: 40, stone: 10, food: 0, iron: 0 },
+  palisadegate: { wood: 40, stone: 10, food: 0, iron: 0 },
 };
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */

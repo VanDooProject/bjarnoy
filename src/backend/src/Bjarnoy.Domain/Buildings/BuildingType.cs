@@ -215,6 +215,21 @@ public enum BuildingType
     /// persisted integers do not shift.
     /// </summary>
     OdinStatue = 29,
+
+    /// <summary>
+    /// One hex of the settlement's wall (<c>docs/design/economy.md</c> section 5): on grass, forest or sand inside the claim, or on a
+    /// coastal-water hex as the wall's sea end. Unlocks at Longhouse 7 behind a level-5 <see cref="Tower"/>, three levels. Which piece
+    /// it draws as (straight, bend, end) follows its wall neighbours (<see cref="Palisades.PalisadeRules"/>). Every palisade hex
+    /// blocks land armies, the owner's included; a land end (one wall neighbour) is half open. Appended at the end so persisted
+    /// integers do not shift.
+    /// </summary>
+    Palisade = 30,
+
+    /// <summary>
+    /// A palisade hex with a gate: only on a hex that resolves to a straight, passable for the wall owner's armies only. Shares the
+    /// Palisade's unlock, prerequisite, costs and levels (one tech-tree card). Appended at the end so persisted integers do not shift.
+    /// </summary>
+    PalisadeGate = 31,
 }
 
 public static class BuildingTypeExtensions
@@ -251,6 +266,8 @@ public static class BuildingTypeExtensions
         BuildingType.Hammerschmiede => "hammerschmiede",
         BuildingType.ReindeerHerder => "reindeerherder",
         BuildingType.OdinStatue => "odinstatue",
+        BuildingType.Palisade => "palisade",
+        BuildingType.PalisadeGate => "palisadegate",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

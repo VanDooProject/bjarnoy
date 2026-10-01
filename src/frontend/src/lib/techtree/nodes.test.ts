@@ -45,6 +45,23 @@ describe('buildTechTreeNodes', () => {
     expect(byName.get('reindeerherder')!.chips).toEqual([{ text: 'LH 1', kind: 'longhouse' }]);
   });
 
+  it('shows the Palisade and its Gate as one card behind a level-5 Tower, unlocking at LH 7', () => {
+    expect(byName.has('palisadegate')).toBe(false);
+    const wall = byName.get('palisade')!;
+    expect(wall.label).toBe('Palisade / Gate');
+    expect(wall.chips).toEqual([
+      { text: 'LH 7', kind: 'longhouse' },
+      { text: 'Tower 5', kind: 'building' },
+    ]);
+    expect(wall.gives).toBe('Blocks every army');
+    expect(wall.category).toBe('military');
+    // The Gate is a separate type with the same gate and prerequisite, merged into the card.
+    expect(byType.palisadegate).toBeTruthy();
+    expect(unlockLevel(byType.palisadegate!)).toBe(7);
+    expect(prerequisitesOf(byType, 'palisadegate')).toEqual(prerequisitesOf(byType, 'palisade'));
+    expect(byType.palisade).toHaveLength(3);
+  });
+
   it('draws the Odin Statue behind the Druid Hut, with both favours on the card', () => {
     const odin = byName.get('odinstatue')!;
     expect(odin.chips).toEqual([

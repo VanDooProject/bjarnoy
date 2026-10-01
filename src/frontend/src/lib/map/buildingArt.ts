@@ -66,7 +66,11 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   bogoreworks: 'bogoreworks',
   // The river hammer mill: a placeholder for the Hammerschmiede on a bog creek (TODO(art): bog-creek Hammerschmiede).
   hammerschmiede: 'hammerschmiede',
+  // The wall set (3D_assets docs/wall-tiles.md): the preview shows the straight and the straight with its gate.
+  palisade: 'palisade_straight180',
+  palisadegate: 'palisade_gate180',
 };
+
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(

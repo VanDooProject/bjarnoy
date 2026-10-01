@@ -15,6 +15,8 @@
     "RequiredBuildingTooLow": "A required building isn't high enough level yet.",
     "ShrineGodAlreadyOnIsland": "This god already has a shrine somewhere on the island.",
     "SettlementAlreadyHasShrine": "This settlement already has a shrine — a settlement can raise only one, of any god.",
+    "PalisadeWouldBranch": "A wall never branches: that hex would have three wall neighbours.",
+    "GateNotOnStraight": "A gate only stands between two opposite wall hexes, so the wall stays straight through it.",
     "NoFreeSlot": "No free construction slot — Premium unlocks a waiting queue.",
     "WorldNotFound": "That world doesn't exist.",
     "IslandNotFound": "That island doesn't exist.",

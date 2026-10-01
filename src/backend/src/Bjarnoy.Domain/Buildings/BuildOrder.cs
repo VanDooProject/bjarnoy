@@ -139,6 +139,18 @@ public enum BuildRejection
     /// counts as guarded for now (no clearing yet), see <c>docs/design/wildlife-camps.md</c>.
     /// </summary>
     HexOccupiedByCamp,
+
+    /// <summary>
+    /// A palisade (or gate) would leave some wall hex with three or more wall neighbours: walls never branch
+    /// (<see cref="Palisades.PalisadeRules"/>).
+    /// </summary>
+    PalisadeWouldBranch,
+
+    /// <summary>
+    /// A gate was ordered where its piece would not resolve to a straight (or where placing it would turn a neighbouring gate): a gate only
+    /// stands between two opposite wall hexes.
+    /// </summary>
+    GateNotOnStraight,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

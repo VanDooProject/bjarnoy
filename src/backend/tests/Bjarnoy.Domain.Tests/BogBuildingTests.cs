@@ -156,11 +156,13 @@ public class BogBuildingTests
     }
 
     [Fact]
-    public void Only_the_bog_buildings_and_the_lake_fishing_hut_stand_on_bog_ground()
+    public void Only_the_bog_buildings_the_lake_fishing_hut_and_the_wall_stand_on_bog_ground()
     {
         var bogTypes = new HashSet<BuildingType>
         {
             BuildingType.ClayBrickworks, BuildingType.BogOreWorks, BuildingType.Hammerschmiede, BuildingType.FishingHut,
+            // The wall stands on plain moss too (and nowhere else on bog).
+            BuildingType.Palisade, BuildingType.PalisadeGate,
         };
 
         foreach (var type in BuildingCatalogue.AllTypes)

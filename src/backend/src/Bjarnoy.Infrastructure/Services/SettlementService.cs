@@ -1113,7 +1113,10 @@ public sealed class SettlementService(
             islandSoil: islandSoil,
             giants: buildGiants,
             camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false),
-            bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false));
+            bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false),
+            palisades: type is BuildingType.Palisade or BuildingType.PalisadeGate
+                ? await WorldPalisades.NearAsync(_dbContext, settlement.WorldId, coord, sampler.TerrainAt, cancellationToken).ConfigureAwait(false)
+                : null);
 
         if (!decision.Accepted)
         {

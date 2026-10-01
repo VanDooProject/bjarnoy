@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/river-pathing-golden.json';
 import { coordKey } from '../hex/coords';
 import { findPath, hoursFrom, pathCost, reachableRange, type PathContext } from './hexPath';
+import { palisadeRestrictions } from './palisadeMovement';
 import { isWideRiverTile } from './riverGenerator';
 import type { RiverTile, Terrain } from './types';
 
@@ -23,6 +24,8 @@ interface FindPathCase {
   from: HexCoordDto;
   to: HexCoordDto;
   isLandUnit: boolean;
+  /** Whose army walks: the wall owner's or an enemy's. */
+  army: 'friendly' | 'enemy';
   /** `null`: no land route exists. */
   expectedPath: HexCoordDto[] | null;
   expectedCumulativeHours: number[] | null;
@@ -39,6 +42,7 @@ interface ReachableRangeCase {
 interface GoldenFixture {
   terrain: Record<string, Terrain>;
   riverTiles: RiverTile[];
+  walls: { q: number; r: number; gate: boolean; owner: string }[];
   findPathCases: FindPathCase[];
   reachableRangeCases: ReachableRangeCase[];
 }
@@ -54,24 +58,29 @@ const RULES = {
   riverCrossingCost: 8.0,
 };
 
-function contextFor(fixture: GoldenFixture): PathContext {
+function contextFor(fixture: GoldenFixture, army: 'friendly' | 'enemy' = 'friendly'): PathContext {
   const riverByKey = new Map(fixture.riverTiles.map((t) => [coordKey(t), t]));
   const riverAt = (c: HexCoordDto) => riverByKey.get(coordKey(c));
+  const terrainAt = (c: HexCoordDto): Terrain => fixture.terrain[coordKey(c)] ?? 'sea';
+  const isWideRiver = (c: HexCoordDto) => {
+    const tile = riverAt(c);
+    return tile !== undefined && isWideRiverTile(tile, riverAt);
+  };
+  const walls = new Map(fixture.walls.map((w) => [coordKey(w), { gate: w.gate, owner: w.owner }]));
+  const owner = fixture.walls[0]?.owner ?? '';
   return {
-    terrainAt: (c) => fixture.terrain[coordKey(c)] ?? 'sea',
+    terrainAt,
     isRiver: (c) => riverByKey.has(coordKey(c)),
-    isWideRiver: (c) => {
-      const tile = riverAt(c);
-      return tile !== undefined && isWideRiverTile(tile, riverAt);
-    },
+    isWideRiver,
     rules: RULES,
     hexesPerHour: 1,
+    restrictions: palisadeRestrictions(walls, terrainAt, isWideRiver, army === 'friendly' ? owner : 'someone-else'),
   };
 }
 
 describe('hexPath golden fixture (issue #159 part B parity)', () => {
   it.each(fixture.findPathCases)('$name: matches the shared golden fixture', (testCase: FindPathCase) => {
-    const ctx = contextFor(fixture);
+    const ctx = contextFor(fixture, testCase.army);
     const hours = hoursFrom(testCase.from, ctx, Number.POSITIVE_INFINITY);
 
     const destinationKey = coordKey(testCase.to);
@@ -93,7 +102,7 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
   });
 
   it.each(fixture.findPathCases.filter((c) => c.isLandUnit))('$name: findPath returns the fixture path and cost', (testCase: FindPathCase) => {
-    const ctx = contextFor(fixture);
+    const ctx = contextFor(fixture, testCase.army);
     const path = findPath(testCase.from, testCase.to, ctx);
     if (testCase.expectedPath === null) {
       expect(path).toBeNull();
@@ -108,6 +117,15 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     expect(byName.get('wide_river_is_impassable')?.expectedPath).toBeNull();
     expect(byName.get('mountain_with_no_way_round_has_no_route')?.expectedPath).toBeNull();
     expect(byName.get('stream_on_a_mountain_costs_a_flat_9')?.expectedCumulativeHours).toEqual([0, 9, 10]);
+  });
+
+  it('covers a gate for the owner and not for an enemy, a half-open end at a flat 3 and a sealed end', () => {
+    const byName = new Map(fixture.findPathCases.map((c) => [c.name, c]));
+    expect(byName.get('wall_with_a_gate_stops_an_enemy')?.expectedPath).toBeNull();
+    expect(byName.get('wall_with_a_gate_lets_the_owner_through')?.expectedCumulativeHours?.at(-1)).toBe(4);
+    expect(byName.get('wall_without_a_gate_stops_the_owner_too')?.expectedPath).toBeNull();
+    expect(byName.get('half_open_end_is_crossed_by_an_enemy_at_3')?.expectedCumulativeHours?.slice(3, 5)).toEqual([3, 6]);
+    expect(byName.get('sealed_end_beside_a_mountain_blocks')?.expectedPath).toBeNull();
   });
 
   it.each(fixture.reachableRangeCases)('$name: matches the shared golden fixture', (testCase: ReachableRangeCase) => {

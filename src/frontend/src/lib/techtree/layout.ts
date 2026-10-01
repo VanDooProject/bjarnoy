@@ -60,7 +60,8 @@ export type Slot = readonly [col: number, row: number];
  *
  * Farm and Pumpkin Farm are two building types (their soil rules differ) but
  * one card: only `farm` has a slot here, and `MERGED_CARDS` (nodes.ts) names
- * the card "Farm / Pumpkin Farm (by soil)".
+ * the card "Farm / Pumpkin Farm (by soil)". Likewise only `palisade` has a slot
+ * for the Palisade and its Gate: "Palisade / Gate".
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 3],
@@ -98,7 +99,9 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   tower: [1, 6],
   barracks: [2, 6],
   archeryrange: [3, 6],
-  // Row 7 — Barracks' second target, the Weaponsmith (Smithy, LH 15), with
+  // Row 7 — Tower's second target, the Palisade / Gate (LH 7, behind a level-5 Tower), one row below the Barracks chain.
+  palisade: [2, 7],
+  // Barracks' second target, the Weaponsmith (Smithy, LH 15), with
   // the Shrine of Thor (LH 25) behind it.
   smithy: [3, 7],
   shrineofthor: [4, 7],

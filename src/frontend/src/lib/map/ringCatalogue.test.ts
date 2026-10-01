@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, isWallBuilding, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -284,5 +284,42 @@ describe('buildingAllowedOnHex', () => {
     expect(isLakeShoreHut({ buildingType: 'fishinghut', bog: { kind: 'half' } })).toBe(true);
     expect(isLakeShoreHut({ buildingType: 'fishinghut' })).toBe(false);
     expect(isLakeShoreHut({ buildingType: 'farm', bog: { kind: 'half' } })).toBe(false);
+  });
+});
+
+describe('the wall in the ring menu', () => {
+  it.each(['palisade', 'palisadegate'])('%s stands on plain bog moss and on no other bog hex', (type) => {
+    expect(buildingAllowedOnHex(type, { terrain: 'bog', bog: { kind: 'bog' } })).toBe(true);
+    for (const kind of ['shore', 'half', 'creek', 'mouth', 'inlet', 'creekspring'] as const) {
+      expect(buildingAllowedOnHex(type, { terrain: 'bog', bog: { kind } })).toBe(false);
+    }
+    expect(buildingAllowedOnHex(type, { terrain: 'bog' })).toBe(false);
+  });
+
+  it.each(['palisade', 'palisadegate'])('%s stands on grass, forest and sand, never on mountain, lake or open sea', (type) => {
+    for (const terrain of ['grass', 'forest', 'sand']) expect(buildingAllowedOnHex(type, { terrain })).toBe(true);
+    for (const terrain of ['mountain', 'lake', 'sea']) expect(buildingAllowedOnHex(type, { terrain })).toBe(false);
+  });
+
+  it('lets the palisade, not the gate, end on a coastal-water hex (the sea end)', () => {
+    expect(buildingAllowedOnHex('palisade', { terrain: 'sea', isCoastalWater: true })).toBe(true);
+    expect(buildingAllowedOnHex('palisade', { terrain: 'sea', isCoastalWater: false })).toBe(false);
+    expect(buildingAllowedOnHex('palisadegate', { terrain: 'sea', isCoastalWater: true })).toBe(false);
+  });
+
+  it('keeps an existing sea end inspectable (a wall on water is a buildable tile)', () => {
+    expect(tileIsBuildable({ terrain: 'sea', buildingType: 'palisade' })).toBe(true);
+    expect(tileIsBuildable({ terrain: 'sea' })).toBe(false);
+    expect(isWallBuilding('palisadegate')).toBe(true);
+    expect(isWallBuilding('tower')).toBe(false);
+  });
+
+  it('words every refusal a wall can get as a lock, and nothing when the hex is fine', () => {
+    expect(palisadeLock({ ok: true })).toBeUndefined();
+    expect(palisadeLock({ ok: false, reason: 'branch' })).toBe('A wall never branches: this hex would get three wall neighbours');
+    expect(palisadeLock({ ok: false, reason: 'gateNotStraight' })).toBe('A gate only stands between two opposite wall hexes, in a straight wall');
+    expect(palisadeLock({ ok: false, reason: 'river' })).toBe('No wall on a river');
+    expect(palisadeLock({ ok: false, reason: 'seaEnd' })).toBe('The sea end needs exactly one land wall beside it');
+    expect(palisadeLock({ ok: false, reason: 'notAllowedOnTerrain' })).toBe("A wall can't stand on this terrain");
   });
 });

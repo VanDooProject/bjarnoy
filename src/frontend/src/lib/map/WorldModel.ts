@@ -13,6 +13,8 @@ import {
   wisdomBuildTimeFactor,
 } from './buildingEconomy';
 import { buildingAllowedOnHex, cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
+import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
+import type { PalisadeWalls } from './palisadeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
@@ -1516,6 +1518,8 @@ export class WorldModel {
       'odinstatue',
       'bogoreworks',
       'hammerschmiede',
+      'palisade',
+      'palisadegate',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1556,6 +1560,7 @@ export class WorldModel {
       }
     }
     this.renderedBuildingCoords.set(settlementId, nowRendered);
+    this.wallRevision++;
   }
 
   /**
@@ -1592,6 +1597,72 @@ export class WorldModel {
       }
     }
     return levels;
+  }
+
+  /** Bumped whenever a building appears, vanishes or levels, so the cached wall index below is rebuilt. */
+  private wallRevision = 0;
+  private wallCache: { revision: number; walls: Map<string, { gate: boolean; level: number; tileOwner?: string }> } | null = null;
+
+  /** Every palisade and gate hex known (a level-0 foundation included), keyed by hex, rebuilt lazily after a building changes. */
+  private palisadeIndex(): Map<string, { gate: boolean; level: number; tileOwner?: string }> {
+    if (this.wallCache?.revision === this.wallRevision) return this.wallCache.walls;
+    const walls = new Map<string, { gate: boolean; level: number; tileOwner?: string }>();
+    for (const tile of this.tiles.values()) {
+      if (tile.buildingType !== 'palisade' && tile.buildingType !== 'palisadegate') continue;
+      walls.set(coordKey(tile), { gate: tile.buildingType === 'palisadegate', level: tile.buildingLevel ?? 1, tileOwner: tile.ownerId });
+    }
+    this.wallCache = { revision: this.wallRevision, walls };
+    return walls;
+  }
+
+  /** Which of `c`'s six neighbours (`neighbors()` order) are wall hexes: what decides the piece a wall hex draws (`palisadeArtFor`). */
+  wallNeighbourFlags(c: AxialCoord): boolean[] {
+    const walls = this.palisadeIndex();
+    return neighbors(c).map((n) => walls.has(coordKey(n)));
+  }
+
+  /**
+   * The standing wall hexes (level 1 or more; a foundation does not block) as the movement rules take them, each with its owner: the
+   * account that holds the settlement the hex belongs to (an army belongs to the same owner), or the settlement itself when that owner
+   * is unknown. Same shape as the backend's `PalisadeIndex`.
+   */
+  standingPalisadeWalls(): PalisadeWalls {
+    const standing = new Map<string, { gate: boolean; owner: string }>();
+    for (const [key, wall] of this.palisadeIndex()) {
+      if (wall.level < 1) continue;
+      const owner = wall.tileOwner ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner) : '';
+      standing.set(key, { gate: wall.gate, owner });
+    }
+    return standing;
+  }
+
+  /**
+   * Whether a palisade (or `gate`) hex may be placed at `at`: `canPlacePalisade` (palisadeTiles.ts, the twin of the backend's
+   * `PalisadeRules.CanPlace`) over the walls known here plus `queued` ones (live mode: wall orders not yet standing, which the server
+   * counts too). `river` and `seaEnd` split the generic terrain refusal into what the player should be told.
+   */
+  palisadePlacement(
+    at: AxialCoord,
+    gate: boolean,
+    queued: readonly { q: number; r: number; gate: boolean }[] = [],
+  ): { ok: true } | { ok: false; reason: PalisadeRefusal | 'river' | 'seaEnd' } {
+    const walls = new Set(this.palisadeIndex().keys());
+    const gates = new Set([...this.palisadeIndex()].filter(([, w]) => w.gate).map(([k]) => k));
+    for (const order of queued) {
+      walls.add(coordKey(order));
+      if (order.gate) gates.add(coordKey(order));
+    }
+    walls.delete(coordKey(at));
+    gates.delete(coordKey(at));
+    const existing: WallSet = { walls, gates };
+    const isRiver = (c: AxialCoord) => this.getRiverTile(c.q, c.r) !== undefined;
+    const result = canPlacePalisade(at, existing, { terrainAt: (c) => this.terrainOf(c.q, c.r), isRiver, isPlainBog: (c) => this.bogByHex.get(coordKey(c))?.kind === 'bog' }, { gate });
+    if (result.ok) return result;
+    if (result.reason === 'notAllowedOnTerrain') {
+      if (isRiver(at)) return { ok: false, reason: 'river' };
+      if (this.terrainOf(at.q, at.r) === 'sea' && !gate) return { ok: false, reason: 'seaEnd' };
+    }
+    return result;
   }
 
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
@@ -1657,9 +1728,13 @@ export class WorldModel {
       const need = additionalStorageHouseRequirement(held.length);
       if (held.length >= 1 && held.filter((h) => h.level >= need.level).length < need.count) return false;
     }
+    // A wall hex must keep every wall hex drawable (matches BuildRejection.PalisadeWouldBranch/GateNotOnStraight and the terrain
+    // refusals): no branch, a gate only on a straight, no river, the sea end on exactly one land wall.
+    if ((type === 'palisade' || type === 'palisadegate') && !this.palisadePlacement(at, type === 'palisadegate').ok) return false;
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;
+    this.wallRevision++;
     if (type === 'odinstatue') {
       this.settlementOdinLevels.set(settlementId, 1);
       for (const c of this.exploredHexesFor(settlement)) {
@@ -1702,6 +1777,7 @@ export class WorldModel {
     if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
+    this.wallRevision++;
     return true;
   }
 
@@ -2000,6 +2076,7 @@ export class WorldModel {
 
     const nextLevel = (tile.buildingLevel ?? 1) + 1;
     tile.buildingLevel = nextLevel;
+    this.wallRevision++;
 
     if (tile.buildingType === 'longhouse') {
       settlement.level = nextLevel;
