@@ -226,7 +226,10 @@ if (databaseOptions.MigrateOnStartup)
     // --ensure-world` (MigrationCommand.EnsureWorldAsync), for that reason.
     var worldService = scope.ServiceProvider.GetRequiredService<WorldService>();
     var worldSeedLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await worldService.SeedDefaultWorldIfNoneAsync(MigrationCommand.DefaultWorldName, worldSeedLogger);
+    var defaultWorldRadius = MigrationCommand.ReadDefaultWorldRadius(
+        scope.ServiceProvider.GetRequiredService<IConfiguration>());
+    await worldService.SeedDefaultWorldIfNoneAsync(
+        MigrationCommand.DefaultWorldName, worldSeedLogger, defaultWorldRadius);
 }
 
 // Seeds the first Admin from ADMIN_BOOTSTRAP_USERNAME/ADMIN_BOOTSTRAP_PASSWORD
