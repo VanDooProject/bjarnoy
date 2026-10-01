@@ -264,6 +264,15 @@
   revert it before committing, it's a sandbox-path hack, not a real repo
   fix (CI has its own correctly-versioned browser install and doesn't need
   this). Do this before claiming e2e changes are unverified.
+- the e2e `webServer` only **serves** `dist/` (`vite preview`), it never
+  builds it, and locally (`reuseExistingServer` outside CI) it reuses
+  whatever is already listening on port 4173. So run `npx vite build` in
+  `src/frontend` before every local e2e run after a code change, and make
+  sure no stale `vite preview` (yours from an earlier run, or one serving
+  another worktree's `dist/`) is still on 4173 (`fuser -k 4173/tcp`) —
+  otherwise the run quietly tests old code, passes or fails for reasons
+  the current diff doesn't have, and CI (which always builds fresh)
+  disagrees with it.
 
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path

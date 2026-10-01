@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [vue()],
   test: {
     environment: 'node',
+    setupFiles: ['./src/test/atlasManifestsSetup.ts'],
     include: ['src/**/*.test.ts', '../../scripts/worldgen-preview/*.test.ts'],
   },
 });

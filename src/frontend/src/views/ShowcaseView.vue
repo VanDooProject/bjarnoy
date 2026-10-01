@@ -103,7 +103,9 @@ interface FeatureCard {
 // to match the feature's own copy (prototypes/MECHANICS.md is the source for
 // all of these). Thumbnails render exactly as TileDocsView.vue does: an
 // AtlasSprite for a 'atlas' ArtRef, a plain <img> for the 'png' fallback.
-const FEATURES: FeatureCard[] = [
+// A computed so the art fills in once the atlas manifests arrive (they are
+// fetched lazily — see lib/map/atlasManifests.ts).
+const FEATURES = computed<FeatureCard[]>(() => [
   { key: 'sharedIslands', art: featureArt('hut', 3) },
   { key: 'borders', art: featureArt('longhouse', 5) },
   { key: 'realTime', art: featureArt('sawmill', 3) },
@@ -112,7 +114,7 @@ const FEATURES: FeatureCard[] = [
   { key: 'trade', art: featureArt('storagehouse', 3) },
   { key: 'guilds', art: featureArt('shrineofthor', 3) },
   { key: 'battles', art: featureArt('barracks', 3) },
-];
+]);
 
 /** A building's in-game art, or a plain grass hex should the pack ever drop that family. */
 function featureArt(type: string, level: number): ArtRef {

@@ -33,7 +33,7 @@ import {
 import { PALISADE_FAMILY } from './palisadeTiles';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { BogTile, RiverTile, Tile } from './types';
-import type { AtlasClip } from './atlas';
+import { findAtlasClip, findAtlasFrame, type AtlasClip } from './atlas';
 
 /** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
 function emptyOrientationArrayMap(): Record<string, unknown[]> {
@@ -1438,9 +1438,14 @@ describe('wildlife camps', () => {
     expect(topTextureFor(textures, { q: 0, r: 0, terrain: 'grass', orientation: 'SE' })).toBeUndefined();
   });
 
-  it('the walrus haul-out is drawn with the seal haul-out art until its own exists', () => {
-    expect(KEY_FAMILY.walrushaulout).toBe('sealhaulout');
+  it('the walrus haul-out is drawn with its own art, which the vendored atlas ships', () => {
+    expect(KEY_FAMILY.walrushaulout).toBe('walrushaulout');
     expect(KEY_FAMILY.otterslide).toBe('otterslide');
+    // Cleared in every rotation, guarded (with its clip) in at least one kept rotation.
+    for (const o of TILE_ORIENTATIONS) expect(findAtlasFrame('showcase', `walrushaulout_${o}_level000`)).toBeDefined();
+    const guarded = TILE_ORIENTATIONS.filter((o) => findAtlasFrame('showcase', `walrushaulout_${o}_level001`));
+    expect(guarded.length).toBeGreaterThan(0);
+    for (const o of guarded) expect(findAtlasClip('buildings-anim', `walrushaulout_${o}_level001`)).toBeDefined();
   });
 
   describe('bearrapids on a river', () => {
