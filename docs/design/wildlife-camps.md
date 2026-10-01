@@ -1,8 +1,9 @@
-# Wildlife camps: placement, levels and guard ranges
+# Wildlife camps: placement, levels, guard ranges and fights
 
-Spawn and render only. Camps are generated with the world, stored per island and drawn on the map;
-nothing reads them yet (no tower blocking, clearing, loot or respawn: see `economy.md` section 10
-for the rules they will carry). Requirements: `world-generation-rules.md`, "Wildlife camps".
+Camps are generated with the world, stored per island and drawn on the map. Players hunt them with
+armies, strong camps attack armies and towers inside their guard range, and camps repopulate and grow
+stronger the more often they are cleared: see [Gameplay](#gameplay). Requirements:
+`world-generation-rules.md`, "Wildlife camps"; `economy.md` section 10; owner decisions in issue #334.
 
 ## Families
 
@@ -120,6 +121,115 @@ Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `StrongCampTile
 `MinCampIslandTiles` 60, `SandTilesPerSealCamp` 2000, `MountainTilesPerEyrieCamp` 2000, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
 guard-range formulas above.
 
+## Gameplay
+
+Owner decisions (issue #334 and the camp-fights PR). All numbers are tuning constants in
+`CampRules` (C#), mirrored in `campRules.ts` where the client shows them.
+
+### Beasts
+
+A camp's garrison is beasts in three tiers per family; they are not `UnitType`s (nobody trains them)
+but a `BeastTier` (`young`, `adult`, `alpha`) on the camp's family. The family only names them
+(`catalogue.beasts.<family>.<tier>`); the stats depend on the camp's strength:
+
+| Strength | young atk/def | adult atk/def | alpha atk/def |
+|---|---|---|---|
+| weak | 0 / 2 | 8 / 12 | 15 / 25 |
+| strong | 2 / 5 | 25 / 30 | 50 / 60 |
+
+Names: wolfden wolf pup / wolf / alpha wolf; boarwallow piglet / boar / tusker; bearrapids cub / bear /
+great bear; fenrirbrood black pup / black wolf / Fenrir's get; walrushaulout calf / walrus / walrus bull;
+eagleeyrie eaglet / sea eagle / old sea eagle; moosemire calf / moose / moose bull; sealhaulout pup /
+seal / seal bull; beaverlodge kit / beaver / old beaver; cranedance chick / crane / lead crane;
+harewarren leveret / hare / jack hare; deerglade fawn / deer / stag; otterslide pup / otter / old otter.
+
+**Full garrison** at effective level `L`:
+
+| Strength | young | adult | alpha |
+|---|---|---|---|
+| weak | `2 + L` | `3 + 2L` | `max(0, L - 2)` |
+| strong | `2 + L` | `3 + 3L` | `L - 1` |
+
+Defense power (Σ count × defense): strong L1 195, L5 815, L10 1 590, L25 3 915, L100 ~16 000; weak L1 66,
+L5 245, L25 1 265.
+
+### Effective level
+
+`EffectiveLevel = min(100, Level + floor(Clears / 10))`: every 10th clear of a camp (by any player)
+raises it a level, up to 100, and it never drops back. The **guard range stays on the rolled `Level`**
+(`GuardRange(Level, strength)`, 1 to 7 hexes), so a farmed camp gets tougher but never holds more land
+or costs start positions. Loot grows slower than the garrison, so an early clear pays far more than it
+costs and a late one is only moderate:
+
+### Loot
+
+`pool(L) = base × L^0.7` (strong base 1 800, weak base 450), split over the camp's loot kinds
+(section Loot below) by weight: each kind 1, a `++` kind 2. The army takes what its survivors can carry
+(`BattleResolver.ComputeLootWithCapacity`, the same carry cap as raids); the rest is lost. Strong pool:
+L1 1 800, L5 5 000, L10 9 000, L25 17 700, L100 45 200.
+
+### Hunting a camp
+
+- New mission `hunt` (`ArmyMission.Hunt`): land units only, sent to the camp's hex (to the nearest
+  reachable neighbour when the camp's own hex is not walkable, e.g. a river camp), with the usual
+  round-trip food check.
+- On arrival the garrison is settled to the arrival instant and the battle is fought with the ordinary
+  attack rules (`BattleResolver` maths: army attack vs. beast defense, a tie goes to the camp, the loser
+  loses everything, the winner `(loser/winner)^1.5`). No raid caps, no tower bonus.
+- Army wins: the camp is **cleared** (garrison 0, `ClearedAt`, `Clears + 1`), loot as above, the survivors
+  walk home on the precomputed return leg. Camp wins: the army is gone, the camp keeps its survivors.
+- An empty camp (already cleared) gives nothing; the army turns home.
+
+### Regrowth, calm and respawn
+
+- **Regrowth**: a damaged camp regrows each tier linearly to its full count over **4 h (weak) / 8 h
+  (strong)** (`floor(full × elapsed / regrow)` on top of the snapshot), computed lazily from the stored
+  snapshot like the resource pool.
+- **Calm**: after any fight (hunt, ambush, tower attack) a camp is calm for **24 h** (`CalmUntil`): it
+  regrows but does not attack. A camp nobody has fought is never calm.
+- **Respawn** of a cleared camp: it regrows (from `ClearedAt`) only while its hex is **outside every
+  realm** (no settlement's claim covers it). An empty camp inside a realm never refills; it keeps its
+  empty art. The realm test is made when the state is read, so a camp whose realm disappears refills as
+  if it had been outside all along (an accepted approximation).
+- **Fenrir's brood** always regrows, inside a realm too, and is never removed.
+- **Building on a camp**: a cleared, empty camp is buildable under its ground's normal rules (not
+  Fenrir's brood; the eyrie's mountain is never buildable). A building on the hex removes the camp from
+  the map for as long as it stands; when the building is gone and the hex is outside every realm, the
+  camp comes back (regrowing as above).
+
+### Strong camps attack
+
+Only **strong** camps attack, and only when **aggressive**: not calm and with at least one adult or
+alpha alive. Camp-initiated fights use the beasts' **attack** against the units' **defense** and are
+**raid-capped** (both sides lose at most half), so a camp is never cleared by its own attack.
+
+- **Ambush**: an army (land, not retreat-immune) whose route enters an aggressive strong camp's guard
+  range is attacked at the instant it enters (`CampAmbush.EarliestAmbush`, the earliest over all camps,
+  checked when the army is settled, like field battles). A hunting army is not ambushed by the camp it
+  hunts. Army loses: it retreats home from where it stands (`Army.ForceFieldRetreat`). Army wins: it
+  marches on. Either way the camp is then calm for 24 h.
+- **Towers**: building a tower inside an aggressive strong camp's guard range is **allowed** (the client
+  warns). The camp attacks it **30 min** after its construction started, or for a standing tower as soon
+  as the camp is aggressive (`CampAggressionHostedService`, every minute). The tower is defended only by
+  the owner's armies **standing on the tower hex** (arrived, not yet turned around); if there are none, or
+  they lose, a tower under construction burns (the order is dropped, its cost is lost) and a standing
+  tower is razed. Either way the camp is then calm for 24 h.
+
+### Reports
+
+Every camp fight writes a `CampReport` (kind `hunt`, `ambush` or `tower`): camp coord, family,
+effective level, the player's settlement and army, the winner, both powers, seed, the player's units
+(sent / lost) and the beasts (before / lost) per tier, loot, whether the camp was cleared and whether a
+tower burned. `GET /settlements/{id}/camp-reports`, `GET /camp-reports/{id}`; the reports inbox shows them
+under "Camps".
+
+### State and API
+
+- `camp_states` (world, q, r): tier counts at `SnapshotAt`, `ClearedAt`, `CalmUntil`, `Clears`. No row
+  means a pristine camp: full garrison at its rolled level, aggressive.
+- `GET /worlds/{worldId}/camps[?islandId=]`: every camp's live state (effective level, garrison per tier,
+  cleared, calm until, clears, removed by a building).
+
 ## Loot (kinds only)
 
 Clearing a camp pays loot (`economy.md` section 10) in the four resources. The kinds are the owner's mix of a
@@ -145,9 +255,8 @@ base rule and each camp's own extras from the design roster (#334's brainstorm);
 | otterslide | weak | food, wood |
 | deerglade, harewarren | weak | food |
 
-Amounts grow with the camp's level, a strong camp's several times a weak one's. The eagle eyrie and Fenrir's
-brood are never built on, so their loot is a one-off prize. Nothing reads this yet: the docs page
-(`WildlifeCampsView.vue`, `LOOT_EXTRAS`/`lootOf`) shows it per card and is the only consumer.
+Amounts: see [Loot](#loot) under Gameplay (`CampRules.LootPool`); the docs page (`WildlifeCampsView.vue`,
+`LOOT_EXTRAS`/`lootOf`) shows the kinds per card.
 
 ## Data, API and art
 
@@ -158,10 +267,11 @@ brood are never built on, so their loot is a one-off prize. Nothing reads this y
   camp hex is not buildable; `findLandfall` avoids strong camps.
 - Build rule, also enforced server-side: `Settlement.PlanBuild` refuses a hex that holds a camp with
   `BuildRejection.HexOccupiedByCamp` (HTTP 409, `rejection: "HexOccupiedByCamp"`), checked right after the
-  giant rule via `CampIndex` (`SettlementService.LoadCampIndexAsync`). Every camp counts as guarded for now
-  (`TODO(camp gameplay PR)`: only a guarded camp will block once clearing exists). The admin god-mode
+  giant rule via `CampIndex` (`SettlementService.LoadCampIndexAsync`). Only a camp that is not empty
+  blocks (and Fenrir's brood always does); a cleared camp is buildable, see Gameplay. The admin god-mode
   building edit is not gated.
-- Render: the ground's own base plus the camp's guarded (`level001`) animated top from the
+- Render: the ground's own base plus the camp's guarded (`level001`) animated top, or its empty
+  (`level000`) top once cleared, and no top while a building stands on it, from the
   `buildings-anim` atlas (bearrapids also brings its river base). The guarded art ships only one to
   three rotations; the tile orientation is mapped onto those (read off the atlas) by modulo in
   `TILE_ORIENTATIONS` order, and bearrapids picks the kept rotation with its river's channel
