@@ -319,7 +319,8 @@ const wallFrame = computed(() => {
           <div class="pair-thumbs">
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairLivingFrame(pair)"
                   :frame="pairLivingFrame(pair)!"
@@ -331,7 +332,8 @@ const wallFrame = computed(() => {
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairWastedFrame(pair)"
                   :frame="pairWastedFrame(pair)!"
@@ -363,7 +365,8 @@ const wallFrame = computed(() => {
           <div class="pair-thumbs">
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairLivingFrame(PAIRS[3]!)"
                   :frame="pairLivingFrame(PAIRS[3]!)!"
@@ -375,7 +378,8 @@ const wallFrame = computed(() => {
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairWastedFrame(PAIRS[3]!)"
                   :frame="pairWastedFrame(PAIRS[3]!)!"
@@ -394,7 +398,8 @@ const wallFrame = computed(() => {
           <div class="pair-thumbs">
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="riverLivingFrame"
                   :frame="riverLivingFrame"
@@ -406,7 +411,8 @@ const wallFrame = computed(() => {
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="riverWastedFrame"
                   :frame="riverWastedFrame"
@@ -436,7 +442,8 @@ const wallFrame = computed(() => {
           <div class="pair-thumbs">
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairLivingFrame(pair)"
                   :frame="pairLivingFrame(pair)!"
@@ -448,7 +455,8 @@ const wallFrame = computed(() => {
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairWastedFrame(pair)"
                   :frame="pairWastedFrame(pair)!"
@@ -602,14 +610,11 @@ h2 {
 }
 .thumb {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   width: 120px;
-  height: 150px;
-  overflow: hidden;
-  border-radius: 8px;
-  background: var(--panel, #1c1710);
-  border: 1px solid var(--panel-border);
+  /* THUMB_BOX_H (148) plus .floating-art's 10px ground-shadow strip. */
+  height: 160px;
 }
 .thumb-name {
   font-size: 12px;
