@@ -153,3 +153,45 @@ describe('QuestTray', () => {
     expect(wrapper.get('[data-testid="quest-progress"]').text()).toBe('0 of 1');
   });
 });
+
+describe('QuestTray on a phone', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    const world = useWorldStore();
+    world.hud.resources = { wood: 0, stone: 0, food: 0, iron: 0 };
+    world.hud.storageCap = { wood: 750, stone: 750, food: 900, iron: 375 };
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+  });
+
+  it('starts as a quest button, without a dot while nothing is ready to claim', async () => {
+    useWorldStore().hud.quests = all();
+    const wrapper = mountTray();
+    await flushPromises();
+    expect(wrapper.find('[data-testid="quest-tray"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="quest-toggle"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(false);
+  });
+
+  it('shows a dot when a quest is ready to claim', async () => {
+    useWorldStore().hud.quests = all({ longhouse2: { completed: true } });
+    const wrapper = mountTray();
+    await flushPromises();
+    expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(true);
+  });
+
+  it('opens on tap and collapses again', async () => {
+    useWorldStore().hud.quests = all();
+    const wrapper = mountTray();
+    await flushPromises();
+    await wrapper.get('[data-testid="quest-toggle"]').trigger('click');
+    expect(wrapper.find('[data-testid="quest-current"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="quest-collapse"]').trigger('click');
+    expect(wrapper.find('[data-testid="quest-tray"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="quest-toggle"]').exists()).toBe(true);
+  });
+});

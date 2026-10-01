@@ -137,7 +137,11 @@ const showSettlementBubble = computed(() => isCompact.value && !props.title && !
 // In rail mode there is no bar band at all (hudBarHeightPx is 0): the bubble
 // sits at the top edge, to the right of the rail.
 const settlementBubbleTop = computed(() => (isRail.value ? '8px' : barPosition.value === 'top' ? `${hudBarHeightPx.value + 8}px` : '8px'));
-const settlementBubbleLeft = computed(() => (isRail.value ? `${hudRailWidthPx.value + 16}px` : undefined));
+// Rail: the ☰ button and the settlement bubble read as one capsule — the
+// bubble starts at the rail's own left edge and leaves room for the button,
+// which paints above it (the bar is z 40, the bubble z 36).
+const settlementBubbleLeft = computed(() => (isRail.value ? 'calc(8px + env(safe-area-inset-left, 0px))' : undefined));
+const railJoined = computed(() => isRail.value && showSettlementBubble.value && !isHudDrawerOpen.value);
 // Finding #13: only counts as "shown" once it's actually visible on screen —
 // the drawer hides it (`v-show="!isHudDrawerOpen"` below) without unmounting
 // it, so a plain `showSettlementBubble` alone would keep DemoModeBadge.vue
@@ -398,6 +402,7 @@ const backdropStyle = computed(() => {
       'hud-bar--drag-enabled': dragEnabled,
       'hud-bar--auto-height': isCompact,
       'hud-bar--rail': isRail,
+      'hud-bar--rail-joined': railJoined,
     }"
     @pointerdown="onBarPointerDown"
     @pointermove="onBarPointerMove"
@@ -481,6 +486,7 @@ const backdropStyle = computed(() => {
   <div
     v-if="showSettlementBubble"
     class="settlement-bubble"
+    :class="{ 'settlement-bubble--rail': isRail }"
     :style="{ top: settlementBubbleTop, left: settlementBubbleLeft }"
     v-show="!isHudDrawerOpen"
   >
@@ -806,6 +812,12 @@ const backdropStyle = computed(() => {
 /* A bar with no ResourceBar in it (the founded landing page) keeps its nav
    content, as one more bubble in the column. */
 .hud-bar--rail .hud-bar-right :deep(.hud-nav) {
+  /* Floats in the top-right corner rather than in the left column, so its
+     popovers (the account-creation nudge, the returning-player menu) hang
+     down from there the way they do from a top bar. */
+  position: fixed;
+  top: 8px;
+  right: calc(8px + env(safe-area-inset-right, 0px));
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
@@ -850,20 +862,19 @@ const backdropStyle = computed(() => {
   top: 5px;
   right: 5px;
 }
-/* The nav bubble's popovers (the account-creation nudge, the returning-player
-   menu) hang off their trigger's right edge for a bar at the top-right; in
-   the rail the trigger is at the left edge of the screen, so they open
-   rightwards instead of running off it. */
-.hud-bar--rail .hud-bar-right :deep(.nudge),
-.hud-bar--rail .hud-bar-right :deep(.panel.menu) {
-  left: 0;
-  right: auto;
-}
-.hud-bar--rail .hud-bar-right :deep(.nudge .notch) {
-  left: 18px;
-  right: auto;
+/* The ☰ button inside the settlement bubble's capsule (`railJoined`): it
+   drops its own circle so the two read as one pill. */
+.hud-bar--rail-joined .hud-grip {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
+.settlement-bubble.settlement-bubble--rail {
+  height: 40px;
+  box-sizing: border-box;
+  padding-left: 48px;
+}
 /* Mobile-only settlement bubble — replaces the inline `.titles` name/caption
    (hidden above under isCompact) since the bar itself has no room for it.
    `top` is set inline (settlementBubbleTop) to land in the same slot

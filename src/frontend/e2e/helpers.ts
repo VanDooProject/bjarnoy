@@ -121,11 +121,37 @@ export async function claimLandfall(page: Page): Promise<void> {
 }
 
 /**
+ * Leaves the landing page for /settlement once onboarding is complete. While
+ * the "Name your jarl" nudge floats on screen (an anonymous player),
+ * the completion banner waits for it, so this goes through the HUD's own
+ * Settlement link (inline on a wide bar, in the drawer on a phone) and
+ * leaves the nudge for the spec to answer; a signed-in player gets the
+ * banner's "Enter your settlement".
+ */
+export async function enterSettlementAfterOnboarding(page: Page): Promise<void> {
+  const cta = page.getByTestId('onboarding-continue');
+  const floatingNudge = page.locator('[data-testid="profile-nudge"]:visible');
+  await expect(cta.or(floatingNudge).first()).toBeVisible();
+  if (await cta.isVisible()) {
+    await cta.click();
+    return;
+  }
+  // A wide bar carries the nav inline; a phone bar keeps it in the drawer.
+  const inlineNav = page.locator('.hud-nav button', { hasText: 'Settlement' });
+  if (await inlineNav.isVisible()) {
+    await inlineNav.click();
+    return;
+  }
+  await page.locator('.hud-grip').click();
+  await page.locator('.hud-drawer button', { hasText: 'Settlement' }).click();
+}
+
+/**
  * Founds a settlement on the landing page (zip 6a: the landing page is the
  * village view — the starter plot is deterministic, so there's exactly one
  * hex to click, not a grid sweep across a world map), places the 2 guided
- * onboarding buildings, confirms the completion banner's hand-off, and
- * waits for /settlement.
+ * onboarding buildings, hands off to the settlement view
+ * (`enterSettlementAfterOnboarding`), and waits for /settlement.
  *
  * Design handoff "2a": onboarding's own forced nickname modal is gone —
  * completion now shows a dismissible banner with an explicit "Enter your
@@ -149,7 +175,7 @@ export async function foundSettlement(page: Page): Promise<void> {
 
   await placeGuidedBuildings(page);
 
-  await page.getByTestId('onboarding-continue').click();
+  await enterSettlementAfterOnboarding(page);
   await page.waitForURL('**/settlement');
   // The click navigates to a *new* SettlementCanvas mount (a fresh renderer,
   // not the landing page's preview one) — wait for its own mount-complete
