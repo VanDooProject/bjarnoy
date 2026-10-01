@@ -451,6 +451,12 @@
     "looks": "Aussehen",
     "camera": "Richtung",
     "stage": "Stufe",
+    "example": {
+      "heading": "Beispielkarte",
+      "body": "Eine kleine Insel, die das Spiel selbst erzeugt hat: Moor, Bach und See sind genau so gezeichnet wie in einer Welt. Zeig auf ein Hexfeld, um zu sehen, was es ist.",
+      "hoverHint": "Zeig auf ein Hexfeld, um zu sehen, was es ist.",
+      "river": "Fluss"
+    },
     "ground": {
       "heading": "Moorboden",
       "body": "Schlichtes Moos, dazu geschmückte Varianten, die sich über eine Moorgegend mischen wie im Ödland. Die Erzquelle und die Quellkette zeigen, wo Raseneisenerz an die Oberfläche tritt.",

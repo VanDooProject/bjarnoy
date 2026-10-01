@@ -451,6 +451,12 @@
     "looks": "Look",
     "camera": "Facing",
     "stage": "Stage",
+    "example": {
+      "heading": "Example map",
+      "body": "A small island the game itself generated, with its bog, creek and lake drawn exactly as a world draws them. Hover a hex to see what it is.",
+      "hoverHint": "Point at a hex to see what it is.",
+      "river": "River"
+    },
     "ground": {
       "heading": "Bog ground",
       "body": "Plain moss, with decorated looks mixed across a bog region the way the wasteland mixes its looks. The ore seep and the seep chain are where bog iron shows at the surface.",
