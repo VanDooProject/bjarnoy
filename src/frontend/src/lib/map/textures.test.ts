@@ -1854,6 +1854,35 @@ describe('palisade art', () => {
     expect(baseTextureFor(textures, tile(3), art)).toBe('coast-base-2');
   });
 
+  it.each([
+    ['grass', 'grass-base'],
+    ['forest', 'forest-floor-base'],
+    ['sand', 'sand-base'],
+  ] as const)('a wall on %s keeps that ground underneath, in the hex\'s own rotation, and draws no tree variant', (terrain, ground) => {
+    const textures = emptyTextures();
+    for (const [key, name] of [['grass', 'grass-base'], ['forest', 'forest-floor-base'], ['sand', 'sand-base']] as const) {
+      textures.base[key] = Object.fromEntries(ORIENTATIONS.map((o) => [o, `${name}-${o}`])) as never;
+    }
+    textures.top.forest = orientationMap(['forest-trees'] as unknown as never);
+    textures.top.palisadestraight = orientationMap(['wall-site', 'wall-1'] as unknown as never);
+    const art = palisadeArtFor({ wallNeighbours: flagsOf([0, 3]), coastalWater: false, gate: false });
+    const tile: Tile = { q: 0, r: 0, terrain, orientation: 'NE', buildingType: 'palisade', buildingLevel: 1 };
+
+    // The ground is the terrain's own base at the tile's rotation (not the wall's camera file), the top is the wall's.
+    expect(baseTextureFor(textures, tile, art)).toBe(`${ground}-NE`);
+    expect(topTextureFor(textures, tile, art)).toBe('wall-1');
+  });
+
+  it('keeps the sea end on its own coastal base', () => {
+    const textures = emptyTextures();
+    textures.base.sea = orientationMap('sea-base' as unknown as never);
+    textures.baseIndexed.palisadeendcoast = orientationMap(['coast-0', 'coast-1'] as unknown as never);
+    const art = palisadeArtFor({ wallNeighbours: flagsOf([3]), coastalWater: true, gate: false });
+    const tile: Tile = { q: 0, r: 0, terrain: 'sea', isCoastalWater: true, orientation: 'NE', buildingType: 'palisade', buildingLevel: 1 };
+
+    expect(baseTextureFor(textures, tile, art)).toBe('coast-1');
+  });
+
   it('classifies the pack\'s palisade frame names into one top per camera and art level', () => {
     const frames = ORIENTATIONS.flatMap((o) =>
       [0, 1, 2].map((l) => ({ name: `palisade_end_${o}_level00${l}`, layer: 'top' as const, value: `${o}${l}` })),

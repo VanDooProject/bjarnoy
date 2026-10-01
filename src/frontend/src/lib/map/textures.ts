@@ -264,6 +264,15 @@ export const PALISADE_TEXTURE_KEY: Record<PalisadePiece, TextureKey> = {
   end_coast: 'palisadeendcoast',
 };
 
+/** The land wall pieces: they stand on their hex's own ground (the sea end brings its own coastal base). */
+const LAND_WALL_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
+  'palisadestraight',
+  'palisadebend60',
+  'palisadebend120',
+  'palisadegatepiece',
+  'palisadeend',
+]);
+
 /**
  * The art a palisade or gate hex draws: the piece and the camera file the wall resolver (`palisadeTiles.ts`) picks from which of the
  * hex's six neighbours are wall hexes, as the `RiverArt` override `baseTextureFor`/`topTextureFor` take (the same way a river building
@@ -1636,6 +1645,11 @@ function pickIndexed<T>(arr: (T | undefined)[] | undefined, index: number): T | 
  * already included.
  */
 export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture {
+  // A land wall hex keeps its own ground: the terrain's base (grass, forest floor without the trees, sand) as that hex would be drawn
+  // plain, in the hex's own rotation so it blends with its neighbours; only the wall's top is drawn over it.
+  if (riverArt && LAND_WALL_KEYS.has(riverArt.key)) {
+    return baseTextureFor(textures, { ...tile, buildingType: undefined, buildingLevel: undefined });
+  }
   const orientation = tileOrientationFor(tile, riverArt);
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
     const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
