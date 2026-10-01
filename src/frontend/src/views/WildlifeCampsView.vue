@@ -60,8 +60,8 @@ function fit(frame: AtlasFrameRect | undefined, boxHeight: number): { width: str
   };
 }
 
-// The art a camp is drawn with - the map's own alias (`KEY_FAMILY`): the walrus haul-out
-// borrows the seal haul-out's art until its own is rendered.
+// The art a camp is drawn with - the map's own family table (`KEY_FAMILY`), so a camp that
+// borrows another camp's art there borrows it here too.
 function artOf(id: CampId): string {
   return KEY_FAMILY[id as TextureKey] ?? id;
 }

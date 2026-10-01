@@ -202,8 +202,7 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   bearrapids: 'bearrapids',
   fenrirbrood: 'fenrirbrood',
   sealhaulout: 'sealhaulout',
-  // No walrus art yet: the strong sand camp borrows the seal haul-out's until its own is rendered.
-  walrushaulout: 'sealhaulout',
+  walrushaulout: 'walrushaulout',
   eagleeyrie: 'eagleeyrie',
   moosemire: 'moosemire',
   beaverlodge: 'beaverlodge',
