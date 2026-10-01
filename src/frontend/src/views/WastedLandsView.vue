@@ -8,6 +8,7 @@ import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import WastedIsland from '../components/docs/WastedIsland.vue';
 import AnimatedGiant from '../components/docs/AnimatedGiant.vue';
+import AnimationPausedNote from '../components/docs/AnimationPausedNote.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { giantFamilyHasClip } from '../lib/docs/wastedIsland';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
@@ -186,6 +187,7 @@ const wallFrame = computed(() => {
         <p class="caption-note">{{ $t('docs.wastedLands.lore.caption') }}</p>
       </section>
 
+      <AnimationPausedNote />
       <section id="giants" class="giants-section">
         <div class="giant-card">
           <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>

@@ -7,6 +7,7 @@ import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
+import AnimationPausedNote from '../components/docs/AnimationPausedNote.vue';
 import { findAtlasClip, findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { KEY_FAMILY, type TextureKey } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
@@ -184,6 +185,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
         <p>{{ $t('docs.wildlifeCamps.camps.body') }}</p>
         <p>{{ $t('docs.wildlifeCamps.strength.help') }}</p>
         <p>{{ $t('docs.wildlifeCamps.loot.note') }}</p>
+        <AnimationPausedNote />
         <div class="filters">
           <div class="pills" data-testid="state-switch">
             <span class="pills-label">{{ $t('docs.wildlifeCamps.state.all') }}</span>
