@@ -27,7 +27,7 @@ import {
   type PlacementContext,
   type WallSet,
 } from '../../src/frontend/src/lib/map/palisadeTiles';
-import { DEFAULT_GENERATION, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
+import { DEFAULT_GENERATION, type WorldGenerationConstants, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
 import type { RiverTile, Terrain } from '../../src/frontend/src/lib/map/types';
 import { BOG_COLOUR, LAKE_COLOUR, riverColourAt, TERRAIN_COLOURS, type Layer, type LegendEntry, type OverlayCanvas, type Rgb } from './layers';
 import { findLandmasses } from './landmasses';
@@ -53,6 +53,12 @@ export interface Scenario {
   title?: string;
   seed: number;
   radius: number;
+  /**
+   * Generation constants on top of the defaults, e.g. the legacy island-density settings
+   * (`islandCellSize` 260, `islandMaxReach` 0, `islandMinGap` 0, `islandLargeShare` 0.12) so a
+   * scenario keeps the terrain it was laid out on when the default density changes.
+   */
+  generation?: Partial<WorldGenerationConstants>;
   window: { q: number; r: number; size: number };
   /** Pixels per hex circumradius (default 22). */
   px?: number;
@@ -209,9 +215,14 @@ function contextFor(scn: Scenario, pw: PathingWorld, wall: WallSet, army: 'frien
   });
 }
 
+/** The world a scenario is laid out on: the defaults, its own generation overrides and its radius. */
+export function scenarioWorld(scn: Scenario): WorldSeed {
+  return { seed: scn.seed, generation: { ...DEFAULT_GENERATION, ...scn.generation, worldRadius: scn.radius } };
+}
+
 /** Every cut-off walkable hex of the islands near the window. */
 function cutoffTiles(scn: Scenario, pw: PathingWorld): Set<string> {
-  const world: WorldSeed = { seed: scn.seed, generation: { ...DEFAULT_GENERATION, worldRadius: scn.radius } };
+  const world = scenarioWorld(scn);
   const out = new Set<string>();
   const reach = scn.window.size;
   for (const island of findLandmasses(world, false, true).landmasses) {
@@ -224,7 +235,7 @@ function cutoffTiles(scn: Scenario, pw: PathingWorld): Set<string> {
 }
 
 export function runScenario(scn: Scenario, pw?: PathingWorld): ScenarioRun {
-  const world: WorldSeed = { seed: scn.seed, generation: { ...DEFAULT_GENERATION, worldRadius: scn.radius } };
+  const world = scenarioWorld(scn);
   const world2 = pw ?? buildPathingWorld(world, scn.window);
   const { wall, refused } = placeWall(scn, world2);
   const tiles = resolveWall(wall, world2.terrainAt, parseKey);
