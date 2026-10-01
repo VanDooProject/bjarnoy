@@ -5,9 +5,9 @@
     <!-- Keep in sync with the Aspire.AppHost.Sdk version pinned in
          src/Bjarnoy.AppHost/Bjarnoy.AppHost.csproj: an SDK reference cannot
          read its version from here. -->
-    <AspireVersion>13.5.2</AspireVersion>
-    <DotNetVersion>10.0.11</DotNetVersion>
-    <ExtensionsVersion>10.9.0</ExtensionsVersion>
+    <AspireVersion>13.6.0</AspireVersion>
+    <DotNetVersion>10.0.12</DotNetVersion>
+    <ExtensionsVersion>10.10.0</ExtensionsVersion>
     <OpenTelemetryVersion>1.18.0</OpenTelemetryVersion>
   </PropertyGroup>
 
