@@ -6,6 +6,7 @@
 import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
 import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
+import { campHexBuildable } from './campRules';
 import type { RiverVariant } from './worldGenerator';
 
 const RESOURCE_KEYS: (keyof ResourceLine)[] = ['wood', 'stone', 'food', 'iron'];
@@ -168,6 +169,12 @@ export function isWaterOnlyBuilding(type: string | undefined): boolean {
  * non-sea tile, or a sea tile that already carries a water building (open
  * water itself is never offered as an empty build target).
  */
-export function tileIsBuildable(tile: { terrain: string; buildingType?: string }): boolean {
+export function tileIsBuildable(tile: {
+  terrain: string;
+  buildingType?: string;
+  camp?: { family: string; empty?: boolean };
+}): boolean {
+  // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood).
+  if (tile.camp && !tile.buildingType && !campHexBuildable(tile.camp)) return false;
   return (tile.terrain !== 'sea' && tile.terrain !== 'lake') || isWaterOnlyBuilding(tile.buildingType);
 }

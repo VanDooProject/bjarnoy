@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
+import { beastName } from '../i18n/catalogueNames';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
@@ -10,6 +11,7 @@ import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
 import { findAtlasClip, findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { KEY_FAMILY, type TextureKey } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
+import { lootKindsOf, lootPoolByKind, type LootShare } from '../lib/map/campRules';
 import { CAMP_FAMILIES, MaxCampLevel, guardRange, type CampGround, type CampStrength } from '../lib/map/campPlacement';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -74,37 +76,10 @@ function rangeOf(strength: CampStrength): { min: number; max: number; levels: nu
   return { min: guardRange(1, strength), max: guardRange(MaxCampLevel, strength), levels: MaxCampLevel };
 }
 
-// Loot kinds only - the amounts are not designed yet (docs/design/wildlife-camps.md, "Loot").
-// The base rule: every camp gives food and a strong camp adds iron. On top,
-// each camp's own extras from the design roster (#334's brainstorm): stone
-// from the bears' rapids and the eyrie's crag, wood from the wolves' forest
-// edge, the beavers' lodge and the otters' drift logs. `more` marks the kind
-// a camp pays a larger share of (the roster's "++"): the boars' and the
-// moose's meat, Fenrir's iron.
-type Loot = 'food' | 'stone' | 'wood' | 'iron';
-interface LootShare {
-  kind: Loot;
-  more?: boolean;
-}
-const LOOT_EXTRAS: Record<CampId, LootShare[]> = {
-  wolfden: [{ kind: 'wood' }],
-  boarwallow: [{ kind: 'food', more: true }],
-  bearrapids: [{ kind: 'stone' }],
-  moosemire: [{ kind: 'food', more: true }],
-  eagleeyrie: [{ kind: 'stone' }, { kind: 'iron' }],
-  fenrirbrood: [{ kind: 'iron', more: true }],
-  beaverlodge: [{ kind: 'wood' }],
-  otterslide: [{ kind: 'wood' }],
-};
-const LOOT_ORDER: Loot[] = ['food', 'stone', 'wood', 'iron'];
-function lootOf(camp: CampEntry): LootShare[] {
-  const shares = new Map<Loot, LootShare>([['food', { kind: 'food' }]]);
-  if (camp.strength === 'strong') shares.set('iron', { kind: 'iron' });
-  for (const extra of LOOT_EXTRAS[camp.id] ?? []) {
-    shares.set(extra.kind, { kind: extra.kind, more: extra.more || shares.get(extra.kind)?.more });
-  }
-  return LOOT_ORDER.flatMap((kind) => (shares.has(kind) ? [shares.get(kind)!] : []));
-}
+// Loot kinds and amounts come from the game's own rules (`campRules.ts`, the mirror of `CampRules`).
+// The levels the cards quote loot amounts for: a fresh camp and a mid-level one.
+const AMOUNT_LEVELS = [1, 5];
+const lootOf = (camp: CampEntry): LootShare[] => lootKindsOf(camp.id);
 
 function hasClip(id: CampId, camera: TileOrientation): boolean {
   return !!findAtlasClip('buildings-anim', `${artOf(id)}_${camera}_level001`);
@@ -176,6 +151,12 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
           <li>{{ $t('docs.wildlifeCamps.rules.building') }}</li>
           <li>{{ $t('docs.wildlifeCamps.rules.respawn') }}</li>
           <li>{{ $t('docs.wildlifeCamps.rules.neverBuilt') }}</li>
+          <li>{{ $t('docs.wildlifeCamps.rules.hunting') }}</li>
+          <li>{{ $t('docs.wildlifeCamps.rules.regrowth') }}</li>
+          <li>{{ $t('docs.wildlifeCamps.rules.calm') }}</li>
+          <li>{{ $t('docs.wildlifeCamps.rules.leveling') }}</li>
+          <li>{{ $t('docs.wildlifeCamps.rules.ambush') }}</li>
+          <li>{{ $t('docs.wildlifeCamps.rules.leftover') }}</li>
         </ul>
       </section>
 
@@ -260,6 +241,16 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
               />
             </div>
             <p>{{ t(`docs.wildlifeCamps.list.${camp.id}.guards`) }}</p>
+            <p class="beasts" data-testid="beasts">
+              <span class="pills-label">{{ $t('docs.wildlifeCamps.beasts.label') }}</span>
+              {{
+                t('docs.wildlifeCamps.beasts.tiers', {
+                  young: beastName(camp.id, 'young'),
+                  adult: beastName(camp.id, 'adult'),
+                  alpha: beastName(camp.id, 'alpha'),
+                })
+              }}
+            </p>
             <p class="loot" data-testid="loot">
               <span class="pills-label">{{ $t('docs.wildlifeCamps.loot.label') }}</span>
               <span
@@ -276,6 +267,12 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
                     ? t('docs.wildlifeCamps.loot.more', { kind: t(`docs.wildlifeCamps.loot.${share.kind}`) })
                     : t(`docs.wildlifeCamps.loot.${share.kind}`)
                 }}
+              </span>
+            </p>
+            <p v-for="level in AMOUNT_LEVELS" :key="level" class="loot-amounts" data-testid="loot-amounts">
+              <span class="pills-label">{{ t('docs.wildlifeCamps.loot.atLevel', { level }) }}</span>
+              <span v-for="share in lootOf(camp)" :key="share.kind" class="loot-kind">
+                {{ lootPoolByKind(camp.id, level)[share.kind] }} {{ t(`docs.wildlifeCamps.loot.${share.kind}`) }}
               </span>
             </p>
             <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
@@ -388,7 +385,8 @@ h2 {
 .filters {
   margin: 12px 0 4px;
 }
-.card p.loot {
+.card p.loot,
+.card p.loot-amounts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

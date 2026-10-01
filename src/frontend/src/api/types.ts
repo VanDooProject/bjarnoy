@@ -133,6 +133,64 @@ export interface CampResponse {
   guardRange: number;
 }
 
+/** Mirrors `CampStateResponse` — a wildlife camp's live state (`GET /worlds/{id}/camps`). */
+export interface CampStateResponse {
+  q: number;
+  r: number;
+  family: string;
+  level: number;
+  effectiveLevel: number;
+  strong: boolean;
+  guardRange: number;
+  garrison: BeastCounts;
+  fullGarrison: BeastCounts;
+  empty: boolean;
+  calmUntil: string | null;
+  aggressive: boolean;
+  clears: number;
+  removed: boolean;
+  leftover: ResourceLine;
+}
+
+export interface BeastCounts {
+  young: number;
+  adult: number;
+  alpha: number;
+}
+
+export type BeastTier = 'young' | 'adult' | 'alpha';
+
+export interface CampReportUnitLine {
+  type: string;
+  sent: number;
+  lost: number;
+}
+
+export interface CampReportBeastLine {
+  tier: BeastTier;
+  before: number;
+  lost: number;
+}
+
+/** Mirrors `CampReportResponse` — a wildlife camp fight (hunt, ambush or tower attack). */
+export interface CampReportResponse {
+  id: string;
+  kind: 'hunt' | 'ambush' | 'tower';
+  occurredAt: string;
+  camp: { q: number; r: number; family: string; effectiveLevel: number };
+  settlementId: string;
+  armyId: string | null;
+  winner: 'army' | 'camp';
+  armyPower: number;
+  campPower: number;
+  units: CampReportUnitLine[];
+  beasts: CampReportBeastLine[];
+  loot: ResourceLine;
+  campCleared: boolean;
+  tower: { q: number; r: number } | null;
+  towerBurned: boolean;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;

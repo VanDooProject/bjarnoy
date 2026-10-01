@@ -21,10 +21,12 @@ import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
   hasCatapultSelected,
+  isHuntUnit,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { buildingLabel } from '../../lib/units/battleReports';
+import HuntTargetSummary from './HuntTargetSummary.vue';
 import { useArmyRows } from '../../composables/useArmyRows';
 
 const world = useWorldStore();
@@ -53,6 +55,8 @@ const garrisonRows = computed(() =>
 // `'mixed'` is handled defensively rather than assumed unreachable.
 const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCounts ?? {}, catalogue.byType));
 function isRowSelectable(unit: string): boolean {
+  // A hunt takes land units only, so ships are locked out from the start.
+  if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType)) return false;
   return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
 }
 // Whether the garrison actually holds units of the class the current
@@ -60,7 +64,9 @@ function isRowSelectable(unit: string): boolean {
 // units can't mix" when there's something of the other class sitting right
 // there, greyed out, for them to wonder about.
 const hasLockedOutUnits = computed(() =>
-  selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
+  draft.value?.mission === 'hunt'
+    ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
+    : selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
     : false,
 );
@@ -106,7 +112,9 @@ const hasUnitsSelected = computed(() =>
 const hasDestination = computed(() =>
   draft.value?.mission === 'attack' || draft.value?.mission === 'support'
     ? !!draft.value.targetSettlementId
-    : routeLength.value > 0,
+    : draft.value?.mission === 'hunt'
+      ? !!draft.value.targetCamp
+      : routeLength.value > 0,
 );
 const canConfirm = computed(
   () => hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
@@ -116,7 +124,7 @@ function beginDispatch() {
   world.startDispatch();
 }
 
-function setMission(mission: 'move' | 'attack' | 'support') {
+function setMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
   world.setDispatchMission(mission);
 }
 
@@ -386,9 +394,22 @@ async function confirmFieldOrderClick() {
           >
             {{ missionName('support') }}
           </button>
+          <button
+            v-if="draft.mission === 'hunt'"
+            type="button"
+            class="mission-tab attack active"
+          >
+            {{ missionName('hunt') }}
+          </button>
         </div>
 
-        <p v-if="draft.mission === 'move'" class="status-subtext instructions">
+        <template v-if="draft.mission === 'hunt'">
+          <p class="status-subtext instructions">
+            {{ t('hud.huntTarget.instructions', { count: routeLength, waypointWord: t('hud.armyPanel.waypointWord', routeLength) }) }}
+          </p>
+          <HuntTargetSummary :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
+        </template>
+        <p v-else-if="draft.mission === 'move'" class="status-subtext instructions">
           {{ t('hud.armyPanel.dispatchInstructions', {
             count: routeLength,
             hexWord: t('hud.armyPanel.hexWord', routeLength),

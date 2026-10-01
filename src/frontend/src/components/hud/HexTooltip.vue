@@ -11,7 +11,7 @@ import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { BuildingOutput, BuildingModifier } from '../../lib/map/buildingEconomy';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName, terrainName, wastedTerrainName, resourceName, giantName, campName } from '../../i18n/catalogueNames';
+import { buildingName, terrainName, wastedTerrainName, resourceName, giantName, campName, beastName } from '../../i18n/catalogueNames';
 
 // Mirrors textures.ts's WASTED_TEXTURE_KEY (grass/forest/sand -> their
 // wasted-island art family) plus the coastal case (sea bordering wasted
@@ -27,7 +27,7 @@ const WASTED_TERRAIN_LABEL_KEY: Partial<Record<string, string>> = {
 
 const props = defineProps<{ info: HoverInfo }>();
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // screenX is already anchored at the hovered tile's own right edge
 // (HexMapRenderer.hoverInfoFor), so only a small fixed margin is needed
@@ -72,6 +72,23 @@ const stat = computed(() => {
   const owner = props.info.owner;
   if (!owner) return t('hud.hoverTooltip.unclaimed');
   return owner.mine ? t('hud.hoverTooltip.clickToBuildHere') : t('hud.hoverTooltip.claimedGround');
+});
+
+// A wildlife camp's live state: garrison per tier with the beasts' names, then whether it is empty,
+// calm until some time, or aggressive, and how often it was cleared. Absent in demo mode.
+const campLines = computed(() => {
+  const subject = props.info.subject;
+  if (subject.kind !== 'camp' || !subject.live) return [];
+  const live = subject.live;
+  const lines = (['young', 'adult', 'alpha'] as const)
+    .filter((tier) => live.fullGarrison[tier] > 0)
+    .map((tier) => `${beastName(subject.family, tier)} ${live.garrison[tier]} / ${live.fullGarrison[tier]}`);
+  const calm = live.calmUntil && Date.parse(live.calmUntil) > Date.now() ? live.calmUntil : null;
+  if (live.empty) lines.push(t('hud.hoverTooltip.campEmpty'));
+  else if (calm) lines.push(t('hud.hoverTooltip.campCalmUntil', { time: d(new Date(calm), 'long') }));
+  else if (subject.strong && live.aggressive) lines.push(t('hud.hoverTooltip.campAggressive'));
+  if (live.clears > 0) lines.push(t('hud.hoverTooltip.campClears', { count: live.clears }));
+  return lines;
 });
 
 function formatOutput(output: BuildingOutput): string {
@@ -139,6 +156,9 @@ const workersText = computed(() =>
     <div v-if="subtitle" class="subtitle">{{ subtitle }}</div>
     <div class="separator" />
     <div v-if="stat" class="stat">{{ stat }}</div>
+    <ul v-if="campLines.length" class="camp-lines" data-testid="camp-lines">
+      <li v-for="line in campLines" :key="line">{{ line }}</li>
+    </ul>
     <dl v-if="outputText || modifierText || workersText" class="stats">
       <template v-if="outputText">
         <dt>{{ t('hud.hoverTooltip.output') }}</dt>
@@ -192,6 +212,13 @@ const workersText = computed(() =>
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--gold);
+}
+.camp-lines {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 .subtitle {
   font-size: 12px;

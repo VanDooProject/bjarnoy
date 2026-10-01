@@ -12,6 +12,7 @@ export const terrainName = (terrain: string) => lookup(`terrain.${terrain}`, ter
 export const wastedTerrainName = (family: string) => lookup(`wastedTerrain.${family}`, family);
 export const giantName = (family: string) => lookup(`giants.${family}`, family);
 export const campName = (family: string) => lookup(`camps.${family}`, family);
+export const beastName = (family: string, tier: string) => lookup(`beasts.${family}.${tier}`, tier);
 export const resourceName = (resource: string) => lookup(`resources.${resource}`, resource);
 export const missionName = (mission: string) => lookup(`missions.${mission}`, mission);
 export const runeTypeName = (type: string) => lookup(`runes.types.${type}`, type);

@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia';
 import { ApiError, api } from '../api/client';
-import type { BattleReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../api/types';
+import type {
+  BattleReportResponse,
+  CampReportResponse,
+  FieldBattleReportResponse,
+  TradeReportResponse,
+} from '../api/types';
+import { DEMO_MODE } from '../config';
 import { type InboxItem, inboxUnreadCount, mergeInbox } from '../lib/units/inbox';
 
 // How often the badge/inbox re-polls while a HUD nav is mounted — battle
@@ -46,6 +52,7 @@ export const useReportsStore = defineStore('reports', {
     items: [] as BattleReportResponse[],
     tradeItems: [] as TradeReportResponse[],
     fieldItems: [] as FieldBattleReportResponse[],
+    campItems: [] as CampReportResponse[],
     loading: false,
     error: null as string | null,
     lastSeenAt: (() => {
@@ -60,10 +67,10 @@ export const useReportsStore = defineStore('reports', {
   getters: {
     /** All three report kinds, merged newest-first — see `lib/units/inbox.ts`. */
     inboxItems(state): InboxItem[] {
-      return mergeInbox(state.items, state.tradeItems, state.fieldItems);
+      return mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems);
     },
     unreadCount(state): number {
-      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems, state.fieldItems), state.lastSeenAt);
+      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems), state.lastSeenAt);
     },
   },
   actions: {
@@ -81,11 +88,16 @@ export const useReportsStore = defineStore('reports', {
       this.loading = true;
       this.error = null;
       try {
-        const [battleItems, tradeItems, fieldItems] = await Promise.all([
+        // Wildlife camp fights exist only against a live backend (the demo has no army simulation).
+        const [battleItems, tradeItems, fieldItems, campItems] = await Promise.all([
           api.getSettlementReports(settlementId, ownerId),
           api.getSettlementTradeReports(settlementId, ownerId),
           api.getSettlementFieldReports(settlementId, ownerId),
+          DEMO_MODE ? Promise.resolve([] as CampReportResponse[]) : api.getSettlementCampReports(settlementId, ownerId),
         ]);
+        this.campItems = [...campItems].sort(
+          (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+        );
         this.items = [...battleItems].sort(
           (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
         );
@@ -120,6 +132,16 @@ export const useReportsStore = defineStore('reports', {
       if (cached) return cached;
       try {
         return await api.getFieldReport(reportId, this.ownerId ?? undefined);
+      } catch {
+        return null;
+      }
+    },
+    /** The camp-report sibling of `getById` — see its own comment. */
+    async getCampById(reportId: string): Promise<CampReportResponse | null> {
+      const cached = this.campItems.find((r) => r.id === reportId);
+      if (cached) return cached;
+      try {
+        return await api.getCampReport(reportId, this.ownerId ?? undefined);
       } catch {
         return null;
       }

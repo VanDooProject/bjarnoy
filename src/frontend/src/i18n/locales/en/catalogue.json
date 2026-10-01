@@ -84,7 +84,8 @@
     "attack": "Attack",
     "support": "Support",
     "raid": "Raid",
-    "found": "Found settlement"
+    "found": "Found settlement",
+    "hunt": "Hunt"
   },
   "runes": {
     "types": {
@@ -129,6 +130,73 @@
       "weeklyFightsLost": "Weekly Fights Lost",
       "weeklyResourcesLooted": "Weekly Resources Looted",
       "biggestArmy": "Biggest Army"
+    }
+  },
+  "beasts": {
+    "wolfden": {
+      "young": "Wolf pup",
+      "adult": "Wolf",
+      "alpha": "Alpha wolf"
+    },
+    "boarwallow": {
+      "young": "Piglet",
+      "adult": "Boar",
+      "alpha": "Tusker"
+    },
+    "bearrapids": {
+      "young": "Cub",
+      "adult": "Bear",
+      "alpha": "Great bear"
+    },
+    "fenrirbrood": {
+      "young": "Black pup",
+      "adult": "Black wolf",
+      "alpha": "Fenrir's get"
+    },
+    "walrushaulout": {
+      "young": "Calf",
+      "adult": "Walrus",
+      "alpha": "Walrus bull"
+    },
+    "eagleeyrie": {
+      "young": "Eaglet",
+      "adult": "Sea eagle",
+      "alpha": "Old sea eagle"
+    },
+    "moosemire": {
+      "young": "Calf",
+      "adult": "Moose",
+      "alpha": "Moose bull"
+    },
+    "sealhaulout": {
+      "young": "Pup",
+      "adult": "Seal",
+      "alpha": "Seal bull"
+    },
+    "beaverlodge": {
+      "young": "Kit",
+      "adult": "Beaver",
+      "alpha": "Old beaver"
+    },
+    "cranedance": {
+      "young": "Chick",
+      "adult": "Crane",
+      "alpha": "Lead crane"
+    },
+    "harewarren": {
+      "young": "Leveret",
+      "adult": "Hare",
+      "alpha": "Jack hare"
+    },
+    "deerglade": {
+      "young": "Fawn",
+      "adult": "Deer",
+      "alpha": "Stag"
+    },
+    "otterslide": {
+      "young": "Pup",
+      "adult": "Otter",
+      "alpha": "Old otter"
     }
   }
 }

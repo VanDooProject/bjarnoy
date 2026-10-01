@@ -33,6 +33,9 @@ import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
 import { reportsLocation } from '../lib/modalRoute';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import FieldBattleReportCard from '../components/battle/FieldBattleReportCard.vue';
+import CampReportCard from '../components/battle/CampReportCard.vue';
+import { campName } from '../i18n/catalogueNames';
+import { isCampReportVictory, totalBeastsLost, totalCampLoot, totalUnitsLost } from '../lib/units/campReports';
 import type { MessageSchema } from '../i18n/schema';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -120,6 +123,24 @@ const rows = computed(() =>
         when: d(new Date(item.report.occurredAt), 'long'),
       };
     }
+    if (item.kind === 'camp') {
+      const report = item.report;
+      return {
+        kind: 'camp' as const,
+        id: report.id,
+        outcome: isCampReportVictory(report) ? t('hud.campReport.won') : t('hud.campReport.lost'),
+        isVictory: isCampReportVictory(report),
+        isTie: false,
+        mission: t(`hud.campReport.kind.${report.kind}`),
+        summary: t('hud.campReport.summary', {
+          title: t(`hud.campReport.title.${report.kind}`, { camp: campName(report.camp.family) }),
+          lost: totalUnitsLost(report),
+          beasts: totalBeastsLost(report),
+          loot: totalCampLoot(report.loot),
+        }),
+        when: d(new Date(report.occurredAt), 'long'),
+      };
+    }
     const side = tradeSideOf(item.report);
     return {
       kind: 'trade' as const,
@@ -137,6 +158,7 @@ const rows = computed(() =>
 const detailItem = computed(() => reports.inboxItems.find((item) => item.report.id === reportId.value) ?? null);
 const detail = computed(() => (detailItem.value?.kind === 'battle' ? detailItem.value.report : null));
 const fieldDetail = computed(() => (detailItem.value?.kind === 'field' ? detailItem.value.report : null));
+const campDetail = computed(() => (detailItem.value?.kind === 'camp' ? detailItem.value.report : null));
 const tradeDetail = computed(() => (detailItem.value?.kind === 'trade' ? detailItem.value.report : null));
 const detailSide = computed(() => (detail.value ? sideOf(detail.value) : 'attacker'));
 const fieldDetailSide = computed(() => (fieldDetail.value ? fieldSideOf(fieldDetail.value) : 'sidea'));
@@ -150,6 +172,7 @@ const isDetail = computed(() => detailItem.value !== null);
 const detailTitle = computed(() => {
   if (detail.value) return missionLabel(detail.value.mission);
   if (fieldDetail.value) return t('hud.fieldBattleReport.title');
+  if (campDetail.value) return t(`hud.campReport.kind.${campDetail.value.kind}`);
   if (tradeDetail.value) return tradeDetail.value.guildTrade ? t('reports.trade.guildTrade') : t('reports.trade.trade');
   return t('reports.title');
 });
@@ -214,12 +237,21 @@ defineExpose({ detailTitle, isDetail, backToList });
       </div>
     </template>
 
+    <template v-else-if="campDetail">
+      <button type="button" class="back-to-list" data-testid="reports-back-to-list" @click="backToList">
+        {{ $t('reports.backToList') }}
+      </button>
+      <div data-testid="report-detail">
+        <CampReportCard :report="campDetail" />
+      </div>
+    </template>
+
     <template v-else>
       <h1>{{ $t('reports.title') }}</h1>
 
       <div class="kind-tabs">
         <button
-          v-for="tab in (['all', 'battle', 'field', 'trade'] as const)"
+          v-for="tab in (['all', 'battle', 'field', 'camp', 'trade'] as const)"
           :key="tab"
           type="button"
           class="kind-tab"
@@ -245,7 +277,7 @@ defineExpose({ detailTitle, isDetail, backToList });
         >
           <div class="row-top">
             <span
-              v-if="row.kind === 'battle' || row.kind === 'field'"
+              v-if="row.kind === 'battle' || row.kind === 'field' || row.kind === 'camp'"
               class="outcome"
               :class="row.isTie ? 'tie' : row.isVictory ? 'victory' : 'defeat'"
             >

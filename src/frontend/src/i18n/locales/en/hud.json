@@ -66,7 +66,11 @@
     "modifierShrineFavourShipAttack": "+{percent}% ship attack",
     "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
     "domainFood": "Food",
-    "domainWood": "Wood"
+    "domainWood": "Wood",
+    "campEmpty": "Cleared: empty",
+    "campCalmUntil": "Calm until {time}",
+    "campAggressive": "Aggressive",
+    "campClears": "Cleared {count} times"
   },
   "ringMenu": {
     "back": "Back",
@@ -100,7 +104,10 @@
       "trainUnits": "Train units",
       "build": "Build",
       "openWater": "Open water",
-      "giantOccupied": "Occupied by a giant landmark"
+      "giantOccupied": "Occupied by a giant landmark",
+      "hunt": "Hunt",
+      "campOccupied": "Occupied by wild beasts",
+      "noLandUnitsAtHome": "No land units at home"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -116,7 +123,8 @@
     "errors": {
       "couldNotQueueBuild": "Could not queue that build.",
       "couldNotQueueUpgrade": "Could not queue that upgrade."
-    }
+    },
+    "towerCampWarning": "Wild beasts will burn this tower unless an army stands guard on it."
   },
   "buildQueue": {
     "title": "Construction",
@@ -324,7 +332,8 @@
     "supportingNamed": "Supporting {name}",
     "supporting": "Supporting",
     "returning": "Returning",
-    "inTransit": "In transit"
+    "inTransit": "In transit",
+    "hunting": "Hunting"
   },
   "armyPanel": {
     "title": "Armies",
@@ -415,5 +424,50 @@
     "retry": "Retry",
     "pollErrorTitle": "Connection problem — retrying",
     "dismiss": "Dismiss"
+  },
+  "huntTarget": {
+    "instructions": "Pick land units to hunt this camp. Optional stops: {count} {waypointWord}.",
+    "status": {
+      "empty": "Cleared: nothing guards it, an army only picks up the leftover loot",
+      "calm": "Calm: it regrows but does not attack",
+      "aggressive": "Aggressive: it ambushes armies that enter its range",
+      "guarded": "Guarded"
+    },
+    "calmUntil": "Calm until {time}",
+    "loot": "Loot",
+    "noLoot": "none",
+    "power": "Your attack {attack} vs. camp defense {defense}",
+    "outlook": {
+      "noArmy": "pick units",
+      "empty": "no fight",
+      "win": "your army should win",
+      "lose": "your army would lose"
+    },
+    "estimateNote": "Estimate: the camp regrows until you arrive, and your army carries only so much loot."
+  },
+  "campReport": {
+    "won": "Won",
+    "lost": "Lost",
+    "kind": {
+      "hunt": "Hunt",
+      "ambush": "Ambush",
+      "tower": "Tower attack"
+    },
+    "title": {
+      "hunt": "Hunt at {camp}",
+      "ambush": "Ambushed by {camp}",
+      "tower": "{camp} attacked your tower"
+    },
+    "campLevel": "Camp level {level} at ({q}, {r})",
+    "armyPower": "Army",
+    "campPower": "Camp",
+    "yourUnits": "Your units",
+    "beasts": "Beasts",
+    "beast": "Beast",
+    "before": "Before",
+    "cleared": "The {camp} is cleared.",
+    "towerBurned": "The tower at ({q}, {r}) burned down.",
+    "towerHeld": "The tower at ({q}, {r}) held.",
+    "summary": "{title}: {lost} units lost, {beasts} beasts slain, {loot} loot"
   }
 }

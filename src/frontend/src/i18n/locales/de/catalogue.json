@@ -84,7 +84,8 @@
     "attack": "Angriff",
     "support": "Unterstützung",
     "raid": "Überfall",
-    "found": "Siedlung gründen"
+    "found": "Siedlung gründen",
+    "hunt": "Jagd"
   },
   "runes": {
     "types": {
@@ -129,6 +130,73 @@
       "weeklyFightsLost": "Niederlagen diese Woche",
       "weeklyResourcesLooted": "Geplünderte Rohstoffe diese Woche",
       "biggestArmy": "Größte Armee"
+    }
+  },
+  "beasts": {
+    "wolfden": {
+      "young": "Wolfswelpe",
+      "adult": "Wolf",
+      "alpha": "Leitwolf"
+    },
+    "boarwallow": {
+      "young": "Frischling",
+      "adult": "Keiler",
+      "alpha": "Hauer"
+    },
+    "bearrapids": {
+      "young": "Bärenjunges",
+      "adult": "Bär",
+      "alpha": "Großbär"
+    },
+    "fenrirbrood": {
+      "young": "Schwarzer Welpe",
+      "adult": "Schwarzwolf",
+      "alpha": "Fenrirs Sprössling"
+    },
+    "walrushaulout": {
+      "young": "Walrosskalb",
+      "adult": "Walross",
+      "alpha": "Walrossbulle"
+    },
+    "eagleeyrie": {
+      "young": "Jungadler",
+      "adult": "Seeadler",
+      "alpha": "Alter Seeadler"
+    },
+    "moosemire": {
+      "young": "Elchkalb",
+      "adult": "Elch",
+      "alpha": "Elchbulle"
+    },
+    "sealhaulout": {
+      "young": "Heuler",
+      "adult": "Robbe",
+      "alpha": "Robbenbulle"
+    },
+    "beaverlodge": {
+      "young": "Jungbiber",
+      "adult": "Biber",
+      "alpha": "Alter Biber"
+    },
+    "cranedance": {
+      "young": "Kranichküken",
+      "adult": "Kranich",
+      "alpha": "Leitkranich"
+    },
+    "harewarren": {
+      "young": "Junghase",
+      "adult": "Hase",
+      "alpha": "Rammler"
+    },
+    "deerglade": {
+      "young": "Rehkitz",
+      "adult": "Hirsch",
+      "alpha": "Platzhirsch"
+    },
+    "otterslide": {
+      "young": "Otterjunges",
+      "adult": "Otter",
+      "alpha": "Alter Otter"
     }
   }
 }

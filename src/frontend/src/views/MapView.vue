@@ -63,6 +63,7 @@ import {
 import type { Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
+import { campHexBuildable, towerThreatAt } from '../lib/map/campRules';
 import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange, type PathContext } from '../lib/map/hexPath';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -355,10 +356,19 @@ function overlayTargets(selectedArmy: (typeof world.armies)[number] | undefined)
     if (targets.some((t) => t.coord.q === settlement.q && t.coord.r === settlement.r && t.kind === kind)) return;
     targets.push({ coord: { q: settlement.q, r: settlement.r }, kind });
   };
+  // A hunt has no target settlement: its marker (the attack icon) sits on the camp's own hex.
+  const addCamp = (coord: AxialCoord | undefined) => {
+    if (!coord || targets.some((t) => t.coord.q === coord.q && t.coord.r === coord.r && t.kind === 'attack')) return;
+    targets.push({ coord: { q: coord.q, r: coord.r }, kind: 'attack' });
+  };
   const draft = world.dispatchDraft;
-  if (draft) add(draft.targetSettlementId, draft.mission);
+  if (draft) {
+    add(draft.targetSettlementId, draft.mission);
+    if (draft.mission === 'hunt') addCamp(draft.targetCamp ?? undefined);
+  }
   if (selectedArmy && !selectedArmy.movement?.isReturning) {
     add(selectedArmy.targetSettlementId, selectedArmy.mission);
+    if (selectedArmy.mission === 'hunt') addCamp(selectedArmy.movement?.path[selectedArmy.movement.path.length - 1]);
   }
   return targets;
 }
@@ -431,6 +441,14 @@ const buildingSignature = computed(() =>
 );
 watch(
   [() => canvasRef.value?.renderer, buildingSignature],
+  ([renderer]) => {
+    renderer?.forceRebuild();
+  },
+);
+
+// A camp state refresh (a camp cleared, a building removed it) changes which art a tile draws.
+watch(
+  [() => canvasRef.value?.renderer, () => world.campStatesVersion],
   ([renderer]) => {
     renderer?.forceRebuild();
   },
@@ -749,13 +767,31 @@ function sendArmyAction(tile: Tile): RingAction {
   };
 }
 
+// Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
+// (the demo has no army simulation, so no camp fights). Needs land units at home — ships cannot hunt.
+function huntActions(tile: Tile): RingAction[] {
+  if (DEMO_MODE || !tile.camp || tile.camp.removed || tile.buildingType) return [];
+  const hasLandUnits = world.hud.garrison.some(
+    (g) => g.count > 0 && classifyUnitSelection({ [g.unit]: g.count }, unitCatalogue.byType) === 'land',
+  );
+  return [
+    {
+      id: 'hunt',
+      label: t('hud.ringMenu.actions.hunt'),
+      color: 'var(--rival)',
+      disabled: !hasLandUnits,
+      hint: hasLandUnits ? undefined : t('hud.ringMenu.actions.noLandUnitsAtHome'),
+    },
+  ];
+}
+
 const rootActions = computed<RingAction[]>(() => {
   const tile = selectedTile.value;
   if (!tile) return [];
   // World zoom only offers the army action: BuildingModal/TrainingModal and
   // the build fan only exist in the settlement template, so Build/Upgrade/
   // Info bubbles here would open nothing.
-  if (mode.value === 'world') return [sendArmyAction(tile)];
+  if (mode.value === 'world') return [...huntActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
@@ -773,6 +809,7 @@ const rootActions = computed<RingAction[]>(() => {
         disabled: true,
         hint: t('hud.ringMenu.actions.noSettlersYet'),
       },
+      ...huntActions(tile),
       sendArmyAction(tile),
     ];
   }
@@ -840,22 +877,28 @@ const rootActions = computed<RingAction[]>(() => {
     // giant is always land, so `buildableSea` alone would otherwise show
     // "Build" as available on it.
     const blockedByGiant = !!tile.giant;
+    // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood) —
+    // mirrors WorldModel.placeBuilding / the server's HexOccupiedByCamp rule.
+    const blockedByCamp = !!tile.camp && !tile.buildingType && !campHexBuildable(tile.camp);
     return [
       { id: 'details', label: t('hud.ringMenu.actions.details') },
       {
         id: 'build',
         label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea || blockedByGiant,
+        disabled: !buildableSea || blockedByGiant || blockedByCamp,
         hint: blockedByGiant
           ? t('hud.ringMenu.actions.giantOccupied')
+          : blockedByCamp
+            ? t('hud.ringMenu.actions.campOccupied')
           : buildableSea
             ? undefined
             : t('hud.ringMenu.actions.openWater'),
       },
+      ...huntActions(tile),
       sendArmyAction(tile),
     ];
   }
-  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }, sendArmyAction(tile)];
+  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }, ...huntActions(tile), sendArmyAction(tile)];
 });
 
 function tileAt(q: number, r: number): Tile {
@@ -974,6 +1017,13 @@ function storageHouseLockFor(): string | undefined {
   return storageHouseLock(hexes.size, Math.max(0, ...standing.map((h) => h.level)));
 }
 
+// Building a tower inside a strong, aggressive camp's guard range is allowed but the beasts will
+// burn it unless an army stands guard on it — a warning, not a lock (docs/design/wildlife-camps.md).
+// Live: the camp's server-side `aggressive` flag; demo (no camp state): any strong camp.
+function towerCampWarning(coord: AxialCoord): string | undefined {
+  return towerThreatAt(world.model.camps(), coord) ? t('hud.ringMenu.towerCampWarning') : undefined;
+}
+
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
@@ -989,6 +1039,7 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
       ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
       ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined),
+    warning: type === 'tower' ? towerCampWarning(coord) : undefined,
     art: buildingArt(type, 1),
   };
 }
@@ -1148,6 +1199,10 @@ async function onRingSelect(id: string) {
       return;
     case 'send-army':
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value);
+      closeRing();
+      return;
+    case 'hunt':
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'hunt' });
       closeRing();
       return;
     case 'attack':

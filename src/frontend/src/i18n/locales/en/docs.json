@@ -315,16 +315,22 @@
   "wildlifeCamps": {
     "title": "Wildlife camps",
     "intro": "Unclaimed islands are not empty. Wolves, bears, seals and worse hold them, each pack in a camp of its own. You may land and settle, but no tower goes up near a guarded camp, so on a big island you clear the camps in your way and build where the land is free.",
-    "status": "Camps now appear on the map, guarded, on the ground each one belongs to. Clearing them, their loot and the tower rule below are still to come; the bog camps (moose mire, beaver lodge, crane dance) stand on plain bog moss.",
+    "status": "Camps are alive: you can hunt them, they regrow, and strong camps fight back. The rules below are the ones the game plays by; the bog camps (moose mire, beaver lodge, crane dance) stand on plain bog moss.",
     "rules": {
       "heading": "How a camp works",
-      "towers": "A guarded camp holds the land around it: no tower can be built within its range (the wolves eat the builders). Beyond that range the island is open to build on.",
+      "towers": "A guarded camp holds the land around it. Strong camps attack: a tower inside the range of an aggressive strong camp is burned down unless one of your armies stands guard on it. The game warns you when you place one. Beyond the range the island is open to build on.",
       "range": "How far a camp reaches depends on its level, which is rolled at random when the camp appears. A strong camp can hold a wide stretch of land; a weak one only its nearest hexes.",
       "bigIslands": "A small island may be held entirely by one camp. On a big island you can clear just the camps in the way and put up towers where the land is then free.",
-      "states": "A camp has two states: guarded, with its animals, and cleared. A half-cleared or a respawned camp still counts as guarded.",
-      "building": "Clearing a camp pays loot. Once it is cleared you can build on its hex, and the building replaces the camp for as long as it stands.",
-      "respawn": "The animals come back only once the hex has no building and lies outside every realm. A cleared camp inside a realm stays cleared.",
-      "neverBuilt": "The eagle's eyrie on its sea stack and Fenrir's brood in the wastes are never built on: the empty nest stays on the map, and Fenrir's brood keeps coming back."
+      "states": "A camp has two states: guarded, with its beasts, and cleared (empty). A damaged camp regrows and still counts as guarded.",
+      "building": "Once a camp is cleared you can build on its hex (not Fenrir's brood), and the building removes the camp for as long as it stands.",
+      "respawn": "A cleared camp refills only while its hex lies outside every realm. An empty camp inside a realm stays empty; when the building on it is gone and the hex is outside every realm, the camp comes back.",
+      "neverBuilt": "The eagle's eyrie on its sea stack and Fenrir's brood in the wastes are never built on: the empty nest stays on the map, and Fenrir's brood keeps coming back.",
+      "hunting": "Hunting: send land units to a camp's hex with the Hunt order. Your army attack is fought against the beasts' defense, a tie goes to the camp. The loser loses everything, the winner part of its force. A win clears the camp and pays its loot.",
+      "regrowth": "Regrowth: a damaged camp regrows its beasts evenly over 4 hours (weak camps) or 8 hours (strong camps).",
+      "calm": "Calm: after any fight a camp is calm for 24 hours. It regrows but does not attack.",
+      "leveling": "Leveling: every 10th clear of a camp, by any player, raises its level by 1, up to 100. It never drops back. Its guard range stays as rolled, so a farmed camp gets tougher but does not claim more land.",
+      "ambush": "Ambush: a strong camp that is not calm and still has adults or alphas ambushes armies that enter its range. Beaten armies retreat home; either way the camp is calm for 24 hours.",
+      "leftover": "Leftover loot: what your army cannot carry stays at the camp for the next hunter. A hunt on a barely regrown camp pays little, and a hunt on an empty camp only picks up the leftover."
     },
     "camps": {
       "heading": "The camps",
@@ -357,7 +363,8 @@
       "iron": "Iron",
       "more": "{kind} ++",
       "moreHint": "A larger share of this than other camps pay",
-      "note": "Clearing a camp pays loot. Every camp gives food from the hunt and a strong camp adds iron, the gear of earlier settlers its pack has eaten; some camps add what their ground holds, and ++ marks a camp's biggest share. How much grows with the camp's level; the amounts are still to be set."
+      "note": "Clearing a camp pays loot. Every camp gives food from the hunt and a strong camp adds iron, the gear of earlier settlers its pack has eaten; some camps add what their ground holds, and ++ marks a camp's biggest share (double weight). The pool grows with the camp's level, slower than its garrison, so an early clear pays far more than it costs.",
+      "atLevel": "At level {level}"
     },
     "camera": "Facing",
     "notKept": "Guarded art only exists for the directions that show the animals best",
@@ -423,6 +430,10 @@
         "name": "Otter slide",
         "guards": "One otter swimming, one on the drift log with a fish, one running the bank and one waiting at the holt."
       }
+    },
+    "beasts": {
+      "label": "Beasts",
+      "tiers": "{young} · {adult} · {alpha}"
     }
   },
   "bogLands": {

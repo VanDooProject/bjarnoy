@@ -1440,7 +1440,7 @@ export function bogOrientationFor(bog: BogTile, fallback: TileOrientation): Tile
 function tileOrientationFor(tile: Tile, riverArt?: RiverArt): TileOrientation {
   if (riverArt) return riverArt.orientation;
   const own = tile.orientation ?? 'SE';
-  return tile.bog && !tile.buildingType && !tile.camp ? bogOrientationFor(tile.bog, own) : own;
+  return tile.bog && !tile.buildingType && !drawnCampOf(tile) ? bogOrientationFor(tile.bog, own) : own;
 }
 
 /** A bog family's variant slot for a tile: its hashed variant, wrapped onto however many the family has (creeks have 2, shores 1-2, ...). */
@@ -1540,17 +1540,31 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   return base![orientation];
 }
 
-/**
- * A camp's art level: every camp is guarded for now (`level001`, animated); the cleared
- * state (`level000`, static) arrives with camp gameplay.
- */
+/** A camp's art levels: `level000` cleared (static), `level001` guarded (animated). */
+const CAMP_CLEARED_LEVEL = 0;
 const CAMP_GUARDED_LEVEL = 1;
 
-/** The texture key and art-level index a tile's top layer resolves to: a camp's own family (guarded level), a building's level, or a terrain variant. */
+/**
+ * The camp a tile actually draws: none once a building stands on its hex or the server reports
+ * it removed. A camp without live state (demo mode, state not fetched yet) is guarded.
+ */
+export function drawnCampOf(tile: Tile): NonNullable<Tile['camp']> | undefined {
+  const camp = tile.camp;
+  if (!camp || camp.removed || tile.buildingType) return undefined;
+  return camp;
+}
+
+/** The art level a camp shows: cleared (`level000`) once empty, else guarded (`level001`). */
+export function campArtLevel(camp: NonNullable<Tile['camp']>): number {
+  return camp.empty ? CAMP_CLEARED_LEVEL : CAMP_GUARDED_LEVEL;
+}
+
+/** The texture key and art-level index a tile's top layer resolves to: a camp's own family (guarded or cleared level), a building's level, or a terrain variant. */
 function topKeyAndIndex(tile: Tile, riverArt?: RiverArt): { key: TextureKey; index: number } {
-  if (tile.camp && !riverArt) return { key: tile.camp.family as CampFamily, index: CAMP_GUARDED_LEVEL };
+  const camp = drawnCampOf(tile);
+  if (camp && !riverArt) return { key: camp.family as CampFamily, index: campArtLevel(camp) };
   const key = textureKeyFor(tile, riverArt);
-  if (tile.camp && riverArt?.key === tile.camp.family) return { key, index: CAMP_GUARDED_LEVEL };
+  if (camp && riverArt?.key === camp.family) return { key, index: campArtLevel(camp) };
   return { key, index: tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0) };
 }
 
@@ -1573,10 +1587,11 @@ export function campArtFor(
   tile: Tile,
   river: RiverTile | undefined,
 ): { orientation: TileOrientation; riverArt?: RiverArt } | undefined {
-  const camp = tile.camp;
+  const camp = drawnCampOf(tile);
   if (!camp) return undefined;
   const family = camp.family as CampFamily;
-  const kept = TILE_ORIENTATIONS.filter((o) => textures.top[family]?.[o]?.[CAMP_GUARDED_LEVEL] !== undefined);
+  const level = campArtLevel(camp);
+  const kept = TILE_ORIENTATIONS.filter((o) => textures.top[family]?.[o]?.[level] !== undefined);
 
   if (RIVER_CAMPS.has(family)) {
     if (!river || river.shape !== 'straight' || river.wasted) return undefined;

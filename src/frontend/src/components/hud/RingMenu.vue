@@ -61,6 +61,8 @@ export interface RingBuilding extends RingAction {
   gives?: string;
   /** Reason it can't be built yet, e.g. "Requires longhouse 2". */
   lock?: string;
+  /** A non-blocking caution (the building can still be placed), e.g. wild beasts burning an unguarded tower. */
+  warning?: string;
   /** Art for the card thumbnail. */
   art?: ArtRef;
 }
@@ -480,6 +482,7 @@ function onBackdropPointerDown(e: PointerEvent) {
           <dd class="nowrap">{{ hovered.gives }}</dd>
         </template>
       </dl>
+      <p v-if="hovered.warning" class="card-warning" data-testid="ring-card-warning">{{ hovered.warning }}</p>
       <button
         class="card-cta"
         :class="{ locked: !!hovered.lock }"
@@ -688,6 +691,12 @@ function onBackdropPointerDown(e: PointerEvent) {
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--food);
+}
+.card-warning {
+  margin: 8px 12px 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--gold);
 }
 .card-badge.locked {
   color: var(--rival);
