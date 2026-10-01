@@ -342,6 +342,10 @@ public sealed record BuildingPrerequisiteResponse(string Type, int Level);
 /// building — check that flag first; it means <em>land</em> terrain plays no
 /// part in this building's placement at all, not "anywhere."
 /// </param>
+/// <param name="AlsoOnCoastalWater">
+/// The building stands on land (<paramref name="AllowedTerrain"/>) <em>and</em>, as an exception, on a coastal-water hex: the palisade's
+/// sea end. Unlike <paramref name="RequiresCoastalWater"/> it does not replace the land terrain.
+/// </param>
 /// <param name="Prerequisites">
 /// Other buildings that must stand before this one may be placed — <em>all</em>
 /// of them, not any one. Empty when there are none. These gate placement, so
@@ -358,6 +362,7 @@ public sealed record BuildingDefinitionResponse(
     ResourceLine StorageCapacity,
     IReadOnlyList<string> AllowedTerrain,
     bool RequiresCoastalWater,
+    bool AlsoOnCoastalWater,
     int RequiredLonghouseLevel,
     int SlotCost,
     bool OccupiesAllSlots,
@@ -377,6 +382,7 @@ public sealed record BuildingDefinitionResponse(
             ResourceLine.From(definition.StorageCapacity),
             [.. definition.AllowedTerrain.Select(t => t.ToWireName()).Order(StringComparer.Ordinal)],
             definition.RequiresCoastalWater,
+            definition.AlsoOnCoastalWater,
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
             definition.OccupiesAllSlots,

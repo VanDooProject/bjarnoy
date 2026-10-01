@@ -78,6 +78,13 @@ public sealed record BuildingDefinition
     public bool RequiresCoastalWater { get; init; }
 
     /// <summary>
+    /// Alongside <see cref="AllowedTerrain"/>: this building may also stand on a coastal-water hex (a sea hex with a land neighbour),
+    /// the terrain under it staying plain <see cref="Terrain.Sea"/>. The Palisade's sea end; any further rule for that hex
+    /// (it must touch exactly one wall, it is never a gate) is <see cref="Palisades.PalisadeRules"/>'s.
+    /// </summary>
+    public bool AlsoOnCoastalWater { get; init; }
+
+    /// <summary>
     /// This building's own hex must be a bog tile (<see cref="World.BogTile"/>) of one of these kinds — <see langword="null"/>
     /// (the default) means no such requirement. Bog-ore works and Clay Brickworks stand on plain moss
     /// (<see cref="World.BogTileKind.Bog"/>: not a shore, mouth, creek or lake), the Hammerschmiede on a creek
@@ -186,7 +193,7 @@ public sealed record BuildingDefinition
         }
         else
         {
-            terrainOk = AllowsTerrain(terrain);
+            terrainOk = AllowsTerrain(terrain) || (AlsoOnCoastalWater && isCoastalWater && terrain == Terrain.Sea);
         }
 
         if (terrainOk && RequiresBogKind is { } kinds)

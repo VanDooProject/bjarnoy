@@ -1035,6 +1035,12 @@ public sealed record Settlement
     /// when it is not bog. Only the buildings with a <see cref="BuildingDefinition.RequiresBogKind"/> (bog-ore works, Clay
     /// Brickworks, Hammerschmiede) or <see cref="BuildingDefinition.LakeShoreKinds"/> (the Fishing Hut) care.
     /// </param>
+    /// <param name="palisades">
+    /// The wall hexes already standing around <paramref name="coord"/> in the world (any settlement's, a standing foundation included) and the
+    /// terrain lookup for their neighbours. Only a <see cref="BuildingType.Palisade"/> or <see cref="BuildingType.PalisadeGate"/> cares: the
+    /// placement rules (<see cref="Palisades.PalisadeRules.CanPlace"/>) read it, together with this settlement's own walls and queued wall
+    /// orders. <see langword="null"/> means no other wall is known.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -1051,7 +1057,8 @@ public sealed record Settlement
         SoilType? islandSoil = null,
         World.IGiantIndex? giants = null,
         World.ICampIndex? camps = null,
-        World.BogTileKind? bogKindAt = null)
+        World.BogTileKind? bogKindAt = null,
+        Palisades.PalisadeLayout? palisades = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -1127,6 +1134,17 @@ public sealed record Settlement
             if (definition.ExcludedRiverVariants?.Contains(riverVariantAt) == true)
             {
                 return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+            }
+        }
+
+        // A new wall hex must keep every wall hex drawable: no branch, a gate only on a straight, no river, the sea end on exactly
+        // one land wall (Palisades.PalisadeRules). Raising a standing wall hex a level is never refused for this.
+        if (type is BuildingType.Palisade or BuildingType.PalisadeGate && baseLevel == 0)
+        {
+            var wallRefusal = PalisadeRefusalFor(type, coord, terrain, riverShapeAt is not null, palisades);
+            if (wallRefusal is not null)
+            {
+                return BuildDecision.Rejected(wallRefusal.Value);
             }
         }
 
@@ -1282,6 +1300,45 @@ public sealed record Settlement
             StartedAt = null,
             CompletesAt = null,
         });
+    }
+
+    /// <summary>
+    /// The placement rule of a new palisade or gate hex against every wall known: the world's (<paramref name="layout"/>) and this
+    /// settlement's own standing, foundation and queued ones.
+    /// </summary>
+    private BuildRejection? PalisadeRefusalFor(
+        BuildingType type, HexCoord coord, Terrain terrain, bool onRiver, Palisades.PalisadeLayout? layout)
+    {
+        var walls = layout is null ? [] : new HashSet<HexCoord>(layout.Walls);
+        var gates = layout is null ? [] : new HashSet<HexCoord>(layout.Gates);
+        foreach (var (hex, hexType) in Buildings.Select(b => (b.Coord, b.Type)).Concat(Queue.Select(o => (o.Coord, o.Type))))
+        {
+            if (hexType is BuildingType.Palisade or BuildingType.PalisadeGate)
+            {
+                walls.Add(hex);
+                if (hexType == BuildingType.PalisadeGate)
+                {
+                    gates.Add(hex);
+                }
+            }
+        }
+
+        walls.Remove(coord);
+        gates.Remove(coord);
+
+        var known = layout?.TerrainAt;
+        var context = new Palisades.PalisadePlacementContext(
+            hex => hex == coord ? terrain : known?.Invoke(hex) ?? Terrain.Grass,
+            hex => onRiver && hex == coord);
+
+        return Palisades.PalisadeRules.CanPlace(coord, new Palisades.WallSet(walls, gates), context, type == BuildingType.PalisadeGate) switch
+        {
+            null => null,
+            Palisades.PalisadeRefusal.Branch => BuildRejection.PalisadeWouldBranch,
+            Palisades.PalisadeRefusal.GateNotStraight => BuildRejection.GateNotOnStraight,
+            Palisades.PalisadeRefusal.Occupied => BuildRejection.HexOccupied,
+            _ => BuildRejection.TerrainNotAllowed,
+        };
     }
 
     /// <summary>
@@ -1542,7 +1599,8 @@ public sealed record Settlement
         IReadOnlyList<UnitStack>? guestStacks = null,
         Func<HexCoord, Terrain>? terrainAt = null,
         World.IGiantIndex? giants = null,
-        World.BogTileKind? bogKindAt = null)
+        World.BogTileKind? bogKindAt = null,
+        Palisades.PalisadeLayout? palisades = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))

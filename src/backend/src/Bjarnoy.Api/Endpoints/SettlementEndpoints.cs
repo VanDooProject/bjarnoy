@@ -794,6 +794,10 @@ public static class SettlementEndpoints
             "Raise your storage houses before building another: 1 at level 10, then 2 at 15, 3 at 20, 4 at 25.",
         BuildRejection.ShrineGodAlreadyOnIsland => "That god already has a shrine on this island.",
         BuildRejection.SettlementAlreadyHasShrine => "This settlement already has a shrine.",
+        BuildRejection.PalisadeWouldBranch =>
+            "A wall never branches: that hex would leave a wall hex with three or more wall neighbours.",
+        BuildRejection.GateNotOnStraight =>
+            "A gate only stands between two opposite wall hexes, so the wall stays straight through it.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",

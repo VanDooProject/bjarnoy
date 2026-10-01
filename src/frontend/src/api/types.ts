@@ -1138,6 +1138,8 @@ export interface BuildingDefinitionResponse {
   allowedTerrain: string[];
   /** Placed on shallow (coastal) water instead of any land terrain — see BuildingDefinition.RequiresCoastalWater. */
   requiresCoastalWater: boolean;
+  /** Land terrain AND (as an exception) coastal water: the palisade's sea end. */
+  alsoOnCoastalWater?: boolean;
   requiredLonghouseLevel: number;
   /** Construction slots one order for this building occupies while building — ignored when `occupiesAllSlots` is set. */
   slotCost: number;

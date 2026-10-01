@@ -21,6 +21,7 @@ public class EconomyDesignTests
         (BuildingType.Farm, 4), (BuildingType.PumpkinFarm, 4),
         (BuildingType.Barracks, 5),
         (BuildingType.TownSquare, 6), (BuildingType.BogOreWorks, 6),
+        (BuildingType.Palisade, 7), (BuildingType.PalisadeGate, 7),
         (BuildingType.Dockyard, 8),
         (BuildingType.ArcheryRange, 9),
         (BuildingType.CartWorkshop, 10),
@@ -186,6 +187,8 @@ public class EconomyDesignTests
     [InlineData(BuildingType.ShrineOfFreyja, 5)]
     [InlineData(BuildingType.ShrineOfUllr, 5)]
     [InlineData(BuildingType.ShrineOfNjord, 5)]
+    [InlineData(BuildingType.Palisade, 3)]
+    [InlineData(BuildingType.PalisadeGate, 3)]
     public void Each_building_has_its_own_max_level_and_no_definition_above_it(BuildingType type, int max)
     {
         Assert.Equal(max, BuildingCatalogue.MaxLevelFor(type));

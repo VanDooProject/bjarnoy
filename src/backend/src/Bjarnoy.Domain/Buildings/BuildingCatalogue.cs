@@ -36,7 +36,7 @@ public static class BuildingCatalogue
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and
     /// Storage House 25 (the bog-ore works too); military/civic buildings and the mills (the Hammerschmiede too) 20; Tower and
-    /// Great Storehouse 10; shrines 5. Unknown/removed types return 0.
+    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3. Unknown/removed types return 0.
     /// </summary>
     public static int MaxLevelFor(BuildingType type) => type switch
     {
@@ -52,6 +52,7 @@ public static class BuildingCatalogue
         BuildingType.ShrineOfThor or BuildingType.ShrineOfFreyja
             or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord
             or BuildingType.OdinStatue => 5,
+        BuildingType.Palisade or BuildingType.PalisadeGate => 3,
         _ => 0,
     };
 
@@ -114,6 +115,8 @@ public static class BuildingCatalogue
             [BuildingType.Barracks] = 5,
             [BuildingType.BogOreWorks] = 6,
             [BuildingType.TownSquare] = 6,
+            [BuildingType.Palisade] = 7,
+            [BuildingType.PalisadeGate] = 7,
             [BuildingType.Dockyard] = 8,
             [BuildingType.ArcheryRange] = 9,
             [BuildingType.CartWorkshop] = 10,
@@ -212,6 +215,8 @@ public static class BuildingCatalogue
             [BuildingType.Farm] = [new(BuildingType.ReindeerHerder, 3)],
             [BuildingType.PumpkinFarm] = [new(BuildingType.ReindeerHerder, 3)],
             [BuildingType.Barracks] = [new(BuildingType.Tower, 3)],
+            [BuildingType.Palisade] = [new(BuildingType.Tower, 5)],
+            [BuildingType.PalisadeGate] = [new(BuildingType.Tower, 5)],
             [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 5)],
             [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 5)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
@@ -284,6 +289,7 @@ public static class BuildingCatalogue
             BuildingType.ShrineOfNjord => Shrine(type, level),
             BuildingType.OdinStatue => Shrine(type, level),
             BuildingType.GreatStorehouse => GreatStorehouse(level),
+            BuildingType.Palisade or BuildingType.PalisadeGate => PalisadeHex(type, level),
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
             BuildingType.Barracks => Barracks(level),
@@ -775,6 +781,23 @@ public static class BuildingCatalogue
         BuildDuration = Duration(12, level),
         AllowedTerrain = type == BuildingType.ShrineOfNjord ? new HashSet<Terrain>() : Grass,
         RequiresCoastalWater = type == BuildingType.ShrineOfNjord,
+    };
+
+    /// <summary>
+    /// One hex of the wall (<c>docs/design/economy.md</c> section 5), the same definition for the plain palisade and the gate:
+    /// 40 wood and 10 stone at level 1, 2 minutes, then the standard growth (cost x1.30, time x1.33 per level), three levels. It stands
+    /// on grass, forest or sand, or as the wall's sea end on a coastal-water hex (<see cref="BuildingDefinition.AlsoOnCoastalWater"/>;
+    /// the gate is refused there by <see cref="Palisades.PalisadeRules"/>). Unlocks at LH 7 behind a level-5 Tower; no production,
+    /// storage or claim of its own.
+    /// </summary>
+    private static BuildingDefinition PalisadeHex(BuildingType type, int level) => new()
+    {
+        Type = type,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 40, Stone: 10, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(2, level),
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
+        AlsoOnCoastalWater = true,
     };
 
     /// <summary>
