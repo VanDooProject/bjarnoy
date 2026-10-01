@@ -24,22 +24,16 @@ namespace Bjarnoy.AppHost.Tests;
 /// settlement through the real UI produces a row a second, independent HTTP
 /// client can read back from the database.
 /// </remarks>
-public class FoundingSettlementPersistenceTests
+public class FoundingSettlementPersistenceTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task FoundingASettlementThroughTheRealFrontendPersistsToTheDatabase()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        // Deliberately keeps the full-size default world, so the suite still covers the real radius-4000 world end to end.
-        var appHost = await TestAppHost.CreateAsync(cancellationToken, worldRadius: null);
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");
@@ -63,7 +57,7 @@ public class FoundingSettlementPersistenceTests
         // tests share this same first step.
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
 
-        // This test's Postgres is a fresh container of its own, so exactly
+        // The shared Postgres is restored to its freshly seeded snapshot before this test, so exactly
         // one world exists at this point — bootstrapLiveWorld() created it,
         // since there was nothing for it to join. No status filter: a
         // freshly created world's WorldStatus is "active" (WorldEntity's

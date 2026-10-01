@@ -15,21 +15,16 @@ namespace Bjarnoy.AppHost.Tests;
 /// them into this link) — a dev clicking it should land signed in as Admin
 /// with no credentials to discover, copy, or type by hand.
 /// </summary>
-public class AdminBootstrapLoginTests
+public class AdminBootstrapLoginTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task ClickingTheDashboardLinkLogsInAsAdmin()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await TestAppHost.CreateAsync(cancellationToken);
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         // frontend.WithUrls's callback runs once the frontend's endpoints are
         // allocated, which isn't guaranteed to have happened the instant the

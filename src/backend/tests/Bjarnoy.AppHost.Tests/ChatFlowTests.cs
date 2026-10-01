@@ -23,7 +23,7 @@ namespace Bjarnoy.AppHost.Tests;
 /// which the Vitest component tests or the API's own integration tests can
 /// see, since both stub the other side out.
 /// </summary>
-public class ChatFlowTests
+public class ChatFlowTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task TwoPlayersCanMessageAndReportThroughTheRealUiAndAnAdminCanResolveIt()
@@ -33,14 +33,9 @@ public class ChatFlowTests
         // 2 minutes for, on top of the message/report/resolve steps.
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(8)).Token;
 
-        var appHost = await TestAppHost.CreateAsync(cancellationToken);
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");
