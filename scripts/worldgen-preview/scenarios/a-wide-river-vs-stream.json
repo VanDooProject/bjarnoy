@@ -1,0 +1,12 @@
+{
+  "name": "a-wide-river-vs-stream",
+  "title": "a wide river blocks (route A walks upstream to where it starts as a stream), a stream is crossed at +8 (route B goes straight over)",
+  "seed": 11,
+  "radius": 1000,
+  "window": { "q": -161, "r": 9, "size": 44 },
+  "px": 22,
+  "routes": [
+    { "from": [-160, 1], "to": [-167, 8], "army": "enemy" },
+    { "from": [-152, 16], "to": [-158, 16], "army": "enemy" }
+  ]
+}

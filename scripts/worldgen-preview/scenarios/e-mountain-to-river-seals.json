@@ -1,0 +1,49 @@
+{
+ "name": "e-mountain-to-river-seals",
+ "title": "a five-hex wall from a mountain to a wide river seals the land behind it (888 hexes): no route in",
+ "seed": 11,
+ "radius": 1000,
+ "window": {
+  "q": -36,
+  "r": -332,
+  "size": 24
+ },
+ "px": 36,
+ "walls": [
+  [
+   -36,
+   -333
+  ],
+  [
+   -35,
+   -333
+  ],
+  [
+   -35,
+   -332
+  ],
+  [
+   -34,
+   -332
+  ],
+  [
+   -33,
+   -332
+  ]
+ ],
+ "routes": [
+  {
+   "from": [
+    -36,
+    -332
+   ],
+   "to": [
+    -34,
+    -333
+   ],
+   "army": "enemy"
+  }
+ ],
+ "flood": 0,
+ "labels": true
+}

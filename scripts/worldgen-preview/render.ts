@@ -7,7 +7,8 @@ import { DEFAULT_GENERATION, type WorldGenerationConstants } from '../../src/fro
 import { drawText, GLYPH_HEIGHT, textWidth } from './font';
 import { drawMarker } from './marks';
 import {
-  legendFor,
+  legendOf,
+  type Layer,
   OUTSIDE_WORLD_TINT,
   RADIUS_OUTLINE,
   resolveLayers,
@@ -35,6 +36,8 @@ export interface PreviewOptions {
   hexPixels?: number;
   maxMapWidth?: number;
   layers: string[];
+  /** Layer objects to draw instead of resolving `layers` by id (a layer built per run, like the pathing preview's). */
+  layerObjects?: Layer[];
   legend: boolean;
   stats: boolean;
   /** Overrides of the generation constants (island knobs, thresholds). */
@@ -66,6 +69,29 @@ function hexAt(q: number, r: number): { q: number; r: number; fq: number; fr: nu
   return { q: rx, r: rz, fq: q, fr: r };
 }
 
+/** A thick line segment: every pixel within `width / 2` of it. */
+function drawLine(rgb: Uint8Array, w: number, h: number, x0: number, y0: number, x1: number, y1: number, width: number, colour: Rgb): void {
+  const half = width / 2;
+  const minX = Math.max(0, Math.floor(Math.min(x0, x1) - half - 1));
+  const maxX = Math.min(w - 1, Math.ceil(Math.max(x0, x1) + half + 1));
+  const minY = Math.max(0, Math.floor(Math.min(y0, y1) - half - 1));
+  const maxY = Math.min(h - 1, Math.ceil(Math.max(y0, y1) + half + 1));
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len2 = dx * dx + dy * dy;
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - x0) * dx + (y - y0) * dy) / len2));
+      if (Math.hypot(x - (x0 + t * dx), y - (y0 + t * dy)) <= half) {
+        const o = (y * w + x) * 3;
+        rgb[o] = colour[0];
+        rgb[o + 1] = colour[1];
+        rgb[o + 2] = colour[2];
+      }
+    }
+  }
+}
+
 function fillRect(rgb: Uint8Array, width: number, x: number, y: number, w: number, h: number, colour: Rgb): void {
   for (let yy = y; yy < y + h; yy++) {
     for (let xx = x; xx < x + w; xx++) {
@@ -80,7 +106,7 @@ function fillRect(rgb: Uint8Array, width: number, x: number, y: number, w: numbe
 export function renderPreview(options: PreviewOptions): PreviewResult {
   const generation: WorldGenerationConstants = { ...DEFAULT_GENERATION, ...options.generation, worldRadius: options.radius };
   const world = { seed: options.seed, generation };
-  const layers = resolveLayers(options.layers);
+  const layers = options.layerObjects ?? resolveLayers(options.layers);
 
   const win = options.window ?? { q: 0, r: 0, size: 2 * options.radius + 1 };
   const maxMapWidth = options.maxMapWidth ?? 1800;
@@ -149,6 +175,15 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
       y: (SQRT3 * (r + q / 2) - cy) * s + mapH / 2 - 0.5,
     }),
     marker: (x, y, shape, radius, colour) => drawMarker(map, mapW, mapH, x, y, shape, radius, colour),
+    line: (x0, y0, x1, y1, width, colour) => drawLine(map, mapW, mapH, x0, y0, x1, y1, width, colour),
+    rect: (x, y, w, h, colour) => {
+      const x0 = Math.max(0, Math.round(x));
+      const y0 = Math.max(0, Math.round(y));
+      const x1 = Math.min(mapW, Math.round(x + w));
+      const y1 = Math.min(mapH, Math.round(y + h));
+      if (x1 > x0 && y1 > y0) fillRect(map, mapW, x0, y0, x1 - x0, y1 - y0, colour);
+    },
+    text: (x, y, text, colour, scale = 1) => drawText(map, mapW, mapH, Math.round(x), Math.round(y), text, colour, scale),
   };
   for (const layer of layers) layer.overlay?.(canvas, context);
   const sampleMs = performance.now() - sampleStart;
@@ -187,7 +222,7 @@ export function renderPreview(options: PreviewOptions): PreviewResult {
   const lineHeight = GLYPH_HEIGHT * TEXT_SCALE + 6;
   const swatch = GLYPH_HEIGHT * TEXT_SCALE + 2;
 
-  const legendEntries = options.legend ? legendFor(options.layers) : [];
+  const legendEntries = options.legend ? legendOf(layers) : [];
   // Lay the legend out first to know how tall the strip is.
   const legendPlacements: { x: number; y: number; label: string; colour: Rgb; shape?: MarkerShape }[] = [];
   let lx = 10;
