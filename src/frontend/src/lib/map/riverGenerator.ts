@@ -720,6 +720,7 @@ class Drainage {
     isLand: (c: AxialCoord) => boolean,
     seed: number,
     blocked: HexSet | null = null,
+    outletPerBasin = false,
   ) {
     this.tiles = sortedByQR(islandTiles);
     const n = this.tiles.length;
@@ -753,7 +754,7 @@ class Drainage {
         (terrainOf(tile) === 'mountain' ? MOUNTAIN_COST : 0.0);
     }
 
-    const outlets = this.pickOutlets(coastal, seed);
+    const outlets = this.pickOutlets(coastal, seed, outletPerBasin);
     this.outletCount = outlets.length;
     const heap = new Heap();
     for (const o of outlets) {
@@ -811,7 +812,7 @@ class Drainage {
     return { out: best, cost: bestCost };
   }
 
-  private pickOutlets(coastal: boolean[], seed: number): number[] {
+  private pickOutlets(coastal: boolean[], seed: number, outletPerBasin: boolean): number[] {
     const candidates: number[] = [];
     const score: number[] = [];
     for (let i = 0; i < this.tiles.length; i++) {
@@ -859,7 +860,63 @@ class Drainage {
         minDistance[i] = Math.min(minDistance[i]!, hexDistance(this.tiles[candidates[i]!]!, this.tiles[candidates[best]!]!));
       }
     }
+    if (outletPerBasin) this.addBasinOutlets(outlets, candidates, score);
     return outlets;
+  }
+
+  /**
+   * One more outlet for every basin (connected group of interior tiles) that no outlet drains: the best-scored candidate that
+   * receives from it. The outlets above are spread by count, so a basin cut off by a neck of coastal tiles (a peninsula, two
+   * landmasses joined by a strip of beach) can be left without one, and nothing in it can reach the sea — mirrors `AddBasinOutlets`.
+   */
+  private addBasinOutlets(outlets: number[], candidates: number[], score: number[]): void {
+    const n = this.tiles.length;
+    const basin = new Int32Array(n).fill(-1);
+    let basins = 0;
+    for (let i = 0; i < n; i++) {
+      if (!this.interior[i] || basin[i] !== -1) continue;
+      basin[i] = basins;
+      const stack = [i];
+      while (stack.length > 0) {
+        const t = stack.pop()!;
+        for (let d = 0; d < 6; d++) {
+          const m = this.neighbour[t * 6 + d]!;
+          if (m >= 0 && this.interior[m] && basin[m] === -1) {
+            basin[m] = basins;
+            stack.push(m);
+          }
+        }
+      }
+      basins++;
+    }
+
+    const drained = new Array<boolean>(basins).fill(false);
+    const markDrained = (o: number): void => {
+      for (let d = 0; d < 6; d++) {
+        const m = this.neighbour[o * 6 + d]!;
+        if (m >= 0 && this.interior[m]) drained[basin[m]!] = true;
+      }
+    };
+    for (const o of outlets) markDrained(o);
+
+    // The best candidate per basin it receives from (first in tile order on a tie).
+    const best = new Int32Array(basins).fill(-1);
+    for (let c = 0; c < candidates.length; c++) {
+      const o = candidates[c]!;
+      for (let d = 0; d < 6; d++) {
+        const m = this.neighbour[o * 6 + d]!;
+        if (m < 0 || !this.interior[m]) continue;
+        const b = basin[m]!;
+        if (best[b] === -1 || score[c]! > score[best[b]!]!) best[b] = c;
+      }
+    }
+
+    for (let b = 0; b < basins; b++) {
+      if (drained[b] || best[b] === -1) continue;
+      const o = candidates[best[b]!]!;
+      outlets.push(o);
+      markDrained(o);
+    }
   }
 }
 
@@ -1264,7 +1321,8 @@ export function generateRiversWithBogs(
   const widthTrial = (trial: BogPaths) =>
     assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), riverLand, seed, undefined, trial.requireRiver);
   const traceRiver = (exit: AxialCoord, startIn: number, current: BogPaths, blocked: HexSet): AxialCoord[] | null => {
-    const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked);
+    // A spawned river must reach the sea from wherever the bog is: every basin gets an outlet.
+    const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked, true);
     const claims2: (Claim | null)[] = new Array<Claim | null>(d2.tiles.length).fill(null);
     for (let k = 0; k < current.paths.length; k++) commit(d2, current.paths[k]!, current.merged[k]!, claims2);
 

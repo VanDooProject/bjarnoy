@@ -57,6 +57,18 @@ export interface WorldGenerationConstants {
   worldRadius: number;
   islandCellSize: number;
   islandChance: number;
+  /**
+   * Farthest, in hexes, an island's land may be from its centre (warps not counted)
+   * before the island is shrunk; a hex scans as many cell rings as that needs. 0 is the
+   * legacy rule: the reach budget of one ring of cells around the island's own.
+   */
+  islandMaxReach: number;
+  /**
+   * Sea, in hexes, an island keeps between its nominal coast and an outranking
+   * neighbour's (larger class first, then the cell's roll) — or it is not generated.
+   * 0 switches the rule off (legacy worlds).
+   */
+  islandMinGap: number;
   islandMinWidth: number;
   islandMaxWidth: number;
   islandMinSegments: number;
@@ -80,8 +92,10 @@ export interface WorldGenerationConstants {
 /** `WorldGenerationOptions`'s own C# defaults — demo mode's world (no backend to ask). */
 export const DEFAULT_GENERATION: WorldGenerationConstants = {
   worldRadius: 4000,
-  islandCellSize: 260,
+  islandCellSize: 150,
   islandChance: 0.8,
+  islandMaxReach: 305,
+  islandMinGap: 24,
   islandMinWidth: 21,
   islandMaxWidth: 40,
   islandMinSegments: 5,
@@ -95,7 +109,7 @@ export const DEFAULT_GENERATION: WorldGenerationConstants = {
   islandCoastNoise: 1.0,
   islandCoastNoiseScale: 49,
   islandSmallShare: 0.3,
-  islandLargeShare: 0.12,
+  islandLargeShare: 0.07,
   beachThreshold: 0.9,
   mountainThreshold: 0.4,
   mountainRockiness: 0.72,
@@ -104,14 +118,16 @@ export const DEFAULT_GENERATION: WorldGenerationConstants = {
 
 /**
  * A scaled-down archipelago — the backend's `WorldGenerationOptions.Compact(seed, 300)`:
- * the same shape at test/dev scale (islands 5-40 hexes across on a 90-hex cell grid). Used
+ * the same shape at test/dev scale (islands 5-40 hexes across on a 66-hex cell grid). Used
  * by the island lab's preset and by tests that need coast, sea and inland terrain inside a
  * window of a few dozen hexes (a production-size island is ~150 hexes across).
  */
 export const COMPACT_GENERATION: WorldGenerationConstants = {
   ...DEFAULT_GENERATION,
   worldRadius: 300,
-  islandCellSize: 90,
+  islandCellSize: 66,
+  islandMaxReach: 103,
+  islandMinGap: 8,
   islandMinWidth: 8,
   islandMaxWidth: 14,
   islandMinSegments: 3,
@@ -173,7 +189,7 @@ export interface IslandShape {
   /** Farthest any land of the island can be from `(cx, cy)`, warps included. */
   reach: number;
   sizeClass: IslandSizeClass;
-  /** 1 unless the island was shrunk to fit its 3x3 cell block. */
+  /** 1 unless the island was shrunk to fit its reach budget. */
   clamp: number;
   /** Inclusive offset-space box outside which no hex of the island can be land. */
   minCol: number;
@@ -187,9 +203,39 @@ function noiseReachFactor(noise: number): number {
   return 1 + noise * 0.5 * (1 + ISLAND_SHAPE.octave2 + ISLAND_SHAPE.octave3);
 }
 
-/** The farthest an island's land may be from its centre before it is shrunk to fit. */
-export function islandReachBudget(cellSize: number, warp: number): number {
-  return (1.5 - ISLAND_SHAPE.jitter / 2) * cellSize - (warp + ISLAND_SHAPE.warp2);
+/**
+ * The farthest an island's land may be from its centre (warps not counted) before it is
+ * shrunk to fit — mirrors the backend's `IslandShapeConstants.ReachBudget`.
+ * `islandMaxReach` when set, else the legacy budget of one ring of cells.
+ */
+export function islandReachBudget(gen: WorldGenerationConstants): number {
+  if (gen.islandMaxReach > 0) return gen.islandMaxReach;
+  return (1.5 - ISLAND_SHAPE.jitter / 2) * gen.islandCellSize - (gen.islandCoastWarp + ISLAND_SHAPE.warp2);
+}
+
+/**
+ * How many rings of cells around its own a hex scans for islands: the fewest that hold
+ * every island whose land (reach plus both warps) can get to the hex — mirrors the
+ * backend's `IslandShapeConstants.ScanSpan`. 1 (a 3x3 block) for legacy worlds.
+ */
+export function islandScanSpan(gen: WorldGenerationConstants): number {
+  if (gen.islandMaxReach <= 0) return 1;
+  const need = gen.islandMaxReach + (gen.islandCoastWarp + ISLAND_SHAPE.warp2);
+  let span = 1;
+  while ((span + 0.5 - ISLAND_SHAPE.jitter / 2) * gen.islandCellSize < need) span++;
+  return span;
+}
+
+/**
+ * How many rings of cells around its own an island checks for an outranking neighbour
+ * closer than `islandMinGap`: the fewest beyond which no two islands can come that close
+ * — mirrors the backend's `IslandShapeConstants.GapSpan`.
+ */
+export function islandGapSpan(gen: WorldGenerationConstants): number {
+  const reach = 2 * islandReachBudget(gen) + gen.islandMinGap;
+  let span = 1;
+  while ((span + 1 - ISLAND_SHAPE.jitter) * gen.islandCellSize <= reach) span++;
+  return span;
 }
 
 // Per-cell shapes are pure functions of (cell, seed, generation constants), so
@@ -200,7 +246,25 @@ interface ShapeCache {
   params: number[];
   green: Map<number, Map<number, IslandShape | null>>;
   wasted: Map<number, Map<number, IslandShape | null>>;
+  /**
+   * Shapes before the world edge and the min-gap rule; the rule compares neighbours by them,
+   * so whether an island exists never depends on the world radius (only on its own distance
+   * to the edge).
+   */
+  greenCandidates: Map<number, Map<number, Candidate>>;
+  wastedCandidates: Map<number, Map<number, Candidate>>;
+  /** Per cell, the islands of its scan block whose land box overlaps the cell — all a hex in it has to measure. */
+  greenNear: Map<number, Map<number, IslandShape[]>>;
+  wastedNear: Map<number, Map<number, IslandShape[]>>;
 }
+
+/** A cell's island before the world edge and the min-gap rule — the backend's `TerrainSampler.Candidate`. */
+interface Candidate {
+  shape: IslandShape | null;
+  insideWorld: boolean;
+}
+
+const NO_CANDIDATE: Candidate = { shape: null, insideWorld: false };
 const shapeCaches = new WeakMap<WorldGenerationConstants, ShapeCache>();
 
 function shapeParams(gen: WorldGenerationConstants): number[] {
@@ -208,6 +272,8 @@ function shapeParams(gen: WorldGenerationConstants): number[] {
     gen.worldRadius,
     gen.islandCellSize,
     gen.islandChance,
+    gen.islandMaxReach,
+    gen.islandMinGap,
     gen.islandMinWidth,
     gen.islandMaxWidth,
     gen.islandMinSegments,
@@ -236,7 +302,7 @@ function shapeCacheFor(gen: WorldGenerationConstants): ShapeCache {
     }
     if (same) return cache;
   }
-  cache = { params, green: new Map(), wasted: new Map() };
+  cache = { params, green: new Map(), wasted: new Map(), greenCandidates: new Map(), wastedCandidates: new Map(), greenNear: new Map(), wastedNear: new Map() };
   shapeCaches.set(gen, cache);
   return cache;
 }
@@ -250,7 +316,8 @@ function cellKey(cellCol: number, cellRow: number): number {
 // cell grid never overlaps a green island's.
 function cellPresent(cellCol: number, cellRow: number, worldSeed: number, wasted: boolean, gen: WorldGenerationConstants): boolean {
   const seed = wasted ? worldSeed + WASTED_SEED_OFFSET : worldSeed;
-  const chance = wasted ? gen.islandChance * WASTED_ISLAND_CHANCE_FACTOR : gen.islandChance;
+  const factor = gen.islandMaxReach > 0 ? WASTED_ISLAND_CHANCE_FACTOR : LEGACY_WASTED_ISLAND_CHANCE_FACTOR;
+  const chance = wasted ? gen.islandChance * factor : gen.islandChance;
   if (hash2(cellCol, cellRow, seed) > chance) return false;
   return !wasted || hash2(cellCol, cellRow, worldSeed) > gen.islandChance;
 }
@@ -260,10 +327,20 @@ function cellClass(cellCol: number, cellRow: number, seed: number, gen: WorldGen
   return h < gen.islandSmallShare ? 'small' : h > 1 - gen.islandLargeShare ? 'large' : 'medium';
 }
 
+function cellsFor<T>(bySeed: Map<number, Map<number, T>>, worldSeed: number): Map<number, T> {
+  let cells = bySeed.get(worldSeed);
+  if (!cells) {
+    cells = new Map();
+    bySeed.set(worldSeed, cells);
+  }
+  return cells;
+}
+
 /**
  * The island (if any) seeded in grid cell `(cellCol, cellRow)` — mirrors the backend's
  * `TerrainSampler.IslandShapeAt`: `null` when the cell rolls no island, when a large
- * neighbour suppresses it, or when the island could cross the world radius.
+ * neighbour suppresses it, when it would come closer than `islandMinGap` to an
+ * outranking neighbour, or when the island could cross the world radius.
  */
 export function islandShapeAt(
   cellCol: number,
@@ -273,19 +350,127 @@ export function islandShapeAt(
 ): IslandShape | null {
   const gen = world.generation;
   const cache = shapeCacheFor(gen);
-  const seed = wasted ? world.seed + WASTED_SEED_OFFSET : world.seed;
-  const bySeed = wasted ? cache.wasted : cache.green;
-  let cells = bySeed.get(world.seed);
-  if (!cells) {
-    cells = new Map();
-    bySeed.set(world.seed, cells);
-  }
+  const cells = cellsFor(wasted ? cache.wasted : cache.green, world.seed);
   const key = cellKey(cellCol, cellRow);
   const hit = cells.get(key);
   if (hit !== undefined) return hit;
-  const shape = buildCell(cellCol, cellRow, world.seed, seed, wasted, gen);
+  const candidate = candidateAt(cellCol, cellRow, world, wasted, cache);
+  let shape = candidate.insideWorld ? candidate.shape : null;
+  if (shape && gen.islandMinGap > 0) {
+    // Min-gap rule: dropped when an outranking neighbour's candidate comes too close. Compared
+    // against candidates (not final shapes), so the rule needs no recursion and no order.
+    const seed = wasted ? world.seed + WASTED_SEED_OFFSET : world.seed;
+    const span = islandGapSpan(gen);
+    for (let dc = -span; dc <= span && shape; dc++) {
+      for (let dr = -span; dr <= span; dr++) {
+        if (dc === 0 && dr === 0) continue;
+        const other = candidateAt(cellCol + dc, cellRow + dr, world, wasted, cache).shape;
+        if (other && outranks(other, shape, seed) && islandsTooClose(shape, other, gen.islandMinGap)) {
+          shape = null;
+          break;
+        }
+      }
+    }
+    // A wasted island also keeps the min gap from every kept green island: green land always
+    // outranks wasted land, so the wasted one is dropped. (Kept green shapes, not candidates: a
+    // green island that is not generated leaves its sea free.)
+    for (let dc = -span; wasted && dc <= span && shape; dc++) {
+      for (let dr = -span; dr <= span; dr++) {
+        const green = islandShapeAt(cellCol + dc, cellRow + dr, world, false);
+        if (green && islandsTooClose(shape, green, gen.islandMinGap)) {
+          shape = null;
+          break;
+        }
+      }
+    }
+  }
   cells.set(key, shape);
   return shape;
+}
+
+function candidateAt(cellCol: number, cellRow: number, world: WorldSeed, wasted: boolean, cache: ShapeCache): Candidate {
+  const cells = cellsFor(wasted ? cache.wastedCandidates : cache.greenCandidates, world.seed);
+  const key = cellKey(cellCol, cellRow);
+  const hit = cells.get(key);
+  if (hit !== undefined) return hit;
+  const seed = wasted ? world.seed + WASTED_SEED_OFFSET : world.seed;
+  const candidate = buildCell(cellCol, cellRow, world.seed, seed, wasted, world.generation);
+  cells.set(key, candidate);
+  return candidate;
+}
+
+function classRank(c: IslandSizeClass): number {
+  return c === 'large' ? 2 : c === 'medium' ? 1 : 0;
+}
+
+/** Whether `a` keeps its place over `b` under the min-gap rule: the larger class, then the higher roll. */
+function outranks(a: IslandShape, b: IslandShape, seed: number): boolean {
+  const ra = classRank(a.sizeClass);
+  const rb = classRank(b.sizeClass);
+  if (ra !== rb) return ra > rb;
+  return hash2(a.cellCol, a.cellRow, seed + 307) > hash2(b.cellCol, b.cellRow, seed + 307);
+}
+
+function pointSegmentDistance(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const ex = px - (ax + t * dx);
+  const ey = py - (ay + t * dy);
+  return Math.sqrt(ex * ex + ey * ey);
+}
+
+function segmentDistance(
+  a0x: number, a0y: number, a1x: number, a1y: number,
+  b0x: number, b0y: number, b1x: number, b1y: number,
+): number {
+  const o1 = (a1x - a0x) * (b0y - a0y) - (a1y - a0y) * (b0x - a0x);
+  const o2 = (a1x - a0x) * (b1y - a0y) - (a1y - a0y) * (b1x - a0x);
+  const o3 = (b1x - b0x) * (a0y - b0y) - (b1y - b0y) * (a0x - b0x);
+  const o4 = (b1x - b0x) * (a1y - b0y) - (b1y - b0y) * (a1x - b0x);
+  if (((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) && ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))) return 0;
+  return Math.min(
+    Math.min(pointSegmentDistance(b0x, b0y, a0x, a0y, a1x, a1y), pointSegmentDistance(b1x, b1y, a0x, a0y, a1x, a1y)),
+    Math.min(pointSegmentDistance(a0x, a0y, b0x, b0y, b1x, b1y), pointSegmentDistance(a1x, a1y, b0x, b0y, b1x, b1y)),
+  );
+}
+
+/**
+ * An island's parts as capsules in absolute offset space, `[x0, y0, x1, y1, halfWidth]` five
+ * numbers each: every spine segment (at the wider of its two vertex widths), then every islet.
+ */
+function islandParts(s: IslandShape): number[] {
+  const out: number[] = [];
+  const n = s.sx.length;
+  if (n === 1) out.push(s.cx + s.sx[0], s.cy + s.sy[0], s.cx + s.sx[0], s.cy + s.sy[0], s.w[0]);
+  for (let k = 0; k < n - 1; k++) {
+    out.push(s.cx + s.sx[k], s.cy + s.sy[k], s.cx + s.sx[k + 1], s.cy + s.sy[k + 1], Math.max(s.w[k], s.w[k + 1]));
+  }
+  for (let i = 0; i < s.ix.length; i++) out.push(s.cx + s.ix[i], s.cy + s.iy[i], s.cx + s.ix[i], s.cy + s.iy[i], s.ir[i]);
+  return out;
+}
+
+/**
+ * Whether two islands' nominal coasts (spine capsules at their half-widths, islets at their
+ * radii; before the shoreline noise) come closer than `gap` hexes — mirrors the backend's
+ * `TerrainSampler.IslandsTooClose`.
+ */
+export function islandsTooClose(a: IslandShape, b: IslandShape, gap: number): boolean {
+  const cx = a.cx - b.cx;
+  const cy = a.cy - b.cy;
+  const far = a.reach + b.reach + gap;
+  if (cx * cx + cy * cy > far * far) return false;
+  const pa = islandParts(a);
+  const pb = islandParts(b);
+  for (let i = 0; i < pa.length; i += 5) {
+    for (let j = 0; j < pb.length; j += 5) {
+      const d = segmentDistance(pa[i], pa[i + 1], pa[i + 2], pa[i + 3], pb[j], pb[j + 1], pb[j + 2], pb[j + 3]);
+      if (d < pa[i + 4] + pb[j + 4] + gap) return true;
+    }
+  }
+  return false;
 }
 
 function buildCell(
@@ -295,8 +480,8 @@ function buildCell(
   seed: number,
   wasted: boolean,
   gen: WorldGenerationConstants,
-): IslandShape | null {
-  if (!cellPresent(cellCol, cellRow, worldSeed, wasted, gen)) return null;
+): Candidate {
+  if (!cellPresent(cellCol, cellRow, worldSeed, wasted, gen)) return NO_CANDIDATE;
   let cls = cellClass(cellCol, cellRow, seed, gen);
 
   // A large island clears its neighbours; of two neighbouring large ones the higher roll
@@ -312,7 +497,7 @@ function buildCell(
       else if (hash2(nc, nr, seed + 307) > hash2(cellCol, cellRow, seed + 307)) cls = 'medium';
     }
   }
-  return suppressed ? null : buildShape(cellCol, cellRow, seed, gen, cls);
+  return suppressed ? NO_CANDIDATE : buildShape(cellCol, cellRow, seed, gen, cls);
 }
 
 function buildShape(
@@ -321,7 +506,7 @@ function buildShape(
   seed: number,
   gen: WorldGenerationConstants,
   cls: IslandSizeClass,
-): IslandShape | null {
+): Candidate {
   const K = ISLAND_SHAPE;
   const cs = gen.islandCellSize;
   const jit = cs * K.jitter;
@@ -397,12 +582,12 @@ function buildShape(
     ir.push(w[k] * (K.isletRadiusMin + (K.isletRadiusMax - K.isletRadiusMin) * hash2(cc, cr, seed + 350 + i)));
   }
 
-  // Reach clamp: the farthest land can get from the centre must fit the 3x3 cell scan.
+  // Reach clamp: the farthest land can get from the centre must fit the budget (and so the cell scan).
   const nm = noiseReachFactor(gen.islandCoastNoise);
   let reach = 0;
   for (let k = 0; k < n; k++) reach = Math.max(reach, Math.sqrt(px[k] * px[k] + py[k] * py[k]) + w[k] * nm);
   for (let i = 0; i < ni; i++) reach = Math.max(reach, Math.sqrt(ix[i] * ix[i] + iy[i] * iy[i]) + ir[i] * nm);
-  const budget = islandReachBudget(cs, gen.islandCoastWarp);
+  const budget = islandReachBudget(gen);
   let factor = 1;
   if (reach > budget) {
     factor = budget / reach;
@@ -419,14 +604,15 @@ function buildShape(
     reach = budget;
   }
 
-  // World edge: drop the island if any of it could cross the world radius.
+  // World edge: the island is dropped if any of it could cross the world radius (it stays a
+  // candidate, so it still keeps its neighbours at the min gap).
   const warpSum = gen.islandCoastWarp + K.warp2;
   const col = Math.floor(cx + 0.5);
   const row = Math.floor(cy + 0.5);
   const q = col;
   const r = row - (col - (col & 1)) / 2;
   const d = (Math.abs(q) + Math.abs(r) + Math.abs(-q - r)) / 2;
-  if (d + 1.42 * (reach + warpSum) > gen.worldRadius) return null;
+  const insideWorld = d + 1.42 * (reach + warpSum) <= gen.worldRadius;
 
   // Tight box of every place land can be, for scanning (see the backend's IslandShape).
   let minX = Number.MAX_VALUE;
@@ -448,7 +634,7 @@ function buildShape(
     maxY = Math.max(maxY, cy + iy[i] + e);
   }
 
-  return {
+  const shape: IslandShape = {
     cellCol: cc,
     cellRow: cr,
     cx,
@@ -467,6 +653,7 @@ function buildShape(
     minRow: Math.floor(minY - warpSum),
     maxRow: Math.ceil(maxY + warpSum),
   };
+  return { shape, insideWorld };
 }
 
 /**
@@ -520,9 +707,42 @@ function shapeDistance(is: IslandShape, qx: number, qy: number): number {
  * distance / interpolated half-width (islets: distance / radius), plus three
  * octaves of shoreline noise.
  */
+/**
+ * The islands a hex in cell `(baseCol, baseRow)` can be land of: those of the cell's scan block
+ * (`islandScanSpan` rings) whose land box overlaps the cell, in scan order (column, then row).
+ * An island whose box misses the hex cannot make it land, so measuring only these gives the
+ * same answer as the full scan — mirrors the backend's `TerrainSampler.IslandsNear`.
+ */
+function islandsNear(baseCol: number, baseRow: number, world: WorldSeed, wasted: boolean): IslandShape[] {
+  const gen = world.generation;
+  const cache = shapeCacheFor(gen);
+  const cells = cellsFor(wasted ? cache.wastedNear : cache.greenNear, world.seed);
+  const key = cellKey(baseCol, baseRow);
+  const hit = cells.get(key);
+  if (hit !== undefined) return hit;
+  const cs = gen.islandCellSize;
+  const minCol = baseCol * cs;
+  const maxCol = minCol + cs - 1;
+  const minRow = baseRow * cs;
+  const maxRow = minRow + cs - 1;
+  const span = islandScanSpan(gen);
+  const near: IslandShape[] = [];
+  for (let dc = -span; dc <= span; dc++) {
+    for (let dr = -span; dr <= span; dr++) {
+      const is = islandShapeAt(baseCol + dc, baseRow + dr, world, wasted);
+      if (is && is.maxCol >= minCol && is.minCol <= maxCol && is.maxRow >= minRow && is.minRow <= maxRow) near.push(is);
+    }
+  }
+  cells.set(key, near);
+  return near;
+}
+
 function closestIsland(col: number, row: number, world: WorldSeed, wasted: boolean): { t: number } | null {
   const gen = world.generation;
   const seed = wasted ? world.seed + WASTED_SEED_OFFSET : world.seed;
+  const cs = gen.islandCellSize;
+  const near = islandsNear(Math.floor(col / cs), Math.floor(row / cs), world, wasted);
+  if (near.length === 0) return null;
 
   // Two-octave domain warp, applied once per hex before any distance is measured, so
   // coastlines wobble (fjords, bays) instead of tracing arcs.
@@ -535,24 +755,17 @@ function closestIsland(col: number, row: number, world: WorldSeed, wasted: boole
     (valueNoise(col, row, seed + 71, gen.islandCoastWarpScale) - 0.5) * 2 * gen.islandCoastWarp +
     (valueNoise(col, row, seed + 89, ISLAND_SHAPE.warpScale2) - 0.5) * 2 * ISLAND_SHAPE.warp2;
 
-  const cs = gen.islandCellSize;
-  const baseCol = Math.floor(col / cs);
-  const baseRow = Math.floor(row / cs);
   let best: { t: number } | null = null;
-  for (let dc = -1; dc <= 1; dc++) {
-    for (let dr = -1; dr <= 1; dr++) {
-      const is = islandShapeAt(baseCol + dc, baseRow + dr, world, wasted);
-      if (!is) continue;
-      const qx = px - is.cx;
-      const qy = py - is.cy;
-      if (qx * qx + qy * qy > is.reach * is.reach) continue;
-      let d = shapeDistance(is, qx, qy);
-      const n1 = valueNoise(col, row, seed + 97, gen.islandCoastNoiseScale) - 0.5;
-      const n2 = valueNoise(col, row, seed + 101, gen.islandCoastNoiseScale / 2.5) - 0.5;
-      const n3 = valueNoise(col, row, seed + 103, gen.islandCoastNoiseScale / 6.25) - 0.5;
-      d += gen.islandCoastNoise * (n1 + ISLAND_SHAPE.octave2 * n2 + ISLAND_SHAPE.octave3 * n3);
-      if (d <= 1 && (!best || d < best.t)) best = { t: d };
-    }
+  for (const is of near) {
+    const qx = px - is.cx;
+    const qy = py - is.cy;
+    if (qx * qx + qy * qy > is.reach * is.reach) continue;
+    let d = shapeDistance(is, qx, qy);
+    const n1 = valueNoise(col, row, seed + 97, gen.islandCoastNoiseScale) - 0.5;
+    const n2 = valueNoise(col, row, seed + 101, gen.islandCoastNoiseScale / 2.5) - 0.5;
+    const n3 = valueNoise(col, row, seed + 103, gen.islandCoastNoiseScale / 6.25) - 0.5;
+    d += gen.islandCoastNoise * (n1 + ISLAND_SHAPE.octave2 * n2 + ISLAND_SHAPE.octave3 * n3);
+    if (d <= 1 && (!best || d < best.t)) best = { t: d };
   }
   return best;
 }
@@ -564,10 +777,20 @@ function closestIsland(col: number, row: number, world: WorldSeed, wasted: boole
 export const WASTED_SEED_OFFSET = 1_000_003;
 
 /**
- * Fraction of `islandChance` a wasted island cell rolls against — mirrors
- * the backend's `TerrainSampler.WastedIslandChanceFactor` exactly.
+ * Fraction of `islandChance` a wasted island cell rolls against in a world on
+ * the density rules (`islandMaxReach` above 0) — mirrors the backend's
+ * `TerrainSampler.WastedIslandChanceFactor` exactly. The min-gap rule drops every
+ * wasted island within the gap of a green one, so the roll is higher than the
+ * legacy factor to keep about as many wasted islands as before.
  */
-export const WASTED_ISLAND_CHANCE_FACTOR = 0.1;
+export const WASTED_ISLAND_CHANCE_FACTOR = 0.5;
+
+/**
+ * The wasted-island factor of a legacy world (`islandMaxReach` 0, as the
+ * migration gives every world created before the density rules), kept so its
+ * wasted terrain stays byte-identical — mirrors `TerrainSampler.LegacyWastedIslandChanceFactor`.
+ */
+export const LEGACY_WASTED_ISLAND_CHANCE_FACTOR = 0.1;
 
 /**
  * Wasted islands are extra islands generated from the same seed on a

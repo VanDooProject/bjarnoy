@@ -1109,7 +1109,8 @@ internal sealed class BogGenerator
         int radius,
         int lakeMax,
         int minFromSpring,
-        Func<BogPaths, List<RiverTile>> widthTrial)
+        Func<BogPaths, List<RiverTile>> widthTrial,
+        bool fitShore = false)
     {
         var path = bp.Paths[p];
         var a = path[i];
@@ -1150,7 +1151,7 @@ internal sealed class BogGenerator
 
         var inP = new HashSet<HexCoord>(path);
         bool IsOther(HexCoord t) => count.GetValueOrDefault(t) - (inP.Contains(t) ? 1 : 0) > 0;
-        var grown = GrowLake(a, disc, radius, lakeMax, IsOther);
+        var grown = GrowLake(a, disc, radius, lakeMax, IsOther, fitShore);
         if (grown is null)
         {
             return null;
@@ -1273,11 +1274,18 @@ internal sealed class BogGenerator
         HashSet<HexCoord> disc,
         int radius,
         int lakeMax,
-        Func<HexCoord, bool> isOther)
+        Func<HexCoord, bool> isOther,
+        bool fitShore = false)
     {
         var target = 3 + (int)Math.Floor(ValueNoise.Hash2(a.Q, a.R, _seed + 71) * (lakeMax - 3));
         bool NearOther(HexCoord t) => isOther(t) || Nb6(t).Any(isOther);
-        bool GrowOk(HexCoord t) => HexCoord.Distance(t, a) <= radius - 3 && disc.Contains(t) && Allowed(t) && !NearOther(t);
+
+        // With fitShore (the guarantee) the lake grows only onto tiles whose every neighbour could be its shore (the checks below
+        // short of the lake's own outline). A lake that the plain growth would finish anyway is grown the same; one that would have
+        // grown against a mountain or the coast and been thrown away grows the other way instead.
+        bool ShoreFit(HexCoord n) => disc.Contains(n) && Allowed(n) && MountainFree(n) && !NearOther(n);
+        bool GrowOk(HexCoord t) => HexCoord.Distance(t, a) <= radius - 3 && disc.Contains(t) && Allowed(t) && !NearOther(t)
+            && (!fitShore || Nb6(t).All(ShoreFit));
 
         if (!GrowOk(a))
         {
@@ -1448,7 +1456,14 @@ internal sealed class BogGenerator
             {
                 if (!routes.ContainsKey(n))
                 {
-                    routes[n] = BuildRoute(n, w, fromState, dir, parent);
+                    // The search runs over (tile, direction) states, so a route can loop back across its own track to come
+                    // at a mouth from the right side. That would lay one creek tile twice (two flows in one tile, rule R3):
+                    // it is not a route, and a later state may still reach the same mouth cleanly.
+                    var route = BuildRoute(n, w, fromState, dir, parent);
+                    if (new HashSet<HexCoord>(route.Tiles).Count == route.Tiles.Count)
+                    {
+                        routes[n] = route;
+                    }
                 }
 
                 return;
@@ -2193,7 +2208,7 @@ internal sealed class BogGenerator
             attempts++;
             var saved = Save(bp);
             var site = TryPlaceSite(
-                bp, PathCount(bp), anchor.Path, anchor.Index, radius, GuaranteeLakeMax, GuaranteeMinFromSpring, widthTrial);
+                bp, PathCount(bp), anchor.Path, anchor.Index, radius, GuaranteeLakeMax, GuaranteeMinFromSpring, widthTrial, fitShore: true);
             if (site is not null)
             {
                 BuildRegion(bp, site);
@@ -2285,7 +2300,7 @@ internal sealed class BogGenerator
         var count = PathCount(bp);
         bool IsOther(HexCoord t) => count.ContainsKey(t);
         var disc = new HashSet<HexCoord>(a.WithinRadius(radius));
-        var grown = GrowLake(a, disc, radius, GuaranteeLakeMax, IsOther);
+        var grown = GrowLake(a, disc, radius, GuaranteeLakeMax, IsOther, fitShore: true);
         if (grown is null)
         {
             return false;

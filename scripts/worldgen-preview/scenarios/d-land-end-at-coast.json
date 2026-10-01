@@ -3,6 +3,7 @@
  "title": "the same wall with a plain land end: the end is half open, so the enemy walks over it at a penalty (3.0)",
  "seed": 11,
  "radius": 1000,
+ "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
  "window": {
   "q": 205,
   "r": -650,

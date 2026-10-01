@@ -48,6 +48,8 @@ const GENERATION_FIELDS: {
 }[] = [
   { key: 'islandCellSize', labelKey: 'islandCellSizeLabel', min: 16, max: 4096, step: 1 },
   { key: 'islandChance', labelKey: 'islandChanceLabel', min: 0.01, max: 1, step: 0.01 },
+  { key: 'islandMaxReach', labelKey: 'islandMaxReachLabel', min: 0, max: 2000, step: 1 },
+  { key: 'islandMinGap', labelKey: 'islandMinGapLabel', min: 0, max: 400, step: 1 },
   { key: 'islandMinWidth', labelKey: 'islandMinWidthLabel', min: 2, max: 200, step: 0.5 },
   { key: 'islandMaxWidth', labelKey: 'islandMaxWidthLabel', min: 2, max: 200, step: 0.5 },
   { key: 'islandMinSegments', labelKey: 'islandMinSegmentsLabel', min: 1, max: 24, step: 1 },
