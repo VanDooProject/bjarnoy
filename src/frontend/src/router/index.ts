@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { resolveAuthGuard } from './authGuard';
+import { awaitAtlasManifests } from './atlasGuard';
 import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
 // Not lazy-loaded like the other views below: App.vue's ProfileModal.vue
@@ -146,31 +147,43 @@ export const router = createRouter({
       path: '/showcase',
       name: 'showcase',
       component: () => import('../views/ShowcaseView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitAtlasManifests(),
     },
     {
       path: '/tech-tree',
       name: 'tech-tree',
       component: () => import('../views/TechTreeView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitAtlasManifests(),
     },
     {
       path: '/docs/tiles',
       name: 'tile-docs',
       component: () => import('../views/TileDocsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitAtlasManifests(),
     },
     {
       path: '/docs/wasted-lands',
       name: 'wasted-lands-docs',
       component: () => import('../views/WastedLandsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitAtlasManifests(),
     },
     {
       path: '/docs/wildlife-camps',
       name: 'wildlife-camps-docs',
       component: () => import('../views/WildlifeCampsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitAtlasManifests(),
     },
     {
       path: '/docs/bog-lands',
       name: 'bog-lands-docs',
       component: () => import('../views/BogLandsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitAtlasManifests(),
     },
     {
       path: '/admin',

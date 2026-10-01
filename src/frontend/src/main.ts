@@ -19,6 +19,10 @@ app.use(i18n);
 
 app.mount('#app');
 
+// Once the map's own art is in, warm the network for the rest of the atlas
+// (see atlas.ts). Imported lazily so Pixi stays out of the entry chunk.
+void import('./lib/map/atlas').then((atlas) => atlas.startBackgroundAtlasLoad());
+
 // Demo-mode-only debug hooks: let test/screenshot scripts (e.g.
 // scripts/screenshot-helpers) drive the app past what the real UI exposes
 // yet. Never present in a live (VITE_DEMO_MODE=false) build.
