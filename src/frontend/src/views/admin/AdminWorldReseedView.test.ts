@@ -57,7 +57,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     status: 'active',
     maxPlayers: 500,
     playerCount: 2,
-    usedSpawnCount: 7,
+    freeSpawnCount: 7,
     spawnCount: 40,
     speedFactor: 1,
     startsAt: null,

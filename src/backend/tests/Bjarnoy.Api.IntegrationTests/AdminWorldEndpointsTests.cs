@@ -125,7 +125,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
-    public async Task Admin_world_list_counts_spawn_spots_used_up_by_first_and_expansion_settlements()
+    public async Task Admin_world_list_counts_free_spawn_spots_left_by_first_and_expansion_settlements()
     {
         using var client = _fixture.CreateClient();
         var world = await CreateWorldAsync(client);
@@ -138,14 +138,15 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         var empty = await ListedAsync();
         Assert.Equal(islands.Sum(i => i.StartPositions.Count), empty.SpawnCount);
-        Assert.Equal(0, empty.UsedSpawnCount);
+        Assert.InRange(empty.FreeSpawnCount, 1, empty.SpawnCount);
 
         var first = await FoundSettlementAsync(client, world);
         var afterFirst = await ListedAsync();
-        Assert.InRange(afterFirst.UsedSpawnCount, 1, afterFirst.SpawnCount);
+        Assert.True(afterFirst.FreeSpawnCount < empty.FreeSpawnCount);
 
         // An expansion: a second settlement on another island, owned by the
-        // same player. It is not a new player, but it still eats spawn spots.
+        // same player. It is not a new player, but it still takes spawn spots
+        // a new player could have joined on.
         var island = islands.First(i => i.Id != first.IslandId);
         var plot = island.StartPositions[0];
         await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
@@ -168,7 +169,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         }
 
         var afterExpansion = await ListedAsync();
-        Assert.True(afterExpansion.UsedSpawnCount > afterFirst.UsedSpawnCount);
+        Assert.True(afterExpansion.FreeSpawnCount < afterFirst.FreeSpawnCount);
         Assert.Equal(empty.SpawnCount, afterExpansion.SpawnCount);
 
         async Task<AdminWorldResponse> ListedAsync()

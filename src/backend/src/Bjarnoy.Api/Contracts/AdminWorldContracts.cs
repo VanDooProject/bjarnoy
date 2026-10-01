@@ -12,7 +12,7 @@ public sealed record AdminWorldResponse(
     string Status,
     int MaxPlayers,
     int PlayerCount,
-    int UsedSpawnCount,
+    int FreeSpawnCount,
     int SpawnCount,
     double SpeedFactor,
     DateTimeOffset? StartsAt,
@@ -26,7 +26,7 @@ public sealed record AdminWorldResponse(
     int Seed,
     WorldGenerationSettingsResponse Generation)
 {
-    public static AdminWorldResponse From(WorldEntity world, int playerCount, SpawnUsage spawns)
+    public static AdminWorldResponse From(WorldEntity world, int playerCount, SpawnCapacity spawns)
     {
         ArgumentNullException.ThrowIfNull(world);
 
@@ -36,7 +36,7 @@ public sealed record AdminWorldResponse(
             world.Status.ToString().ToLowerInvariant(),
             world.MaxPlayers,
             playerCount,
-            spawns.Used,
+            spawns.Free,
             spawns.Total,
             world.SpeedFactor,
             world.StartsAt,

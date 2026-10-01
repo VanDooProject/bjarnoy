@@ -10,10 +10,11 @@ using Microsoft.Extensions.Logging;
 namespace Bjarnoy.Infrastructure.Services;
 
 /// <summary>
-/// A world's spawn spots (island start positions): how many exist and how
-/// many are used up — see <see cref="WorldService.GetSpawnUsageAsync"/>.
+/// A world's spawn spots (island start positions): how many exist, and how
+/// many new players could still found on them right now — see
+/// <see cref="WorldService.GetSpawnCapacityAsync"/>.
 /// </summary>
-public readonly record struct SpawnUsage(int Used, int Total);
+public readonly record struct SpawnCapacity(int Free, int Total);
 
 /// <summary>Raised when a world cannot be created as asked.</summary>
 public sealed class WorldCreationException(string message) : Exception(message);
@@ -507,16 +508,25 @@ public sealed class WorldService(
             .FirstOrDefaultAsync(w => w.Id == id, cancellationToken);
 
     /// <summary>
-    /// Spawn spots (island start positions) per world, and how many of them
-    /// are used up: no longer foundable because a settlement — a player's
-    /// first one or one they expanded into with settlers — sits on or near
-    /// them. Same spacing rule a founding is checked against
-    /// (<see cref="Founding.CheckSpacing"/>), so "used" means a new player
-    /// could not start there any more. Transient landing-page plot
-    /// reservations are not counted. Wasted islands carry no start positions.
+    /// Spawn spots (island start positions) per world, and how many new
+    /// players could still found a settlement on them right now.
     /// </summary>
+    /// <remarks>
+    /// "Free" is not "total minus blocked": start positions sit closer
+    /// together than the founding spacing, so one new player takes several
+    /// of them out at once. Instead joins are simulated one after another,
+    /// each island's start positions in their stored order (the order the
+    /// plot suggestion walks them): a position counts when it clears the same
+    /// spacing rule a real founding is checked against
+    /// (<see cref="Founding.CheckSpacing"/>) — against every settlement
+    /// already on the island, a player's first one and their expansions
+    /// alike, and against the fresh settlements the simulation already
+    /// placed. Transient landing-page plot reservations are not counted, and
+    /// neither is <see cref="WorldEntity.MaxPlayers"/>: this is what the map
+    /// has room for. Wasted islands carry no start positions.
+    /// </remarks>
     /// <param name="worldId">One world only, or <see langword="null"/> for every world.</param>
-    public async Task<Dictionary<Guid, SpawnUsage>> GetSpawnUsageAsync(
+    public async Task<Dictionary<Guid, SpawnCapacity>> GetSpawnCapacityAsync(
         Guid? worldId = null,
         CancellationToken cancellationToken = default)
     {
@@ -553,19 +563,42 @@ public sealed class WorldService(
             .GroupBy(i => i.WorldId)
             .ToDictionary(
                 g => g.Key,
-                g => new SpawnUsage(
-                    Used: g.Sum(island =>
-                    {
-                        var neighbours = neighboursByIsland.GetValueOrDefault(island.Id);
-                        return neighbours is null
-                            ? 0
-                            : island.StartPositions.Count(p => Founding.CheckSpacing(
-                                new HexCoord(p.Q, p.R),
-                                neighbours,
-                                SettlementService.MinimumSpacing,
-                                SettlementService.FoundingSafetyMargin) != Founding.SpacingVerdict.Ok);
-                    }),
+                g => new SpawnCapacity(
+                    Free: g.Sum(island => CountFreeSpawns(
+                        island.StartPositions, neighboursByIsland.GetValueOrDefault(island.Id, []))),
                     Total: g.Sum(island => island.StartPositions.Count)));
+    }
+
+    /// <summary>
+    /// How many of <paramref name="startPositions"/> could be founded on one
+    /// after another — see <see cref="GetSpawnCapacityAsync"/>. Each pick is
+    /// added as a fresh settlement (a level-1 longhouse on its centre, exactly
+    /// what founding builds) before the next position is checked.
+    /// </summary>
+    public static int CountFreeSpawns(
+        IEnumerable<HexPoint> startPositions,
+        IEnumerable<Founding.NeighbourSnapshot> existing)
+    {
+        var neighbours = existing.ToList();
+        var free = 0;
+        foreach (var position in startPositions)
+        {
+            var candidate = new HexCoord(position.Q, position.R);
+            if (Founding.CheckSpacing(
+                    candidate,
+                    neighbours,
+                    SettlementService.MinimumSpacing,
+                    SettlementService.FoundingSafetyMargin) != Founding.SpacingVerdict.Ok)
+            {
+                continue;
+            }
+
+            neighbours.Add(new Founding.NeighbourSnapshot(
+                candidate, [new PlacedBuilding(candidate, BuildingType.Longhouse, 1)]));
+            free++;
+        }
+
+        return free;
     }
 
     /// <summary>Island count per world, for listing worlds without loading their islands.</summary>

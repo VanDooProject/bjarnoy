@@ -229,7 +229,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <td>{{ world.status }}</td>
           <td>{{ world.runState }}</td>
           <td>{{ world.playerCount }} / {{ world.maxPlayers }}</td>
-          <td>{{ world.usedSpawnCount }} / {{ world.spawnCount }}</td>
+          <td>{{ world.freeSpawnCount }} / {{ world.spawnCount }}</td>
           <td>{{ world.joinsClosed ? $t('adminWorlds.joins.closed') : $t('adminWorlds.joins.open') }}</td>
           <td>{{ world.endbossTriggeredAt ? $t('adminWorlds.endbossStatus.triggered') : world.endbossAt ? $t('adminWorlds.endbossStatus.scheduled') : $t('adminWorlds.endbossStatus.none') }}</td>
           <td>{{ world.frozenIslesEnabled ? $t('adminWorlds.frozenIsles.enabled') : $t('adminWorlds.frozenIsles.disabled') }}</td>

@@ -32,7 +32,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     status: 'active',
     maxPlayers: 500,
     playerCount: 2,
-    usedSpawnCount: 7,
+    freeSpawnCount: 7,
     spawnCount: 40,
     speedFactor: 1,
     startsAt: null,
@@ -74,7 +74,7 @@ describe('AdminWorldsView', () => {
     expect(wrapper.text()).toContain('Midgard');
     expect(wrapper.text()).toContain('Utgard');
     expect(wrapper.text()).toContain('2 / 500');
-    // Spawn spots used, separate from players: expansions eat them too.
+    // Free spawn spots, separate from player slots: expansions take them too.
     expect(wrapper.text()).toContain('7 / 40');
     expect(wrapper.text()).toContain('paused');
     // The world's active generation seed, surfaced so an admin can tell what

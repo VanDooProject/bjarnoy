@@ -63,11 +63,11 @@ public static class AdminWorldEndpoints
     {
         var entities = await worlds.GetWorldsAsync(cancellationToken);
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
-        var spawnUsage = await worlds.GetSpawnUsageAsync(cancellationToken: cancellationToken);
+        var spawnCapacity = await worlds.GetSpawnCapacityAsync(cancellationToken: cancellationToken);
 
         IReadOnlyList<AdminWorldResponse> response =
         [
-            .. entities.Select(w => AdminWorldResponse.From(w, playerCounts.GetValueOrDefault(w.Id), spawnUsage.GetValueOrDefault(w.Id))),
+            .. entities.Select(w => AdminWorldResponse.From(w, playerCounts.GetValueOrDefault(w.Id), spawnCapacity.GetValueOrDefault(w.Id))),
         ];
 
         return TypedResults.Ok(response);
@@ -116,7 +116,7 @@ public static class AdminWorldEndpoints
         {
             var world = await worlds.CreateWorldAsync(
                 request.Name.Trim(), options, request.MaxPlayers, autoSeed: request.Seed is null, cancellationToken);
-            var spawns = await worlds.GetSpawnUsageAsync(world.Id, cancellationToken);
+            var spawns = await worlds.GetSpawnCapacityAsync(world.Id, cancellationToken);
 
             return TypedResults.Created(
                 $"/api/v1/admin/worlds/{world.Id}", AdminWorldResponse.From(world, playerCount: 0, spawns.GetValueOrDefault(world.Id)));
@@ -191,7 +191,7 @@ public static class AdminWorldEndpoints
         }
 
         var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
-        var spawns = await worlds.GetSpawnUsageAsync(worldId, cancellationToken);
+        var spawns = await worlds.GetSpawnCapacityAsync(worldId, cancellationToken);
         return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount, spawns.GetValueOrDefault(worldId)));
     }
 
@@ -293,7 +293,7 @@ public static class AdminWorldEndpoints
 
             default:
                 var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
-                var spawns = await worlds.GetSpawnUsageAsync(worldId, cancellationToken);
+                var spawns = await worlds.GetSpawnCapacityAsync(worldId, cancellationToken);
                 return TypedResults.Ok(new ReseedWorldResponse(
                     AdminWorldResponse.From(result.World!, playerCount, spawns.GetValueOrDefault(worldId)),
                     options.Seed,
@@ -414,7 +414,7 @@ public static class AdminWorldEndpoints
         }
 
         var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
-        var spawns = await worlds.GetSpawnUsageAsync(worldId, cancellationToken);
+        var spawns = await worlds.GetSpawnCapacityAsync(worldId, cancellationToken);
         return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount, spawns.GetValueOrDefault(worldId)));
     }
 }

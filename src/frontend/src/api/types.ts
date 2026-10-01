@@ -543,8 +543,8 @@ export interface AdminWorldResponse {
   status: string;
   maxPlayers: number;
   playerCount: number;
-  /** Start positions no longer foundable because a settlement (first or expansion) blocks them. */
-  usedSpawnCount: number;
+  /** How many new players could still found on the map right now; nearby start positions block each other. */
+  freeSpawnCount: number;
   spawnCount: number;
   speedFactor: number;
   startsAt: string | null;
