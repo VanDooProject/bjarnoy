@@ -930,7 +930,7 @@ public class SettlementTests
             BuildingType.Farm, campHex, Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps);
         Assert.Equal(BuildRejection.HexOccupiedByCamp, refused.Rejection);
 
-        // A weak camp counts too (every camp is guarded for now), and only its own hex is refused.
+        // A weak camp in the index counts too (the index lists blocking camps), and only its own hex is refused.
         var elsewhere = settlement.PlanBuild(
             BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps);
         Assert.NotEqual(BuildRejection.HexOccupiedByCamp, elsewhere.Rejection);

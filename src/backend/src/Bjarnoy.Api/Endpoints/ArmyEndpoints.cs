@@ -111,6 +111,17 @@ public static class ArmyEndpoints
             .WithSummary("Lists field battle reports touching a settlement, either side, newest first (issue #206).")
             .RequireSettlementOwner();
 
+        reports.MapGet("/camp-reports/{reportId:guid}", GetCampReport)
+            .WithName("GetCampReport")
+            .WithSummary("Fetches one wildlife camp report (hunt, ambush or tower) by id.")
+            // Only the player's settlement owner — a camp has no owner.
+            .RequireCampReportOwner();
+
+        reports.MapGet("/settlements/{settlementId:guid}/camp-reports", ListCampReportsForSettlement)
+            .WithName("ListSettlementCampReports")
+            .WithSummary("Lists wildlife camp reports of a settlement, newest first.")
+            .RequireSettlementOwner();
+
         return app;
     }
 
@@ -145,7 +156,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -469,6 +480,27 @@ public static class ArmyEndpoints
         return TypedResults.Ok(response);
     }
 
+    private static async Task<Results<Ok<CampReportResponse>, NotFound>> GetCampReport(
+        Guid reportId,
+        CampReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(CampReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<CampReportResponse>>> ListCampReportsForSettlement(
+        Guid settlementId,
+        CampReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
+        IReadOnlyList<CampReportResponse> response = [.. entities.Select(CampReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
     /// <summary>Internal, not private: reused by <see cref="SimulatorEndpoints"/> to parse the simulator's own attack/raid mission field.</summary>
     internal static bool TryParseMission(string? value, out ArmyMission mission)
     {
@@ -499,6 +531,12 @@ public static class ArmyEndpoints
         if (string.Equals(value, "found", StringComparison.OrdinalIgnoreCase))
         {
             mission = ArmyMission.Found;
+            return true;
+        }
+
+        if (string.Equals(value, "hunt", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.Hunt;
             return true;
         }
 
@@ -560,6 +598,8 @@ public static class ArmyEndpoints
                     "Not enough renown for another settlement yet, or founding requires a real account.",
                 DispatchRejection.TargetHexNotFoundable =>
                     "The target hex is too close to an already-claimed settlement's border.",
+                DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
+                DispatchRejection.HuntRequiresLandUnits => "Only land units can hunt a wildlife camp; ships cannot.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

@@ -184,6 +184,7 @@ public sealed class SettlementService(
     GameDbContext dbContext,
     TimeProvider timeProvider,
     IPlotReservationStore reservations,
+    CampService campService,
     ILogger<SettlementService> logger)
 {
     /// <summary>
@@ -231,6 +232,7 @@ public sealed class SettlementService(
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly IPlotReservationStore _reservations = reservations;
+    private readonly CampService _campService = campService;
     private readonly ILogger<SettlementService> _logger = logger;
 
     /// <summary>
@@ -1109,7 +1111,7 @@ public sealed class SettlementService(
             shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland,
             islandSoil: islandSoil,
             giants: buildGiants,
-            camps: await LoadCampIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false));
+            camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false));
 
         if (!decision.Accepted)
         {
@@ -1548,22 +1550,13 @@ public sealed class SettlementService(
         return new GiantIndex(giants);
     }
 
-    /// <summary>Every wildlife camp across every island of <paramref name="worldId"/>, built into one lookup (the build rule).</summary>
-    public async Task<ICampIndex> LoadCampIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
-    {
-        var islands = await _dbContext.Islands
-            .AsNoTracking()
-            .Where(i => i.WorldId == worldId)
-            .Select(i => i.Camps)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        var camps = islands
-            .SelectMany(c => c)
-            .Select(c => new Camp(new HexCoord(c.Q, c.R), c.Family, c.Level, (TileOrientation)c.Orientation))
-            .ToList();
-
-        return new CampIndex(camps);
-    }
+    /// <summary>
+    /// The world's <em>blocking</em> wildlife camps as of <paramref name="now"/>, built into one lookup for the build rule:
+    /// camps that still have beasts (a cleared camp's hex is buildable) plus Fenrir's brood always — see
+    /// <see cref="CampIndex.Blocking"/>.
+    /// </summary>
+    public Task<ICampIndex> LoadCampIndexAsync(Guid worldId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+        _campService.LoadBlockingIndexAsync(worldId, now, cancellationToken);
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements

@@ -1025,12 +1025,13 @@ public sealed record Settlement
     /// buildable even for the settlement whose claim fully encloses it.
     /// </param>
     /// <param name="camps">
-    /// The world's wildlife camp index, or <see langword="null"/> for a caller
-    /// with none on hand. A hex holding a camp is refused
+    /// The world's <em>blocking</em> wildlife camps, or <see langword="null"/> for a caller
+    /// with none on hand. A hex holding one is refused
     /// (<see cref="BuildRejection.HexOccupiedByCamp"/>), checked right after the
-    /// giant rule and before the claim check. Every camp is guarded for now,
-    /// so every camp hex is refused; once camps can be cleared, only a cleared
-    /// one will be buildable.
+    /// giant rule and before the claim check. The index decides what blocks: the caller
+    /// (<c>SettlementService.LoadCampIndexAsync</c>) lists only camps that still have beasts at the
+    /// build instant, plus Fenrir's brood always, so a cleared camp's hex is buildable under its
+    /// ground's normal rules.
     /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
@@ -1055,7 +1056,7 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.HexOccupiedByGiant);
         }
 
-        // TODO(camp gameplay PR): only a guarded camp blocks; every camp is guarded for now.
+        // The index lists blocking camps only (guarded ones and Fenrir's brood); a cleared camp is not in it.
         if ((camps ?? World.CampIndex.Empty).TryGetCamp(coord, out _))
         {
             return BuildDecision.Rejected(BuildRejection.HexOccupiedByCamp);
