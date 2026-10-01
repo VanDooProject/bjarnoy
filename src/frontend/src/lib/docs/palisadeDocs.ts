@@ -2,7 +2,7 @@
 // palisade pieces and the atlas names of their art, how many stages the atlas has for each (read off the
 // atlas, so the stage the art pipeline adds next shows up by itself), the ground a piece stands on, and
 // the small example wall - resolved with the game's own `palisadeTiles.ts`, not with a hand-written table.
-import { coordKey, neighbors, parseKey, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import {
   PALISADE_FAMILY,
   resolveWall,
@@ -74,8 +74,9 @@ export interface ExampleWallHex {
 
 /**
  * A wall that runs four hexes in one direction, turns 60 degrees (a 120-degree bend, the wide turn) and runs
- * two more: end, straight, gate, straight, bend, straight, end. Only the hexes are placed; which piece each
- * one is, and which way it is turned, is decided by `resolveExampleWall`.
+ * two more into the sea: land end, straight, gate, straight, bend, straight, sea end. Only the hexes are
+ * placed (the last one on coastal water, see `exampleSeaHexes`); which piece each one is, and which way it is
+ * turned, is decided by `resolveExampleWall`.
  */
 export function exampleWallHexes(): ExampleWallHex[] {
   const [first, second] = [
@@ -102,25 +103,54 @@ export interface ResolvedExampleHex {
   result: PalisadeResult;
 }
 
-/** The example wall's pieces, in wall order, resolved by the game's own piece rules (all on grass). */
+/**
+ * The example's sea: the wall's last hex and every hex within two of it that lies beyond it, seen from the
+ * wall hex before it. That leaves the two hexes the last two wall hexes share as shore, so the sea end touches
+ * exactly one land wall hex the way the rules ask.
+ */
+export function exampleSeaHexes(hexes: readonly ExampleWallHex[] = exampleWallHexes()): AxialCoord[] {
+  const last = hexes.at(-1)!.coord;
+  const prev = hexes.at(-2)!.coord;
+  const sea: AxialCoord[] = [];
+  for (let dq = -2; dq <= 2; dq++) {
+    for (let dr = Math.max(-2, -dq - 2); dr <= Math.min(2, -dq + 2); dr++) {
+      const c = { q: last.q + dq, r: last.r + dr };
+      if (c.q === last.q && c.r === last.r) sea.push(c);
+      else if (hexDistance(c, prev) > hexDistance(c, last)) sea.push(c);
+    }
+  }
+  return sea;
+}
+
+/** The example wall's pieces, in wall order, resolved by the game's own piece rules (on grass, into the sea). */
 export function resolveExampleWall(hexes: readonly ExampleWallHex[] = exampleWallHexes()): ResolvedExampleHex[] {
   const wall: WallSet = {
     walls: new Set(hexes.map((h) => coordKey(h.coord))),
     gates: new Set(hexes.filter((h) => h.gate).map((h) => coordKey(h.coord))),
   };
-  const resolved = resolveWall(wall, (): Terrain => 'grass', parseKey);
-  return hexes.map((h) => ({ coord: h.coord, result: resolved.get(coordKey(h.coord))! }));
+  const sea = new Set(exampleSeaHexes(hexes).map(coordKey));
+  const resolved = resolveWall(wall, (c): Terrain => (sea.has(coordKey(c)) ? 'sea' : 'grass'), parseKey);
+  return hexes.map((h) => ({
+    coord: h.coord,
+    result: resolved.get(coordKey(h.coord))!,
+  }));
 }
 
-/** The grass hexes around the wall that the example draws as ground, so the wall does not float. */
-export function exampleGroundHexes(hexes: readonly ExampleWallHex[] = exampleWallHexes()): AxialCoord[] {
+/**
+ * The hexes around the wall that the example draws as ground, so the wall does not float: grass beside the
+ * land wall, and the sea (minus the sea end's own hex, which draws its own water).
+ */
+export function exampleGroundHexes(
+  hexes: readonly ExampleWallHex[] = exampleWallHexes(),
+): { coord: AxialCoord; sea: boolean }[] {
   const wall = new Set(hexes.map((h) => coordKey(h.coord)));
-  const ground = new Map<string, AxialCoord>();
-  for (const h of hexes) {
-    for (const n of neighbors(h.coord)) {
-      const k = coordKey(n);
-      if (!wall.has(k)) ground.set(k, n);
-    }
-  }
+  const sea = new Set(exampleSeaHexes(hexes).map(coordKey));
+  const ground = new Map<string, { coord: AxialCoord; sea: boolean }>();
+  const add = (c: AxialCoord) => {
+    const k = coordKey(c);
+    if (!wall.has(k)) ground.set(k, { coord: c, sea: sea.has(k) });
+  };
+  for (const h of hexes) neighbors(h.coord).forEach(add);
+  exampleSeaHexes(hexes).forEach(add);
   return [...ground.values()];
 }

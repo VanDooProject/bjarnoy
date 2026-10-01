@@ -602,10 +602,10 @@
         "gate": "A gate only fits on a straight, with a wall hex on two opposite sides, and that has to stay true after any later placement.",
         "sea": "A sea end touches exactly one land wall hex and can never be a gate."
       },
-      "example": "An example: a wall that ends, runs straight, passes a gate, runs on, turns by 120° and ends again. The game worked out each piece and its rotation from the hexes alone."
+      "example": "An example: a wall that ends on land, runs straight, passes a gate, runs on, turns by 120° and runs out into the sea. The game worked out each piece and its rotation from the hexes alone."
     },
     "example": {
-      "alt": "An example wall of {count} hexes on grass."
+      "alt": "An example wall of {count} hexes on grass, ending in the sea."
     },
     "where": {
       "heading": "Where walls can stand",
@@ -632,9 +632,19 @@
         "sealedTitle": "Sealed",
         "sealed": "A wall run up to mountains on both ends: no way through.",
         "halfOpenTitle": "Half open",
-        "halfOpen": "A land end: any army crosses it at a cost of 3.",
+        "halfOpen": "A wall that stops on land, even right beside the sea: any army crosses its end at a cost of 3.",
+        "seaEndTitle": "Sea end",
+        "seaEnd": "The wall runs out into the water on a sea end: sealed at the coast.",
         "gateTitle": "Gate",
-        "gate": "A gate opens for its owner's armies only."
+        "gate": "A gate opens for its owner's armies only.",
+        "legend": {
+          "wall": "Wall",
+          "gate": "Gate",
+          "seaEnd": "Sea end (wall in the water)",
+          "water": "Sea",
+          "mountain": "Mountain",
+          "ground": "Open ground"
+        }
       }
     },
     "notBuilt": {

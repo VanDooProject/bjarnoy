@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The Walls docs page's example: a short wall laid out on a hex grid, every hex's piece and rotation worked
 // out by the game's own rules (palisadeTiles.ts, through lib/docs/palisadeDocs.ts) and drawn as the ground's
-// base frame with the piece's top frame on it, the same way the map composes a wall hex.
+// base frame with the piece's top frame on it, the same way the map composes a wall hex. One end runs out
+// into the sea, so the sea end is shown standing in its water.
 //
 // TODO(palisade #378): once palisade rendering is on main, draw this through the real HexMapRenderer with a
 // StaticWorldModel, the way BogIsland.vue does, so it renders exactly like the game. Until then it is plain
@@ -49,8 +50,10 @@ const sprites = computed<Sprite[]>(() => {
     });
   };
 
-  for (const c of exampleGroundHexes()) {
-    add(`g${c.q},${c.r}`, c, 0, findAtlasFrame('terrain', pieceFrameNames('straight180', 'SE', 0, 'grass').base));
+  for (const { coord: c, sea } of exampleGroundHexes()) {
+    // Open sea around the sea end: the plain water tile, which has no beach rim to turn the wrong way.
+    const frame = sea ? 'watertile_SE_base' : pieceFrameNames('straight180', 'SE', 0, 'grass').base;
+    add(`g${c.q},${c.r}`, c, 0, findAtlasFrame('terrain', frame));
   }
   for (const { coord, result } of resolveExampleWall()) {
     if (isRefusal(result)) continue;
@@ -58,7 +61,12 @@ const sprites = computed<Sprite[]>(() => {
     const stage = stagesOf(result.piece, (n) => !!findAtlasFrame('buildings-static', n)).at(-1) ?? 0;
     const names = pieceFrameNames(result.piece, result.dir, stage, 'grass');
     const k = `${coord.q},${coord.r}`;
-    add(`b${k}`, coord, 0, findAtlasFrame('terrain', names.base));
+    // A piece's own leveled base ships beside its top in the buildings atlases; the plain ground one in `terrain`.
+    const base =
+      findAtlasFrame('buildings-static', names.ownBase) ??
+      findAtlasFrame('buildings-level1', names.ownBase) ??
+      findAtlasFrame('terrain', names.base);
+    add(`b${k}`, coord, 0, base);
     add(`t${k}`, coord, 1, findAtlasFrame('buildings-static', names.top));
   }
   // Painter's order: back rows first, a hex's own ground before its wall.

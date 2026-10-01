@@ -602,10 +602,10 @@
         "gate": "Ein Tor passt nur auf eine Gerade, mit einem Mauerfeld auf zwei gegenüberliegenden Seiten, und das muss auch nach jedem späteren Bauen so bleiben.",
         "sea": "Ein Seeende berührt genau ein Mauerfeld an Land und kann nie ein Tor sein."
       },
-      "example": "Ein Beispiel: eine Mauer, die endet, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und wieder endet. Das Spiel hat jedes Teil und seine Drehung allein aus den Feldern ermittelt."
+      "example": "Ein Beispiel: eine Mauer, die an Land endet, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und ins Meer ausläuft. Das Spiel hat jedes Teil und seine Drehung allein aus den Feldern ermittelt."
     },
     "example": {
-      "alt": "Eine Beispielmauer aus {count} Feldern auf Gras."
+      "alt": "Eine Beispielmauer aus {count} Feldern auf Gras, die im Meer endet."
     },
     "where": {
       "heading": "Wo Mauern stehen können",
@@ -632,9 +632,19 @@
         "sealedTitle": "Verschlossen",
         "sealed": "Eine Mauer, die an beiden Enden bis an Berge reicht: kein Durchkommen.",
         "halfOpenTitle": "Halb offen",
-        "halfOpen": "Ein Landende: Jedes Heer überquert es zu Kosten von 3.",
+        "halfOpen": "Eine Mauer, die an Land aufhört, selbst direkt am Meer: Jedes Heer überquert ihr Ende zu Kosten von 3.",
+        "seaEndTitle": "Seeende",
+        "seaEnd": "Die Mauer läuft auf einem Seeende ins Wasser aus: an der Küste verschlossen.",
         "gateTitle": "Tor",
-        "gate": "Ein Tor öffnet sich nur für die Heere seines Besitzers."
+        "gate": "Ein Tor öffnet sich nur für die Heere seines Besitzers.",
+        "legend": {
+          "wall": "Mauer",
+          "gate": "Tor",
+          "seaEnd": "Seeende (Mauer im Wasser)",
+          "water": "Meer",
+          "mountain": "Berg",
+          "ground": "Offenes Land"
+        }
       }
     },
     "notBuilt": {

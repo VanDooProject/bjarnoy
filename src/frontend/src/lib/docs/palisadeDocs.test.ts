@@ -3,6 +3,7 @@ import { PALISADE_FAMILY, isRefusal } from '../map/palisadeTiles';
 import {
   PALISADE_PIECES,
   exampleGroundHexes,
+  exampleSeaHexes,
   exampleWallHexes,
   pieceFrameNames,
   resolveExampleWall,
@@ -60,9 +61,16 @@ describe('pieceFrameNames', () => {
 });
 
 describe('the example wall', () => {
-  it('resolves to end, straight, gate, straight, 120-degree bend, straight, end', () => {
+  it('resolves to land end, straight, gate, straight, 120-degree bend, straight, sea end', () => {
     const pieces = resolveExampleWall().map((h) => (isRefusal(h.result) ? h.result.refusal : h.result.piece));
-    expect(pieces).toEqual(['end', 'straight180', 'gate180', 'straight180', 'bend120', 'straight180', 'end']);
+    expect(pieces).toEqual(['end', 'straight180', 'gate180', 'straight180', 'bend120', 'straight180', 'end_coast']);
+  });
+
+  it('puts the sea end in the sea and keeps every land wall hex on land', () => {
+    const hexes = exampleWallHexes();
+    const sea = new Set(exampleSeaHexes(hexes).map(coordKey));
+    expect(sea.has(coordKey(hexes.at(-1)!.coord))).toBe(true);
+    for (const h of hexes.slice(0, -1)) expect(sea.has(coordKey(h.coord))).toBe(false);
   });
 
   it('turns each piece onto its neighbours, so the two ends face into the wall', () => {
@@ -77,10 +85,13 @@ describe('the example wall', () => {
     }
   });
 
-  it('is a connected line of seven distinct hexes with grass ground that does not overlap it', () => {
+  it('is a connected line of seven distinct hexes with ground that does not overlap it', () => {
     const hexes = exampleWallHexes();
     expect(new Set(hexes.map((h) => coordKey(h.coord))).size).toBe(7);
     const wall = new Set(hexes.map((h) => coordKey(h.coord)));
-    for (const g of exampleGroundHexes(hexes)) expect(wall.has(coordKey(g))).toBe(false);
+    const ground = exampleGroundHexes(hexes);
+    for (const g of ground) expect(wall.has(coordKey(g.coord))).toBe(false);
+    expect(ground.some((g) => g.sea)).toBe(true);
+    expect(ground.some((g) => !g.sea)).toBe(true);
   });
 });
