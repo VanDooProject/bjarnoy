@@ -286,7 +286,7 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
   // Right after founding the "Name your jarl" bubble floats in the top-right
   // corner (it used to sit in the rail, its nudge hanging past the left
   // screen edge and over the completion banner).
-  test('the account nudge stays on screen and clear of the completion banner', async ({ page }) => {
+  test('the account nudge stays on screen and the completion banner waits for it', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
@@ -297,12 +297,12 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
     const trigger = await box(page.getByTestId('returning-player-trigger'), 'jarl trigger');
     expect(trigger.x + trigger.width, 'jarl trigger in the top-right corner').toBeGreaterThan(page.viewportSize()!.width - 24);
     expect(trigger.y).toBeLessThan(24);
-    const banner = settlement.banner.filter({ has: settlement.continueButton });
-    await expect(banner).toBeVisible();
-    const a = await box(nudge, 'nudge');
-    const b = await box(banner, 'completion banner');
-    const overlaps = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-    expect(overlaps, 'nudge covers the completion banner').toBe(false);
+    // The nudge is the one call to action while it is up; the completion
+    // banner and its "Enter your settlement" follow once it is answered.
+    await expect(settlement.continueButton).toHaveCount(0);
+    await nudge.getByTestId('profile-nudge-later').click();
+    await expect(settlement.continueButton).toBeVisible();
+    await expectFullyInViewport(page, settlement.continueButton, 'enter-settlement button');
   });
 
   // The landfall banner was a full-width card and the slim checklist floated
