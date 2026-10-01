@@ -168,7 +168,10 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   The bog comes from a relaxed through-river site first, else a small **spawn bog** (a creek spring feeds the lake, its outflow is traced
   as a river to the sea, so one river still runs through the lake). Consequence for the 20% rule above: rolled sinks and spawns are
   4.4% of all bogs, but the guarantee's spawn bogs (18.1% of all bogs) spawn a river by construction, 22.5% together. Islands with no
-  inland room stay without bog. See [`bog.md`](./bog.md), "Implemented generation" step 5.
+  inland room stay without bog. See [`bog.md`](./bog.md), "Implemented generation" step 5. On the denser terrain of the island
+  density PR: 273 of the 482 green islands of seeds 1-8 at radius 1000 have landing spots (338 have a candidate), after giving the
+  spawned river an outlet in every drainage basin and growing the guarantee's lakes only onto shore-fit tiles (258 before; see
+  `bog.md`, "On the denser terrain").
 
 ## Wildlife camps
 

@@ -860,6 +860,7 @@ export class BogGenerator {
     lakeMax: number,
     minFromSpring: number,
     widthTrial: WidthTrial,
+    fitShore = false,
   ): Site | null {
     const path = bp.paths[p]!;
     const a = path[i]!;
@@ -883,7 +884,7 @@ export class BogGenerator {
 
     const inP = new Set(path.map((c) => coordKey(c)));
     const isOther = (t: AxialCoord): boolean => (count.get(coordKey(t)) ?? 0) - (inP.has(coordKey(t)) ? 1 : 0) > 0;
-    const grown = this.growLake(a, disc, radius, lakeMax, isOther);
+    const grown = this.growLake(a, disc, radius, lakeMax, isOther, fitShore);
     if (grown === null) return null;
     const { lake, mouthDir } = grown;
 
@@ -997,6 +998,7 @@ export class BogGenerator {
     radius: number,
     lakeMax: number,
     isOther: (t: AxialCoord) => boolean,
+    fitShore = false,
   ): { lake: HexSet; mouthDir: Map<string, number> } | null {
     const nearOther = (t: AxialCoord): boolean => {
       if (isOther(t)) return true;
@@ -1004,8 +1006,18 @@ export class BogGenerator {
       return false;
     };
 
+    // With `fitShore` (the guarantee) the lake grows only onto tiles whose every neighbour could be its shore (the checks below
+    // short of the lake's own outline). A lake that the plain growth would finish anyway is grown the same; one that would have
+    // grown against a mountain or the coast and been thrown away grows the other way instead.
+    const shoreFit = (n: AxialCoord): boolean => disc.has(n) && this.allowed(n) && this.mountainFree(n) && !nearOther(n);
+    const fits = (t: AxialCoord): boolean => {
+      for (let d = 0; d < 6; d++) if (!shoreFit(nb(t, d))) return false;
+      return true;
+    };
+
     const target = 3 + Math.floor(hash2(a.q, a.r, this.seed + 71) * (lakeMax - 3));
-    const growOk = (t: AxialCoord): boolean => hexDistance(t, a) <= radius - 3 && disc.has(t) && this.allowed(t) && !nearOther(t);
+    const growOk = (t: AxialCoord): boolean =>
+      hexDistance(t, a) <= radius - 3 && disc.has(t) && this.allowed(t) && !nearOther(t) && (!fitShore || fits(t));
 
     if (!growOk(a)) return null;
 
@@ -1560,7 +1572,7 @@ export class BogGenerator {
 
       attempts++;
       const saved = this.save(bp);
-      const site = this.tryPlaceSite(bp, pathCount(bp), anchor.path, anchor.index, radius, GUARANTEE_LAKE_MAX, GUARANTEE_MIN_FROM_SPRING, widthTrial);
+      const site = this.tryPlaceSite(bp, pathCount(bp), anchor.path, anchor.index, radius, GUARANTEE_LAKE_MAX, GUARANTEE_MIN_FROM_SPRING, widthTrial, true);
       if (site !== null) {
         this.buildRegion(bp, site);
         if (this.padOrCount(bp, site) && this.coveredCandidates(candidates, BOG_REACH) > 0) return true;
@@ -1618,7 +1630,7 @@ export class BogGenerator {
     const count = pathCount(bp);
     const isOther = (t: AxialCoord): boolean => count.has(coordKey(t));
     const disc = new HexSet(BogGenerator.within(a, radius));
-    const grown = this.growLake(a, disc, radius, GUARANTEE_LAKE_MAX, isOther);
+    const grown = this.growLake(a, disc, radius, GUARANTEE_LAKE_MAX, isOther, true);
     if (grown === null) return false;
 
     const { lake, mouthDir } = grown;

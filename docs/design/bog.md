@@ -85,9 +85,15 @@ grass at a hex edge, like the wasteland does.
    (most candidates within reach), and a bog that would leave no candidate covered is rolled back (the generator snapshots its state):
    a. a **through-river site with relaxed criteria** (disc radius `BogGuaranteeRadius` 5, lake of 3 to 8, river tiles from 2 after the
       spring to 3 before the mouth), the same `TryPlaceSite` as the normal pass;
+      the guarantee's lakes (here and in b) grow only onto tiles whose six neighbours could all be its shore (allowed, in the disc, no
+      mountain beside them, no river within one), so a lake the plain growth would finish anyway grows the same, and one that would
+      have grown against a mountain or the coast and been thrown away grows the other way instead (island density PR);
    b. otherwise a **spawn bog** on river-free inland grass or forest: a small lake, a creek from a spring inside the disc (at least three
       from the lake) into one mouth, and a creek out of another mouth to a tile just outside the disc where a normal river starts, traced
-      to the sea (or a trunk) by the drainage tracer, so exactly one river runs through the lake and it is the spawned one. Rules R1-R12
+      to the sea (or a trunk) by the drainage tracer, so exactly one river runs through the lake and it is the spawned one. The tracer's
+      drainage field gives every basin (connected group of interior tiles) an outlet of its own: the island's outlets are spread by
+      count (one per 2000 tiles), and a basin cut off by a neck of coastal tiles can otherwise have none, so nothing traced in it
+      reaches the sea (island density PR). Rules R1-R12
       hold as for any site; R9 accepts a spring whose creek ends in a lake that has its outflow;
    c. otherwise the island is left as it is: no room. Rule R7 keeps every lake tile, shore and creek more than two hexes from sand and
       sea, on grass or forest, and a lake with its shore ring needs about 6 hexes of such ground across.
@@ -116,6 +122,24 @@ The "sites dropped" row is small because the search steers clear of unpaddable g
 the top and in the normal pass (124 to 100 bogs): rivers start on mountains and most candidate lakes have one near. The 37 islands with a
 candidate and no bog are 5 more than before; the largest has 438 tiles (a mountainous island: every anchor has a mountain within one ring of
 the shore or creek).
+
+*On the denser terrain* (island density PR, seeds 1-8 at radius 1000, 482 islands, measured the same way). The terrain change left two
+islands of 500+ tiles with a candidate and no bog, which the guarantee test does not allow: seed 4 island 28 (2705 tiles, an arc joined to a
+74-tile islet by a one-hex strip of beach; the island's single drainage outlet sat on the islet, so every spawn bog's river on the arc
+failed to trace, 1 400+ attempts) and seed 8 island 31 (605 tiles, forest round a mountain massif; every spawn lake grew towards the
+mountains and was rejected). The two fixes in step 6 (an outlet per basin for the spawned river, lakes grown onto shore-fit tiles)
+only rescue attempts that used to fail, so islands the guarantee already helped keep their bog:
+
+| | before the two fixes | with them |
+|---|---|---|
+| islands with a bog | 258 | 276 |
+| green islands with a landing candidate / with landing spots (bog rule on) | 341 / 258 | 338 / 273 |
+| guarantee: islands acted on / through-river / spawn / could not help | 159 / 49 / 68 / 42 | 159 / 53 / 82 / 24 |
+| rolled sinks, rolled spawns, guarantee spawns (% of all bogs, pockets excluded) | 1.8%, 2.5%, 24.5% (of 278) | 1.7%, 2.4%, 27.7% (of 296) |
+| lakes / bog tiles | 339 / 39 310 | 357 / 40 038 |
+| R1-R12 violations, inland river mouths | 0, 0 | 0, 0 |
+
+The guarantee's spawn bogs push the spawn share further over the owner's 20% (30.1% of all bogs with the rolled ones); see "The 20% rule".
 
 Creeks are routed by a BFS over (tile, heading) with turns {0, +60, -60}: only straight tiles and 60-degree bends
 (see the tile kinds in `BogTileKind`). Giants, camps and start positions see bog through `BogTerrain.Overlay`; bog
