@@ -1829,3 +1829,171 @@ describe('WorldModel bog buildings', () => {
     });
   });
 });
+
+// The palisade (docs/design/economy.md section 5): demo mode places walls and gates by the same rules as the server
+// (Settlement.PlanBuild / PalisadeRules.CanPlace), and the model hands the renderer each wall hex's neighbours and the pathfinder the
+// standing walls.
+describe('WorldModel palisade and gate', () => {
+  /** A settlement big enough to claim a good area, and a straight run of `length` free, river-free grass/forest/sand hexes inside it. */
+  function walledSetting(length = 4) {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
+    const radius = model.borderRadius(settlement);
+    const plain = (c: AxialCoord) => {
+      const tile = model.getTile(c.q, c.r);
+      return tile.ownerId === settlement.id && ['grass', 'forest', 'sand'].includes(tile.terrain) && !tile.buildingType && !model.getRiverTile(c.q, c.r);
+    };
+    for (const start of hexesInRadius(at, radius)) {
+      for (let d = 0; d < 6; d++) {
+        const step = neighbors({ q: 0, r: 0 })[d]!;
+        const line = Array.from({ length }, (_, k) => ({ q: start.q + step.q * k, r: start.r + step.r * k }));
+        if (line.every(plain)) return { model, settlement, at, line, step };
+      }
+    }
+    throw new Error('no free straight run of land found — pick a different test seed');
+  }
+
+  it('places a line of wall hexes, each end joined to its neighbour', () => {
+    const { model, settlement, line, step } = walledSetting(3);
+
+    for (const hex of line) expect(model.placeBuilding(settlement.id, hex, 'palisade')).toBe(true);
+
+    const middle = line[1]!;
+    expect(model.getTile(middle.q, middle.r).buildingType).toBe('palisade');
+    // The middle hex has exactly its two neighbours along the run, on opposite sides.
+    const flags = model.wallNeighbourFlags(middle);
+    expect(flags.filter(Boolean)).toHaveLength(2);
+    const dir = neighbors({ q: 0, r: 0 }).findIndex((n) => n.q === step.q && n.r === step.r);
+    expect(flags[dir]).toBe(true);
+    expect(flags[(dir + 3) % 6]).toBe(true);
+    // An end has one.
+    expect(model.wallNeighbourFlags(line[0]!).filter(Boolean)).toHaveLength(1);
+  });
+
+  it('refuses a hex that would give a wall hex a third neighbour (walls never branch)', () => {
+    const { model, settlement, line } = walledSetting(3);
+    for (const hex of line) expect(model.placeBuilding(settlement.id, hex, 'palisade')).toBe(true);
+    const middle = line[1]!;
+    const side = neighbors(middle).find((n) => !line.some((l) => l.q === n.q && l.r === n.r) && model.getTile(n.q, n.r).terrain !== 'sea')!;
+
+    expect(model.palisadePlacement(side, false)).toEqual({ ok: false, reason: 'branch' });
+    expect(model.placeBuilding(settlement.id, side, 'palisade')).toBe(false);
+    expect(model.getTile(side.q, side.r).buildingType).toBeUndefined();
+  });
+
+  it('places a gate only between two opposite wall hexes', () => {
+    const { model, settlement, line } = walledSetting(3);
+    const [a, middle, b] = line as [AxialCoord, AxialCoord, AxialCoord];
+
+    // On its own, and beside one wall hex, there is no straight yet.
+    expect(model.placeBuilding(settlement.id, middle, 'palisadegate')).toBe(false);
+    expect(model.placeBuilding(settlement.id, a, 'palisade')).toBe(true);
+    expect(model.palisadePlacement(middle, true)).toEqual({ ok: false, reason: 'gateNotStraight' });
+    expect(model.placeBuilding(settlement.id, b, 'palisade')).toBe(true);
+
+    expect(model.palisadePlacement(middle, true)).toEqual({ ok: true });
+    expect(model.placeBuilding(settlement.id, middle, 'palisadegate')).toBe(true);
+    expect(model.getTile(middle.q, middle.r).buildingType).toBe('palisadegate');
+    // A gate counts as a wall hex for its neighbours.
+    expect(model.wallNeighbourFlags(a).filter(Boolean)).toHaveLength(1);
+  });
+
+  it('refuses a gate on a bend', () => {
+    const { model, settlement, line, step } = walledSetting(2);
+    const [a, corner] = line as [AxialCoord, AxialCoord];
+    // A third wall hex off the corner, at 60 degrees to the run: the corner would be a bend.
+    const dir = neighbors({ q: 0, r: 0 }).findIndex((n) => n.q === step.q && n.r === step.r);
+    const turn = neighbors(corner)[(dir + 1) % 6]!;
+    if (model.getTile(turn.q, turn.r).ownerId !== settlement.id || model.getTile(turn.q, turn.r).terrain === 'mountain') throw new Error('pick another seed');
+
+    expect(model.placeBuilding(settlement.id, a, 'palisade')).toBe(true);
+    expect(model.placeBuilding(settlement.id, turn, 'palisade')).toBe(true);
+    expect(model.palisadePlacement(corner, true)).toEqual({ ok: false, reason: 'gateNotStraight' });
+    expect(model.palisadePlacement(corner, false)).toEqual({ ok: true });
+  });
+
+  it('refuses a wall on a river, a mountain, a bog and a lake, and on a hex outside the claim', () => {
+    const { model, settlement, at, line } = walledSetting(3);
+    const [river, bog, lake] = line as [AxialCoord, AxialCoord, AxialCoord];
+    model.setRiverTiles([riverTile(river, 'straight')]);
+    model.setBogTiles([
+      { q: bog.q, r: bog.r, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] },
+      { q: lake.q, r: lake.r, kind: 'lake', inDirections: [], outDirection: null, waterEdges: [] },
+    ]);
+    const mountain = hexesInRadius(at, 40).find((c) => model.getTile(c.q, c.r).terrain === 'mountain');
+    if (!mountain) throw new Error('no mountain near the settlement — pick a different test seed');
+
+    expect(model.palisadePlacement(river, false)).toEqual({ ok: false, reason: 'river' });
+    expect(model.placeBuilding(settlement.id, river, 'palisade')).toBe(false);
+    for (const hex of [mountain, bog, lake]) {
+      expect(model.palisadePlacement(hex, false)).toEqual({ ok: false, reason: 'notAllowedOnTerrain' });
+    }
+    expect(model.placeBuilding(settlement.id, bog, 'palisade')).toBe(false);
+    expect(model.placeBuilding(settlement.id, { q: settlement.q + 40, r: settlement.r }, 'palisade')).toBe(false);
+  });
+
+  it('counts queued wall orders as wall hexes when a new hex is judged', () => {
+    const { model, line } = walledSetting(3);
+    // Two orders in the queue, not standing: the third would complete a straight, not a branch...
+    expect(model.palisadePlacement(line[1]!, false, [{ ...line[0]!, gate: false }, { ...line[2]!, gate: false }])).toEqual({ ok: true });
+    // ... and a gate between two queued posts is accepted just like the server does.
+    expect(model.palisadePlacement(line[1]!, true, [{ ...line[0]!, gate: false }, { ...line[2]!, gate: false }])).toEqual({ ok: true });
+    expect(model.palisadePlacement(line[1]!, true, [{ ...line[0]!, gate: false }])).toEqual({ ok: false, reason: 'gateNotStraight' });
+  });
+
+  it('ends a wall in a sea end on a coastal-water hex, which takes no gate and exactly one land wall', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
+    const radius = model.borderRadius(settlement);
+    const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
+    const shore = neighbors(coastal).find(
+      (n) => model.getTile(n.q, n.r).ownerId === settlement.id && ['grass', 'sand', 'forest'].includes(model.getTile(n.q, n.r).terrain) && !model.getRiverTile(n.q, n.r),
+    );
+    if (!shore) throw new Error('no free shore hex beside the coastal water — pick a different test seed');
+
+    // No land wall beside it yet: nothing to hang off.
+    expect(model.palisadePlacement(coastal, false)).toEqual({ ok: false, reason: 'seaEnd' });
+    expect(model.placeBuilding(settlement.id, shore, 'palisade')).toBe(true);
+    expect(model.palisadePlacement(coastal, true)).toEqual({ ok: false, reason: 'notAllowedOnTerrain' });
+    expect(model.palisadePlacement(coastal, false)).toEqual({ ok: true });
+    expect(model.placeBuilding(settlement.id, coastal, 'palisade')).toBe(true);
+    expect(model.getTile(coastal.q, coastal.r).terrain).toBe('sea');
+  });
+
+  it('hands the pathfinder only standing walls (a level-0 foundation does not block), each with its owner', () => {
+    const { model, settlement, line } = walledSetting(3);
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [
+        { q: line[0]!.q, r: line[0]!.r, type: 'palisade', level: 1 },
+        { q: line[1]!.q, r: line[1]!.r, type: 'palisadegate', level: 2 },
+        { q: line[2]!.q, r: line[2]!.r, type: 'palisade', level: 0 },
+      ],
+    });
+
+    const standing = model.standingPalisadeWalls();
+    expect([...standing.keys()].sort()).toEqual([line[0]!, line[1]!].map((c) => `${c.q},${c.r}`).sort());
+    expect(standing.get(`${line[1]!.q},${line[1]!.r}`)).toEqual({ gate: true, owner: settlement.ownerId });
+    // The foundation is still a wall hex for drawing: its neighbour joins it.
+    expect(model.wallNeighbourFlags(line[1]!).filter(Boolean)).toHaveLength(2);
+    expect(model.getTile(line[2]!.q, line[2]!.r).buildingLevel).toBe(0);
+  });
+
+  it('re-resolves a neighbour when a wall hex is razed', () => {
+    const { model, settlement, line } = walledSetting(2);
+    for (const hex of line) expect(model.placeBuilding(settlement.id, hex, 'palisade')).toBe(true);
+    expect(model.wallNeighbourFlags(line[0]!).filter(Boolean)).toHaveLength(1);
+
+    expect(model.razeBuilding(settlement.id, line[1]!)).toBe(true);
+
+    expect(model.wallNeighbourFlags(line[0]!).filter(Boolean)).toHaveLength(0);
+    expect(model.standingPalisadeWalls().size).toBe(1);
+  });
+});

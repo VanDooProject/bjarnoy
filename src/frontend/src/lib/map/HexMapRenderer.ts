@@ -82,6 +82,7 @@ import {
   loadTerrainAtlas,
   mergeTileTextures,
   riverBuildingArtFor,
+  palisadeArtFor,
   riverTexturesFor,
   textureKeyFor,
   topAnimFor,
@@ -3563,6 +3564,21 @@ export class HexMapRenderer {
           fogPerfStats.terrainDrawnCount++;
           continue;
         }
+      }
+      // A wall hex (palisade or gate) draws the piece and camera its wall neighbours decide (palisadeArtFor), on its own ground (on
+      // coastal water, the sea end brings its own base). The whole visible region is re-resolved on every rebuild, so a hex whose
+      // neighbour was just placed or razed comes out with its new piece.
+      if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
+        const wallArt = palisadeArtFor({
+          wallNeighbours: worldModel.wallNeighbourFlags(c),
+          coastalWater: tile.terrain === 'sea',
+          gate: tile.buildingType === 'palisadegate',
+        });
+        baseEntries.set(key, { texture: baseTextureFor(textures, tile, wallArt), coord: c });
+        const wallTop = topTextureFor(textures, tile, wallArt);
+        if (wallTop) topEntries.set(key, { texture: wallTop, coord: c });
+        fogPerfStats.terrainDrawnCount++;
+        continue;
       }
       // A Sawmill/Crop Mill is built directly on a river tile
       // (WorldModel.placeBuilding mirrors BuildingCatalogue's

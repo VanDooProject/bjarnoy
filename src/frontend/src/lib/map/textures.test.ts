@@ -23,10 +23,13 @@ import {
   RIVER_FAMILY,
   KEY_FAMILY,
   LAKE_PROP_VARIANT,
+  PALISADE_TEXTURE_KEY,
+  palisadeArtFor,
   selectVariantFrames,
   type FamilyFrame,
   type TileTextures,
 } from './textures';
+import { PALISADE_FAMILY } from './palisadeTiles';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { BogTile, RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
@@ -1749,5 +1752,137 @@ describe('bog buildings and lake decorations', () => {
       pause: 0,
       rest: 'boglake_SW_variant005_rest',
     });
+  });
+});
+
+// The wall set (3D_assets docs/wall-tiles.md): which art a palisade or gate hex draws — the piece and camera its wall neighbours decide,
+// game levels 1-3 on art level000-002 — and that the vendored atlas really carries every frame that asks for.
+describe('palisade art', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  const flagsOf = (dirs: number[]): boolean[] => [0, 1, 2, 3, 4, 5].map((d) => dirs.includes(d));
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+  function emptyTextures(): TileTextures {
+    return {
+      base: {},
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      riverBase: {} as TileTextures['riverBase'],
+      riverTop: {} as TileTextures['riverTop'],
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+  }
+
+  it('maps every piece to the atlas family the art ships under', () => {
+    expect(
+      (['straight180', 'bend60', 'bend120', 'gate180', 'end', 'end_coast'] as const).map((piece) => KEY_FAMILY[PALISADE_TEXTURE_KEY[piece]]),
+    ).toEqual([
+      'palisade_straight180',
+      'palisade_bend60',
+      'palisade_bend120',
+      'palisade_gate180',
+      'palisade_end',
+      'palisade_end_coast',
+    ]);
+  });
+
+  it.each([
+    // [wall neighbours, gate, coastal water, expected key, expected camera file]
+    // The file for a piece whose canonical W edge faces direction dW is TILE_ORIENTATIONS[(2 - dW) mod 6] (palisadeTiles.ts).
+    [[0, 3], false, false, 'palisadestraight', 'NW'], // E and W neighbours: a straight, its W edge on direction 0 (dW 0 -> file NW)
+    [[0, 3], true, false, 'palisadegatepiece', 'NW'],
+    [[1, 4], false, false, 'palisadestraight', 'NE'], // NE and SW: dW 1 -> file NE
+    [[3, 4], false, false, 'palisadebend60', 'SE'], // W - SW: the tight turn with its W edge facing direction 3 (dW 3 -> file SE)
+    [[3, 5], false, false, 'palisadebend120', 'SE'], // W - SE: the wide turn, W edge on direction 3
+    [[3], false, false, 'palisadeend', 'SE'], // a land end whose wall runs west
+    [[3], false, true, 'palisadeendcoast', 'SE'], // the sea end, on water
+  ] as const)('walls at %j (gate %s, water %s) draw %s from the %s camera', (dirs, gate, coastalWater, key, camera) => {
+    const art = palisadeArtFor({ wallNeighbours: flagsOf([...dirs]), coastalWater, gate });
+
+    expect(art).toEqual({ key, orientation: camera });
+  });
+
+  it('turns a wall in all six rotations: the camera file steps one place per direction', () => {
+    const files = [0, 1, 2, 3, 4, 5].map((dW) => palisadeArtFor({ wallNeighbours: flagsOf([dW, (dW + 1) % 6]), coastalWater: false, gate: false }));
+
+    expect(files.every((a) => a.key === 'palisadebend60')).toBe(true);
+    expect(new Set(files.map((a) => a.orientation)).size).toBe(6);
+  });
+
+  it('draws a free-standing post as an end (a sea end on water) rather than nothing when the wall cannot be resolved', () => {
+    expect(palisadeArtFor({ wallNeighbours: flagsOf([]), coastalWater: false, gate: false }).key).toBe('palisadeend');
+    expect(palisadeArtFor({ wallNeighbours: flagsOf([]), coastalWater: true, gate: false }).key).toBe('palisadeendcoast');
+    // A branch (an admin-placed wall can have one) is not drawable as any piece either.
+    expect(palisadeArtFor({ wallNeighbours: flagsOf([0, 2, 4]), coastalWater: false, gate: false }).key).toBe('palisadeend');
+  });
+
+  it('draws game levels 1-3 from art level000-002, and a level-0 foundation from level000', () => {
+    const textures = emptyTextures();
+    textures.top.palisadestraight = orientationMap(['straight-level000', 'straight-level001', 'straight-level002'] as unknown as never);
+    const art = palisadeArtFor({ wallNeighbours: flagsOf([0, 3]), coastalWater: false, gate: false });
+    const tile = (level: number): Tile => ({ q: 0, r: 0, terrain: 'grass', orientation: 'SE', buildingType: 'palisade', buildingLevel: level });
+
+    expect(topTextureFor(textures, tile(0), art)).toBe('straight-level000');
+    expect(topTextureFor(textures, tile(1), art)).toBe('straight-level000');
+    expect(topTextureFor(textures, tile(2), art)).toBe('straight-level001');
+    expect(topTextureFor(textures, tile(3), art)).toBe('straight-level002');
+  });
+
+  it('draws the sea end\'s own base per art level, on the water hex', () => {
+    const textures = emptyTextures();
+    textures.baseIndexed.palisadeendcoast = orientationMap(['coast-base-0', 'coast-base-1', 'coast-base-2'] as unknown as never);
+    textures.base.sea = orientationMap('sea-base' as unknown as never);
+    const art = palisadeArtFor({ wallNeighbours: flagsOf([3]), coastalWater: true, gate: false });
+    const tile = (level: number): Tile => ({
+      q: 0, r: 0, terrain: 'sea', isCoastalWater: true, orientation: 'SE', buildingType: 'palisade', buildingLevel: level,
+    });
+
+    expect(baseTextureFor(textures, tile(1), art)).toBe('coast-base-0');
+    expect(baseTextureFor(textures, tile(3), art)).toBe('coast-base-2');
+  });
+
+  it('classifies the pack\'s palisade frame names into one top per camera and art level', () => {
+    const frames = ORIENTATIONS.flatMap((o) =>
+      [0, 1, 2].map((l) => ({ name: `palisade_end_${o}_level00${l}`, layer: 'top' as const, value: `${o}${l}` })),
+    );
+    const classified = classifyFamilyFrames(collapseLetteredLevels(frames));
+
+    expect(classified.top!.E).toEqual(['E0', 'E1', 'E2']);
+    expect(classified.top!.SE).toEqual(['SE0', 'SE1', 'SE2']);
+    expect(classified.base).toBeUndefined();
+  });
+
+  // The vendored atlas manifests (a gitignored submodule: absent where it was not checked out, then the check is skipped).
+  const manifests = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/buildings-{static,level1}-*.json', {
+    eager: true,
+    import: 'default',
+  }) as Record<string, { frames: Record<string, unknown> }>;
+  const vendored = Object.keys(manifests).length > 0;
+
+  it.skipIf(!vendored)('the vendored atlas carries every frame the wall pieces can ask for', () => {
+    const frames = new Set<string>();
+    for (const manifest of Object.values(manifests)) {
+      for (const name of Object.keys(manifest.frames)) if (name.startsWith('palisade_')) frames.add(name);
+    }
+    const missing: string[] = [];
+    for (const family of Object.values(PALISADE_FAMILY)) {
+      for (const dir of ORIENTATIONS) {
+        for (const level of [0, 1, 2]) {
+          const top = `${family}_${dir}_level00${level}`;
+          if (!frames.has(top)) missing.push(top);
+          // The sea end brings its own base per level; the land pieces stand on the hex's own ground.
+          if (family === 'palisade_end_coast' && !frames.has(`${top}_base`)) missing.push(`${top}_base`);
+        }
+      }
+    }
+
+    expect(missing).toEqual([]);
   });
 });

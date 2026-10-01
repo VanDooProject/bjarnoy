@@ -49,6 +49,7 @@ import {
   type GiantPart,
   type GiantTextureMap,
 } from './giantTiles';
+import { PALISADE_FAMILY, isRefusal, palisadeTileFor, type PalisadePiece } from './palisadeTiles';
 import type { BogTile, RiverTile, Terrain, Tile, TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
@@ -127,6 +128,14 @@ export type TextureKey =
   // like the Sawmill's river keys these are texture-lookup keys, not wire building types.
   | 'fisherhutlake'
   | 'hammerschmiedebend'
+  // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
+  // texture-lookup keys, not wire building types (the wire types are `palisade` and `palisadegate`).
+  | 'palisadestraight'
+  | 'palisadebend60'
+  | 'palisadebend120'
+  | 'palisadegatepiece'
+  | 'palisadeend'
+  | 'palisadeendcoast'
   | CampFamily;
 
 type OrientationMap<T> = Record<TileOrientation, T>;
@@ -236,7 +245,46 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // The river hammer mill stands in for a bog-creek Hammerschmiede for now (TODO(art): bog-creek Hammerschmiede).
   hammerschmiede: 'hammerschmiede',
   hammerschmiedebend: 'hammerschmiede_bend',
+  // The palisade wall set (3D_assets docs/wall-tiles.md): one family per piece, three levels (level000-002) each.
+  palisadestraight: PALISADE_FAMILY.straight180,
+  palisadebend60: PALISADE_FAMILY.bend60,
+  palisadebend120: PALISADE_FAMILY.bend120,
+  palisadegatepiece: PALISADE_FAMILY.gate180,
+  palisadeend: PALISADE_FAMILY.end,
+  palisadeendcoast: PALISADE_FAMILY.end_coast,
 };
+
+/** The texture key of each palisade piece. */
+export const PALISADE_TEXTURE_KEY: Record<PalisadePiece, TextureKey> = {
+  straight180: 'palisadestraight',
+  bend60: 'palisadebend60',
+  bend120: 'palisadebend120',
+  gate180: 'palisadegatepiece',
+  end: 'palisadeend',
+  end_coast: 'palisadeendcoast',
+};
+
+const PALISADE_KEYS: ReadonlySet<TextureKey> = new Set(Object.values(PALISADE_TEXTURE_KEY));
+
+/**
+ * The art level index of a building's game level: every building draws `level N` from art `levelNNN`, except the palisade, whose three
+ * art levels `level000`-`level002` are game levels 1-3 (the construction look is level 0's, so a foundation shows `level000` as well).
+ */
+function artIndexOf(key: TextureKey, gameLevel: number): number {
+  return PALISADE_KEYS.has(key) ? Math.max(0, gameLevel - 1) : gameLevel;
+}
+
+/**
+ * The art a palisade or gate hex draws: the piece and the camera file the wall resolver (`palisadeTiles.ts`) picks from which of the
+ * hex's six neighbours are wall hexes, as the `RiverArt` override `baseTextureFor`/`topTextureFor` take (the same way a river building
+ * brings its own orientation). A hex the resolver cannot draw (no wall neighbour yet, or an admin-built branch) is an `end` (a sea end on
+ * water) facing east: a post that is not joined to anything.
+ */
+export function palisadeArtFor(input: { wallNeighbours: readonly boolean[]; coastalWater: boolean; gate: boolean }): RiverArt {
+  const resolved = palisadeTileFor(input);
+  if (!isRefusal(resolved)) return { key: PALISADE_TEXTURE_KEY[resolved.piece], orientation: resolved.dir };
+  return { key: PALISADE_TEXTURE_KEY[input.coastalWater ? 'end_coast' : 'end'], orientation: 'E' };
+}
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
 const COASTAL_FAMILY = 'coastalwatertile';
@@ -1621,7 +1669,7 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
     if (arr.length > 0) return arr[bogVariantIn(tile, arr)]!;
   }
   if (indexed && !BOG_TEXTURE_KEYS.has(key)) {
-    const picked = pickIndexed(indexed[orientation], tile.buildingLevel ?? 1);
+    const picked = pickIndexed(indexed[orientation], artIndexOf(key, tile.buildingLevel ?? 1));
     if (picked !== undefined) return picked;
   }
   // A building with no art of its own in the pack (e.g. Lumberjack/Quarry —
@@ -1647,7 +1695,7 @@ function topKeyAndIndex(tile: Tile, riverArt?: RiverArt): { key: TextureKey; ind
   if (tile.camp && riverArt?.key === tile.camp.family) return { key, index: CAMP_GUARDED_LEVEL };
   // A lake decoration is one frame per rotation (index 0); a building is its level; terrain its hashed variant.
   if (tile.lakeProp && !tile.buildingType) return { key, index: 0 };
-  return { key, index: tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0) };
+  return { key, index: tile.buildingType ? artIndexOf(key, tile.buildingLevel ?? 1) : (tile.variant ?? 0) };
 }
 
 /** Camps that stand on a straight river tile and bring their own river base per level: the bears and the otters. */
