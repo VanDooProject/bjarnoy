@@ -31,8 +31,8 @@ public class FoundingSettlementPersistenceTests
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(ApiClientResilience.Configure);
+        // Deliberately keeps the full-size default world, so the suite still covers the real radius-4000 world end to end.
+        var appHost = await TestAppHost.CreateAsync(cancellationToken, worldRadius: null);
 
         await using var app = await appHost.BuildAsync(cancellationToken);
         await app.StartAsync(cancellationToken);

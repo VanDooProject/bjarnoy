@@ -430,7 +430,9 @@ public sealed class WorldService(
     /// anywhere on this server. A no-op otherwise, including when
     /// <paramref name="name"/> specifically is already taken by something
     /// else (this is a bootstrap convenience, not a guarantee about that one
-    /// name).
+    /// name). <paramref name="radius"/> overrides the generator's default world
+    /// radius (4000) when set — the AppHost tests use a small one so each
+    /// test's startup world generates in under a second instead of ~14 s.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -453,7 +455,7 @@ public sealed class WorldService(
     /// </para>
     /// </remarks>
     public async Task SeedDefaultWorldIfNoneAsync(
-        string name, ILogger logger, CancellationToken cancellationToken = default)
+        string name, ILogger logger, int? radius = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(logger);
@@ -465,9 +467,15 @@ public sealed class WorldService(
 
         try
         {
+            var options = WorldGenerationOptions.ForSeed(Random.Shared.Next());
+            if (radius is not null)
+            {
+                options = options with { Radius = radius.Value };
+            }
+
             await CreateWorldAsync(
                 name,
-                WorldGenerationOptions.ForSeed(Random.Shared.Next()),
+                options,
                 maxPlayers: 500,
                 autoSeed: true,
                 cancellationToken)

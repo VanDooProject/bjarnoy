@@ -1,5 +1,7 @@
+using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -57,6 +59,43 @@ public static class MigrationCommand
     /// path in <c>Program.cs</c> so the two cannot name it differently.
     /// </summary>
     public const string DefaultWorldName = "Kettil Sea";
+
+    /// <summary>
+    /// Configuration key (env var <c>World__DefaultRadius</c>) overriding the radius of
+    /// the default world. Unset in normal runs; the AppHost tests set it so each test's
+    /// startup world is cheap to generate.
+    /// </summary>
+    public const string DefaultWorldRadiusKey = "World:DefaultRadius";
+
+    /// <summary>
+    /// Reads <see cref="DefaultWorldRadiusKey"/>: <c>null</c> when missing or empty (the
+    /// generator's default applies), otherwise an integer in 1..<see cref="WorldGenerationOptions.MaxRadius"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The value is present but not a valid radius. Fails startup loudly rather than
+    /// silently ignoring a typo and generating a full-size world.
+    /// </exception>
+    public static int? ReadDefaultWorldRadius(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var raw = configuration[DefaultWorldRadiusKey];
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        if (!int.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var radius)
+            || radius < 1
+            || radius > WorldGenerationOptions.MaxRadius)
+        {
+            throw new InvalidOperationException(
+                $"Configuration '{DefaultWorldRadiusKey}' must be an integer between 1 and " +
+                $"{WorldGenerationOptions.MaxRadius}, but was '{raw}'.");
+        }
+
+        return radius;
+    }
 
     public static MigrationCommandKind Parse(string[] args)
     {
@@ -200,7 +239,11 @@ public static class MigrationCommand
         }
 
         await worldService
-            .SeedDefaultWorldIfNoneAsync(DefaultWorldName, logger, cancellationToken)
+            .SeedDefaultWorldIfNoneAsync(
+                DefaultWorldName,
+                logger,
+                ReadDefaultWorldRadius(scopedServices.GetRequiredService<IConfiguration>()),
+                cancellationToken)
             .ConfigureAwait(false);
 
         // Not assumed: SeedDefaultWorldIfNoneAsync swallows the race it can lose
