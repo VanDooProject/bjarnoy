@@ -89,8 +89,8 @@ export function buildAttackDispatchRequest(
  * Builds a `hunt`-mission `DispatchArmyRequest` against a wildlife camp: the camp's own hex is the
  * `destination` (the server walks to the nearest reachable neighbour when the hex itself is not
  * walkable) and `route` holds only intermediate waypoints. `null` without units or a camp target.
- * Land units only (against land camps) is enforced by the UI (`isHuntUnit`) and by the server (`HuntRequiresLandUnits`;
- * a water camp, the whale road, is hunted by fleets only: `HuntRequiresFleet`, client UI for that comes later).
+ * Land units only against land camps and ships only against a water camp (the whale road) is enforced by the UI
+ * (`isHuntUnit`) and by the server (`HuntRequiresLandUnits` / `HuntRequiresFleet`).
  */
 export function buildHuntDispatchRequest(
   unitCounts: Record<string, number>,
@@ -113,10 +113,23 @@ export function buildHuntDispatchRequest(
   };
 }
 
-/** Whether a unit type may join a hunt — land units only, ships cannot hunt. */
-export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
+/**
+ * Whether a unit type may join a hunt: land units against a land camp, ships only against a water camp (`atSea`,
+ * the whale road).
+ */
+export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>, atSea = false): boolean {
   const definition = byType[type];
-  return !!definition && definition.class !== 'ship';
+  if (!definition) return false;
+  return atSea ? definition.class === 'ship' : definition.class !== 'ship';
+}
+
+/** Whether a garrison holds any unit that may hunt the camp (`atSea`: ships for a water camp, land units otherwise). */
+export function garrisonCanHunt(
+  garrison: ReadonlyArray<{ unit: string; count: number }>,
+  byType: Record<string, UnitDefinitionResponse>,
+  atSea: boolean,
+): boolean {
+  return garrison.some((g) => g.count > 0 && isHuntUnit(g.unit, byType, atSea));
 }
 
 /**

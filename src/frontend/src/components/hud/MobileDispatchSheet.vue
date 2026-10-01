@@ -19,6 +19,7 @@ import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import HuntTargetSummary from './HuntTargetSummary.vue';
+import { isWaterCampFamily } from '../../lib/map/campPlacement';
 import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
@@ -54,10 +55,17 @@ const garrisonRows = computed(() =>
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
+// The hunt target is a camp on the sea (the whale road): fleets only.
+const huntAtSea = computed(() => {
+  void world.campStatesVersion;
+  const target = draft.value?.targetCamp;
+  const camp = target ? world.model.campAt(target) : undefined;
+  return !!camp && isWaterCampFamily(camp.family);
+});
 const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCounts ?? {}, catalogue.byType));
 function isRowSelectable(unit: string): boolean {
-  // A hunt takes land units only, so ships are locked out from the start.
-  if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType)) return false;
+  // A hunt takes land units against a land camp and ships against a water camp, so the other class is locked out from the start.
+  if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType, huntAtSea.value)) return false;
   return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
 }
 const hasLockedOutUnits = computed(() =>

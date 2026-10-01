@@ -68,7 +68,8 @@ import type { Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable, towerThreatAt } from '../lib/map/campRules';
-import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { classifyUnitSelection, garrisonCanHunt, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -816,19 +817,19 @@ function sendArmyAction(tile: Tile): RingAction {
 }
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
-// (the demo has no army simulation, so no camp fights). Needs land units at home — ships cannot hunt.
+// (the demo has no army simulation, so no camp fights). A land camp needs land units at home, a camp at sea (the
+// whale road) ships — the other class cannot hunt it.
 function huntActions(tile: Tile): RingAction[] {
   if (DEMO_MODE || !tile.camp || tile.camp.removed || tile.buildingType) return [];
-  const hasLandUnits = world.hud.garrison.some(
-    (g) => g.count > 0 && classifyUnitSelection({ [g.unit]: g.count }, unitCatalogue.byType) === 'land',
-  );
+  const atSea = isWaterCampFamily(tile.camp.family);
+  const hasLandUnits = garrisonCanHunt(world.hud.garrison, unitCatalogue.byType, atSea);
   return [
     {
       id: 'hunt',
       label: t('hud.ringMenu.actions.hunt'),
       color: 'var(--rival)',
       disabled: !hasLandUnits,
-      hint: hasLandUnits ? undefined : t('hud.ringMenu.actions.noLandUnitsAtHome'),
+      hint: hasLandUnits ? undefined : t(atSea ? 'hud.ringMenu.actions.noShipsAtHome' : 'hud.ringMenu.actions.noLandUnitsAtHome'),
     },
   ];
 }
