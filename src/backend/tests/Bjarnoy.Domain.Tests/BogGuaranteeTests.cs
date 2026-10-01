@@ -67,9 +67,10 @@ public class BogGuaranteeTests
         Assert.True(qualifying >= 150, $"only {qualifying} islands have a landing candidate");
 
         // The rest are narrow or mountainous islands: a lake needs a shore ring of grass or forest more than two hexes from the coast
-        // (rule R7), which islands of a few hundred tiles rarely have. Nothing of 400 tiles or more may be left without.
-        var large = missing.Where(m => int.Parse(m[(m.IndexOf('(') + 1)..m.IndexOf(' ', m.IndexOf('('))]) >= 400).ToList();
-        Assert.True(large.Count == 0, "islands of 400+ tiles without a bog: " + string.Join("; ", large));
+        // (rule R7) and, now that every water feature is padded with bog (R12), no mountain beside its shore or creeks, which islands
+        // of a few hundred tiles rarely have. Nothing of 500 tiles or more may be left without.
+        var large = missing.Where(m => int.Parse(m[(m.IndexOf('(') + 1)..m.IndexOf(' ', m.IndexOf('('))]) >= 500).ToList();
+        Assert.True(large.Count == 0, "islands of 500+ tiles without a bog: " + string.Join("; ", large));
         Assert.True(missing.Count <= qualifying / 4, $"{missing.Count} of {qualifying} islands with a landing candidate have no bog: " + string.Join("; ", missing));
     }
 

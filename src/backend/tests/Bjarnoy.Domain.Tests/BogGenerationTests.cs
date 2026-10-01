@@ -4,7 +4,7 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Tests;
 
 /// <summary>
-/// Bogland generation (<c>BogGenerator</c>, <c>docs/design/bog.md</c>): the art's map rules R1-R11 on many islands, the owner's
+/// Bogland generation (<c>BogGenerator</c>, <c>docs/design/bog.md</c>): the art's map rules R1-R12 on many islands, the owner's
 /// requirements (a river through every lake, sink/spawn under 20%, never beside sea or sand, enclosed pockets filled), that giants,
 /// camps and start positions keep off the bog, and the terrain the rest of the game sees (Bog costs twice grass, a Lake is
 /// impassable to armies and ships). Cross-language parity is <c>BogGenerationGoldenTests</c>.
@@ -44,6 +44,80 @@ public class BogGenerationTests
 
         Assert.Equal(0, total.Total);
         Assert.True(islandsWithBog >= 25, $"only {islandsWithBog} islands got a bog across eight worlds");
+    }
+
+    [Fact]
+    public void Every_lake_shore_mouth_creek_and_spring_has_all_six_neighbours_inside_the_bog()
+    {
+        var features = 0;
+        foreach (var (seed, sampler, island) in GreenIslands().Where(i => i.Island.BogTiles.Count > 0))
+        {
+            Assert.Equal(0, BogRules.Check(island.BogTiles, island.RiverTiles, sampler.TerrainAt).R12);
+
+            // The same, stated without the checker: only a creek's own river link may lead out of the bog.
+            var bog = island.BogTiles.ToDictionary(t => t.Coord);
+            var rivers = island.RiverTiles.ToDictionary(t => t.Coord);
+            foreach (var tile in island.BogTiles.Where(t => t.Kind != BogTileKind.Bog))
+            {
+                features++;
+                for (var d = 0; d < 6; d++)
+                {
+                    var n = tile.Coord + HexCoord.Directions[d];
+                    if (bog.ContainsKey(n))
+                    {
+                        continue;
+                    }
+
+                    var link = rivers.ContainsKey(n)
+                        && (tile.InDirections.Any(x => (int)x == d) || (tile.OutDirection is { } o && (int)o == d));
+                    Assert.True(link, $"seed {seed} island {island.Index}: {tile.Kind} {tile.Coord} touches non-bog {n} ({sampler.TerrainAt(n)})");
+                }
+            }
+        }
+
+        Assert.True(features > 1000, $"only {features} water-feature tiles");
+    }
+
+    [Fact]
+    public void No_group_of_grass_or_forest_is_enclosed_by_bog()
+    {
+        foreach (var (seed, sampler, island) in GreenIslands().Where(i => i.Island.BogTiles.Count > 0))
+        {
+            var bog = island.BogTiles.Select(t => t.Coord).ToHashSet();
+            var land = island.Tiles.ToDictionary(t => t, sampler.TerrainAt);
+            var seen = new HashSet<HexCoord>();
+            foreach (var start in island.Tiles.Where(t => !bog.Contains(t)))
+            {
+                if (!seen.Add(start))
+                {
+                    continue;
+                }
+
+                // Everything reachable from here without stepping on bog; open when it ever reaches past the island.
+                var group = new List<HexCoord>();
+                var stack = new Stack<HexCoord>([start]);
+                var open = false;
+                while (stack.Count > 0)
+                {
+                    var c = stack.Pop();
+                    group.Add(c);
+                    foreach (var n in c.Neighbours().Where(n => !bog.Contains(n)))
+                    {
+                        if (!land.ContainsKey(n))
+                        {
+                            open = true;
+                        }
+                        else if (seen.Add(n))
+                        {
+                            stack.Push(n);
+                        }
+                    }
+                }
+
+                var plain = group.Where(c => land[c] is Terrain.Grass or Terrain.Forest).ToList();
+                Assert.True(open || plain.Count == 0, $"seed {seed} island {island.Index}: {plain.Count} grass/forest tiles enclosed by bog around {(plain.Count > 0 ? plain[0] : default)}");
+            }
+        }
     }
 
     [Fact]
@@ -338,6 +412,42 @@ public class BogGenerationTests
         var creek = new List<BogTile> { T(1, 0, BogTileKind.Creek, [TileOrientation.W], TileOrientation.E) };
         var stream = new RiverTile(new HexCoord(0, 0), RiverTileShape.Straight, [TileOrientation.W], TileOrientation.E, RiverWidth.Stream);
         Assert.True(BogRules.Check(creek, [stream], AllGrass).R11 > 0);
+    }
+
+    [Fact]
+    public void The_checker_flags_water_features_without_a_full_ring_of_bog_but_lets_a_creek_touch_its_own_river()
+    {
+        // A lone shore tile: every neighbour but the lake one is missing; the lake tile misses its own.
+        var shore = new List<BogTile> { T(0, 0, BogTileKind.Inlet, water: [TileOrientation.E]), T(1, 0, BogTileKind.Lake) };
+        Assert.True(BogRules.Check(shore, [], AllGrass).R12 >= 5);
+
+        // A creek ringed by bog is fine; take one ring tile away and it is flagged.
+        var centre = new HexCoord(0, 0);
+        List<BogTile> Ringed(int skip)
+        {
+            var tiles = new List<BogTile> { T(0, 0, BogTileKind.Creek, [TileOrientation.W], TileOrientation.E) };
+            for (var d = 0; d < 6; d++)
+            {
+                var n = centre + HexCoord.Directions[d];
+                if (d != skip)
+                {
+                    tiles.Add(T(n.Q, n.R, BogTileKind.Bog));
+                }
+            }
+
+            return tiles;
+        }
+
+        Assert.Equal(0, BogRules.Check(Ringed(-1), [], AllGrass).R12);
+        Assert.Equal(1, BogRules.Check(Ringed(1), [], AllGrass).R12);
+
+        // The missing neighbour is the river the creek flows out to (its out link, E): allowed. A river on any other side is not.
+        RiverTile River(int q, int r) => new(new HexCoord(q, r), RiverTileShape.Straight, [TileOrientation.W], TileOrientation.E, RiverWidth.River);
+        Assert.Equal(0, BogRules.Check(Ringed(0), [River(1, 0)], AllGrass).R12);
+        Assert.Equal(1, BogRules.Check(Ringed(1), [River(1, -1)], AllGrass).R12);
+
+        // Plain moss needs no ring of its own.
+        Assert.Equal(0, BogRules.Check([T(0, 0, BogTileKind.Bog)], [], AllGrass).R12);
     }
 
     // ---------------------------------------------------------------- terrain the rest of the game sees

@@ -1194,7 +1194,10 @@ export function generateRiversWithBogs(
 
   // An island without mountains has no river to run through a bog, but the bog guarantee may still spawn one.
   const guaranteeOnly = candidates.length === 0;
-  if (guaranteeOnly && !bogs.guaranteeApplies) return { rivers: [], bogs: bogs.classify() };
+  if (guaranteeOnly && !bogs.guaranteeApplies) {
+    bogs.fillHoles(null);
+    return { rivers: [], bogs: bogs.classify() };
+  }
 
   const drainage = new Drainage(islandTiles, terrainOf, riverLand, seed, bogs.pocketRing);
   if (stats && !guaranteeOnly) stats.outlets += drainage.outletCount;

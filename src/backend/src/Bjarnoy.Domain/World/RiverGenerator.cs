@@ -41,6 +41,14 @@ internal static class RiverGenerator
         /// <summary>Islands the guarantee could not help (no room inland, or no valid site).</summary>
         public int BogGuaranteeMissed;
 
+        /// <summary>Sites dropped because their water features could not get a full ring of bog (rule R12), by the normal pass and by the guarantee's attempts.</summary>
+        public int BogPaddingRejected;
+
+        public int BogGuaranteePaddingRejected;
+
+        /// <summary>Grass and forest tiles inside a bog (enclosed by it) that turned to moss.</summary>
+        public int BogHoleTiles;
+
         public void Add(RiverStats other)
         {
             BogSites += other.BogSites;
@@ -54,6 +62,9 @@ internal static class RiverGenerator
             BogGuaranteeThrough += other.BogGuaranteeThrough;
             BogGuaranteeSpawns += other.BogGuaranteeSpawns;
             BogGuaranteeMissed += other.BogGuaranteeMissed;
+            BogPaddingRejected += other.BogPaddingRejected;
+            BogGuaranteePaddingRejected += other.BogGuaranteePaddingRejected;
+            BogHoleTiles += other.BogHoleTiles;
             Springs += other.Springs;
             Outlets += other.Outlets;
             Rivers += other.Rivers;
@@ -193,6 +204,7 @@ internal static class RiverGenerator
         var guaranteeOnly = candidates.Count == 0;
         if (guaranteeOnly && !bogs.GuaranteeApplies)
         {
+            bogs.FillHoles(null);
             return new Result([], bogs.Classify());
         }
 

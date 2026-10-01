@@ -1,7 +1,7 @@
 // A bit-exact TypeScript port of the backend's `Bjarnoy.Domain.World.BogGenerator` (see that file's own
 // doc comment and `docs/design/bog.md` for the design): lakes with a river running through them, bog moss
 // around them, the occasional extra river sunk into a lake or spawned by a creek spring, and an enclosed
-// sea pocket turned into a lake with a bog ring, all within the art's map rules (R1-R11).
+// sea pocket turned into a lake with a bog ring, all within the art's map rules (R1-R12).
 //
 // Like `riverGenerator.ts` (which calls it from inside the green pipeline) this is pure and mirrors the C#
 // statement for statement, because the result is compared cell for cell against
@@ -70,6 +70,11 @@ export interface BogStats {
   guaranteeThrough: number;
   guaranteeSpawns: number;
   guaranteeMissed: number;
+  /** Sites dropped because their water features could not get a full ring of bog (rule R12): the normal pass, and the guarantee's attempts. */
+  paddingRejected: number;
+  guaranteePaddingRejected: number;
+  /** Grass and forest tiles enclosed by a bog that turned to moss. */
+  holeTiles: number;
 }
 
 export function emptyBogStats(): BogStats {
@@ -85,6 +90,9 @@ export function emptyBogStats(): BogStats {
     guaranteeThrough: 0,
     guaranteeSpawns: 0,
     guaranteeMissed: 0,
+    paddingRejected: 0,
+    guaranteePaddingRejected: 0,
+    holeTiles: 0,
   };
 }
 
@@ -452,12 +460,12 @@ export class BogGenerator {
         if (!keep) continue;
 
         if (!this.inIsland(t)) {
-          if (d === 1) return false;
+          if (d <= 2) return false;
           continue;
         }
 
         if (this.terrainOf(t) === 'mountain' || openSea(t) || hasOpenSeaNeighbour(t)) {
-          if (d === 1) return false;
+          if (d <= 2) return false;
           continue;
         }
 
@@ -606,6 +614,20 @@ export class BogGenerator {
     return owner === undefined || owner === ownSite;
   }
 
+  /** No neighbour of the tile is a mountain (a mountain cannot become padding, rule R12) — mirrors `MountainFree`. */
+  private anyNeighbour(c: AxialCoord, pred: (n: AxialCoord) => boolean): boolean {
+    for (let d = 0; d < 6; d++) if (pred(nb(c, d))) return true;
+    return false;
+  }
+
+  private mountainFree(t: AxialCoord): boolean {
+    for (let d = 0; d < 6; d++) {
+      const n = nb(t, d);
+      if (this.inIsland(n) && this.terrainOf(n) === 'mountain') return false;
+    }
+    return true;
+  }
+
   /** Through-river sites, then sinks and spawns, then the pockets' own sinks — mirrors `PlaceSites`. Mutates `bp`. */
   placeSites(bp: BogPaths, widthTrial: WidthTrial, traceRiver: TraceRiver): void {
     const wanted = Math.min(BOG_MAX_SITES, Math.max(1, Math.floor(this.islandTiles.length / BOG_TILES_PER_SITE)));
@@ -654,6 +676,7 @@ export class BogGenerator {
 
       attempts++;
       const count = pathCount(bp);
+      const saved = this.save(bp);
       const site = this.tryPlaceSite(
         bp,
         count,
@@ -666,27 +689,157 @@ export class BogGenerator {
       );
       if (site === null) continue;
 
+      const sunk = hash2(site.anchor.q, site.anchor.r, this.seed + 83) < BOG_SINK_CHANCE && this.trySink(bp, site, radius + SINK_EXTRA_REACH, widthTrial);
+      const spawned = hash2(site.anchor.q, site.anchor.r, this.seed + 89) < BOG_SPAWN_CHANCE && this.trySpawn(bp, site, widthTrial, traceRiver);
+      this.buildRegion(bp, site);
+
+      // Rule R12: a ring of bog around every water feature; a site that cannot get it is dropped whole.
+      if (!this.tryPad(bp, site)) {
+        this.restore(saved, bp);
+        if (this.stats) this.stats.paddingRejected++;
+        continue;
+      }
+
       placed++;
       siteAnchors.push(anchor.tile);
-      if (this.stats) this.stats.sites++;
-
-      if (hash2(site.anchor.q, site.anchor.r, this.seed + 83) < BOG_SINK_CHANCE && this.trySink(bp, site, radius + SINK_EXTRA_REACH, widthTrial)) {
-        if (this.stats) this.stats.sinks++;
+      if (this.stats) {
+        this.stats.sites++;
+        if (sunk) this.stats.sinks++;
+        if (spawned) this.stats.spawns++;
       }
-
-      if (hash2(site.anchor.q, site.anchor.r, this.seed + 89) < BOG_SPAWN_CHANCE && this.trySpawn(bp, site, widthTrial, traceRiver)) {
-        if (this.stats) this.stats.spawns++;
-      }
-
-      this.buildRegion(bp, site);
     }
 
     // Pockets: the nearest river within reach sinks into each.
     for (const site of this.sites.filter((s) => s.pocket)) {
-      if (this.trySink(bp, site, BOG_MAX_SINK_REROUTE, widthTrial) && this.stats) this.stats.pocketSinks++;
+      const saved = this.save(bp);
+      const core = new HexSet(site.core);
+      const creeks = [...site.creeks];
+      if (!this.trySink(bp, site, BOG_MAX_SINK_REROUTE, widthTrial)) continue;
+
+      if (this.tryPad(bp, site)) {
+        if (this.stats) this.stats.pocketSinks++;
+      } else {
+        this.restore(saved, bp);
+        site.core.clear();
+        for (const t of core) site.core.add(t);
+        site.creeks.length = 0;
+        site.creeks.push(...creeks);
+        if (this.stats) this.stats.paddingRejected++;
+      }
     }
 
     this.placeGuarantee(bp, widthTrial, traceRiver);
+    this.fillHoles(bp);
+  }
+
+  /** `TryPad` for the guarantee's attempts, counting the sites it had to drop — mirrors `PadOrCount`. */
+  private padOrCount(bp: BogPaths, site: Site): boolean {
+    if (this.tryPad(bp, site)) return true;
+    if (this.stats) this.stats.guaranteePaddingRejected++;
+    return false;
+  }
+
+  /**
+   * Rule R12: every lake, shore, mouth, creek and spring tile of `site` has all six neighbours inside the bog. Missing ones become
+   * plain moss when they are grass or forest that is not a river and does not touch the sea or sand (R7); a creek tile may touch the
+   * river its own flow links lead to. Returns false (and changes nothing) when a neighbour cannot be padded — mirrors `TryPad`.
+   */
+  private tryPad(bp: BogPaths, site: Site): boolean {
+    const count = pathCount(bp);
+    const pending = new HexSet();
+    const features = new HexSet(site.core);
+    for (const t of site.lake) features.add(t);
+    for (const f of sorted(features)) {
+      const fk = coordKey(f);
+      const isLake = this.lake.has(f);
+      let inDir = -1;
+      let outDir = -1;
+      const m = this.mouth.get(fk);
+      const c = this.creek.get(fk);
+      const sp = this.spring.get(fk);
+      if (m !== undefined) {
+        inDir = m.in;
+        outDir = m.out;
+      } else if (c !== undefined) {
+        inDir = c.in;
+        outDir = c.out;
+      } else if (sp !== undefined) {
+        outDir = sp;
+      } else if (!isLake && this.lakeMask(f, this.lake) === 0) {
+        continue;
+      }
+
+      for (let d = 0; d < 6; d++) {
+        const n = nb(f, d);
+        if (this.bog.has(n) || this.lake.has(n) || pending.has(n)) continue;
+        if (count.has(coordKey(n))) {
+          if (d === inDir || d === outDir) continue;
+          return false;
+        }
+
+        if (!this.canPad(n)) return false;
+        pending.add(n);
+      }
+    }
+
+    for (const t of pending) this.bog.add(t);
+    return true;
+  }
+
+  /** A grass or forest tile of the island that touches neither the open sea nor sand, so moss on it keeps rule R7 — mirrors `CanPad`. */
+  private canPad(n: AxialCoord): boolean {
+    if (!this.inIsland(n)) return false;
+    const terrain = this.terrainOf(n);
+    if (terrain !== 'grass' && terrain !== 'forest') return false;
+    for (let d = 0; d < 6; d++) {
+      const m = nb(n, d);
+      if (this.bog.has(m) || this.lake.has(m)) continue;
+      if (!this.inIsland(m) || this.terrainOf(m) === 'sand') return false;
+    }
+    return true;
+  }
+
+  /**
+   * Fills the holes a noisy bog outline leaves: every connected group of non-bog island tiles that no path leaves without crossing
+   * bog (or lake) turns its grass and forest, except river tiles, into plain moss — mirrors `FillHoles`.
+   */
+  fillHoles(bp: BogPaths | null): void {
+    const count = bp === null ? new Map<string, number>() : pathCount(bp);
+    const seen = new Set<string>();
+    const fill: AxialCoord[] = [];
+    const land = this.islandTiles.filter((t) => this.inIsland(t));
+    for (const start of sorted(land)) {
+      const sk = coordKey(start);
+      if (this.bog.has(start) || this.lake.has(start) || seen.has(sk)) continue;
+      seen.add(sk);
+      const group: AxialCoord[] = [];
+      const stack: AxialCoord[] = [start];
+      let open = false;
+      while (stack.length > 0) {
+        const c = stack.pop()!;
+        group.push(c);
+        for (let d = 0; d < 6; d++) {
+          const n = nb(c, d);
+          if (this.bog.has(n) || this.lake.has(n)) continue;
+          if (!this.inIsland(n)) {
+            open = true;
+          } else if (!seen.has(coordKey(n))) {
+            seen.add(coordKey(n));
+            stack.push(n);
+          }
+        }
+      }
+
+      if (!open) {
+        for (const t of group) {
+          const terrain = this.terrainOf(t);
+          if ((terrain === 'grass' || terrain === 'forest') && !count.has(coordKey(t))) fill.push(t);
+        }
+      }
+    }
+
+    for (const t of fill) this.bog.add(t);
+    if (this.stats) this.stats.holeTiles += fill.length;
   }
 
   private discIsClear(anchor: AxialCoord, radius: number): boolean {
@@ -736,10 +889,23 @@ export class BogGenerator {
 
     const up = path[i0 - 1]!;
     const down = path[i1 + 1]!;
-    const creekOk = (t: AxialCoord): boolean => disc.has(t) && this.allowed(t) && !lake.has(t) && !isOther(t) && this.lakeMask(t, lake) === 0;
+    const creekOk = (t: AxialCoord): boolean =>
+      disc.has(t) && this.allowed(t) && this.mountainFree(t) && !lake.has(t) && !isOther(t) && this.lakeMask(t, lake) === 0;
 
-    const inRoutes = this.routesFrom(up, dirOf(up, path[i0 - 2]!), creekOk, mouthDir);
-    const outRoutes = this.routesFrom(down, i1 + 2 < path.length ? dirOf(down, path[i1 + 2]!) : -1, creekOk, mouthDir);
+    // Rule R12: a creek tile may touch only the river tile it is linked to (and the stretch of this river that the lake replaces).
+    const removedTiles = new HexSet(path.slice(i0, i1 + 1));
+    const keptRiverBeside = (t: AxialCoord, link: AxialCoord): boolean => {
+      for (let d = 0; d < 6; d++) {
+        const n = nb(t, d);
+        if (!sameCoord(n, link) && count.has(coordKey(n)) && !removedTiles.has(n)) return true;
+      }
+      return false;
+    };
+    const creekOkIn = (t: AxialCoord): boolean => creekOk(t) && !keptRiverBeside(t, up);
+    const creekOkOut = (t: AxialCoord): boolean => creekOk(t) && !keptRiverBeside(t, down);
+
+    const inRoutes = this.routesFrom(up, dirOf(up, path[i0 - 2]!), creekOkIn, mouthDir);
+    const outRoutes = this.routesFrom(down, i1 + 2 < path.length ? dirOf(down, path[i1 + 2]!) : -1, creekOkOut, mouthDir);
     if (inRoutes.size === 0 || outRoutes.size === 0) return null;
 
     const byLengthThenMouth = (x: Route, y: Route): number => x.tiles.length - y.tiles.length || x.mouth.q - y.mouth.q || x.mouth.r - y.mouth.r;
@@ -881,7 +1047,10 @@ export class BogGenerator {
     const shore = sorted(BogGenerator.neighboursOf(lake));
     for (const t of shore) {
       const mask = this.lakeMask(t, lake);
-      if (popCount(mask) > 3 || runs(mask) !== 1 || !this.allowed(t) || isOther(t) || !disc.has(t)) return null;
+      if (popCount(mask) > 3 || runs(mask) !== 1 || !this.allowed(t) || isOther(t) || !disc.has(t) || !this.mountainFree(t)) return null;
+
+      // Rule R12: the ring beyond the shore is padded with moss, so no other river may run there.
+      for (let d = 0; d < 6; d++) if (isOther(nb(t, d))) return null;
     }
 
     // Mouth candidates: a shore tile with exactly one lake neighbour.
@@ -1058,10 +1227,12 @@ export class BogGenerator {
 
       const creekOk = (c: AxialCoord): boolean =>
         (site.ring.has(c) || this.allowed(c, site.id)) &&
+        this.mountainFree(c) &&
         !lake.has(c) &&
         !count.has(coordKey(c)) &&
         this.lakeMask(c, lake) === 0 &&
-        hexDistance(c, t) <= reach + MAX_CREEK_LENGTH;
+        hexDistance(c, t) <= reach + MAX_CREEK_LENGTH &&
+        !this.anyNeighbour(c, (n) => !sameCoord(n, t) && count.has(coordKey(n)));
 
       const routes = this.routesFrom(t, dirOf(t, path[j - 1]!), creekOk, mouthDir);
       if (routes.size === 0) continue;
@@ -1097,7 +1268,8 @@ export class BogGenerator {
           !this.mouth.has(coordKey(t)) &&
           BogGenerator.minDistance(t, lake) >= 3 &&
           BogGenerator.minDistance(t, site.creeks) >= 2 &&
-          !count.has(coordKey(t)),
+          !count.has(coordKey(t)) &&
+          this.mountainFree(t),
       )
       .sort((a, b) => hash2(b.q, b.r, this.seed + 97) - hash2(a.q, a.r, this.seed + 97) || a.q - b.q || a.r - b.r)
       .slice(0, 3);
@@ -1109,7 +1281,9 @@ export class BogGenerator {
         !lake.has(c) &&
         this.lakeMask(c, lake) === 0 &&
         !this.creek.has(coordKey(c)) &&
-        !this.mouth.has(coordKey(c));
+        !this.mouth.has(coordKey(c)) &&
+        this.mountainFree(c) &&
+        !this.anyNeighbour(c, (n) => count.has(coordKey(n)));
 
       // Breadth-first over (tile, heading), exits are tiles just outside the region.
       const parent = new Map<string, RouteState | null>();
@@ -1150,6 +1324,10 @@ export class BogGenerator {
         for (const t of this.lake) blocked.add(t);
         for (const t of route.tiles) blocked.add(t);
         blocked.add(s);
+
+        // Rule R12: the spawned river keeps off the creek's neighbours (only its own start touches the creek).
+        for (const t of [...route.tiles, s, ...site.core]) for (let d = 0; d < 6; d++) blocked.add(nb(t, d));
+        blocked.delete(exit);
         const traced = traceRiver(exit, opp(dir), bp, blocked);
         if (traced === null) continue;
 
@@ -1195,6 +1373,7 @@ export class BogGenerator {
   /** The guarantee alone, for an island with no river candidates at all: only a spawn bog — mirrors `PlaceGuaranteeOnly`. */
   placeGuaranteeOnly(bp: BogPaths, widthTrial: WidthTrial, traceRiver: TraceRiver): void {
     this.placeGuarantee(bp, widthTrial, traceRiver);
+    this.fillHoles(bp);
   }
 
   private static within(c: AxialCoord, radius: number): AxialCoord[] {
@@ -1378,7 +1557,7 @@ export class BogGenerator {
       const site = this.tryPlaceSite(bp, pathCount(bp), anchor.path, anchor.index, radius, GUARANTEE_LAKE_MAX, GUARANTEE_MIN_FROM_SPRING, widthTrial);
       if (site !== null) {
         this.buildRegion(bp, site);
-        if (this.coveredCandidates(candidates, BOG_REACH) > 0) return true;
+        if (this.padOrCount(bp, site) && this.coveredCandidates(candidates, BOG_REACH) > 0) return true;
       }
 
       this.restore(saved, bp);
@@ -1418,7 +1597,7 @@ export class BogGenerator {
       attempts++;
       const saved = this.save(bp);
       if (this.trySpawnSite(bp, anchor.tile, widthTrial, traceRiver)) {
-        if (this.coveredCandidates(candidates, BOG_REACH) > 0) return true;
+        if (this.padOrCount(bp, this.sites[this.sites.length - 1]!) && this.coveredCandidates(candidates, BOG_REACH) > 0) return true;
       }
 
       this.restore(saved, bp);
@@ -1437,7 +1616,14 @@ export class BogGenerator {
     if (grown === null) return false;
 
     const { lake, mouthDir } = grown;
-    const creekOk = (t: AxialCoord): boolean => disc.has(t) && this.allowed(t) && !lake.has(t) && !isOther(t) && this.lakeMask(t, lake) === 0;
+    const creekOk = (t: AxialCoord): boolean =>
+      disc.has(t) &&
+      this.allowed(t) &&
+      this.mountainFree(t) &&
+      !lake.has(t) &&
+      !isOther(t) &&
+      this.lakeMask(t, lake) === 0 &&
+      !this.anyNeighbour(t, isOther);
 
     const springs = sorted(disc)
       .filter((t) => creekOk(t) && BogGenerator.minDistance(t, lake) >= 3)
@@ -1474,6 +1660,10 @@ export class BogGenerator {
           for (const t of taken) blocked.add(t);
           for (const t of flow.tiles) blocked.add(t);
           blocked.add(mouth);
+
+          // Rule R12: the spawned river keeps off the creeks' neighbours (only its own start touches the creek).
+          for (const t of [...flow.tiles, ...inRoute.tiles, s, ...BogGenerator.neighboursOf(lake)]) for (let d = 0; d < 6; d++) blocked.add(nb(t, d));
+          blocked.delete(exit);
           const traced = traceRiver(exit, opp(dir), bp, blocked);
           if (traced === null) continue;
 

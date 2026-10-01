@@ -1,18 +1,18 @@
 namespace Bjarnoy.Domain.World;
 
-/// <summary>How many times each of the bog map rules (R1-R11, <c>docs/design/bog.md</c>) is broken. All zero for a generated world.</summary>
-public sealed record BogRuleViolations(int R1, int R2, int R3, int R4, int R5, int R6, int R7, int R8, int R9, int R10, int R11)
+/// <summary>How many times each of the bog map rules (R1-R12, <c>docs/design/bog.md</c>) is broken. All zero for a generated world.</summary>
+public sealed record BogRuleViolations(int R1, int R2, int R3, int R4, int R5, int R6, int R7, int R8, int R9, int R10, int R11, int R12)
 {
-    public int Total => R1 + R2 + R3 + R4 + R5 + R6 + R7 + R8 + R9 + R10 + R11;
+    public int Total => R1 + R2 + R3 + R4 + R5 + R6 + R7 + R8 + R9 + R10 + R11 + R12;
 
     public static BogRuleViolations operator +(BogRuleViolations a, BogRuleViolations b) => new(
         a.R1 + b.R1, a.R2 + b.R2, a.R3 + b.R3, a.R4 + b.R4, a.R5 + b.R5, a.R6 + b.R6,
-        a.R7 + b.R7, a.R8 + b.R8, a.R9 + b.R9, a.R10 + b.R10, a.R11 + b.R11);
+        a.R7 + b.R7, a.R8 + b.R8, a.R9 + b.R9, a.R10 + b.R10, a.R11 + b.R11, a.R12 + b.R12);
 
-    public static BogRuleViolations None { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    public static BogRuleViolations None { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     public override string ToString() =>
-        $"R1={R1} R2={R2} R3={R3} R4={R4} R5={R5} R6={R6} R7={R7} R8={R8} R9={R9} R10={R10} R11={R11}";
+        $"R1={R1} R2={R2} R3={R3} R4={R4} R5={R5} R6={R6} R7={R7} R8={R8} R9={R9} R10={R10} R11={R11} R12={R12}";
 }
 
 /// <summary>
@@ -66,7 +66,7 @@ public static class BogRules
             return m;
         }
 
-        int r1 = 0, r2 = 0, r3 = 0, r4 = 0, r7 = 0, r8 = 0, r9 = 0, r10 = 0, r11 = 0;
+        int r1 = 0, r2 = 0, r3 = 0, r4 = 0, r7 = 0, r8 = 0, r9 = 0, r10 = 0, r11 = 0, r12 = 0;
 
         // Lake components (edge-connected).
         var component = new Dictionary<HexCoord, int>();
@@ -119,6 +119,7 @@ public static class BogRules
                     var n = Nb(c, d);
                     if (!byCoord.ContainsKey(n))
                     {
+                        r12++;
                         if (baseTerrain(c) == Terrain.Sea)
                         {
                             r10++;
@@ -188,6 +189,27 @@ public static class BogRules
                 && !t.WaterEdges.Select(e => (int)e).SequenceEqual(expectedEdges))
             {
                 r1++;
+            }
+
+            // R12: every neighbour of a water feature (anything but plain moss) is bog; a creek may touch the river its flow links lead to.
+            if (t.Kind != BogTileKind.Bog)
+            {
+                for (var d = 0; d < 6; d++)
+                {
+                    var n = Nb(c, d);
+                    if (byCoord.ContainsKey(n))
+                    {
+                        continue;
+                    }
+
+                    var ownRiver = t.Kind is BogTileKind.Creek or BogTileKind.Mouth or BogTileKind.CreekSpring
+                        && riverByCoord.ContainsKey(n)
+                        && (t.InDirections.Any(x => (int)x == d) || (t.OutDirection is { } od2 && (int)od2 == d));
+                    if (!ownRiver)
+                    {
+                        r12++;
+                    }
+                }
             }
 
             // R7: never beside the open sea or sand.
@@ -369,6 +391,6 @@ public static class BogRules
             }
         }
 
-        return new BogRuleViolations(r1, r2, r3, r4, 0, 0, r7, r8, r9, r10, r11);
+        return new BogRuleViolations(r1, r2, r3, r4, 0, 0, r7, r8, r9, r10, r11, r12);
     }
 }
