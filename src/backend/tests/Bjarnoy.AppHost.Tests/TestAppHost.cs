@@ -9,10 +9,11 @@ namespace Bjarnoy.AppHost.Tests;
 public static class TestAppHost
 {
     /// <summary>
-    /// Radius of the world each test's API seeds at startup. The default of 4000
-    /// takes ~14 s to generate and every test generates at least one world; 1000
-    /// takes under a second, and every test seed still draws ~30 islands with
-    /// plenty of start positions.
+    /// Radius of the world the shared stack's API seeds once, before
+    /// <see cref="AppHostFixture"/> snapshots the database. The default of 4000
+    /// takes ~14 s to generate, and several tests generate further worlds of
+    /// their own; 1000 takes under a second, and every test seed still draws ~30
+    /// islands with plenty of start positions.
     /// </summary>
     public const int WorldRadius = 1000;
 

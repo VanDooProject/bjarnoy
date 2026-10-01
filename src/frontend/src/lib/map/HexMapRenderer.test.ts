@@ -168,6 +168,29 @@ describe('hoverSubjectFor', () => {
     expect(hoverSubjectFor({ ...tileOf('grass'), camp, giant }, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
   });
 
+  it('carries the live camp state and the effective level, and drops a removed camp', () => {
+    const camp = {
+      family: 'wolfden',
+      level: 2,
+      orientation: 'SE' as const,
+      strong: true,
+      guardRange: 4,
+      effectiveLevel: 3,
+      garrison: { young: 1, adult: 2, alpha: 0 },
+      fullGarrison: { young: 5, adult: 12, alpha: 2 },
+      empty: false,
+      calmUntil: null,
+      aggressive: true,
+      clears: 10,
+    };
+    expect(hoverSubjectFor({ ...tileOf('grass'), camp }, undefined)).toMatchObject({
+      kind: 'camp',
+      level: 3,
+      live: { garrison: { young: 1, adult: 2, alpha: 0 }, empty: false, aggressive: true, clears: 10 },
+    });
+    expect(hoverSubjectFor({ ...tileOf('grass'), camp: { ...camp, removed: true } }, undefined)).toMatchObject({ kind: 'terrain' });
+  });
+
   it('falls back to building, then terrain, when there is no giant', () => {
     const building = { ...tileOf('grass'), buildingType: 'hut' as const, buildingLevel: 2 };
     expect(hoverSubjectFor(building, undefined)).toEqual({ kind: 'building', buildingType: 'hut', level: 2 });

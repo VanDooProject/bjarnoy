@@ -400,17 +400,18 @@ describe('TopBar', () => {
       wrapper.unmount();
     });
 
-    it('moves the settlement bubble to the top edge, right of the rail', async () => {
+    it('joins the settlement bubble to the menu button as one capsule at the top-left', async () => {
       const world = useWorldStore();
       world.hud.settlementName = 'Unnamed realm';
       hudRailWidthPx.value = 92;
       const wrapper = mountTopBar(undefined, DRAWER_SLOT);
       await wrapper.vm.$nextTick();
-      // jsdom has no layout: the rail's measured width stays whatever it was
-      // before the measurement (zeroed on unmount, set here for the first one).
       const bubble = wrapper.get('.settlement-bubble');
       expect(bubble.attributes('style')).toContain('top: 8px');
-      expect(bubble.attributes('style')).toMatch(/left: \d+px/);
+      // Starts at the rail's own left edge (the ☰ button paints inside it).
+      expect(bubble.attributes('style')).toContain('left: calc(8px');
+      expect(bubble.classes()).toContain('settlement-bubble--rail');
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--rail-joined');
       wrapper.unmount();
     });
   });

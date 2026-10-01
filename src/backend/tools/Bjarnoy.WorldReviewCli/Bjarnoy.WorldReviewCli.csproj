@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Developer/agent CLI around Bjarnoy.Domain's WorldReview: generates worlds for a list of seeds and prints the review.
+    See docs/design/world-generation-rules.md, "World review". Not shipped: nothing references it.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Bjarnoy.Domain\Bjarnoy.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -6,6 +6,7 @@ import {
   bogOrientationFor,
   bogTextureKey,
   campArtFor,
+  drawnCampOf,
   classifyFamilyClips,
   classifyFamilyFrames,
   collapseLetteredLevels,
@@ -1404,6 +1405,27 @@ describe('wildlife camps', () => {
     const tile = { ...campTile('wolfden', 'SW'), variant: 2 };
     expect(topTextureFor(textures, tile)).toBe('wolfden-SW-guarded');
     expect(topAnimFor(textures, tile)).toEqual({ textures: ['wolfden-SW-f0'], fps: 6, playback: 'loop' });
+  });
+
+  it('a cleared (empty) camp shows its static level000 top, never the clip', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'wolfden', ['SE', 'SW']);
+    const tile = campTile('wolfden', 'SW');
+    tile.camp = { ...tile.camp!, empty: true };
+    expect(topTextureFor(textures, tile)).toBe('wolfden-SW-cleared');
+    expect(topAnimFor(textures, tile)).toBeUndefined();
+    // A cleared camp may face any rotation (all are shipped), not just the guarded ones.
+    expect(campArtFor(textures, { ...tile, orientation: 'NE', camp: { ...tile.camp, orientation: 'NE' } }, undefined)?.orientation).toBe('NE');
+  });
+
+  it('a removed camp, or one with a building on its hex, draws no camp art at all', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'wolfden', ['SE']);
+    const tile = campTile('wolfden', 'SE');
+    expect(drawnCampOf(tile)).toBeDefined();
+    expect(drawnCampOf({ ...tile, camp: { ...tile.camp!, removed: true } })).toBeUndefined();
+    expect(campArtFor(textures, { ...tile, camp: { ...tile.camp!, removed: true } }, undefined)).toBeUndefined();
+    expect(drawnCampOf({ ...tile, buildingType: 'farm', buildingLevel: 1 })).toBeUndefined();
   });
 
   it('a tile without a camp is untouched by the camp lookup', () => {

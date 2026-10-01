@@ -122,7 +122,7 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
 // Design handoff "2a" frame 5: completion drops the checklist for a banner
 // with an explicit hand-off, and nudges the player toward naming their jarl
 // via the avatar mark instead of a forced popup.
-test('onboarding completion shows the completion banner and profile nudge, and hands off to /settlement', { tag: '@g3' }, async ({ page }) => {
+test('onboarding completion leads with the profile nudge, then the completion banner hands off to /settlement', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
@@ -147,8 +147,6 @@ test('onboarding completion shows the completion banner and profile nudge, and h
     world.syncHud();
   });
 
-  await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('All three placed.');
   await expect(settlement.checklist).toHaveCount(0);
 
   // The profile-mark nudge, glow included, replaces the old forced nickname
@@ -158,9 +156,15 @@ test('onboarding completion shows the completion banner and profile nudge, and h
   await expect(settlement.profileNudge).toContainText('Three buildings, no jarl.');
   await expect(page.getByTestId('returning-player-trigger')).toHaveClass(/is-nudging/);
 
+  // The nudge is the one call to action while it is up: the completion
+  // banner and its "Enter your settlement" wait until it is answered.
+  await expect(settlement.banner).toHaveCount(0);
+
   await page.getByTestId('profile-nudge-later').click();
   await expect(settlement.profileNudge).toHaveCount(0);
   await expect(page.getByTestId('returning-player-trigger')).not.toHaveClass(/is-nudging/);
+  await expect(settlement.banner).toBeVisible();
+  await expect(settlement.banner).toContainText('All three placed.');
 
   await settlement.continueButton.click();
   await page.waitForURL('**/settlement');

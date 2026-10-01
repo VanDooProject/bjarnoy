@@ -20,17 +20,18 @@ vi.mock('../../config', async (importOriginal) => {
   return { ...actual, DEMO_MODE: false };
 });
 
-const { getSettlementReports, getSettlementTradeReports, getSettlementFieldReports } = vi.hoisted(() => ({
+const { getSettlementReports, getSettlementTradeReports, getSettlementFieldReports, getSettlementCampReports } = vi.hoisted(() => ({
   getSettlementReports: vi.fn(),
   getSettlementTradeReports: vi.fn(),
   getSettlementFieldReports: vi.fn(),
+  getSettlementCampReports: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { getSettlementReports, getSettlementTradeReports, getSettlementFieldReports },
+    api: { getSettlementReports, getSettlementTradeReports, getSettlementFieldReports, getSettlementCampReports },
   };
 });
 
@@ -92,6 +93,7 @@ beforeEach(() => {
   getSettlementReports.mockResolvedValue([battleReport()]);
   getSettlementTradeReports.mockResolvedValue([]);
   getSettlementFieldReports.mockResolvedValue([]);
+  getSettlementCampReports.mockResolvedValue([]);
   const player = usePlayerStore();
   player.settlementId = 'settlement-1';
 });

@@ -3,14 +3,18 @@ import { computed, markRaw, onMounted, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import WorldMapCanvas from '../../components/map/WorldMapCanvas.vue';
+import WorldReviewPanel from '../../components/admin/WorldReviewPanel.vue';
 import { api, ApiError } from '../../api/client';
 import { WorldModel } from '../../lib/map/WorldModel';
 import type {
   AdminWorldResponse,
   WorldGenerationSettings,
   WorldGenerationSettingsOverrides,
+  WorldReviewFinding,
   WorldSeedPreviewResponse,
+  WorldSeedReviewResponse,
 } from '../../api/types';
+import { formatShare, MAX_SCAN_COUNT, parseScan } from './worldReview';
 import type { TileOrientation } from '../../lib/map/types';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -91,6 +95,52 @@ const previewModel = shallowRef<WorldModel | null>(null);
 const previewing = ref(false);
 const previewError = ref<string | null>(null);
 const fullscreen = ref(false);
+const canvasRef = ref<InstanceType<typeof WorldMapCanvas> | null>(null);
+/** The review finding the preview map was last centred on (highlighted in the table). */
+const selectedFinding = ref<WorldReviewFinding | null>(null);
+
+/** Centres the preview map on a review finding's representative hex. */
+function focusFinding(finding: WorldReviewFinding) {
+  selectedFinding.value = finding;
+  canvasRef.value?.renderer?.panTo({ q: finding.q, r: finding.r });
+}
+
+// Seed scan: review a range of candidate seeds (POST review-seeds) and preview one of them.
+const scanFrom = ref('');
+const scanCount = ref('4');
+const scanning = ref(false);
+const scanError = ref<string | null>(null);
+const scanResult = ref<WorldSeedReviewResponse | null>(null);
+
+async function runScan() {
+  if (scanning.value) return;
+  const parsed = parseScan(scanFrom.value, scanCount.value);
+  if (parsed === 'badSeed') {
+    scanError.value = t('adminWorldReseed.seedMustBeInteger');
+    return;
+  }
+  if (parsed === 'badCount') {
+    scanError.value = t('adminWorldReview.scanCountRange', { max: MAX_SCAN_COUNT });
+    return;
+  }
+
+  scanning.value = true;
+  scanError.value = null;
+  try {
+    scanResult.value = await api.adminReviewWorldSeeds(worldId.value, { ...parsed, generation: { ...generation.value } });
+  } catch (err) {
+    scanError.value = err instanceof ApiError ? err.message : t('adminWorldReview.scanError');
+    scanResult.value = null;
+  } finally {
+    scanning.value = false;
+  }
+}
+
+/** Previews a seed from the scan list: the same as typing it into the seed field and pressing "Preview seed". */
+function previewScanned(seed: number) {
+  seedInput.value = String(seed);
+  void runPreview();
+}
 
 const confirmName = ref('');
 const committing = ref(false);
@@ -147,6 +197,7 @@ onMounted(async () => {
     loading.value = false;
   }
   randomizeSeed();
+  scanFrom.value = seedInput.value;
 });
 
 async function runPreview() {
@@ -163,6 +214,7 @@ async function runPreview() {
     const requestedGeneration = { ...generation.value };
     const result = await api.adminPreviewWorldSeed(worldId.value, { seed, generation: requestedGeneration });
     preview.value = result;
+    selectedFinding.value = null;
     previewedGeneration.value = requestedGeneration;
     previewModel.value = markRaw(buildPreviewModel(result));
   } catch (err) {
@@ -320,12 +372,75 @@ function back() {
         </p>
       </section>
 
-      <section v-if="previewModel" class="map-panel" :class="{ fullscreen }">
-        <WorldMapCanvas :world-model="previewModel" player-id="admin-preview" />
-        <button class="expand" @click="fullscreen = !fullscreen">
-          {{ fullscreen ? $t('adminWorldReseed.exitFullScreen') : $t('adminWorldReseed.fullScreen') }}
-        </button>
+      <section class="panel" data-testid="seed-scan">
+        <h2>{{ $t('adminWorldReview.scanHeading') }}</h2>
+        <p class="hint">{{ $t('adminWorldReview.scanHint') }}</p>
+        <div class="controls">
+          <label for="scan-from">{{ $t('adminWorldReview.scanFrom') }}</label>
+          <input id="scan-from" v-model="scanFrom" type="number" step="1" data-testid="scan-from" />
+          <label for="scan-count">{{ $t('adminWorldReview.scanCount') }}</label>
+          <input
+            id="scan-count"
+            v-model="scanCount"
+            class="count"
+            type="number"
+            min="1"
+            :max="MAX_SCAN_COUNT"
+            step="1"
+            data-testid="scan-count"
+          />
+          <button :disabled="scanning" data-testid="scan-seeds" @click="runScan">
+            {{ scanning ? $t('adminWorldReview.scanning') : $t('adminWorldReview.scan') }}
+          </button>
+        </div>
+        <p v-if="scanError" class="error" data-testid="scan-error">{{ scanError }}</p>
+        <table v-else-if="scanResult" class="scan-table" data-testid="scan-results">
+          <thead>
+            <tr>
+              <th>{{ $t('adminWorldReview.colSeed') }}</th>
+              <th>{{ $t('adminWorldReview.colErrors') }}</th>
+              <th>{{ $t('adminWorldReview.colWarnings') }}</th>
+              <th>{{ $t('adminWorldReview.colCutOff') }}</th>
+              <th>{{ $t('adminWorldReview.colMissingBog') }}</th>
+              <th>{{ $t('adminWorldReview.colNoLandingSpots') }}</th>
+              <th>{{ $t('adminWorldReview.colLandingSpots') }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in scanResult.seeds" :key="s.seed" data-testid="scan-row">
+              <td>{{ s.seed }}</td>
+              <td :class="{ bad: s.errors > 0 }">{{ s.errors }}</td>
+              <td>{{ s.warnings }}</td>
+              <td>{{ s.cutOffTiles }} ({{ formatShare(s.cutOffShare) }})</td>
+              <td :class="{ bad: s.islandsMissingBog > 0 }">{{ s.islandsMissingBog }}</td>
+              <td>{{ s.islandsWithoutLandingSpots }}</td>
+              <td>{{ s.landingSpots }}</td>
+              <td>
+                <button class="secondary" :disabled="previewing" data-testid="scan-preview" @click="previewScanned(s.seed)">
+                  {{ $t('adminWorldReview.previewThis') }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </section>
+
+      <div v-if="previewModel" class="preview-layout">
+        <section class="map-panel" :class="{ fullscreen }">
+          <WorldMapCanvas ref="canvasRef" :world-model="previewModel" player-id="admin-preview" />
+          <button class="expand" @click="fullscreen = !fullscreen">
+            {{ fullscreen ? $t('adminWorldReseed.exitFullScreen') : $t('adminWorldReseed.fullScreen') }}
+          </button>
+        </section>
+        <WorldReviewPanel
+          v-if="preview?.review"
+          class="review-panel"
+          :review="preview.review"
+          :selected="selectedFinding"
+          @select="focusFinding"
+        />
+      </div>
 
       <section v-if="preview" class="panel danger">
         <h2>{{ $t('adminWorldReseed.commitHeading') }}</h2>
@@ -431,6 +546,46 @@ function back() {
 }
 /* WorldMapCanvas's own container is absolutely positioned to its parent's
    box, so the preview needs a sized, positioned frame to fill. */
+.preview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 960px) {
+  .preview-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.preview-layout .map-panel {
+  margin-bottom: 0;
+}
+.review-panel {
+  max-height: max(420px, calc(100dvh - 420px));
+}
+.scan-table {
+  margin-top: 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.scan-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 4px 10px 4px 0;
+}
+.scan-table td {
+  padding: 4px 10px 4px 0;
+  border-top: 1px solid var(--panel-border);
+  font-variant-numeric: tabular-nums;
+}
+.scan-table td.bad {
+  color: var(--rival);
+  font-weight: 600;
+}
+input.count {
+  width: 5em;
+}
 .map-panel {
   position: relative;
   height: max(420px, calc(100vh - 420px));

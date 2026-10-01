@@ -15,7 +15,8 @@
     "all": "All",
     "battle": "Battle",
     "field": "Field",
-    "trade": "Trade"
+    "trade": "Trade",
+    "camp": "Camps"
   },
   "noReports": "No reports yet.",
   "simulatorHint": "Want to test a fight without risking real troops?",

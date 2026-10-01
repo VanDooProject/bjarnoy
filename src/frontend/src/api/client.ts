@@ -52,6 +52,8 @@ import type {
   ReseedWorldRequest,
   ReseedWorldResponse,
   WorldSeedPreviewResponse,
+  ReviewWorldSeedsRequest,
+  WorldSeedReviewResponse,
   PagedConversationsResponse,
   PagedMessagesResponse,
   PagedReportsResponse,
@@ -97,6 +99,8 @@ import type {
   WorldMembershipResponse,
   WorldResponse,
   WorldSummaryResponse,
+  CampReportResponse,
+  CampStateResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -267,6 +271,8 @@ export const api = {
   // calls (e.g. getFogChunks/getPlotSuggestion below). 400s without it.
   getWorldMembership: (worldId: string, ownerId: string) =>
     request<WorldMembershipResponse>(`/worlds/${worldId}/membership`, { headers: ownerHeader(ownerId) }),
+  getWorldCamps: (worldId: string, islandId?: string) =>
+    request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`),
   getIslands: (worldId: string) => request<IslandResponse[]>(`/worlds/${worldId}/islands`),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {
@@ -467,6 +473,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminReviewWorldSeeds: (worldId: string, body: ReviewWorldSeedsRequest) =>
+    request<WorldSeedReviewResponse>(`/admin/worlds/${worldId}/review-seeds`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   adminReseedWorld: (worldId: string, body: ReseedWorldRequest) =>
     request<ReseedWorldResponse>(`/admin/worlds/${worldId}/reseed`, {
       method: 'POST',
@@ -651,6 +662,11 @@ export const api = {
     request<FieldBattleReportResponse[]>(`/settlements/${settlementId}/field-reports`, {
       headers: ownerHeader(ownerId),
     }),
+  // Wildlife camp fights (hunt / ambush / tower attack) — `ArmyEndpoints`' camp-report routes.
+  getCampReport: (reportId: string, ownerId?: string) =>
+    request<CampReportResponse>(`/camp-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
+  getSettlementCampReports: (settlementId: string, ownerId?: string) =>
+    request<CampReportResponse[]>(`/settlements/${settlementId}/camp-reports`, { headers: ownerHeader(ownerId) }),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,

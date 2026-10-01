@@ -27,6 +27,7 @@ import { usePlayerStore } from './player';
 import type { AxialCoord } from '../lib/hex/coords';
 import {
   buildAttackDispatchRequest,
+  buildHuntDispatchRequest,
   buildFieldOrderRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
@@ -288,6 +289,8 @@ export const useWorldStore = defineStore('world', {
     // drawn on the map (HexMapRenderer.setArmyOverlay) while selected. Not a
     // computed getter: selection persists across `refreshArmies` polls by id.
     selectedArmyId: null as string | null,
+    // Bumped when a camp-state refresh changed something the map draws (MapView watches it).
+    campStatesVersion: 0,
     // Waypoint-editing / dispatch-composition state — see `startDispatch`/
     // `addWaypoint`/`confirmDispatch`. `null` while no dispatch is being
     // composed; SettlementView threads this into SettlementCanvas's
@@ -307,8 +310,10 @@ export const useWorldStore = defineStore('world', {
       // `buildAttackDispatchRequest`'s own comment). 'support' (issue #40
       // phase 4) is shaped identically to 'attack' — a target settlement plus
       // optional waypoints — see `buildSupportDispatchRequest`.
-      mission: 'move' | 'attack' | 'support';
+      // 'hunt' targets a wildlife camp's hex (`targetCamp`); the route holds only intermediate waypoints.
+      mission: 'move' | 'attack' | 'support' | 'hunt';
       targetSettlementId: string | null;
+      targetCamp: { q: number; r: number } | null;
       // Issue #40 phase 5: the coordinate of a building within the target
       // settlement a Catapult-carrying Attack would prefer to hit — a
       // *preference*, not a guarantee (see `buildAttackDispatchRequest`'s own
@@ -577,6 +582,9 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
+      // Live camp state (garrison, cleared, calm...) on top of the static camp tags above; a failure
+      // only leaves every camp showing as guarded, so it never blocks the bootstrap.
+      await this.refreshCampStates();
       this.liveReady = true;
       // Fog-gated (ExploredAreaService): for a caller with an existing realm
       // (a returning/claimed player), this pulls in their own settlements and
@@ -1303,6 +1311,21 @@ export const useWorldStore = defineStore('world', {
      * own army list does. No-op in demo mode. See `armies`'s own comment for
      * why home garrison never appears here.
      */
+    /**
+     * Live mode: fetches every camp's live state (`GET /worlds/{id}/camps`) and merges it onto the
+     * model's camps (`WorldModel.setCampStates`); bumps `campStatesVersion` only on a real change so
+     * the map redraws (a cleared camp swaps its art) without a rebuild per poll. Never throws: a
+     * failed fetch leaves the previous state. A no-op in demo mode, where every camp stays guarded.
+     */
+    async refreshCampStates() {
+      if (DEMO_MODE || !this.worldId) return;
+      try {
+        const states = await api.getWorldCamps(this.worldId);
+        if (this.model.setCampStates(states)) this.campStatesVersion += 1;
+      } catch (err) {
+        console.warn('camp states refresh failed', err);
+      }
+    },
     async refreshArmies() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [summaries, guests] = await Promise.all([
@@ -1318,6 +1341,8 @@ export const useWorldStore = defineStore('world', {
       this.armiesFetchedAt = Date.now();
       this.guestArmies = guests;
       this.guestArmiesFetchedAt = Date.now();
+      // Hunts, ambushes and regrowth change camps; piggy-back the camp refresh on the army poll.
+      await this.refreshCampStates();
       // An army that arrived home (and was folded back/deleted — see the
       // `armies` state comment) simply stops appearing in the list; drop a
       // selection that's no longer valid rather than leaving the map overlay
@@ -1425,6 +1450,7 @@ export const useWorldStore = defineStore('world', {
         error: null,
         mission: 'move',
         targetSettlementId: null,
+        targetCamp: null,
         targetBuildingCoord: null,
       };
       this.dispatchTargetBuildings = null;
@@ -1442,10 +1468,13 @@ export const useWorldStore = defineStore('world', {
      * to fill in. Units are still picked manually (no default selection);
      * this only sets the mission and destination the tap already implied.
      */
-    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support'; targetSettlementId?: string } = {}) {
+    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {}) {
       this.startDispatch();
       if (!this.dispatchDraft) return;
-      if (opts.mission && opts.targetSettlementId) {
+      if (opts.mission === 'hunt') {
+        this.dispatchDraft.mission = 'hunt';
+        this.dispatchDraft.targetCamp = { q: coord.q, r: coord.r };
+      } else if (opts.mission && opts.targetSettlementId) {
         this.dispatchDraft.mission = opts.mission;
         this.setDispatchTarget(opts.targetSettlementId);
       } else {
@@ -1453,11 +1482,12 @@ export const useWorldStore = defineStore('world', {
       }
     },
     /** Switching mission clears the plotted route/target — a move destination and an attack's/support's waypoint-only route aren't interchangeable, and a stale target settlement from a previous draft shouldn't silently carry over. */
-    setDispatchMission(mission: 'move' | 'attack' | 'support') {
+    setDispatchMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
       if (!this.dispatchDraft) return;
       this.dispatchDraft.mission = mission;
       this.dispatchDraft.route = [];
       this.dispatchDraft.targetSettlementId = null;
+      this.dispatchDraft.targetCamp = null;
       this.dispatchDraft.targetBuildingCoord = null;
       this.dispatchDraft.error = null;
     },
@@ -1590,12 +1620,16 @@ export const useWorldStore = defineStore('world', {
             )
           : draft.mission === 'support'
             ? buildSupportDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
-            : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+            : draft.mission === 'hunt'
+              ? buildHuntDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetCamp)
+              : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
         } else if (draft.mission === 'move' && draft.route.length === 0) {
           draft.error = i18n.global.t('common.errors.clickMapForDestination');
+        } else if (draft.mission === 'hunt' && !draft.targetCamp) {
+          draft.error = i18n.global.t('common.errors.chooseCampToHunt');
         } else if ((draft.mission === 'attack' || draft.mission === 'support') && !draft.targetSettlementId) {
           draft.error = i18n.global.t('common.errors.chooseSettlementFor', { mission: draft.mission });
         } else {

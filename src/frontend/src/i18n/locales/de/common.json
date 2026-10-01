@@ -20,7 +20,8 @@
     "selectAtLeastOneUnit": "Wähle mindestens eine Einheit zum Entsenden.",
     "clickMapForDestination": "Klicke zuerst auf die Karte, um ein Ziel festzulegen.",
     "chooseSettlementFor": "Wähle zuerst eine Siedlung zum {mission}.",
-    "fieldOrderPremiumRequired": "Premium erforderlich, um mehr als einen Stopp zu planen — entferne den zusätzlichen Stopp oder führe ein Upgrade durch."
+    "fieldOrderPremiumRequired": "Premium erforderlich, um mehr als einen Stopp zu planen — entferne den zusätzlichen Stopp oder führe ein Upgrade durch.",
+    "chooseCampToHunt": "Wähle zuerst ein Wildtierlager zum Jagen."
   },
   "localeSwitcher": {
     "label": "Sprache",

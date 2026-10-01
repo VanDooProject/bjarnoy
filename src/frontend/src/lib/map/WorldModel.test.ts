@@ -1383,6 +1383,79 @@ describe('WorldModel wildlife camps', () => {
     expect(model.getTile(candidate!.q, candidate!.r).buildingType).toBeUndefined();
   });
 
+  describe('live camp state', () => {
+    const state = (q: number, r: number, over: Record<string, unknown> = {}) => ({
+      q,
+      r,
+      family: 'wolfden',
+      level: 2,
+      effectiveLevel: 3,
+      strong: true,
+      guardRange: 4,
+      garrison: { young: 5, adult: 12, alpha: 2 },
+      fullGarrison: { young: 5, adult: 12, alpha: 2 },
+      empty: false,
+      calmUntil: null,
+      aggressive: true,
+      clears: 10,
+      removed: false,
+      leftover: { wood: 0, stone: 0, food: 0, iron: 0 },
+      ...over,
+    });
+
+    function buildableCandidate() {
+      const control = new WorldModel(DEMO_SEED);
+      const { settlement, at } = foundLandedSettlement(control);
+      const candidate = hexesInRadius(at, 3).find(
+        (c) => hexDistance(at, c) >= 2 && control.placeBuilding(settlement.id, c, 'farm'),
+      );
+      expect(candidate).toBeDefined();
+      return candidate!;
+    }
+
+    it('setCampStates merges by q,r, reports a change once, and ignores hexes without a camp', () => {
+      const model = new WorldModel(DEMO_SEED);
+      model.setCamps([{ family: 'wolfden', coord: { q: 3, r: 4 }, level: 2, orientation: 'SE' }]);
+      expect(model.setCampStates([state(3, 4), state(50, 50)])).toBe(true);
+      expect(model.getTile(3, 4).camp).toMatchObject({ effectiveLevel: 3, clears: 10, empty: false, family: 'wolfden' });
+      expect(model.campAt({ q: 3, r: 4 })?.effectiveLevel).toBe(3);
+      expect(model.getTile(50, 50).camp).toBeUndefined();
+      // The same state again changes nothing, so no redraw is forced.
+      expect(model.setCampStates([state(3, 4)])).toBe(false);
+      expect(model.setCampStates([state(3, 4, { empty: true })])).toBe(true);
+    });
+
+    it('a cleared (empty) camp hex is buildable; a guarded one and Fenrir\'s brood are not', () => {
+      const candidate = buildableCandidate();
+
+      const guarded = new WorldModel(DEMO_SEED);
+      const g = foundLandedSettlement(guarded);
+      guarded.setCamps([{ family: 'wolfden', coord: candidate, level: 2, orientation: 'SE' }]);
+      guarded.setCampStates([state(candidate.q, candidate.r)]);
+      expect(guarded.placeBuilding(g.settlement.id, candidate, 'farm')).toBe(false);
+
+      const cleared = new WorldModel(DEMO_SEED);
+      const c = foundLandedSettlement(cleared);
+      cleared.setCamps([{ family: 'wolfden', coord: candidate, level: 2, orientation: 'SE' }]);
+      cleared.setCampStates([state(candidate.q, candidate.r, { empty: true })]);
+      expect(cleared.placeBuilding(c.settlement.id, candidate, 'farm')).toBe(true);
+
+      const fenrir = new WorldModel(DEMO_SEED);
+      const f = foundLandedSettlement(fenrir);
+      fenrir.setCamps([{ family: 'fenrirbrood', coord: candidate, level: 2, orientation: 'SE' }]);
+      fenrir.setCampStates([state(candidate.q, candidate.r, { family: 'fenrirbrood', empty: true })]);
+      expect(fenrir.placeBuilding(f.settlement.id, candidate, 'farm')).toBe(false);
+    });
+
+    it('a camp marked removed keeps its tag but stays out of the way of a building', () => {
+      const model = new WorldModel(DEMO_SEED);
+      model.setCamps([{ family: 'wolfden', coord: { q: 3, r: 4 }, level: 2, orientation: 'SE' }]);
+      model.setCampStates([state(3, 4, { empty: true, removed: true })]);
+      expect(model.getTile(3, 4).camp?.removed).toBe(true);
+      expect(model.camps()).toHaveLength(1);
+    });
+  });
+
   it('findLandfall keeps out of a strong camp\'s guard range plus the margin, but not a weak camp\'s', () => {
     const model = new WorldModel(DEMO_SEED);
     const spot = model.findLandfall({ q: 0, r: 0 })!;

@@ -99,6 +99,8 @@ public sealed class ArmyService(
     RenownService renownService,
     AuthService authService,
     FieldBattleService fieldBattleService,
+    CampService campService,
+    CampAmbushService campAmbushService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
@@ -107,6 +109,8 @@ public sealed class ArmyService(
     private readonly RenownService _renownService = renownService;
     private readonly AuthService _authService = authService;
     private readonly FieldBattleService _fieldBattleService = fieldBattleService;
+    private readonly CampService _campService = campService;
+    private readonly CampAmbushService _campAmbushService = campAmbushService;
     private readonly ILogger<ArmyService> _logger = logger;
 
     /// <summary>
@@ -114,7 +118,8 @@ public sealed class ArmyService(
     /// provisions, and computes its route.
     /// </summary>
     /// <param name="destination">
-    /// Required for <see cref="ArmyMission.Move"/>; ignored for
+    /// Required for <see cref="ArmyMission.Move"/> and, as the camp's own hex, for <see cref="ArmyMission.Hunt"/>
+    /// (the route then ends on the camp's hex, or on its nearest walkable neighbour when that hex is not walkable); ignored for
     /// <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Support"/>,
     /// whose destination is always the target settlement's own hex —
     /// resolved here rather than trusted from the caller.
@@ -238,6 +243,21 @@ public sealed class ArmyService(
         var dispatchGiantIndex = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
 
+        // Hunt-specific: the destination names the camp's hex. With no camp there the dispatch is refused by
+        // Army.PlanDispatch (targetCampCoord stays null); otherwise the route may end beside a camp whose own
+        // hex is not walkable.
+        HexCoord? targetCampCoord = null;
+        if (mission == ArmyMission.Hunt)
+        {
+            var camp = await _campService.FindCampAsync(settlement.WorldId, effectiveDestination, now, cancellationToken)
+                .ConfigureAwait(false);
+            if (camp is { } found)
+            {
+                targetCampCoord = found.Camp.Coord;
+                effectiveDestination = Army.HuntRouteDestination(found.Camp.Coord, settled.Centre, sampler.TerrainAt);
+            }
+        }
+
         // Founding-specific, dispatch-time-only checks (issue #55 §6): renown/
         // slot and target-hex spacing both need database access the pure
         // Army.PlanDispatch cannot reach on its own, so they are resolved
@@ -284,7 +304,7 @@ public sealed class ArmyService(
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex);
+            dispatchGiantIndex, targetCampCoord);
 
         if (!decision.Accepted)
         {
@@ -790,11 +810,28 @@ public sealed class ArmyService(
             return ArmySettleOutcome.Updated;
         }
 
+        // A strong camp's ambush (docs/design/wildlife-camps.md) is likewise checked before any arrival handling and
+        // likewise leaves the rest of the settle to this army's next call.
+        switch (await _campAmbushService.TryResolveAsync(army, domain, now, cancellationToken).ConfigureAwait(false))
+        {
+            case CampAmbushOutcome.Fought:
+                return ArmySettleOutcome.Updated;
+            case CampAmbushOutcome.ArmyDestroyed:
+                return ArmySettleOutcome.FoldedHome;
+        }
+
         if (domain.Mission is ArmyMission.Attack or ArmyMission.Raid
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             && now >= inTransit.Movement.ArrivesAt)
         {
             return await ResolveBattleAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (domain.Mission == ArmyMission.Hunt
+            && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } huntTransit
+            && now >= huntTransit.Movement.ArrivesAt)
+        {
+            return await ResolveHuntAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
         }
 
         if (domain.Mission == ArmyMission.Found
@@ -976,6 +1013,73 @@ public sealed class ArmyService(
         }
 
         return ApplyArmyOutcome(armyEntity, arrival.Army, now);
+    }
+
+    /// <summary>
+    /// Settles an <see cref="ArmyMission.Hunt"/> army's arrival at its camp: the camp's garrison is settled to the
+    /// arrival instant (<see cref="CampState.GarrisonAt"/> with the realm test), the fight is resolved by
+    /// <see cref="CampBattleResolver.Hunt"/>, the camp's state row and a <see cref="CampReportEntity"/> are written,
+    /// and the army either vanishes (wiped out) or walks home with its loot (<see cref="Army.SettleHuntArrival"/>).
+    /// A camp that no longer exists, or that a building now stands on, is no fight: the army turns home.
+    /// </summary>
+    private async Task<ArmySettleOutcome> ResolveHuntAsync(
+        ArmyEntity armyEntity, Army domain, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var movement = ((ArmyLocation.InTransit)domain.Location).Movement;
+        var arrivesAt = movement.ArrivesAt;
+        var worldId = armyEntity.Settlement!.WorldId;
+
+        var found = domain.TargetCampCoord is { } coord
+            ? await _campService.FindCampAsync(worldId, coord, arrivesAt, cancellationToken).ConfigureAwait(false)
+            : null;
+        var realm = await _campService.LoadRealmAsync(worldId, cancellationToken).ConfigureAwait(false);
+
+        if (found is not { } worldCamp || realm.HasBuilding(worldCamp.Camp.Coord))
+        {
+            _logger.LogWarning(
+                "Army {ArmyId}'s hunt target {Target} is gone; recalling home without a fight.",
+                armyEntity.Id, domain.TargetCampCoord);
+
+            return ApplyArmyOutcome(armyEntity, TurnHomeWithoutBattle(domain, movement), now);
+        }
+
+        var camp = worldCamp.Camp;
+        var state = worldCamp.State;
+        var garrison = state.GarrisonAt(camp, arrivesAt, realm.InsideRealm(camp.Coord));
+        var effectiveLevel = state.EffectiveLevel(camp);
+
+        var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
+        var landAttackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(UnitClass.Infantry) ?? 0;
+
+        var seed = Random.Shared.Next();
+        var plan = CampBattleResolver.Hunt(
+            domain.Stacks, garrison, camp, effectiveLevel, seed, landAttackBonusPercent, state.Leftover);
+
+        // An already empty camp is a pickup, not a clear: clears, calm and snapshot stay as they were.
+        var nextState = garrison.IsEmpty
+            ? state.AfterPickup(plan.Loot)
+            : state.AfterHunt(camp, arrivesAt, plan);
+        await _campService.UpsertStateAsync(worldId, camp.Coord, nextState, cancellationToken).ConfigureAwait(false);
+
+        var report = CampReport.From(
+            Guid.CreateVersion7(), worldId, CampReportKind.Hunt, arrivesAt, camp, effectiveLevel,
+            armyEntity.SettlementId, armyEntity.Id, domain.Stacks, garrison, plan, seed);
+        _dbContext.CampReports.Add(CampReportEntity.FromDomain(report));
+
+        _logger.LogInformation(
+            "Army {ArmyId} hunted {Family} camp at {Camp}: {Winner} won ({ArmyPower} vs {CampPower}); "
+                + "{Survivors} unit(s) survived, loot {Loot}.",
+            armyEntity.Id, camp.Family, camp.Coord, plan.Winner, plan.ArmyPower, plan.CampPower,
+            plan.ArmySurvivors.Sum(s => s.Count), plan.Loot);
+
+        var returning = domain.SettleHuntArrival(plan, arrivesAt);
+        if (returning is null)
+        {
+            _dbContext.Armies.Remove(armyEntity);
+            return ArmySettleOutcome.FoldedHome;
+        }
+
+        return ApplyArmyOutcome(armyEntity, returning, now);
     }
 
     /// <summary>

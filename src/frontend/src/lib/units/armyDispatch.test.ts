@@ -4,6 +4,8 @@ import {
   armyStatusLabel,
   buildAttackDispatchRequest,
   buildFieldOrderRequest,
+  buildHuntDispatchRequest,
+  isHuntUnit,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   canFieldOrderArmy,
@@ -394,5 +396,30 @@ describe('isFieldOrderMidMarch', () => {
     expect(
       isFieldOrderMidMarch({ movement: { isReturning: false, arrivesAt: '2026-01-01T13:00:00Z' } }, now),
     ).toBe(true);
+  });
+});
+
+describe('buildHuntDispatchRequest', () => {
+  it('returns null without units or a camp target', () => {
+    expect(buildHuntDispatchRequest({ spearman: 0 }, [], 10, { q: 1, r: 2 })).toBeNull();
+    expect(buildHuntDispatchRequest({ spearman: 3 }, [], 10, null)).toBeNull();
+  });
+
+  it('sends the camp hex as the destination with a hunt mission and the route as waypoints', () => {
+    expect(buildHuntDispatchRequest({ spearman: 3, axeman: 0 }, [{ q: 0, r: 1 }], 40, { q: 4, r: -2 })).toEqual({
+      units: [{ unit: 'spearman', count: 3 }],
+      waypoints: [{ q: 0, r: 1 }],
+      destination: { q: 4, r: -2 },
+      provisions: 40,
+      mission: 'hunt',
+    });
+    expect(buildHuntDispatchRequest({ spearman: 1 }, [], 0, { q: 4, r: -2 })?.waypoints).toBeUndefined();
+  });
+
+  it('only land units may hunt', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    expect(isHuntUnit('spearman', byType)).toBe(true);
+    expect(isHuntUnit('longship', byType)).toBe(false);
+    expect(isHuntUnit('unknown', byType)).toBe(false);
   });
 });

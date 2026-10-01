@@ -36,6 +36,7 @@ import {
 import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { AlreadyFoundedError, useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
+import { isHudDrawerPending } from '../composables/hudDrawerPendingState';
 import { useAuthStore } from '../stores/auth';
 import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
@@ -383,6 +384,22 @@ watch(
   },
   { immediate: true },
 );
+
+// The "Name your jarl" nudge and the completion banner used to show side by
+// side, two calls to action at once. While the nudge floats on screen it is
+// the only one; the banner (and its "Enter your settlement") follows once
+// the player registers or picks "Later". Same gate as HudNav.vue's
+// `showProfileNudge`; a nudge tucked into the phone drawer
+// (`isHudDrawerPending`) is not on screen, so the banner stays then.
+const profileNudgeFloating = computed(
+  () =>
+    player.onboardingComplete &&
+    !auth.isAuthenticated &&
+    !player.nickname &&
+    !player.profileNudgeDismissed &&
+    !isHudDrawerPending.value,
+);
+const showCompletionBanner = computed(() => guidance.value.complete && !profileNudgeFloating.value);
 
 function onContinueToSettlement() {
   router.push('/settlement');
@@ -1039,7 +1056,7 @@ watch(
          unlike completion, where the banner replaces the checklist
          entirely since there's nothing left to check off. -->
     <OnboardingBanner v-if="showLandfallBanner" variant="landfall" />
-    <OnboardingBanner v-if="guidance.complete" variant="complete" @continue="onContinueToSettlement" />
+    <OnboardingBanner v-if="showCompletionBanner" variant="complete" @continue="onContinueToSettlement" />
     <!-- Mobile tutorial focus (owner decision): on phones, the progress tray
          and the open ring menu would otherwise both fight for the same
          strip of screen near the bottom — the tray steps aside while the
@@ -1178,15 +1195,6 @@ h1 {
    hero has to span full-width below the mobile header instead of a fixed
    left offset, and the footer has to shrink so it doesn't fight the
    checklist tray for the same strip of screen at the bottom. */
-/* Landscape rail (TopBar.vue): the account-creation nudge hangs off the
-   rail's "Name your jarl" bubble at the top-left, right where the
-   completion banner's title sits on a short screen. While the nudge is up,
-   the banner starts right of it (the nudge is 300px wide, from the rail's
-   8px margin). */
-.landing:has(.hud-bar--rail .nudge) > .banner.complete {
-  left: 324px;
-  width: calc(100vw - 340px);
-}
 @media (max-width: 768px), (max-height: 500px) {
   .hero {
     left: 20px;
@@ -1257,6 +1265,11 @@ h1 {
 @media (max-height: 500px) {
   .footer {
     display: none;
+  }
+  /* The footer the phone rules reserve 44px for is hidden here, so the
+     checklist docks in the corner itself. */
+  .landing > .tray {
+    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
   /* Short landscape phones get the same minimal founding hero, kept to a
      narrow left column so it stays clear of the island on the right. */
