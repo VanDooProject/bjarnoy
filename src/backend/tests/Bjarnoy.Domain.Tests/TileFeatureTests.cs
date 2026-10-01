@@ -320,4 +320,17 @@ public class TileFeatureTests
         Assert.Equal(TerrainChecksumFixture.Expected(seed, "orientation"), orientation);
         Assert.Equal(TerrainChecksumFixture.Expected(seed, "variant"), variant);
     }
+
+    [Fact(Skip = "Manual run only: the art pack's variants may change, so this is not a CI gate. Remove Skip to run.")]
+    public void Bog_never_rolls_the_undecorated_plain_frame_but_uses_every_dressed_one()
+    {
+        var plain = new TerrainSampler(WorldGenerationOptions.ForSeed(7));
+        var hexes = Enumerable.Range(-20, 40).SelectMany(q => Enumerable.Range(-20, 40).Select(r => new HexCoord(q, r))).ToList();
+        var overlay = hexes.ToDictionary(h => h, _ => Terrain.Bog);
+        var sampler = plain.WithBogOverlay(overlay);
+
+        var seen = hexes.Select(sampler.VariantAt).Distinct().Order().ToArray();
+
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8 }, seen);
+    }
 }

@@ -1039,12 +1039,28 @@ const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
   grass: 4,
   forest: 3,
   mountain: 4,
-  // Bog: the plain moss plus variant001-008; lake: the plain water plus variant001-003 (islet, moss mat, reed
+  // Bog: the plain moss plus variant001-008 (the bare moss is never rolled, see `UNDECORATED_FIRST`); lake: the plain water plus variant001-003 (islet, moss mat, reed
   // island — the fish weir and the two boats are placed by the buildings that use them, never rolled). Mirrors
   // `TerrainSampler.VariantCounts`.
   bog: 9,
   lake: 4,
 };
+
+/**
+ * Terrains whose plain (index 0) frame carries no decoration of its own, so it would sit bare among dressed
+ * neighbours. They roll from `[1, N)` instead of `[0, N)`. Mirrors the backend's `TerrainSampler.UndecoratedFirst`.
+ * (The lake's plain frame is dressed by the always-on `lake_life` collection, so it stays in the roll.)
+ */
+const UNDECORATED_FIRST: ReadonlySet<Terrain> = new Set<Terrain>(['bog']);
+
+/** Maps a hash in [0, 1) to a variant index of `terrain`, skipping index 0 for `UNDECORATED_FIRST` terrains. */
+function rollVariant(h: number, terrain: Terrain): number {
+  const count = VARIANT_COUNTS[terrain] ?? 1;
+  if (count <= 1) return 0;
+  const skip = UNDECORATED_FIRST.has(terrain) ? 1 : 0;
+  const index = skip + Math.floor(h * (count - skip));
+  return index >= count ? count - 1 : index;
+}
 
 /**
  * Coastal water (`coastalwatertile_*`) has its own plain image plus
@@ -1105,10 +1121,7 @@ function weightedIndex(h: number, weights: number[]): number {
 export function variantAt(q: number, r: number, world: WorldSeed): number {
   const h = hash2(q, r, world.seed + 31);
   if (isCoastalWater(q, r, world)) return weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
-  const count = VARIANT_COUNTS[terrainAt(q, r, world)] ?? 1;
-  if (count <= 1) return 0;
-  const index = Math.floor(h * count);
-  return index >= count ? count - 1 : index;
+  return rollVariant(h, terrainAt(q, r, world));
 }
 
 /**
@@ -1117,10 +1130,7 @@ export function variantAt(q: number, r: number, world: WorldSeed): number {
  * cannot answer for them.
  */
 export function variantForTerrain(q: number, r: number, world: WorldSeed, terrain: Terrain): number {
-  const count = VARIANT_COUNTS[terrain] ?? 1;
-  if (count <= 1) return 0;
-  const index = Math.floor(hash2(q, r, world.seed + 31) * count);
-  return index >= count ? count - 1 : index;
+  return rollVariant(hash2(q, r, world.seed + 31), terrain);
 }
 
 /**
