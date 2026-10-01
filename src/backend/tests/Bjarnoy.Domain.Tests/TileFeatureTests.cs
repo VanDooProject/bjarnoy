@@ -321,8 +321,7 @@ public class TileFeatureTests
         Assert.Equal(TerrainChecksumFixture.Expected(seed, "variant"), variant);
     }
 
-    // Manual run only (xUnit v3 Explicit): the art pack's variants may change, so this is not a CI gate.
-    [Fact(Explicit = true)]
+    [Fact(Skip = "Manual run only: the art pack's variants may change, so this is not a CI gate. Remove Skip to run.")]
     public void Bog_never_rolls_the_undecorated_plain_frame_but_uses_every_dressed_one()
     {
         var plain = new TerrainSampler(WorldGenerationOptions.ForSeed(7));
