@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coordKey, type AxialCoord } from '../hex/coords';
-import { findPath, hoursFrom, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, type MovementRules, type PathContext } from './hexPath';
+import { findPath, HALF_OPEN_END_COST, hoursFrom, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, type MovementRules, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
 // Mirrors HexPathfinder's own cost tables (issue #159 part A/B) — kept as a
@@ -283,38 +283,34 @@ describe('PathContext.restrictions (default off)', () => {
   });
 });
 
-describe('PathRestrictions.wadeable (coastal water at a palisade land end)', () => {
-  // Land strip q 0..4 on r=0 and r=1 with the sea beyond; a wall on q=2 across r=0 and r=1 ends against the sea at r=-1.
-  const land = new Map<string, Terrain>();
-  for (let q = 0; q <= 4; q++) for (const r of [0, 1]) land.set(coordKey({ q, r }), 'grass');
+describe('PathRestrictions.halfOpen (a palisade land end)', () => {
+  const corridor = new Map<string, Terrain>();
+  for (let q = 0; q <= 4; q++) corridor.set(coordKey({ q, r: 0 }), 'grass');
   const from = { q: 0, r: 0 };
   const to = { q: 4, r: 0 };
-  const wall = new Set(['2,0', '2,1']);
-  const make = (restrictions: PathContext['restrictions']): PathContext => ({ ...contextFor(land), restrictions });
-  // The sea hexes touching the wall end (2,0).
-  const wade = new Set(['2,-1', '3,-1']);
+  const make = (restrictions: PathContext['restrictions']): PathContext => ({ ...contextFor(corridor), restrictions });
+  const wall = (c: AxialCoord) => c.q === 2;
 
-  it('wades round a land end through the water touching it, at 2.0 a step', () => {
-    const ctx = make({ blocked: (c) => wall.has(coordKey(c)), wadeable: (c) => wade.has(coordKey(c)) });
+  it('crosses a half-open end at the penalty instead of the terrain cost, for any army', () => {
+    const ctx = make({ blocked: wall, halfOpen: wall });
     const path = findPath(from, to, ctx)!;
-    expect(path.map(coordKey)).toContain('2,-1');
-    expect(pathCost(path, ctx)).toBeGreaterThan(4);
-    expect(path.filter((c) => land.get(coordKey(c)) === undefined).length).toBeGreaterThan(0);
+    expect(path.map(coordKey)).toContain('2,0');
+    expect(pathCost(path, ctx)).toBe(1 + HALF_OPEN_END_COST + 1 + 1);
+    expect(pathCost(path, make({ blocked: wall, halfOpen: wall, halfOpenCost: 5 }))).toBe(1 + 5 + 1 + 1);
+    // A friendly gate on the same hex changes nothing: it is already passable.
+    expect(findPath(from, to, make({ blocked: wall, halfOpen: wall, friendlyGate: wall }))).not.toBeNull();
   });
 
-  it('a sea end (blocked water) is not wadeable, and a coastal hex not next to a wall end stays impassable', () => {
-    const sea = make({ blocked: (c) => wall.has(coordKey(c)) || coordKey(c) === '2,-1', wadeable: (c) => wade.has(coordKey(c)) });
-    expect(findPath(from, to, sea)).toBeNull();
-    const nothing = make({ blocked: (c) => wall.has(coordKey(c)), wadeable: () => false });
-    expect(findPath(from, to, nothing)).toBeNull();
-    // Off by default: no wadeable predicate, no wading.
-    expect(findPath(from, to, make({ blocked: (c) => wall.has(coordKey(c)) }))).toBeNull();
+  it('a sealed end (blocked, not half open) blocks; default off blocks too', () => {
+    expect(findPath(from, to, make({ blocked: wall, halfOpen: () => false }))).toBeNull();
+    expect(findPath(from, to, make({ blocked: wall }))).toBeNull();
   });
 
-  it('only sea is wadeable, never land the predicate happens to name', () => {
-    const ctx = make({ wadeable: () => true, mountainsImpassable: true });
-    const mountain = new Map(land).set('2,0', 'mountain');
-    expect(pathCost([from, { q: 1, r: 0 }], { ...ctx, terrainAt: (c) => mountain.get(coordKey(c)) ?? 'sea' })).toBe(1);
-    expect(pathCost([{ q: 1, r: 0 }, { q: 2, r: 0 }], { ...ctx, terrainAt: (c) => mountain.get(coordKey(c)) ?? 'sea' })).toBe(Infinity);
+  it('prefers going round when that is cheaper than the penalty', () => {
+    const land = new Map(corridor);
+    for (const q of [1, 2, 3]) land.set(coordKey({ q, r: 1 }), 'grass');
+    const ctx = { ...contextFor(land), restrictions: { blocked: (c: AxialCoord) => c.q === 2 && c.r === 0, halfOpen: (c: AxialCoord) => c.q === 2 && c.r === 0 } };
+    const path = findPath(from, to, ctx)!;
+    expect(path.map(coordKey)).not.toContain('2,0');
   });
 });

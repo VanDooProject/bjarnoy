@@ -1,6 +1,6 @@
 {
  "name": "d2-land-end-one-short",
- "title": "the same wall ending one hex short of the coast: a land hex is left between the end and the sea, so the enemy walks round the open end",
+ "title": "the same wall one hex short of the coast: the enemy goes round the end or over its half-open hex, whichever is cheaper",
  "seed": 11,
  "radius": 1000,
  "window": {

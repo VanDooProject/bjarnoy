@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { coordKey, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import {
   canPlacePalisade,
+  classifyEnd,
   dirForWestEdge,
   isRefusal,
   PALISADE_FAMILY,
@@ -220,5 +221,26 @@ describe('resolveWall', () => {
     expect(piece(hexes[2]!)).toBe('bend120'); // neighbours W (3) and NE (1): one edge apart
     expect(piece(sea)).toBe('end_coast');
     expect(tileOfWallHex(sea, wall, ctx.terrainAt)).toMatchObject({ piece: 'end_coast', edges: [4] });
+  });
+});
+
+describe('classifyEnd', () => {
+  const at = { q: 0, r: 0 };
+  const ring = neighbors(at);
+  const terrainWith = (d: number, t: Terrain) => (c: AxialCoord): Terrain => (coordKey(c) === coordKey(ring[d]!) ? t : 'grass');
+  const noRiver = () => false;
+
+  it('an end on plain land or next to the sea is half open', () => {
+    expect(classifyEnd(at, () => 'grass', noRiver)).toBe('halfOpen');
+    for (let d = 0; d < 6; d++) expect(classifyEnd(at, terrainWith(d, 'sea'), noRiver)).toBe('halfOpen');
+    // Streams (not wide) and bog do not seal either.
+    expect(classifyEnd(at, terrainWith(1, 'bog'), noRiver)).toBe('halfOpen');
+  });
+
+  it('an end that touches a mountain or a wide river is sealed, from any side', () => {
+    for (let d = 0; d < 6; d++) {
+      expect(classifyEnd(at, terrainWith(d, 'mountain'), noRiver)).toBe('sealed');
+      expect(classifyEnd(at, () => 'grass', (c) => coordKey(c) === coordKey(ring[d]!))).toBe('sealed');
+    }
   });
 });

@@ -21,6 +21,9 @@ export interface MovementRules {
  * by default, so a context without `restrictions` prices exactly what HexPathfinder.cs does and
  * the golden fixture stays valid. Not on the wire yet: `rules` still comes from the backend.
  */
+/** What entering a half-open palisade end costs, in place of the terrain cost. */
+export const HALF_OPEN_END_COST = 3.0;
+
 export interface PathRestrictions {
   /** A river hex for which `isWideRiver` holds is impassable (streams stay crossable at the river cost). */
   wideRiversImpassable?: boolean;
@@ -31,13 +34,12 @@ export interface PathRestrictions {
   /** A blocked hex this army may pass anyway (a gate, for a friendly army only; leave unset for an enemy). */
   friendlyGate?(c: AxialCoord): boolean;
   /**
-   * Sea hexes land armies may wade through (the caller passes the coastal water touching a palisade's
-   * land end), priced at `wadeCost` (default 2.0, like bog). Nothing else about the sea changes: a hex
-   * `blocked` returns true for (the sea-end piece) stays impassable, and only hexes `terrainAt` calls
-   * sea are affected.
+   * Hexes that are blocked (a palisade) but half open: any army may enter them, at `halfOpenCost`
+   * instead of the terrain cost (a palisade's land end that abuts no wide river or mountain). The
+   * caller decides which hexes (see `classifyEnd` in palisadeTiles.ts); `blocked` is not consulted for them.
    */
-  wadeable?(c: AxialCoord): boolean;
-  wadeCost?: number;
+  halfOpen?(c: AxialCoord): boolean;
+  halfOpenCost?: number;
 }
 
 export interface PathContext {
@@ -65,13 +67,11 @@ function stepCost(c: AxialCoord, ctx: PathContext): number | null {
   const terrain = ctx.terrainAt(c);
   const base = ctx.rules.land[terrain];
   const r = ctx.restrictions;
-  if (base === undefined) {
-    if (terrain === 'sea' && r?.wadeable?.(c) && !r.blocked?.(c)) return r.wadeCost ?? 2.0;
-    return null;
-  }
+  if (base === undefined) return null;
   if (r) {
     if (r.mountainsImpassable && terrain === 'mountain') return null;
     if (r.wideRiversImpassable && ctx.isRiver(c) && (ctx.isWideRiver?.(c) ?? true)) return null;
+    if (r.halfOpen?.(c)) return r.halfOpenCost ?? HALF_OPEN_END_COST;
     if (r.blocked?.(c) && !r.friendlyGate?.(c)) return null;
   }
   return ctx.isRiver(c) ? base + ctx.rules.riverCrossingCost : base;

@@ -17,6 +17,7 @@ import { coordKey, hexDistance, neighbors, parseKey, type AxialCoord } from '../
 import { findPath, pathCost, reachableFrom, type PathContext } from '../../src/frontend/src/lib/map/hexPath';
 import {
   canPlacePalisade,
+  classifyEnd,
   isRefusal,
   resolveWall,
   type PalisadePiece,
@@ -63,7 +64,7 @@ export interface Scenario {
   attempts?: (Pair | [number, number, 'gate'])[];
   routes?: ScenarioRoute[];
   /** The owner's rules, each on by default: wide rivers and mountains impassable. Turn one off to compare. */
-  rules?: { wideRivers?: boolean; mountains?: boolean; palisade?: boolean; /** coastal water touching a palisade land end is wadeable (default on) */ wadeEnds?: boolean };
+  rules?: { wideRivers?: boolean; mountains?: boolean; palisade?: boolean; /** a land end that abuts no wide river or mountain is half open (default on) */ halfOpenEnds?: boolean };
   /** Tint everything reachable from route N's origin (0-based) with route N's army's rules. */
   flood?: number | boolean;
   /** Print the piece and camera on every wall hex. */
@@ -143,8 +144,8 @@ export interface ScenarioRun {
   refused: Refused[];
   routes: RouteResult[];
   flood: Set<string> | null;
-  /** Coastal water a land army may wade: sea hexes touching a land `palisade_end`. */
-  wadeable: Set<string>;
+  /** Land ends that are half open (passable at HALF_OPEN_END_COST); the other ends are sealed. */
+  halfOpen: Set<string>;
 }
 
 /** Places the scenario's wall hex by hex with `canPlacePalisade`; refusals are recorded, not thrown. */
@@ -177,21 +178,19 @@ export function placeWall(scn: Scenario, pw: PathingWorld): { wall: WallSet; ref
   return { wall: state(), refused };
 }
 
-/** Sea hexes (not wall hexes) next to a wall hex that resolved as a land end: the only water land armies wade. */
-export function wadeableWater(wall: WallSet, tiles: Map<string, PalisadeResult>, pw: PathingWorld): Set<string> {
+/** Wall hexes that resolved as a land end and abut no wide river or mountain: half open. */
+export function halfOpenEnds(tiles: Map<string, PalisadeResult>, pw: PathingWorld): Set<string> {
   const out = new Set<string>();
   for (const [key, tile] of tiles) {
     if (isRefusal(tile) || tile.piece !== 'end') continue;
-    for (const n of neighbors(parseKey(key))) {
-      if (pw.terrainAt(n) === 'sea' && !wall.walls.has(coordKey(n))) out.add(coordKey(n));
-    }
+    if (classifyEnd(parseKey(key), pw.terrainAt, pw.isWideRiver) === 'halfOpen') out.add(key);
   }
   return out;
 }
 
 function contextFor(scn: Scenario, pw: PathingWorld, wall: WallSet, army: 'friendly' | 'enemy'): PathContext {
   const rules = scn.rules ?? {};
-  const wade = (rules.wadeEnds ?? true) && (rules.palisade ?? true) ? wadeableWater(wall, resolveWall(wall, pw.terrainAt, parseKey), pw) : null;
+  const open = (rules.halfOpenEnds ?? true) && (rules.palisade ?? true) ? halfOpenEnds(resolveWall(wall, pw.terrainAt, parseKey), pw) : null;
   const walls = wall.walls;
   const gates = wall.gates ?? new Set<string>();
   const palisade = rules.palisade ?? true;
@@ -200,7 +199,7 @@ function contextFor(scn: Scenario, pw: PathingWorld, wall: WallSet, army: 'frien
     mountainsImpassable: rules.mountains ?? true,
     blocked: palisade ? (c) => walls.has(coordKey(c)) : undefined,
     friendlyGate: army === 'friendly' ? (c) => gates.has(coordKey(c)) : undefined,
-    wadeable: wade ? (c) => wade.has(coordKey(c)) : undefined,
+    halfOpen: open ? (c) => open.has(coordKey(c)) : undefined,
   });
 }
 
@@ -243,8 +242,8 @@ export function runScenario(scn: Scenario, pw?: PathingWorld): ScenarioRun {
     const r = scn.routes?.[index];
     if (r) flood = reachableFrom(pair(r.from), contextFor(scn, world2, wall, r.army));
   }
-  const wadeable = (scn.rules?.wadeEnds ?? true) && (scn.rules?.palisade ?? true) ? wadeableWater(wall, tiles, world2) : new Set<string>();
-  return { scenario: scn, pw: world2, wall, tiles, refused, routes, flood, wadeable };
+  const halfOpen = (scn.rules?.halfOpenEnds ?? true) && (scn.rules?.palisade ?? true) ? halfOpenEnds(tiles, world2) : new Set<string>();
+  return { scenario: scn, pw: world2, wall, tiles, refused, routes, flood, halfOpen };
 }
 
 // ---- the centrelines (the art contract's, drawn in the preview's flat-top geometry) ---------
@@ -320,7 +319,8 @@ const REFUSED_COLOUR: Rgb = [255, 40, 200];
 const MOUNTAIN_HATCH: Rgb = [58, 54, 50];
 const WIDE_COLOUR: Rgb = [22, 58, 175];
 const STREAM_COLOUR: Rgb = [130, 205, 245];
-const WADE_COLOUR: Rgb = [90, 200, 190];
+const HALF_OPEN_COLOUR: Rgb = [255, 140, 20];
+const SEALED_END_COLOUR: Rgb = [235, 205, 140];
 const FLOOD_TINT: Rgb = [255, 236, 120];
 const FLOOD_AMOUNT = 0.3;
 
@@ -349,7 +349,8 @@ const LEGEND: readonly LegendEntry[] = [
   { label: 'mountain (impassable, hatched)', colour: TERRAIN_COLOURS.mountain },
   { label: 'wide river (impassable)', colour: WIDE_COLOUR },
   { label: 'stream (crossable, +8)', colour: STREAM_COLOUR },
-  { label: 'wadeable water at a land end (2.0)', colour: WADE_COLOUR },
+  { label: 'half-open end (passable, 3.0)', colour: HALF_OPEN_COLOUR, shape: 'hollowDisc' },
+  { label: 'sealed end (blocks)', colour: SEALED_END_COLOUR, shape: 'square' },
   { label: 'palisade (impassable)', colour: WALL_COLOUR },
   { label: 'gate (friendly only)', colour: GATE_COLOUR },
   { label: 'friendly route', colour: FRIENDLY_COLOUR },
@@ -421,7 +422,7 @@ export function createPathingLayer(scn: Scenario): Layer {
       return footerLines(run);
     },
     colourAt(q, r, _world, dx = 0, dy = 0, fine = false) {
-      const { pw, flood, wadeable } = must();
+      const { pw, flood } = must();
       const c = { q, r };
       const terrain: Terrain = pw.terrainAt(c);
       let colour: Rgb = terrain === 'bog' ? BOG_COLOUR : terrain === 'lake' ? LAKE_COLOUR : TERRAIN_COLOURS[terrain];
@@ -430,11 +431,6 @@ export function createPathingLayer(scn: Scenario): Layer {
         const rc = riverColourAt(tile, dx, dy, fine, false);
         // Off the flow the river hex keeps its land colour (the helper answers grass there).
         if (rc !== TERRAIN_COLOURS.grass) colour = rc;
-      }
-      if (wadeable.has(coordKey(c))) {
-        // Light dotted teal: shallows a land army wades through.
-        const dot = fine ? Math.hypot(((dx * 5) % 1 + 1) % 1 - 0.5, ((dy * 5) % 1 + 1) % 1 - 0.5) < 0.22 : true;
-        colour = mix(colour, WADE_COLOUR, dot ? 0.75 : 0.25);
       }
       if (!fine) {
         if (terrain === 'mountain') colour = mix(colour, MOUNTAIN_HATCH, 0.4);
@@ -494,7 +490,8 @@ function drawRun(canvas: OverlayCanvas, run: ScenarioRun): void {
     if (tile.piece === 'end') {
       const tip = centreline(tile.piece, tile.edges)[1]!;
       const p = place(c, tip);
-      canvas.marker(p.x, p.y, 'square', 0.2 * s, [235, 205, 140]);
+      if (run.halfOpen.has(coordKey(c))) canvas.marker(p.x, p.y, 'hollowDisc', 0.32 * s, HALF_OPEN_COLOUR);
+      else canvas.marker(p.x, p.y, 'square', 0.2 * s, SEALED_END_COLOUR);
     } else if (tile.piece === 'gate180') {
       const [a, b] = tile.edges as [number, number];
       const ca = place(c, edgeMidpoint(a));

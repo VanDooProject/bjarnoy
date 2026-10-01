@@ -1,6 +1,6 @@
 {
  "name": "d-land-end-at-coast",
- "title": "the same wall without the sea-end piece: the coastal water touching the land end is wadeable (2.0 a step), so the enemy wades round the end",
+ "title": "the same wall with a plain land end: the end is half open, so the enemy walks over it at a penalty (3.0)",
  "seed": 11,
  "radius": 1000,
  "window": {

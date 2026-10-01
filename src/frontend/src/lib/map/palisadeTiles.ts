@@ -221,3 +221,17 @@ export function canPlacePalisade(
   }
   return { ok: true };
 }
+
+/**
+ * Whether a land end (`palisade_end`) at `c` is half open (any army may pass it, at a penalty) or
+ * sealed. An end that touches a mountain or a wide river is sealed: the wall runs up to a natural
+ * barrier and the barrier closes it. Anything else, the sea included, leaves it half open.
+ */
+export function classifyEnd(
+  c: AxialCoord,
+  terrainAt: (c: AxialCoord) => Terrain,
+  isWideRiver: (c: AxialCoord) => boolean,
+): 'halfOpen' | 'sealed' {
+  for (const n of neighbors(c)) if (terrainAt(n) === 'mountain' || isWideRiver(n)) return 'sealed';
+  return 'halfOpen';
+}
