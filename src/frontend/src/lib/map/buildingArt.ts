@@ -28,6 +28,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // levels up) — doesn't replace Pumpkin Farm's own `farm_pumpkin` family,
   // which stays legacy for now.
   farm: 'farm',
+  reindeerherder: 'reindeerherder',
   tower: 'towerbuilding',
   // The docs preview always shows the corrie landform, one of the two the
   // pack carves a quarry into — see the docs page's own variant picker for

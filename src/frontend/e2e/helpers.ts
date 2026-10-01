@@ -157,7 +157,7 @@ export async function foundSettlement(page: Page): Promise<void> {
 }
 
 /**
- * Places the 2 guided onboarding buildings (farm + lumberjack) next to the
+ * Places the 2 guided onboarding buildings (reindeer herder + lumberjack) next to the
  * freshly founded settlement, which completes onboarding and shows the
  * completion banner. Assumes `claimLandfall` has already run.
  */
@@ -166,7 +166,7 @@ export async function placeGuidedBuildings(page: Page): Promise<void> {
   // real click-to-build UI is settlement-interactions.spec's job to cover;
   // this helper only needs the onboarding *gate*
   // (onboardingGuidance.deriveOnboardingGuidance's `complete`, which now
-  // specifically requires farm + lumberjack rather than any 3 buildings) to
+  // specifically requires reindeer herder + lumberjack rather than any 3 buildings) to
   // fire reliably, and the settlement's own zoom (picked by
   // zoomForFogMargin to keep a wide fog margin on screen) makes clicking a
   // specific nearby hex by pixel offset unreliable. __demoWorld is the same
@@ -185,7 +185,7 @@ export async function placeGuidedBuildings(page: Page): Promise<void> {
       [-1, 1],
       [0, 1],
     ];
-    const guidedTypes = ['farm', 'lumberjack'];
+    const guidedTypes = ['reindeerherder', 'lumberjack'];
     let placed = 0;
     for (let radius = 1; radius <= 2 && placed < guidedTypes.length; radius++) {
       for (const [dq, dr] of dirs) {

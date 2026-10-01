@@ -355,7 +355,8 @@ export interface Tile {
     | 'smithy'
     | 'druidhut'
     | 'cartworkshop'
-    | 'claybrickworks';
+    | 'claybrickworks'
+    | 'reindeerherder';
   buildingLevel?: number;
   /**
    * This hex's place in a "giant tile" — one art object spanning a centre

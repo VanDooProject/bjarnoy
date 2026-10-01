@@ -23,7 +23,7 @@ export const BASE_STORAGE_CAPACITY = 500;
 export const FOUNDING_STOCK: ResourceLine = { wood: 700, stone: 700, food: 700, iron: 0 };
 /** Fallback for 3 x SettlerCrew.trainingCost when the unit catalogue has no settlercrew row. */
 export const FALLBACK_SETTLER_COST: ResourceLine = { wood: 600, stone: 450, food: 300, iron: 300 };
-export const DEFAULT_PRODUCER_COUNTS: Record<string, number> = { lumberjack: 3, quarry: 3, farm: 3 };
+export const DEFAULT_PRODUCER_COUNTS: Record<string, number> = { lumberjack: 3, quarry: 3, reindeerherder: 3 };
 
 const check = (start: string): Session => ({ start, minutes: 10 });
 /** Daily schedules (design §9). `always24` is a reference line, not a realistic player. */

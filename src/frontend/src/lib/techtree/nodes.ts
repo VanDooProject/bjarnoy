@@ -56,6 +56,17 @@ function formatModifier(modifier: BuildingModifier): string {
   }
 }
 
+/**
+ * Card-per-type exceptions: one card standing for several building types. Farm
+ * and Pumpkin Farm are separate types only because their soil rule differs
+ * (Pumpkin Farm needs a Pumpkin-soil island), so the tree shows one card with
+ * one unlock level and one prerequisite, and the other type has no slot of its
+ * own in `TECH_TREE_LAYOUT`.
+ */
+export const MERGED_CARDS: Readonly<Record<string, { label: string; absorbs: readonly string[] }>> = {
+  farm: { label: 'Farm / Pumpkin Farm (by soil)', absorbs: ['pumpkinfarm'] },
+};
+
 export interface TechTreeChip {
   text: string;
   kind: 'longhouse' | 'building' | 'anchor';
@@ -124,7 +135,7 @@ export function buildTechTreeNodes(
 
     nodes.push({
       type,
-      label: typeLabel(type),
+      label: MERGED_CARDS[type]?.label ?? typeLabel(type),
       gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : '',
       category: graphCategoryOf(type),
       x: columnX(col),

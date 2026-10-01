@@ -72,7 +72,7 @@ public class LandingOnboardingCompletionTests
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         var settlement = Assert.Single(settlements!);
 
-        // The two guided buildings the tray tracks (farm, lumberjack — see
+        // The two guided buildings the tray tracks (reindeerherder, lumberjack — see
         // LandingView.vue's GUIDED_BUILD_TERRAIN) each need their own
         // terrain, both guaranteed adjacent to any start position (see
         // LandingBuildQueueTests's own comment on WorldGenerator's
@@ -122,7 +122,7 @@ public class LandingOnboardingCompletionTests
 
         var queuedFarm = await apiClient.PostAsJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", grassTile.Q, grassTile.R),
+            new QueueBuildRequest("reindeerherder", grassTile.Q, grassTile.R),
             cancellationToken);
         queuedFarm.EnsureSuccessStatusCode();
 
@@ -152,7 +152,7 @@ public class LandingOnboardingCompletionTests
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
         Assert.Empty(settlementAfterCompletion!.Queue);
-        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "farm");
+        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "reindeerherder");
         Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack");
 
         // Onboarding is complete (both guided buildings actually standing —

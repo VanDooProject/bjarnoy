@@ -148,6 +148,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   shrineofnjord: 'njordshrine',
   // Newer, on-palette scripted art — see buildingArt.ts's matching docs-page
   // choice. Pumpkin Farm stays on the legacy `farm_pumpkin` family for now.
+  // The Reindeer Herder is the starting food building (LH 1), also scripted art.
+  reindeerherder: 'reindeerherder',
   farm: 'farm',
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjack',

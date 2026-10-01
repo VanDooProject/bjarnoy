@@ -27,6 +27,7 @@ export const PRODUCER_TYPES: ReadonlySet<string> = new Set([
   'lumberjack',
   'quarry',
   'claybrickworks',
+  'reindeerherder',
   'farm',
   'pumpkinfarm',
   'fishinghut',

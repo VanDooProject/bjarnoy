@@ -184,6 +184,14 @@ public enum BuildingType
     /// guarantee one within reach of a starting position), at a lower rate.
     /// </summary>
     ClayBrickworks = 25,
+
+    /// <summary>
+    /// Food, on grass — the starting food building, unlocked at Longhouse 1.
+    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/> now come later (LH 4,
+    /// behind a level-3 Reindeer Herder). Appended at the end so persisted
+    /// integers do not shift.
+    /// </summary>
+    ReindeerHerder = 26,
 }
 
 public static class BuildingTypeExtensions
@@ -216,6 +224,7 @@ public static class BuildingTypeExtensions
         BuildingType.DruidHut => "druidhut",
         BuildingType.CartWorkshop => "cartworkshop",
         BuildingType.ClayBrickworks => "claybrickworks",
+        BuildingType.ReindeerHerder => "reindeerherder",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

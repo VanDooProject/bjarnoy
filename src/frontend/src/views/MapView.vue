@@ -601,6 +601,7 @@ function onRingOutsidePointerDown(e: PointerEvent) {
 
 type BuildableType =
   | 'hut'
+  | 'reindeerherder'
   | 'farm'
   | 'tower'
   | 'fishinghut'
@@ -663,6 +664,7 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog',
     {
       id: 'resource',
       buildings: [
+        { type: 'reindeerherder' },
         { type: 'farm' },
         { type: 'pumpkinfarm' },
         // Sawmill and Crop Mill are only actually buildable on a Grass hex

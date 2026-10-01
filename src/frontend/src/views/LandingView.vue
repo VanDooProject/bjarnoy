@@ -58,23 +58,23 @@ import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenSta
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue: the onboarding build step used to pop BuildingModal — a single
-// "Build here" button with no type picker, hardcoded to 'farm' (live) or
-// 'hut' (demo). Farm requires grass (BuildingCatalogue), so a click on any
+// "Build here" button with no type picker, hardcoded to 'reindeerherder' (live) or
+// 'hut' (demo). Reindeer Herder requires grass (BuildingCatalogue), so a click on any
 // forest/mountain tile in the fresh border silently failed (TerrainNotAllowed,
 // only console.error'd) with the modal just sitting there — "can't actually
 // select the correct building". Ring menu, same as SettlementView's, fixes
 // that: a flat ring (no nested categories — this is the "simplified" version)
 // with only the guided type matching the *clicked tile's own terrain*
-// enabled (Farm needs grass, Lumberjack needs forest — BuildingCatalogue),
+// enabled (Reindeer Herder needs grass, Lumberjack needs forest — BuildingCatalogue),
 // everything else visibly disabled. Enabling both regardless of terrain
 // would just reintroduce the same silent-failure bug for whichever one
 // doesn't fit the tile actually clicked.
-type OnboardingBuildType = 'farm' | 'lumberjack' | 'tower' | 'fishinghut' | 'quarry';
+type OnboardingBuildType = 'reindeerherder' | 'lumberjack' | 'tower' | 'fishinghut' | 'quarry';
 const GUIDED_BUILD_TERRAIN: Partial<Record<OnboardingBuildType, Terrain>> = {
-  farm: 'grass',
+  reindeerherder: 'grass',
   lumberjack: 'forest',
 };
-const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['farm', 'lumberjack', 'quarry', 'tower', 'fishinghut'];
+const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['reindeerherder', 'lumberjack', 'quarry', 'tower', 'fishinghut'];
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -527,7 +527,7 @@ function showInvalidClickMessage(message: string) {
 // than relying on that agreement implicitly. `Settlement.Claims` (what the
 // backend actually gates new construction against) is the union of the
 // centre disc and every placed Tower's own satellite disc — but this
-// onboarding flow only ever places the very first Farm/Lumberjack, before
+// onboarding flow only ever places the very first Reindeer Herder/Lumberjack, before
 // any Tower exists, so the centre disc alone is already the exact same
 // range at this point in a player's settlement; `claimRadiusForLevel` stays
 // a faithful enough mirror here without needing the fuller `claimDiscs`
@@ -700,7 +700,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
 // a rates-delta watch would never fire there at all.
 const resourceTicks = ref<ResourceTick[]>([]);
 let tickIdSeq = 0;
-function fireResourceTick(type: 'farm' | 'lumberjack', coord: AxialCoord) {
+function fireResourceTick(type: 'reindeerherder' | 'lumberjack', coord: AxialCoord) {
   const boostTerrain = BOOST_TERRAIN[type];
   const neighbours = boostTerrain
     ? matchingNeighbourCount(coord, boostTerrain, (q, r) => world.model.getTile(q, r))
@@ -722,7 +722,7 @@ async function onRingSelect(type: string) {
     canvasRef.value?.renderer?.forceRebuild();
     world.syncHud();
     closeRing();
-    if (type === 'farm' || type === 'lumberjack') fireResourceTick(type, coord);
+    if (type === 'reindeerherder' || type === 'lumberjack') fireResourceTick(type, coord);
     return;
   }
   // Always close, win or lose — matching SettlementView's own onRingSelect
@@ -732,7 +732,7 @@ async function onRingSelect(type: string) {
   closeRing();
   try {
     await world.queueBuildLive(type, coord);
-    if (type === 'farm' || type === 'lumberjack') fireResourceTick(type, coord);
+    if (type === 'reindeerherder' || type === 'lumberjack') fireResourceTick(type, coord);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
     showInvalidClickMessage(t('landing.invalidClick.orderFailed'));

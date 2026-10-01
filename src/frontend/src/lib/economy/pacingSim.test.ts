@@ -226,7 +226,7 @@ describe('simulatePacing on the bundled catalogue', () => {
     const started = performance.now();
     const r = simulatePacing(byType, params({
       horizonDays: 60,
-      producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+      producerCounts: { lumberjack: 3, quarry: 3, reindeerherder: 3 },
       startStock: { wood: 300, stone: 300, food: 200, iron: 0 },
       settleType: 'cartworkshop',
     }));
@@ -241,7 +241,7 @@ describe('simulatePacing on the bundled catalogue', () => {
     for (const producersAhead of [0, 3]) {
       const base = {
         horizonDays: 30,
-        producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+        producerCounts: { lumberjack: 3, quarry: 3, reindeerherder: 3 },
         startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
         settleType: 'cartworkshop',
         producersAhead,
@@ -259,7 +259,7 @@ describe('simulatePacing on the bundled catalogue', () => {
   it('running producers ahead of the Longhouse makes the settlement stronger on day 14', () => {
     const base = {
       horizonDays: 20,
-      producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+      producerCounts: { lumberjack: 3, quarry: 3, reindeerherder: 3 },
       startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
       settleType: 'cartworkshop',
       sessions: PROFILE_PRESETS.active,
@@ -434,7 +434,7 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
     simulatePacing(byType, {
       startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
       horizonDays,
-      producerCounts: { lumberjack: 3, quarry: 3, farm: 3 },
+      producerCounts: { lumberjack: 3, quarry: 3, reindeerherder: 3 },
       settlerCost: settlerCostFrom(undefined),
       settleType: 'cartworkshop',
       storageCount: 2,

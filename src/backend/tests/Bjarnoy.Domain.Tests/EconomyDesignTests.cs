@@ -15,10 +15,10 @@ public class EconomyDesignTests
     private static readonly (BuildingType Type, int Unlock)[] Ladder =
     [
         (BuildingType.Lumberjack, 1), (BuildingType.Quarry, 1), (BuildingType.ClayBrickworks, 1),
-        (BuildingType.StorageHouse, 1), (BuildingType.Farm, 1),
+        (BuildingType.StorageHouse, 1), (BuildingType.ReindeerHerder, 1),
         (BuildingType.FishingHut, 2),
         (BuildingType.Tower, 3),
-        (BuildingType.PumpkinFarm, 4),
+        (BuildingType.Farm, 4), (BuildingType.PumpkinFarm, 4),
         (BuildingType.Barracks, 5),
         (BuildingType.TownSquare, 6),
         (BuildingType.Dockyard, 8),
@@ -34,8 +34,8 @@ public class EconomyDesignTests
 
     private static readonly BuildingType[] Producers =
     [
-        BuildingType.Lumberjack, BuildingType.Quarry, BuildingType.ClayBrickworks, BuildingType.Farm,
-        BuildingType.PumpkinFarm, BuildingType.FishingHut,
+        BuildingType.Lumberjack, BuildingType.Quarry, BuildingType.ClayBrickworks, BuildingType.ReindeerHerder,
+        BuildingType.Farm, BuildingType.PumpkinFarm, BuildingType.FishingHut,
     ];
 
     private static double Sum(ResourceAmounts a) => a.Wood + a.Stone + a.Food + a.Iron;
@@ -161,6 +161,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Lumberjack, 25)]
     [InlineData(BuildingType.Quarry, 25)]
     [InlineData(BuildingType.ClayBrickworks, 25)]
+    [InlineData(BuildingType.ReindeerHerder, 25)]
     [InlineData(BuildingType.Farm, 25)]
     [InlineData(BuildingType.PumpkinFarm, 25)]
     [InlineData(BuildingType.FishingHut, 25)]
@@ -408,6 +409,19 @@ public class EconomyDesignTests
 
     private static BuildDecision PlanStorage(Settlement settlement, HexCoord coord) =>
         settlement.PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+
+    [Fact]
+    public void A_farm_is_refused_until_a_level_3_reindeer_herder_stands()
+    {
+        var without = SettlementWith(4, (BuildingType.ReindeerHerder, 2));
+        var with = SettlementWith(4, (BuildingType.ReindeerHerder, 3));
+
+        var refused = without.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+        var accepted = with.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, refused.Rejection);
+        Assert.True(accepted.Accepted, $"expected accept, got {accepted.Rejection}");
+    }
 
     [Fact]
     public void The_first_storage_house_is_never_refused_by_the_level_10_rule()

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Onboarding quest tray in the settlement view (docs/design/economy.md
-// section 7). The landing page's found -> farm -> lumberjack checklist
+// section 7). The landing page's found -> reindeer herder -> lumberjack checklist
 // (OnboardingChecklist.vue) hands off to the settlement view; from there
 // this tray walks the player through six goals that each pay a resource
 // reward on a manual Claim. It shows the first unclaimed quest prominently,

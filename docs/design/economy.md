@@ -103,7 +103,7 @@ Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 **What caps a building's level.** Most buildings can never be a higher level
 than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
 keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
-Farm, Pumpkin Farm, Fishing Hut) are capped by **storage**
+Reindeer Herder, Farm, Pumpkin Farm, Fishing Hut) are capped by **storage**
 instead: they only need their unlock LH at every level, and a level whose cost
 exceeds what the settlement can store can never be afforded, so the next level
 has to fit in storage. Each **additional Storage House** raises the bar: with `n` held (standing plus
@@ -123,7 +123,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 
 | LH | Unlocks | Also needs |
 |---|---|---|
-| 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder*, Storage House | — |
+| 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder, Storage House | — |
 | 2 | Fishing Hut | — |
 | 3 | Tower | — |
 | 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |
@@ -530,8 +530,10 @@ Open work, in rough order. Each is its own PR.
    Fisher Hut is gone from the catalogue; a stored Fisher Hut (and a queued
    order for one) becomes a Fishing Hut at the same hex and level when its
    settlement loads. The enum value 15 stays so persisted rows still read.
-5. **New buildings:** the Reindeer Herder (the default food building; Farm and
-   Pumpkin Farm move to LH 4 as one card by soil), the Odin Statue (Ravens and
+5. **New buildings:** ~~the Reindeer Herder~~ (done: the default food building,
+   LH 1, grass, the standard producer numbers and no terrain boost; Farm and
+   Pumpkin Farm moved to LH 4 behind a level-3 Herder, shown as one card by
+   soil), the Odin Statue (Ravens and
    Wisdom, §5) and the Palisade (§5).
 6. **Bogs and iron** (§8, `bog.md`): bog ground, creeks and lakes in world
    generation, the bog-ore works, Clay Brickworks on bog ground, the lake

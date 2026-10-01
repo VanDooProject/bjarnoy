@@ -1410,6 +1410,7 @@ export class WorldModel {
       'druidhut',
       'cartworkshop',
       'claybrickworks',
+      'reindeerherder',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);

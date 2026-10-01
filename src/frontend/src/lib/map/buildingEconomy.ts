@@ -97,6 +97,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'lumberjack':
     case 'quarry':
     case 'claybrickworks':
+    case 'reindeerherder':
     case 'farm':
     case 'pumpkinfarm':
     case 'fishinghut':
@@ -197,12 +198,14 @@ export function buildingStatsFor(
   matchingNeighbours = 0,
 ): BuildingLevelStats {
   switch (type) {
-    // Farm and PumpkinFarm are deliberately excluded from BuildingCatalogue.cs's
-    // Boosts table (they work a fixed field, not a resource that concentrates
-    // nearby) — no terrain or water adjacency changes their output. Farm is
-    // always buildable; PumpkinFarm is gated to Pumpkin-soil islands (see
-    // ringCatalogue.ts's cropAllowedHere) and yields more, the "more fertile"
-    // island's bonus crop.
+    // ReindeerHerder, Farm and PumpkinFarm are deliberately excluded from
+    // BuildingCatalogue.cs's Boosts table (they work a herd or a fixed field,
+    // not a resource that concentrates nearby) — no terrain or water adjacency
+    // changes their output. The herder is the starting food building; Farm is
+    // buildable everywhere from LH 4; PumpkinFarm is gated to Pumpkin-soil
+    // islands (see ringCatalogue.ts's cropAllowedHere) and yields more, the
+    // "more fertile" island's bonus crop.
+    case 'reindeerherder':
     case 'farm': {
       const workersCap = level * 4;
       return {
@@ -361,6 +364,7 @@ const PRODUCER_COST: ResourceLine = { wood: 50, stone: 40, food: 15, iron: 0 };
 const SMALL_BUILDING_COST: ResourceLine = { wood: 100, stone: 80, food: 0, iron: 0 };
 const BASE_COST: Record<BuildingKind, ResourceLine> = {
   hut: PRODUCER_COST,
+  reindeerherder: PRODUCER_COST,
   farm: PRODUCER_COST,
   pumpkinfarm: PRODUCER_COST,
   fishinghut: PRODUCER_COST,

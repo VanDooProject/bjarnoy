@@ -63,7 +63,7 @@ public sealed class ConstructionSlotTests
         // already occupies one of them.
         var settlement = Found();
         var farmOrder = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         Assert.True(farmOrder.Accepted);
         var withFarm = settlement.Enqueue(farmOrder.Order!, T0);
 
@@ -100,16 +100,16 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var first = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
         var withFirst = settlement.Enqueue(first.Order!, T0);
         var second = withFirst.PlanBuild(
-            BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7());
         var withSecond = withFirst.Enqueue(second.Order!, T0);
 
         Assert.Equal(0, withSecond.FreeSlots);
 
         var third = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 0);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 0);
 
         Assert.Equal(BuildRejection.NoFreeSlot, third.Rejection);
     }
@@ -119,15 +119,15 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var first = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
         var withFirst = settlement.Enqueue(first.Order!, T0);
         var second = withFirst.PlanBuild(
-            BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7());
         var withSecond = withFirst.Enqueue(second.Order!, T0);
 
         var coord = new HexCoord(-1, 1);
         var third = withSecond.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
         Assert.True(third.Accepted);
         Assert.True(third.Order!.IsWaiting);
 
@@ -138,7 +138,7 @@ public sealed class ConstructionSlotTests
         Assert.Equal(stockBefore.Wood, stockAfter.Wood, 6);
         Assert.DoesNotContain(queued.Buildings, b => b.Coord == coord);
 
-        var cost = BuildingCatalogue.Get(BuildingType.Farm, 1).Cost;
+        var cost = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1).Cost;
         Assert.Equal(cost.Wood, queued.ReservedResources.Wood, 6);
     }
 
@@ -146,22 +146,22 @@ public sealed class ConstructionSlotTests
     public void Building_payment_frees_storage_headroom_while_a_reservation_does_not()
     {
         var settlement = Found();
-        var cost = BuildingCatalogue.Get(BuildingType.Farm, 1).Cost;
+        var cost = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1).Cost;
 
         // A building order pays immediately — the stock actually drops.
         var buildOrder = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
         var afterBuild = settlement.Enqueue(buildOrder.Order!, T0);
         Assert.Equal(settlement.Resources.At(T0).Wood - cost.Wood, afterBuild.Resources.At(T0).Wood, 6);
 
         // A waiting order's cost still sits in Stock — only ReservedResources
         // (and hence AvailableResources) reflects it.
         var withFirst = settlement.Enqueue(
-            settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var withSecond = withFirst.Enqueue(
-            withFirst.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            withFirst.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var waitingOrder = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         var withWaiting = withSecond.Enqueue(waitingOrder.Order!, T0);
 
         Assert.Equal(withSecond.Resources.At(T0).Wood, withWaiting.Resources.At(T0).Wood, 6);
@@ -173,12 +173,12 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var first = settlement.Enqueue(
-            settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var withSecond = first.Enqueue(
-            first.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            first.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
 
         var waitingDecision = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         var withWaiting = withSecond.Enqueue(waitingDecision.Order!, T0);
 
         var stockAtCompletion = withWaiting.Resources.At(withWaiting.Queue[0].CompletesAt!.Value);
@@ -189,7 +189,7 @@ public sealed class ConstructionSlotTests
         Assert.NotNull(promoted.StartedAt);
         Assert.Equal(withWaiting.Queue[0].CompletesAt!.Value, promoted.StartedAt);
 
-        var cost = BuildingCatalogue.Get(BuildingType.Farm, 1).Cost;
+        var cost = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1).Cost;
         Assert.Equal(stockAtCompletion.Wood - cost.Wood, settled.Settlement.Resources.At(promoted.StartedAt!.Value).Wood, 6);
     }
 
@@ -198,12 +198,12 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var first = settlement.Enqueue(
-            settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var withSecond = first.Enqueue(
-            first.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            first.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
 
         var waitingDecision = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         var withWaiting = withSecond.Enqueue(waitingDecision.Order!, T0);
 
         var toCancel = withWaiting.ActiveOrders.First().Id;
@@ -219,12 +219,12 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var first = settlement.Enqueue(
-            settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var withSecond = first.Enqueue(
-            first.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            first.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
 
         var waitingDecision = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         var withWaiting = withSecond.Enqueue(waitingDecision.Order!, T0);
 
         // Cancel one building order out-of-band (simulating something else
@@ -243,12 +243,12 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var first = settlement.Enqueue(
-            settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var withSecond = first.Enqueue(
-            first.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            first.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
 
         var waitingDecision = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         var withWaiting = withSecond.Enqueue(waitingDecision.Order!, T0);
 
         var firstOrder = withWaiting.ActiveOrders.OrderBy(o => o.Coord.Q).First();
@@ -268,7 +268,7 @@ public sealed class ConstructionSlotTests
         }
 
         var promoted = settled.Settlement.ActiveOrders.Single(o => o.Coord == new HexCoord(-1, 1));
-        var baseDuration = BuildingCatalogue.Get(BuildingType.Farm, 1).BuildDuration;
+        var baseDuration = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1).BuildDuration;
         Assert.Equal(
             completesAt + TimeSpan.FromTicks(baseDuration.Ticks / 2), promoted.CompletesAt);
     }
@@ -278,12 +278,12 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var first = settlement.Enqueue(
-            settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var withSecond = first.Enqueue(
-            first.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            first.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
 
         var waitingDecision = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         var withWaiting = withSecond.Enqueue(waitingDecision.Order!, T0);
 
         var stockBefore = withWaiting.Resources.At(T0);
@@ -299,11 +299,11 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var first = settlement.Enqueue(
-            settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var withSecond = first.Enqueue(
-            first.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            first.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var waitingDecision = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         var withWaiting = withSecond.Enqueue(waitingDecision.Order!, T0);
 
         var firstCompletion = withWaiting.Queue.Where(o => !o.IsWaiting).Min(o => o.CompletesAt!.Value);
@@ -326,11 +326,11 @@ public sealed class ConstructionSlotTests
         var settlement = Found();
         var coord = new HexCoord(1, 0);
         var first = settlement.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxOrdersPerHex: 1);
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxOrdersPerHex: 1);
         var queued = settlement.Enqueue(first.Order!, T0);
 
         var second = queued.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxOrdersPerHex: 1);
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxOrdersPerHex: 1);
 
         Assert.Equal(BuildRejection.AlreadyQueuedOnHex, second.Rejection);
     }
@@ -344,19 +344,19 @@ public sealed class ConstructionSlotTests
         var coord = new HexCoord(1, 0);
 
         var first = settlement.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3, maxOrdersPerHex: 3);
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3, maxOrdersPerHex: 3);
         Assert.True(first.Accepted);
         Assert.Equal(1, first.Order!.TargetLevel);
         var withFirst = settlement.Enqueue(first.Order!, T0);
 
         var second = withFirst.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3, maxOrdersPerHex: 3);
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3, maxOrdersPerHex: 3);
         Assert.True(second.Accepted);
         Assert.Equal(2, second.Order!.TargetLevel);
         var withSecond = withFirst.Enqueue(second.Order!, T0);
 
         var third = withSecond.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3, maxOrdersPerHex: 3);
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3, maxOrdersPerHex: 3);
         Assert.True(third.Accepted);
         Assert.Equal(3, third.Order!.TargetLevel);
         var withThird = withSecond.Enqueue(third.Order!, T0);
@@ -364,7 +364,7 @@ public sealed class ConstructionSlotTests
         // A 4th order is refused — maxOrdersPerHex caps it at 3, regardless
         // of level contiguity.
         var fourth = withThird.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3, maxOrdersPerHex: 3);
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3, maxOrdersPerHex: 3);
         Assert.Equal(BuildRejection.AlreadyQueuedOnHex, fourth.Rejection);
 
         // Only the first order fits a slot now (2 slots, one already used by
@@ -397,15 +397,15 @@ public sealed class ConstructionSlotTests
     {
         var settlement = Found();
         var withFirst = settlement.Enqueue(
-            settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
         var withSecond = withFirst.Enqueue(
-            withFirst.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
+            withFirst.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7()).Order!, T0);
 
         var waitingA = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
         var withWaitingA = withSecond.Enqueue(waitingA.Order!, T0);
         var waitingB = withWaitingA.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, -1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+            BuildingType.ReindeerHerder, new HexCoord(1, -1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
         var withWaitingB = withWaitingA.Enqueue(waitingB.Order!, T0);
 
         Assert.Equal(2, withWaitingB.WaitingOrders.Count());

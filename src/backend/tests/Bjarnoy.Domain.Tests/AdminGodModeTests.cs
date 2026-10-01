@@ -53,7 +53,7 @@ public sealed class AdminGodModeTests
         var coord = new HexCoord(1, 0);
 
         var decision = settlement.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, Start, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, Start, Guid.CreateVersion7());
         Assert.True(decision.Accepted);
 
         var queued = settlement.Enqueue(decision.Order!, Start);
@@ -66,7 +66,7 @@ public sealed class AdminGodModeTests
 
         Assert.True(settled.Changed);
         Assert.Empty(settled.Settlement.Queue);
-        Assert.Contains(settled.Settlement.Buildings, b => b.Coord == coord && b.Type == BuildingType.Farm);
+        Assert.Contains(settled.Settlement.Buildings, b => b.Coord == coord && b.Type == BuildingType.ReindeerHerder);
     }
 
     /// <summary>
@@ -83,12 +83,12 @@ public sealed class AdminGodModeTests
         // the third going to the waiting tail (premium queue simulated by
         // passing maxWaitingOrders explicitly, exactly as SettlementService
         // does for a premium settlement).
-        var first = settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, Start, Guid.CreateVersion7());
+        var first = settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, Start, Guid.CreateVersion7());
         var withFirst = settlement.Enqueue(first.Order!, Start);
-        var second = withFirst.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, Start, Guid.CreateVersion7());
+        var second = withFirst.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, Start, Guid.CreateVersion7());
         var withSecond = withFirst.Enqueue(second.Order!, Start);
         var third = withSecond.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, Start, Guid.CreateVersion7(), maxWaitingOrders: 1);
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, Start, Guid.CreateVersion7(), maxWaitingOrders: 1);
         Assert.True(third.Accepted);
         Assert.True(third.Order!.IsWaiting);
         var withThird = withSecond.Enqueue(third.Order!, Start);
@@ -100,7 +100,7 @@ public sealed class AdminGodModeTests
 
         Assert.True(settled.Changed);
         Assert.Empty(settled.Settlement.Queue);
-        Assert.Equal(3, settled.Settlement.Buildings.Count(b => b.Type == BuildingType.Farm));
+        Assert.Equal(3, settled.Settlement.Buildings.Count(b => b.Type == BuildingType.ReindeerHerder));
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class AdminGodModeTests
     {
         var settlement = NewSettlement();
         var build = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, Start, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, Start, Guid.CreateVersion7());
         var withBuild = settlement.Enqueue(build.Order!, Start);
 
         var train = withBuild.PlanTrain(UnitType.Thrall, 5, Start, Guid.CreateVersion7(), hasShoreline: false);
@@ -145,12 +145,12 @@ public sealed class AdminGodModeTests
         var coord = new HexCoord(1, 0);
 
         var result = settlement.PlaceBuilding(
-            coord, BuildingType.Farm, level: 3, Terrain.Grass, isCoastalWater: false, Start,
+            coord, BuildingType.ReindeerHerder, level: 3, Terrain.Grass, isCoastalWater: false, Start,
             terrainAt: Grass);
 
         Assert.True(result.Accepted);
         var placed = result.Settlement!.Buildings.Single(b => b.Coord == coord);
-        Assert.Equal(BuildingType.Farm, placed.Type);
+        Assert.Equal(BuildingType.ReindeerHerder, placed.Type);
         Assert.Equal(3, placed.Level);
 
         // A level-3 farm produces more food than the bare longhouse did.
@@ -163,15 +163,15 @@ public sealed class AdminGodModeTests
         var settlement = NewSettlement();
 
         var farAway = settlement.PlaceBuilding(
-            new HexCoord(20, 20), BuildingType.Farm, 1, Terrain.Grass, false, Start, terrainAt: Grass);
+            new HexCoord(20, 20), BuildingType.ReindeerHerder, 1, Terrain.Grass, false, Start, terrainAt: Grass);
         Assert.Equal(AdminBuildingEditRejection.HexNotInSettlement, farAway.Rejection);
 
         var wrongTerrain = settlement.PlaceBuilding(
-            new HexCoord(1, 0), BuildingType.Farm, 1, Terrain.Mountain, false, Start, terrainAt: Grass);
+            new HexCoord(1, 0), BuildingType.ReindeerHerder, 1, Terrain.Mountain, false, Start, terrainAt: Grass);
         Assert.Equal(AdminBuildingEditRejection.TerrainNotAllowed, wrongTerrain.Rejection);
 
         var noSuchLevel = settlement.PlaceBuilding(
-            new HexCoord(1, 0), BuildingType.Farm, 999, Terrain.Grass, false, Start, terrainAt: Grass);
+            new HexCoord(1, 0), BuildingType.ReindeerHerder, 999, Terrain.Grass, false, Start, terrainAt: Grass);
         Assert.Equal(AdminBuildingEditRejection.InvalidLevel, noSuchLevel.Rejection);
     }
 
@@ -183,7 +183,7 @@ public sealed class AdminGodModeTests
         var giants = new GiantIndex([new Giant(giantHex, "giantmountain", TileOrientation.E)]);
 
         var result = settlement.PlaceBuilding(
-            giantHex, BuildingType.Farm, level: 1, Terrain.Grass, isCoastalWater: false, Start,
+            giantHex, BuildingType.ReindeerHerder, level: 1, Terrain.Grass, isCoastalWater: false, Start,
             terrainAt: Grass, giants: giants);
 
         Assert.Equal(AdminBuildingEditRejection.HexOccupiedByGiant, result.Rejection);
@@ -205,7 +205,7 @@ public sealed class AdminGodModeTests
         Assert.Equal(AdminBuildingEditRejection.LonghouseIsFixed, second.Rejection);
 
         var retyped = settlement.PlaceBuilding(
-            centre, BuildingType.Farm, 1, Terrain.Grass, false, Start, terrainAt: Grass);
+            centre, BuildingType.ReindeerHerder, 1, Terrain.Grass, false, Start, terrainAt: Grass);
         Assert.Equal(AdminBuildingEditRejection.LonghouseIsFixed, retyped.Rejection);
 
         var razed = settlement.RazeBuilding(centre, Start, terrainAt: Grass);
@@ -221,9 +221,9 @@ public sealed class AdminGodModeTests
         var coord = new HexCoord(1, 0);
 
         var placed = settlement.PlaceBuilding(
-            coord, BuildingType.Farm, 1, Terrain.Grass, false, Start, terrainAt: Grass).Settlement!;
+            coord, BuildingType.ReindeerHerder, 1, Terrain.Grass, false, Start, terrainAt: Grass).Settlement!;
 
-        var upgrade = placed.PlanBuild(BuildingType.Farm, coord, Terrain.Grass, Start, Guid.CreateVersion7());
+        var upgrade = placed.PlanBuild(BuildingType.ReindeerHerder, coord, Terrain.Grass, Start, Guid.CreateVersion7());
         Assert.True(upgrade.Accepted);
         var queued = placed.Enqueue(upgrade.Order!, Start);
 

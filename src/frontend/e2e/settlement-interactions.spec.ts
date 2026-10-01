@@ -186,7 +186,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
       await settlement.ring.openCategory(label);
       await expect(settlement.ring.childBubbles.first()).toBeVisible();
       const buildingLabels = await settlement.ring.childBubbles.allTextContents();
-      for (const forbidden of ['Farm', 'Pumpkin Farm', 'Lumberjack', 'Quarry', 'Hut', 'Magic Tower']) {
+      for (const forbidden of ['Reindeer Herder', 'Farm', 'Pumpkin Farm', 'Lumberjack', 'Quarry', 'Hut', 'Magic Tower']) {
         expect(buildingLabels).not.toContain(forbidden);
       }
     }
