@@ -5,7 +5,7 @@
 // units, no distance-circle shortcut. `rules` always comes from the backend
 // (`WorldResponse.movement`), never a hardcoded literal here, so this and the
 // server can't quietly drift apart — see hexPath.golden.test.ts.
-import { coordKey, neighbors, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import type { Terrain } from './types';
 
 export interface MovementRules {
@@ -15,12 +15,32 @@ export interface MovementRules {
   riverCrossingCost: number;
 }
 
+/**
+ * Optional movement rules beyond the backend's current cost model (the pathing preview's
+ * "decided rules": wide rivers, mountains and palisades stop land armies). Every field is off
+ * by default, so a context without `restrictions` prices exactly what HexPathfinder.cs does and
+ * the golden fixture stays valid. Not on the wire yet: `rules` still comes from the backend.
+ */
+export interface PathRestrictions {
+  /** A river hex for which `isWideRiver` holds is impassable (streams stay crossable at the river cost). */
+  wideRiversImpassable?: boolean;
+  /** Mountain hexes are impassable instead of costing `rules.land.mountain`. */
+  mountainsImpassable?: boolean;
+  /** Extra impassable hexes (a palisade). */
+  blocked?(c: AxialCoord): boolean;
+  /** A blocked hex this army may pass anyway (a gate, for a friendly army only; leave unset for an enemy). */
+  friendlyGate?(c: AxialCoord): boolean;
+}
+
 export interface PathContext {
   terrainAt(c: AxialCoord): Terrain;
   isRiver(c: AxialCoord): boolean;
+  /** Which river hexes are wide; only read when `restrictions.wideRiversImpassable` is on (default: every river hex). */
+  isWideRiver?(c: AxialCoord): boolean;
   rules: MovementRules;
   /** Army speed (hexes/hour) already scaled by the world's speedFactor. */
   hexesPerHour: number;
+  restrictions?: PathRestrictions;
 }
 
 /**
@@ -37,6 +57,12 @@ function stepCost(c: AxialCoord, ctx: PathContext): number | null {
   const terrain = ctx.terrainAt(c);
   const base = ctx.rules.land[terrain];
   if (base === undefined) return null;
+  const r = ctx.restrictions;
+  if (r) {
+    if (r.mountainsImpassable && terrain === 'mountain') return null;
+    if (r.wideRiversImpassable && ctx.isRiver(c) && (ctx.isWideRiver?.(c) ?? true)) return null;
+    if (r.blocked?.(c) && !r.friendlyGate?.(c)) return null;
+  }
   return ctx.isRiver(c) ? base + ctx.rules.riverCrossingCost : base;
 }
 
@@ -160,4 +186,83 @@ export function reachableRange(
   }
 
   return result;
+}
+
+/** Hard cap on hexes `findPath` expands, the twin of `HexPathfinder.MaxExpandedNodes`. */
+export const MAX_EXPANDED_NODES = 20_000;
+
+/**
+ * Cheapest land route from `from` to `to` (both included), or `null` if there is none: the TS
+ * twin of `HexPathfinder.FindPath` for land armies. Same A* (plain hex distance as the
+ * heuristic), same endpoint check (both must be land terrain),
+ * same bounding box (the endpoints padded by their distance, at least 10) and expansion cap.
+ * The optional `ctx.restrictions` make more hexes impassable; with none set it prices exactly
+ * what the backend does.
+ */
+export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): AxialCoord[] | null {
+  if (ctx.rules.land[ctx.terrainAt(from)] === undefined || ctx.rules.land[ctx.terrainAt(to)] === undefined) return null;
+  if (from.q === to.q && from.r === to.r) return [from];
+
+  const padding = Math.max(10, hexDistance(from, to));
+  const qMin = Math.min(from.q, to.q) - padding;
+  const qMax = Math.max(from.q, to.q) + padding;
+  const rMin = Math.min(from.r, to.r) - padding;
+  const rMax = Math.max(from.r, to.r) + padding;
+
+  const open = new MinHeap<AxialCoord>();
+  const g = new Map<string, number>([[coordKey(from), 0]]);
+  const cameFrom = new Map<string, AxialCoord>();
+  const closed = new Set<string>();
+  open.push(from, hexDistance(from, to));
+  let expanded = 0;
+
+  for (let current = open.pop(); current; current = open.pop()) {
+    const currentKey = coordKey(current);
+    if (closed.has(currentKey)) continue;
+    closed.add(currentKey);
+
+    if (current.q === to.q && current.r === to.r) {
+      const path = [current];
+      for (let k = cameFrom.get(currentKey); k; k = cameFrom.get(coordKey(k))) path.push(k);
+      return path.reverse();
+    }
+    if (++expanded > MAX_EXPANDED_NODES) return null;
+
+    for (const n of neighbors(current)) {
+      if (n.q < qMin || n.q > qMax || n.r < rMin || n.r > rMax) continue;
+      const nKey = coordKey(n);
+      if (closed.has(nKey)) continue;
+      const step = stepCost(n, ctx);
+      if (step === null) continue;
+      const tentative = g.get(currentKey)! + step;
+      const existing = g.get(nKey);
+      if (existing !== undefined && tentative >= existing) continue;
+      g.set(nKey, tentative);
+      cameFrom.set(nKey, current);
+      open.push(n, tentative + hexDistance(n, to));
+    }
+  }
+  return null;
+}
+
+/** Terrain-and-river cost of walking `path` (the origin is free, every later hex is charged on entry), in hex-cost units; `Infinity` through an impassable hex. */
+export function pathCost(path: readonly AxialCoord[], ctx: PathContext): number {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += stepCost(path[i]!, ctx) ?? Number.POSITIVE_INFINITY;
+  return total;
+}
+
+/** Every hex reachable from `origin` (origin included) under `ctx`'s rules, as `coordKey`s, capped at `limit` hexes. */
+export function reachableFrom(origin: AxialCoord, ctx: PathContext, limit = 200_000): Set<string> {
+  const seen = new Set<string>([coordKey(origin)]);
+  const queue: AxialCoord[] = [origin];
+  for (let i = 0; i < queue.length && seen.size < limit; i++) {
+    for (const n of neighbors(queue[i]!)) {
+      const k = coordKey(n);
+      if (seen.has(k) || stepCost(n, ctx) === null) continue;
+      seen.add(k);
+      queue.push(n);
+    }
+  }
+  return seen;
 }

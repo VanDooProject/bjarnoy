@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/river-pathing-golden.json';
 import { coordKey } from '../hex/coords';
-import { hoursFrom, reachableRange, type PathContext } from './hexPath';
+import { findPath, hoursFrom, pathCost, reachableRange, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
 interface HexCoordDto {
@@ -78,6 +78,13 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     testCase.expectedPath.forEach((coord: HexCoordDto, i: number) => {
       expect(hours.get(coordKey(coord))).toBeCloseTo(testCase.expectedCumulativeHours[i], 9);
     });
+  });
+
+  it.each(fixture.findPathCases.filter((c) => c.isLandUnit))('$name: findPath returns the fixture path and cost', (testCase: FindPathCase) => {
+    const ctx = contextFor(fixture);
+    const path = findPath(testCase.from, testCase.to, ctx);
+    expect(path?.map(coordKey)).toEqual(testCase.expectedPath.map(coordKey));
+    expect(pathCost(path!, ctx)).toBeCloseTo(testCase.expectedCumulativeHours.at(-1)!, 9);
   });
 
   it.each(fixture.reachableRangeCases)('$name: matches the shared golden fixture', (testCase: ReachableRangeCase) => {

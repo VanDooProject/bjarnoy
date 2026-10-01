@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coordKey, type AxialCoord } from '../hex/coords';
-import { hoursFrom, MAX_TINT_HEXES, reachableRange, type MovementRules, type PathContext } from './hexPath';
+import { findPath, hoursFrom, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, type MovementRules, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
 // Mirrors HexPathfinder's own cost tables (issue #159 part A/B) — kept as a
@@ -180,5 +180,106 @@ describe('reachableRange', () => {
   it('is empty when there is no food to spend', () => {
     const ctx = contextFor(grid([{ q: 0, r: 0 }], 'grass'));
     expect(reachableRange({ q: 0, r: 0 }, { q: 0, r: 0 }, 0, ctx).size).toBe(0);
+  });
+});
+
+describe('findPath', () => {
+  const key = (cs: AxialCoord[]) => cs.map(coordKey).join(' ');
+  // A 5x3 meadow: q 0..4, r -1..1 (fits a parallelogram, everything else is sea).
+  const meadow = (): Map<string, Terrain> => {
+    const t = new Map<string, Terrain>();
+    for (let q = 0; q <= 4; q++) for (let r = -1; r <= 1; r++) t.set(coordKey({ q, r }), 'grass');
+    return t;
+  };
+  const from = { q: 0, r: 0 };
+  const to = { q: 4, r: 0 };
+
+  it('walks a straight line over open grass, endpoints included', () => {
+    const path = findPath(from, to, contextFor(meadow()))!;
+    expect(path.map(coordKey)).toEqual(['0,0', '1,0', '2,0', '3,0', '4,0']);
+    expect(pathCost(path, contextFor(meadow()))).toBe(4);
+  });
+
+  it('returns null when an endpoint is sea or the sea cuts the two apart', () => {
+    expect(findPath(from, { q: 9, r: 9 }, contextFor(meadow()))).toBeNull();
+    const split = meadow();
+    for (let r = -1; r <= 1; r++) split.set(coordKey({ q: 2, r }), 'sea');
+    expect(findPath(from, to, contextFor(split))).toBeNull();
+  });
+
+  it('is the identity for from === to', () => {
+    expect(findPath(from, from, contextFor(meadow()))).toEqual([from]);
+  });
+
+  it('crosses a river at the crossing cost (never blocks) when nothing else is switched on', () => {
+    const rivers = new Set(['2,0']);
+    const ctx = contextFor(meadow(), rivers);
+    // Cheaper to go round than to pay +8 for (2,0).
+    const path = findPath(from, to, ctx)!;
+    expect(path.map(coordKey)).not.toContain('2,0');
+    // With no room to go round, it crosses.
+    const corridor = grid([from, { q: 1, r: 0 }, { q: 2, r: 0 }, { q: 3, r: 0 }, to], 'grass');
+    const crossed = findPath(from, to, contextFor(corridor, rivers))!;
+    expect(crossed.map(coordKey)).toContain('2,0');
+    expect(pathCost(crossed, contextFor(corridor, rivers))).toBe(4 + 8);
+  });
+});
+
+describe('PathContext.restrictions (default off)', () => {
+  const corridor = (terrain: Terrain = 'grass'): Map<string, Terrain> => {
+    const t = new Map<string, Terrain>();
+    for (let q = 0; q <= 4; q++) t.set(coordKey({ q, r: 0 }), q === 2 ? terrain : 'grass');
+    return t;
+  };
+  const from = { q: 0, r: 0 };
+  const to = { q: 4, r: 0 };
+  const withRestrictions = (ctx: PathContext, restrictions: PathContext['restrictions']): PathContext => ({ ...ctx, restrictions });
+
+  it('changes nothing when absent, empty or all-false', () => {
+    const base = contextFor(corridor('mountain'), new Set(['2,0']));
+    const expected = findPath(from, to, base)!;
+    for (const restrictions of [undefined, {}, { wideRiversImpassable: false, mountainsImpassable: false }]) {
+      expect(findPath(from, to, withRestrictions(base, restrictions))).toEqual(expected);
+    }
+    expect(pathCost(expected, base)).toBe(1 + (2 + 8) + 1 + 1);
+  });
+
+  it('mountainsImpassable stops a corridor, and only when switched on', () => {
+    const base = contextFor(corridor('mountain'));
+    expect(findPath(from, to, base)).not.toBeNull();
+    expect(findPath(from, to, withRestrictions(base, { mountainsImpassable: true }))).toBeNull();
+  });
+
+  it('wideRiversImpassable blocks wide rivers but not streams, via isWideRiver', () => {
+    const rivers = new Set(['2,0']);
+    const base = contextFor(corridor(), rivers);
+    const stream = withRestrictions({ ...base, isWideRiver: () => false }, { wideRiversImpassable: true });
+    expect(findPath(from, to, stream)).not.toBeNull();
+    const wide = withRestrictions({ ...base, isWideRiver: (c) => coordKey(c) === '2,0' }, { wideRiversImpassable: true });
+    expect(findPath(from, to, wide)).toBeNull();
+    // Without isWideRiver every river hex counts as wide.
+    expect(findPath(from, to, withRestrictions(base, { wideRiversImpassable: true }))).toBeNull();
+    // A wide river on a hex that is not a river at all is ignored.
+    const notRiver = withRestrictions({ ...contextFor(corridor()), isWideRiver: () => true }, { wideRiversImpassable: true });
+    expect(findPath(from, to, notRiver)).not.toBeNull();
+  });
+
+  it('blocked hexes stop everyone, a friendlyGate lets a friendly army through that hex only', () => {
+    const base = contextFor(corridor());
+    const wall = withRestrictions(base, { blocked: (c) => c.q === 2 });
+    expect(findPath(from, to, wall)).toBeNull();
+    const friendly = withRestrictions(base, { blocked: (c) => c.q === 2, friendlyGate: (c) => c.q === 2 });
+    expect(findPath(from, to, friendly)!.map(coordKey)).toEqual(['0,0', '1,0', '2,0', '3,0', '4,0']);
+    // A gate somewhere else does not open the wall.
+    const wrongGate = withRestrictions(base, { blocked: (c) => c.q === 2, friendlyGate: (c) => c.q === 3 });
+    expect(findPath(from, to, wrongGate)).toBeNull();
+  });
+
+  it('refuses a blocked destination and feeds reachableFrom and hoursFrom too', () => {
+    const base = contextFor(corridor());
+    const wall = withRestrictions(base, { blocked: (c) => c.q === 2 });
+    expect(findPath(from, { q: 2, r: 0 }, wall)).toBeNull();
+    expect([...reachableFrom(from, wall)].sort()).toEqual(['0,0', '1,0']);
+    expect([...hoursFrom(from, wall, 100).keys()].sort()).toEqual(['0,0', '1,0']);
   });
 });
