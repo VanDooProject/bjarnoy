@@ -188,6 +188,12 @@
   sudo dockerd > /tmp/dockerd.log 2>&1 &
   sleep 5 && docker info   # confirm it came up
   ```
+  The daemon does not survive a session restart/resume, so start it again
+  after one (every Docker-backed test then fails fast at container start).
+  If `dockerd` then exits with `failed to start containerd: timeout waiting
+  for containerd to start` / "containerd is still running", it's a stale pid
+  file from the previous container lifetime — remove it and start again:
+  `sudo rm -f /var/run/docker/containerd/containerd.pid /var/run/docker.pid`.
   **Image pulls from Docker Hub work** (verified 2026-10-01: `hello-world`,
   `postgres:18-alpine`, `testcontainers/ryuk` all pull and run), so the
   Docker-dependent suites run for real here — "no Docker in the sandbox" is
