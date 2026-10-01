@@ -720,7 +720,7 @@ const actionLabel = computed(() => {
    `.body` at a 367px content width, so this stacks art above body and lets
    the whole modal scroll vertically instead. Last in the file so it wins
    over the desktop `.art`/`.body` rules above at equal specificity. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .modal {
     flex-direction: column;
     max-height: 90vh;

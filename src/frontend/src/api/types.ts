@@ -601,6 +601,9 @@ export interface AdminWorldResponse {
   status: string;
   maxPlayers: number;
   playerCount: number;
+  /** How many new players could still found on the map right now; nearby start positions block each other. */
+  freeSpawnCount: number;
+  spawnCount: number;
   speedFactor: number;
   startsAt: string | null;
   joinsClosed: boolean;

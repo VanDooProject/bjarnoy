@@ -33,6 +33,7 @@ import {
   snapToOfferedPlot,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
+import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { AlreadyFoundedError, useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { useAuthStore } from '../stores/auth';
@@ -49,9 +50,9 @@ import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useMediaQuery } from '../composables/useMediaQuery';
-import { hudBarHeightPx } from '../composables/hudBarHeight';
-import { DEMO_BADGE_ROW_PX, isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
-import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
+import { isHudBarAtBottom, isHudRail } from '../composables/hudSettlementBubbleState';
+import { HUD_COMPACT_QUERY, TOUCH_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -408,6 +409,7 @@ const queueDrawerOpen = ref(false);
 // CSS custom properties to stay clear of the bar on either edge instead of
 // assuming it's always at the top.
 const isCompactHudLanding = useMediaQuery(HUD_COMPACT_QUERY);
+const isTouch = useMediaQuery(TOUCH_QUERY);
 // Mobile tutorial focus (owner decision): on phones, once a settlement is
 // founded the guided build steps are the whole show — the top HUD bar (and
 // everything it carries: the settlement-name bubble, the pull-down drawer)
@@ -431,13 +433,14 @@ const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && isHudB
 const hudInsetTopPxLanding = computed(() =>
   hideBarForTutorial.value || hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value,
 );
+// Landscape rail mode (TopBar.vue): no top band (hudBarHeightPx is 0 there),
+// the rail's width goes into `--hud-inset-left` instead.
+const hudInsetLeftPxLanding = computed(() =>
+  hideBarForTutorial.value || !isHudRail.value ? 0 : hudRailWidthPx.value + 8,
+);
 const hudInsetBottomPxLanding = computed(() =>
   !hideBarForTutorial.value && hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0,
 );
-// With the bar unmounted for the tutorial, the demo badge drops to the top
-// edge (DemoModeBadge.vue) — the landfall banner below reserves its row
-// rather than sliding up underneath it.
-const overlayRowTopPx = computed(() => (DEMO_MODE && hideBarForTutorial.value ? DEMO_BADGE_ROW_PX : 0));
 
 watch(ringScreen, (screen) => {
   if (!screen) ringLaneSpots.value = {};
@@ -615,7 +618,9 @@ const pointerTarget = computed(() => {
     return {
       mode: 'hex' as const,
       coord: previewCoord.value,
-      label: DEMO_MODE ? t('landing.pointer.clickThisPlot') : t('landing.pointer.anyGlowingPlot'),
+      label: DEMO_MODE
+        ? isTouch.value ? t('landing.pointer.tapThisPlot') : t('landing.pointer.clickThisPlot')
+        : t('landing.pointer.anyGlowingPlot'),
       angle: 38,
       targetRadius: HEX_TARGET_RADIUS_PX,
     };
@@ -886,6 +891,16 @@ watch(
     renderer?.forceRebuild();
   },
 );
+
+// Construction progress dials over buildings still being built; the renderer
+// animates the progress itself every tick from these absolute timestamps.
+watch(
+  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  ([renderer]) => {
+    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -894,7 +909,7 @@ watch(
     :style="{
       '--hud-inset-top': hudInsetTopPxLanding + 'px',
       '--hud-inset-bottom': hudInsetBottomPxLanding + 'px',
-      '--overlay-row-top': overlayRowTopPx + 'px',
+      '--hud-inset-left': hudInsetLeftPxLanding + 'px',
     }"
   >
     <!-- Deliberately outside the SettlementCanvas v-if below: it has to show
@@ -1015,7 +1030,7 @@ watch(
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
       :target-radius="pointerTarget.targetRadius"
-      clear-below-selector=".hero--founding"
+      clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
@@ -1163,7 +1178,16 @@ h1 {
    hero has to span full-width below the mobile header instead of a fixed
    left offset, and the footer has to shrink so it doesn't fight the
    checklist tray for the same strip of screen at the bottom. */
-@media (max-width: 768px) {
+/* Landscape rail (TopBar.vue): the account-creation nudge hangs off the
+   rail's "Name your jarl" bubble at the top-left, right where the
+   completion banner's title sits on a short screen. While the nudge is up,
+   the banner starts right of it (the nudge is 300px wide, from the rail's
+   8px margin). */
+.landing:has(.hud-bar--rail .nudge) > .banner.complete {
+  left: 324px;
+  width: calc(100vw - 340px);
+}
+@media (max-width: 768px), (max-height: 500px) {
   .hero {
     left: 20px;
     right: 20px;
@@ -1207,6 +1231,9 @@ h1 {
     height: 40px;
     font-size: 12px;
     gap: 12px;
+    /* Lifts the line clear of the "Demo" tag in the bottom-left corner. */
+    padding-bottom: 10px;
+    box-sizing: border-box;
   }
   /* The checklist tray (OnboardingChecklist's root, which carries this
      view's scope attribute) docks right above the footer rather than on
@@ -1250,6 +1277,10 @@ h1 {
     font-size: 12px;
     margin-top: 6px;
     gap: 6px;
+    /* The phone rules above keep the facts on one line; in this 280px
+       column that line would run out across the island instead. */
+    flex-wrap: wrap;
+    white-space: normal;
   }
 }
 </style>

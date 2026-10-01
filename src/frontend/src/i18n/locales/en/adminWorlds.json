@@ -20,6 +20,8 @@
     "status": "Status",
     "runState": "Run state",
     "players": "Players",
+    "spawns": "Free spawn spots",
+    "spawnsHint": "How many new players could still join on the map right now (out of all start positions). Nearby start positions block each other, and both first settlements and expansions take them up. The player cap is not included.",
     "joinable": "Joinable",
     "endboss": "Endboss",
     "frozenIsles": "Frozen isles",

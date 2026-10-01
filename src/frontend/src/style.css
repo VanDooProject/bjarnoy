@@ -176,3 +176,78 @@ button {
 .pill {
   border-radius: 999px;
 }
+
+/* Docs pages (hub, tech tree, tile/land docs) size everything in px around a
+   ~90ch reading column, which leaves most of a big monitor empty. Scaling the
+   whole content column — text, art, tables, graph — rather than only widening
+   it keeps the layout's proportions and reading width intact. The docked
+   TopBar is outside this class, so it matches the rest of the app. */
+@media (min-width: 1600px) {
+  .docs-scale {
+    zoom: 1.2;
+  }
+}
+@media (min-width: 2200px) {
+  .docs-scale {
+    zoom: 1.45;
+  }
+}
+@media (min-width: 3000px) {
+  .docs-scale {
+    zoom: 1.8;
+  }
+}
+
+/* Docs art previews (tech tree buildings, tile docs) float free of any frame:
+   a drop shadow that follows the sprite's own alpha, plus a gentle bob. The
+   ground shadow stays put and shrinks as the art rises, which sells the
+   "hovering" read. Put .floating-art on the preview box and a
+   <span class="floating-art-shadow"> as its first child. */
+.floating-art {
+  position: relative;
+  padding-bottom: 10px;
+  box-sizing: border-box;
+}
+.floating-art > :not(.floating-art-shadow) {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 6px 5px rgba(0, 0, 0, 0.45));
+  animation: floating-art-bob 3.2s ease-in-out infinite;
+  transition: filter 0.2s ease;
+}
+.floating-art-shadow {
+  position: absolute;
+  bottom: 2px;
+  left: 15%;
+  width: 70%;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.45), transparent);
+  animation: floating-art-ground 3.2s ease-in-out infinite;
+}
+@keyframes floating-art-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes floating-art-ground {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.8);
+    opacity: 0.6;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floating-art > :not(.floating-art-shadow),
+  .floating-art-shadow {
+    animation: none;
+  }
+}

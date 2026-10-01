@@ -2,7 +2,8 @@
 import { defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MOBILE_MAX_WIDTH, useIsMobile } from './useIsMobile';
+import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { useIsMobile } from './useIsMobile';
 
 // jsdom has no real matchMedia implementation, so stub one that tracks its
 // listeners and lets a test flip `matches` and fire a synthetic change —
@@ -15,7 +16,7 @@ function stubMatchMedia(initialMatches: boolean) {
     get matches() {
       return state.matches;
     },
-    media: `(max-width: ${MOBILE_MAX_WIDTH}px)`,
+    media: HUD_COMPACT_QUERY,
     addEventListener: (_type: 'change', listener: (event: MediaQueryListEvent) => void) => {
       listeners.add(listener);
     },

@@ -525,5 +525,13 @@
       "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
       "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
     }
+  },
+  "animations": {
+    "play": "Play animations",
+    "paused": {
+      "reducedMotion": "Animations are paused because your device asks for reduced motion.",
+      "saveData": "Animations are paused because your browser is saving data.",
+      "off": "Animations are switched off on this device."
+    }
   }
 }

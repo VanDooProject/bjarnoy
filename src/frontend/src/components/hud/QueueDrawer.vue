@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
+import { hudRailHeightPx } from '../../composables/hudBarHeight';
 import {
   MAX_TRAINING_QUEUE_LENGTH,
   formatCountdownShort,
@@ -239,9 +240,13 @@ interface DragState {
 let dragState: DragState | null = null;
 
 const rootStyle = computed(() => {
-  if (dragPx.value === null) return {};
+  // Landscape rail (TopBar.vue): the HUD's ☰ button and resource bubbles fill
+  // the top-left, where this drawer's handle also sits — start the whole
+  // column below them (0 outside rail mode, which leaves the CSS `top` alone).
+  const railClear = hudRailHeightPx.value > 0 ? { top: `${hudRailHeightPx.value + 16}px` } : {};
+  if (dragPx.value === null) return railClear;
   const base = open.value ? 0 : -TRAVEL.value;
-  return { transform: `translateX(${base + dragPx.value}px)` };
+  return { ...railClear, transform: `translateX(${base + dragPx.value}px)` };
 });
 
 function onHandlePointerDown(event: PointerEvent) {

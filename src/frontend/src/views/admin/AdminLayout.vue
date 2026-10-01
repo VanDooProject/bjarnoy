@@ -72,8 +72,9 @@ async function onLogout() {
 }
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 24px;
+  gap: 12px 24px;
   padding: 16px 28px;
   border-bottom: 1px solid var(--panel-border);
 }
@@ -85,8 +86,13 @@ async function onLogout() {
   display: flex;
   gap: 4px;
   flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .tab {
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 8px 14px;
   border-radius: 8px;
   color: var(--muted);
@@ -132,5 +138,32 @@ async function onLogout() {
 }
 .body {
   padding: 24px 28px 60px;
+  /* The admin tables are wider than a phone: they scroll sideways inside
+     the page body instead of dragging the header along with them. */
+  overflow-x: auto;
+}
+/* Seven tabs, the world picker and the account don't share one row below
+   a laptop width: the tabs take a full-width row of their own under the
+   rest (scrolling sideways when even that is too narrow), instead of
+   pushing the picker and "Log out" off the right edge. */
+@media (max-width: 1100px) {
+  .tabs {
+    order: 1;
+    flex: 1 1 100%;
+  }
+  .account {
+    margin-left: auto;
+  }
+}
+@media (max-width: 640px) {
+  .topbar {
+    padding: 12px 16px;
+  }
+  .body {
+    padding: 16px 16px 48px;
+  }
+  .tab {
+    padding: 10px 12px;
+  }
 }
 </style>

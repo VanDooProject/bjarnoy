@@ -231,7 +231,7 @@ async function train(type: string, count: number) {
 /* Mobile-readiness audit: fit 320px without horizontal overflow — tighter
    padding, and unit rows wrap their info/action halves instead of squeezing
    the qty input + Train button against the row's text. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .modal {
     padding: 16px;
   }

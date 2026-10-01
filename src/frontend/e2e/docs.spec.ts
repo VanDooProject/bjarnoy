@@ -203,6 +203,25 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await expect(all.locator('.active')).toHaveCount(0);
   });
 
+  // Regression: without an account the animation setting (profile page) is out of reach, so a device
+  // that asks for reduced motion only ever saw still camps. The docs page now says why and offers a button.
+  test('wildlife camps page offers to play animations when the device asks for reduced motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/docs/wildlife-camps');
+    const frame = page.locator('#camp-wolfden .animated-camp .layer').nth(1);
+    await frame.waitFor();
+
+    const note = page.getByTestId('animation-paused');
+    await expect(note).toBeVisible();
+    const still = await frame.getAttribute('style');
+    await page.waitForTimeout(1000);
+    expect(await frame.getAttribute('style')).toBe(still);
+
+    await note.getByRole('button', { name: 'Play animations' }).click();
+    await expect(note).toBeHidden();
+    await expect.poll(async () => frame.getAttribute('style')).not.toBe(still);
+  });
+
   test('bog lands page scrolls and every stage and look has art', async ({ page }) => {
     await page.goto('/docs/bog-lands');
     const view = new ScrollableView(page, '.bog-lands');
