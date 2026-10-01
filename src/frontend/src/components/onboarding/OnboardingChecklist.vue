@@ -198,4 +198,68 @@ function subtextFor(row: ChecklistRow): string {
     width: min(340px, calc(100vw - 24px));
   }
 }
+
+/* Short-landscape phones, slim strip: docked in the corner the tray still
+   stood ~150px tall, and at 667x375 the landfall plot (the island is
+   framed, not the plot) ended up under it, swallowing the founding tap.
+   Here the tray is one line instead of three: the current step's card on
+   the left, the step count on the right, and the progress bar as a thin
+   rule along the bottom edge. The title goes — the step count and the
+   card already say what it is. */
+@media (max-height: 500px) {
+  .tray {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px 10px;
+  }
+  .tray-title {
+    display: none;
+  }
+  .tray-header {
+    order: 2;
+    margin-bottom: 0;
+  }
+  .tray-rows {
+    order: 1;
+    flex: 1;
+    min-width: 0;
+  }
+  .tray-progress {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 4px;
+    height: 3px;
+    margin-bottom: 0;
+  }
+  .tray-item {
+    gap: 8px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    min-width: 0;
+  }
+  .tray-item > div:last-child {
+    min-width: 0;
+  }
+  .dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+  }
+  .tray-item.done .dot {
+    font-size: 12px;
+  }
+  .name {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  .sub {
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 </style>
