@@ -10,6 +10,7 @@
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
 import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
+import { TILE_ORIENTATIONS as TILE_DIRECTIONS, type TileOrientation } from './types';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
 export type ArtRef = { kind: 'atlas'; frame: AtlasFrameRect } | { kind: 'png'; url: string };
@@ -60,6 +61,9 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   druidhut: 'druidhut',
   cartworkshop: 'cartworkshop',
   claybrickworks: 'claybrickworks',
+  bogoreworks: 'bogoreworks',
+  // The river hammer mill: a placeholder for the Hammerschmiede on a bog creek (TODO(art): bog-creek Hammerschmiede).
+  hammerschmiede: 'hammerschmiede',
 };
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
@@ -88,6 +92,8 @@ const TERRAIN_SHOWCASE_FAMILY: Record<string, string> = {
   grass: 'grasstile',
   forest: 'foresttile',
   mountain: 'mountaintile',
+  bog: 'bog',
+  lake: 'boglake',
 };
 
 /**
@@ -155,6 +161,27 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
   const family = BUILDING_ART_FAMILIES[type];
   if (!family) return undefined;
   return buildingArtByFamily(family, level);
+}
+
+/**
+ * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
+ * (`fisherhut_lake`), a Hammerschmiede on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
+ * placeholder art for now). Everything else is `buildingArt`.
+ */
+export function buildingArtOnTile(
+  type: string,
+  level: number,
+  tile: { bog?: { kind: string; inDirections: readonly TileOrientation[]; outDirection: TileOrientation | null } },
+): ArtRef | undefined {
+  if (type === 'fishinghut' && tile.bog?.kind === 'half') return buildingArtByFamily('fisherhut_lake', level);
+  if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
+    const straight =
+      tile.bog.inDirections[0] !== undefined &&
+      tile.bog.outDirection !== null &&
+      (TILE_DIRECTIONS.indexOf(tile.bog.inDirections[0]) + 3) % 6 === TILE_DIRECTIONS.indexOf(tile.bog.outDirection);
+    return buildingArtByFamily(straight ? 'hammerschmiede' : 'hammerschmiede_bend', level);
+  }
+  return buildingArt(type, level);
 }
 
 /**

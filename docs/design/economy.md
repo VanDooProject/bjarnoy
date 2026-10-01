@@ -1,10 +1,10 @@
 # Economy & tech tree
 
-Status: **agreed design, not yet in the game.** The catalogue still runs
-the old numbers until the rebalance PR lands. Numbers are tuned against the
-pacing simulator (the admin *Economy lab* page, `/admin/economy`); change
-them together with it. Buildings marked * don't exist in the game yet and
-come in their own PRs.
+Status: **agreed design.** The catalogue runs these numbers; the bog-ore works,
+the Hammerschmiede and the unit iron rework (§8) are in the game. Numbers are
+tuned against the pacing simulator (the admin *Economy lab* page,
+`/admin/economy`); change them together with it. Buildings marked * don't exist
+in the game yet and come in their own PRs.
 
 ## 1. Design targets
 
@@ -33,8 +33,8 @@ Wood, Stone, Food, Iron.
 - **Food** — Reindeer Herder (the default, any grass), later Farm / Pumpkin
   Farm by island soil (one tech-tree card), Fishing Hut on coastal water.
 - **Iron** — comes from **bog ore**: the bog-ore works stand on bog ground
-  (§8, `bog.md`), and a river **Hammerschmiede** (water-powered hammer
-  mill) boosts them later, the way the Sawmill boosts Lumberjacks. Before
+  (§8, `bog.md`), and a **Hammerschmiede** (water-powered hammer mill) on a
+  bog creek boosts them later, the way the Sawmill boosts Lumberjacks. Before
   the bog-ore works, the Longhouse is the only iron source, so buildings
   cost no iron; iron is a military resource (units, Tower).
 
@@ -90,9 +90,9 @@ has 3–8 stages per building, and each level maps onto a stage
 | Group | Max level |
 |---|---|
 | Longhouse | 30 (also drives build slots, claim radius and the build-speed bonus) |
-| Resource producers, Storage House | 25 |
+| Resource producers (incl. the bog-ore works), Storage House | 25 |
 | Military and civic buildings (Barracks, Archery Range, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
-| Mills (Sawmill, Crop Mill) | 20 |
+| Mills (Sawmill, Crop Mill, Hammerschmiede) | 20 |
 | Tower | 10 |
 | Great Storehouse | 10 |
 | Shrines | 5 (one per settlement) |
@@ -103,7 +103,7 @@ Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 **What caps a building's level.** Most buildings can never be a higher level
 than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
 keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
-Farm, Pumpkin Farm, Fishing Hut) are capped by **storage**
+Farm, Pumpkin Farm, Fishing Hut, bog-ore works) are capped by **storage**
 instead: they only need their unlock LH at every level, and a level whose cost
 exceeds what the settlement can store can never be afforded, so the next level
 has to fit in storage. An **additional Storage House** can only be placed once
@@ -125,7 +125,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 3 | Tower | — |
 | 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |
 | 5 | Barracks | Tower 3 |
-| 6 | Town Square (feasts, §6) | — |
+| 6 | Town Square (feasts, §6), Bog-ore works (iron, §8) | — |
 | 7 | Palisade* | Tower 5 |
 | 8 | Dockyard | Fishing Hut 5 |
 | 9 | Archery Range | Barracks 5 |
@@ -133,7 +133,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
-| 20 | Sawmill, Crop Mill | Lumberjack 10 / Farm 10 |
+| 20 | Sawmill, Crop Mill, Hammerschmiede | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
 | 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue* | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / any other shrine 5 |
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
@@ -188,11 +188,13 @@ play.
   a tower is placed, not as extra tech-tree cards.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
-- **Rivers block space but pay for it.** A river hex can't take an ordinary
-  building, but it is the only place for the mills, and a mill boosts every
-  Lumberjack / Farm within its range (up to +100% at max level). A river
-  running through a claim is a trade: fewer producer hexes, and a much
-  stronger boost on the ones that are left.
+- **Rivers and bog creeks block space but pay for it.** A river hex can't
+  take an ordinary building, but it is the only place for the mills, and a
+  mill boosts every Lumberjack / Farm within its range (up to +100% at max
+  level); a bog creek hex is the only place for the Hammerschmiede, which does
+  the same for bog-ore works. A river or creek running through a claim is a
+  trade: fewer producer hexes, and a much stronger boost on the ones that are
+  left.
 
 ### Shrines
 
@@ -372,13 +374,14 @@ The art for this is the **bog set** in `VanDooProject/3D_assets`
 [`bog.md`](./bog.md):
 
 - **Bog ground** (moss), with bog creeks and bog lakes.
-- **Bog-ore works** on bog ground: the iron producer, from diggings to a
-  bloomery over 7 levels.
-- **Clay Brickworks** moves from grass onto bog ground.
-- A **lake Fisher Hut** on stilts, the same building as the coastal one.
-- A **Hammerschmiede** on a river only (not part of the bog set; art still
-  to come): boosts bog-ore works within range, limited by river shapes the
-  same way the Sawmill and Crop Mill are.
+- **Bog-ore works** on plain bog moss: the iron producer, from diggings to a
+  bloomery over 7 art levels (a level past the last shows the last).
+- **Clay Brickworks** moves from grass onto plain bog moss.
+- A **lake Fishing Hut** on stilts on a lake's half shore, the same building
+  as the coastal one.
+- A **Hammerschmiede** on a bog creek (straight or bend): boosts bog-ore works
+  within range, with the mills' percent and range curve. It is drawn with the
+  river hammer-mill art until its own bog-creek art exists.
 
 A furnace alone creates no ore, so bog ore is the only real source, and the
 Longhouse gives a small trickle (+2 iron/h per level).
@@ -392,13 +395,77 @@ sources have to line up with the unit unlocks:
 |---|---|---|
 | LH 1–5 | Longhouse trickle only (2–10 iron/h) | Thrall (no iron), then the first Spearmen when the Barracks opens at LH 5 |
 | from ~LH 6 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
-| LH 20 | Hammerschmiede (river) boosts bog ore | elite units: Berserker, Catapult, Longship |
+| LH 20 | Hammerschmiede (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
 So bog ground and the bog-ore works are needed by about LH 6, not as a
-late add-on. The unit costs and unlock levels get reworked together
-with them so the levels match: today every unit costs iron (Thrall 15 …
-Catapult 250), and the unit Longhouse gates still follow the old ladder
-(the Spearman at LH 1, while the Barracks now opens at LH 5).
+late add-on. The unit costs and unlock levels are reworked together with
+them so the levels match. *Implemented:*
+
+- the Thrall costs no iron (it was 15); every other unit still does (Spearman
+  40, Axeman 60, Bowman 50, Berserker 120, Provisioner 20, Karve 100,
+  Longship 220, Settler Crew 100, Catapult 250);
+- each unit's Longhouse gate follows the building that trains it:
+
+  | Unit | Trained at | Longhouse gate (was) |
+  |---|---|---|
+  | Thrall | Barracks | the Barracks' own gate (LH 5); no gate of its own (1) |
+  | Spearman | Barracks | 5 (1) |
+  | Axeman | Barracks | 6 (3): opens with the first bog-ore works |
+  | Karve | Dockyard | 8 (5) |
+  | Bowman | Archery Range | 9 (4) |
+  | Provisioner, Settler Crew | Cart Workshop | 10 (4, 5) |
+  | Berserker, Catapult, Longship | Barracks, Archery Range, Dockyard | 20 (6, 10, 8): with the Hammerschmiede |
+
+  (Berserker still needs the Axeman, Catapult the Berserker, Longship the
+  Karve.) The elite units are gated by the Longhouse level only, not by a
+  standing Hammerschmiede: not every settlement has a creek.
+
+### Bog-ore works numbers (Economy lab)
+
+The bog-ore works follow the producer formulas (§3): cost 50 / 40 / 15 like
+the other producers, output `P₁ · 1.20^(L−1)`, terrain boost +10% per
+neighbouring bog, creek or lake hex up to +50%, storage-capped (§4). **P₁ = 20
+iron/h** (the other producers: 40). The lab places a producer that unlocks late
+(a level-1 gate above Longhouse 1) when its Longhouse level, prerequisites, a
+free slot and the stock allow, instead of assuming it stands from minute 0.
+
+Why 20: iron is the indirect gate for the army, so it must stay scarcer than
+wood. A unit costs about half as much iron as wood (Spearman 40 iron / 80
+wood, Karve 100 / 250, Catapult 250 / 300), so iron income at about **half of
+wood income** makes both equally binding. With the default three bog-ore
+works the lab (three producers each of wood, stone and food, two storage
+houses, producers up to three levels ahead) gives iron/wood 0.44 to 0.49 from
+Longhouse 8 on; one works gives 0.16, so a settlement with one works is
+iron-limited. P₁ 40 gave 0.9 (iron never binds), P₁ 10 gave 0.23.
+
+Iron per hour by Longhouse level (three works, P₁ 20; the Longhouse trickle
+included). The profile only shifts *when* a level is reached:
+
+| LH | iron/h | reached: active | 4 check-ins | 2 check-ins |
+|---|---|---|---|---|
+| 5 (Barracks) | 10 | day 1.3 | day 5.4 | day 11.0 |
+| 6 (works open) | 98 (32 for the check-in profiles, whose works are still level 1) | day 2.0 | day 6.5 | day 13.5 |
+| 8 | 326 | day 3.0 | day 12.2 | day 24.5 |
+| 10 | 466 | day 4.2 | day 16.2 | day 32.5 |
+| 15 | 1 139 | day 9.2 | day 25.4 | day 48.5 |
+| 20 | 2 800 | day 21.2 | day 40.6 | — (past day 60) |
+
+Iron before the works is the Longhouse trickle alone (2/h per level: 10/h at
+LH 5), which has banked 139 iron at LH 5 for the active profile (622 and 1 256
+for the slower ones): the first three Spearmen (40 each) are affordable the
+moment the Barracks open, ten of them about 17 h later. Every other unit is
+affordable the moment its gate opens, because its gate opens with or after the
+works: Axeman at LH 6 (361 iron banked), Karve at LH 8, Settler Crew and
+Provisioner at LH 10, the elite units at LH 20 (income 2 800/h against a
+Catapult's 250).
+
+Second-settlement timing (§6) is unchanged as long as the lab's default
+producers are used (no bog-ore works: 6.4 / 12.3 / 25.0 days for active / 4
+check-ins / 2 check-ins). A lab run that adds works delays it, because the
+simulator's greedy player upgrades the scarce iron producer ahead of the others:
+one works gives 7.4 / 14.3 / 29.0 days, three works 7.1 / 16.1 / 32.5. That is a
+simulator artefact (a player raises iron only as far as the army needs), not a
+target; the default count stays 0.
 
 ## 9. Pacing model (the Economy lab)
 
@@ -526,18 +593,20 @@ Open work, in rough order. Each is its own PR.
 5. **New buildings:** the Reindeer Herder (the default food building; Farm and
    Pumpkin Farm move to LH 4 as one card by soil), the Odin Statue (Ravens and
    Wisdom, §5) and the Palisade (§5).
-6. **Bogs and iron** (§8, `bog.md`): bog ground, creeks and lakes in world
+6. ~~**Bogs and iron** (§8, `bog.md`): bog ground, creeks and lakes in world
    generation, the bog-ore works, Clay Brickworks on bog ground, the lake
-   Fisher Hut, and the Hammerschmiede.
-7. **Units and iron:** every unit except the Thrall costs iron, and the unit
-   unlock levels follow the building ladder, matched to the iron sources.
+   Fishing Hut, and the Hammerschmiede.~~ Done (the Hammerschmiede with the
+   river mill's art until the bog-creek art exists).
+7. ~~**Units and iron:** every unit except the Thrall costs iron, and the unit
+   unlock levels follow the building ladder, matched to the iron sources.~~
+   Done (§8).
 8. **Raiding and snowballing** (§10): wildlife on empty islands, beast dens,
    merchant ships, size-gap protection with revenge, and the hideout.
 
 ## 12. Open questions
 
 - ~~Fishing Hut and Fisher Hut~~: merged into one coastal building (the
-  Fishing Hut). A lake version comes with the bog set (on stilts on a bog-lake
-  shore): the same building, with its own art.
+  Fishing Hut). The lake version (on stilts on a bog-lake half shore) is the
+  same building, with its own art.
 - The profile parameters (online hours, share spent on troops) are
   assumptions; real telemetry should replace them once players exist.

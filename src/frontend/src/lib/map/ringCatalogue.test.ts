@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -186,5 +186,72 @@ describe('isWaterOnlyBuilding / tileIsBuildable', () => {
     expect(tileIsBuildable({ terrain: 'sea' })).toBe(false);
     expect(tileIsBuildable({ terrain: 'sea', buildingType: 'farm' })).toBe(false);
     expect(tileIsBuildable({ terrain: 'grass' })).toBe(true);
+  });
+});
+
+// Mirrors BogBuildingTests.cs in the domain tests: where each bog building may stand (BuildingDefinition.AllowsHex).
+describe('buildingAllowedOnHex', () => {
+  const ALL_KINDS = ['bog', 'lake', 'inlet', 'shore', 'half', 'mouth', 'creek', 'creekspring'] as const;
+  const bogHex = (kind: (typeof ALL_KINDS)[number]) => ({ terrain: kind === 'lake' ? 'lake' : 'bog', bog: { kind } });
+
+  it.each(['claybrickworks', 'bogoreworks'])('%s stands on plain moss only', (type) => {
+    expect(buildingAllowedOnHex(type, bogHex('bog'))).toBe(true);
+    for (const kind of ALL_KINDS.filter((k) => k !== 'bog')) {
+      expect(buildingAllowedOnHex(type, bogHex(kind)), `${type} on ${kind}`).toBe(false);
+    }
+    expect(buildingAllowedOnHex(type, { terrain: 'grass' })).toBe(false);
+    expect(buildingAllowedOnHex(type, { terrain: 'bog' })).toBe(false); // bog kind unknown
+  });
+
+  it('the Hammerschmiede stands on a creek and nothing else', () => {
+    expect(buildingAllowedOnHex('hammerschmiede', bogHex('creek'))).toBe(true);
+    for (const kind of ALL_KINDS.filter((k) => k !== 'creek')) {
+      expect(buildingAllowedOnHex('hammerschmiede', bogHex(kind)), `on ${kind}`).toBe(false);
+    }
+    expect(buildingAllowedOnHex('hammerschmiede', { terrain: 'grass' })).toBe(false);
+    expect(buildingAllowedOnHex('hammerschmiede', { terrain: 'sea', isCoastalWater: true })).toBe(false);
+  });
+
+  it('the Fishing Hut keeps the coast and also stands on a lake half shore, nowhere else on the bog', () => {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'sea', isCoastalWater: true })).toBe(true);
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'sea', isCoastalWater: false })).toBe(false);
+    expect(buildingAllowedOnHex('fishinghut', bogHex('half'))).toBe(true);
+    for (const kind of ALL_KINDS.filter((k) => k !== 'half')) {
+      expect(buildingAllowedOnHex('fishinghut', bogHex(kind)), `on ${kind}`).toBe(false);
+    }
+    // A coastal hut on land is not a thing: grass is not water (the caller filters non-coastal terrain separately).
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'grass' })).toBe(false);
+  });
+
+  it('the other water buildings never stand on the bog', () => {
+    for (const type of ['dockyard', 'shrineofnjord']) {
+      expect(buildingAllowedOnHex(type, { terrain: 'sea', isCoastalWater: true })).toBe(true);
+      for (const kind of ALL_KINDS) expect(buildingAllowedOnHex(type, bogHex(kind)), `${type} on ${kind}`).toBe(false);
+    }
+  });
+
+  it('nothing at all stands on a lake, and no grass building stands on any bog hex', () => {
+    for (const type of ['farm', 'tower', 'storagehouse', 'lumberjack', 'quarry', 'townsquare', 'sawmill', 'fishinghut', 'bogoreworks', 'claybrickworks']) {
+      expect(buildingAllowedOnHex(type, bogHex('lake')), `${type} on a lake`).toBe(false);
+    }
+    for (const type of ['farm', 'tower', 'storagehouse', 'lumberjack', 'quarry', 'townsquare', 'smithy', 'barracks', 'meadery', 'longhouse']) {
+      for (const kind of ALL_KINDS) expect(buildingAllowedOnHex(type, bogHex(kind)), `${type} on ${kind}`).toBe(false);
+    }
+  });
+
+  it('is unchanged for the buildings on grass, forest, mountain and sand', () => {
+    expect(buildingAllowedOnHex('farm', { terrain: 'grass' })).toBe(true);
+    expect(buildingAllowedOnHex('lumberjack', { terrain: 'forest' })).toBe(true);
+    expect(buildingAllowedOnHex('quarry', { terrain: 'mountain' })).toBe(true);
+    expect(buildingAllowedOnHex('tower', { terrain: 'sand' })).toBe(true);
+    expect(buildingAllowedOnHex('farm', { terrain: 'sea', isCoastalWater: true })).toBe(false);
+  });
+
+  it('names the bog-bound buildings and tells a lake hut from a coastal one', () => {
+    expect(['claybrickworks', 'bogoreworks', 'hammerschmiede'].every(isBogBoundBuilding)).toBe(true);
+    expect(isBogBoundBuilding('fishinghut')).toBe(false);
+    expect(isLakeShoreHut({ buildingType: 'fishinghut', bog: { kind: 'half' } })).toBe(true);
+    expect(isLakeShoreHut({ buildingType: 'fishinghut' })).toBe(false);
+    expect(isLakeShoreHut({ buildingType: 'farm', bog: { kind: 'half' } })).toBe(false);
   });
 });
