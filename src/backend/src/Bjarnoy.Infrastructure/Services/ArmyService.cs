@@ -30,9 +30,10 @@ public enum RecallOutcome
     /// The army could be recalled (it is mid-journey or supporting) but no
     /// land/sea route home exists for it — distinct from
     /// <see cref="NothingToRecall"/>, which means there was nothing to
-    /// recall in the first place (issue #159 part A). A crossing-cost river
-    /// never causes this on its own; it remains possible in principle (e.g.
-    /// a fleet with no adjacent open sea, or a guest's host settlement gone).
+    /// recall in the first place (issue #159 part A). It is possible when the
+    /// army stands where mountains or wide rivers close it in (a land army
+    /// cannot cross either), a fleet has no adjacent open sea, or a guest's
+    /// host settlement is gone.
     /// </summary>
     NoRouteHome,
 

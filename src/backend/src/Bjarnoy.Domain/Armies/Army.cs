@@ -1115,8 +1115,8 @@ public sealed record Army
     /// <returns>
     /// <see langword="null"/> only if no route home exists at all — should
     /// not happen in practice for an army that was already mid-journey
-    /// (issue #159's river-crossing case aside, no hex on a reachable route is
-    /// ever itself unreachable), but handled defensively rather than throwing.
+    /// (it came from home over land it was allowed to walk, and the same
+    /// rules price the way back), but handled defensively rather than throwing.
     /// </returns>
     public Army ForceFieldRetreat(
         DateTimeOffset battleInstant, HexCoord fromHex, HexCoord home, Func<HexCoord, Terrain> terrainAt,
