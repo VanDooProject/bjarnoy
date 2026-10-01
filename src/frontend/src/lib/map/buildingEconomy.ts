@@ -137,6 +137,18 @@ export function maxTowers(longhouseLevel: number): number {
 }
 
 /**
+ * Every shrine building type — `BuildingCatalogue.GodOf(type) is not null`. A
+ * settlement raises at most one of them in total
+ * (`BuildRejection.SettlementAlreadyHasShrine`).
+ */
+export const SHRINE_BUILDING_TYPES: ReadonlySet<string> = new Set([
+  'shrineofthor',
+  'shrineoffreyja',
+  'shrineofullr',
+  'shrineofnjord',
+]);
+
+/**
  * Mirrors `BuildingCatalogue.AdditionalStorageHouseRequirement`: with
  * `existing` storage houses held (standing plus queued), one more needs
  * `min(existing, 4)` of them at level `min(10 + 5·(existing − 1), 25)` — 1 at

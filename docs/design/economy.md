@@ -200,8 +200,11 @@ play.
 
 ### Shrines
 
-One shrine per god per settlement. The only way to stack a god's favour is
-to hold several settlements on one island and merge them later.
+A settlement holds **one shrine in total**, of any god (the Odin Statue counts
+too), and each god has at most one shrine per island
+(`BuildRejection.SettlementAlreadyHasShrine`). Which god a settlement serves is
+therefore a real choice; stacking favours means holding several settlements and
+merging them later.
 
 | Shrine | Favour |
 |---|---|

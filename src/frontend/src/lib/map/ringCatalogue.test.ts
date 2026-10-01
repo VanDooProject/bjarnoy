@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -197,5 +197,16 @@ describe('isWaterOnlyBuilding / tileIsBuildable', () => {
     expect(tileIsBuildable({ terrain: 'sea' })).toBe(false);
     expect(tileIsBuildable({ terrain: 'sea', buildingType: 'farm' })).toBe(false);
     expect(tileIsBuildable({ terrain: 'grass' })).toBe(true);
+  });
+});
+
+describe('shrineLimitLock', () => {
+  it('locks every shrine once the settlement holds one, whichever god', () => {
+    expect(shrineLimitLock(1)).toBe('This settlement already has a shrine');
+    expect(shrineLimitLock(2)).toBe('This settlement already has a shrine');
+  });
+
+  it('never locks the first shrine', () => {
+    expect(shrineLimitLock(0)).toBeUndefined();
   });
 });

@@ -255,6 +255,24 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.placeBuilding(settlement.id, spots[5], 'storagehouse')).toBe(true);
   });
 
+  it('lets a settlement hold only one shrine in total, of any god', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    settlement.level = 3;
+
+    expect(model.shrineCoords(settlement.id)).toEqual([]);
+    expect(model.placeBuilding(settlement.id, spots[0], 'shrineofthor')).toBe(true);
+    expect(model.shrineCoords(settlement.id)).toEqual([{ q: spots[0].q, r: spots[0].r }]);
+    // neither another god's shrine nor a second one of the same god
+    expect(model.placeBuilding(settlement.id, spots[1], 'shrineoffreyja')).toBe(false);
+    expect(model.placeBuilding(settlement.id, spots[2], 'shrineofthor')).toBe(false);
+    // other buildings are unaffected
+    expect(model.placeBuilding(settlement.id, spots[1], 'farm')).toBe(true);
+  });
+
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);

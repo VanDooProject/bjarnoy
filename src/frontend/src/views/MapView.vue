@@ -51,6 +51,7 @@ import {
   matchingNeighbourCount,
   type BuildingModifier,
   type BuildingOutput,
+  SHRINE_BUILDING_TYPES,
 } from '../lib/map/buildingEconomy';
 import {
   cropAllowedHere,
@@ -58,6 +59,7 @@ import {
   formatMissingResources,
   longhouseLock,
   riverBuildingAllowedHere,
+  shrineLimitLock,
   storageHouseLock,
   towerLimitLock,
 } from '../lib/map/ringCatalogue';
@@ -971,6 +973,18 @@ function towersHeld(): number {
   return hexes.size;
 }
 
+// Shrines held by the selected settlement (standing plus queued new-shrine
+// orders, by distinct hex): a settlement raises one shrine in total.
+function shrinesHeld(): number {
+  const id = world.selectedSettlementId;
+  if (!id) return 0;
+  const hexes = new Set(world.model.shrineCoords(id).map((c) => `${c.q},${c.r}`));
+  for (const order of world.hud.queue) {
+    if (SHRINE_BUILDING_TYPES.has(order.building)) hexes.add(`${order.q},${order.r}`);
+  }
+  return hexes.size;
+}
+
 // Storage houses held (standing plus queued, distinct hexes like
 // Settlement.PlanBuild counts them) and the best standing level, for the
 // additional-storage-house lock.
@@ -999,6 +1013,7 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
     lock:
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
       ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
+      ?? (SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined)
       ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined),
     art: buildingArt(type, 1),
   };

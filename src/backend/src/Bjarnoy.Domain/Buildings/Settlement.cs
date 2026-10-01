@@ -1129,6 +1129,17 @@ public sealed record Settlement
             }
         }
 
+        // A settlement holds at most one shrine in total, of any god. A
+        // queued new shrine already stakes a level-0 stub in Buildings, but the
+        // queue is counted too so the answer doesn't hang on that. Levelling
+        // the shrine standing on this same coord is not "another" one.
+        if (BuildingCatalogue.GodOf(type) is not null
+            && (Buildings.Any(b => BuildingCatalogue.GodOf(b.Type) is not null && b.Coord != coord)
+                || Queue.Any(o => BuildingCatalogue.GodOf(o.Type) is not null && o.Coord != coord)))
+        {
+            return BuildDecision.Rejected(BuildRejection.SettlementAlreadyHasShrine);
+        }
+
         // Each of the four gods gets at most one shrine per island — raised
         // by whichever settlement gets there first, anywhere on it, not just
         // this one (see shrineGodsElsewhereOnIsland's own doc comment). A

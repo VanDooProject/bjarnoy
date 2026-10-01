@@ -52,6 +52,17 @@ export function towerLimitLock(towersHeld: number, longhouseLevel: number): stri
 }
 
 /**
+ * The reason a *new* shrine can't be placed: the settlement already holds one
+ * (standing or queued) — mirrors `Settlement.PlanBuild`'s
+ * `BuildRejection.SettlementAlreadyHasShrine`. A settlement raises one shrine
+ * in total, of any god.
+ */
+export function shrineLimitLock(shrinesHeld: number): string | undefined {
+  if (shrinesHeld < 1) return undefined;
+  return i18n.global.t('hud.ringMenu.shrineLimitLock') as string;
+}
+
+/**
  * The reason an *additional* storage house can't be placed: with `n` held
  * (standing or queued) it needs `min(n, 4)` of them at level
  * `min(10 + 5·(n − 1), 25)` — mirrors `Settlement.PlanBuild`'s

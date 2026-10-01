@@ -14,6 +14,7 @@
     "StorageHouseTooLow": "Baue zuerst deine Lagerhäuser aus: ein weiteres braucht 1 auf Stufe 10, 2 auf Stufe 15, 3 auf Stufe 20 oder 4 auf Stufe 25.",
     "RequiredBuildingTooLow": "Ein benötigtes Gebäude ist noch nicht hoch genug ausgebaut.",
     "ShrineGodAlreadyOnIsland": "Für diesen Gott steht bereits ein Schrein auf der Insel.",
+    "SettlementAlreadyHasShrine": "Diese Siedlung hat bereits einen Schrein – pro Siedlung ist nur einer erlaubt, egal welches Gottes.",
     "NoFreeSlot": "Kein freier Bauplatz — Premium schaltet eine Warteschlange frei.",
     "WorldNotFound": "Diese Welt existiert nicht.",
     "IslandNotFound": "Diese Insel existiert nicht.",

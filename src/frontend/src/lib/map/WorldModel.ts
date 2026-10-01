@@ -5,7 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
-import { additionalStorageHouseRequirement, maxTowers } from './buildingEconomy';
+import { SHRINE_BUILDING_TYPES, additionalStorageHouseRequirement, maxTowers } from './buildingEconomy';
 import { cropAllowedHere, isWaterOnlyBuilding, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
@@ -1460,6 +1460,17 @@ export class WorldModel {
     return (this.settlementTowers.get(settlementId) ?? []).map((t) => ({ q: t.q, r: t.r }));
   }
 
+  /** Where this settlement's shrines (of any god) stand — at most one is allowed. */
+  shrineCoords(settlementId: string): { q: number; r: number }[] {
+    const coords: { q: number; r: number }[] = [];
+    for (const tile of this.tiles.values()) {
+      if (tile.ownerId === settlementId && tile.buildingType && SHRINE_BUILDING_TYPES.has(tile.buildingType)) {
+        coords.push({ q: tile.q, r: tile.r });
+      }
+    }
+    return coords;
+  }
+
   /**
    * This settlement's standing storage houses (hex and level), for the
    * additional-storage-house rule (`additionalStorageHouseRequirement`): a new
@@ -1525,6 +1536,9 @@ export class WorldModel {
     if (type === 'tower' && this.towerCoords(settlementId).length >= maxTowers(settlement.level)) {
       return false;
     }
+    // A settlement raises one shrine in total, of any god (matches
+    // BuildRejection.SettlementAlreadyHasShrine).
+    if (type && SHRINE_BUILDING_TYPES.has(type) && this.shrineCoords(settlementId).length >= 1) return false;
     // An additional storage house needs enough standing ones at a high enough
     // level (matches BuildRejection.StorageHouseTooLow). Upgrades never go
     // through here.

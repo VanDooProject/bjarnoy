@@ -1549,8 +1549,8 @@ public class SettlementTests
     [Fact]
     public void A_shrine_to_a_different_god_is_still_buildable_while_another_gods_shrine_stands_on_the_island()
     {
-        // A settlement (or island) can still raise all four gods' shrines —
-        // it's the same god twice that's refused, not shrines in general.
+        // The island limit is per god: a different god's shrine elsewhere on
+        // the island does not block this settlement's first shrine.
         var settlement = FoundAtLonghouseLevel(25, (BuildingType.CropMill, 5));
 
         var decision = settlement.PlanBuild(
@@ -1558,6 +1558,31 @@ public class SettlementTests
             shrineGodsElsewhereOnIsland: new HashSet<GodType> { GodType.Thor });
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Theory]
+    [InlineData(BuildingType.ShrineOfFreyja)]
+    [InlineData(BuildingType.ShrineOfThor)]
+    public void A_settlement_that_already_holds_a_shrine_refuses_a_second_one_on_another_hex(BuildingType second)
+    {
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.Smithy, 5), (BuildingType.ShrineOfThor, 1));
+
+        var decision = settlement.PlanBuild(second, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.SettlementAlreadyHasShrine, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_queued_new_shrine_already_blocks_a_second_one()
+    {
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.CropMill, 5));
+        var first = settlement.PlanBuild(BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        Assert.True(first.Accepted, $"expected accept, got {first.Rejection}");
+        var queued = settlement.Enqueue(first.Order!, T0);
+
+        var second = queued.PlanBuild(BuildingType.ShrineOfFreyja, new HexCoord(1, 1), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.SettlementAlreadyHasShrine, second.Rejection);
     }
 
     [Fact]

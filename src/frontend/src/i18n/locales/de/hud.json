@@ -69,6 +69,7 @@
     "domainWood": "Holz"
   },
   "ringMenu": {
+    "shrineLimitLock": "Diese Siedlung hat bereits einen Schrein",
     "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "back": "Zurück",
     "backButton": "‹ ZURÜCK",

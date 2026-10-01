@@ -95,11 +95,18 @@ public enum BuildRejection
     RequiredBuildingTooLow,
 
     /// <summary>
-    /// A shrine to this god already stands somewhere else on the island — a
-    /// settlement can raise all four gods' shrines, just never a second one
-    /// to the same god (see <see cref="BuildingCatalogue.GodOf"/>).
+    /// A shrine to this god already stands somewhere else on the island —
+    /// never a second one to the same god (see <see cref="BuildingCatalogue.GodOf"/>).
     /// </summary>
     ShrineGodAlreadyOnIsland,
+
+    /// <summary>
+    /// A shrine (of any god, see <see cref="BuildingCatalogue.GodOf"/>) was
+    /// ordered on a new hex while this settlement already holds one — standing
+    /// or queued. A settlement raises at most one shrine in total; levelling
+    /// the existing shrine is never refused for this reason.
+    /// </summary>
+    SettlementAlreadyHasShrine,
 
     /// <summary>
     /// PumpkinFarm was ordered on a Wheat-soil island — it's the bonus crop

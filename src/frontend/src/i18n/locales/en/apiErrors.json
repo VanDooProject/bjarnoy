@@ -14,6 +14,7 @@
     "StorageHouseTooLow": "Raise your storehouses first: another one needs 1 at level 10, 2 at level 15, 3 at level 20 or 4 at level 25.",
     "RequiredBuildingTooLow": "A required building isn't high enough level yet.",
     "ShrineGodAlreadyOnIsland": "This god already has a shrine somewhere on the island.",
+    "SettlementAlreadyHasShrine": "This settlement already has a shrine — a settlement can raise only one, of any god.",
     "NoFreeSlot": "No free construction slot — Premium unlocks a waiting queue.",
     "WorldNotFound": "That world doesn't exist.",
     "IslandNotFound": "That island doesn't exist.",
