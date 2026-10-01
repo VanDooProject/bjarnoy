@@ -78,6 +78,21 @@ public sealed record BuildingDefinition
     public bool RequiresCoastalWater { get; init; }
 
     /// <summary>
+    /// This building's own hex must be a bog tile (<see cref="World.BogTile"/>) of one of these kinds — <see langword="null"/>
+    /// (the default) means no such requirement. Bog-ore works and Clay Brickworks stand on plain moss
+    /// (<see cref="World.BogTileKind.Bog"/>: not a shore, mouth, creek or lake), the Hammerschmiede on a creek
+    /// (<see cref="World.BogTileKind.Creek"/>). A hex whose bog kind the caller could not tell (<see langword="null"/>) is refused.
+    /// </summary>
+    public IReadOnlySet<World.BogTileKind>? RequiresBogKind { get; init; }
+
+    /// <summary>
+    /// Alongside <see cref="RequiresCoastalWater"/>: bog tile kinds this building may stand on instead of coastal water. The
+    /// Fishing Hut stands on a lake's half shore (<see cref="World.BogTileKind.Half"/>, three water edges) with its lake art.
+    /// <see langword="null"/> (the default) means coastal water only.
+    /// </summary>
+    public IReadOnlySet<World.BogTileKind>? LakeShoreKinds { get; init; }
+
+    /// <summary>
     /// This building's own hex must itself be a river tile of one of these
     /// shapes — <see langword="null"/> (the default) means no river
     /// requirement at all. The Sawmill's rule: it's built directly on a
@@ -155,6 +170,32 @@ public sealed record BuildingDefinition
     /// behind it while it runs.
     /// </summary>
     public bool OccupiesAllSlots { get; init; }
+
+    /// <summary>
+    /// Whether this building may stand on one hex, from everything that can decide it: the terrain, whether it is coastal water,
+    /// and the bog kind of the hex (<see langword="null"/> when it is not a bog tile, or the caller cannot say). River shape
+    /// rules are separate (<see cref="RequiresRiverShape"/>).
+    /// </summary>
+    public bool AllowsHex(Terrain terrain, bool isCoastalWater, World.BogTileKind? bogKind)
+    {
+        bool terrainOk;
+        if (RequiresCoastalWater)
+        {
+            terrainOk = isCoastalWater
+                || (terrain == Terrain.Bog && bogKind is { } shore && LakeShoreKinds?.Contains(shore) == true);
+        }
+        else
+        {
+            terrainOk = AllowsTerrain(terrain);
+        }
+
+        if (terrainOk && RequiresBogKind is { } kinds)
+        {
+            terrainOk = terrain == Terrain.Bog && bogKind is { } kind && kinds.Contains(kind);
+        }
+
+        return terrainOk;
+    }
 
     /// <summary>Whether this building may stand on <paramref name="terrain"/>.</summary>
     public bool AllowsTerrain(Terrain terrain)

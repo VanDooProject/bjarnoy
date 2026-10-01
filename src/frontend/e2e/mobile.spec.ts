@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { claimLandfall, layoutOverflow, loginTestUser, waitForMapReady } from './helpers';
+import { claimLandfall, layoutOverflow, loginTestUser, openRingOnGuidedHex, waitForMapReady } from './helpers';
 
 // Mobile-readiness audit: every one of these was a real defect at phone width
 // — the onboarding checklist's third card and the guidance chip clipped past
@@ -47,30 +47,6 @@ async function plotHitsCanvas(page: Page): Promise<boolean> {
     const plot = renderer.hexCenterScreen(renderer.previewCenter!);
     return document.elementFromPoint(box.x + plot.x, box.y + plot.y) === canvas;
   });
-}
-
-/**
- * Opens the ring menu on the guided hex GuidancePointer.vue is currently
- * aiming at (design handoff "2a" frame 2, right after landfall — the pointer
- * follows the camera via `useMapAnchor`, which writes the hex's screen point
- * into `--anchor-x`/`--anchor-y` on `[data-testid="guidance-pointer"]`) and
- * waits for frame 3's "This one fits {terrain}" chip, the case the chip's
- * placement bug was found on. Reads the anchor vars rather than re-deriving
- * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
- * (camera + arrowTipOffset) is exactly where the click needs to land.
- */
-async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
-  const pointer = settlement.guidancePointer;
-  await expect
-    .poll(async () => (await pointer.getAttribute('style')) ?? '', { message: 'guidance pointer never got an anchor point' })
-    .toMatch(/--anchor-x: -?\d/);
-  const style = (await pointer.getAttribute('style'))!;
-  const x = Number(style.match(/--anchor-x: (-?[\d.]+)px/)![1]);
-  const y = Number(style.match(/--anchor-y: (-?[\d.]+)px/)![1]);
-  const box = await settlement.canvasBox();
-  await settlement.page.mouse.click(box.x + x, box.y + y);
-  await settlement.ring.waitForOpen();
-  await expect(pointer.locator('.chip')).toContainText('fits');
 }
 
 async function expectNoOverlap(a: Locator, b: Locator, what: string): Promise<void> {
@@ -268,12 +244,9 @@ test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
     await openRingOnGuidedHex(settlement);
     const chip = settlement.guidancePointer.locator('.chip');
     await expectInsideViewport(page, chip);
-    const chipBox = (await chip.boundingBox())!;
+    // Short landscape has no top bar: `.hud-bar` is the left rail (☰ + pills).
     const hudBar = page.locator('.hud-bar');
-    if (await hudBar.isVisible()) {
-      const hudBarBox = (await hudBar.boundingBox())!;
-      expect(chipBox.y).toBeGreaterThanOrEqual(hudBarBox.y + hudBarBox.height - 1);
-    }
+    if (await hudBar.isVisible()) await expectNoOverlap(chip, hudBar, 'chip covered by the HUD bar');
     // The settlement bubble and demo badge stack in rows under the bar here;
     // the chip must not end up behind them either.
     for (const [selector, what] of [
@@ -311,12 +284,13 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
     await expect(page.locator('.hud-bar')).toHaveCount(0);
     await expect(page.locator('.settlement-bubble')).toHaveCount(0);
 
+    // On phones the demo badge is a small tag in the bottom-left corner,
+    // well away from the landfall banner at the top.
     const badge = page.locator('.demo-badge');
     if (await badge.isVisible()) {
       const badgeBox = (await badge.boundingBox())!;
-      expect(badgeBox.y, 'demo badge should sit near the top edge, not a stale bar offset').toBeLessThan(40);
-      // The landfall banner reserves the badge's row instead of sliding up
-      // underneath it now that there's no bar between them.
+      expect(badgeBox.x, 'demo tag should hug the left edge').toBeLessThan(12);
+      expect(badgeBox.y + badgeBox.height, 'demo tag should hug the bottom edge').toBeGreaterThan(PHONE.height - 30);
       await expect(settlement.banner).toBeVisible();
       await expectNoOverlap(settlement.banner, badge, 'demo badge covers the landfall banner');
     }
@@ -338,13 +312,13 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
   });
 });
 
-// z-layering: the phone settlement bubble and demo badge are fixed layers
-// outside the HUD bar. They used to sit at z 41 / 1000 and painted over the
-// bar's own popovers (ProfileNudge) and over the open queue drawer.
+// z-layering: the phone settlement bubble is a fixed layer outside the HUD
+// bar. It used to sit at z 41 and painted over the bar's own popovers
+// (ProfileNudge) and over the open queue drawer.
 test.describe('phone overlay layering', { tag: '@g1' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
-  test('the profile nudge paints above the settlement bubble and the demo badge', async ({ page }) => {
+  test('the profile nudge paints above the settlement bubble', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
@@ -352,10 +326,6 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
     await expect(settlement.profileNudge).toBeVisible();
 
     await expectPaintsAbove(settlement.profileNudge, page.locator('.settlement-bubble'), 'settlement bubble paints over the profile nudge');
-    const badge = page.locator('.demo-badge');
-    if (await badge.isVisible()) {
-      await expectPaintsAbove(settlement.profileNudge, badge, 'demo badge paints over the profile nudge');
-    }
   });
 
   test('the open queue drawer paints above the settlement bubble', async ({ page }) => {

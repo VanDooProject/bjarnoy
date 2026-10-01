@@ -18,10 +18,10 @@ export type BuildingModifier =
   | { kind: 'trainsLandTroops' }
   | { kind: 'trainsShips' }
   | { kind: 'trainsCivilianCrews' }
-  | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
+  | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain' | 'bog' | 'lake'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
-  | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' };
+  | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' | 'iron' };
 
 /**
  * Structured (not pre-formatted) so callers in different render contexts —
@@ -44,12 +44,15 @@ export interface BuildingLevelStats {
  * production of its own to be terrain-boosted any more, see
  * `RADIUS_BOOST_TARGET`/`radiusBoostPercent`/`radiusBoostRange` below.
  */
-export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain>> = {
+export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain | readonly Terrain[]>> = {
   lumberjack: 'forest',
   quarry: 'mountain',
   // The hut itself already stands on coastal water; more open sea around it
-  // is what the backend rewards, not the land it backs onto.
-  fishinghut: 'sea',
+  // is what the backend rewards, not the land it backs onto. A hut on a bog
+  // lake's half shore counts the lake hexes around it the same way.
+  fishinghut: ['sea', 'lake'],
+  // The bog around a bog-ore works: any bog hex (moss, shore, creek, mouth, spring) or lake water.
+  bogoreworks: ['bog', 'lake'],
 };
 
 /** Mirrors `BuildingCatalogue.BoostMultiplier`'s 10%-per-neighbour curve, capped at 50% (5 of 6 neighbours). */
@@ -64,9 +67,11 @@ function boostMultiplier(matchingNeighbours: number): number {
  * `RadiusBoostTargets`. Sawmill/CropMill have no production of their own any
  * more — this replaces it.
  */
-export const RADIUS_BOOST_RESOURCE: Partial<Record<BuildingKind, 'wood' | 'food'>> = {
+export const RADIUS_BOOST_RESOURCE: Partial<Record<BuildingKind, 'wood' | 'food' | 'iron'>> = {
   sawmill: 'wood',
   cropmill: 'food',
+  // Raises the bog-ore works within range (BuildingCatalogue.RadiusBoostTargets).
+  hammerschmiede: 'iron',
 };
 
 /** The level the mills (Sawmill, Crop Mill) top out at — where their boost reaches +100%. */
@@ -100,6 +105,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'farm':
     case 'pumpkinfarm':
     case 'fishinghut':
+    case 'bogoreworks':
     case 'storagehouse':
       return 25;
     case 'barracks':
@@ -112,6 +118,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'meadery':
     case 'sawmill':
     case 'cropmill':
+    case 'hammerschmiede':
       return 20;
     case 'tower':
     case 'greatstorehouse':
@@ -142,6 +149,9 @@ export function maxTowers(longhouseLevel: number): number {
  */
 export const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
 
+/** Mirrors `BuildingCatalogue.BogOreWorksIronAtLevelOne`: iron per hour of a level-1 bog-ore works. */
+export const BOG_ORE_WORKS_IRON_AT_LEVEL_ONE = 20;
+
 /** Mirrors `BuildingCatalogue.ProductionFor`: a level's total output is `perHourAtLevelOne · 1.20^(level−1)`. */
 function producerOutput(perHourAtLevelOne: number, level: number, multiplier = 1): number {
   return Math.round(perHourAtLevelOne * Math.pow(1.2, level - 1) * multiplier);
@@ -152,13 +162,30 @@ function geometricCapacity(c1: number, growth: number, level: number): number {
   return Math.round((c1 * (Math.pow(growth, level) - 1)) / (growth - 1));
 }
 
-/** How many of `tile`'s six direct neighbours (never `tile` itself) are `terrain`. */
+/** How many of `tile`'s six direct neighbours (never `tile` itself) are `terrain` (or any of them, when several). */
 export function matchingNeighbourCount(
   tile: AxialCoord,
-  terrain: Terrain,
+  terrain: Terrain | readonly Terrain[],
   getTile: (q: number, r: number) => Tile,
 ): number {
-  return neighbors(tile).filter((c) => getTile(c.q, c.r).terrain === terrain).length;
+  const wanted = typeof terrain === 'string' ? [terrain] : terrain;
+  return neighbors(tile).filter((c) => wanted.includes(getTile(c.q, c.r).terrain)).length;
+}
+
+/**
+ * `buildingStatsFor` for a building standing on `tile`: reads the boost terrain's neighbour count off the map, and knows a
+ * Fishing Hut on a bog lake's half shore boosts by lake (not coastal) water. One helper for the hover card, the building
+ * modal and the ring menu, so they can't drift apart.
+ */
+export function buildingStatsAt(
+  type: BuildingKind,
+  level: number,
+  tile: AxialCoord & { bog?: Tile['bog'] },
+  getTile: (q: number, r: number) => Tile,
+): BuildingLevelStats {
+  const boostTerrain = BOOST_TERRAIN[type];
+  const matching = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0;
+  return buildingStatsFor(type, level, matching, type === 'fishinghut' && tile.bog?.kind === 'half');
 }
 
 /** Whether any of `tile`'s six direct neighbours is one of `terrains`. */
@@ -177,6 +204,7 @@ export function buildingStatsFor(
   type: BuildingKind,
   level: number,
   matchingNeighbours = 0,
+  onLake = false,
 ): BuildingLevelStats {
   switch (type) {
     // Farm and PumpkinFarm are deliberately excluded from BuildingCatalogue.cs's
@@ -268,12 +296,37 @@ export function buildingStatsFor(
       const output = producerOutput(40, level, multiplier);
       return {
         output: { kind: 'resourceRate', resource: 'food', amount: output },
-        modifier:
-          multiplier > 1
+        modifier: onLake
+          ? multiplier > 1
+            ? { kind: 'terrainBoost', terrain: 'lake', percent: Math.round((multiplier - 1) * 100) }
+            : undefined
+          : multiplier > 1
             ? { kind: 'coastal', percent: Math.round((multiplier - 1) * 100) }
             : { kind: 'coastal' },
       };
     }
+    // Iron, from bog moss only; boosted by the bog, creeks and lakes around it (10% each, capped at 50%) and by the
+    // Hammerschmiede. P1 is BuildingCatalogue.BogOreWorksIronAtLevelOne, tuned in the Economy lab.
+    case 'bogoreworks': {
+      const multiplier = boostMultiplier(matchingNeighbours);
+      return {
+        output: { kind: 'resourceRate', resource: 'iron', amount: producerOutput(BOG_ORE_WORKS_IRON_AT_LEVEL_ONE, level, multiplier) },
+        modifier:
+          multiplier > 1
+            ? { kind: 'terrainBoost', terrain: 'bog', percent: Math.round((multiplier - 1) * 100) }
+            : undefined,
+      };
+    }
+    // No production of its own: raises every bog-ore works within range, like the Sawmill raises Lumberjacks.
+    case 'hammerschmiede':
+      return {
+        modifier: {
+          kind: 'radiusBoost',
+          percent: Math.round(radiusBoostPercent(level)),
+          range: radiusBoostRange(level),
+          resource: 'iron',
+        },
+      };
     // Mirrors ShrineCatalogue.Favour.cs: +10% at level 1, +3%/level after,
     // capped at level 5 (+22%) so slotted runes always have headroom.
     case 'shrineofthor':
@@ -349,6 +402,8 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   lumberjack: PRODUCER_COST,
   quarry: PRODUCER_COST,
   claybrickworks: PRODUCER_COST,
+  bogoreworks: PRODUCER_COST,
+  hammerschmiede: SMALL_BUILDING_COST,
   longhouse: { wood: 120, stone: 100, food: 60, iron: 0 },
   tower: { wood: 120, stone: 200, food: 0, iron: 0 },
   shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },

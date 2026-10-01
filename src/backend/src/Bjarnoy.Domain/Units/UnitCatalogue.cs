@@ -13,6 +13,14 @@ namespace Bjarnoy.Domain.Units;
 /// economy — see the issue #40 table this was seeded from.
 /// </remarks>
 /// <remarks>
+/// Iron and the unlock ladder (<c>docs/design/economy.md</c> section 8): every unit except the
+/// <see cref="UnitType.Thrall"/> costs iron, so raising troops is gated by iron income. Each unit's
+/// Longhouse gate follows the building that trains it: Spearman with the Barracks (LH 5; the Thrall has no gate of its own, its Barracks is the gate), Axeman
+/// with the first bog-ore works (LH 6), Karve with the Dockyard (LH 8), Bowman with the Archery Range (LH 9),
+/// Provisioner and Settler Crew with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
+/// Longship) at LH 20, where the Hammerschmiede boosts the bog-ore works.
+/// </remarks>
+/// <remarks>
 /// <see cref="BuildingType.Barracks"/> and <see cref="BuildingType.ArcheryRange"/>
 /// split the land-army roster with no overlap by <see cref="UnitDefinition.RequiredBuildingType"/>:
 /// Barracks trains the core line (Thrall, Spearman, Axeman, Berserker),
@@ -35,7 +43,7 @@ public static class UnitCatalogue
             CarryCapacity = 60,
             FoodCarryCapacity = 20,
             UpkeepPerHour = 1,
-            TrainingCost = new ResourceAmounts(Wood: 60, Stone: 30, Food: 25, Iron: 15),
+            TrainingCost = new ResourceAmounts(Wood: 60, Stone: 30, Food: 25, Iron: 0),
             TrainingDuration = TimeSpan.FromMinutes(10),
             RequiredLonghouseLevel = 1,
             RequiredBuildingType = BuildingType.Barracks,
@@ -52,7 +60,7 @@ public static class UnitCatalogue
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 20, Iron: 40),
             TrainingDuration = TimeSpan.FromMinutes(15),
-            RequiredLonghouseLevel = 1,
+            RequiredLonghouseLevel = 5,
             RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Axeman] = new UnitDefinition
@@ -67,7 +75,7 @@ public static class UnitCatalogue
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 100, Stone: 30, Food: 20, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(20),
-            RequiredLonghouseLevel = 3,
+            RequiredLonghouseLevel = 6,
             RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Bowman] = new UnitDefinition
@@ -82,7 +90,7 @@ public static class UnitCatalogue
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 90, Stone: 60, Food: 20, Iron: 50),
             TrainingDuration = TimeSpan.FromMinutes(20),
-            RequiredLonghouseLevel = 4,
+            RequiredLonghouseLevel = 9,
             RequiredBuildingType = BuildingType.ArcheryRange,
         },
         [UnitType.Berserker] = new UnitDefinition
@@ -97,7 +105,7 @@ public static class UnitCatalogue
             UpkeepPerHour = 2,
             TrainingCost = new ResourceAmounts(Wood: 150, Stone: 60, Food: 30, Iron: 120),
             TrainingDuration = TimeSpan.FromMinutes(35),
-            RequiredLonghouseLevel = 6,
+            RequiredLonghouseLevel = 20,
             RequiredUnitType = UnitType.Axeman,
             RequiredBuildingType = BuildingType.Barracks,
         },
@@ -113,7 +121,7 @@ public static class UnitCatalogue
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 90, Stone: 40, Food: 30, Iron: 20),
             TrainingDuration = TimeSpan.FromMinutes(20),
-            RequiredLonghouseLevel = 4,
+            RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
         [UnitType.SettlerCrew] = new UnitDefinition
@@ -139,7 +147,7 @@ public static class UnitCatalogue
             // one of the most expensive units in the game.
             TrainingCost = new ResourceAmounts(Wood: 200, Stone: 150, Food: 100, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(40),
-            RequiredLonghouseLevel = 5,
+            RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
         [UnitType.Catapult] = new UnitDefinition
@@ -161,7 +169,7 @@ public static class UnitCatalogue
             SiegePower = 40,
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 200, Food: 40, Iron: 250),
             TrainingDuration = TimeSpan.FromHours(1),
-            RequiredLonghouseLevel = 10,
+            RequiredLonghouseLevel = 20,
             RequiredUnitType = UnitType.Berserker,
             RequiredBuildingType = BuildingType.ArcheryRange,
         },
@@ -177,7 +185,7 @@ public static class UnitCatalogue
             UpkeepPerHour = 2,
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
-            RequiredLonghouseLevel = 5,
+            RequiredLonghouseLevel = 8,
             RequiredBuildingType = BuildingType.Dockyard,
         },
         [UnitType.Longship] = new UnitDefinition
@@ -192,7 +200,7 @@ public static class UnitCatalogue
             UpkeepPerHour = 3,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 200, Food: 60, Iron: 220),
             TrainingDuration = TimeSpan.FromHours(1.5),
-            RequiredLonghouseLevel = 8,
+            RequiredLonghouseLevel = 20,
             RequiredUnitType = UnitType.Karve,
             RequiredBuildingType = BuildingType.Dockyard,
         },

@@ -21,9 +21,12 @@ public static class WorldTerrain
     /// <summary>How many worlds' overlays are kept in memory.</summary>
     public const int MaxCachedWorlds = 8;
 
-    private sealed class Entry(Task<IReadOnlyDictionary<HexCoord, Terrain>> overlay)
+    /// <summary>What is kept per world: the bog / lake overlay of its terrain, and the kind of every bog hex (moss, shore, creek, ...).</summary>
+    private sealed record BogData(IReadOnlyDictionary<HexCoord, Terrain> Overlay, IReadOnlyDictionary<HexCoord, BogTileKind> Kinds);
+
+    private sealed class Entry(Task<BogData> data)
     {
-        public Task<IReadOnlyDictionary<HexCoord, Terrain>> Overlay { get; } = overlay;
+        public Task<BogData> Data { get; } = data;
 
         public long LastUsedTicks { get; set; } = Environment.TickCount64;
     }
@@ -39,7 +42,20 @@ public static class WorldTerrain
     }
 
     /// <summary>The bog overlay (bog / lake per hex) of a world's islands.</summary>
-    public static async Task<IReadOnlyDictionary<HexCoord, Terrain>> OverlayAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyDictionary<HexCoord, Terrain>> OverlayAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken = default) =>
+        (await DataAsync(db, worldId, cancellationToken).ConfigureAwait(false)).Overlay;
+
+    /// <summary>
+    /// What kind of bog hex stands on <paramref name="coord"/> (plain moss, a shore, a creek, ...), or <see langword="null"/> when it is not a
+    /// bog hex. Buildings that only stand on some bog kinds (bog-ore works, Hammerschmiede, the lake Fishing Hut) ask this.
+    /// </summary>
+    public static async Task<BogTileKind?> BogKindAtAsync(GameDbContext db, Guid worldId, HexCoord coord, CancellationToken cancellationToken = default)
+    {
+        var data = await DataAsync(db, worldId, cancellationToken).ConfigureAwait(false);
+        return data.Kinds.TryGetValue(coord, out var kind) ? kind : null;
+    }
+
+    private static async Task<BogData> DataAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
 
@@ -53,9 +69,9 @@ public static class WorldTerrain
         entry.LastUsedTicks = Environment.TickCount64;
         try
         {
-            return await entry.Overlay.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return await entry.Data.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception) when (entry.Overlay.IsFaulted)
+        catch (Exception) when (entry.Data.IsFaulted)
         {
             Cache.TryRemove(new KeyValuePair<Guid, Entry>(worldId, entry));
             throw;
@@ -65,7 +81,7 @@ public static class WorldTerrain
     /// <summary>Forgets a world's overlay; call it when its islands are regenerated.</summary>
     public static void Invalidate(Guid worldId) => Cache.TryRemove(worldId, out _);
 
-    private static async Task<IReadOnlyDictionary<HexCoord, Terrain>> LoadAsync(GameDbContext db, Guid worldId)
+    private static async Task<BogData> LoadAsync(GameDbContext db, Guid worldId)
     {
         var islands = await db.Islands
             .AsNoTracking()
@@ -74,12 +90,15 @@ public static class WorldTerrain
             .ToListAsync(CancellationToken.None).ConfigureAwait(false);
 
         var overlay = new Dictionary<HexCoord, Terrain>();
+        var kinds = new Dictionary<HexCoord, BogTileKind>();
         foreach (var tile in islands.SelectMany(tiles => tiles))
         {
-            overlay[new HexCoord(tile.Q, tile.R)] = tile.Kind == (int)BogTileKind.Lake ? Terrain.Lake : Terrain.Bog;
+            var coord = new HexCoord(tile.Q, tile.R);
+            overlay[coord] = tile.Kind == (int)BogTileKind.Lake ? Terrain.Lake : Terrain.Bog;
+            kinds[coord] = (BogTileKind)tile.Kind;
         }
 
-        return overlay;
+        return new BogData(overlay, kinds);
     }
 
     private static void Trim()

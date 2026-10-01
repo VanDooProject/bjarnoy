@@ -179,11 +179,24 @@ public enum BuildingType
     CartWorkshop = 24,
 
     /// <summary>
-    /// Stone, on grass — an alternative to <see cref="Quarry"/> that needs
-    /// no Mountain hex (<see cref="World.WorldGenerator"/> does not
-    /// guarantee one within reach of a starting position), at a lower rate.
+    /// Stone, on plain bog — the start's stone source (<see cref="World.WorldGenerator"/> guarantees bog in reach of a
+    /// landing spot, not a Mountain hex), an alternative to <see cref="Quarry"/> at a lower rate.
     /// </summary>
     ClayBrickworks = 25,
+
+    /// <summary>
+    /// Iron, on plain bog moss (<see cref="World.BogTileKind.Bog"/>: not a shore, mouth, creek or lake) — the game's iron
+    /// producer (<c>docs/design/economy.md</c> section 8, <c>docs/design/bog.md</c>). Boosted by the bog, creek and
+    /// lake hexes around it and, later, by the <see cref="Hammerschmiede"/>. Unlocks at Longhouse level 6 with no feeder.
+    /// </summary>
+    BogOreWorks = 26,
+
+    /// <summary>
+    /// A water-powered hammer mill on a bog creek (<see cref="World.BogTileKind.Creek"/>, straight or bend; never a mouth,
+    /// spring or lake). Produces nothing of its own: it raises every <see cref="BogOreWorks"/> within its range, the way the
+    /// <see cref="Sawmill"/> raises Lumberjacks. Unlocks at Longhouse level 20 behind a level-10 bog-ore works.
+    /// </summary>
+    Hammerschmiede = 27,
 }
 
 public static class BuildingTypeExtensions
@@ -216,6 +229,8 @@ public static class BuildingTypeExtensions
         BuildingType.DruidHut => "druidhut",
         BuildingType.CartWorkshop => "cartworkshop",
         BuildingType.ClayBrickworks => "claybrickworks",
+        BuildingType.BogOreWorks => "bogoreworks",
+        BuildingType.Hammerschmiede => "hammerschmiede",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

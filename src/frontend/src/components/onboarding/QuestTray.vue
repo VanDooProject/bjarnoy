@@ -111,7 +111,9 @@ async function claim(q: QuestResponse) {
    bottom-docked mobile HUD is cleared through --hud-inset-bottom (MapView). */
 .quest-tray {
   position: absolute;
-  left: 16px;
+  /* `--hud-inset-left` is the landscape rail's width (0 everywhere else): the
+     tray sits right of the ☰ + resource column instead of under it. */
+  left: calc(var(--hud-inset-left, 0px) + 16px);
   bottom: calc(16px + var(--hud-inset-bottom, 0px));
   z-index: 10;
   width: 280px;
@@ -247,7 +249,7 @@ async function claim(q: QuestResponse) {
    stays out of the map's way. */
 @media (max-width: 768px) {
   .quest-tray {
-    left: 12px;
+    left: calc(var(--hud-inset-left, 0px) + 12px);
     right: 12px;
     width: auto;
     bottom: calc(12px + var(--hud-inset-bottom, 0px));

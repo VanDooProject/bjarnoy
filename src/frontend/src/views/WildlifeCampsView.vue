@@ -162,7 +162,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <main class="body">
+    <main class="body docs-scale">
       <h1>{{ $t('docs.wildlifeCamps.title') }}</h1>
       <p class="intro">{{ $t('docs.wildlifeCamps.intro') }}</p>
       <p class="status">{{ $t('docs.wildlifeCamps.status') }}</p>

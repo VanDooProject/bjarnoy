@@ -59,7 +59,7 @@ pipeline): bog moss (olive), lakes (dark slate blue), shores tinted by how many 
 one, two, three), creeks (light blue lines), lake mouths (orange rings) and creek springs (white dots). Under 3 px a hex is
 one colour. The footer prints the bog islands, lake sizes (min/median/max), through-river bogs, sinks and spawns (with
 their share of the bogs: together under 20%), the enclosed sea pockets found and filled, and one **rule-violation count
-per map rule R1-R11 (must all be 0)**, checked by `bogRules.ts` (the twin of the backend's `BogRules`). The rivers layer
+per map rule R1-R12 (must all be 0)**, checked by `bogRules.ts` (the twin of the backend's `BogRules`). The rivers layer
 follows a river through a lake, so its `inland mouths` count stays 0.
 
 `npx tsx ../../scripts/worldgen-preview/bog-stats.ts --seeds 1-8 --radius 1000` (from `src/frontend`) prints the bog
