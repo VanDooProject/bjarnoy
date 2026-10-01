@@ -163,7 +163,7 @@ const buildingsByTile = computed(() => {
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <main class="body">
+    <main class="body docs-scale">
       <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.tiles.title') }}</h1>
       <p class="intro">{{ $t('docs.tiles.intro') }}</p>

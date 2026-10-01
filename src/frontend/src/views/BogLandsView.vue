@@ -120,7 +120,7 @@ function buildingFrame(id: BuildingId): AtlasFrameRect | undefined {
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <main class="body">
+    <main class="body docs-scale">
       <h1>{{ $t('docs.bogLands.title') }}</h1>
       <p class="intro">{{ $t('docs.bogLands.intro') }}</p>
       <p class="status">{{ $t('docs.bogLands.status') }}</p>

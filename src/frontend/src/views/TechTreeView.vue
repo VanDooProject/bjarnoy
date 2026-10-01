@@ -226,7 +226,7 @@ function formatAmount(value: number): string {
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <div class="page">
+    <div class="page docs-scale">
     <div class="head">
       <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.techTree.title') }}</h1>

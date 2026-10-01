@@ -176,3 +176,24 @@ button {
 .pill {
   border-radius: 999px;
 }
+
+/* Docs pages (hub, tech tree, tile/land docs) size everything in px around a
+   ~90ch reading column, which leaves most of a big monitor empty. Scaling the
+   whole content column — text, art, tables, graph — rather than only widening
+   it keeps the layout's proportions and reading width intact. The docked
+   TopBar is outside this class, so it matches the rest of the app. */
+@media (min-width: 1600px) {
+  .docs-scale {
+    zoom: 1.2;
+  }
+}
+@media (min-width: 2200px) {
+  .docs-scale {
+    zoom: 1.45;
+  }
+}
+@media (min-width: 3000px) {
+  .docs-scale {
+    zoom: 1.8;
+  }
+}

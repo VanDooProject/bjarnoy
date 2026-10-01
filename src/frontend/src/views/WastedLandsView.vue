@@ -173,7 +173,7 @@ const wallFrame = computed(() => {
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <main class="body">
+    <main class="body docs-scale">
       <h1>{{ $t('docs.wastedLands.title') }}</h1>
       <p class="intro">{{ $t('docs.wastedLands.intro') }}</p>
 
