@@ -6,6 +6,9 @@ import {
   additionalStorageHouseRequirement,
   ravensRings,
   wisdomBuildTimeFactor,
+  BOG_ORE_WORKS_IRON_AT_LEVEL_ONE,
+  BOOST_TERRAIN,
+  buildingStatsAt,
   buildingStatsFor,
   buildingUpgradeCost,
   isNearAnyOf,
@@ -16,6 +19,8 @@ import {
   radiusBoostRange,
 } from './buildingEconomy';
 import { neighbors } from '../hex/coords';
+import type { BuildingDefinitionResponse } from '../../api/types';
+import catalogueSnapshot from '../../data/building-catalogue.json';
 import type { Terrain, Tile } from './types';
 
 function tile(q: number, r: number, terrain: Terrain): Tile {
@@ -223,5 +228,101 @@ describe('Odin Statue favour (mirrors ShrineCatalogue.Favour(Odin))', () => {
     expect(buildingStatsFor('odinstatue', 5).modifier).toEqual({ kind: 'odinFavour', buildTimePercent: 10, visionRings: 10 });
     expect(buildingStatsFor('odinstatue', 2).modifier).toEqual({ kind: 'odinFavour', buildTimePercent: 4, visionRings: 4 });
     expect(maxLevelFor('odinstatue')).toBe(5);
+  });
+});
+
+// The bog buildings (docs/design/bog.md): the same numbers as BuildingCatalogue.cs, see BogBuildingTests.cs.
+describe('bog buildings', () => {
+  it('the bog-ore works makes iron: 20/h at level 1 growing 20% a level, boosted 10% per bog, creek or lake neighbour up to +50%', () => {
+    expect(BOG_ORE_WORKS_IRON_AT_LEVEL_ONE).toBe(20);
+    expect(buildingStatsFor('bogoreworks', 1).output).toEqual({ kind: 'resourceRate', resource: 'iron', amount: 20 });
+    expect(buildingStatsFor('bogoreworks', 3).output).toEqual({
+      kind: 'resourceRate',
+      resource: 'iron',
+      amount: Math.round(20 * 1.2 * 1.2),
+    });
+    expect(buildingStatsFor('bogoreworks', 1, 3).output).toEqual({ kind: 'resourceRate', resource: 'iron', amount: 26 });
+    expect(buildingStatsFor('bogoreworks', 1, 3).modifier).toEqual({ kind: 'terrainBoost', terrain: 'bog', percent: 30 });
+    // Capped at +50%, like the other producers.
+    expect(buildingStatsFor('bogoreworks', 1, 6).output).toEqual({ kind: 'resourceRate', resource: 'iron', amount: 30 });
+    expect(buildingStatsFor('bogoreworks', 1, 0).modifier).toBeUndefined();
+  });
+
+  it('counts bog and lake neighbours for the bog-ore works, sea and lake for the fishing hut', () => {
+    expect(BOOST_TERRAIN.bogoreworks).toEqual(['bog', 'lake']);
+    expect(BOOST_TERRAIN.fishinghut).toEqual(['sea', 'lake']);
+    const mixed = (q: number, r: number): Tile => {
+      const kinds: Terrain[] = ['bog', 'lake', 'bog', 'grass', 'grass', 'forest'];
+      const index = neighbors({ q: 0, r: 0 }).findIndex((c) => c.q === q && c.r === r);
+      return tile(q, r, index >= 0 ? kinds[index]! : 'grass');
+    };
+    expect(matchingNeighbourCount({ q: 0, r: 0 }, ['bog', 'lake'], mixed)).toBe(3);
+    expect(matchingNeighbourCount({ q: 0, r: 0 }, 'bog', mixed)).toBe(2);
+  });
+
+  it('stats on a tile: a lake fishing hut boosts by lake water, a coastal one by sea', () => {
+    const lakeHut: Tile = { q: 0, r: 0, terrain: 'bog', buildingType: 'fishinghut', bog: { q: 0, r: 0, kind: 'half', inDirections: [], outDirection: null, waterEdges: ['E', 'NE', 'NW'] } };
+    const lakeNeighbours = terrainMap('lake', 3);
+    expect(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours).modifier).toEqual({ kind: 'terrainBoost', terrain: 'lake', percent: 30 });
+    expect(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours).output).toEqual({ kind: 'resourceRate', resource: 'food', amount: 52 });
+
+    const coastHut: Tile = { q: 0, r: 0, terrain: 'sea', buildingType: 'fishinghut' };
+    expect(buildingStatsAt('fishinghut', 1, coastHut, terrainMap('sea', 2)).modifier).toEqual({ kind: 'coastal', percent: 20 });
+    expect(buildingStatsAt('fishinghut', 1, coastHut, terrainMap('grass', 0)).modifier).toEqual({ kind: 'coastal' });
+    expect(buildingStatsAt('lumberjack', 1, tile(0, 0, 'forest'), terrainMap('forest', 4)).output).toEqual({
+      kind: 'resourceRate',
+      resource: 'wood',
+      amount: 56,
+    });
+  });
+
+  it('the Hammerschmiede has no output of its own and raises iron like the mills (5% to 100%, 1 to 5 rings)', () => {
+    expect(buildingStatsFor('hammerschmiede', 1)).toEqual({
+      modifier: { kind: 'radiusBoost', percent: 5, range: 1, resource: 'iron' },
+    });
+    expect(buildingStatsFor('hammerschmiede', 20).modifier).toEqual({ kind: 'radiusBoost', percent: 100, range: 5, resource: 'iron' });
+    expect(buildingStatsFor('hammerschmiede', 1).output).toBeUndefined();
+  });
+
+  it('max levels and costs: bog-ore works 25 like the producers, Hammerschmiede 20 like the mills', () => {
+    expect(maxLevelFor('bogoreworks')).toBe(25);
+    expect(maxLevelFor('hammerschmiede')).toBe(20);
+    expect(buildingUpgradeCost('bogoreworks', 1)).toEqual({ wood: 50, stone: 40, food: 15, iron: 0 });
+    expect(buildingUpgradeCost('hammerschmiede', 1)).toEqual({ wood: 100, stone: 80, food: 0, iron: 0 });
+  });
+});
+
+// The bundled catalogue snapshot is what the demo and the lab run on: the client's own display formulas have to agree with it.
+describe('bog buildings against the catalogue snapshot', () => {
+  const snapshot = (catalogueSnapshot.data as BuildingDefinitionResponse[]).filter((d) => d.type === 'bogoreworks' || d.type === 'hammerschmiede');
+  const of = (type: string) => snapshot.filter((d) => d.type === type).sort((a, b) => a.level - b.level);
+
+  it('has the same levels, costs and iron output as the client formulas', () => {
+    for (const type of ['bogoreworks', 'hammerschmiede'] as const) {
+      const levels = of(type);
+      expect(levels.length).toBe(maxLevelFor(type));
+      for (const d of levels) {
+        expect(d.cost.wood).toBeCloseTo(buildingUpgradeCost(type, d.level).wood, -0.5);
+        expect(d.cost.iron).toBe(0);
+      }
+    }
+    for (const d of of('bogoreworks')) {
+      const stats = buildingStatsFor('bogoreworks', d.level).output;
+      expect(stats).toMatchObject({ kind: 'resourceRate', resource: 'iron' });
+      expect(d.productionPerHour.iron).toBeCloseTo(BOG_ORE_WORKS_IRON_AT_LEVEL_ONE * Math.pow(1.2, d.level - 1), 6);
+      expect(d.productionPerHour.wood + d.productionPerHour.stone + d.productionPerHour.food).toBe(0);
+    }
+  });
+
+  it('gates the bog-ore works at longhouse 6 with no feeder and the Hammerschmiede at 20 behind bog-ore works 10', () => {
+    expect(of('bogoreworks')[0]!.requiredLonghouseLevel).toBe(6);
+    expect(of('bogoreworks')[0]!.prerequisites).toEqual([]);
+    expect(of('hammerschmiede')[0]!.requiredLonghouseLevel).toBe(20);
+    expect(of('hammerschmiede')[0]!.prerequisites).toEqual([{ type: 'bogoreworks', level: 10 }]);
+  });
+
+  it('puts the Clay Brickworks on bog in the snapshot too', () => {
+    const clay = (catalogueSnapshot.data as BuildingDefinitionResponse[]).find((d) => d.type === 'claybrickworks' && d.level === 1)!;
+    expect(clay.allowedTerrain).toEqual(['bog']);
   });
 });

@@ -1,4 +1,5 @@
-import type { CDPSession, Locator, Page } from '@playwright/test';
+import { expect, type CDPSession, type Locator, type Page } from '@playwright/test';
+import type { SettlementPage } from './pages/SettlementPage';
 import { AdminAuthFixture } from './pages/AdminAuthFixture';
 
 /**
@@ -392,4 +393,28 @@ export async function layoutOverflow(page: Page): Promise<{ pageScrollsSideways:
     }
     return { pageScrollsSideways: document.documentElement.scrollWidth > vw + 1, offscreen: [...new Set(offscreen)] };
   });
+}
+
+/**
+ * Opens the ring menu on the guided hex GuidancePointer.vue is currently
+ * aiming at (design handoff "2a" frame 2, right after landfall — the pointer
+ * follows the camera via `useMapAnchor`, which writes the hex's screen point
+ * into `--anchor-x`/`--anchor-y` on `[data-testid="guidance-pointer"]`) and
+ * waits for frame 3's "This one fits {terrain}" chip, the case the chip's
+ * placement bug was found on. Reads the anchor vars rather than re-deriving
+ * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
+ * (camera + arrowTipOffset) is exactly where the click needs to land.
+ */
+export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
+  const pointer = settlement.guidancePointer;
+  await expect
+    .poll(async () => (await pointer.getAttribute('style')) ?? '', { message: 'guidance pointer never got an anchor point' })
+    .toMatch(/--anchor-x: -?\d/);
+  const style = (await pointer.getAttribute('style'))!;
+  const x = Number(style.match(/--anchor-x: (-?[\d.]+)px/)![1]);
+  const y = Number(style.match(/--anchor-y: (-?[\d.]+)px/)![1]);
+  const box = await settlement.canvasBox();
+  await settlement.page.mouse.click(box.x + x, box.y + y);
+  await settlement.ring.waitForOpen();
+  await expect(pointer.locator('.chip')).toContainText('fits');
 }

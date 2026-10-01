@@ -20,14 +20,14 @@ public class EconomyDesignTests
         (BuildingType.Tower, 3),
         (BuildingType.Farm, 4), (BuildingType.PumpkinFarm, 4),
         (BuildingType.Barracks, 5),
-        (BuildingType.TownSquare, 6),
+        (BuildingType.TownSquare, 6), (BuildingType.BogOreWorks, 6),
         (BuildingType.Dockyard, 8),
         (BuildingType.ArcheryRange, 9),
         (BuildingType.CartWorkshop, 10),
         (BuildingType.Meadery, 11),
         (BuildingType.DruidHut, 12),
         (BuildingType.Smithy, 15), (BuildingType.GreatStorehouse, 15),
-        (BuildingType.Sawmill, 20), (BuildingType.CropMill, 20),
+        (BuildingType.Sawmill, 20), (BuildingType.CropMill, 20), (BuildingType.Hammerschmiede, 20),
         (BuildingType.ShrineOfUllr, 25), (BuildingType.ShrineOfFreyja, 25),
         (BuildingType.ShrineOfNjord, 25), (BuildingType.ShrineOfThor, 25),
         (BuildingType.OdinStatue, 25),
@@ -36,7 +36,7 @@ public class EconomyDesignTests
     private static readonly BuildingType[] Producers =
     [
         BuildingType.Lumberjack, BuildingType.Quarry, BuildingType.ClayBrickworks, BuildingType.ReindeerHerder,
-        BuildingType.Farm, BuildingType.PumpkinFarm, BuildingType.FishingHut,
+        BuildingType.Farm, BuildingType.PumpkinFarm, BuildingType.FishingHut, BuildingType.BogOreWorks,
     ];
 
     private static double Sum(ResourceAmounts a) => a.Wood + a.Stone + a.Food + a.Iron;
@@ -75,11 +75,12 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void At_most_two_new_buildings_unlock_at_any_longhouse_level_except_1_and_25()
+    public void At_most_two_new_buildings_unlock_at_any_longhouse_level_except_1_20_and_25()
     {
         foreach (var group in Ladder.GroupBy(l => l.Unlock))
         {
-            if (group.Key is 1 or 25)
+            // LH 20 is the mills tier: Sawmill, Crop Mill and the Hammerschmiede.
+            if (group.Key is 1 or 20 or 25)
             {
                 continue;
             }
@@ -166,6 +167,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Farm, 25)]
     [InlineData(BuildingType.PumpkinFarm, 25)]
     [InlineData(BuildingType.FishingHut, 25)]
+    [InlineData(BuildingType.BogOreWorks, 25)]
     [InlineData(BuildingType.StorageHouse, 25)]
     [InlineData(BuildingType.Barracks, 20)]
     [InlineData(BuildingType.ArcheryRange, 20)]
@@ -177,6 +179,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Meadery, 20)]
     [InlineData(BuildingType.Sawmill, 20)]
     [InlineData(BuildingType.CropMill, 20)]
+    [InlineData(BuildingType.Hammerschmiede, 20)]
     [InlineData(BuildingType.Tower, 10)]
     [InlineData(BuildingType.GreatStorehouse, 10)]
     [InlineData(BuildingType.ShrineOfThor, 5)]
@@ -434,7 +437,7 @@ public class EconomyDesignTests
         Assert.Equal(new BuildingPrerequisite(BuildingType.DruidHut, 10), Assert.Single(definition.Prerequisites));
         Assert.Equal(Bjarnoy.Domain.Shrines.GodType.Odin, BuildingCatalogue.GodOf(BuildingType.OdinStatue));
         Assert.Equal("odinstatue", BuildingType.OdinStatue.ToWireName());
-        Assert.Equal(27, (int)BuildingType.OdinStatue); // persisted ints must not shift
+        Assert.Equal(29, (int)BuildingType.OdinStatue); // persisted ints must not shift
         // Costs and times follow the other shrines.
         var thor = BuildingCatalogue.Get(BuildingType.ShrineOfThor, 1);
         Assert.Equal(thor.Cost, definition.Cost);

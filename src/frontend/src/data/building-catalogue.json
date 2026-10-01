@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-10-01T11:29:11.358Z"
+    "generatedAt": "2026-10-01T12:54:42.292Z"
   },
   "data": [
     {
@@ -13517,7 +13517,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13549,7 +13549,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13581,7 +13581,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13613,7 +13613,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13645,7 +13645,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13677,7 +13677,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13709,7 +13709,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13741,7 +13741,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13773,7 +13773,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13805,7 +13805,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13837,7 +13837,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13869,7 +13869,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13901,7 +13901,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13933,7 +13933,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13965,7 +13965,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -13997,7 +13997,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14029,7 +14029,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14061,7 +14061,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14093,7 +14093,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14125,7 +14125,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14157,7 +14157,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14189,7 +14189,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14221,7 +14221,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14253,7 +14253,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
@@ -14285,10 +14285,1455 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass"
+        "bog"
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 1,
+      "cost": {
+        "wood": 50,
+        "stone": 40,
+        "food": 15,
+        "iron": 0
+      },
+      "buildSeconds": 180,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 20
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 2,
+      "cost": {
+        "wood": 65,
+        "stone": 52,
+        "food": 19.5,
+        "iron": 0
+      },
+      "buildSeconds": 239,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 24
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 3,
+      "cost": {
+        "wood": 84.50000000000001,
+        "stone": 67.60000000000001,
+        "food": 25.35,
+        "iron": 0
+      },
+      "buildSeconds": 318,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 28.799999999999997
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 4,
+      "cost": {
+        "wood": 109.85000000000001,
+        "stone": 87.88,
+        "food": 32.955,
+        "iron": 0
+      },
+      "buildSeconds": 423,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 34.559999999999995
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 5,
+      "cost": {
+        "wood": 142.80500000000004,
+        "stone": 114.24400000000003,
+        "food": 42.84150000000001,
+        "iron": 0
+      },
+      "buildSeconds": 563,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 41.471999999999994
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 6,
+      "cost": {
+        "wood": 185.64650000000003,
+        "stone": 148.51720000000003,
+        "food": 55.69395000000001,
+        "iron": 0
+      },
+      "buildSeconds": 749,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 49.76639999999999
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 7,
+      "cost": {
+        "wood": 241.34045000000003,
+        "stone": 193.07236000000003,
+        "food": 72.40213500000002,
+        "iron": 0
+      },
+      "buildSeconds": 996,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 59.71967999999998
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 8,
+      "cost": {
+        "wood": 313.7425850000001,
+        "stone": 250.99406800000008,
+        "food": 94.12277550000003,
+        "iron": 0
+      },
+      "buildSeconds": 1325,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 71.66361599999999
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 9,
+      "cost": {
+        "wood": 407.8653605000001,
+        "stone": 326.2922884000001,
+        "food": 122.35960815000004,
+        "iron": 0
+      },
+      "buildSeconds": 1762,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 85.99633919999997
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 10,
+      "cost": {
+        "wood": 530.2249686500002,
+        "stone": 424.1799749200001,
+        "food": 159.06749059500004,
+        "iron": 0
+      },
+      "buildSeconds": 2344,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 103.19560703999997
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 11,
+      "cost": {
+        "wood": 689.2924592450003,
+        "stone": 551.4339673960002,
+        "food": 206.78773777350008,
+        "iron": 0
+      },
+      "buildSeconds": 3117,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 123.83472844799995
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 12,
+      "cost": {
+        "wood": 896.0801970185003,
+        "stone": 716.8641576148002,
+        "food": 268.8240591055501,
+        "iron": 0
+      },
+      "buildSeconds": 4146,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 148.60167413759993
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 13,
+      "cost": {
+        "wood": 1164.9042561240503,
+        "stone": 931.9234048992404,
+        "food": 349.47127683721516,
+        "iron": 0
+      },
+      "buildSeconds": 5514,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 178.32200896511992
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 14,
+      "cost": {
+        "wood": 1514.3755329612657,
+        "stone": 1211.5004263690125,
+        "food": 454.3126598883797,
+        "iron": 0
+      },
+      "buildSeconds": 7334,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 213.9864107581439
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 15,
+      "cost": {
+        "wood": 1968.6881928496455,
+        "stone": 1574.9505542797165,
+        "food": 590.6064578548936,
+        "iron": 0
+      },
+      "buildSeconds": 9754,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 256.78369290977264
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 16,
+      "cost": {
+        "wood": 2559.294650704539,
+        "stone": 2047.435720563631,
+        "food": 767.7883952113617,
+        "iron": 0
+      },
+      "buildSeconds": 12973,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 308.1404314917272
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 17,
+      "cost": {
+        "wood": 3327.0830459159006,
+        "stone": 2661.6664367327207,
+        "food": 998.1249137747702,
+        "iron": 0
+      },
+      "buildSeconds": 17254,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 369.7685177900726
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 18,
+      "cost": {
+        "wood": 4325.2079596906715,
+        "stone": 3460.1663677525376,
+        "food": 1297.5623879072016,
+        "iron": 0
+      },
+      "buildSeconds": 22948,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 443.7222213480871
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 19,
+      "cost": {
+        "wood": 5622.770347597872,
+        "stone": 4498.216278078298,
+        "food": 1686.8311042793619,
+        "iron": 0
+      },
+      "buildSeconds": 30521,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 532.4666656177045
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 20,
+      "cost": {
+        "wood": 7309.601451877235,
+        "stone": 5847.681161501788,
+        "food": 2192.8804355631705,
+        "iron": 0
+      },
+      "buildSeconds": 40593,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 638.9599987412454
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 21,
+      "cost": {
+        "wood": 9502.481887440406,
+        "stone": 7601.985509952325,
+        "food": 2850.744566232122,
+        "iron": 0
+      },
+      "buildSeconds": 53989,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 766.7519984894944
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 22,
+      "cost": {
+        "wood": 12353.226453672527,
+        "stone": 9882.581162938022,
+        "food": 3705.9679361017584,
+        "iron": 0
+      },
+      "buildSeconds": 71805,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 920.1023981873934
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 23,
+      "cost": {
+        "wood": 16059.194389774288,
+        "stone": 12847.35551181943,
+        "food": 4817.758316932286,
+        "iron": 0
+      },
+      "buildSeconds": 95501,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 1104.122877824872
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 24,
+      "cost": {
+        "wood": 20876.952706706576,
+        "stone": 16701.56216536526,
+        "food": 6263.085812011973,
+        "iron": 0
+      },
+      "buildSeconds": 127017,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 1324.947453389846
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "bogoreworks",
+      "level": 25,
+      "cost": {
+        "wood": 27140.038518718546,
+        "stone": 21712.030814974838,
+        "food": 8142.011555615564,
+        "iron": 0
+      },
+      "buildSeconds": 168932,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 1589.9369440678154
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 1,
+      "cost": {
+        "wood": 100,
+        "stone": 80,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 240,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [
+        {
+          "type": "bogoreworks",
+          "level": 10
+        }
+      ]
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 2,
+      "cost": {
+        "wood": 130,
+        "stone": 104,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 319,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 3,
+      "cost": {
+        "wood": 169.00000000000003,
+        "stone": 135.20000000000002,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 425,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 4,
+      "cost": {
+        "wood": 219.70000000000002,
+        "stone": 175.76,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 565,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 5,
+      "cost": {
+        "wood": 285.61000000000007,
+        "stone": 228.48800000000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 751,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 6,
+      "cost": {
+        "wood": 371.29300000000006,
+        "stone": 297.03440000000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 999,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 7,
+      "cost": {
+        "wood": 482.68090000000007,
+        "stone": 386.14472000000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1328,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 8,
+      "cost": {
+        "wood": 627.4851700000002,
+        "stone": 501.98813600000017,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1767,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 9,
+      "cost": {
+        "wood": 815.7307210000002,
+        "stone": 652.5845768000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 2350,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 10,
+      "cost": {
+        "wood": 1060.4499373000003,
+        "stone": 848.3599498400002,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 3125,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 11,
+      "cost": {
+        "wood": 1378.5849184900005,
+        "stone": 1102.8679347920004,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 4156,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 12,
+      "cost": {
+        "wood": 1792.1603940370005,
+        "stone": 1433.7283152296004,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 5528,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 13,
+      "cost": {
+        "wood": 2329.8085122481007,
+        "stone": 1863.8468097984808,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 7352,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 14,
+      "cost": {
+        "wood": 3028.7510659225313,
+        "stone": 2423.000852738025,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 9779,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 15,
+      "cost": {
+        "wood": 3937.376385699291,
+        "stone": 3149.901108559433,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 13006,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 16,
+      "cost": {
+        "wood": 5118.589301409078,
+        "stone": 4094.871441127262,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 17298,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 17,
+      "cost": {
+        "wood": 6654.166091831801,
+        "stone": 5323.3328734654415,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 23006,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 18,
+      "cost": {
+        "wood": 8650.415919381343,
+        "stone": 6920.332735505075,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 30598,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 19,
+      "cost": {
+        "wood": 11245.540695195745,
+        "stone": 8996.432556156597,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 40695,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "hammerschmiede",
+      "level": 20,
+      "cost": {
+        "wood": 14619.20290375447,
+        "stone": 11695.362323003576,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 54124,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "bog"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 20,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,

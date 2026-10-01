@@ -43,8 +43,8 @@ export type Slot = readonly [col: number, row: number];
  * section 5), read top to bottom: rows are ordered by the Longhouse level their
  * first card unlocks at, so scrolling down the page walks the game's own
  * progression — Lumberjack, Reindeer Herder, Quarry, Clay Brickworks and
- * Storage House (LH 1), Fishing Hut (LH 2), Tower (LH 3), Town Square (LH 6).
- * Each row is one chain: a source sits level with what it feeds, so
+ * Storage House (LH 1), Fishing Hut (LH 2), Tower (LH 3), Bog-ore works and
+ * Town Square (LH 6). Each row is one chain: a source sits level with what it feeds, so
  * most links are a single horizontal run — Lumberjack -> Sawmill -> Shrine of
  * Ullr, Reindeer Herder -> Farm -> Crop Mill -> Shrine of Freyja, Storage House -> Great
  * Storehouse, Fishing Hut -> Dockyard -> Shrine of Njörd, Tower -> Barracks ->
@@ -103,13 +103,17 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   smithy: [3, 7],
   shrineofthor: [4, 7],
 
-  // Row 8 — Town Square (LH 6) -> Cart Workshop (LH 10); its second target,
+  // Row 8 — Bog-ore works (LH 6) -> Hammerschmiede (LH 20): the iron chain.
+  bogoreworks: [1, 8],
+  hammerschmiede: [2, 8],
+
+  // Row 9 — Town Square (LH 6) -> Cart Workshop (LH 10); its second target,
   // the Druid Hut (LH 12), one row below.
-  townsquare: [1, 8],
-  cartworkshop: [2, 8],
-  druidhut: [2, 9],
-  // Row 9 — the Druid Hut (LH 12) -> Odin Statue (LH 25).
-  odinstatue: [4, 9],
+  townsquare: [1, 9],
+  cartworkshop: [2, 9],
+  druidhut: [2, 10],
+  // Row 10 — the Druid Hut (LH 12) -> Odin Statue (LH 25), in the Capstone column.
+  odinstatue: [4, 10],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;

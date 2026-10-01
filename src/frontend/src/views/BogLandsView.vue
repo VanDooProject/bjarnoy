@@ -87,6 +87,7 @@ const waterFrame = computed(() =>
 const BUILDINGS = [
   { id: 'bogoreworks', family: 'bogoreworks' },
   { id: 'fisherhut', family: 'fisherhut_lake' },
+  { id: 'hammerschmiede', family: 'hammerschmiede' },
   { id: 'claybrickworks', family: 'claybrickworks' },
 ] as const;
 type BuildingId = (typeof BUILDINGS)[number]['id'];
@@ -120,7 +121,7 @@ function buildingFrame(id: BuildingId): AtlasFrameRect | undefined {
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <main class="body">
+    <main class="body docs-scale">
       <h1>{{ $t('docs.bogLands.title') }}</h1>
       <p class="intro">{{ $t('docs.bogLands.intro') }}</p>
       <p class="status">{{ $t('docs.bogLands.status') }}</p>
@@ -266,6 +267,7 @@ function buildingFrame(id: BuildingId): AtlasFrameRect | undefined {
           <li>{{ $t('docs.bogLands.rules.creeks') }}</li>
           <li>{{ $t('docs.bogLands.rules.mouth') }}</li>
           <li>{{ $t('docs.bogLands.rules.weir') }}</li>
+          <li>{{ $t('docs.bogLands.rules.boats') }}</li>
           <li>{{ $t('docs.bogLands.rules.river') }}</li>
           <li>{{ $t('docs.bogLands.rules.inland') }}</li>
           <li>{{ $t('docs.bogLands.rules.landing') }}</li>

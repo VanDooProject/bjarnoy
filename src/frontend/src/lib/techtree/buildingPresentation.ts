@@ -54,6 +54,8 @@ const TYPE_LABELS: Record<string, string> = {
   druidhut: "Druid's hut",
   cartworkshop: 'Cart workshop',
   claybrickworks: 'Clay brickworks',
+  bogoreworks: 'Bog-ore works',
+  hammerschmiede: 'Hammerschmiede',
   // Display name only; the internal type stays `smithy`.
   smithy: 'Weaponsmith',
 };
@@ -121,6 +123,8 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   meadery: 'production',
   cropmill: 'production',
   claybrickworks: 'production',
+  bogoreworks: 'production',
+  hammerschmiede: 'production',
   tower: 'military',
   archeryrange: 'military',
   barracks: 'military',

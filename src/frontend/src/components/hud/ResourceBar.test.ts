@@ -13,6 +13,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import ResourceBar from './ResourceBar.vue';
 import { useWorldStore } from '../../stores/world';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
+import { isHudRail } from '../../composables/hudSettlementBubbleState';
+import { HUD_COMPACT_QUERY, HUD_RAIL_TALL_QUERY } from '../../lib/breakpoints';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
@@ -23,15 +25,19 @@ function mountResourceBar() {
   });
 }
 
-function stubCompactMediaQuery(matches: boolean) {
+// Answers per query, like a real browser (compact and "tall" are separate facts).
+function stubMediaQueries(matching: string[]) {
   vi.stubGlobal(
     'matchMedia',
-    vi.fn().mockReturnValue({
-      matches,
+    vi.fn().mockImplementation((query: string) => ({
+      matches: matching.includes(query),
       addEventListener: () => {},
       removeEventListener: () => {},
-    }),
+    })),
   );
+}
+function stubCompactMediaQuery(matches: boolean) {
+  stubMediaQueries(matches ? [HUD_COMPACT_QUERY] : []);
 }
 
 describe('ResourceBar', () => {
@@ -238,6 +244,121 @@ describe('ResourceBar (compact / mobile)', () => {
     expect(wood.get('.value').text()).toContain('12,000'); // cap suffix
     expect(wood.get('.rate').text()).toBe('+60/h');
     expect(wood.find('.fill-track').exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+// Landscape rail (TopBar.vue publishes `isHudRail`): the pills are a column of
+// fixed-width bubbles, one line each, or two lines when the viewport is tall.
+describe('ResourceBar (landscape rail)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    isHudRail.value = true;
+    const world = useWorldStore();
+    world.hud.resources = { wood: 4965, stone: 2310, food: 6120, iron: 780 };
+    world.hud.storageCap = { wood: 12000, stone: 8000, food: 10000, iron: 4000 };
+    world.hud.rates = { wood: 60, stone: 45, food: 90, iron: 20 };
+    world.hud.reserved = { wood: 0, stone: 0, food: 0, iron: 0 };
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    isHudRail.value = false;
+    isHudDrawerOpen.value = false;
+  });
+
+  it('is one line per pill by default and keeps the shared stock -> rate -> cap tap cycle', async () => {
+    stubMediaQueries([HUD_COMPACT_QUERY]);
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    expect(wrapper.get('.resource-bar').classes()).toContain('resource-bar--rail');
+    expect(wrapper.get('.resource-bar').classes()).not.toContain('resource-bar--rail-2');
+    const [wood, stone] = wrapper.findAll('.resource--compact');
+    expect(wood.findAll('.value-compact')).toHaveLength(1);
+    expect(wood.get('.value-compact').text()).toBe('4,965');
+    expect(wood.find('.fill-track').exists()).toBe(true);
+
+    await wood.trigger('click');
+    expect(wood.get('.value-compact').text()).toBe('+60/h');
+    expect(stone.get('.value-compact').text()).toBe('+45/h'); // all pills together
+    await wood.trigger('click');
+    expect(wood.get('.value-compact').text()).toBe('/12,000');
+    wrapper.unmount();
+  });
+
+  it('is two lines per pill when tall: stock, then the rate; a tap swaps only the second line to the cap', async () => {
+    stubMediaQueries([HUD_COMPACT_QUERY, HUD_RAIL_TALL_QUERY]);
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    expect(wrapper.get('.resource-bar').classes()).toContain('resource-bar--rail-2');
+    const [wood, stone] = wrapper.findAll('.resource--compact');
+    expect(wood.findAll('.value-compact')).toHaveLength(2);
+    expect(wood.findAll('.value-compact')[0].text()).toBe('4,965');
+    expect(wood.get('.value-line2').text()).toBe('+60/h');
+
+    await wood.trigger('click');
+    expect(wood.findAll('.value-compact')[0].text()).toBe('4,965'); // stock stays
+    expect(wood.get('.value-line2').text()).toBe('/12,000');
+    expect(stone.get('.value-line2').text()).toBe('/8,000');
+
+    await wood.trigger('click');
+    expect(wood.get('.value-line2').text()).toBe('+60/h'); // two states, not three
+    wrapper.unmount();
+  });
+
+  it('two-line pills fall back to the rate after the auto-return delay', async () => {
+    vi.useFakeTimers();
+    stubMediaQueries([HUD_COMPACT_QUERY, HUD_RAIL_TALL_QUERY]);
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    const wood = wrapper.findAll('.resource--compact')[0];
+    await wood.trigger('click');
+    expect(wood.get('.value-line2').text()).toBe('/12,000');
+    vi.advanceTimersByTime(6000);
+    await wrapper.vm.$nextTick();
+    expect(wood.get('.value-line2').text()).toBe('+60/h');
+    wrapper.unmount();
+  });
+
+  it('keeps the compact pills while the drawer is open — no expanded layout in the rail', async () => {
+    stubMediaQueries([HUD_COMPACT_QUERY]);
+    isHudDrawerOpen.value = true;
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    expect(wrapper.get('.resource-bar').classes()).not.toContain('expanded');
+    expect(wrapper.findAll('.resource--compact').length).toBeGreaterThan(0);
+    wrapper.unmount();
+  });
+
+  it('does not measure a row: no hidden fit clone, and short notation follows the size of the numbers', async () => {
+    stubMediaQueries([HUD_COMPACT_QUERY]);
+    const world = useWorldStore();
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    expect(wrapper.find('[data-measure]').exists()).toBe(false);
+    expect(wrapper.findAll('.resource--compact')[0].get('.value-compact').text()).toBe('4,965');
+
+    world.hud.resources = { ...world.hud.resources, wood: 250_000 };
+    world.hud.storageCap = { ...world.hud.storageCap, wood: 300_000 };
+    await flushPromises();
+    expect(wrapper.findAll('.resource--compact')[0].get('.value-compact').text()).toBe('250k');
+    // Every pill switches together, as in the row.
+    expect(wrapper.findAll('.resource--compact')[1].get('.value-compact').text()).toBe('2.3k');
+    wrapper.unmount();
+  });
+
+  it('is not a rail when the flag is set but the viewport is not compact', async () => {
+    stubMediaQueries([]);
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    expect(wrapper.get('.resource-bar').classes()).not.toContain('resource-bar--rail');
+    expect(wrapper.find('.resource--compact').exists()).toBe(false);
     wrapper.unmount();
   });
 });

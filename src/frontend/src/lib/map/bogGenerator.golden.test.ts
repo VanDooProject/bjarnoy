@@ -59,17 +59,19 @@ describe('bog-generation golden fixture (bog generation parity)', () => {
     expect(totalViolations(checkBogRules(actual.bogs, actual.rivers, (c) => terrainAt(c.q, c.r, world)))).toBe(0);
   });
 
-  it('covers a plain lake, a sink, a spawn, an enclosed pocket and two lakes', () => {
+  it('covers a plain lake, a sink, a spawn, a guaranteed spawn bog, an enclosed pocket and two lakes', () => {
     const names = fixture.scenarios.map((s) => s.name);
     expect(names).toEqual([
       'green_island_through_lake',
       'green_island_sunk_river',
       'green_island_spawned_river',
+      'green_island_guarantee_spawn',
       'green_island_enclosed_pocket',
       'green_island_two_lakes',
     ]);
     const kinds = (name: string) => new Set(fixture.scenarios.find((s) => s.name === name)!.bogs.map((b) => b.kind));
     expect(kinds('green_island_spawned_river')).toContain('creekspring');
+    expect(kinds('green_island_guarantee_spawn')).toContain('creekspring');
     for (const s of fixture.scenarios) {
       expect(kinds(s.name)).toContain('lake');
       // A lake on land has its through river's mouths; an enclosed pocket has one only when a river could be sunk into it.

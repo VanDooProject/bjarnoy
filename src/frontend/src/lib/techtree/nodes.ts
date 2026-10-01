@@ -15,6 +15,8 @@ import { ANCHOR, columnX, rowY, TECH_TREE_LAYOUT, type Slot } from './layout';
 const TERRAIN_LABELS: Record<string, string> = {
   forest: 'Forest',
   mountain: 'Mountain',
+  bog: 'Bog',
+  lake: 'Lake',
 };
 
 // The graph is raw English by design (see buildingPresentation.ts) — mirrors
@@ -54,7 +56,7 @@ function formatModifier(modifier: BuildingModifier): string {
     case 'odinFavour':
       return `-${modifier.buildTimePercent}% build time, +${modifier.visionRings} rings of vision`;
     case 'radiusBoost':
-      return `+${modifier.percent}% ${modifier.resource === 'wood' ? 'Wood' : 'Food'} within ${modifier.range} ${modifier.range === 1 ? 'ring' : 'rings'}`;
+      return `+${modifier.percent}% ${modifier.resource === 'wood' ? 'Wood' : modifier.resource === 'iron' ? 'Iron' : 'Food'} within ${modifier.range} ${modifier.range === 1 ? 'ring' : 'rings'}`;
   }
 }
 

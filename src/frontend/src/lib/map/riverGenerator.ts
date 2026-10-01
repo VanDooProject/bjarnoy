@@ -1191,12 +1191,18 @@ export function generateRiversWithBogs(
   const riverLand = pocketWater.size === 0 ? isLand : (c: AxialCoord) => isLand(c) || pocketWater.has(c);
 
   const candidates = springCandidates(islandTiles, terrainOf, islandLand);
-  if (candidates.length === 0) return { rivers: [], bogs: bogs.classify() };
+
+  // An island without mountains has no river to run through a bog, but the bog guarantee may still spawn one.
+  const guaranteeOnly = candidates.length === 0;
+  if (guaranteeOnly && !bogs.guaranteeApplies) {
+    bogs.fillHoles(null);
+    return { rivers: [], bogs: bogs.classify() };
+  }
 
   const drainage = new Drainage(islandTiles, terrainOf, riverLand, seed, bogs.pocketRing);
-  if (stats) stats.outlets += drainage.outletCount;
+  if (stats && !guaranteeOnly) stats.outlets += drainage.outletCount;
 
-  const springs = pickSprings(candidates, islandTiles.length, depthAt, drainage, seed);
+  const springs = guaranteeOnly ? [] : pickSprings(candidates, islandTiles.length, depthAt, drainage, seed);
   const order = springs
     .map((spring) => ({ spring, cost: drainage.bestOut(drainage.index.get(coordKey(spring))!, -1, null).cost }))
     .sort((a, b) => b.cost - a.cost || a.spring.q - b.spring.q || a.spring.r - b.spring.r)
@@ -1228,19 +1234,19 @@ export function generateRiversWithBogs(
 
   // Bog sites: through-river lakes (the river is re-routed through them), sinks and spawns.
   const bp = new BogPaths(paths, mergedFlags);
-  bogs.placeSites(
-    bp,
-    (trial) => assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), riverLand, seed, undefined, trial.requireRiver),
-    (exit, startIn, current, blocked) => {
-      const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked);
-      const claims2: (Claim | null)[] = new Array<Claim | null>(d2.tiles.length).fill(null);
-      for (let k = 0; k < current.paths.length; k++) commit(d2, current.paths[k]!, current.merged[k]!, claims2);
+  const widthTrial = (trial: BogPaths) =>
+    assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), riverLand, seed, undefined, trial.requireRiver);
+  const traceRiver = (exit: AxialCoord, startIn: number, current: BogPaths, blocked: HexSet): AxialCoord[] | null => {
+    const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked);
+    const claims2: (Claim | null)[] = new Array<Claim | null>(d2.tiles.length).fill(null);
+    for (let k = 0; k < current.paths.length; k++) commit(d2, current.paths[k]!, current.merged[k]!, claims2);
 
-      const onPath2 = new Array<boolean>(d2.tiles.length).fill(false);
-      const traced = traceDrainage(d2, exit, claims2, onPath2, current.paths.length > 0, startIn);
-      return traced ? traced.path : null;
-    },
-  );
+    const onPath2 = new Array<boolean>(d2.tiles.length).fill(false);
+    const traced = traceDrainage(d2, exit, claims2, onPath2, current.paths.length > 0, startIn);
+    return traced ? traced.path : null;
+  };
+  if (guaranteeOnly) bogs.placeGuaranteeOnly(bp, widthTrial, traceRiver);
+  else bogs.placeSites(bp, widthTrial, traceRiver);
 
   const nodes = buildNodes(bp.paths, bp.forcedOut, bp.bogIn);
   return { rivers: assignWidths(nodes, riverLand, seed, stats, bp.requireRiver), bogs: bogs.classify() };

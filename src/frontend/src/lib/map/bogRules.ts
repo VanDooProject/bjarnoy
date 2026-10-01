@@ -1,5 +1,5 @@
 // Checks an island's bogland and rivers against the art's map rules and the owner's requirements — the
-// TypeScript twin of the backend's `Bjarnoy.Domain.World.BogRules` (which documents R1-R11). The
+// TypeScript twin of the backend's `Bjarnoy.Domain.World.BogRules` (which documents R1-R12). The
 // generator builds every site on scratch state and drops it when it would break one, so a generated island
 // reports zero everywhere; the tests and the worldgen preview count these.
 import { coordKey, type AxialCoord } from '../hex/coords';
@@ -19,10 +19,11 @@ export interface BogRuleViolations {
   R9: number;
   R10: number;
   R11: number;
+  R12: number;
 }
 
 export function noViolations(): BogRuleViolations {
-  return { R1: 0, R2: 0, R3: 0, R4: 0, R5: 0, R6: 0, R7: 0, R8: 0, R9: 0, R10: 0, R11: 0 };
+  return { R1: 0, R2: 0, R3: 0, R4: 0, R5: 0, R6: 0, R7: 0, R8: 0, R9: 0, R10: 0, R11: 0, R12: 0 };
 }
 
 export function addViolations(a: BogRuleViolations, b: BogRuleViolations): BogRuleViolations {
@@ -105,6 +106,7 @@ export function checkBogRules(
       // Every neighbour of a lake tile is lake or bog (R1); pocket lake tiles on sea have R10 for the same test.
       for (let d = 0; d < 6; d++) {
         if (!byCoord.has(coordKey(nb(c, d)))) {
+          v.R12++;
           if (baseTerrain(c) === 'sea') v.R10++;
           else v.R1++;
         }
@@ -147,6 +149,18 @@ export function checkBogRules(
       t.waterEdges.map(dirIndex).join(',') !== expectedEdges.join(',')
     ) {
       v.R1++;
+    }
+
+    // R12: every neighbour of a water feature (anything but plain moss) is bog; a creek may touch the river its flow links lead to.
+    if (t.kind !== 'bog') {
+      const creekFamily = t.kind === 'creek' || t.kind === 'mouth' || t.kind === 'creekspring';
+      const flowDirs = [...t.inDirections.map(dirIndex), dirIndex(t.outDirection)];
+      for (let d = 0; d < 6; d++) {
+        const n = nb(c, d);
+        if (byCoord.has(coordKey(n))) continue;
+        const ownRiver = creekFamily && riverByCoord.has(coordKey(n)) && flowDirs.includes(d);
+        if (!ownRiver) v.R12++;
+      }
     }
 
     // R7: never beside the open sea or sand.
@@ -240,6 +254,20 @@ export function checkBogRules(
       const n = nb(cur, dirIndex(cur.outDirection));
       if (riverByCoord.has(coordKey(n))) {
         reachedRiver = true;
+        break;
+      }
+      const lakeId = component.get(coordKey(n));
+      if (lakeId !== undefined) {
+        // A spring that feeds a lake (a guaranteed spawn bog): the river through the lake, out of its outflow mouth, takes the water on.
+        // R8 makes sure every lake has exactly one; the link checks above follow it to the river.
+        reachedRiver = bog.some(
+          (m) =>
+            m.kind === 'mouth' &&
+            m.waterEdges.length === 1 &&
+            m.inDirections.length === 1 &&
+            m.inDirections[0] === m.waterEdges[0] &&
+            Array.from({ length: 6 }, (_, d) => d).some((d) => component.get(coordKey(nb(m, d))) === lakeId),
+        );
         break;
       }
       cur = byCoord.get(coordKey(n));

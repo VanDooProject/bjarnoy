@@ -10,6 +10,8 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName } from '../../i18n/catalogueNames';
 import type { ChecklistRow, ChecklistRowKey, OnboardingGuidance } from '../../lib/map/onboardingGuidance';
+import { useMediaQuery } from '../../composables/useMediaQuery';
+import { TOUCH_QUERY } from '../../lib/breakpoints';
 
 const props = defineProps<{
   guidance: OnboardingGuidance;
@@ -17,6 +19,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const isTouch = useMediaQuery(TOUCH_QUERY);
 
 function nameFor(key: ChecklistRowKey): string {
   return key === 'longhouse' ? t('landing.tray.longhouseName') : buildingName(key);
@@ -24,8 +27,9 @@ function nameFor(key: ChecklistRowKey): string {
 
 function subtextFor(row: ChecklistRow): string {
   if (row.state === 'done') return t('landing.tray.placed');
-  if (row.key === 'longhouse') return t('landing.tray.clickToPlace');
-  return props.hasFounded ? t('landing.tray.clickEmptyHex') : t('landing.tray.foundFirst');
+  if (row.key === 'longhouse') return isTouch.value ? t('landing.tray.tapToPlace') : t('landing.tray.clickToPlace');
+  if (!props.hasFounded) return t('landing.tray.foundFirst');
+  return isTouch.value ? t('landing.tray.tapEmptyHex') : t('landing.tray.clickEmptyHex');
 }
 </script>
 

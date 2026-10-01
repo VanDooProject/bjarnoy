@@ -24,9 +24,11 @@
     "smithy": "Weaponsmith",
     "druidhut": "Druid's Hut",
     "cartworkshop": "Cart Workshop",
+    "claybrickworks": "Clay Brickworks",
+    "bogoreworks": "Bog-Ore Works",
+    "hammerschmiede": "Hammerschmiede",
     "odinstatue": "Odin Statue",
-    "reindeerherder": "Reindeer Herder",
-    "claybrickworks": "Clay Brickworks"
+    "reindeerherder": "Reindeer Herder"
   },
   "units": {
     "thrall": "Thrall",
@@ -37,7 +39,8 @@
     "provisioner": "Provisioner",
     "catapult": "Catapult",
     "karve": "Karve",
-    "longship": "Longship"
+    "longship": "Longship",
+    "settlercrew": "Settler Crew"
   },
   "giants": {
     "giantmountain": "Giant mountain",

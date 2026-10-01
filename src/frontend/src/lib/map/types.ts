@@ -357,8 +357,16 @@ export interface Tile {
     | 'cartworkshop'
     | 'claybrickworks'
     | 'reindeerherder'
-    | 'odinstatue';
+    | 'odinstatue'
+    | 'bogoreworks'
+    | 'hammerschmiede';
   buildingLevel?: number;
+  /**
+   * A decoration on this open-lake hex, drawn because of a building nearby (`lakeProps.ts`): a fish weir or fishing boat
+   * next to a lake Fishing Hut, an ore boat next to a bog-ore works. Render-only and derived, like `bog`; set and cleared by
+   * `WorldModel` whenever the buildings around a lake change, never by the server.
+   */
+  lakeProp?: 'weir' | 'oreboat' | 'fishboat';
   /**
    * This hex's place in a "giant tile" — one art object spanning a centre
    * hex plus its six neighbours (see `giantTiles.ts`'s module doc comment

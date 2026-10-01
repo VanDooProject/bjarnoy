@@ -489,3 +489,92 @@ describe('growth flattening', () => {
     expect(r.growthFlattensAt).toBeNull();
   });
 });
+
+describe('a producer that unlocks late (the bog-ore works)', () => {
+  // Longhouse 1-4 with a fast Longhouse, and an iron producer that opens at Longhouse 3.
+  function ironCatalogue(): BuildingDefinitionResponse[] {
+    return [
+      def('longhouse', 1, { storage: 100000 }),
+      ...[2, 3, 4].map((l) => def('longhouse', l, { cost: { wood: 10 }, buildSeconds: 60, storage: 100000 })),
+      def('mill', 1, { prod: { wood: 100 } }),
+      def('ore', 1, { prod: { iron: 50 }, reqLh: 3, cost: { wood: 10 }, buildSeconds: 60 }),
+      def('ore', 2, { prod: { iron: 60 }, reqLh: 3, cost: { wood: 10 }, buildSeconds: 60 }),
+    ];
+  }
+
+  it('makes no iron before its Longhouse level, and starts making it once it is placed', () => {
+    const result = simulatePacing(
+      group(ironCatalogue()),
+      params({ producerCounts: { mill: 1, ore: 1 }, startStock: { wood: 1000, stone: 0, food: 0, iron: 0 }, horizonDays: 1, producersAhead: 3 }),
+    );
+    const reachedLh3 = Math.ceil(result.lhReachedAt[3]! / 60);
+    expect(result.lhReachedAt[3]).toBeDefined();
+    expect(result.series.rate.iron.slice(0, reachedLh3).every((r) => r === 0)).toBe(true);
+    expect(result.series.rate.iron.at(-1)).toBeGreaterThan(0);
+  });
+
+  it('does not start a producer whose level 1 is open from the start at level 0', () => {
+    const result = simulatePacing(
+      group(ironCatalogue()),
+      params({ producerCounts: { mill: 1 }, startStock: { wood: 1000, stone: 0, food: 0, iron: 0 }, horizonDays: 1 }),
+    );
+    expect(result.series.rate.wood[0]).toBeGreaterThan(0);
+  });
+});
+
+// docs/design/economy.md section 8: the bog-ore works' level-1 iron (20/h) was tuned in this lab so iron stays the indirect gate for
+// the army: from the moment the works stand (LH 6) the Longhouse trickle alone (2/h per level) is what the first Spearmen run on,
+// and with the default three works iron income settles at about half the wood income, where a unit costs about half the wood.
+describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
+  const byType = group(catalogueSnapshot.data as BuildingDefinitionResponse[]);
+  const run = (works: number) =>
+    simulatePacing(byType, params({
+      horizonDays: 40,
+      producerCounts: { lumberjack: 3, quarry: 3, farm: 3, bogoreworks: works },
+      startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
+      settleType: 'cartworkshop',
+      sessions: PROFILE_PRESETS.active,
+      joinTime: '09:00',
+      producersAhead: 3,
+    }));
+  const hourAt = (r: ReturnType<typeof run>, lh: number) => Math.ceil(r.lhReachedAt[lh]! / 60);
+
+  it('has only the Longhouse trickle (2 iron/h per level) until the bog-ore works open at Longhouse 6', () => {
+    const r = run(3);
+    for (let lh = 1; lh <= 5; lh++) {
+      const at = hourAt(r, lh);
+      expect(r.series.rate.iron[at], `LH ${lh}`).toBe(2 * lh);
+    }
+    expect(r.series.rate.iron[hourAt(r, 6)]).toBeGreaterThan(2 * 6);
+  });
+
+  it('builds no bog-ore works before Longhouse 6', () => {
+    const r = run(3);
+    const before = hourAt(r, 6) - 1;
+    expect(r.series.rate.iron[before]).toBeLessThanOrEqual(2 * 5);
+  });
+
+  it('keeps iron income at about a third to a half of wood income with three works from Longhouse 8 on', () => {
+    const r = run(3);
+    for (const lh of [8, 10, 15, 20]) {
+      const h = hourAt(r, lh);
+      const ratio = r.series.rate.iron[h]! / r.series.rate.wood[h]!;
+      expect(ratio, `LH ${lh}`).toBeGreaterThan(0.3);
+      expect(ratio, `LH ${lh}`).toBeLessThan(0.6);
+    }
+  });
+
+  it('is a much smaller share with one works (iron stays scarce), and never zero once the works stand', () => {
+    const one = run(1);
+    const h = hourAt(one, 10);
+    expect(one.series.rate.iron[h]!).toBeGreaterThan(0);
+    expect(one.series.rate.iron[h]! / one.series.rate.wood[h]!).toBeLessThan(0.25);
+  });
+
+  it('pays for a first Spearman from the banked trickle the moment the Barracks open at Longhouse 5', () => {
+    const r = run(0);
+    const h = hourAt(r, 5);
+    // Spearman: 40 iron. The trickle has banked at least that by the time LH 5 lands.
+    expect(r.series.stock.iron[h]!).toBeGreaterThanOrEqual(40);
+  });
+});
