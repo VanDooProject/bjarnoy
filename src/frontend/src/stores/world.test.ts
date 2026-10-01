@@ -30,6 +30,7 @@ const getWorld = vi.fn();
 const getIslands = vi.fn();
 const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
+const dispatchArmy = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -81,6 +82,7 @@ async function loadStoreModule(demoMode: boolean) {
       getIslands: (...args: unknown[]) => getIslands(...args),
       listWorlds: (...args: unknown[]) => listWorlds(...args),
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
+      dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -196,6 +198,32 @@ describe('useWorldStore refreshArmies (guest armies)', () => {
     await store.refreshArmies();
 
     expect(getSettlementGuests).not.toHaveBeenCalled();
+  });
+});
+
+// The movement rules (wide rivers and mountains stop a land army): a dispatch with no land route is
+// refused by the API (409 UnreachableLeg) and the draft stays open with the reason, so the player can
+// pick another target instead of losing the unit/provisions selection.
+describe('useWorldStore confirmDispatch with no land route', () => {
+  it('keeps the draft and shows the no-land-route message when the API refuses with UnreachableLeg', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError } = await import('../api/client');
+    dispatchArmy.mockReset().mockRejectedValue(
+      new ApiError(409, { title: 'The dispatch was refused.', detail: 'No land route: mountains and wide rivers can\'t be crossed.', rejection: 'UnreachableLeg' }),
+    );
+    store.selectedSettlementId = 'home-1';
+    store.startDispatch();
+    store.dispatchDraft!.unitCounts = { spearman: 2 };
+    store.dispatchDraft!.provisions = 10;
+    store.addWaypoint({ q: 5, r: 0 });
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).toHaveBeenCalledTimes(1);
+    expect(store.dispatchDraft).not.toBeNull();
+    expect(store.dispatchDraft!.route).toEqual([{ q: 5, r: 0 }]);
+    expect(store.dispatchDraft!.submitting).toBe(false);
+    expect(store.dispatchDraft!.error).toBe("No land route: mountains and wide rivers can't be crossed.");
   });
 });
 
