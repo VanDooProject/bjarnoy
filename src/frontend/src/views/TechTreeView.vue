@@ -274,6 +274,7 @@ function formatAmount(value: number): string {
               @keydown.enter="toggleThumbSize($event)"
               @keydown.space.prevent="toggleThumbSize($event)"
             >
+              <span class="thumb-shadow" aria-hidden="true" />
               <AnimatedBuildingSprite v-if="thumbAnimatedLayers(type)" :layers="thumbAnimatedLayers(type)!" />
               <AtlasSprite v-else-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
               <img v-else-if="thumbUrl(type)" class="thumb-img" :src="thumbUrl(type)!" alt="" />
@@ -499,18 +500,68 @@ function formatAmount(value: number): string {
   align-items: flex-end;
   justify-content: center;
   flex: none;
+  position: relative;
   width: 96px;
   height: 144px;
-  overflow: hidden;
+  padding-bottom: 10px;
+  box-sizing: border-box;
   border-radius: 8px;
-  background: var(--panel, #1c1710);
-  border: 1px solid var(--panel-border);
   cursor: pointer;
 }
-.thumb:hover,
+/* The art floats free of any frame: a drop shadow that follows the sprite's
+   own alpha, plus a gentle bob. The ground shadow below stays put and shrinks
+   as the building rises, which sells the "hovering" read. */
+.thumb > :not(.thumb-shadow) {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 6px 5px rgba(0, 0, 0, 0.45));
+  animation: thumb-float 3.2s ease-in-out infinite;
+  transition: filter 0.2s ease;
+}
+.thumb:hover > :not(.thumb-shadow),
+.thumb:focus-visible > :not(.thumb-shadow) {
+  filter: drop-shadow(0 8px 6px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px rgba(214, 170, 82, 0.45));
+}
+.thumb-shadow {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 70%;
+  height: 10px;
+  margin-left: -35%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.45), transparent);
+  animation: thumb-shadow 3.2s ease-in-out infinite;
+}
 .thumb:focus-visible {
-  border-color: var(--gold);
-  outline: none;
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+@keyframes thumb-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes thumb-shadow {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.8);
+    opacity: 0.6;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumb > :not(.thumb-shadow),
+  .thumb-shadow {
+    animation: none;
+  }
 }
 .thumb.large {
   width: 176px;
