@@ -1,25 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { awaitAtlasManifests } from './atlasGuard';
+import { startAtlasManifestLoad } from './atlasGuard';
 
-describe('awaitAtlasManifests', () => {
-  it('waits for the preload before letting navigation through', async () => {
-    let finish!: () => void;
-    const preload = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
-    let settled = false;
-    const guard = awaitAtlasManifests(preload).then((r) => {
-      settled = true;
-      return r;
-    });
-    await Promise.resolve();
-    expect(settled).toBe(false);
-    finish();
-    await expect(guard).resolves.toBe(true);
+describe('startAtlasManifestLoad', () => {
+  it('starts the preload and lets navigation through without waiting for it', () => {
+    const preload = vi.fn(() => new Promise<void>(() => {}));
+    expect(startAtlasManifestLoad(preload)).toBe(true);
+    expect(preload).toHaveBeenCalledOnce();
   });
 
-  it('still lets navigation through (with a warning) when the preload fails', async () => {
+  it('warns instead of throwing when the preload fails', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await expect(awaitAtlasManifests(() => Promise.reject(new Error('offline')))).resolves.toBe(true);
-    expect(warn).toHaveBeenCalled();
+    expect(startAtlasManifestLoad(() => Promise.reject(new Error('offline')))).toBe(true);
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
     warn.mockRestore();
   });
 });

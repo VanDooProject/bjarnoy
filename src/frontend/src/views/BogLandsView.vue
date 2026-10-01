@@ -50,10 +50,13 @@ function levelsOf(family: string): number[] {
 
 // Look names follow the variant order in 3D_assets' docs/bog-tiles.md.
 const GROUND_LOOKS = ['plain', 'mire1', 'mire2', 'mire3', 'oreSeep', 'fen', 'peat', 'copse', 'seepChain'] as const;
-const groundLooks = looksOf('bog');
-const groundLook = ref(Math.min(1, groundLooks.length - 1));
+// Computed: the looks are read off the atlas, whose manifests arrive lazily.
+const groundLooks = computed(() => looksOf('bog'));
+// The first decorated look by default; groundFrame falls back to the plain one
+// while the manifests are still on their way.
+const groundLook = ref(1);
 const groundCamera = ref<TileOrientation>('SE');
-const groundFrame = computed(() => showcase(`bog_${groundCamera.value}${groundLooks[groundLook.value] ?? ''}`));
+const groundFrame = computed(() => showcase(`bog_${groundCamera.value}${groundLooks.value[groundLook.value] ?? ''}`));
 function groundLookName(i: number): string {
   const key = GROUND_LOOKS[i];
   return key ? t(`docs.bogLands.ground.looks.${key}`) : String(i + 1);

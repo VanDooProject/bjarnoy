@@ -102,7 +102,8 @@ interface TileEntry {
 // Generation rules mirror WorldGenerationOptions' documented defaults
 // (BeachThreshold, MountainThreshold, ForestRockiness, MountainRockiness) —
 // see that file for the exact fractions if a world overrides them.
-const TILES: TileEntry[] = [
+// A computed so the art fills in once the atlas manifests arrive (fetched lazily).
+const TILES = computed<TileEntry[]>(() => [
   { id: 'sea', art: terrainArt('sea'), terrain: 'sea' },
   { id: 'coastal-water', art: coastalWaterArt(), terrain: null, coastal: true },
   { id: 'sand', art: terrainArt('sand'), terrain: 'sand' },
@@ -110,7 +111,7 @@ const TILES: TileEntry[] = [
   { id: 'forest', art: terrainArt('forest'), terrain: 'forest' },
   { id: 'mountain', art: terrainArt('mountain'), terrain: 'mountain', mountain: true },
   { id: 'river', art: riverArt('straight'), terrain: null, river: true },
-];
+]);
 
 /** The picture a tile's card shows — the river/mountain entries swap in whichever shape/landform is picked, everything else is static. */
 function thumbArt(tile: TileEntry): ArtRef {
@@ -140,7 +141,7 @@ function typeLabel(type: string): string {
 
 const buildingsByTile = computed(() => {
   const result: Record<string, string[]> = {};
-  for (const tile of TILES) {
+  for (const tile of TILES.value) {
     result[tile.id] = catalogue.types
       .filter((type) => {
         const def = catalogue.byType[type]?.[0];
