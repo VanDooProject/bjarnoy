@@ -177,9 +177,10 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await cards.first().waitFor();
     const total = await cards.count();
 
-    // Guarded by default: every camp with a clip plays it.
+    // Guarded by default: every camp with a clip plays it — once the animation
+    // manifests have arrived (they load lazily, after the cards render).
     const animated = page.locator('.wildlife-camps .card .animated-camp[data-animated="true"]');
-    expect(await animated.count()).toBeGreaterThan(0);
+    await expect.poll(() => animated.count()).toBeGreaterThan(0);
     await expect(page.locator('.wildlife-camps .card [data-testid="guard-range"]')).toHaveCount(total);
     // Every camp gives food and every strong camp iron; the camps' own extras and larger shares come on top.
     await expect(page.locator('.wildlife-camps .card [data-loot="food"]')).toHaveCount(total);
@@ -196,7 +197,7 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     );
 
     await all.getByRole('button', { name: 'Guarded', exact: true }).click();
-    expect(await animated.count()).toBeGreaterThan(0);
+    await expect.poll(() => animated.count()).toBeGreaterThan(0);
 
     // A camp's own pill takes it out of step, so the page-wide switch shows neither state.
     await page.locator('#camp-wolfden').getByRole('button', { name: 'Cleared', exact: true }).click();
