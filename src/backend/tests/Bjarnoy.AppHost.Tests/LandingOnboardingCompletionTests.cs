@@ -31,21 +31,16 @@ namespace Bjarnoy.AppHost.Tests;
 /// backend's real claim radius at level 1 (<c>Settlement.ClaimRadius</c>)
 /// might reject depending on exactly where it lands.
 /// </remarks>
-public class LandingOnboardingCompletionTests
+public class LandingOnboardingCompletionTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task CompletingBothGuidedBuildingsHandsOffToSettlementViaTheCompletionBanner()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await TestAppHost.CreateAsync(cancellationToken);
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");
