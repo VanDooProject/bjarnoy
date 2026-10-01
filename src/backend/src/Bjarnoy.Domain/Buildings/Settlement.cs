@@ -1033,6 +1033,11 @@ public sealed record Settlement
     /// build instant, plus Fenrir's brood always, so a cleared camp's hex is buildable under its
     /// ground's normal rules.
     /// </param>
+    /// <param name="bogKindAt">
+    /// What kind of bog tile stands on <paramref name="coord"/> (plain moss, shore, creek, ...), or <see langword="null"/>
+    /// when it is not bog. Only the buildings with a <see cref="BuildingDefinition.RequiresBogKind"/> (bog-ore works, Clay
+    /// Brickworks, Hammerschmiede) or <see cref="BuildingDefinition.LakeShoreKinds"/> (the Fishing Hut) care.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -1048,7 +1053,8 @@ public sealed record Settlement
         IReadOnlySet<GodType>? shrineGodsElsewhereOnIsland = null,
         SoilType? islandSoil = null,
         World.IGiantIndex? giants = null,
-        World.ICampIndex? camps = null)
+        World.ICampIndex? camps = null,
+        World.BogTileKind? bogKindAt = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -1109,10 +1115,7 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.UnknownBuildingLevel);
         }
 
-        var terrainOk = definition.RequiresCoastalWater
-            ? isCoastalWater
-            : definition.AllowsTerrain(terrain);
-        if (!terrainOk)
+        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }
@@ -1530,7 +1533,8 @@ public sealed record Settlement
         double speedFactor = 1.0,
         IReadOnlyList<UnitStack>? guestStacks = null,
         Func<HexCoord, Terrain>? terrainAt = null,
-        World.IGiantIndex? giants = null)
+        World.IGiantIndex? giants = null,
+        World.BogTileKind? bogKindAt = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -1563,8 +1567,7 @@ public sealed record Settlement
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.LonghouseIsFixed);
         }
 
-        var terrainOk = definition.RequiresCoastalWater ? isCoastalWater : definition.AllowsTerrain(terrain);
-        if (!terrainOk)
+        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
         {
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.TerrainNotAllowed);
         }

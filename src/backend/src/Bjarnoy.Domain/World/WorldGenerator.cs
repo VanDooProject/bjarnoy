@@ -124,7 +124,7 @@ public sealed class WorldGenerator
                     camps = CampGenerator.Generate(
                         tiles, terrainLand, _sampler, _options, index, riverTiles, giants,
                         plainBog: BogTerrain.PlainBog(bogTiles));
-                    startPositions = FindStartPositions(tiles, terrainLand, giants, camps);
+                    startPositions = FindStartPositions(tiles, terrainLand, giants, camps, BogTerrain.PlainBog(bogTiles), _options.BogReach);
                 }
 
                 built[i] = new GeneratedIsland
@@ -379,11 +379,18 @@ public sealed class WorldGenerator
     /// within <c>GuardRange + StartPositionMargin</c> hex steps of a <em>strong</em> camp is
     /// dropped.
     /// </remarks>
-    private static List<HexCoord> FindStartPositions(
+    /// <remarks>
+    /// Bog in reach (<c>docs/design/bog.md</c>, "Decisions"): a spot with no <em>plain</em> bog tile within
+    /// <paramref name="bogReach"/> hexes is dropped, so an island without bog offers no landing spots at all. The Clay
+    /// Brickworks (the start's stone) and the bog-ore works (its iron) stand on plain bog only. <c>bogReach</c> 0 turns the rule off.
+    /// </remarks>
+    internal static List<HexCoord> FindStartPositions(
         IReadOnlyList<HexCoord> tiles,
         Dictionary<HexCoord, Terrain> land,
         IReadOnlyList<Giant> giants,
-        IReadOnlyList<Camp> camps)
+        IReadOnlyList<Camp> camps,
+        IReadOnlySet<HexCoord> plainBog,
+        int bogReach)
     {
         var candidates = new List<(HexCoord Coord, int Score)>();
 
@@ -468,6 +475,12 @@ public sealed class WorldGenerator
                 continue;
             }
 
+            // Bog in reach: the start's stone and iron come from plain bog.
+            if (bogReach > 0 && !BogWithin(tile, plainBog, bogReach))
+            {
+                continue;
+            }
+
             candidates.Add((tile, (forest * 2) + grass));
         }
 
@@ -477,5 +490,24 @@ public sealed class WorldGenerator
             .ThenBy(c => c.Coord.R)
             .Select(c => c.Coord)
             .ToList();
+    }
+
+    /// <summary>Whether any hex of <paramref name="plainBog"/> lies within <paramref name="reach"/> hex steps of <paramref name="from"/>.</summary>
+    private static bool BogWithin(HexCoord from, IReadOnlySet<HexCoord> plainBog, int reach)
+    {
+        if (plainBog.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var nearby in from.WithinRadius(reach))
+        {
+            if (plainBog.Contains(nearby))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

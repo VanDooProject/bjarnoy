@@ -66,6 +66,7 @@
     "modifierShrineFavourShipAttack": "+{percent}% Schiffsangriff",
     "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
     "domainFood": "Nahrung",
+    "domainIron": "Eisen",
     "domainWood": "Holz",
     "campEmpty": "Geräumt: leer",
     "campCalmUntil": "Ruhig bis {time}",
@@ -105,6 +106,7 @@
       "build": "Bauen",
       "openWater": "Offenes Wasser",
       "giantOccupied": "Von einem Riesenwahrzeichen belegt",
+      "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden",
       "hunt": "Jagen",
       "campOccupied": "Von wilden Tieren belegt",
       "noLandUnitsAtHome": "Keine Landeinheiten zu Hause"

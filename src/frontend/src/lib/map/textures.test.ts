@@ -23,6 +23,8 @@ import {
   topTextureFor,
   RIVER_FAMILY,
   KEY_FAMILY,
+  LAKE_PROP_VARIANT,
+  selectVariantFrames,
   type FamilyFrame,
   type TileTextures,
 } from './textures';
@@ -1596,5 +1598,178 @@ describe('bog art', () => {
     expect(textureKeyFor({ ...shore, buildingType: 'hut' })).toBe('hut');
     expect(textureKeyFor({ q: 0, r: 0, terrain: 'lake' })).toBe('lake');
     expect(textureKeyFor({ q: 0, r: 0, terrain: 'bog' })).toBe('bog');
+  });
+});
+
+// The bog buildings and the lake's decorations (docs/design/bog.md, "Buildings"): the art each one stands on, and the
+// rotation it is drawn in. The textures are plain strings naming key and orientation, so a wrong rotation shows up.
+describe('bog buildings and lake decorations', () => {
+  const bog = (
+    kind: BogTile['kind'],
+    inDirections: BogTile['inDirections'] = [],
+    outDirection: BogTile['outDirection'] = null,
+    waterEdges: BogTile['waterEdges'] = [],
+  ): BogTile => ({ q: 0, r: 0, kind, inDirections, outDirection, waterEdges });
+
+  function labelled(keys: readonly string[]): TileTextures {
+    const map = <T>(make: (o: (typeof TILE_ORIENTATIONS)[number]) => T) =>
+      Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, make(o)])) as Record<(typeof TILE_ORIENTATIONS)[number], T>;
+    const textures: TileTextures = {
+      base: {},
+      coastalBase: map(() => []),
+      wastedCoastalBase: map(() => []),
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      riverBase: {} as never,
+      riverTop: {} as never,
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    };
+    for (const key of keys) {
+      (textures.base as Record<string, unknown>)[key] = map((o) => `${key}-base-${o}`);
+      (textures.top as Record<string, unknown>)[key] = map((o) => [`${key}-top-${o}`]);
+    }
+    return textures;
+  }
+
+  it('selects one numbered variant of the lake family and renames it to plain frame names', () => {
+    const frames: FamilyFrame<string>[] = [];
+    for (const v of ['', '_variant001', '_variant004', '_variant005', '_variant006']) {
+      frames.push(frame(`boglake_SW${v}`, 'top'), frame(`boglake_SW${v}_base`, 'base'));
+    }
+    frames.push(frame('boglake_W_variant006', 'top'), frame('boglake_W_variant006_base', 'base'));
+
+    expect(selectVariantFrames(frames, 5).map((f) => f.name).sort()).toEqual(['boglake_SW', 'boglake_SW_base']);
+    expect(selectVariantFrames(frames, 6).map((f) => f.name).sort()).toEqual([
+      'boglake_SW',
+      'boglake_SW_base',
+      'boglake_W',
+      'boglake_W_base',
+    ]);
+    const classified = classifyFamilyFrames(selectVariantFrames(frames, 6));
+    // The frames keep their own value (here the original name); only the lookup names are plain.
+    expect(classified.top!.W).toEqual(['boglake_W_variant006']);
+    expect(classified.base!.W).toBe('boglake_W_variant006_base');
+    // The weir, ore boat and fishing boat are variants 4-6 of the `boglake` family and no others.
+    expect(LAKE_PROP_VARIANT).toEqual({ lakeweir: 4, lakeoreboat: 5, lakefishboat: 6 });
+    for (const key of ['lakeweir', 'lakeoreboat', 'lakefishboat'] as const) expect(KEY_FAMILY[key]).toBe('boglake');
+  });
+
+  it('keeps the plain lake from ever rolling a decoration variant', () => {
+    const frames: FamilyFrame<string>[] = [];
+    for (let v = 0; v <= 6; v++) {
+      const suffix = v === 0 ? '' : `_variant${String(v).padStart(3, '0')}`;
+      frames.push(frame(`boglake_E${suffix}`, 'top'));
+    }
+    const plain = classifyFamilyFrames(normalizeBogFrames(frames, 3));
+    expect(plain.top!.E).toHaveLength(4);
+  });
+
+  it('resolves the bog buildings to their own families and the placeholder river hammer mill', () => {
+    expect(KEY_FAMILY.bogoreworks).toBe('bogoreworks');
+    expect(KEY_FAMILY.hammerschmiede).toBe('hammerschmiede');
+    expect(KEY_FAMILY.hammerschmiedebend).toBe('hammerschmiede_bend');
+    expect(KEY_FAMILY.fisherhutlake).toBe('fisherhut_lake');
+    expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
+  });
+
+  it('draws a Fishing Hut on a half shore with the lake art, and one on the coast with the coastal art', () => {
+    const half: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 2, bog: bog('half', [], null, ['SE', 'E', 'NE']) };
+    expect(textureKeyFor(half)).toBe('fisherhutlake');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'sea', isCoastalWater: true, buildingType: 'fishinghut' })).toBe('fishinghut');
+
+    // The hut's rotation follows its shore's water edges, not the tile's cosmetic orientation.
+    const textures = labelled(['fisherhutlake']);
+    const shoreOrientation = bogOrientationFor(half.bog!, 'NW');
+    expect(shoreOrientation).not.toBe('NW');
+    expect(baseTextureFor(textures, half)).toBe(`fisherhutlake-base-${shoreOrientation}`);
+    expect(topTextureFor(textures, half)).toBe(`fisherhutlake-top-${shoreOrientation}`);
+  });
+
+  it('draws a Hammerschmiede on a creek as the straight or bend river mill, turned like the creek', () => {
+    const straight: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'SW', buildingType: 'hammerschmiede', buildingLevel: 1, bog: bog('creek', ['W'], 'E') };
+    const bend: Tile = { ...straight, bog: bog('creek', ['E'], 'SW') };
+    expect(textureKeyFor(straight)).toBe('hammerschmiede');
+    expect(textureKeyFor(bend)).toBe('hammerschmiedebend');
+
+    const textures = labelled(['hammerschmiede', 'hammerschmiedebend']);
+    expect(topTextureFor(textures, straight)).toBe(`hammerschmiede-top-${bogOrientationFor(straight.bog!, 'SW')}`);
+    expect(topTextureFor(textures, bend)).toBe(`hammerschmiedebend-top-${bogOrientationFor(bend.bog!, 'SW')}`);
+    // The creek's art rotation, not the tile's random one, decides it.
+    expect(bogOrientationFor(straight.bog!, 'SW')).not.toBe('SW');
+  });
+
+  it('keeps the tile’s own rotation for buildings on plain moss (bog-ore works, Clay Brickworks)', () => {
+    const textures = labelled(['bogoreworks', 'claybrickworks']);
+    for (const type of ['bogoreworks', 'claybrickworks'] as const) {
+      const tile: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NE', buildingType: type, buildingLevel: 3, bog: bog('bog') };
+      expect(textureKeyFor(tile)).toBe(type);
+      expect(topTextureFor(textures, tile)).toBe(`${type}-top-NE`);
+    }
+  });
+
+  it('draws a lake decoration with its variant’s art in its variant’s one rotation', () => {
+    const textures = labelled(['lakeweir', 'lakeoreboat', 'lakefishboat', 'lake']);
+    const lake = (lakeProp: NonNullable<Tile['lakeProp']>, orientation: Tile['orientation']): Tile => ({
+      q: 0,
+      r: 0,
+      terrain: 'lake',
+      orientation,
+      variant: 2,
+      bog: bog('lake'),
+      lakeProp,
+    });
+
+    expect(textureKeyFor(lake('oreboat', 'NE'))).toBe('lakeoreboat');
+    expect(textureKeyFor(lake('fishboat', 'NE'))).toBe('lakefishboat');
+    expect(textureKeyFor(lake('weir', 'NE'))).toBe('lakeweir');
+    // Boats exist in one camera only (ore boat SW, fishing boat W), whatever the tile's own orientation.
+    for (const own of ['E', 'NE', 'SE', 'W'] as const) {
+      expect(topTextureFor(textures, lake('oreboat', own))).toBe('lakeoreboat-top-SW');
+      expect(baseTextureFor(textures, lake('oreboat', own))).toBe('lakeoreboat-base-SW');
+      expect(topTextureFor(textures, lake('fishboat', own))).toBe('lakefishboat-top-W');
+    }
+    // The weir has all six rotations: it keeps the tile's own.
+    expect(topTextureFor(textures, lake('weir', 'NE'))).toBe('lakeweir-top-NE');
+    expect(topTextureFor(textures, lake('weir', 'SE'))).toBe('lakeweir-top-SE');
+    // A plain lake has no decoration.
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'lake', bog: bog('lake') })).toBe('lake');
+  });
+
+  it('plays a boat’s clip from its own key, as level 0', () => {
+    const textures = labelled(['lakeoreboat']);
+    const boat = { textures: ['f0', 'f1'], fps: 6, playback: 'loop', pause: 0, rest: 'rest' };
+    (textures.animTop as Record<string, unknown>).lakeoreboat = Object.fromEntries(
+      TILE_ORIENTATIONS.map((o) => [o, o === 'SW' ? [boat] : []]),
+    );
+    const tile: Tile = { q: 0, r: 0, terrain: 'lake', orientation: 'E', bog: bog('lake'), lakeProp: 'oreboat' };
+
+    expect(topAnimFor(textures, tile)).toEqual(boat);
+    expect(topAnimFor(textures, { ...tile, lakeProp: undefined })).toBeUndefined();
+  });
+
+  it('classifies a boat clip by its variant, not by a `_levelNNN` in its name', () => {
+    const boat = clip({
+      name: 'boglake_SW_variant005',
+      orientation: 'SW',
+      frames: ['a', 'b'],
+      family: 'boglake',
+      variant: 'variant005',
+      overlay: true,
+      rest: 'boglake_SW_variant005_rest',
+    });
+    // Without a level rule a variant clip is not a level clip at all.
+    expect(classifyFamilyClips([boat], resolveAll).SW.size).toBe(0);
+    const byVariant = classifyFamilyClips([boat], resolveAll, () => 0);
+    expect(byVariant.SW.get(0)).toEqual({
+      textures: ['a', 'b'],
+      fps: 6,
+      playback: 'loop',
+      pause: 0,
+      rest: 'boglake_SW_variant005_rest',
+    });
   });
 });

@@ -52,7 +52,9 @@
     "cropmill": "Getreidemühle",
     "druidhut": "Druidenhütte",
     "cartworkshop": "Wagnerei",
-    "claybrickworks": "Ziegelei"
+    "claybrickworks": "Ziegelei",
+    "bogoreworks": "Raseneisenerz-Grube",
+    "hammerschmiede": "Hammerschmiede"
   },
   "techTree": {
     "title": "Techbaum",
@@ -90,7 +92,7 @@
       "farm": "Zieht Nahrung auf offenem Grasland und hält den Tisch des Langhauses gefüllt. Auf jeder Insel baubar, unabhängig vom Boden.",
       "storagehouse": "Zusätzlicher Platz für die Ernte auf Gras, damit ein volles Lager die Produktion nie stoppt.",
       "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter hinausschiebt.",
-      "fishinghut": "Ein Steg über flachem Wasser, der die Untiefen befischt, die ein Bauernhof nie erreichen könnte.",
+      "fishinghut": "Ein Steg über flachem Wasser, der die Untiefen befischt, die ein Bauernhof nie erreichen könnte. Steht auch auf Pfählen am Halbufer eines Moorsees.",
       "pumpkinfarm": "Eine zweite Ernte für Gras — Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Nur auf einer Kürbisboden-Insel baubar (das Spiel bestimmt den Boden jeder Insel, nicht der Spieler) — der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
       "shrineofthor": "Für Thor errichtet auf Gras — seine Gunst steigert die Holz- und Steinproduktion. Pro Insel darf nur ein Schrein je Gott stehen — eine Siedlung kann weiterhin alle vier errichten, nur nie einen zweiten für Thor.",
       "shrineoffreyja": "Für Freyja errichtet auf Gras — ihre Gunst steigert die Nahrungsproduktion. Pro Insel darf nur ein Schrein je Gott stehen — eine Siedlung kann weiterhin alle vier errichten, nur nie einen zweiten für Freyja.",
@@ -107,7 +109,9 @@
       "smithy": "Die Schmiede der Siedlung, mit Amboss, auf Gras oder Sand hinter einer Kaserne der Stufe 10 — der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: hier sollen einmal Truppen aufgewertet werden, eine Mechanik, die noch kommt.",
       "druidhut": "Ein Rundhaus mit Grasdach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen — noch ohne eigene Wirkung, aber für eine künftige Gunst- oder Runenmechanik gedacht.",
       "cartworkshop": "Baut die Karren der Siedlung auf Gras hinter einem Dorfplatz — bildet Furiere und Siedlertrupps anstelle des Langhauses aus. Keine eigene Lagerkapazität.",
-      "claybrickworks": "Gräbt und brennt Ton auf Gras — eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht."
+      "claybrickworks": "Gräbt und brennt Ton auf Moorboden — eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
+      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben in den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %. Ab Langhaus 6.",
+      "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Kein eigenes Eisen: Es steigert stattdessen jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus). Bis es eigene Grafik bekommt, wird das Hammerwerk vom Fluss gezeigt."
     },
     "table": {
       "level": "Stufe",
@@ -439,7 +443,7 @@
   "bogLands": {
     "title": "Moorland",
     "intro": "Nasser Moosboden (altnordisch mýrr), durchzogen von trägen Bächen und dunklen Seen. Rostfarbene Quellen zeigen das Raseneisenerz, das hier gegraben wird, und an den Seeufern wird Lehm gestochen. Moore gehören zu den lebendigen Landen und grenzen an einer Feldkante an Gras.",
-    "status": "Moore gibt es jetzt in Welten: einen See mit einem Fluss, der hindurchfließt, auf den meisten großen Inseln, und einen See mit Moorring dort, wo eine Insel eine Meeresbucht umschließt. Die Moorgebäude (Raseneisenerz-Grube, Lehmziegelei auf Moor und Seefischerhütte) kommen noch.",
+    "status": "Moore gibt es jetzt in Welten: einen See mit einem Fluss, der hindurchfließt, auf den meisten großen Inseln, und einen See mit Moorring dort, wo eine Insel eine Meeresbucht umschließt. Die Moorgebäude sind da: Raseneisenerz-Grube und Lehmziegelei auf einfachem Moorboden, die Fischerhütte am Halbufer eines Sees und die Hammerschmiede an einem Bach (mit der Grafik des Flusswerks, bis sie eine eigene hat).",
     "looks": "Aussehen",
     "camera": "Richtung",
     "stage": "Stufe",
@@ -499,18 +503,22 @@
     },
     "buildings": {
       "heading": "Gebäude im Moor",
-      "body": "Drei Gebäude stehen auf Moorboden. Blättere durch die Stufen, die jedes beim Ausbau durchläuft.",
+      "body": "Vier Gebäude gehören zum Moor. Blättere durch die Stufen, die jedes beim Ausbau durchläuft.",
       "bogoreworks": {
         "name": "Raseneisenerz-Grube",
-        "body": "Der Eisenproduzent: von ein paar Gruben in den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute."
+        "body": "Der Eisenproduzent auf einfachem Moorboden: von ein paar Gruben in den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute."
       },
       "fisherhut": {
         "name": "Fischerhütte (See)",
-        "body": "Die Fischerhütte auf Pfählen über einem Moorseeufer. Dasselbe Gebäude wie an der Küste, mit eigener Grafik."
+        "body": "Die Fischerhütte auf Pfählen über einem Moorseeufer (Halbufer). Dasselbe Gebäude wie an der Küste, mit eigener Grafik; sie zählt die Seefelder um sich, wie die Küstenhütte das Meer zählt."
+      },
+      "hammerschmiede": {
+        "name": "Hammerschmiede",
+        "body": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10: Es steigert jede Raseneisenerz-Grube in seiner Reichweite. Bis es eigene Grafik bekommt, wird das Hammerwerk vom Fluss gezeigt."
       },
       "claybrickworks": {
         "name": "Lehmziegelei",
-        "body": "Lehm aus dem Moor, zu Ziegeln gebrannt: die erste Steinquelle eines neuen Spielers. Sie steht jetzt auf Moorboden statt auf Gras."
+        "body": "Lehm aus dem Moor, zu Ziegeln gebrannt: die erste Steinquelle eines neuen Spielers. Sie steht auf einfachem Moorboden statt auf Gras."
       }
     },
     "rules": {
@@ -521,6 +529,7 @@
       "creeks": "Bäche verlaufen gerade oder biegen um 120° ab und enden in einer Quelle oder einer Seemündung.",
       "mouth": "Ein Bach trifft einen See nur an einer Mündung.",
       "weir": "Die Fischreuse gibt es nur in der Nähe einer Seefischerhütte.",
+      "boats": "Boote erscheinen auf einem See nur dort, wo eine Seefischerhütte oder eine Raseneisenerz-Grube am Ufer steht, und nicht bei jedem Gebäude: Jedes hat eine Chance von 50 %, ein kleiner See trägt höchstens ein Boot, ein großer eines je zwölf Wasserkacheln, und Boote und Reusen halten drei Kacheln Abstand.",
       "landing": "Jeder Landeplatz, der einem neuen Spieler angeboten wird, hat Moor in Reichweite, denn Lehmziegelei und Raseneisenerz-Grube brauchen es beide.",
       "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal fließt ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
       "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Ring aus Moor, und die Flüsse in der Nähe münden in ihn."

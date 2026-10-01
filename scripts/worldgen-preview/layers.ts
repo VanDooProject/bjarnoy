@@ -198,7 +198,7 @@ export const SHORE_COLOUR: Rgb = [52, 84, 116];
 export const HALF_COLOUR: Rgb = [38, 66, 108];
 export const CREEK_COLOUR: Rgb = [90, 150, 225];
 export const BOG_MOUTH_COLOUR: Rgb = [255, 170, 40];
-export const CREEK_SPRING_COLOUR: Rgb = [255, 255, 255];
+export const CREEK_SPRING_COLOUR: Rgb = [120, 255, 60];
 
 const CREEK_HALF_WIDTH = 0.3;
 
@@ -247,6 +247,7 @@ const RULE_LABELS: [keyof RiverField['bogViolations'], string][] = [
   ['R9', 'R9 SPRING/SINK RULES'],
   ['R10', 'R10 POCKETS RINGED'],
   ['R11', 'R11 CREEKS AT RIVER WIDTH'],
+  ['R12', 'R12 BOG PADDING AROUND WATER'],
 ];
 
 export function bogStatsLines(f: RiverField): string[] {

@@ -893,9 +893,10 @@ public sealed class SettlementService(
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World!, cancellationToken).ConfigureAwait(false);
         var placeGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
 
+        var bogKind = await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false);
         var result = settled.PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
-            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants);
+            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants, bogKind);
 
         if (!result.Accepted)
         {
@@ -1111,7 +1112,8 @@ public sealed class SettlementService(
             shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland,
             islandSoil: islandSoil,
             giants: buildGiants,
-            camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false));
+            camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false),
+            bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false));
 
         if (!decision.Accepted)
         {

@@ -66,6 +66,7 @@
     "modifierShrineFavourShipAttack": "+{percent}% ship attack",
     "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
     "domainFood": "Food",
+    "domainIron": "Iron",
     "domainWood": "Wood",
     "campEmpty": "Cleared: empty",
     "campCalmUntil": "Calm until {time}",
@@ -105,6 +106,7 @@
       "build": "Build",
       "openWater": "Open water",
       "giantOccupied": "Occupied by a giant landmark",
+      "bogNothingHere": "Nothing can be built on this bog hex",
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
       "noLandUnitsAtHome": "No land units at home"

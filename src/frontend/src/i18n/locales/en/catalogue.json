@@ -24,7 +24,9 @@
     "smithy": "Weaponsmith",
     "druidhut": "Druid's Hut",
     "cartworkshop": "Cart Workshop",
-    "claybrickworks": "Clay Brickworks"
+    "claybrickworks": "Clay Brickworks",
+    "bogoreworks": "Bog-Ore Works",
+    "hammerschmiede": "Hammerschmiede"
   },
   "units": {
     "thrall": "Thrall",
@@ -35,7 +37,8 @@
     "provisioner": "Provisioner",
     "catapult": "Catapult",
     "karve": "Karve",
-    "longship": "Longship"
+    "longship": "Longship",
+    "settlercrew": "Settler Crew"
   },
   "giants": {
     "giantmountain": "Giant mountain",

@@ -9,9 +9,11 @@ import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, hexRing, neighbors, type AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import { guardRange, placeCamps } from './campPlacement';
+import { BOG_REACH } from './bogGenerator';
+import { placeLakeProps } from './lakeProps';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
-import type { RiverTile } from './types';
+import type { BogTile, RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
   const at = model.findLandfall({ q: 0, r: 0 });
@@ -1628,5 +1630,184 @@ describe('WorldModel bogland', () => {
     const landfall = model.findLandfall(near)!;
     expect(model.getBogTile(landfall.q, landfall.r)).toBeUndefined();
     expect(model.getTile(landfall.q, landfall.r).terrain).toBe('grass');
+  });
+
+  // docs/design/bog.md, "Decisions": a landing spot needs plain bog moss within BOG_REACH hexes
+  // (WorldGenerator.FindStartPositions, the same rule on the server).
+  it('lands on a hex with plain bog in reach once the island is generated', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+
+    const plainBog = model.listBogTiles().filter((t) => t.kind === 'bog');
+    expect(plainBog.length).toBeGreaterThan(0);
+
+    const landfall = model.findLandfall(near)!;
+    expect(model.hasPlainBogInReach(landfall)).toBe(true);
+    expect(plainBog.some((b) => hexDistance(b, landfall) <= BOG_REACH)).toBe(true);
+  });
+
+  it('counts only plain moss as bog in reach, and stops exactly at the reach', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+    const plainBog = model.listBogTiles().filter((t) => t.kind === 'bog');
+    const target = plainBog[0]!;
+
+    // Keep only one plain moss hex and a lake/creek elsewhere: only the moss hex's surroundings are in reach.
+    const notPlain = model.listBogTiles().find((t) => t.kind !== 'bog' && hexDistance(t, target) > 3 * BOG_REACH);
+    model.setBogTiles([target, ...(notPlain ? [notPlain] : [])]);
+    const exactly = hexRing(target, BOG_REACH)[0]!;
+    const beyond = hexRing(target, BOG_REACH + 1)[0]!;
+    expect(model.hasPlainBogInReach(exactly)).toBe(true);
+    expect(model.hasPlainBogInReach(beyond)).toBe(false);
+    if (notPlain) expect(model.hasPlainBogInReach(notPlain)).toBe(false);
+  });
+
+  it('does not apply the bog rule before any island is generated (no bog is known yet)', () => {
+    const model = new WorldModel(DEMO_SEED);
+    expect(model.hasPlainBogInReach({ q: 0, r: 0 })).toBe(true);
+  });
+});
+
+// The bog buildings (docs/design/bog.md, "Buildings"): where each may be placed, and the lake decorations they ask for.
+describe('WorldModel bog buildings', () => {
+  const bogTile = (
+    q: number,
+    r: number,
+    kind: BogTile['kind'],
+    inDirections: BogTile['inDirections'] = [],
+    outDirection: BogTile['outDirection'] = null,
+    waterEdges: BogTile['waterEdges'] = [],
+  ): BogTile => ({ q, r, kind, inDirections, outDirection, waterEdges });
+
+  /** A settlement of the given level with one bog hex of every kind laid out in its claim, and a lake beyond. */
+  function bogSettlement(level = 3, seed = DEMO_SEED) {
+    const model = new WorldModel(seed);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+    settlement.level = level;
+    model.claimTerritory(settlement.id);
+    const ring = hexRing(at, 2);
+    const hex = (i: number) => ring[i]!;
+    const tiles: BogTile[] = [
+      bogTile(hex(0).q, hex(0).r, 'bog'),
+      bogTile(hex(1).q, hex(1).r, 'creek', ['W'], 'E'),
+      bogTile(hex(2).q, hex(2).r, 'half', [], null, ['E', 'NE', 'NW']),
+      bogTile(hex(3).q, hex(3).r, 'shore', [], null, ['E', 'NE']),
+      bogTile(hex(4).q, hex(4).r, 'mouth', ['W'], 'E', ['E']),
+      bogTile(hex(5).q, hex(5).r, 'creekspring', [], 'E'),
+      bogTile(hex(6).q, hex(6).r, 'inlet', [], null, ['E']),
+      bogTile(hex(7).q, hex(7).r, 'lake'),
+    ];
+    model.setBogTiles(tiles);
+    return { model, settlement, at, hex };
+  }
+
+  it('places the Clay Brickworks and the bog-ore works on plain moss only', () => {
+    for (const type of ['claybrickworks', 'bogoreworks'] as const) {
+      const { model, settlement, hex } = bogSettlement();
+      expect(model.placeBuilding(settlement.id, hex(3), type), `${type} on a shore`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(1), type), `${type} on a creek`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(4), type), `${type} on a mouth`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(5), type), `${type} on a spring`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(6), type), `${type} on an inlet`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(7), type), `${type} on a lake`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(0), type), `${type} on plain moss`).toBe(true);
+    }
+  });
+
+  it('places the Hammerschmiede on a creek only', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const i of [0, 2, 3, 4, 5, 6, 7]) {
+      expect(model.placeBuilding(settlement.id, hex(i), 'hammerschmiede'), `hex ${i}`).toBe(false);
+    }
+    expect(model.placeBuilding(settlement.id, hex(1), 'hammerschmiede')).toBe(true);
+    expect(model.getTile(hex(1).q, hex(1).r).buildingType).toBe('hammerschmiede');
+  });
+
+  it('places the Fishing Hut on a lake half shore, and on no other bog hex', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const i of [0, 1, 3, 4, 5, 6, 7]) {
+      expect(model.placeBuilding(settlement.id, hex(i), 'fishinghut'), `hex ${i}`).toBe(false);
+    }
+    expect(model.placeBuilding(settlement.id, hex(2), 'fishinghut')).toBe(true);
+  });
+
+  it('refuses every grass building on bog ground (the PR3 open point)', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const type of ['farm', 'tower', 'storagehouse', 'townsquare', 'meadery', 'barracks', 'smithy', 'lumberjack', 'quarry'] as const) {
+      for (const i of [0, 1, 2, 3, 4, 5, 6]) {
+        expect(model.placeBuilding(settlement.id, hex(i), type), `${type} on hex ${i}`).toBe(false);
+      }
+    }
+  });
+
+  it('no longer builds the Clay Brickworks on grass', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+    const grass = hexesInRadius(at, 2).find((c) => model.getTile(c.q, c.r).terrain === 'grass' && !model.getTile(c.q, c.r).buildingType);
+    expect(grass).toBeDefined();
+    expect(model.placeBuilding(settlement.id, grass!, 'claybrickworks')).toBe(false);
+    expect(model.placeBuilding(settlement.id, grass!, 'farm')).toBe(true);
+  });
+
+  describe('lake decorations', () => {
+    /** A lake of radius 3 whose shore ring holds half-shore tiles; the settlement (LH 3, radius 3) claims the ring's near side. */
+    function lakeWorld(seed: number) {
+      const model = new WorldModel(seed);
+      const at = model.findLandfall({ q: 0, r: 0 })!;
+      const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+      settlement.level = 3;
+      model.claimTerritory(settlement.id);
+      const centre = { q: at.q + 6, r: at.r };
+      const lake = hexesInRadius(centre, 3).map((c) => bogTile(c.q, c.r, 'lake'));
+      const shore = hexRing(centre, 4).map((c) => bogTile(c.q, c.r, 'half', [], null, ['E', 'NE', 'NW']));
+      model.setBogTiles([...lake, ...shore]);
+      const huts = shore.filter((s) => model.placeBuilding(settlement.id, s, 'fishinghut'));
+      return { model, settlement, lake, shore, huts, centre };
+    }
+
+    it('shows the props the pure placement gives for the huts on the shore, and only on open-lake hexes', () => {
+      let seen = 0;
+      for (const seed of [1, 2, 3, 7, 42, DEMO_SEED]) {
+        const { model, lake, huts } = lakeWorld(seed);
+        if (huts.length === 0) continue;
+        const expected = placeLakeProps(
+          seed,
+          lake,
+          huts.map((h) => ({ q: h.q, r: h.r, type: 'fishinghut' as const })),
+        );
+        for (const l of lake) {
+          expect(model.getTile(l.q, l.r).lakeProp, `seed ${seed} at ${l.q},${l.r}`).toBe(expected.get(`${l.q},${l.r}`));
+          expect(model.lakePropAt(l.q, l.r)).toBe(expected.get(`${l.q},${l.r}`));
+        }
+        seen += expected.size;
+      }
+      expect(seen).toBeGreaterThan(0);
+    });
+
+    it('takes the props away again when the hut is torn down, and a bog-ore works far from the water asks for none', () => {
+      for (const seed of [1, 2, 3, 7, 42, DEMO_SEED]) {
+        const { model, settlement, lake, huts } = lakeWorld(seed);
+        if (huts.length === 0) continue;
+        const withProps = lake.filter((l) => model.getTile(l.q, l.r).lakeProp);
+        if (withProps.length === 0) continue;
+
+        for (const h of huts) model.razeBuilding(settlement.id, h);
+        for (const l of lake) expect(model.getTile(l.q, l.r).lakeProp, `seed ${seed}`).toBeUndefined();
+        return;
+      }
+      throw new Error('no seed put a prop on the lake');
+    });
+
+    it('never puts a prop on a plain lake with no building beside it', () => {
+      const { model, lake } = lakeWorld(DEMO_SEED);
+      const far = new WorldModel(DEMO_SEED);
+      far.setBogTiles(lake);
+      for (const l of lake) expect(far.getTile(l.q, l.r).lakeProp).toBeUndefined();
+      expect(model.listBogTiles().length).toBeGreaterThan(0);
+    });
   });
 });
