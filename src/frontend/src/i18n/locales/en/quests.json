@@ -1,5 +1,7 @@
 {
   "title": "Quests",
+  "open": "Show quests",
+  "collapse": "Hide quests",
   "progress": "{done} of {total}",
   "claim": "Claim",
   "claiming": "Claiming…",

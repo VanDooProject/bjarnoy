@@ -1,5 +1,7 @@
 {
   "title": "Aufgaben",
+  "open": "Quests anzeigen",
+  "collapse": "Quests ausblenden",
   "progress": "{done} von {total}",
   "claim": "Abholen",
   "claiming": "Wird abgeholt …",
