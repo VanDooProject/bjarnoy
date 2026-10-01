@@ -1,4 +1,5 @@
-// Issue #159 part B's anti-drift guard. src/shared/river-pathing-golden.json
+// Issue #159 part B's anti-drift guard (now also the movement rules: wide rivers and mountains impassable,
+// streams a flat 9). src/shared/river-pathing-golden.json
 // is read by this suite and by HexPathfinderGoldenTests.cs on the backend —
 // each side computes against the same terrain patch and cases using its OWN
 // production cost tables/river rule, then asserts the fixture's frozen
@@ -9,7 +10,8 @@ import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/river-pathing-golden.json';
 import { coordKey } from '../hex/coords';
 import { findPath, hoursFrom, pathCost, reachableRange, type PathContext } from './hexPath';
-import type { Terrain } from './types';
+import { isWideRiverTile } from './riverGenerator';
+import type { RiverTile, Terrain } from './types';
 
 interface HexCoordDto {
   q: number;
@@ -21,8 +23,9 @@ interface FindPathCase {
   from: HexCoordDto;
   to: HexCoordDto;
   isLandUnit: boolean;
-  expectedPath: HexCoordDto[];
-  expectedCumulativeHours: number[];
+  /** `null`: no land route exists. */
+  expectedPath: HexCoordDto[] | null;
+  expectedCumulativeHours: number[] | null;
 }
 
 interface ReachableRangeCase {
@@ -35,7 +38,7 @@ interface ReachableRangeCase {
 
 interface GoldenFixture {
   terrain: Record<string, Terrain>;
-  riverTiles: string[];
+  riverTiles: RiverTile[];
   findPathCases: FindPathCase[];
   reachableRangeCases: ReachableRangeCase[];
 }
@@ -52,10 +55,15 @@ const RULES = {
 };
 
 function contextFor(fixture: GoldenFixture): PathContext {
-  const riverSet = new Set(fixture.riverTiles);
+  const riverByKey = new Map(fixture.riverTiles.map((t) => [coordKey(t), t]));
+  const riverAt = (c: HexCoordDto) => riverByKey.get(coordKey(c));
   return {
     terrainAt: (c) => fixture.terrain[coordKey(c)] ?? 'sea',
-    isRiver: (c) => riverSet.has(coordKey(c)),
+    isRiver: (c) => riverByKey.has(coordKey(c)),
+    isWideRiver: (c) => {
+      const tile = riverAt(c);
+      return tile !== undefined && isWideRiverTile(tile, riverAt);
+    },
     rules: RULES,
     hexesPerHour: 1,
   };
@@ -67,6 +75,10 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     const hours = hoursFrom(testCase.from, ctx, Number.POSITIVE_INFINITY);
 
     const destinationKey = coordKey(testCase.to);
+    if (testCase.expectedPath === null || testCase.expectedCumulativeHours === null) {
+      expect(hours.has(destinationKey)).toBe(false);
+      return;
+    }
     const expectedTotal = testCase.expectedCumulativeHours.at(-1)!;
     expect(hours.get(destinationKey)).toBeCloseTo(expectedTotal, 9);
 
@@ -76,15 +88,26 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     // backend recorded for it, which is the real parity claim: both sides
     // agree on the cost of the same route, hex for hex.
     testCase.expectedPath.forEach((coord: HexCoordDto, i: number) => {
-      expect(hours.get(coordKey(coord))).toBeCloseTo(testCase.expectedCumulativeHours[i], 9);
+      expect(hours.get(coordKey(coord))).toBeCloseTo(testCase.expectedCumulativeHours![i], 9);
     });
   });
 
   it.each(fixture.findPathCases.filter((c) => c.isLandUnit))('$name: findPath returns the fixture path and cost', (testCase: FindPathCase) => {
     const ctx = contextFor(fixture);
     const path = findPath(testCase.from, testCase.to, ctx);
+    if (testCase.expectedPath === null) {
+      expect(path).toBeNull();
+      return;
+    }
     expect(path?.map(coordKey)).toEqual(testCase.expectedPath.map(coordKey));
-    expect(pathCost(path!, ctx)).toBeCloseTo(testCase.expectedCumulativeHours.at(-1)!, 9);
+    expect(pathCost(path!, ctx)).toBeCloseTo(testCase.expectedCumulativeHours!.at(-1)!, 9);
+  });
+
+  it('covers a wide river and a mountain that stop a land army, and a stream on a mountain at a flat 9', () => {
+    const byName = new Map(fixture.findPathCases.map((c) => [c.name, c]));
+    expect(byName.get('wide_river_is_impassable')?.expectedPath).toBeNull();
+    expect(byName.get('mountain_with_no_way_round_has_no_route')?.expectedPath).toBeNull();
+    expect(byName.get('stream_on_a_mountain_costs_a_flat_9')?.expectedCumulativeHours).toEqual([0, 9, 10]);
   });
 
   it.each(fixture.reachableRangeCases)('$name: matches the shared golden fixture', (testCase: ReachableRangeCase) => {

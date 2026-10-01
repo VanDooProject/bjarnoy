@@ -67,7 +67,8 @@ import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable, towerThreatAt } from '../lib/map/campRules';
 import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
-import { reachableRange, type PathContext } from '../lib/map/hexPath';
+import { reachableRange } from '../lib/map/hexPath';
+import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
 
@@ -406,12 +407,12 @@ const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
   if (speed <= 0 || upkeep <= 0 || draft.provisions <= 0) return null;
 
   const hoursOfFood = draft.provisions / upkeep;
-  const ctx: PathContext = {
-    terrainAt: (c) => world.model.getTile(c.q, c.r).terrain,
-    isRiver: (c) => world.model.getRiverTile(c.q, c.r) !== undefined,
-    rules: { land: world.movementRules.land, riverCrossingCost: world.movementRules.riverCrossingCost },
-    hexesPerHour: speed * world.worldSpeedFactor,
-  };
+  // The same rules HexPathfinder.cs paths a dispatch with: wide rivers and mountains stop the army, a stream costs a flat 9.
+  const ctx = gamePathContext(
+    world.model,
+    { land: world.movementRules.land, riverCrossingCost: world.movementRules.riverCrossingCost },
+    speed * world.worldSpeedFactor,
+  );
   const origin = { q: home.q, r: home.r };
   const range = reachableRange(origin, origin, hoursOfFood, ctx);
   return [...range.keys()].map(parseKey);

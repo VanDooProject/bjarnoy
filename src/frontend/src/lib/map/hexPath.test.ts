@@ -8,14 +8,16 @@ import type { Terrain } from './types';
 // fixture (hexPath.golden.test.ts) is to catch the two sides drifting apart;
 // a plain unit test is free to use its own small numbers.
 const RULES: MovementRules = {
-  land: { grass: 1, sand: 1.1, forest: 1.3, mountain: 2 },
+  land: { grass: 1, sand: 1.1, forest: 1.3, mountain: 2, bog: 2 },
   riverCrossingCost: 8,
 };
 
-function contextFor(terrain: Map<string, Terrain>, rivers: Set<string> = new Set()): PathContext {
+/** `wide`: the river hexes that are wide rivers (impassable); every other river hex is a stream. */
+function contextFor(terrain: Map<string, Terrain>, rivers: Set<string> = new Set(), wide: Set<string> = new Set()): PathContext {
   return {
     terrainAt: (c) => terrain.get(coordKey(c)) ?? 'sea',
     isRiver: (c) => rivers.has(coordKey(c)),
+    isWideRiver: (c) => wide.has(coordKey(c)),
     rules: RULES,
     hexesPerHour: 1,
   };
@@ -29,8 +31,9 @@ describe('hoursFrom', () => {
   it('prefers cheap terrain over shorter raw distance', () => {
     // Everything not listed defaults to sea (impassable), so Dijkstra has
     // exactly two candidate routes from (0,0) to (3,0): a 3-hop direct one
-    // over mountain (2.0/hex, 6.0h total) and a 4-hop detour around it over
+    // over bog (2.0/hex, 5.0h total) and a 4-hop detour around it over
     // grass (1.0/hex, 4.0h total) — fewer hexes is not what wins here.
+    // (Bog stands in for the mountain this test used before mountains became impassable.)
     const direct = [
       { q: 1, r: 0 },
       { q: 2, r: 0 },
@@ -42,7 +45,7 @@ describe('hoursFrom', () => {
       { q: 3, r: -1 },
     ];
     const terrain = new Map([
-      ...grid(direct, 'mountain'),
+      ...grid(direct, 'bog'),
       ...grid(detour, 'grass'),
       [coordKey(destination), 'grass' as Terrain],
     ]);
@@ -50,7 +53,7 @@ describe('hoursFrom', () => {
     const ctx = contextFor(terrain);
     const hours = hoursFrom({ q: 0, r: 0 }, ctx, 20);
 
-    // Direct: 2 mountain hexes (2.0 each) + destination (1.0) = 5.0h.
+    // Direct: 2 bog hexes (2.0 each) + destination (1.0) = 5.0h.
     // Detour: 3 grass hexes (1.0 each) + destination (1.0) = 4.0h. Detour wins.
     expect(hours.get(coordKey(destination))).toBeCloseTo(4.0, 10);
   });
@@ -64,7 +67,7 @@ describe('hoursFrom', () => {
     expect([...hours.keys()]).toEqual([coordKey({ q: 0, r: 0 })]);
   });
 
-  it('charges the river-crossing penalty on entry, same as HexPathfinder', () => {
+  it('charges the stream flat crossing cost on entry, same as HexPathfinder', () => {
     const terrain = grid(
       [
         { q: 0, r: 0 },
@@ -210,7 +213,7 @@ describe('findPath', () => {
     expect(findPath(from, from, contextFor(meadow()))).toEqual([from]);
   });
 
-  it('crosses a river at the crossing cost (never blocks) when nothing else is switched on', () => {
+  it('crosses a stream at the flat crossing cost when there is no way round', () => {
     const rivers = new Set(['2,0']);
     const ctx = contextFor(meadow(), rivers);
     // Cheaper to go round than to pay +8 for (2,0).
@@ -224,7 +227,7 @@ describe('findPath', () => {
   });
 });
 
-describe('PathContext.restrictions (default off)', () => {
+describe('PathContext.restrictions (the game rules are the default)', () => {
   const corridor = (terrain: Terrain = 'grass'): Map<string, Terrain> => {
     const t = new Map<string, Terrain>();
     for (let q = 0; q <= 4; q++) t.set(coordKey({ q, r: 0 }), q === 2 ? terrain : 'grass');
@@ -233,34 +236,31 @@ describe('PathContext.restrictions (default off)', () => {
   const from = { q: 0, r: 0 };
   const to = { q: 4, r: 0 };
   const withRestrictions = (ctx: PathContext, restrictions: PathContext['restrictions']): PathContext => ({ ...ctx, restrictions });
+  const allOff = { wideRiversImpassable: false, mountainsImpassable: false, streamsIgnoreTerrain: false };
 
-  it('changes nothing when absent, empty or all-false', () => {
+  it('applies the same rules whether restrictions are absent or empty, and the preview can switch them all off', () => {
     const base = contextFor(corridor('mountain'), new Set(['2,0']));
     const expected = findPath(from, to, base)!;
-    for (const restrictions of [undefined, {}, { wideRiversImpassable: false, mountainsImpassable: false }]) {
-      expect(findPath(from, to, withRestrictions(base, restrictions))).toEqual(expected);
-    }
-    expect(pathCost(expected, base)).toBe(1 + (2 + 8) + 1 + 1);
+    expect(findPath(from, to, withRestrictions(base, {}))).toEqual(expected);
+    // A stream over a mountain: a flat 9, not 2 + 8.
+    expect(pathCost(expected, base)).toBe(1 + 9 + 1 + 1);
+    // Opted out (the preview tool's "before"): terrain cost + 8.
+    expect(pathCost(findPath(from, to, withRestrictions(base, allOff))!, withRestrictions(base, allOff))).toBe(1 + (2 + 8) + 1 + 1);
   });
 
-  it('mountainsImpassable stops a corridor, and only when switched on', () => {
+  it('mountains are impassable by default, and passable only when the preview opts out', () => {
     const base = contextFor(corridor('mountain'));
-    expect(findPath(from, to, base)).not.toBeNull();
-    expect(findPath(from, to, withRestrictions(base, { mountainsImpassable: true }))).toBeNull();
+    expect(findPath(from, to, base)).toBeNull();
+    expect(findPath(from, to, withRestrictions(base, { mountainsImpassable: false }))).not.toBeNull();
   });
 
-  it('wideRiversImpassable blocks wide rivers but not streams, via isWideRiver', () => {
+  it('a wide river is impassable by default, a stream is not, and a wide flag on a non-river hex is ignored', () => {
     const rivers = new Set(['2,0']);
-    const base = contextFor(corridor(), rivers);
-    const stream = withRestrictions({ ...base, isWideRiver: () => false }, { wideRiversImpassable: true });
-    expect(findPath(from, to, stream)).not.toBeNull();
-    const wide = withRestrictions({ ...base, isWideRiver: (c) => coordKey(c) === '2,0' }, { wideRiversImpassable: true });
+    expect(findPath(from, to, contextFor(corridor(), rivers))).not.toBeNull();
+    const wide = contextFor(corridor(), rivers, new Set(['2,0']));
     expect(findPath(from, to, wide)).toBeNull();
-    // Without isWideRiver every river hex counts as wide.
-    expect(findPath(from, to, withRestrictions(base, { wideRiversImpassable: true }))).toBeNull();
-    // A wide river on a hex that is not a river at all is ignored.
-    const notRiver = withRestrictions({ ...contextFor(corridor()), isWideRiver: () => true }, { wideRiversImpassable: true });
-    expect(findPath(from, to, notRiver)).not.toBeNull();
+    expect(findPath(from, to, withRestrictions(wide, { wideRiversImpassable: false }))).not.toBeNull();
+    expect(findPath(from, to, contextFor(corridor(), new Set(), new Set(['2,0'])))).not.toBeNull();
   });
 
   it('blocked hexes stop everyone, a friendlyGate lets a friendly army through that hex only', () => {
@@ -315,7 +315,7 @@ describe('PathRestrictions.halfOpen (a palisade land end)', () => {
   });
 });
 
-describe('PathRestrictions.streamsIgnoreTerrain', () => {
+describe('streams (the flat crossing cost over any terrain)', () => {
   const corridor = (terrain: Terrain): Map<string, Terrain> => {
     const t = new Map<string, Terrain>();
     for (let q = 0; q <= 4; q++) t.set(coordKey({ q, r: 0 }), q === 2 ? terrain : 'grass');
@@ -326,27 +326,29 @@ describe('PathRestrictions.streamsIgnoreTerrain', () => {
   const flat = 1 + RULES.riverCrossingCost;
 
   it('a stream on a mountain hex is walkable at a flat 9, not blocked and not 2 + 8', () => {
-    const ctx = { ...contextFor(corridor('mountain'), new Set(['2,0'])), restrictions: { mountainsImpassable: true, streamsIgnoreTerrain: true } };
+    const ctx = contextFor(corridor('mountain'), new Set(['2,0']));
     const path = findPath(from, to, ctx)!;
     expect(path.map(coordKey)).toContain('2,0');
     expect(pathCost(path, ctx)).toBe(1 + flat + 1 + 1);
     // Forest under a stream costs the same flat 9 (not 1.3 + 8).
-    const forest = { ...contextFor(corridor('forest'), new Set(['2,0'])), restrictions: { streamsIgnoreTerrain: true } };
+    const forest = contextFor(corridor('forest'), new Set(['2,0']));
     expect(pathCost([{ q: 1, r: 0 }, { q: 2, r: 0 }], forest)).toBe(flat);
   });
 
-  it('a mountain hex without a stream stays blocked, and a wide river stays impassable', () => {
-    const restrictions = { mountainsImpassable: true, wideRiversImpassable: true, streamsIgnoreTerrain: true };
-    expect(findPath(from, to, { ...contextFor(corridor('mountain')), restrictions })).toBeNull();
-    const wide = { ...contextFor(corridor('mountain'), new Set(['2,0'])), isWideRiver: () => true, restrictions };
+  it('a mountain hex without a stream stays blocked, and a wide river on a mountain stays impassable', () => {
+    expect(findPath(from, to, contextFor(corridor('mountain')))).toBeNull();
+    const wide = contextFor(corridor('mountain'), new Set(['2,0']), new Set(['2,0']));
     expect(findPath(from, to, wide)).toBeNull();
   });
 
-  it('is off unless asked for, and the unrestricted path is unchanged (terrain cost + 8)', () => {
-    const rivers = new Set(['2,0']);
-    const mountainStream = contextFor(corridor('mountain'), rivers);
-    expect(pathCost([{ q: 1, r: 0 }, { q: 2, r: 0 }], mountainStream)).toBe(2 + 8);
-    const on = { ...mountainStream, restrictions: { mountainsImpassable: true } };
-    expect(findPath(from, to, on)).toBeNull();
+  it('a stream over sea or a lake is still impassable', () => {
+    expect(findPath(from, to, contextFor(corridor('sea'), new Set(['2,0'])))).toBeNull();
+    expect(findPath(from, to, contextFor(corridor('lake' as Terrain), new Set(['2,0'])))).toBeNull();
+  });
+
+  it('range tint: a stream-on-a-mountain pass is reachable at its flat cost, a mountain wall is not', () => {
+    const pass = contextFor(corridor('mountain'), new Set(['2,0']));
+    expect(hoursFrom(from, pass, 100).get('4,0')).toBeCloseTo(1 + flat + 1 + 1, 10);
+    expect(hoursFrom(from, contextFor(corridor('mountain')), 100).has('4,0')).toBe(false);
   });
 });

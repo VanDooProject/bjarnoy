@@ -35,17 +35,18 @@ public class HexPathfinderTests
     [Fact]
     public void Prefers_cheaper_terrain_over_a_shorter_raw_distance()
     {
-        // A straight line from (0,0) to (4,0) crosses mountain (cost 2.0);
+        // A straight line from (0,0) to (4,0) crosses bog (cost 2.0);
         // a one-hex detour through grass (cost 1.0) is cheaper overall
-        // (5 x 1.0 = 5.0) than the "shorter" direct route (4 x 2.0 = 8.0
-        // for the mountain hexes plus whatever grass borders them), even
-        // though it visits one more hex.
+        // than the "shorter" direct route, even though it visits one more
+        // hex. (Bog stands in for the mountain this test used before
+        // mountains became impassable: that case is covered by
+        // Mountains_are_impassable_to_land_armies below.)
         var mountainLine = new HashSet<HexCoord>
         {
             new(1, 0), new(2, 0), new(3, 0),
         };
 
-        Terrain TerrainAt(HexCoord c) => mountainLine.Contains(c) ? Terrain.Mountain : Terrain.Grass;
+        Terrain TerrainAt(HexCoord c) => mountainLine.Contains(c) ? Terrain.Bog : Terrain.Grass;
 
         var from = new HexCoord(0, 0);
         var to = new HexCoord(4, 0);
@@ -214,20 +215,20 @@ public class HexPathfinderTests
     public void Cumulative_hours_reflect_terrain_cost_not_just_hex_count()
     {
         var path = new List<HexCoord> { new(0, 0), new(1, 0), new(2, 0) };
-        Terrain TerrainAt(HexCoord c) => c == new HexCoord(2, 0) ? Terrain.Mountain : Terrain.Grass;
+        Terrain TerrainAt(HexCoord c) => c == new HexCoord(2, 0) ? Terrain.Bog : Terrain.Grass;
 
         var hours = HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 2.0);
 
         Assert.Equal(0, hours[0]);
         Assert.Equal(0.5, hours[1], 6); // grass: 1.0 / 2.0
-        Assert.Equal(0.5 + 1.0, hours[2], 6); // + mountain: 2.0 / 2.0
+        Assert.Equal(0.5 + 1.0, hours[2], 6); // + bog: 2.0 / 2.0
     }
 
     [Fact]
     public void Cumulative_hours_scale_down_with_the_world_speed_factor()
     {
         var path = new List<HexCoord> { new(0, 0), new(1, 0), new(2, 0) };
-        Terrain TerrainAt(HexCoord c) => c == new HexCoord(2, 0) ? Terrain.Mountain : Terrain.Grass;
+        Terrain TerrainAt(HexCoord c) => c == new HexCoord(2, 0) ? Terrain.Bog : Terrain.Grass;
 
         var normal = HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 2.0);
         var doubled = HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 2.0, speedFactor: 2.0);
@@ -343,5 +344,134 @@ public class HexPathfinderTests
         var waypointed = HexPathfinder.CumulativeHours(waypointedPath, AllGrass(), hexesPerHour: 1.0, isRiver: IsRiver);
 
         Assert.Equal(totalOneMarch, waypointed[^1], 6);
+    }
+
+    // --- Movement rules: wide rivers and mountains stop land armies, streams cost a flat 9 ---
+
+    /// <summary>A wall of hexes across the whole padded search box, so no detour exists.</summary>
+    private static HashSet<HexCoord> Wall(int q)
+    {
+        var wall = new HashSet<HexCoord>();
+        for (var r = -15; r <= 15; r++)
+        {
+            wall.Add(new HexCoord(q, r));
+        }
+
+        return wall;
+    }
+
+    [Fact]
+    public void A_wide_river_blocks_a_land_army()
+    {
+        var river = Wall(2);
+
+        var path = HexPathfinder.FindPath(
+            new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true,
+            isRiver: river.Contains, isWideRiver: river.Contains);
+
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public void A_wide_river_hex_is_routed_around_not_through()
+    {
+        var wide = new HashSet<HexCoord> { new(2, 0) };
+
+        var path = HexPathfinder.FindPath(
+            new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true,
+            isRiver: wide.Contains, isWideRiver: wide.Contains)!;
+
+        Assert.NotNull(path);
+        Assert.DoesNotContain(path, wide.Contains);
+        Assert.Equal(new HexCoord(4, 0), path[^1]);
+    }
+
+    [Fact]
+    public void A_stream_is_crossed_at_a_flat_nine_when_there_is_no_detour()
+    {
+        var stream = Wall(2);
+
+        var path = HexPathfinder.FindPath(
+            new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true,
+            isRiver: stream.Contains, isWideRiver: _ => false)!;
+
+        Assert.NotNull(path);
+        Assert.Contains(new HexCoord(2, 0), path);
+        var hours = HexPathfinder.CumulativeHours(path, AllGrass(), hexesPerHour: 1.0, isRiver: stream.Contains, isWideRiver: _ => false);
+        Assert.Equal(1.0 + 9.0 + 1.0 + 1.0, hours[^1], 6);
+        Assert.Equal(1.0 + HexPathfinder.RiverCrossingCost, hours[2] - hours[1], 6);
+    }
+
+    [Fact]
+    public void A_stream_on_a_mountain_is_walkable_at_a_flat_nine()
+    {
+        var mountainStream = new HexCoord(2, 0);
+        Terrain TerrainAt(HexCoord c) => c == mountainStream ? Terrain.Mountain : Terrain.Grass;
+        bool IsRiver(HexCoord c) => c == mountainStream;
+        var path = new List<HexCoord> { new(1, 0), mountainStream, new(3, 0) };
+
+        var hours = HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 1.0, isRiver: IsRiver, isWideRiver: _ => false);
+
+        // Flat 1.0 + RiverCrossingCost = 9, not the mountain's own cost plus 8.
+        Assert.Equal(9.0, hours[1], 6);
+        Assert.Equal(10.0, hours[2], 6);
+    }
+
+    [Fact]
+    public void A_stream_on_a_mountain_wall_lets_the_pathfinder_through()
+    {
+        var wall = Wall(2);
+        var stream = new HexCoord(2, 0);
+        Terrain TerrainAt(HexCoord c) => wall.Contains(c) ? Terrain.Mountain : Terrain.Grass;
+
+        var path = HexPathfinder.FindPath(
+            new HexCoord(0, 0), new HexCoord(4, 0), TerrainAt, isLandUnit: true,
+            isRiver: c => c == stream, isWideRiver: _ => false)!;
+
+        Assert.NotNull(path);
+        Assert.Contains(stream, path);
+    }
+
+    [Fact]
+    public void Mountains_are_impassable_to_land_armies()
+    {
+        var wall = Wall(2);
+        Terrain TerrainAt(HexCoord c) => wall.Contains(c) ? Terrain.Mountain : Terrain.Grass;
+
+        Assert.Null(HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(4, 0), TerrainAt, isLandUnit: true));
+        // The destination itself being a mountain is refused too.
+        Assert.Null(HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(2, 0), TerrainAt, isLandUnit: true));
+    }
+
+    [Fact]
+    public void A_target_inside_a_ring_of_mountains_has_no_route()
+    {
+        var target = new HexCoord(5, 0);
+        var ring = target.Neighbours().ToHashSet();
+        Terrain TerrainAt(HexCoord c) => ring.Contains(c) ? Terrain.Mountain : Terrain.Grass;
+
+        Assert.Null(HexPathfinder.FindPath(new HexCoord(0, 0), target, TerrainAt, isLandUnit: true));
+    }
+
+    [Fact]
+    public void The_blocked_hook_is_optional_and_makes_a_hex_impassable_when_given()
+    {
+        var wall = Wall(2);
+
+        Assert.NotNull(HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true));
+        Assert.Null(HexPathfinder.FindPath(
+            new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true, blocked: wall.Contains));
+    }
+
+    [Fact]
+    public void The_movement_rules_do_not_touch_fleets()
+    {
+        // A fleet on open sea is not affected by the river lookups, whatever they report.
+        var path = HexPathfinder.FindPath(
+            new HexCoord(0, 0), new HexCoord(3, 0), _ => Terrain.Sea, isLandUnit: false,
+            isRiver: _ => true, isWideRiver: _ => true, blocked: _ => true);
+
+        Assert.NotNull(path);
+        Assert.Equal(4, path!.Count);
     }
 }

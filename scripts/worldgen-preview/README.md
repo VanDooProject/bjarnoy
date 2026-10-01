@@ -124,7 +124,7 @@ Coordinates are axial `[q, r]`. Wall hexes are placed in order through `canPlace
 a gate that is not on a straight, a river, mountain, lake or bog hex, a second sea end, ...) is not drawn as wall but marked and
 named in the footer. Friendly routes pass gate hexes, enemy routes do not; every route pays the backend's costs (grass 1.0,
 sand 1.1, forest 1.3, bog 2.0, +8 to enter a river hex) with the rules above switched on through `PathContext.restrictions`
-(`src/frontend/src/lib/map/hexPath.ts`: default off, so the game's own pathing is unchanged).
+(`src/frontend/src/lib/map/hexPath.ts`: the wide-river, mountain and stream rules are the game's own defaults now, switched off only for the "before" comparison).
 
 A route whose origin or destination is itself impassable (a mountain, a wall, sea) reports `NO ROUTE (DESTINATION IS A MOUNTAIN)`
 rather than silently blaming the wall; pick endpoints on walkable land.
@@ -177,7 +177,7 @@ Findings: mountains are generated only in an island's core (`terrainAt` in `worl
 grass or forest always separates them from the sea: 2 of 164,836 mountain hexes touch it. Mountains do touch rivers (10.7 %
 any river, since springs rise on them; 0.8 % a wide one) and never a lake. Cut-off land is mostly a valley closed in by mountains
 alone. **Streams are walkable at a flat 9.0 (1.0 + 8) whatever terrain they run over** (`PathRestrictions.streamsIgnoreTerrain`,
-on in the decided rules, off by default; mountain impassability and the terrain cost do not apply to a crossable river tile, a
+the game's own rule, on by default; mountain impassability and the terrain cost do not apply to a crossable river tile, a
 wide river stays impassable): ~600 stream tiles per world run over mountains, and they open most valleys. Seeds 1-8: cut-off land
 drops from 21,794 hexes (2.46 % of walkable) to 8,190 (0.92 %), regions from 380 to 304, mountain-only valleys of 100+ hexes
 from 31 to 14 and of 10-99 from 131 to 92; no region over 1,000 hexes is left (`--no-streams` gives the old numbers).
