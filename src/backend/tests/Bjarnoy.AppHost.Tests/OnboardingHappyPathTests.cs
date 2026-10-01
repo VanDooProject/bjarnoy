@@ -42,7 +42,7 @@ public class OnboardingHappyPathTests
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(8)).Token;
 
         var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
+        appHost.Services.ConfigureHttpClientDefaults(ApiClientResilience.Configure);
 
         await using var app = await appHost.BuildAsync(cancellationToken);
         await app.StartAsync(cancellationToken);

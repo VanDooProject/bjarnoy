@@ -37,6 +37,17 @@ import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
+import { formatCountdownShort } from '../hud/countdown';
+import {
+  DIAL_FINISH_MS,
+  dialFinishFrame,
+  polylinePartial,
+  retainFinishingDials,
+  dialProgress,
+  dialRemainingSeconds,
+  hexPerimeterPath,
+  type ConstructionDial,
+} from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { RiverTile, Settlement, Terrain, Tile } from './types';
@@ -194,6 +205,13 @@ export const LABEL_STYLES = {
   }),
   cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
   badgeName: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: 13 }),
+  dialTime: new TextStyle({
+    fill: 0xffffff,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: 'bold',
+    fontSize: 12,
+    dropShadow: { color: 0x000000, alpha: 0.9, blur: 2, distance: 1, angle: Math.PI / 2 },
+  }),
   badgeSuffix: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: '400', fontSize: 12 }),
 } as const;
 
@@ -767,6 +785,14 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
   }
   return points;
 }
+
+// Construction progress dial (see `constructionDial.ts`): drawn in screen space
+// by `drawConstructionDials` (constant on-screen size, like the settlement
+// badge) over a building under construction — white track, yellow elapsed arc,
+// remaining time inside.
+const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
+// Dial height above the tile centre.
+const CONSTRUCTION_DIAL_LIFT = TILE_H * 0.9;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
@@ -1557,6 +1583,9 @@ export class HexMapRenderer {
   // hidden under fog with no extra check needed here.
   private rangeLayer = new Graphics();
   private rangeOverlay: AxialCoord[] | null = null;
+  // Construction progress dials — just stores data, drawn every tick into
+  // `highlightLayer` (above the buildings) in settlement mode only.
+  private constructionDials: ConstructionDial[] | null = null;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -4153,7 +4182,10 @@ export class HexMapRenderer {
     // hides the rest, same bookkeeping labels already do (labelsUsed).
     this.iconsUsed = 0;
     if (this.options.mode === 'settlement') {
+      this.labelsUsed = 0;
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
+      this.drawConstructionDials();
+      for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
       this.drawArmyOverlay();
       this.hideUnusedIcons();
       return;
@@ -4289,7 +4321,6 @@ export class HexMapRenderer {
   // glued to the hex while the camera pans.
   private rebuildSettlementLabels() {
     const { worldModel, playerId } = this.options;
-    this.labelsUsed = 0;
 
     for (const settlement of worldModel.listSettlements()) {
       // Don't reveal a rival's name over ground you haven't scouted.
@@ -4378,7 +4409,80 @@ export class HexMapRenderer {
       nameLabel.visible = true;
       suffixLabel.visible = true;
     }
-    for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
+  }
+
+  /**
+   * Construction progress dials, in screen space (markerLayer): a constant
+   * on-screen size at/below the settlement's default zoom that grows past it,
+   * like the settlement badge. Must run before the unused-label hide loop in
+   * `rebuildMarkers` since it acquires pooled labels. A completed dial plays
+   * `dialFinishFrame` (pop, flash, shockwaves, check mark) and is then pruned.
+   */
+  private drawConstructionDials() {
+    if (!this.constructionDials) return;
+    const lift = CONSTRUCTION_DIAL_LIFT;
+    const nowMs = Date.now();
+    const zs = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
+    const g = this.markerLayer;
+    const strokePath = (path: number[], width: number, color: number, alpha: number) => {
+      if (path.length < 4) return;
+      g.moveTo(path[0], path[1]);
+      for (let i = 2; i < path.length; i += 2) g.lineTo(path[i], path[i + 1]);
+      g.stroke({ width, color, alpha, cap: 'round', join: 'round' });
+    };
+    const live = this.constructionDials.filter((d) => d.endMs === null || nowMs - d.endMs < DIAL_FINISH_MS);
+    if (live.length !== this.constructionDials.length) this.constructionDials = live.length > 0 ? live : null;
+    for (const dial of live) {
+      const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
+      const progress = dialProgress(dial, nowMs);
+      const remaining = dialRemainingSeconds(dial, nowMs);
+      const anchor = this.toScreen({
+        x: grid.x + TILE_W / 2,
+        y: grid.y + TILE_CENTER_Y_OFFSET - lift,
+      });
+      const cx = anchor.x;
+      const cy = anchor.y;
+      const r = 22 * zs * 1.25;
+      const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
+
+      if (frame) {
+        const fr = r * frame.scale;
+        const a = frame.alpha;
+        g.poly(hexPoints(cx, cy, fr)).fill({ color: 0x08121a, alpha: 0.85 * a });
+        g.poly(hexPoints(cx, cy, fr)).fill({ color: CONSTRUCTION_DIAL_ELAPSED_COLOR, alpha: 0.75 * frame.flash * a });
+        strokePath(hexPerimeterPath(cx, cy, fr, 1), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, a);
+        for (const ring of frame.rings) {
+          if (ring.alpha <= 0) continue;
+          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
+            width: 3 * zs,
+            color: CONSTRUCTION_DIAL_ELAPSED_COLOR,
+            alpha: ring.alpha * a,
+            join: 'round',
+          });
+        }
+        const check = polylinePartial(
+          [
+            { x: cx - 0.38 * fr, y: cy + 0.02 * fr },
+            { x: cx - 0.1 * fr, y: cy + 0.3 * fr },
+            { x: cx + 0.4 * fr, y: cy - 0.25 * fr },
+          ],
+          frame.check,
+        );
+        strokePath(check, 5 * zs, 0xffffff, a);
+        continue;
+      }
+
+      g.poly(hexPoints(cx, cy, r))
+        .fill({ color: 0x08121a, alpha: 0.85 })
+        .stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3, join: 'round' });
+      strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, 1);
+      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2);
+      label.text = remaining === null ? '…' : formatCountdownShort(remaining);
+      label.tint = remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
+      label.anchor.set(0.5);
+      label.position.set(cx, cy);
+      label.visible = true;
+    }
   }
 
   private hideUnusedIcons() {
@@ -4456,6 +4560,7 @@ export class HexMapRenderer {
     if (label.style !== style) label.style = style;
     label.scale.set(scale);
     label.alpha = 1;
+    label.tint = 0xffffff;
     this.labelsUsed++;
     return label;
   }
@@ -4612,6 +4717,16 @@ export class HexMapRenderer {
    */
   setRangeOverlay(hexes: AxialCoord[] | null) {
     this.rangeOverlay = hexes && hexes.length > 0 ? hexes : null;
+  }
+
+  /**
+   * Hands in the under-construction dials (`constructionDialsFromQueue`).
+   * Like `setRangeOverlay`, this only stores the data; `drawHighlight` redraws
+   * the animated progress every tick (settlement mode only). `null` clears.
+   */
+  setConstructionDials(dials: ConstructionDial[] | null) {
+    const merged = retainFinishingDials(this.constructionDials ?? [], dials ?? [], Date.now());
+    this.constructionDials = merged.length > 0 ? merged : null;
   }
 
   /**
