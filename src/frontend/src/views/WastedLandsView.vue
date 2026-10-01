@@ -2,9 +2,7 @@
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
-import TopBar from '../components/hud/TopBar.vue';
-import HudNav from '../components/hud/HudNav.vue';
-import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
+import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import WastedIsland from '../components/docs/WastedIsland.vue';
 import AnimatedGiant from '../components/docs/AnimatedGiant.vue';
@@ -167,347 +165,324 @@ const wallFrame = computed(() => {
 </script>
 
 <template>
-  <div class="wasted-lands">
-    <TopBar docked :title="$t('docs.wastedLands.title')" caption="DOCS · WASTED LANDS">
-      <HudNav />
-      <template #drawer="{ close }">
-        <MobileHudDrawer @close="close" />
-      </template>
-    </TopBar>
-    <main class="body docs-scale">
-      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
-      <h1>{{ $t('docs.wastedLands.title') }}</h1>
-      <p class="intro">{{ $t('docs.wastedLands.intro') }}</p>
+  <DocsPageLayout
+    class="wasted-lands"
+    :title="$t('docs.wastedLands.title')"
+    caption="DOCS · WASTED LANDS"
+    :intro="$t('docs.wastedLands.intro')"
+  >
+    <section id="lore" class="lore-section">
+      <h2>{{ $t('docs.wastedLands.lore.heading') }}</h2>
+      <p class="saga">{{ $t('docs.wastedLands.lore.p1') }}</p>
+      <p class="saga">{{ $t('docs.wastedLands.lore.p2') }}</p>
+      <p class="saga">{{ $t('docs.wastedLands.lore.p3') }}</p>
+      <p class="saga">{{ $t('docs.wastedLands.lore.p4') }}</p>
+      <p class="caption-note">{{ $t('docs.wastedLands.lore.caption') }}</p>
+    </section>
 
-      <section id="lore" class="lore-section">
-        <h2>{{ $t('docs.wastedLands.lore.heading') }}</h2>
-        <p class="saga">{{ $t('docs.wastedLands.lore.p1') }}</p>
-        <p class="saga">{{ $t('docs.wastedLands.lore.p2') }}</p>
-        <p class="saga">{{ $t('docs.wastedLands.lore.p3') }}</p>
-        <p class="saga">{{ $t('docs.wastedLands.lore.p4') }}</p>
-        <p class="caption-note">{{ $t('docs.wastedLands.lore.caption') }}</p>
-      </section>
+    <AnimationPausedNote />
+    <section id="giants" class="giants-section">
+      <div class="giant-card">
+        <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>
+        <p>{{ $t('docs.wastedLands.utgard.body') }}</p>
+        <div class="giant-box">
+          <AnimatedGiant
+            v-if="utgardHasAnim"
+            family="giantutgard"
+            top-category="buildings-static"
+            plate-family="wasteland"
+            :orientation="utgardCamera"
+          />
+          <AtlasSprite v-else-if="utgardFrame" :frame="utgardFrame" :style="fit(utgardFrame, GIANT_BOX_H)" />
+        </div>
+        <div class="camera-pills">
+          <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
+          <button
+            v-for="cam in TILE_ORIENTATIONS"
+            :key="cam"
+            type="button"
+            class="variant-button"
+            :class="{ active: utgardCamera === cam }"
+            @click="utgardCamera = cam"
+          >
+            {{ cam }}
+          </button>
+        </div>
+      </div>
 
-      <AnimationPausedNote />
-      <section id="giants" class="giants-section">
+      <div class="giant-card">
+        <h2>{{ $t('docs.wastedLands.volcano.heading') }}</h2>
+        <p>{{ $t('docs.wastedLands.volcano.body') }}</p>
+        <div class="giant-box">
+          <AnimatedGiant
+            v-if="volcanoHasAnim"
+            family="giantvolcano_wasted"
+            top-category="terrain"
+            plate-family="wasteland"
+            :orientation="volcanoCamera"
+          />
+          <AtlasSprite v-else-if="volcanoFrame" :frame="volcanoFrame" :style="fit(volcanoFrame, GIANT_BOX_H)" />
+        </div>
+        <div class="camera-pills">
+          <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
+          <button
+            v-for="cam in TILE_ORIENTATIONS"
+            :key="cam"
+            type="button"
+            class="variant-button"
+            :class="{ active: volcanoCamera === cam }"
+            @click="volcanoCamera = cam"
+          >
+            {{ cam }}
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section id="defences" class="defences-section">
+      <h2>{{ $t('docs.wastedLands.defences.heading') }}</h2>
+      <p>{{ $t('docs.wastedLands.defences.body') }}</p>
+      <div class="giants-section">
         <div class="giant-card">
-          <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>
-          <p>{{ $t('docs.wastedLands.utgard.body') }}</p>
-          <div class="giant-box">
-            <AnimatedGiant
-              v-if="utgardHasAnim"
-              family="giantutgard"
-              top-category="buildings-static"
-              plate-family="wasteland"
-              :orientation="utgardCamera"
-            />
-            <AtlasSprite v-else-if="utgardFrame" :frame="utgardFrame" :style="fit(utgardFrame, GIANT_BOX_H)" />
+          <h3>{{ $t('docs.wastedLands.defences.watchtower.heading') }}</h3>
+          <p>{{ $t('docs.wastedLands.defences.watchtower.body') }}</p>
+          <div class="giant-box defence-box">
+            <AtlasSprite v-if="towerFrame" :frame="towerFrame" :style="fit(towerFrame, DEFENCE_BOX_H)" />
           </div>
           <div class="camera-pills">
-            <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
+            <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
             <button
-              v-for="cam in TILE_ORIENTATIONS"
-              :key="cam"
+              v-for="level in DEFENCE_LEVELS"
+              :key="level"
               type="button"
               class="variant-button"
-              :class="{ active: utgardCamera === cam }"
-              @click="utgardCamera = cam"
+              :class="{ active: towerLevel === level }"
+              @click="towerLevel = level"
             >
-              {{ cam }}
+              {{ level + 1 }}
             </button>
           </div>
         </div>
 
         <div class="giant-card">
-          <h2>{{ $t('docs.wastedLands.volcano.heading') }}</h2>
-          <p>{{ $t('docs.wastedLands.volcano.body') }}</p>
-          <div class="giant-box">
-            <AnimatedGiant
-              v-if="volcanoHasAnim"
-              family="giantvolcano_wasted"
-              top-category="terrain"
-              plate-family="wasteland"
-              :orientation="volcanoCamera"
-            />
-            <AtlasSprite v-else-if="volcanoFrame" :frame="volcanoFrame" :style="fit(volcanoFrame, GIANT_BOX_H)" />
+          <h3>{{ $t('docs.wastedLands.defences.walls.heading') }}</h3>
+          <p>{{ $t('docs.wastedLands.defences.walls.body') }}</p>
+          <div class="giant-box defence-box">
+            <AtlasSprite v-if="wallFrame" :frame="wallFrame" :style="fit(wallFrame, DEFENCE_BOX_H)" />
           </div>
           <div class="camera-pills">
-            <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
+            <span class="variants-label">{{ $t('docs.wastedLands.defences.walls.piece') }}</span>
             <button
-              v-for="cam in TILE_ORIENTATIONS"
-              :key="cam"
+              v-for="piece in WALL_PIECES"
+              :key="piece.id"
               type="button"
               class="variant-button"
-              :class="{ active: volcanoCamera === cam }"
-              @click="volcanoCamera = cam"
+              :class="{ active: wallPiece === piece.id }"
+              @click="wallPiece = piece.id"
             >
-              {{ cam }}
+              {{ t(`docs.wastedLands.defences.pieces.${piece.id}`) }}
+            </button>
+          </div>
+          <div class="camera-pills level-pills">
+            <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
+            <button
+              v-for="level in DEFENCE_LEVELS"
+              :key="level"
+              type="button"
+              class="variant-button"
+              :class="{ active: wallLevel === level }"
+              @click="wallLevel = level"
+            >
+              {{ level + 1 }}
             </button>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section id="defences" class="defences-section">
-        <h2>{{ $t('docs.wastedLands.defences.heading') }}</h2>
-        <p>{{ $t('docs.wastedLands.defences.body') }}</p>
-        <div class="giants-section">
-          <div class="giant-card">
-            <h3>{{ $t('docs.wastedLands.defences.watchtower.heading') }}</h3>
-            <p>{{ $t('docs.wastedLands.defences.watchtower.body') }}</p>
-            <div class="giant-box defence-box">
-              <AtlasSprite v-if="towerFrame" :frame="towerFrame" :style="fit(towerFrame, DEFENCE_BOX_H)" />
+    <section id="island" class="island-section">
+      <h2>{{ $t('docs.wastedLands.island.heading') }}</h2>
+      <p>{{ $t('docs.wastedLands.island.body') }}</p>
+      <WastedIsland />
+    </section>
+
+    <section id="pairs" class="pairs-section">
+      <h2>{{ $t('docs.wastedLands.pairs.heading') }}</h2>
+      <p>{{ $t('docs.wastedLands.pairs.body') }}</p>
+
+      <div v-for="pair in PAIRS.slice(0, 3)" :key="pair.kind" :id="`pair-${pair.kind}`" class="pair-row">
+        <div class="pair-thumbs">
+          <div class="thumb-col">
+            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
+            <div class="thumb floating-art">
+              <span class="floating-art-shadow" aria-hidden="true" />
+              <AtlasSprite
+                v-if="pairLivingFrame(pair)"
+                :frame="pairLivingFrame(pair)!"
+                :style="fit(pairLivingFrame(pair), THUMB_BOX_H)"
+              />
             </div>
-            <div class="camera-pills">
-              <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
-              <button
-                v-for="level in DEFENCE_LEVELS"
-                :key="level"
-                type="button"
-                class="variant-button"
-                :class="{ active: towerLevel === level }"
-                @click="towerLevel = level"
-              >
-                {{ level + 1 }}
-              </button>
-            </div>
+            <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
           </div>
-
-          <div class="giant-card">
-            <h3>{{ $t('docs.wastedLands.defences.walls.heading') }}</h3>
-            <p>{{ $t('docs.wastedLands.defences.walls.body') }}</p>
-            <div class="giant-box defence-box">
-              <AtlasSprite v-if="wallFrame" :frame="wallFrame" :style="fit(wallFrame, DEFENCE_BOX_H)" />
+          <span class="pair-arrow">→</span>
+          <div class="thumb-col">
+            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
+            <div class="thumb floating-art">
+              <span class="floating-art-shadow" aria-hidden="true" />
+              <AtlasSprite
+                v-if="pairWastedFrame(pair)"
+                :frame="pairWastedFrame(pair)!"
+                :style="fit(pairWastedFrame(pair), THUMB_BOX_H)"
+              />
             </div>
-            <div class="camera-pills">
-              <span class="variants-label">{{ $t('docs.wastedLands.defences.walls.piece') }}</span>
-              <button
-                v-for="piece in WALL_PIECES"
-                :key="piece.id"
-                type="button"
-                class="variant-button"
-                :class="{ active: wallPiece === piece.id }"
-                @click="wallPiece = piece.id"
-              >
-                {{ t(`docs.wastedLands.defences.pieces.${piece.id}`) }}
-              </button>
-            </div>
-            <div class="camera-pills level-pills">
-              <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
-              <button
-                v-for="level in DEFENCE_LEVELS"
-                :key="level"
-                type="button"
-                class="variant-button"
-                :class="{ active: wallLevel === level }"
-                @click="wallLevel = level"
-              >
-                {{ level + 1 }}
-              </button>
-            </div>
+            <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
           </div>
         </div>
-      </section>
+        <p class="pair-lore">
+          {{ t(`docs.wastedLands.tiles.${pair.kind}.lore`) }}
+        </p>
+        <div v-if="pair.wastedSuffixes.length > 1" class="variants">
+          <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
+          <button
+            v-for="(suffix, i) in pair.wastedSuffixes"
+            :key="suffix"
+            type="button"
+            class="variant-button"
+            :class="{ active: variantIndex[pair.kind] === i }"
+            @click="variantIndex[pair.kind] = i"
+          >
+            {{ i + 1 }}
+          </button>
+        </div>
+      </div>
 
-      <section id="island" class="island-section">
-        <h2>{{ $t('docs.wastedLands.island.heading') }}</h2>
-        <p>{{ $t('docs.wastedLands.island.body') }}</p>
-        <WastedIsland />
-      </section>
-
-      <section id="pairs" class="pairs-section">
-        <h2>{{ $t('docs.wastedLands.pairs.heading') }}</h2>
-        <p>{{ $t('docs.wastedLands.pairs.body') }}</p>
-
-        <div v-for="pair in PAIRS.slice(0, 3)" :key="pair.kind" :id="`pair-${pair.kind}`" class="pair-row">
-          <div class="pair-thumbs">
-            <div class="thumb-col">
-              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb floating-art">
-                <span class="floating-art-shadow" aria-hidden="true" />
-                <AtlasSprite
-                  v-if="pairLivingFrame(pair)"
-                  :frame="pairLivingFrame(pair)!"
-                  :style="fit(pairLivingFrame(pair), THUMB_BOX_H)"
-                />
-              </div>
-              <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
+      <div id="pair-mountain" class="pair-row">
+        <div class="pair-thumbs">
+          <div class="thumb-col">
+            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
+            <div class="thumb floating-art">
+              <span class="floating-art-shadow" aria-hidden="true" />
+              <AtlasSprite
+                v-if="pairLivingFrame(PAIRS[3]!)"
+                :frame="pairLivingFrame(PAIRS[3]!)!"
+                :style="fit(pairLivingFrame(PAIRS[3]!), THUMB_BOX_H)"
+              />
             </div>
-            <span class="pair-arrow">→</span>
-            <div class="thumb-col">
-              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb floating-art">
-                <span class="floating-art-shadow" aria-hidden="true" />
-                <AtlasSprite
-                  v-if="pairWastedFrame(pair)"
-                  :frame="pairWastedFrame(pair)!"
-                  :style="fit(pairWastedFrame(pair), THUMB_BOX_H)"
-                />
-              </div>
-              <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
-            </div>
+            <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.living') }}</span>
           </div>
-          <p class="pair-lore">
-            {{ t(`docs.wastedLands.tiles.${pair.kind}.lore`) }}
-          </p>
-          <div v-if="pair.wastedSuffixes.length > 1" class="variants">
-            <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
-            <button
-              v-for="(suffix, i) in pair.wastedSuffixes"
-              :key="suffix"
-              type="button"
-              class="variant-button"
-              :class="{ active: variantIndex[pair.kind] === i }"
-              @click="variantIndex[pair.kind] = i"
-            >
-              {{ i + 1 }}
-            </button>
+          <span class="pair-arrow">→</span>
+          <div class="thumb-col">
+            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
+            <div class="thumb floating-art">
+              <span class="floating-art-shadow" aria-hidden="true" />
+              <AtlasSprite
+                v-if="pairWastedFrame(PAIRS[3]!)"
+                :frame="pairWastedFrame(PAIRS[3]!)!"
+                :style="fit(pairWastedFrame(PAIRS[3]!), THUMB_BOX_H)"
+              />
+            </div>
+            <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.wasted') }}</span>
           </div>
         </div>
+        <p class="pair-lore">
+          {{ t('docs.wastedLands.tiles.mountain.lore') }}
+        </p>
+      </div>
 
-        <div id="pair-mountain" class="pair-row">
-          <div class="pair-thumbs">
-            <div class="thumb-col">
-              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb floating-art">
-                <span class="floating-art-shadow" aria-hidden="true" />
-                <AtlasSprite
-                  v-if="pairLivingFrame(PAIRS[3]!)"
-                  :frame="pairLivingFrame(PAIRS[3]!)!"
-                  :style="fit(pairLivingFrame(PAIRS[3]!), THUMB_BOX_H)"
-                />
-              </div>
-              <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.living') }}</span>
+      <div id="pair-river" class="pair-row">
+        <div class="pair-thumbs">
+          <div class="thumb-col">
+            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
+            <div class="thumb floating-art">
+              <span class="floating-art-shadow" aria-hidden="true" />
+              <AtlasSprite
+                v-if="riverLivingFrame"
+                :frame="riverLivingFrame"
+                :style="fit(riverLivingFrame, THUMB_BOX_H)"
+              />
             </div>
-            <span class="pair-arrow">→</span>
-            <div class="thumb-col">
-              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb floating-art">
-                <span class="floating-art-shadow" aria-hidden="true" />
-                <AtlasSprite
-                  v-if="pairWastedFrame(PAIRS[3]!)"
-                  :frame="pairWastedFrame(PAIRS[3]!)!"
-                  :style="fit(pairWastedFrame(PAIRS[3]!), THUMB_BOX_H)"
-                />
-              </div>
-              <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.wasted') }}</span>
-            </div>
+            <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.living') }}</span>
           </div>
-          <p class="pair-lore">
-            {{ t('docs.wastedLands.tiles.mountain.lore') }}
-          </p>
-        </div>
-
-        <div id="pair-river" class="pair-row">
-          <div class="pair-thumbs">
-            <div class="thumb-col">
-              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb floating-art">
-                <span class="floating-art-shadow" aria-hidden="true" />
-                <AtlasSprite
-                  v-if="riverLivingFrame"
-                  :frame="riverLivingFrame"
-                  :style="fit(riverLivingFrame, THUMB_BOX_H)"
-                />
-              </div>
-              <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.living') }}</span>
+          <span class="pair-arrow">→</span>
+          <div class="thumb-col">
+            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
+            <div class="thumb floating-art">
+              <span class="floating-art-shadow" aria-hidden="true" />
+              <AtlasSprite
+                v-if="riverWastedFrame"
+                :frame="riverWastedFrame"
+                :style="fit(riverWastedFrame, THUMB_BOX_H)"
+              />
             </div>
-            <span class="pair-arrow">→</span>
-            <div class="thumb-col">
-              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb floating-art">
-                <span class="floating-art-shadow" aria-hidden="true" />
-                <AtlasSprite
-                  v-if="riverWastedFrame"
-                  :frame="riverWastedFrame"
-                  :style="fit(riverWastedFrame, THUMB_BOX_H)"
-                />
-              </div>
-              <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.wasted') }}</span>
-            </div>
-          </div>
-          <p class="pair-lore">{{ t('docs.wastedLands.tiles.river.lore') }}</p>
-          <div class="variants">
-            <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
-            <button
-              v-for="shape in ['straight', 'bend', 'bend60', 'spring'] as const"
-              :key="shape"
-              type="button"
-              class="variant-button"
-              :class="{ active: riverShape === shape }"
-              @click="riverShape = shape"
-            >
-              {{ t(`docs.wastedLands.lavaShapes.${shape}`) }}
-            </button>
+            <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.wasted') }}</span>
           </div>
         </div>
+        <p class="pair-lore">{{ t('docs.wastedLands.tiles.river.lore') }}</p>
+        <div class="variants">
+          <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
+          <button
+            v-for="shape in ['straight', 'bend', 'bend60', 'spring'] as const"
+            :key="shape"
+            type="button"
+            class="variant-button"
+            :class="{ active: riverShape === shape }"
+            @click="riverShape = shape"
+          >
+            {{ t(`docs.wastedLands.lavaShapes.${shape}`) }}
+          </button>
+        </div>
+      </div>
 
-        <div v-for="pair in PAIRS.slice(4)" :key="pair.kind" :id="`pair-${pair.kind}`" class="pair-row">
-          <div class="pair-thumbs">
-            <div class="thumb-col">
-              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb floating-art">
-                <span class="floating-art-shadow" aria-hidden="true" />
-                <AtlasSprite
-                  v-if="pairLivingFrame(pair)"
-                  :frame="pairLivingFrame(pair)!"
-                  :style="fit(pairLivingFrame(pair), THUMB_BOX_H)"
-                />
-              </div>
-              <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
+      <div v-for="pair in PAIRS.slice(4)" :key="pair.kind" :id="`pair-${pair.kind}`" class="pair-row">
+        <div class="pair-thumbs">
+          <div class="thumb-col">
+            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
+            <div class="thumb floating-art">
+              <span class="floating-art-shadow" aria-hidden="true" />
+              <AtlasSprite
+                v-if="pairLivingFrame(pair)"
+                :frame="pairLivingFrame(pair)!"
+                :style="fit(pairLivingFrame(pair), THUMB_BOX_H)"
+              />
             </div>
-            <span class="pair-arrow">→</span>
-            <div class="thumb-col">
-              <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb floating-art">
-                <span class="floating-art-shadow" aria-hidden="true" />
-                <AtlasSprite
-                  v-if="pairWastedFrame(pair)"
-                  :frame="pairWastedFrame(pair)!"
-                  :style="fit(pairWastedFrame(pair), THUMB_BOX_H)"
-                />
-              </div>
-              <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
-            </div>
+            <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
           </div>
-          <p class="pair-lore">
-            {{ t(`docs.wastedLands.tiles.${pair.kind}.lore`) }}
-          </p>
-          <div v-if="pair.wastedSuffixes.length > 1" class="variants">
-            <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
-            <button
-              v-for="(suffix, i) in pair.wastedSuffixes"
-              :key="suffix"
-              type="button"
-              class="variant-button"
-              :class="{ active: variantIndex[pair.kind] === i }"
-              @click="variantIndex[pair.kind] = i"
-            >
-              {{ i + 1 }}
-            </button>
+          <span class="pair-arrow">→</span>
+          <div class="thumb-col">
+            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
+            <div class="thumb floating-art">
+              <span class="floating-art-shadow" aria-hidden="true" />
+              <AtlasSprite
+                v-if="pairWastedFrame(pair)"
+                :frame="pairWastedFrame(pair)!"
+                :style="fit(pairWastedFrame(pair), THUMB_BOX_H)"
+              />
+            </div>
+            <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
           </div>
         </div>
-      </section>
-    </main>
-  </div>
+        <p class="pair-lore">
+          {{ t(`docs.wastedLands.tiles.${pair.kind}.lore`) }}
+        </p>
+        <div v-if="pair.wastedSuffixes.length > 1" class="variants">
+          <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
+          <button
+            v-for="(suffix, i) in pair.wastedSuffixes"
+            :key="suffix"
+            type="button"
+            class="variant-button"
+            :class="{ active: variantIndex[pair.kind] === i }"
+            @click="variantIndex[pair.kind] = i"
+          >
+            {{ i + 1 }}
+          </button>
+        </div>
+      </div>
+    </section>
+  </DocsPageLayout>
 </template>
 
 <style scoped>
-.wasted-lands {
-  width: 100%;
-  height: 100vh;
-  overflow: auto;
-  background: var(--shell);
-}
-.body {
-  max-width: 90ch;
-  margin: 0 auto;
-  padding: 24px 28px 60px;
-  color: var(--text);
-}
-.intro {
-  color: var(--muted);
-  line-height: 1.6;
-}
 section {
   margin-top: 40px;
   scroll-margin-top: 84px;

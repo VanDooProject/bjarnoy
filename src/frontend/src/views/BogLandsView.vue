@@ -2,9 +2,10 @@
 import { reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
-import TopBar from '../components/hud/TopBar.vue';
-import HudNav from '../components/hud/HudNav.vue';
-import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
+import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
+import DocsPicker from '../components/docs/DocsPicker.vue';
+import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
+import DocsToc from '../components/docs/DocsToc.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import BogIsland from '../components/docs/BogIsland.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
@@ -139,168 +140,96 @@ function titleOf(entry: Entry): string {
 function textOf(entry: Entry): string {
   return entry.group === 'ground' ? t('docs.bogLands.ground.body') : t(`${keyPrefix(entry)}.${entry.id}.body`);
 }
+
+const tocLinks = [
+  ...ENTRIES.map((entry) => ({ href: `#${entry.id}`, label: titleOf(entry) })),
+  { href: '#example-map', label: t('docs.bogLands.example.heading') },
+  { href: '#map-rules', label: t('docs.bogLands.rules.heading') },
+];
 </script>
 
 <template>
-  <div class="bog-lands">
-    <TopBar docked :title="$t('docs.bogLands.title')" caption="DOCS · BOG LANDS">
-      <HudNav />
-      <template #drawer="{ close }">
-        <MobileHudDrawer @close="close" />
-      </template>
-    </TopBar>
-    <main class="body docs-scale">
-      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
-      <h1>{{ $t('docs.bogLands.title') }}</h1>
-      <p class="intro">{{ $t('docs.bogLands.intro') }}</p>
+  <DocsPageLayout
+    class="bog-lands"
+    :title="$t('docs.bogLands.title')"
+    caption="DOCS · BOG LANDS"
+    :intro="$t('docs.bogLands.intro')"
+  >
+    <template #status>
       <p class="status">{{ $t('docs.bogLands.status') }}</p>
+    </template>
 
-      <nav class="toc" :aria-label="$t('docs.status.toc')">
-        <a v-for="entry in ENTRIES" :key="entry.id" class="toc-link" :href="`#${entry.id}`">{{ titleOf(entry) }}</a>
-        <a class="toc-link" href="#example-map">{{ $t('docs.bogLands.example.heading') }}</a>
-        <a class="toc-link" href="#map-rules">{{ $t('docs.bogLands.rules.heading') }}</a>
-      </nav>
+    <DocsToc :links="tocLinks" />
 
-      <template v-for="group in GROUPS" :key="group">
-        <h2 class="group-heading">
-          {{ $t(`docs.bogLands.${group}.heading`) }}
-        </h2>
-        <p v-if="group !== 'ground'" class="group-body">
-          {{ $t(`docs.bogLands.${group}.body`) }}
-        </p>
+    <template v-for="group in GROUPS" :key="group">
+      <h2 class="group-heading">
+        {{ $t(`docs.bogLands.${group}.heading`) }}
+      </h2>
+      <p v-if="group !== 'ground'" class="group-body">
+        {{ $t(`docs.bogLands.${group}.body`) }}
+      </p>
 
-        <section v-for="entry in entriesIn(group)" :id="entry.id" :key="entry.id" class="tile">
-          <div class="tile-header">
-            <div class="thumb floating-art">
-              <span class="floating-art-shadow" aria-hidden="true" />
-              <AtlasSprite v-if="frameOf(entry)" :frame="frameOf(entry)!" />
-            </div>
-            <div class="tile-intro">
-              <h3>{{ titleOf(entry) }}</h3>
-              <p class="lore">{{ textOf(entry) }}</p>
-            </div>
-          </div>
-          <div v-if="entry.looks.length > 1" class="variants">
-            <span class="variants-label">{{ $t('docs.bogLands.looks') }}</span>
-            <button
-              v-for="(suffix, i) in entry.looks"
-              :key="suffix"
-              type="button"
-              class="variant-button"
-              :class="{ active: view[entry.id]!.look === i }"
-              @click="view[entry.id]!.look = i"
-            >
-              {{ lookName(entry, i) }}
-            </button>
-          </div>
-          <div v-if="entry.levels.length > 1" class="variants">
-            <span class="variants-label">{{ $t('docs.bogLands.stage') }}</span>
-            <button
-              v-for="level in entry.levels"
-              :key="level"
-              type="button"
-              class="variant-button"
-              :class="{ active: view[entry.id]!.level === level }"
-              @click="view[entry.id]!.level = level"
-            >
-              {{ level + 1 }}
-            </button>
-          </div>
-          <div class="variants">
-            <span class="variants-label">{{ $t('docs.bogLands.camera') }}</span>
-            <button
-              v-for="cam in TILE_ORIENTATIONS"
-              :key="cam"
-              type="button"
-              class="variant-button"
-              :class="{ active: view[entry.id]!.camera === cam }"
-              @click="view[entry.id]!.camera = cam"
-            >
-              {{ cam }}
-            </button>
-          </div>
-        </section>
-      </template>
+      <DocsTileEntry
+        v-for="entry in entriesIn(group)"
+        :id="entry.id"
+        :key="entry.id"
+        :title="titleOf(entry)"
+        :level="3"
+      >
+        <template #thumb>
+          <AtlasSprite v-if="frameOf(entry)" :frame="frameOf(entry)!" />
+        </template>
+        <p class="lore">{{ textOf(entry) }}</p>
+        <template #pickers>
+          <DocsPicker
+            v-if="entry.looks.length > 1"
+            v-model="view[entry.id]!.look"
+            :label="$t('docs.bogLands.looks')"
+            :options="entry.looks.map((_, i) => ({ value: i, label: lookName(entry, i) }))"
+          />
+          <DocsPicker
+            v-if="entry.levels.length > 1"
+            v-model="view[entry.id]!.level"
+            :label="$t('docs.bogLands.stage')"
+            :options="entry.levels.map((level) => ({ value: level, label: String(level + 1) }))"
+          />
+          <DocsPicker
+            v-model="view[entry.id]!.camera"
+            :label="$t('docs.bogLands.camera')"
+            :options="TILE_ORIENTATIONS.map((cam) => ({ value: cam, label: cam }))"
+          />
+        </template>
+      </DocsTileEntry>
+    </template>
 
-      <section id="example-map" class="block">
-        <h2>{{ $t('docs.bogLands.example.heading') }}</h2>
-        <p class="group-body">{{ $t('docs.bogLands.example.body') }}</p>
-        <BogIsland />
-      </section>
+    <section id="example-map" class="block">
+      <h2>{{ $t('docs.bogLands.example.heading') }}</h2>
+      <p class="group-body">{{ $t('docs.bogLands.example.body') }}</p>
+      <BogIsland />
+    </section>
 
-      <section id="map-rules" class="block">
-        <h2>{{ $t('docs.bogLands.rules.heading') }}</h2>
-        <p class="group-body">{{ $t('docs.bogLands.rules.body') }}</p>
-        <ol class="rules">
-          <li>{{ $t('docs.bogLands.rules.waterEdges') }}</li>
-          <li>{{ $t('docs.bogLands.rules.lakesApart') }}</li>
-          <li>{{ $t('docs.bogLands.rules.creeks') }}</li>
-          <li>{{ $t('docs.bogLands.rules.mouth') }}</li>
-          <li>{{ $t('docs.bogLands.rules.weir') }}</li>
-          <li>{{ $t('docs.bogLands.rules.boats') }}</li>
-          <li>{{ $t('docs.bogLands.rules.river') }}</li>
-          <li>{{ $t('docs.bogLands.rules.inland') }}</li>
-          <li>{{ $t('docs.bogLands.rules.landing') }}</li>
-        </ol>
-      </section>
-    </main>
-  </div>
+    <section id="map-rules" class="block">
+      <h2>{{ $t('docs.bogLands.rules.heading') }}</h2>
+      <p class="group-body">{{ $t('docs.bogLands.rules.body') }}</p>
+      <ol class="rules">
+        <li>{{ $t('docs.bogLands.rules.waterEdges') }}</li>
+        <li>{{ $t('docs.bogLands.rules.lakesApart') }}</li>
+        <li>{{ $t('docs.bogLands.rules.creeks') }}</li>
+        <li>{{ $t('docs.bogLands.rules.mouth') }}</li>
+        <li>{{ $t('docs.bogLands.rules.weir') }}</li>
+        <li>{{ $t('docs.bogLands.rules.boats') }}</li>
+        <li>{{ $t('docs.bogLands.rules.river') }}</li>
+        <li>{{ $t('docs.bogLands.rules.inland') }}</li>
+        <li>{{ $t('docs.bogLands.rules.landing') }}</li>
+      </ol>
+    </section>
+  </DocsPageLayout>
 </template>
 
 <style scoped>
-.bog-lands {
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  overflow: auto;
-  background: var(--shell);
-}
-.body {
-  max-width: 90ch;
-  margin: 0 auto;
-  padding: 24px 28px 60px;
-  color: var(--text);
-}
-.breadcrumb {
-  display: inline-block;
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: var(--muted);
-  text-decoration: none;
-}
-.breadcrumb:hover {
-  color: var(--gold);
-  text-decoration: underline;
-}
-.intro,
 .group-body {
   color: var(--muted);
   line-height: 1.6;
-}
-.status {
-  font-size: 13px;
-  border-left: 3px solid var(--gold);
-  padding-left: 12px;
-  color: var(--muted);
-}
-.toc {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  margin-top: 20px;
-  padding: 14px 18px;
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  background: var(--panel, #1c1710);
-}
-.toc-link {
-  font-size: 13px;
-  color: var(--muted);
-  text-decoration: none;
-}
-.toc-link:hover {
-  color: var(--text);
-  text-decoration: underline;
 }
 .group-heading {
   margin: 40px 0 8px;
@@ -319,66 +248,5 @@ function textOf(entry: Entry): string {
 }
 .rules li {
   margin-bottom: 6px;
-}
-.tile {
-  margin-top: 28px;
-  scroll-margin-top: 84px;
-}
-.tile-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.thumb {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  flex: none;
-  width: 96px;
-  height: 144px;
-}
-.tile-intro h3 {
-  margin: 0 0 4px;
-}
-.lore {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0 0 4px;
-  max-width: 60ch;
-}
-.variants {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin-top: 12px;
-}
-.variants-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  margin-right: 4px;
-}
-.variant-button {
-  background: var(--panel, #1c1710);
-  border: 1px solid var(--panel-border);
-  color: var(--muted);
-  padding: 5px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: inherit;
-}
-.variant-button:hover {
-  color: var(--text);
-  border-color: var(--gold);
-}
-.variant-button.active {
-  color: #20160a;
-  background: var(--gold);
-  border-color: var(--gold);
 }
 </style>

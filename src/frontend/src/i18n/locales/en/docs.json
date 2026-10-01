@@ -25,6 +25,10 @@
         "title": "Bog lands",
         "description": "Moss ground, creeks and bog lakes, where bog iron is dug and clay is cut."
       },
+      "walls": {
+        "title": "Walls",
+        "description": "The palisade: its six pieces, how they are chosen, where walls can stand, and who can walk through them."
+      },
       "showcase": {
         "title": "Showcase",
         "description": "A player-first pitch for the game, plus a look under the hood for anyone curious how it's built."
@@ -555,6 +559,101 @@
       "reducedMotion": "Animations are paused because your device asks for reduced motion.",
       "saveData": "Animations are paused because your browser is saving data.",
       "off": "Animations are switched off on this device."
+    }
+  },
+  "walls": {
+    "title": "Walls",
+    "intro": "The palisade is the earth-and-timber wall of the Viking age, and above all a movement barrier: it stops land armies, not boats. It unlocks at Longhouse 7, behind a level-5 Tower, and has 3 levels. Each wall hex costs about 40 wood and 10 stone at level 1.",
+    "stage": "Stage",
+    "camera": "Facing",
+    "stages": {
+      "construction": "Under construction",
+      "level": "Level {n}"
+    },
+    "pieces": {
+      "heading": "The six pieces",
+      "body": "A wall is built one hex at a time, and every hex draws one of six pieces. Each piece comes in six rotations and in every stage the art has, from the construction site to the finished wall. Each is drawn here the way the map draws it: the ground, with the piece on top.",
+      "straight": {
+        "name": "Straight",
+        "body": "The run of the wall: it joins two opposite neighbours."
+      },
+      "bend60": {
+        "name": "60° bend",
+        "body": "The tight turn, between two adjacent neighbours. It only occurs in a triangle of three wall hexes, because a fourth hex would make the wall fork."
+      },
+      "bend120": {
+        "name": "120° bend",
+        "body": "The wide turn, with one neighbour skipped: the wall changes direction by 60°."
+      },
+      "gate": {
+        "name": "Gate",
+        "body": "A straight with a gate in the middle. It lets its owner's armies through and no one else's."
+      },
+      "end": {
+        "name": "Land end",
+        "body": "The last hex of a wall on land, with a single wall neighbour. It is half open: any army can cross it at a cost."
+      },
+      "seaEnd": {
+        "name": "Sea end",
+        "body": "Where a wall runs out into the water: it stands on coastal water, touches exactly one land wall hex, and has its own water ground."
+      }
+    },
+    "choosing": {
+      "heading": "How the pieces are chosen",
+      "body": "You only decide where a hex of wall goes. The game picks the piece and its rotation from the wall hexes around it, and picks again when a neighbour is added or removed, so an end turns into a straight when the wall grows past it.",
+      "rules": {
+        "fork": "Walls never fork: no hex may have three or more wall neighbours.",
+        "gate": "A gate only fits on a straight, with a wall hex on two opposite sides, and that has to stay true after any later placement.",
+        "sea": "A sea end touches exactly one land wall hex and can never be a gate."
+      },
+      "example": "An example: a wall that ends on land, runs straight, passes a gate, runs on, turns by 120° and runs out into the sea. The game worked out each piece and its rotation from the hexes alone."
+    },
+    "example": {
+      "alt": "An example wall of {count} hexes on grass, ending in the sea."
+    },
+    "where": {
+      "heading": "Where walls can stand",
+      "body": "On grass, forest, sand and plain bog moss, inside your territory. The wall keeps the ground it stands on: on forest the trees are cleared and the forest floor stays. Walls cannot be built on rivers, streams, mountains, bog water or lakes. The sea end is the exception that proves it: it stands on coastal water.",
+      "grounds": {
+        "grass": "Grass",
+        "forest": "Forest floor",
+        "sand": "Sand",
+        "bog": "Bog moss"
+      }
+    },
+    "movement": {
+      "heading": "Movement",
+      "body": "Walls are about land armies. Fleets are not affected.",
+      "rules": {
+        "block": "A wall hex blocks every land army, your own included. Only standing hexes count: a construction site does not block.",
+        "gate": "A gate lets the owner's armies through, at the normal cost of the ground, and no one else's.",
+        "end": "A land end is half open: any army can cross it, at a cost of 3 instead of the cost of the ground. If it touches a mountain or a wide river it is a sealed end and blocks like any wall hex.",
+        "sea": "A wall that ends in the sea end seals at the coast. A wall that merely stops on land next to open sea does not: its half-open end is the way through.",
+        "natural": "Mountains and wide rivers cannot be crossed by land armies anyway, so a wall run up to one is sealed there.",
+        "fleets": "Fleets are not affected by walls."
+      },
+      "diagram": {
+        "sealedTitle": "Sealed",
+        "sealed": "A wall run up to mountains on both ends: no way through.",
+        "halfOpenTitle": "Half open",
+        "halfOpen": "A wall that stops on land, even right beside the sea: any army crosses its end at a cost of 3.",
+        "seaEndTitle": "Sea end",
+        "seaEnd": "The wall runs out into the water on a sea end: sealed at the coast.",
+        "gateTitle": "Gate",
+        "gate": "A gate opens for its owner's armies only.",
+        "legend": {
+          "wall": "Wall",
+          "gate": "Gate",
+          "seaEnd": "Sea end (wall in the water)",
+          "water": "Sea",
+          "mountain": "Mountain",
+          "ground": "Open ground"
+        }
+      }
+    },
+    "notBuilt": {
+      "heading": "Not built yet",
+      "body": "Siege and fire taking a level off a wall: a wall will lose its levels one at a time until it is gone. Nothing does this yet."
     }
   }
 }

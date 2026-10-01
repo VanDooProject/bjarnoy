@@ -247,4 +247,52 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await page.getByRole('link', { name: '← Docs' }).click();
     await expect(page).toHaveURL(/\/docs$/);
   });
+
+  // Every docs page sits on the shared DocsPageLayout: the same top bar, a breadcrumb back to the hub
+  // (the hub itself has none), a title and the lede.
+  for (const path of ['/tech-tree', '/docs/tiles', '/docs/wasted-lands', '/docs/wildlife-camps', '/docs/bog-lands']) {
+    test(`${path} shows its breadcrumb back to the docs hub`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.locator('.docs-page h1')).toBeVisible();
+      await expect(page.locator('.docs-page .intro')).toBeVisible();
+      await page.locator('.docs-page .breadcrumb').click();
+      await expect(page).toHaveURL(/\/docs$/);
+      await expect(page.locator('.docs-page h1')).toBeVisible();
+      await expect(page.locator('.docs-page .breadcrumb')).toHaveCount(0);
+    });
+  }
+
+  test('walls page shows the six pieces with stage and facing pickers, the example wall and the hub links to it', async ({
+    page,
+  }) => {
+    await page.goto('/docs');
+    await page.getByRole('button', { name: /^Walls/ }).click();
+    await expect(page).toHaveURL(/\/docs\/walls$/);
+
+    const cards = page.locator('.walls .tile');
+    await expect(cards).toHaveCount(6);
+    await expect(page.locator('.walls .tile .thumb .animated-building')).toHaveCount(6);
+    for (const id of ['straight180', 'bend60', 'bend120', 'gate180', 'end', 'end_coast']) {
+      await expect(page.locator(`#piece-${id}`)).toBeVisible();
+    }
+
+    // Stages are read off the atlas: the construction site and at least two finished stages.
+    const straight = page.locator('#piece-straight180');
+    await expect(straight.getByRole('button', { name: 'Under construction' })).toBeVisible();
+    await expect(straight.getByRole('button', { name: 'Level 1', exact: true })).toBeVisible();
+    await straight.getByRole('button', { name: 'Under construction' }).click();
+    await expect(straight.getByRole('button', { name: 'Under construction' })).toHaveClass(/active/);
+    await straight.getByRole('button', { name: 'NW', exact: true }).click();
+    await expect(straight.getByRole('button', { name: 'NW', exact: true })).toHaveClass(/active/);
+    await expect(straight.locator('.animated-building')).toBeVisible();
+
+    // The example wall, drawn by the game's own map renderer, and the four grounds.
+    await expect(page.locator('.wall-example canvas')).toBeVisible();
+    await expect(page.locator('.walls figure.ground')).toHaveCount(4);
+    await expect(page.getByTestId('wall-movement-diagram').locator('figure')).toHaveCount(4);
+    await expect(page.getByTestId('wall-movement-legend').locator('li')).toHaveCount(6);
+
+    await page.locator('.docs-page .breadcrumb').click();
+    await expect(page).toHaveURL(/\/docs$/);
+  });
 });

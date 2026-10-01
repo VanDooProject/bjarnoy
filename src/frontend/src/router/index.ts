@@ -186,6 +186,11 @@ export const router = createRouter({
       beforeEnter: () => awaitShowcaseManifests(),
     },
     {
+      path: '/docs/walls',
+      name: 'walls-docs',
+      component: () => import('../views/WallsView.vue'),
+    },
+    {
       path: '/admin',
       component: () => import('../views/admin/AdminLayout.vue'),
       meta: { requiresAdmin: true },
