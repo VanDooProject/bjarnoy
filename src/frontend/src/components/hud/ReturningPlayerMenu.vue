@@ -113,7 +113,11 @@ watch(() => route.fullPath, close);
           <span class="trigger-sub">{{ t('hud.returningPlayer.nameJarlTriggerSub') }}</span>
         </template>
         <template v-else>
-          <span class="trigger-main">{{ t('hud.returningPlayer.trigger') }}</span>
+          <span class="trigger-main trigger-main--full">{{ t('hud.returningPlayer.trigger') }}</span>
+          <!-- The compact phone bar has ~92px for this line: "I already
+               have a realm" ellipsised to "I already hav…", which said
+               nothing. The menu it opens leads with "Log in" anyway. -->
+          <span class="trigger-main trigger-main--short">{{ t('hud.returningPlayer.logIn') }}</span>
           <span class="trigger-sub">{{ t('hud.returningPlayer.triggerSub') }}</span>
         </template>
       </span>
@@ -325,7 +329,7 @@ watch(() => route.fullPath, close);
    single line of text. Same breakpoint as lib/breakpoints.ts's
    HUD_COMPACT_MAX_WIDTH — plain CSS here can't read that JS constant, so it
    has to be repeated as a literal (see that file's own comment). */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .trigger {
     max-width: 132px;
     min-height: 44px;
@@ -340,5 +344,14 @@ watch(() => route.fullPath, close);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  .trigger-main--full {
+    display: none;
+  }
+  .trigger-main.trigger-main--short {
+    display: inline-block;
+  }
+}
+.trigger-main--short {
+  display: none;
 }
 </style>

@@ -8,6 +8,7 @@ import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import WastedIsland from '../components/docs/WastedIsland.vue';
 import AnimatedGiant from '../components/docs/AnimatedGiant.vue';
+import AnimationPausedNote from '../components/docs/AnimationPausedNote.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { giantFamilyHasClip } from '../lib/docs/wastedIsland';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
@@ -173,7 +174,7 @@ const wallFrame = computed(() => {
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <main class="body">
+    <main class="body docs-scale">
       <h1>{{ $t('docs.wastedLands.title') }}</h1>
       <p class="intro">{{ $t('docs.wastedLands.intro') }}</p>
 
@@ -186,6 +187,7 @@ const wallFrame = computed(() => {
         <p class="caption-note">{{ $t('docs.wastedLands.lore.caption') }}</p>
       </section>
 
+      <AnimationPausedNote />
       <section id="giants" class="giants-section">
         <div class="giant-card">
           <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>
@@ -319,7 +321,8 @@ const wallFrame = computed(() => {
           <div class="pair-thumbs">
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairLivingFrame(pair)"
                   :frame="pairLivingFrame(pair)!"
@@ -331,7 +334,8 @@ const wallFrame = computed(() => {
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairWastedFrame(pair)"
                   :frame="pairWastedFrame(pair)!"
@@ -363,7 +367,8 @@ const wallFrame = computed(() => {
           <div class="pair-thumbs">
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairLivingFrame(PAIRS[3]!)"
                   :frame="pairLivingFrame(PAIRS[3]!)!"
@@ -375,7 +380,8 @@ const wallFrame = computed(() => {
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairWastedFrame(PAIRS[3]!)"
                   :frame="pairWastedFrame(PAIRS[3]!)!"
@@ -394,7 +400,8 @@ const wallFrame = computed(() => {
           <div class="pair-thumbs">
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="riverLivingFrame"
                   :frame="riverLivingFrame"
@@ -406,7 +413,8 @@ const wallFrame = computed(() => {
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="riverWastedFrame"
                   :frame="riverWastedFrame"
@@ -436,7 +444,8 @@ const wallFrame = computed(() => {
           <div class="pair-thumbs">
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairLivingFrame(pair)"
                   :frame="pairLivingFrame(pair)!"
@@ -448,7 +457,8 @@ const wallFrame = computed(() => {
             <span class="pair-arrow">→</span>
             <div class="thumb-col">
               <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
-              <div class="thumb">
+              <div class="thumb floating-art">
+                <span class="floating-art-shadow" aria-hidden="true" />
                 <AtlasSprite
                   v-if="pairWastedFrame(pair)"
                   :frame="pairWastedFrame(pair)!"
@@ -602,14 +612,11 @@ h2 {
 }
 .thumb {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   width: 120px;
-  height: 150px;
-  overflow: hidden;
-  border-radius: 8px;
-  background: var(--panel, #1c1710);
-  border: 1px solid var(--panel-border);
+  /* THUMB_BOX_H (148) plus .floating-art's 10px ground-shadow strip. */
+  height: 160px;
 }
 .thumb-name {
   font-size: 12px;

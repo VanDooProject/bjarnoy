@@ -15,27 +15,28 @@ public class EconomyDesignTests
     private static readonly (BuildingType Type, int Unlock)[] Ladder =
     [
         (BuildingType.Lumberjack, 1), (BuildingType.Quarry, 1), (BuildingType.ClayBrickworks, 1),
-        (BuildingType.StorageHouse, 1), (BuildingType.Farm, 1),
+        (BuildingType.StorageHouse, 1), (BuildingType.ReindeerHerder, 1),
         (BuildingType.FishingHut, 2),
         (BuildingType.Tower, 3),
-        (BuildingType.PumpkinFarm, 4),
+        (BuildingType.Farm, 4), (BuildingType.PumpkinFarm, 4),
         (BuildingType.Barracks, 5),
-        (BuildingType.TownSquare, 6),
+        (BuildingType.TownSquare, 6), (BuildingType.BogOreWorks, 6),
         (BuildingType.Dockyard, 8),
         (BuildingType.ArcheryRange, 9),
         (BuildingType.CartWorkshop, 10),
         (BuildingType.Meadery, 11),
         (BuildingType.DruidHut, 12),
         (BuildingType.Smithy, 15), (BuildingType.GreatStorehouse, 15),
-        (BuildingType.Sawmill, 20), (BuildingType.CropMill, 20),
+        (BuildingType.Sawmill, 20), (BuildingType.CropMill, 20), (BuildingType.Hammerschmiede, 20),
         (BuildingType.ShrineOfUllr, 25), (BuildingType.ShrineOfFreyja, 25),
         (BuildingType.ShrineOfNjord, 25), (BuildingType.ShrineOfThor, 25),
+        (BuildingType.OdinStatue, 25),
     ];
 
     private static readonly BuildingType[] Producers =
     [
-        BuildingType.Lumberjack, BuildingType.Quarry, BuildingType.ClayBrickworks, BuildingType.Farm,
-        BuildingType.PumpkinFarm, BuildingType.FishingHut,
+        BuildingType.Lumberjack, BuildingType.Quarry, BuildingType.ClayBrickworks, BuildingType.ReindeerHerder,
+        BuildingType.Farm, BuildingType.PumpkinFarm, BuildingType.FishingHut, BuildingType.BogOreWorks,
     ];
 
     private static double Sum(ResourceAmounts a) => a.Wood + a.Stone + a.Food + a.Iron;
@@ -74,11 +75,12 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void At_most_two_new_buildings_unlock_at_any_longhouse_level_except_1_and_25()
+    public void At_most_two_new_buildings_unlock_at_any_longhouse_level_except_1_20_and_25()
     {
         foreach (var group in Ladder.GroupBy(l => l.Unlock))
         {
-            if (group.Key is 1 or 25)
+            // LH 20 is the mills tier: Sawmill, Crop Mill and the Hammerschmiede.
+            if (group.Key is 1 or 20 or 25)
             {
                 continue;
             }
@@ -161,9 +163,11 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Lumberjack, 25)]
     [InlineData(BuildingType.Quarry, 25)]
     [InlineData(BuildingType.ClayBrickworks, 25)]
+    [InlineData(BuildingType.ReindeerHerder, 25)]
     [InlineData(BuildingType.Farm, 25)]
     [InlineData(BuildingType.PumpkinFarm, 25)]
     [InlineData(BuildingType.FishingHut, 25)]
+    [InlineData(BuildingType.BogOreWorks, 25)]
     [InlineData(BuildingType.StorageHouse, 25)]
     [InlineData(BuildingType.Barracks, 20)]
     [InlineData(BuildingType.ArcheryRange, 20)]
@@ -175,6 +179,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Meadery, 20)]
     [InlineData(BuildingType.Sawmill, 20)]
     [InlineData(BuildingType.CropMill, 20)]
+    [InlineData(BuildingType.Hammerschmiede, 20)]
     [InlineData(BuildingType.Tower, 10)]
     [InlineData(BuildingType.GreatStorehouse, 10)]
     [InlineData(BuildingType.ShrineOfThor, 5)]
@@ -410,6 +415,126 @@ public class EconomyDesignTests
         settlement.PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
 
     [Fact]
+    public void A_farm_is_refused_until_a_level_3_reindeer_herder_stands()
+    {
+        var without = SettlementWith(4, (BuildingType.ReindeerHerder, 2));
+        var with = SettlementWith(4, (BuildingType.ReindeerHerder, 3));
+
+        var refused = without.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+        var accepted = with.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, refused.Rejection);
+        Assert.True(accepted.Accepted, $"expected accept, got {accepted.Rejection}");
+    }
+
+    [Fact]
+    public void The_odin_statue_is_a_five_level_shrine_behind_a_level_10_druid_hut_and_no_other_shrine()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.OdinStatue, 1);
+
+        Assert.Equal(5, BuildingCatalogue.MaxLevelFor(BuildingType.OdinStatue));
+        Assert.Equal(25, definition.RequiredLonghouseLevel);
+        Assert.Equal(new BuildingPrerequisite(BuildingType.DruidHut, 10), Assert.Single(definition.Prerequisites));
+        Assert.Equal(Bjarnoy.Domain.Shrines.GodType.Odin, BuildingCatalogue.GodOf(BuildingType.OdinStatue));
+        Assert.Equal("odinstatue", BuildingType.OdinStatue.ToWireName());
+        Assert.Equal(29, (int)BuildingType.OdinStatue); // persisted ints must not shift
+        // Costs and times follow the other shrines.
+        var thor = BuildingCatalogue.Get(BuildingType.ShrineOfThor, 1);
+        Assert.Equal(thor.Cost, definition.Cost);
+        Assert.Equal(thor.BuildDuration, definition.BuildDuration);
+    }
+
+    [Fact]
+    public void The_odin_statue_is_refused_until_a_level_10_druid_hut_stands()
+    {
+        var low = SettlementWith(25, (BuildingType.DruidHut, 9));
+        var ready = SettlementWith(25, (BuildingType.DruidHut, 10));
+
+        Assert.Equal(
+            BuildRejection.RequiredBuildingTooLow,
+            low.PlanBuild(BuildingType.OdinStatue, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Rejection);
+        Assert.True(
+            ready.PlanBuild(BuildingType.OdinStatue, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Accepted);
+    }
+
+    [Fact]
+    public void The_odin_statue_counts_as_the_settlements_one_shrine()
+    {
+        var withThor = SettlementWith(25, (BuildingType.DruidHut, 10), (BuildingType.ShrineOfThor, 1));
+        var withOdin = SettlementWith(25, (BuildingType.Smithy, 5), (BuildingType.OdinStatue, 1));
+
+        Assert.Equal(
+            BuildRejection.SettlementAlreadyHasShrine,
+            withThor.PlanBuild(BuildingType.OdinStatue, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Rejection);
+        Assert.Equal(
+            BuildRejection.SettlementAlreadyHasShrine,
+            withOdin.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Rejection);
+    }
+
+    [Fact]
+    public void Wisdom_takes_two_percent_off_builds_per_odin_level()
+    {
+        Assert.Equal(1.0, SettlementWith(25).BuildTimeFactor, 9);
+        foreach (var level in new[] { 1, 2, 3, 4, 5 })
+        {
+            Assert.Equal(1.0 - (0.02 * level), SettlementWith(25, (BuildingType.OdinStatue, level)).BuildTimeFactor, 9);
+        }
+
+        // An unfinished statue (level-0 foundation stub) grants nothing yet.
+        Assert.Equal(1.0, SettlementWith(25, (BuildingType.OdinStatue, 0)).BuildTimeFactor, 9);
+    }
+
+    [Fact]
+    public void An_order_that_starts_at_once_runs_for_the_wisdom_scaled_duration()
+    {
+        var plain = SettlementWith(25);
+        var wise = SettlementWith(25, (BuildingType.OdinStatue, 5));
+        var at = new HexCoord(1, 0);
+
+        var plainOrder = plain.PlanBuild(BuildingType.Lumberjack, at, Terrain.Forest, T0, Guid.CreateVersion7(), speedFactor: 2.0).Order!;
+        var wiseOrder = wise.PlanBuild(BuildingType.Lumberjack, at, Terrain.Forest, T0, Guid.CreateVersion7(), speedFactor: 2.0).Order!;
+
+        var plainSeconds = (plainOrder.CompletesAt!.Value - plainOrder.StartedAt!.Value).TotalSeconds;
+        var wiseSeconds = (wiseOrder.CompletesAt!.Value - wiseOrder.StartedAt!.Value).TotalSeconds;
+        Assert.Equal(plainSeconds * 0.90, wiseSeconds, 3);
+        // The catalogue's own base duration is untouched, so a later change of Odin's level still scales from it.
+        Assert.Equal(plainOrder.BaseDuration, wiseOrder.BaseDuration);
+    }
+
+    [Fact]
+    public void A_waiting_order_is_timed_by_the_odin_level_standing_when_it_starts()
+    {
+        var plainStart = SettlementWith(25).PlanBuild(BuildingType.Lumberjack, new HexCoord(1, 0), Terrain.Forest, T0, Guid.CreateVersion7()).Order!;
+        var waiting = new BuildOrder
+        {
+            Id = Guid.CreateVersion7(),
+            Type = BuildingType.Lumberjack,
+            TargetLevel = 1,
+            Coord = new HexCoord(1, 0),
+            QueuedAt = T0,
+            BaseDuration = plainStart.BaseDuration,
+        };
+        var wise = SettlementWith(25, (BuildingType.OdinStatue, 3));
+        wise = wise with { Queue = [waiting] };
+
+        var (promoted, changed) = wise.PromoteWaitingOrders(T0.AddMinutes(1));
+
+        Assert.True(changed);
+        var started = Assert.Single(promoted.Queue);
+        Assert.False(started.IsWaiting);
+        Assert.Equal(plainStart.BaseDuration.TotalSeconds * 0.94, (started.CompletesAt!.Value - started.StartedAt!.Value).TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void The_ravens_are_two_rings_per_odin_level_and_zero_without_a_finished_statue()
+    {
+        Assert.Equal(0, SettlementWith(25).VisionBonusRings);
+        Assert.Equal(0, SettlementWith(25, (BuildingType.OdinStatue, 0)).VisionBonusRings);
+        Assert.Equal(2, SettlementWith(25, (BuildingType.OdinStatue, 1)).VisionBonusRings);
+        Assert.Equal(10, SettlementWith(25, (BuildingType.OdinStatue, 5)).VisionBonusRings);
+    }
+
+    [Fact]
     public void The_first_storage_house_is_never_refused_by_the_level_10_rule()
     {
         Assert.True(PlanStorage(SettlementWith(1), new HexCoord(1, 0)).Accepted);
@@ -420,7 +545,6 @@ public class EconomyDesignTests
     {
         var settlement = SettlementWith(12, (BuildingType.StorageHouse, 9));
 
-        Assert.Equal(BuildingCatalogue.AdditionalStorageHouseLevel, 10);
         Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(settlement, new HexCoord(1, 0)).Rejection);
     }
 
@@ -441,6 +565,63 @@ public class EconomyDesignTests
         var settlement = SettlementWith(12, (BuildingType.StorageHouse, 10));
 
         Assert.True(PlanStorage(settlement, new HexCoord(1, 0)).Accepted);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(1, 1, 10)]
+    [InlineData(2, 2, 15)]
+    [InlineData(3, 3, 20)]
+    [InlineData(4, 4, 25)]
+    [InlineData(5, 4, 25)]
+    [InlineData(9, 4, 25)]
+    public void The_additional_storage_house_requirement_rises_with_the_houses_held(int existing, int count, int level)
+    {
+        Assert.Equal((count, level), BuildingCatalogue.AdditionalStorageHouseRequirement(existing));
+    }
+
+    [Fact]
+    public void A_third_storage_house_needs_two_at_level_15()
+    {
+        var oneHigh = SettlementWith(25, (BuildingType.StorageHouse, 15), (BuildingType.StorageHouse, 14));
+        var bothHigh = SettlementWith(25, (BuildingType.StorageHouse, 15), (BuildingType.StorageHouse, 20));
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(oneHigh, new HexCoord(1, 0)).Rejection);
+        Assert.True(PlanStorage(bothHigh, new HexCoord(1, 0)).Accepted);
+    }
+
+    [Fact]
+    public void A_fourth_storage_house_needs_three_at_level_20()
+    {
+        var two = SettlementWith(25, (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 19));
+        var three = SettlementWith(25, (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 21), (BuildingType.StorageHouse, 25));
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(two, new HexCoord(1, 0)).Rejection);
+        Assert.True(PlanStorage(three, new HexCoord(1, 0)).Accepted);
+    }
+
+    [Fact]
+    public void A_fifth_storage_house_needs_four_at_level_25_and_then_they_are_unlimited()
+    {
+        var threeMaxed = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 24));
+        var fourMaxed = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25));
+        var sixHouses = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 1));
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(threeMaxed, new HexCoord(1, 0)).Rejection);
+        Assert.True(PlanStorage(fourMaxed, new HexCoord(1, 0)).Accepted);
+        Assert.True(PlanStorage(sixHouses, new HexCoord(1, 1)).Accepted);
+    }
+
+    [Fact]
+    public void A_queued_new_storage_house_counts_toward_the_houses_held()
+    {
+        // One standing L10 house plus one queued new house = 2 held, so the third needs two at L15.
+        var settlement = SettlementWith(25, (BuildingType.StorageHouse, 10));
+        var second = PlanStorage(settlement, new HexCoord(1, 0));
+        Assert.True(second.Accepted);
+        var queued = settlement.Enqueue(second.Order!, T0);
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(queued, new HexCoord(1, 1)).Rejection);
     }
 
     [Fact]

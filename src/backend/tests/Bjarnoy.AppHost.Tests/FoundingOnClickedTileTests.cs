@@ -72,7 +72,9 @@ public class FoundingOnClickedTileTests
     /// remarks (against the older, client-side placement rule — re-verified
     /// against the current backend-owned suggestion by a throwaway harness
     /// reproducing <c>ComputeFreshPin</c> for a zero-population world, which
-    /// is what this test's own fresh world always is).
+    /// is what this test's own fresh world always is). The seed is pinned
+    /// together with the radius (<see cref="TestAppHost.WorldRadius"/>): the
+    /// same seed yields different terrain at a different radius.
     /// </summary>
     private const int PinnedWorldSeed = 5538230;
 
@@ -81,8 +83,7 @@ public class FoundingOnClickedTileTests
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
+        var appHost = await TestAppHost.CreateAsync(cancellationToken);
 
         await using var app = await appHost.BuildAsync(cancellationToken);
         await app.StartAsync(cancellationToken);
@@ -123,7 +124,7 @@ public class FoundingOnClickedTileTests
         // known terrain when none of the others do.
         var createWorld = await apiClient.PostAsJsonAsync(
             "/api/v1/admin/worlds",
-            new CreateWorldRequest($"Founding click test {Guid.NewGuid():N}", Seed: PinnedWorldSeed),
+            new CreateWorldRequest($"Founding click test {Guid.NewGuid():N}", Seed: PinnedWorldSeed, Radius: TestAppHost.WorldRadius),
             cancellationToken);
         createWorld.EnsureSuccessStatusCode();
         var world = (await createWorld.Content.ReadFromJsonAsync<AdminWorldResponse>(cancellationToken))!;

@@ -57,6 +57,8 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     status: 'active',
     maxPlayers: 500,
     playerCount: 2,
+    freeSpawnCount: 7,
+    spawnCount: 40,
     speedFactor: 1,
     startsAt: null,
     joinsClosed: false,
@@ -327,7 +329,7 @@ describe('AdminWorldReseedView', () => {
     expect(value('islandCoastNoise')).toBe('1');
     expect(value('islandCoastNoiseScale')).toBe('49');
     expect(value('islandSmallShare')).toBe('0.3');
-    expect(value('islandLargeShare')).toBe('0.12');
+    expect(value('islandLargeShare')).toBe('0.07');
   });
 
   it('sends an edited island-shape parameter to the preview endpoint', async () => {

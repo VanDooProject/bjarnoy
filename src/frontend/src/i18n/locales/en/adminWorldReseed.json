@@ -29,6 +29,8 @@
   "resetToCurrent": "Reset to current",
   "islandCellSizeLabel": "Island spacing (cell size)",
   "islandChanceLabel": "Island chance",
+  "islandMaxReachLabel": "Island max reach (hexes, 0 = legacy)",
+  "islandMinGapLabel": "Island min sea gap (hexes, 0 = off)",
   "islandMinWidthLabel": "Island min half-width",
   "islandMaxWidthLabel": "Island max half-width",
   "islandMinSegmentsLabel": "Island min spine segments",

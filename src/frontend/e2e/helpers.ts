@@ -1,4 +1,5 @@
-import type { CDPSession, Locator, Page } from '@playwright/test';
+import { expect, type CDPSession, type Locator, type Page } from '@playwright/test';
+import type { SettlementPage } from './pages/SettlementPage';
 import { AdminAuthFixture } from './pages/AdminAuthFixture';
 
 /**
@@ -157,7 +158,7 @@ export async function foundSettlement(page: Page): Promise<void> {
 }
 
 /**
- * Places the 2 guided onboarding buildings (farm + lumberjack) next to the
+ * Places the 2 guided onboarding buildings (reindeer herder + lumberjack) next to the
  * freshly founded settlement, which completes onboarding and shows the
  * completion banner. Assumes `claimLandfall` has already run.
  */
@@ -166,7 +167,7 @@ export async function placeGuidedBuildings(page: Page): Promise<void> {
   // real click-to-build UI is settlement-interactions.spec's job to cover;
   // this helper only needs the onboarding *gate*
   // (onboardingGuidance.deriveOnboardingGuidance's `complete`, which now
-  // specifically requires farm + lumberjack rather than any 3 buildings) to
+  // specifically requires reindeer herder + lumberjack rather than any 3 buildings) to
   // fire reliably, and the settlement's own zoom (picked by
   // zoomForFogMargin to keep a wide fog margin on screen) makes clicking a
   // specific nearby hex by pixel offset unreliable. __demoWorld is the same
@@ -185,7 +186,7 @@ export async function placeGuidedBuildings(page: Page): Promise<void> {
       [-1, 1],
       [0, 1],
     ];
-    const guidedTypes = ['farm', 'lumberjack'];
+    const guidedTypes = ['reindeerherder', 'lumberjack'];
     let placed = 0;
     for (let radius = 1; radius <= 2 && placed < guidedTypes.length; radius++) {
       for (const [dq, dr] of dirs) {
@@ -392,4 +393,28 @@ export async function layoutOverflow(page: Page): Promise<{ pageScrollsSideways:
     }
     return { pageScrollsSideways: document.documentElement.scrollWidth > vw + 1, offscreen: [...new Set(offscreen)] };
   });
+}
+
+/**
+ * Opens the ring menu on the guided hex GuidancePointer.vue is currently
+ * aiming at (design handoff "2a" frame 2, right after landfall — the pointer
+ * follows the camera via `useMapAnchor`, which writes the hex's screen point
+ * into `--anchor-x`/`--anchor-y` on `[data-testid="guidance-pointer"]`) and
+ * waits for frame 3's "This one fits {terrain}" chip, the case the chip's
+ * placement bug was found on. Reads the anchor vars rather than re-deriving
+ * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
+ * (camera + arrowTipOffset) is exactly where the click needs to land.
+ */
+export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
+  const pointer = settlement.guidancePointer;
+  await expect
+    .poll(async () => (await pointer.getAttribute('style')) ?? '', { message: 'guidance pointer never got an anchor point' })
+    .toMatch(/--anchor-x: -?\d/);
+  const style = (await pointer.getAttribute('style'))!;
+  const x = Number(style.match(/--anchor-x: (-?[\d.]+)px/)![1]);
+  const y = Number(style.match(/--anchor-y: (-?[\d.]+)px/)![1]);
+  const box = await settlement.canvasBox();
+  await settlement.page.mouse.click(box.x + x, box.y + y);
+  await settlement.ring.waitForOpen();
+  await expect(pointer.locator('.chip')).toContainText('fits');
 }

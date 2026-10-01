@@ -33,6 +33,7 @@ import {
   snapToOfferedPlot,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
+import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { AlreadyFoundedError, useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { useAuthStore } from '../stores/auth';
@@ -49,31 +50,31 @@ import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useMediaQuery } from '../composables/useMediaQuery';
-import { hudBarHeightPx } from '../composables/hudBarHeight';
-import { DEMO_BADGE_ROW_PX, isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
-import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
+import { isHudBarAtBottom, isHudRail } from '../composables/hudSettlementBubbleState';
+import { HUD_COMPACT_QUERY, TOUCH_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue: the onboarding build step used to pop BuildingModal — a single
-// "Build here" button with no type picker, hardcoded to 'farm' (live) or
-// 'hut' (demo). Farm requires grass (BuildingCatalogue), so a click on any
+// "Build here" button with no type picker, hardcoded to 'reindeerherder' (live) or
+// 'hut' (demo). Reindeer Herder requires grass (BuildingCatalogue), so a click on any
 // forest/mountain tile in the fresh border silently failed (TerrainNotAllowed,
 // only console.error'd) with the modal just sitting there — "can't actually
 // select the correct building". Ring menu, same as SettlementView's, fixes
 // that: a flat ring (no nested categories — this is the "simplified" version)
 // with only the guided type matching the *clicked tile's own terrain*
-// enabled (Farm needs grass, Lumberjack needs forest — BuildingCatalogue),
+// enabled (Reindeer Herder needs grass, Lumberjack needs forest — BuildingCatalogue),
 // everything else visibly disabled. Enabling both regardless of terrain
 // would just reintroduce the same silent-failure bug for whichever one
 // doesn't fit the tile actually clicked.
-type OnboardingBuildType = 'farm' | 'lumberjack' | 'tower' | 'fishinghut' | 'quarry';
+type OnboardingBuildType = 'reindeerherder' | 'lumberjack' | 'tower' | 'fishinghut' | 'quarry';
 const GUIDED_BUILD_TERRAIN: Partial<Record<OnboardingBuildType, Terrain>> = {
-  farm: 'grass',
+  reindeerherder: 'grass',
   lumberjack: 'forest',
 };
-const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['farm', 'lumberjack', 'quarry', 'tower', 'fishinghut'];
+const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['reindeerherder', 'lumberjack', 'quarry', 'tower', 'fishinghut'];
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -408,6 +409,7 @@ const queueDrawerOpen = ref(false);
 // CSS custom properties to stay clear of the bar on either edge instead of
 // assuming it's always at the top.
 const isCompactHudLanding = useMediaQuery(HUD_COMPACT_QUERY);
+const isTouch = useMediaQuery(TOUCH_QUERY);
 // Mobile tutorial focus (owner decision): on phones, once a settlement is
 // founded the guided build steps are the whole show — the top HUD bar (and
 // everything it carries: the settlement-name bubble, the pull-down drawer)
@@ -431,13 +433,14 @@ const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && isHudB
 const hudInsetTopPxLanding = computed(() =>
   hideBarForTutorial.value || hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value,
 );
+// Landscape rail mode (TopBar.vue): no top band (hudBarHeightPx is 0 there),
+// the rail's width goes into `--hud-inset-left` instead.
+const hudInsetLeftPxLanding = computed(() =>
+  hideBarForTutorial.value || !isHudRail.value ? 0 : hudRailWidthPx.value + 8,
+);
 const hudInsetBottomPxLanding = computed(() =>
   !hideBarForTutorial.value && hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0,
 );
-// With the bar unmounted for the tutorial, the demo badge drops to the top
-// edge (DemoModeBadge.vue) — the landfall banner below reserves its row
-// rather than sliding up underneath it.
-const overlayRowTopPx = computed(() => (DEMO_MODE && hideBarForTutorial.value ? DEMO_BADGE_ROW_PX : 0));
 
 watch(ringScreen, (screen) => {
   if (!screen) ringLaneSpots.value = {};
@@ -526,7 +529,7 @@ function showInvalidClickMessage(message: string) {
 // than relying on that agreement implicitly. `Settlement.Claims` (what the
 // backend actually gates new construction against) is the union of the
 // centre disc and every placed Tower's own satellite disc — but this
-// onboarding flow only ever places the very first Farm/Lumberjack, before
+// onboarding flow only ever places the very first Reindeer Herder/Lumberjack, before
 // any Tower exists, so the centre disc alone is already the exact same
 // range at this point in a player's settlement; `claimRadiusForLevel` stays
 // a faithful enough mirror here without needing the fuller `claimDiscs`
@@ -615,7 +618,9 @@ const pointerTarget = computed(() => {
     return {
       mode: 'hex' as const,
       coord: previewCoord.value,
-      label: DEMO_MODE ? t('landing.pointer.clickThisPlot') : t('landing.pointer.anyGlowingPlot'),
+      label: DEMO_MODE
+        ? isTouch.value ? t('landing.pointer.tapThisPlot') : t('landing.pointer.clickThisPlot')
+        : t('landing.pointer.anyGlowingPlot'),
       angle: 38,
       targetRadius: HEX_TARGET_RADIUS_PX,
     };
@@ -699,7 +704,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
 // a rates-delta watch would never fire there at all.
 const resourceTicks = ref<ResourceTick[]>([]);
 let tickIdSeq = 0;
-function fireResourceTick(type: 'farm' | 'lumberjack', coord: AxialCoord) {
+function fireResourceTick(type: 'reindeerherder' | 'lumberjack', coord: AxialCoord) {
   const boostTerrain = BOOST_TERRAIN[type];
   const neighbours = boostTerrain
     ? matchingNeighbourCount(coord, boostTerrain, (q, r) => world.model.getTile(q, r))
@@ -721,7 +726,7 @@ async function onRingSelect(type: string) {
     canvasRef.value?.renderer?.forceRebuild();
     world.syncHud();
     closeRing();
-    if (type === 'farm' || type === 'lumberjack') fireResourceTick(type, coord);
+    if (type === 'reindeerherder' || type === 'lumberjack') fireResourceTick(type, coord);
     return;
   }
   // Always close, win or lose — matching SettlementView's own onRingSelect
@@ -731,7 +736,7 @@ async function onRingSelect(type: string) {
   closeRing();
   try {
     await world.queueBuildLive(type, coord);
-    if (type === 'farm' || type === 'lumberjack') fireResourceTick(type, coord);
+    if (type === 'reindeerherder' || type === 'lumberjack') fireResourceTick(type, coord);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
     showInvalidClickMessage(t('landing.invalidClick.orderFailed'));
@@ -886,6 +891,16 @@ watch(
     renderer?.forceRebuild();
   },
 );
+
+// Construction progress dials over buildings still being built; the renderer
+// animates the progress itself every tick from these absolute timestamps.
+watch(
+  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  ([renderer]) => {
+    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -894,7 +909,7 @@ watch(
     :style="{
       '--hud-inset-top': hudInsetTopPxLanding + 'px',
       '--hud-inset-bottom': hudInsetBottomPxLanding + 'px',
-      '--overlay-row-top': overlayRowTopPx + 'px',
+      '--hud-inset-left': hudInsetLeftPxLanding + 'px',
     }"
   >
     <!-- Deliberately outside the SettlementCanvas v-if below: it has to show
@@ -1015,7 +1030,7 @@ watch(
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
       :target-radius="pointerTarget.targetRadius"
-      clear-below-selector=".hero--founding"
+      clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
@@ -1163,7 +1178,16 @@ h1 {
    hero has to span full-width below the mobile header instead of a fixed
    left offset, and the footer has to shrink so it doesn't fight the
    checklist tray for the same strip of screen at the bottom. */
-@media (max-width: 768px) {
+/* Landscape rail (TopBar.vue): the account-creation nudge hangs off the
+   rail's "Name your jarl" bubble at the top-left, right where the
+   completion banner's title sits on a short screen. While the nudge is up,
+   the banner starts right of it (the nudge is 300px wide, from the rail's
+   8px margin). */
+.landing:has(.hud-bar--rail .nudge) > .banner.complete {
+  left: 324px;
+  width: calc(100vw - 340px);
+}
+@media (max-width: 768px), (max-height: 500px) {
   .hero {
     left: 20px;
     right: 20px;
@@ -1207,6 +1231,9 @@ h1 {
     height: 40px;
     font-size: 12px;
     gap: 12px;
+    /* Lifts the line clear of the "Demo" tag in the bottom-left corner. */
+    padding-bottom: 10px;
+    box-sizing: border-box;
   }
   /* The checklist tray (OnboardingChecklist's root, which carries this
      view's scope attribute) docks right above the footer rather than on
@@ -1250,6 +1277,10 @@ h1 {
     font-size: 12px;
     margin-top: 6px;
     gap: 6px;
+    /* The phone rules above keep the facts on one line; in this 280px
+       column that line would run out across the island instead. */
+    flex-wrap: wrap;
+    white-space: normal;
   }
 }
 </style>

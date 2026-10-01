@@ -11,8 +11,8 @@ namespace Bjarnoy.Domain.Tests;
 /// </summary>
 public class WastedIslandGenerationTests
 {
-    // Seed 6 (default-size world) places nine wasted islands, eight of them with
-    // lava rivers and seven with a giant (found by scanning seeds 1-60).
+    // Seed 6 (the radius-1000 test world) places several wasted islands (11 of 6+ tiles
+    // with the wasted-island min gap), with lava rivers and giants.
     private const int TwoWastedIslandSeed = 6;
 
     private static GeneratedWorld Generate(int seed) => TestWorlds.Default(seed);

@@ -64,11 +64,15 @@
     "modifierShrineFavour": "+{percent}% {domain} production",
     "modifierShrineFavourLandAttack": "+{percent}% land unit attack",
     "modifierShrineFavourShipAttack": "+{percent}% ship attack",
+    "modifierOdinFavour": "-{percent}% build time, +{rings} rings of vision",
     "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
     "domainFood": "Food",
+    "domainIron": "Iron",
     "domainWood": "Wood"
   },
   "ringMenu": {
+    "shrineLimitLock": "This settlement already has a shrine",
+    "storageHouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
     "back": "Back",
     "backButton": "‹ BACK",
     "buildHub": "BUILD",
@@ -100,7 +104,8 @@
       "trainUnits": "Train units",
       "build": "Build",
       "openWater": "Open water",
-      "giantOccupied": "Occupied by a giant landmark"
+      "giantOccupied": "Occupied by a giant landmark",
+      "bogNothingHere": "Nothing can be built on this bog hex"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -275,6 +280,7 @@
       "storagehouse": "Storehouse",
       "tower": "Watchtower",
       "fishinghut": "Fishing hut",
+      "reindeerherder": "Reindeer herder",
       "pumpkinfarm": "Pumpkin farm"
     },
     "missionAttack": "Attack",

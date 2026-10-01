@@ -1,11 +1,11 @@
-// A single source of truth for "is this a mobile-width viewport" — used to
+// A single source of truth for "is this a phone-sized viewport" (narrow, or
+// short like a phone held sideways — see lib/breakpoints.ts) — used to
 // swap the desktop BuildQueuePanel/TrainingQueuePanel pair for the mobile
 // QueueDrawer in MapView.vue/LandingView.vue. Tracked via matchMedia rather
 // than window.innerWidth so it updates on rotation/resize without a manual
 // resize listener.
 import { onUnmounted, ref, type Ref } from 'vue';
-
-export const MOBILE_MAX_WIDTH = 768;
+import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 
 export function useIsMobile(): Readonly<Ref<boolean>> {
   // jsdom in unit tests for components that merely import this composable
@@ -15,7 +15,7 @@ export function useIsMobile(): Readonly<Ref<boolean>> {
     return ref(false);
   }
 
-  const query = window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`);
+  const query = window.matchMedia(HUD_COMPACT_QUERY);
   const isMobile = ref(query.matches);
   const onChange = (event: MediaQueryListEvent) => {
     isMobile.value = event.matches;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Onboarding quest tray in the settlement view (docs/design/economy.md
-// section 7). The landing page's found -> farm -> lumberjack checklist
+// section 7). The landing page's found -> reindeer herder -> lumberjack checklist
 // (OnboardingChecklist.vue) hands off to the settlement view; from there
 // this tray walks the player through six goals that each pay a resource
 // reward on a manual Claim. It shows the first unclaimed quest prominently,
@@ -111,7 +111,9 @@ async function claim(q: QuestResponse) {
    bottom-docked mobile HUD is cleared through --hud-inset-bottom (MapView). */
 .quest-tray {
   position: absolute;
-  left: 16px;
+  /* `--hud-inset-left` is the landscape rail's width (0 everywhere else): the
+     tray sits right of the ☰ + resource column instead of under it. */
+  left: calc(var(--hud-inset-left, 0px) + 16px);
   bottom: calc(16px + var(--hud-inset-bottom, 0px));
   z-index: 10;
   width: 280px;
@@ -247,7 +249,7 @@ async function claim(q: QuestResponse) {
    stays out of the map's way. */
 @media (max-width: 768px) {
   .quest-tray {
-    left: 12px;
+    left: calc(var(--hud-inset-left, 0px) + 12px);
     right: 12px;
     width: auto;
     bottom: calc(12px + var(--hud-inset-bottom, 0px));

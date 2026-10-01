@@ -36,7 +36,8 @@ import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
-import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
+import { isHudRail } from '../../composables/hudSettlementBubbleState';
+import { HUD_COMPACT_QUERY, HUD_RAIL_TALL_QUERY } from '../../lib/breakpoints';
 import { formatHudNumber } from '../../lib/hud/compactNumber';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -52,7 +53,15 @@ const world = useWorldStore();
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
-const isExpanded = computed(() => isCompact.value && isHudDrawerOpen.value);
+// Landscape rail (TopBar.vue's `isHudRail`): the pills are a column of
+// separate floating bubbles at a fixed width, never the pull-down drawer's
+// "expanded" layout and never measured against a row — see `updateFit`.
+// One line per pill by default (the usual stock -> rate -> cap tap cycle);
+// two lines (stock, then rate or cap) once the viewport is tall enough.
+const isRail = computed(() => isCompact.value && isHudRail.value);
+const isTall = useMediaQuery(HUD_RAIL_TALL_QUERY);
+const railTwoLine = computed(() => isRail.value && isTall.value);
+const isExpanded = computed(() => isCompact.value && isHudDrawerOpen.value && !isRail.value);
 
 // Issue #158: each pill's fill track gains a dim reserved segment — the
 // stock is not split into two bars, `reserved` is a *portion* of `value`
@@ -145,6 +154,32 @@ function cycle() {
 
 onBeforeUnmount(clearRevertTimer);
 
+// Two-line rail pills: the first line is always the stock, and a tap only
+// cycles the second line between the rate and the cap.
+type Line2 = 0 | 1;
+const line2 = ref<Line2>(0);
+function cycleLine2() {
+  line2.value = (line2.value === 0 ? 1 : 0) as Line2;
+  clearRevertTimer();
+  if (line2.value !== 0) {
+    revertTimer = setTimeout(() => {
+      line2.value = 0;
+      revertTimer = null;
+    }, AUTO_REVERT_MS);
+  }
+}
+function onPillTap() {
+  if (railTwoLine.value) cycleLine2();
+  else cycle();
+}
+function line2Text(rate: number, cap: number): string {
+  return line2.value === 1 ? t('hud.resourceBar.capSuffix', { n: fmt(cap) }) : t('hud.resourceBar.rate', { n: fmtRate(rate) });
+}
+/** The text a rail pill shows (both lines, for the aria-label) — in two-line mode the stock and its second line, otherwise the one cycling line. */
+function pillSummary(value: number, rate: number, cap: number): string {
+  return railTwoLine.value ? `${fmt(value)} ${line2Text(rate, cap)}` : stageText(value, rate, cap);
+}
+
 // Cap stage now reuses the exact same "/{n}" the expanded view's cap line
 // shows (owner's call — a bare "/3,000" reads as continuing the "current"
 // line's own cap, exactly like the expanded pill directly above it does),
@@ -171,9 +206,20 @@ let resizeObserver: ResizeObserver | null = null;
 /** Smallest evenly spread gap short notation may leave before the font steps down a size. */
 const MIN_TIGHT_GAP_PX = 8;
 
+/** The rail's pills have a fixed width: numbers of six digits and up switch to "k"/"M" together. */
+const RAIL_SHORT_FROM = 100_000;
+
 async function updateFit(): Promise<void> {
   if (!isCompact.value) {
     useShortNotation.value = false;
+    useTightFont.value = false;
+    return;
+  }
+  if (isRail.value) {
+    // No row to measure: the rail is a fixed-width column, so only the size
+    // of the numbers decides, and the font never steps down.
+    const all = [...pills.value, { value: population.value.current, rate: population.value.rate, cap: population.value.max }];
+    useShortNotation.value = all.some((p) => Math.max(Math.abs(p.value), Math.abs(p.rate), Math.abs(p.cap)) >= RAIL_SHORT_FROM);
     useTightFont.value = false;
     return;
   }
@@ -212,14 +258,21 @@ onBeforeUnmount(() => {
 // shows one stage's text at a time), and collapsed <-> expanded (a
 // completely different markup shape) — a bar *resize* (rotation, drawer
 // animation) is already covered by the ResizeObserver above.
-watch([pills, population, stage, isExpanded, isCompact, locale], () => void updateFit(), { deep: true });
+watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => void updateFit(), { deep: true });
 </script>
 
 <template>
   <div
     ref="barRef"
     class="resource-bar"
-    :class="{ disabled: props.ringOpen, compact: isCompact && !isExpanded, expanded: isExpanded, 'tight-font': useTightFont }"
+    :class="{
+      disabled: props.ringOpen,
+      compact: isCompact && !isExpanded,
+      expanded: isExpanded,
+      'tight-font': useTightFont,
+      'resource-bar--rail': isRail,
+      'resource-bar--rail-2': railTwoLine,
+    }"
   >
     <template v-if="!isCompact || isExpanded">
       <div v-for="pill in pills" :key="pill.key" class="resource">
@@ -260,16 +313,19 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
         type="button"
         class="resource resource--compact"
         :data-stage="stage"
-        :aria-label="t(`catalogue.resources.${pill.key}`) + ': ' + stageText(pill.value, pill.rate, pill.cap)"
-        @click="cycle"
+        :aria-label="t(`catalogue.resources.${pill.key}`) + ': ' + pillSummary(pill.value, pill.rate, pill.cap)"
+        @click="onPillTap"
       >
         <span class="hex-icon" :style="{ background: pill.color }" />
         <div class="numbers-compact">
-          <span class="value-compact" :class="`stage-${stage}`">
-            {{ stageText(pill.value, pill.rate, pill.cap) }}
-            <span v-if="stage === 0 && pill.reserved > 0" class="reserved-hint">
+          <span class="value-compact" :class="railTwoLine ? 'stage-0' : `stage-${stage}`">
+            {{ railTwoLine ? fmt(pill.value) : stageText(pill.value, pill.rate, pill.cap) }}
+            <span v-if="stage === 0 && pill.reserved > 0 && !isRail" class="reserved-hint">
               {{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}
             </span>
+          </span>
+          <span v-if="railTwoLine" class="value-compact value-line2" :class="line2 === 0 ? 'stage-1' : 'stage-2'">
+            {{ line2Text(pill.rate, pill.cap) }}
           </span>
           <span class="fill-track">
             <span class="fill" :style="{ width: fillPct(pill.value, pill.cap) + '%', background: pill.color }" />
@@ -289,13 +345,16 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
         type="button"
         class="resource resource--compact population"
         :data-stage="stage"
-        :aria-label="t('hud.nav.settlement') + ': ' + stageText(population.current, population.rate, population.max)"
-        @click="cycle"
+        :aria-label="t('hud.nav.settlement') + ': ' + pillSummary(population.current, population.rate, population.max)"
+        @click="onPillTap"
       >
         <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
         <div class="numbers-compact">
-          <span class="value-compact" :class="`stage-${stage}`">
-            {{ stageText(population.current, population.rate, population.max) }}
+          <span class="value-compact" :class="railTwoLine ? 'stage-0' : `stage-${stage}`">
+            {{ railTwoLine ? fmt(population.current) : stageText(population.current, population.rate, population.max) }}
+          </span>
+          <span v-if="railTwoLine" class="value-compact value-line2" :class="line2 === 0 ? 'stage-1' : 'stage-2'">
+            {{ line2Text(population.rate, population.max) }}
           </span>
           <span class="fill-track">
             <span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop, #7fb3d5)' }" />
@@ -310,7 +369,7 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
        out off-screen via `position: fixed` so it can't affect `.hud-bar-right`'s
        real layout or be seen/hit-tested. Exists only on phones. -->
   <div
-    v-if="isCompact"
+    v-if="isCompact && !isRail"
     ref="measureRef"
     class="resource-bar resource-bar--measure"
     :class="{ compact: !isExpanded, expanded: isExpanded }"
@@ -594,6 +653,60 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
 .resource-bar.compact .fill-track {
   min-width: 0;
   margin-top: 2px;
+}
+
+/* Landscape rail (TopBar.vue's `hud-bar--rail`): the pills stack as a column
+   of separate floating bubbles, each in the same dark translucent pill as the
+   settlement bubble and Trade button, at a fixed width — nothing here is
+   measured against a row (`updateFit` only picks short notation by number
+   size). One line per pill (84px) by default, two (92px: stock, then rate or
+   cap) when the viewport is tall enough (`resource-bar--rail-2`). Placed
+   after the `.compact` rules so it wins at equal specificity. */
+.resource-bar--rail.compact {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex: none;
+  gap: 6px;
+}
+.resource-bar--rail .resource--compact {
+  width: 84px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  gap: 6px;
+  border-radius: 14px;
+  background: rgba(6, 12, 16, 0.94);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+.resource-bar--rail.compact .resource--compact + .resource--compact {
+  /* Undo the row's separator reset above: every rail pill is a full bubble. */
+  padding-left: 8px;
+  border-left: 1px solid var(--panel-border);
+}
+.resource-bar--rail-2 .resource--compact {
+  width: 92px;
+}
+.resource-bar--rail .numbers-compact {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.resource-bar--rail .value-compact {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resource-bar--rail .value-line2 {
+  font-size: 11px;
+}
+.resource-bar--rail .reserved-hint {
+  display: none;
+}
+.resource-bar--rail.compact .fill-track {
+  margin-top: 3px;
+}
+.resource-bar--rail-2.compact .fill-track {
+  margin-top: 4px;
 }
 
 /* Hidden fit-measurement clone (see `updateFit` in the script above) — laid

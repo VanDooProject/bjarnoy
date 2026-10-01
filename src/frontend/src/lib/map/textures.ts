@@ -118,6 +118,15 @@ export type TextureKey =
   | 'lakeshore'
   | 'lakehalf'
   | 'lakemouth'
+  // The lake's decorations that a building nearby asks for (`lakeProps.ts`): variants 4-6 of the `boglake` family, each
+  // its own key so `bog.ts`-style variant hashing never rolls them for a plain lake tile.
+  | 'lakeweir'
+  | 'lakeoreboat'
+  | 'lakefishboat'
+  // A Fishing Hut on a bog lake's half shore, and the Hammerschmiede on a creek bend (straight creek = `hammerschmiede`):
+  // like the Sawmill's river keys these are texture-lookup keys, not wire building types.
+  | 'fisherhutlake'
+  | 'hammerschmiedebend'
   | CampFamily;
 
 type OrientationMap<T> = Record<TileOrientation, T>;
@@ -144,10 +153,14 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   shrineofthor: 'torshrine',
   shrineoffreyja: 'freyjashrine',
   shrineofullr: 'ullrshrine',
+  // The Odin Statue: a statue on grass, animated like the other shrines.
+  odinstatue: 'odinstatue',
   // A skerry standing in coastal water — a water-only building.
   shrineofnjord: 'njordshrine',
   // Newer, on-palette scripted art — see buildingArt.ts's matching docs-page
   // choice. Pumpkin Farm stays on the legacy `farm_pumpkin` family for now.
+  // The Reindeer Herder is the starting food building (LH 1), also scripted art.
+  reindeerherder: 'reindeerherder',
   farm: 'farm',
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjack',
@@ -214,6 +227,15 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   lakeshore: 'boglake_shore',
   lakehalf: 'boglake_half',
   lakemouth: 'boglake_mouth',
+  lakeweir: 'boglake',
+  lakeoreboat: 'boglake',
+  lakefishboat: 'boglake',
+  // The bog-ore works (7 art levels, level000-006) and its helpers. The lake Fishing Hut stands on the half shore base.
+  bogoreworks: 'bogoreworks',
+  fisherhutlake: 'fisherhut_lake',
+  // The river hammer mill stands in for a bog-creek Hammerschmiede for now (TODO(art): bog-creek Hammerschmiede).
+  hammerschmiede: 'hammerschmiede',
+  hammerschmiedebend: 'hammerschmiede_bend',
 };
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
@@ -565,6 +587,40 @@ export const BOG_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
  */
 const BOG_MAX_VARIANT: Partial<Record<TextureKey, number>> = { lake: 3 };
 
+/**
+ * The `boglake` variants that are decorations, not plain tiles: variant004 the fish weir (all six rotations, static),
+ * variant005 the ore boat (animated, kept camera SW only) and variant006 the fishing boat (animated, kept camera W only).
+ */
+export const LAKE_PROP_VARIANT: Readonly<Partial<Record<TextureKey, number>>> = {
+  lakeweir: 4,
+  lakeoreboat: 5,
+  lakefishboat: 6,
+};
+
+/** The texture key of each lake decoration (`Tile.lakeProp`). */
+export const LAKE_PROP_KEY: Readonly<Record<NonNullable<Tile['lakeProp']>, TextureKey>> = {
+  weir: 'lakeweir',
+  oreboat: 'lakeoreboat',
+  fishboat: 'lakefishboat',
+};
+
+/** The one camera each animated boat is rendered from (3D_assets `docs/bog-tiles.md`): the only rotation its frames exist in. */
+export const LAKE_PROP_KEPT_ORIENTATION: Readonly<Partial<Record<NonNullable<Tile['lakeProp']>, TileOrientation>>> = {
+  oreboat: 'SW',
+  fishboat: 'W',
+};
+
+/** Picks one numbered variant out of the `boglake` frames and renames it to the plain frame names `classifyFamilyFrames` reads (`boglake_SW_variant005_base` becomes `boglake_SW_base`). Exported for the tests. */
+export function selectVariantFrames<T>(frames: FamilyFrame<T>[], variant: number): FamilyFrame<T>[] {
+  const result: FamilyFrame<T>[] = [];
+  for (const frame of frames) {
+    const match = BOG_FRAME_RE.exec(frame.name);
+    if (!match || match[3] === undefined || Number(match[3]) !== variant) continue;
+    result.push({ name: `${match[1]}_${match[2]}${match[4] ?? ''}`, layer: frame.layer, value: frame.value });
+  }
+  return result;
+}
+
 const BOG_FRAME_RE = /^(.+)_(NE|NW|SW|SE|E|W)(?:_variant(\d{3}))?(_base)?$/;
 
 /** Lines a bog family's frames up for `classifyFamilyFrames` — see `BOG_TEXTURE_KEYS`. Exported for the tests. */
@@ -710,13 +766,14 @@ export interface TileAnimClip {
 export function classifyFamilyClips<T>(
   clips: AtlasClip[],
   resolveFrame: (name: string) => T | undefined,
+  levelOf?: (clip: AtlasClip) => number | undefined,
 ): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T }>> {
   const byOrientation = emptyOrientationMap<
     Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T }>
   >(() => new Map());
   for (const clip of clips) {
-    const match = ANIM_LEVEL_RE.exec(clip.name);
-    if (!match) continue;
+    const level = levelOf ? levelOf(clip) : ANIM_LEVEL_RE.exec(clip.name) ? Number(ANIM_LEVEL_RE.exec(clip.name)![1]) : undefined;
+    if (level === undefined) continue;
     const orientation = clip.orientation as TileOrientation;
     if (!TILE_ORIENTATIONS.includes(orientation)) continue;
     const frameValues = clip.frames.map(resolveFrame);
@@ -731,7 +788,7 @@ export function classifyFamilyClips<T>(
       rest = resolveFrame(clip.rest);
       if (rest === undefined) continue;
     }
-    byOrientation[orientation].set(Number(match[1]), {
+    byOrientation[orientation].set(level, {
       textures: frameValues as T[],
       fps: clip.fps,
       playback: clip.playback,
@@ -855,9 +912,13 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
   const animTop: TileTextures['animTop'] = {};
   for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
     const rawFrames = framesOfFamily(merged, family);
-    const frames = BOG_TEXTURE_KEYS.has(key)
-      ? normalizeBogFrames(rawFrames, BOG_MAX_VARIANT[key])
-      : collapseLetteredLevels(rawFrames);
+    const propVariant = LAKE_PROP_VARIANT[key];
+    const frames =
+      propVariant !== undefined
+        ? selectVariantFrames(rawFrames, propVariant)
+        : BOG_TEXTURE_KEYS.has(key)
+          ? normalizeBogFrames(rawFrames, BOG_MAX_VARIANT[key])
+          : collapseLetteredLevels(rawFrames);
     const keySparse = sparse && !TERRAIN_TEXTURE_KEYS.has(key);
     const classified = classifyFamilyFrames(GAPPY_VARIANT_FAMILIES.has(family) ? renumberTopVariants(frames) : frames, {
       sparse: keySparse,
@@ -867,8 +928,15 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
     if (classified.top) top[key] = classified.top;
 
     if (classified.top && animAtlas) {
-      const familyClips = Object.values(animAtlas.clips).filter((clip) => clip.family === family);
-      const clipsByOrientation = classifyFamilyClips(familyClips, (name) => animAtlas.textures[name]);
+      const familyClips = Object.values(animAtlas.clips).filter(
+        (clip) => clip.family === family && (propVariant === undefined || clip.variant === `variant${String(propVariant).padStart(3, '0')}`),
+      );
+      // A lake decoration's clip is the one clip of its variant, `boglake_SW_variant005`: level 0 of its key, no `_levelNNN` in its name.
+      const clipsByOrientation = classifyFamilyClips(
+        familyClips,
+        (name) => animAtlas.textures[name],
+        propVariant === undefined ? undefined : () => 0,
+      );
       const hasClips = TILE_ORIENTATIONS.some((o) => clipsByOrientation[o].size > 0);
       if (hasClips) {
         const topArr = classified.top;
@@ -986,6 +1054,9 @@ const TERRAIN_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
   'blacksand',
   'wastedmountain',
   ...BOG_TEXTURE_KEYS,
+  'lakeweir',
+  'lakeoreboat',
+  'lakefishboat',
 ]);
 
 function mergeKeyed<V>(a: Partial<Record<TextureKey, V>>, b: Partial<Record<TextureKey, V>>): Partial<Record<TextureKey, V>> {
@@ -1424,7 +1495,14 @@ const WASTED_TEXTURE_KEY: Partial<Record<Terrain, TextureKey>> = {
  */
 export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (riverArt) return riverArt.key;
+  if (tile.lakeProp && !tile.buildingType) return LAKE_PROP_KEY[tile.lakeProp];
   if (tile.buildingType === 'sawmill') return 'sawmillriver';
+  // A Fishing Hut on a bog lake's half shore has its own lake art; the Hammerschmiede on a creek is the river hammer mill
+  // (straight creek or bend), a placeholder until the bog-creek art exists.
+  if (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half') return 'fisherhutlake';
+  if (tile.buildingType === 'hammerschmiede' && tile.bog?.kind === 'creek') {
+    return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
+  }
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
   if (tile.bog) return bogTextureKey(tile.bog);
@@ -1488,11 +1566,27 @@ export function bogOrientationFor(bog: BogTile, fallback: TileOrientation): Tile
   }
 }
 
-/** The rotation a tile renders with: a river's or bog's own art rotation where it has one, else the tile's cosmetic one. */
+/**
+ * Whether a bog hex renders with its bog kind's own art rotation: bare bog always, and the two buildings whose art is drawn
+ * over the hex's own water — the lake Fishing Hut (over the half shore) and the Hammerschmiede (over the creek). The other
+ * bog buildings (bog-ore works, Clay Brickworks) stand on plain moss and keep the tile's cosmetic rotation.
+ */
+function usesBogOrientation(tile: Tile): boolean {
+  if (!tile.bog || tile.camp) return false;
+  if (!tile.buildingType) return true;
+  return tile.buildingType === 'hammerschmiede' || (tile.buildingType === 'fishinghut' && tile.bog.kind === 'half');
+}
+
+/**
+ * The rotation a tile renders with: a river's or bog's own art rotation where it has one, else the tile's cosmetic one.
+ * A lake decoration keeps its variant's rotation: the boats exist in one camera only (`LAKE_PROP_KEPT_ORIENTATION`), the
+ * weir (all six) keeps the tile's own.
+ */
 function tileOrientationFor(tile: Tile, riverArt?: RiverArt): TileOrientation {
   if (riverArt) return riverArt.orientation;
   const own = tile.orientation ?? 'SE';
-  return tile.bog && !tile.buildingType && !tile.camp ? bogOrientationFor(tile.bog, own) : own;
+  if (tile.lakeProp && !tile.buildingType) return LAKE_PROP_KEPT_ORIENTATION[tile.lakeProp] ?? own;
+  return usesBogOrientation(tile) ? bogOrientationFor(tile.bog!, own) : own;
 }
 
 /** A bog family's variant slot for a tile: its hashed variant, wrapped onto however many the family has (creeks have 2, shores 1-2, ...). */
@@ -1603,6 +1697,8 @@ function topKeyAndIndex(tile: Tile, riverArt?: RiverArt): { key: TextureKey; ind
   if (tile.camp && !riverArt) return { key: tile.camp.family as CampFamily, index: CAMP_GUARDED_LEVEL };
   const key = textureKeyFor(tile, riverArt);
   if (tile.camp && riverArt?.key === tile.camp.family) return { key, index: CAMP_GUARDED_LEVEL };
+  // A lake decoration is one frame per rotation (index 0); a building is its level; terrain its hashed variant.
+  if (tile.lakeProp && !tile.buildingType) return { key, index: 0 };
   return { key, index: tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0) };
 }
 

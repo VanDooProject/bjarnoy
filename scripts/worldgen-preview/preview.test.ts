@@ -94,7 +94,7 @@ describe('rivers layer', () => {
 });
 
 describe('bog layer', () => {
-  const options = { seed: 11, radius: 1000, window: { q: -728, r: 204, size: 60 }, hexPixels: 6, layers: ['terrain', 'rivers', 'bog'], legend: true, stats: false };
+  const options = { seed: 11, radius: 1000, window: { q: -17, r: 115, size: 60 }, hexPixels: 6, layers: ['terrain', 'rivers', 'bog'], legend: true, stats: false };
 
   it('draws the lake, lists every bog kind in the legend and reports zero violations of every rule', () => {
     const plain = renderPreview({ ...options, layers: ['terrain', 'rivers'] });
@@ -106,7 +106,7 @@ describe('bog layer', () => {
     const line = withBog.statsLines.find((l) => l.startsWith('RULE VIOLATIONS'))!;
     expect(line).toBeDefined();
     expect(line).toMatch(/TOTAL 0$/);
-    for (const rule of ['R1', 'R2', 'R3', 'R4', 'R7', 'R8', 'R9', 'R10', 'R11']) expect(line).toMatch(new RegExp(`${rule} [^ ]*.* 0`));
+    for (const rule of ['R1', 'R2', 'R3', 'R4', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12']) expect(line).toMatch(new RegExp(`${rule} [^ ]*.* 0`));
     expect(withBog.statsLines.find((l) => l.startsWith('BOG ON'))).toMatch(/LAKES [1-9]/);
     // A river through the lake is not an inland mouth.
     expect(withBog.statsLines.find((l) => l.startsWith('MERGES'))).toContain('INLAND MOUTHS 0');

@@ -179,7 +179,8 @@ public class FogChunkServiceTests : IDisposable
     public async Task Excludes_another_players_settlements()
     {
         var worldId = AddWorld(6);
-        AddSettlement(worldId, "player-2", 0, 0, level: 1);
+        // Same ground, a second player without an Odin Statue — the control.
+        AddSettlement(worldId, "player-2", 0, 1, level: 1);
         await _dbContext.SaveChangesAsync(Ct);
 
         var result = await GetWorldAsync(worldId, "player-1", 6);
@@ -303,6 +304,76 @@ public class FogChunkServiceTests : IDisposable
 
         Assert.True(afterLoss.Accepted);
         Assert.Equal(0, CellAt(afterLoss, FogMaskLayout.ToTexel(new HexCoord(8, 0))).Unknown);
+    }
+
+    [Fact]
+    public async Task Odins_ravens_widen_the_settlements_own_explored_and_visible_rings()
+    {
+        var worldId = AddWorld(30);
+        // Level 1: ExploredRadius 5, VisibleRadius 3 (border 2). An Odin Statue at level 3 adds 6 rings.
+        var settlement = AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        // Same ground, a second player without an Odin Statue — the control.
+        AddSettlement(worldId, "player-2", 0, 1, level: 1);
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.OdinStatue, Level = 3 });
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var withOdin = await GetWorldAsync(worldId, "player-1", 30);
+        var without = await GetWorldAsync(worldId, "player-2", 30);
+
+        var edge = FogMaskLayout.ToTexel(new HexCoord(11, 0)); // 5 + 6 = 11 rings out
+        var beyond = FogMaskLayout.ToTexel(new HexCoord(28, 0)); // past 11 + the 14-ring fade
+        Assert.NotEqual(0, CellAt(without, edge).Unknown);
+        Assert.Equal(0, CellAt(withOdin, edge).Unknown);
+        Assert.Equal(255, CellAt(withOdin, beyond).Unknown);
+        // Line of sight grew too: 3 + 6 = 9 rings out is no longer out of sight.
+        var seen = FogMaskLayout.ToTexel(new HexCoord(9, 0));
+        Assert.Equal(255, CellAt(without, seen).OutOfSight);
+        Assert.Equal(0, CellAt(withOdin, seen).OutOfSight);
+    }
+
+    [Fact]
+    public async Task An_unfinished_odin_statue_widens_nothing()
+    {
+        var worldId = AddWorld(30);
+        var settlement = AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.OdinStatue, Level = 0 });
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var result = await GetWorldAsync(worldId, "player-1", 30);
+
+        Assert.NotEqual(0, CellAt(result, FogMaskLayout.ToTexel(new HexCoord(11, 0))).Unknown);
+    }
+
+    [Fact]
+    public async Task Odins_ravens_widen_what_a_travelling_army_explores()
+    {
+        var worldId = AddWorld(40);
+        var settlement = AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.OdinStatue, Level = 5 });
+        // The army stands at (20, 0), far outside the settlement's own (5 + 10 = 15) explored ring.
+        _dbContext.Armies.Add(new ArmyEntity
+        {
+            SettlementId = settlement.Id,
+            Settlement = settlement,
+            AtHome = false,
+            IsSupporting = false,
+            DepartedAt = DateTimeOffset.UnixEpoch,
+            Path = [new HexPoint(20, 0)],
+            CumulativeHours = [0],
+            ReturnPath = [new HexPoint(20, 0), new HexPoint(0, 0)],
+            ReturnCumulativeHours = [0, 1],
+            TurnAroundAt = DateTimeOffset.UnixEpoch.AddDays(3650),
+            IsReturning = false,
+        });
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var result = await GetWorldAsync(worldId, "player-1", 40);
+
+        // Base army vision is 2 rings; Ravens at level 5 make it 12. (28, 0) is 8 rings from the
+        // army and 28 from the settlement: only the widened army reveal explains it.
+        Assert.Equal(0, CellAt(result, FogMaskLayout.ToTexel(new HexCoord(28, 0))).Unknown);
+        Assert.Equal(0, CellAt(result, FogMaskLayout.ToTexel(new HexCoord(31, 0))).Unknown);
+        Assert.NotEqual(0, CellAt(result, FogMaskLayout.ToTexel(new HexCoord(37, 0))).Unknown);
     }
 
     [Fact]

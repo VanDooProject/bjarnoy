@@ -41,8 +41,7 @@ public class OnboardingHappyPathTests
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(8)).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
+        var appHost = await TestAppHost.CreateAsync(cancellationToken);
 
         await using var app = await appHost.BuildAsync(cancellationToken);
         await app.StartAsync(cancellationToken);
@@ -83,7 +82,7 @@ public class OnboardingHappyPathTests
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         var settlement = Assert.Single(settlements!);
 
-        // The two guided buildings the tray tracks (farm, lumberjack — see
+        // The two guided buildings the tray tracks (reindeerherder, lumberjack — see
         // LandingView.vue's GUIDED_BUILD_TERRAIN) each need their own
         // terrain, both guaranteed adjacent to any start position (see
         // LandingBuildQueueTests's own comment on WorldGenerator's
@@ -127,9 +126,9 @@ public class OnboardingHappyPathTests
             cancellationToken);
         speedUpResponse.EnsureSuccessStatusCode();
 
-        // --- Guided build 1: Farm on the grass hex, via the REAL ring menu -----
+        // --- Guided build 1: Reindeer Herder on the grass hex, via the REAL ring menu -----
         await LiveFrontendTestHelpers.ClickHexAsync(page, grassTile.Q, grassTile.R);
-        var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Farm" });
+        var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Reindeer Herder" });
         await Assertions.Expect(farmBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await farmBubble.ClickAsync();
 
@@ -150,7 +149,7 @@ public class OnboardingHappyPathTests
 
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
-        Assert.Contains(settlementAfterCompletion!.Buildings, b => b.Type == "farm");
+        Assert.Contains(settlementAfterCompletion!.Buildings, b => b.Type == "reindeerherder");
         Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack");
 
         var completionBanner = page.GetByTestId("onboarding-banner");

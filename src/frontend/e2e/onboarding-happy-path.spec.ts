@@ -71,10 +71,10 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   await expect(settlement.banner).toBeVisible();
   await expect(settlement.banner).toContainText('Landfall made.');
 
-  // --- Guided build 1: Farm on a grass hex, via the real ring menu -------
+  // --- Guided build 1: Reindeer Herder on a grass hex, via the real ring menu -------
   const grassHex = await settlement.findHex({ terrain: 'grass' });
   await settlement.clickHex(grassHex);
-  const farm = settlement.ring.action('Farm');
+  const farm = settlement.ring.action('Reindeer Herder');
   await expect(farm).toBeVisible();
   await expect(farm).toBeEnabled();
   const buildingsBeforeFarm = await settlement.countBuildings();
@@ -83,7 +83,7 @@ async function foundAndFinishGuidedBuilds(page: Page) {
 
   // --- Guided build 2: Lumberjack on a forest hex, via the ring menu -----
   // LandingView.vue's GUIDED_BUILD_TERRAIN maps Lumberjack -> forest, the
-  // same way Farm requires grass — only the tile-matching action is
+  // same way Reindeer Herder requires grass — only the tile-matching action is
   // enabled (see landing.spec.ts's ring-gating test for that regression
   // coverage). This spec just needs a forest hex to actually place it on.
   const forestHex = await settlement.findHex({ terrain: 'forest' });

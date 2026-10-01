@@ -51,9 +51,17 @@ public static class FogVisionRadii
     /// </summary>
     public static int ExploredRadius(int longhouseLevel) => BorderRadius(longhouseLevel) + ScoutRingHexes;
 
-    /// <summary>Builds the <see cref="FogVisionSource"/> a settlement contributes to the mask.</summary>
-    public static FogVisionSource ToVisionSource(HexCoord coord, int longhouseLevel) =>
-        new(coord, ExploredRadius(longhouseLevel), VisibleRadius(longhouseLevel));
+    /// <summary>
+    /// Builds the <see cref="FogVisionSource"/> a settlement contributes to the
+    /// mask. <paramref name="bonusRings"/> is Odin's Ravens
+    /// (<see cref="Buildings.Settlement.VisionBonusRings"/>): extra rings on
+    /// both the explored and the visible radius.
+    /// </summary>
+    public static FogVisionSource ToVisionSource(HexCoord coord, int longhouseLevel, int bonusRings = 0) =>
+        new(
+            coord,
+            ExploredRadius(longhouseLevel) + Math.Max(0, bonusRings),
+            VisibleRadius(longhouseLevel) + Math.Max(0, bonusRings));
 
     /// <summary>
     /// A single standing <see cref="Buildings.BuildingType.Tower"/>'s own
@@ -81,8 +89,11 @@ public static class FogVisionRadii
     /// <see cref="ToVisionSource"/>, the same way <see cref="Buildings.Settlement.ClaimDiscsFor"/>
     /// adds one satellite claim disc per Tower alongside the centre disc.
     /// </summary>
-    public static FogVisionSource ToTowerVisionSource(HexCoord coord, int towerLevel) =>
-        new(coord, TowerExploredRadius(towerLevel), TowerVisibleRadius(towerLevel));
+    public static FogVisionSource ToTowerVisionSource(HexCoord coord, int towerLevel, int bonusRings = 0) =>
+        new(
+            coord,
+            TowerExploredRadius(towerLevel) + Math.Max(0, bonusRings),
+            TowerVisibleRadius(towerLevel) + Math.Max(0, bonusRings));
 
     /// <summary>
     /// How far around a travelling army's current hex counts as "walked, now
@@ -94,4 +105,10 @@ public static class FogVisionRadii
     /// number to tune rather than two that could quietly drift apart.
     /// </summary>
     public const int ArmyVisionRadiusHexes = 2;
+
+    /// <summary>
+    /// The walked-ground radius around a travelling army of a settlement whose
+    /// Odin Statue grants <paramref name="bonusRings"/> of Ravens.
+    /// </summary>
+    public static int ArmyVisionRadius(int bonusRings = 0) => ArmyVisionRadiusHexes + Math.Max(0, bonusRings);
 }

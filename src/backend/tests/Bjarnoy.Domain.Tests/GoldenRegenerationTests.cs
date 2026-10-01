@@ -39,6 +39,22 @@ public class GoldenRegenerationTests
 
         static bool Has(GeneratedIsland i, RiverTileShape shape) => i.RiverTiles.Any(t => t.Shape == shape);
 
+        // Valley streams only happen on big islands with a mountain-enclosed valley, so the search is limited to seeds 1-8.
+        static bool CarvesValleyStream(Candidate c)
+        {
+            if (c.Island.IsWasted || c.Seed > 8)
+            {
+                return false;
+            }
+
+            var options = TestWorlds.Options(c.Seed);
+            var sampler = new TerrainSampler(options);
+            var land = c.Island.Tiles.ToDictionary(t => t, t => sampler.TerrainAt(t));
+            var stats = new RiverGenerator.RiverStats();
+            RiverGenerator.GenerateWithBogs(c.Island.Tiles, land, sampler, options, c.Island.Index, stats: stats);
+            return stats.ValleyStreams > 0;
+        }
+
         Candidate Smallest(string what, Func<Candidate, bool> filter) =>
             candidates.Where(filter).OrderBy(c => c.Island.TileCount).ThenBy(c => c.Seed).FirstOrDefault()
             ?? throw new InvalidOperationException($"no candidate island for '{what}' in seeds 1-40");
@@ -58,13 +74,14 @@ public class GoldenRegenerationTests
                 && c.Island.RiverTiles.Any(t => t.Shape == RiverTileShape.Confluence && t.Width == RiverWidth.RiverStream))),
             ("green_island_widening_mouth", Smallest("widening mouth", c => !c.Island.IsWasted
                 && c.Island.RiverTiles.Any(t => t.Shape == RiverTileShape.Mouth && t.Width == RiverWidth.Widen))),
+            ("green_island_valley_stream", Smallest("valley stream", CarvesValleyStream)),
             ("wasted_island_lava_stream", Smallest("wasted", c => c.Island.IsWasted)),
         };
 
         var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var sb = new StringBuilder();
         sb.Append("{\n  \"_comment\": ").Append(JsonSerializer.Serialize(
-            "Cross-language parity fixture for river generation (RiverGenerator.Generate backend / generateRivers frontend): given an island's tiles (with terrain), a world seed, an island index, and wasted/allowConfluence flags, both sides must trace the same rivers in the same order. Covers: the smallest green island that keeps any rivers (a small drainage network), a stream that widens on a straight tile, a smallwide Y where two streams join, a river-width confluence (a tributary widened before joining), a stream joining a river at the wide Y (the river-stream Y), a stream widening on its mouth tile, a green island whose traced rivers collide into a confluence, a green island whose river takes at least one sharp (bend60) turn, and a wasted island whose lava stream (allowConfluence: false) never merges. Every scenario is a real island of a real WorldGenerator.Generate() run at the default world size (the smallest one of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the river trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). RiverGenerationGoldenTests.cs (backend) and riverGenerator.golden.test.ts (frontend) each compute against this fixture using their own production river-tracing implementation, then assert the frozen `rivers` list below (order matters: sorted by (q, r), same as RiverGenerator.BuildRiverTiles's own output order).",
+            "Cross-language parity fixture for river generation (RiverGenerator.Generate backend / generateRivers frontend): given an island's tiles (with terrain), a world seed, an island index, and wasted/allowConfluence flags, both sides must trace the same rivers in the same order. Covers: the smallest green island that keeps any rivers (a small drainage network), a stream that widens on a straight tile, a smallwide Y where two streams join, a river-width confluence (a tributary widened before joining), a stream joining a river at the wide Y (the river-stream Y), a stream widening on its mouth tile, a green island whose traced rivers collide into a confluence, a green island whose river takes at least one sharp (bend60) turn, a green island with a stream carved out of a mountain-enclosed valley (valley streams), and a wasted island whose lava stream (allowConfluence: false) never merges. Every scenario is a real island of a real WorldGenerator.Generate() run at the default world size (the smallest one of seeds 1-40 with the wanted feature; of seeds 1-8 for the valley stream), so terrain, depth-field noise and the river trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). RiverGenerationGoldenTests.cs (backend) and riverGenerator.golden.test.ts (frontend) each compute against this fixture using their own production river-tracing implementation, then assert the frozen `rivers` list below (order matters: sorted by (q, r), same as RiverGenerator.BuildRiverTiles's own output order).",
             options)).Append(",\n  \"scenarios\": [\n");
 
         var sampler = (Func<int, TerrainSampler>)(seed => new TerrainSampler(TestWorlds.Options(seed)));
@@ -195,6 +212,30 @@ public class GoldenRegenerationTests
         var samplers = new Dictionary<int, TerrainSampler>();
         TerrainSampler SamplerOf(int seed) => samplers.TryGetValue(seed, out var s) ? s : samplers[seed] = new TerrainSampler(TestWorlds.Options(seed));
 
+        // A creek spring whose creek runs into a lake (the guarantee's spawn bog) as opposed to out to a river (a rolled spawn).
+        static bool FeedsLake(GeneratedIsland island, BogTile spring)
+        {
+            var byCoord = island.BogTiles.ToDictionary(t => t.Coord);
+            var cur = spring;
+            for (var steps = 0; steps < 200 && cur.OutDirection is { } o; steps++)
+            {
+                var next = cur.Coord + HexCoord.Directions[(int)o];
+                if (!byCoord.TryGetValue(next, out var tile))
+                {
+                    return false;
+                }
+
+                if (tile.Kind == BogTileKind.Lake)
+                {
+                    return true;
+                }
+
+                cur = tile;
+            }
+
+            return false;
+        }
+
         Candidate Smallest(string what, Func<Candidate, bool> filter) =>
             candidates.Where(filter).OrderBy(c => c.Island.TileCount).ThenBy(c => c.Seed).FirstOrDefault()
             ?? throw new InvalidOperationException($"no candidate island for '{what}' in seeds 1-40");
@@ -204,7 +245,8 @@ public class GoldenRegenerationTests
             ("green_island_through_lake", Smallest("one plain site", c => !IsPocket(c, SamplerOf(c.Seed)) && Outflows(c.Island) == 1 && Inflows(c.Island) == 1
                 && !c.Island.BogTiles.Any(t => t.Kind == BogTileKind.CreekSpring))),
             ("green_island_sunk_river", Smallest("sink", c => !IsPocket(c, SamplerOf(c.Seed)) && Inflows(c.Island) > Outflows(c.Island))),
-            ("green_island_spawned_river", Smallest("spawn", c => c.Island.BogTiles.Any(t => t.Kind == BogTileKind.CreekSpring))),
+            ("green_island_spawned_river", Smallest("spawn", c => c.Island.BogTiles.Any(t => t.Kind == BogTileKind.CreekSpring && !FeedsLake(c.Island, t)))),
+            ("green_island_guarantee_spawn", Smallest("guarantee spawn", c => c.Island.BogTiles.Any(t => t.Kind == BogTileKind.CreekSpring && FeedsLake(c.Island, t)))),
             ("green_island_enclosed_pocket", Smallest("pocket", c => IsPocket(c, SamplerOf(c.Seed)))),
             ("green_island_two_lakes", Smallest("two lakes", c => Outflows(c.Island) >= 2)),
         };
@@ -212,7 +254,7 @@ public class GoldenRegenerationTests
         var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var sb = new StringBuilder();
         sb.Append("{\n  \"_comment\": ").Append(JsonSerializer.Serialize(
-            "Cross-language parity fixture for bog generation (RiverGenerator.GenerateWithBogs backend / generateRiversWithBogs frontend, BogGenerator inside the drainage pipeline): given a real green island's tiles (with seed terrain), a world seed and an island index, both sides must trace the same rivers and place the same bogland (lakes, shores, mouths, creeks, moss, in the same order). Covers: the smallest island with one plain through-river lake, one where a second river sinks into the lake, one where a bog spawns a river (a creek spring), one with an enclosed sea pocket turned into a lake with a bog ring, and one with two lakes. Every scenario is a real island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). BogGenerationGoldenTests.cs (backend) and bogGenerator.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `rivers` and `bogs` lists (order matters: sorted by (q, r)).",
+            "Cross-language parity fixture for bog generation (RiverGenerator.GenerateWithBogs backend / generateRiversWithBogs frontend, BogGenerator inside the drainage pipeline): given a real green island's tiles (with seed terrain), a world seed and an island index, both sides must trace the same rivers and place the same bogland (lakes, shores, mouths, creeks, moss, in the same order). Covers: the smallest island with one plain through-river lake, one where a second river sinks into the lake, one where a bog spawns a river (a creek spring), one where the bog guarantee's spawn bog feeds a lake from a creek spring (the river through the lake is the spawned one), one with an enclosed sea pocket turned into a lake with a bog ring, and one with two lakes (the smallest island with one plain lake is a guaranteed bog on a relaxed through-river site). Every scenario is a real island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). BogGenerationGoldenTests.cs (backend) and bogGenerator.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `rivers` and `bogs` lists (order matters: sorted by (q, r)).",
             options)).Append(",\n  \"scenarios\": [\n");
 
         for (var s = 0; s < scenarios.Length; s++)

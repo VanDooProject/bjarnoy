@@ -1,7 +1,7 @@
 // A bit-exact TypeScript port of the backend's `Bjarnoy.Domain.World.BogGenerator` (see that file's own
 // doc comment and `docs/design/bog.md` for the design): lakes with a river running through them, bog moss
 // around them, the occasional extra river sunk into a lake or spawned by a creek spring, and an enclosed
-// sea pocket turned into a lake with a bog ring, all within the art's map rules (R1-R11).
+// sea pocket turned into a lake with a bog ring, all within the art's map rules (R1-R12).
 //
 // Like `riverGenerator.ts` (which calls it from inside the green pipeline) this is pure and mirrors the C#
 // statement for statement, because the result is compared cell for cell against
@@ -34,10 +34,27 @@ export const BOG_POCKET_MIN_TILES = 3;
 export const BOG_POCKET_MAX_TILES = 400;
 export const BOG_POCKET_RADIUS = 4;
 export const BOG_MAX_SINK_REROUTE = 12;
+/**
+ * A landing spot needs plain bog moss within this many hexes — mirrors `WorldGenerationOptions.BogReach`
+ * (`docs/design/bog.md`, "Decisions"): the Clay Brickworks and the bog-ore works stand on plain bog only.
+ */
+export const BOG_REACH = 12;
+/**
+ * The bog guarantee — mirrors `WorldGenerationOptions.BogGuaranteeMinTiles` / `BogGuaranteeRadius` (`docs/design/bog.md`): an island of
+ * at least this many land tiles that has a landing-spot candidate with no plain bog within `BOG_REACH` of one is given a bog.
+ */
+export const BOG_GUARANTEE_MIN_TILES = 150;
+export const BOG_GUARANTEE_RADIUS = 5;
 
 const SINK_EXTRA_REACH = 6;
 const MAX_CREEK_LENGTH = 40;
 const MAX_SITE_ATTEMPTS = 60;
+const GUARANTEE_MIN_FROM_SPRING = 2;
+const GUARANTEE_MIN_FROM_MOUTH = 3;
+const GUARANTEE_LAKE_MAX = 8;
+const GUARANTEE_MIN_COAST_DIST = 4;
+const MAX_SPAWN_ATTEMPTS = 80;
+const MAX_SPRING_CANDIDATES = 6;
 
 /** Counters `generateRivers` fills for the preview tool and the tests. */
 export interface BogStats {
@@ -47,10 +64,36 @@ export interface BogStats {
   pocketsFound: number;
   pocketsFilled: number;
   pocketSinks: number;
+  /** Islands the bog guarantee acted on, of them without any bog, bogs it placed (through river / spawn) and islands it could not help. */
+  guaranteeIslands: number;
+  guaranteeWithoutBog: number;
+  guaranteeThrough: number;
+  guaranteeSpawns: number;
+  guaranteeMissed: number;
+  /** Sites dropped because their water features could not get a full ring of bog (rule R12): the normal pass, and the guarantee's attempts. */
+  paddingRejected: number;
+  guaranteePaddingRejected: number;
+  /** Grass and forest tiles enclosed by a bog that turned to moss. */
+  holeTiles: number;
 }
 
 export function emptyBogStats(): BogStats {
-  return { sites: 0, sinks: 0, spawns: 0, pocketsFound: 0, pocketsFilled: 0, pocketSinks: 0 };
+  return {
+    sites: 0,
+    sinks: 0,
+    spawns: 0,
+    pocketsFound: 0,
+    pocketsFilled: 0,
+    pocketSinks: 0,
+    guaranteeIslands: 0,
+    guaranteeWithoutBog: 0,
+    guaranteeThrough: 0,
+    guaranteeSpawns: 0,
+    guaranteeMissed: 0,
+    paddingRejected: 0,
+    guaranteePaddingRejected: 0,
+    holeTiles: 0,
+  };
 }
 
 const DQ = [1, 1, 0, -1, -1, 0];
@@ -122,6 +165,10 @@ export class HexSet implements Iterable<AxialCoord> {
     this.m.delete(coordKey(c));
   }
 
+  clear(): void {
+    this.m.clear();
+  }
+
   get size(): number {
     return this.m.size;
   }
@@ -169,6 +216,17 @@ interface Site {
   radius: number;
   up: AxialCoord | null;
   down: AxialCoord | null;
+}
+
+interface Saved {
+  lake: AxialCoord[];
+  bog: AxialCoord[];
+  buffer: Map<string, number>;
+  creek: Map<string, { in: number; out: number }>;
+  mouth: Map<string, { in: number; out: number; water: number }>;
+  spring: Map<string, number>;
+  sites: number;
+  paths: BogPaths;
 }
 
 interface Route {
@@ -402,12 +460,12 @@ export class BogGenerator {
         if (!keep) continue;
 
         if (!this.inIsland(t)) {
-          if (d === 1) return false;
+          if (d <= 2) return false;
           continue;
         }
 
         if (this.terrainOf(t) === 'mountain' || openSea(t) || hasOpenSeaNeighbour(t)) {
-          if (d === 1) return false;
+          if (d <= 2) return false;
           continue;
         }
 
@@ -556,6 +614,20 @@ export class BogGenerator {
     return owner === undefined || owner === ownSite;
   }
 
+  /** No neighbour of the tile is a mountain (a mountain cannot become padding, rule R12) — mirrors `MountainFree`. */
+  private anyNeighbour(c: AxialCoord, pred: (n: AxialCoord) => boolean): boolean {
+    for (let d = 0; d < 6; d++) if (pred(nb(c, d))) return true;
+    return false;
+  }
+
+  private mountainFree(t: AxialCoord): boolean {
+    for (let d = 0; d < 6; d++) {
+      const n = nb(t, d);
+      if (this.inIsland(n) && this.terrainOf(n) === 'mountain') return false;
+    }
+    return true;
+  }
+
   /** Through-river sites, then sinks and spawns, then the pockets' own sinks — mirrors `PlaceSites`. Mutates `bp`. */
   placeSites(bp: BogPaths, widthTrial: WidthTrial, traceRiver: TraceRiver): void {
     const wanted = Math.min(BOG_MAX_SITES, Math.max(1, Math.floor(this.islandTiles.length / BOG_TILES_PER_SITE)));
@@ -604,28 +676,170 @@ export class BogGenerator {
 
       attempts++;
       const count = pathCount(bp);
-      const site = this.tryPlaceSite(bp, count, pIndex, iIndex, radius, large, widthTrial);
+      const saved = this.save(bp);
+      const site = this.tryPlaceSite(
+        bp,
+        count,
+        pIndex,
+        iIndex,
+        radius,
+        large ? BOG_LAKE_MAX_LARGE : BOG_LAKE_MAX,
+        BOG_MIN_FROM_SPRING,
+        widthTrial,
+      );
       if (site === null) continue;
+
+      const sunk = hash2(site.anchor.q, site.anchor.r, this.seed + 83) < BOG_SINK_CHANCE && this.trySink(bp, site, radius + SINK_EXTRA_REACH, widthTrial);
+      const spawned = hash2(site.anchor.q, site.anchor.r, this.seed + 89) < BOG_SPAWN_CHANCE && this.trySpawn(bp, site, widthTrial, traceRiver);
+      this.buildRegion(bp, site);
+
+      // Rule R12: a ring of bog around every water feature; a site that cannot get it is dropped whole.
+      if (!this.tryPad(bp, site)) {
+        this.restore(saved, bp);
+        if (this.stats) this.stats.paddingRejected++;
+        continue;
+      }
 
       placed++;
       siteAnchors.push(anchor.tile);
-      if (this.stats) this.stats.sites++;
-
-      if (hash2(site.anchor.q, site.anchor.r, this.seed + 83) < BOG_SINK_CHANCE && this.trySink(bp, site, radius + SINK_EXTRA_REACH, widthTrial)) {
-        if (this.stats) this.stats.sinks++;
+      if (this.stats) {
+        this.stats.sites++;
+        if (sunk) this.stats.sinks++;
+        if (spawned) this.stats.spawns++;
       }
-
-      if (hash2(site.anchor.q, site.anchor.r, this.seed + 89) < BOG_SPAWN_CHANCE && this.trySpawn(bp, site, widthTrial, traceRiver)) {
-        if (this.stats) this.stats.spawns++;
-      }
-
-      this.buildRegion(bp, site);
     }
 
     // Pockets: the nearest river within reach sinks into each.
     for (const site of this.sites.filter((s) => s.pocket)) {
-      if (this.trySink(bp, site, BOG_MAX_SINK_REROUTE, widthTrial) && this.stats) this.stats.pocketSinks++;
+      const saved = this.save(bp);
+      const core = new HexSet(site.core);
+      const creeks = [...site.creeks];
+      if (!this.trySink(bp, site, BOG_MAX_SINK_REROUTE, widthTrial)) continue;
+
+      if (this.tryPad(bp, site)) {
+        if (this.stats) this.stats.pocketSinks++;
+      } else {
+        this.restore(saved, bp);
+        site.core.clear();
+        for (const t of core) site.core.add(t);
+        site.creeks.length = 0;
+        site.creeks.push(...creeks);
+        if (this.stats) this.stats.paddingRejected++;
+      }
     }
+
+    this.placeGuarantee(bp, widthTrial, traceRiver);
+    this.fillHoles(bp);
+  }
+
+  /** `TryPad` for the guarantee's attempts, counting the sites it had to drop — mirrors `PadOrCount`. */
+  private padOrCount(bp: BogPaths, site: Site): boolean {
+    if (this.tryPad(bp, site)) return true;
+    if (this.stats) this.stats.guaranteePaddingRejected++;
+    return false;
+  }
+
+  /**
+   * Rule R12: every lake, shore, mouth, creek and spring tile of `site` has all six neighbours inside the bog. Missing ones become
+   * plain moss when they are grass or forest that is not a river and does not touch the sea or sand (R7); a creek tile may touch the
+   * river its own flow links lead to. Returns false (and changes nothing) when a neighbour cannot be padded — mirrors `TryPad`.
+   */
+  private tryPad(bp: BogPaths, site: Site): boolean {
+    const count = pathCount(bp);
+    const pending = new HexSet();
+    const features = new HexSet(site.core);
+    for (const t of site.lake) features.add(t);
+    for (const f of sorted(features)) {
+      const fk = coordKey(f);
+      const isLake = this.lake.has(f);
+      let inDir = -1;
+      let outDir = -1;
+      const m = this.mouth.get(fk);
+      const c = this.creek.get(fk);
+      const sp = this.spring.get(fk);
+      if (m !== undefined) {
+        inDir = m.in;
+        outDir = m.out;
+      } else if (c !== undefined) {
+        inDir = c.in;
+        outDir = c.out;
+      } else if (sp !== undefined) {
+        outDir = sp;
+      } else if (!isLake && this.lakeMask(f, this.lake) === 0) {
+        continue;
+      }
+
+      for (let d = 0; d < 6; d++) {
+        const n = nb(f, d);
+        if (this.bog.has(n) || this.lake.has(n) || pending.has(n)) continue;
+        if (count.has(coordKey(n))) {
+          if (d === inDir || d === outDir) continue;
+          return false;
+        }
+
+        if (!this.canPad(n)) return false;
+        pending.add(n);
+      }
+    }
+
+    for (const t of pending) this.bog.add(t);
+    return true;
+  }
+
+  /** A grass or forest tile of the island that touches neither the open sea nor sand, so moss on it keeps rule R7 — mirrors `CanPad`. */
+  private canPad(n: AxialCoord): boolean {
+    if (!this.inIsland(n)) return false;
+    const terrain = this.terrainOf(n);
+    if (terrain !== 'grass' && terrain !== 'forest') return false;
+    for (let d = 0; d < 6; d++) {
+      const m = nb(n, d);
+      if (this.bog.has(m) || this.lake.has(m)) continue;
+      if (!this.inIsland(m) || this.terrainOf(m) === 'sand') return false;
+    }
+    return true;
+  }
+
+  /**
+   * Fills the holes a noisy bog outline leaves: every connected group of non-bog island tiles that no path leaves without crossing
+   * bog (or lake) turns its grass and forest, except river tiles, into plain moss — mirrors `FillHoles`.
+   */
+  fillHoles(bp: BogPaths | null): void {
+    const count = bp === null ? new Map<string, number>() : pathCount(bp);
+    const seen = new Set<string>();
+    const fill: AxialCoord[] = [];
+    const land = this.islandTiles.filter((t) => this.inIsland(t));
+    for (const start of sorted(land)) {
+      const sk = coordKey(start);
+      if (this.bog.has(start) || this.lake.has(start) || seen.has(sk)) continue;
+      seen.add(sk);
+      const group: AxialCoord[] = [];
+      const stack: AxialCoord[] = [start];
+      let open = false;
+      while (stack.length > 0) {
+        const c = stack.pop()!;
+        group.push(c);
+        for (let d = 0; d < 6; d++) {
+          const n = nb(c, d);
+          if (this.bog.has(n) || this.lake.has(n)) continue;
+          if (!this.inIsland(n)) {
+            open = true;
+          } else if (!seen.has(coordKey(n))) {
+            seen.add(coordKey(n));
+            stack.push(n);
+          }
+        }
+      }
+
+      if (!open) {
+        for (const t of group) {
+          const terrain = this.terrainOf(t);
+          if ((terrain === 'grass' || terrain === 'forest') && !count.has(coordKey(t))) fill.push(t);
+        }
+      }
+    }
+
+    for (const t of fill) this.bog.add(t);
+    if (this.stats) this.stats.holeTiles += fill.length;
   }
 
   private discIsClear(anchor: AxialCoord, radius: number): boolean {
@@ -643,8 +857,10 @@ export class BogGenerator {
     p: number,
     i: number,
     radius: number,
-    large: boolean,
+    lakeMax: number,
+    minFromSpring: number,
     widthTrial: WidthTrial,
+    fitShore = false,
   ): Site | null {
     const path = bp.paths[p]!;
     const a = path[i]!;
@@ -662,80 +878,35 @@ export class BogGenerator {
       }
     }
 
-    if (i0 < Math.max(2, BOG_MIN_FROM_SPRING + 1) || i1 > path.length - 2) return null;
+    if (i0 < Math.max(2, minFromSpring + 1) || i1 > path.length - 2) return null;
     if (bp.merged[p] && i1 + 1 === path.length - 1) return null;
     for (let k = i0 - 1; k <= i1 + 1; k++) if (count.get(coordKey(path[k]!)) !== 1) return null;
 
     const inP = new Set(path.map((c) => coordKey(c)));
     const isOther = (t: AxialCoord): boolean => (count.get(coordKey(t)) ?? 0) - (inP.has(coordKey(t)) ? 1 : 0) > 0;
-    const nearOther = (t: AxialCoord): boolean => {
-      if (isOther(t)) return true;
-      for (let d = 0; d < 6; d++) if (isOther(nb(t, d))) return true;
-      return false;
-    };
-
-    const lakeMax = large ? BOG_LAKE_MAX_LARGE : BOG_LAKE_MAX;
-    const target = 3 + Math.floor(hash2(a.q, a.r, this.seed + 71) * (lakeMax - 3));
-    const growOk = (t: AxialCoord): boolean => hexDistance(t, a) <= radius - 3 && disc.has(t) && this.allowed(t) && !nearOther(t);
-
-    if (!growOk(a)) return null;
-
-    const lake = new HexSet([a]);
-    while (lake.size < target) {
-      let best: AxialCoord | null = null;
-      let bestHash = -1.0;
-      for (const t of sorted(BogGenerator.neighboursOf(lake))) {
-        if (!growOk(t)) continue;
-        const h = hash2(t.q, t.r, this.seed + 75);
-        if (h > bestHash) {
-          bestHash = h;
-          best = t;
-        }
-      }
-      if (best === null) break;
-      lake.add(best);
-    }
-
-    if (lake.size < 3) return null;
-
-    // R1: fill notches until every shore tile touches one contiguous run of at most three lake tiles.
-    for (let iteration = 0; iteration < 24; iteration++) {
-      const add: AxialCoord[] = [];
-      for (const t of sorted(BogGenerator.neighboursOf(lake))) {
-        const mask = this.lakeMask(t, lake);
-        if (popCount(mask) >= 4 || runs(mask) > 1) add.push(t);
-      }
-      if (add.length === 0) break;
-      for (const t of add) {
-        if (!growOk(t)) return null;
-        lake.add(t);
-      }
-      if (lake.size > lakeMax + 6) return null;
-    }
-
-    if (lake.size > lakeMax + 6) return null;
-
-    const shore = sorted(BogGenerator.neighboursOf(lake));
-    for (const t of shore) {
-      const mask = this.lakeMask(t, lake);
-      if (popCount(mask) > 3 || runs(mask) !== 1 || !this.allowed(t) || isOther(t) || !disc.has(t)) return null;
-    }
-
-    // Mouth candidates: a shore tile with exactly one lake neighbour.
-    const mouthDir = new Map<string, number>();
-    for (const t of shore) {
-      const mask = this.lakeMask(t, lake);
-      if (popCount(mask) === 1) {
-        for (let d = 0; d < 6; d++) if (((mask >> d) & 1) === 1) mouthDir.set(coordKey(t), d);
-      }
-    }
+    const grown = this.growLake(a, disc, radius, lakeMax, isOther, fitShore);
+    if (grown === null) return null;
+    const { lake, mouthDir } = grown;
 
     const up = path[i0 - 1]!;
     const down = path[i1 + 1]!;
-    const creekOk = (t: AxialCoord): boolean => disc.has(t) && this.allowed(t) && !lake.has(t) && !isOther(t) && this.lakeMask(t, lake) === 0;
+    const creekOk = (t: AxialCoord): boolean =>
+      disc.has(t) && this.allowed(t) && this.mountainFree(t) && !lake.has(t) && !isOther(t) && this.lakeMask(t, lake) === 0;
 
-    const inRoutes = this.routesFrom(up, dirOf(up, path[i0 - 2]!), creekOk, mouthDir);
-    const outRoutes = this.routesFrom(down, i1 + 2 < path.length ? dirOf(down, path[i1 + 2]!) : -1, creekOk, mouthDir);
+    // Rule R12: a creek tile may touch only the river tile it is linked to (and the stretch of this river that the lake replaces).
+    const removedTiles = new HexSet(path.slice(i0, i1 + 1));
+    const keptRiverBeside = (t: AxialCoord, link: AxialCoord): boolean => {
+      for (let d = 0; d < 6; d++) {
+        const n = nb(t, d);
+        if (!sameCoord(n, link) && count.has(coordKey(n)) && !removedTiles.has(n)) return true;
+      }
+      return false;
+    };
+    const creekOkIn = (t: AxialCoord): boolean => creekOk(t) && !keptRiverBeside(t, up);
+    const creekOkOut = (t: AxialCoord): boolean => creekOk(t) && !keptRiverBeside(t, down);
+
+    const inRoutes = this.routesFrom(up, dirOf(up, path[i0 - 2]!), creekOkIn, mouthDir);
+    const outRoutes = this.routesFrom(down, i1 + 2 < path.length ? dirOf(down, path[i1 + 2]!) : -1, creekOkOut, mouthDir);
     if (inRoutes.size === 0 || outRoutes.size === 0) return null;
 
     const byLengthThenMouth = (x: Route, y: Route): number => x.tiles.length - y.tiles.length || x.mouth.q - y.mouth.q || x.mouth.r - y.mouth.r;
@@ -816,6 +987,96 @@ export class BogGenerator {
     return site;
   }
 
+  /**
+   * Grows a lake of 3 to `lakeMax` (plus notch fill) tiles from `a` inside `disc`, fills every notch (R1) and checks the shore is fit.
+   * Returns the lake and the mouth candidates (shore tiles with one lake neighbour, and that neighbour's direction), or null —
+   * mirrors `GrowLake`.
+   */
+  private growLake(
+    a: AxialCoord,
+    disc: HexSet,
+    radius: number,
+    lakeMax: number,
+    isOther: (t: AxialCoord) => boolean,
+    fitShore = false,
+  ): { lake: HexSet; mouthDir: Map<string, number> } | null {
+    const nearOther = (t: AxialCoord): boolean => {
+      if (isOther(t)) return true;
+      for (let d = 0; d < 6; d++) if (isOther(nb(t, d))) return true;
+      return false;
+    };
+
+    // With `fitShore` (the guarantee) the lake grows only onto tiles whose every neighbour could be its shore (the checks below
+    // short of the lake's own outline). A lake that the plain growth would finish anyway is grown the same; one that would have
+    // grown against a mountain or the coast and been thrown away grows the other way instead.
+    const shoreFit = (n: AxialCoord): boolean => disc.has(n) && this.allowed(n) && this.mountainFree(n) && !nearOther(n);
+    const fits = (t: AxialCoord): boolean => {
+      for (let d = 0; d < 6; d++) if (!shoreFit(nb(t, d))) return false;
+      return true;
+    };
+
+    const target = 3 + Math.floor(hash2(a.q, a.r, this.seed + 71) * (lakeMax - 3));
+    const growOk = (t: AxialCoord): boolean =>
+      hexDistance(t, a) <= radius - 3 && disc.has(t) && this.allowed(t) && !nearOther(t) && (!fitShore || fits(t));
+
+    if (!growOk(a)) return null;
+
+    const lake = new HexSet([a]);
+    while (lake.size < target) {
+      let best: AxialCoord | null = null;
+      let bestHash = -1.0;
+      for (const t of sorted(BogGenerator.neighboursOf(lake))) {
+        if (!growOk(t)) continue;
+        const h = hash2(t.q, t.r, this.seed + 75);
+        if (h > bestHash) {
+          bestHash = h;
+          best = t;
+        }
+      }
+      if (best === null) break;
+      lake.add(best);
+    }
+
+    if (lake.size < 3) return null;
+
+    // R1: fill notches until every shore tile touches one contiguous run of at most three lake tiles.
+    for (let iteration = 0; iteration < 24; iteration++) {
+      const add: AxialCoord[] = [];
+      for (const t of sorted(BogGenerator.neighboursOf(lake))) {
+        const mask = this.lakeMask(t, lake);
+        if (popCount(mask) >= 4 || runs(mask) > 1) add.push(t);
+      }
+      if (add.length === 0) break;
+      for (const t of add) {
+        if (!growOk(t)) return null;
+        lake.add(t);
+      }
+      if (lake.size > lakeMax + 6) return null;
+    }
+
+    if (lake.size > lakeMax + 6) return null;
+
+    const shore = sorted(BogGenerator.neighboursOf(lake));
+    for (const t of shore) {
+      const mask = this.lakeMask(t, lake);
+      if (popCount(mask) > 3 || runs(mask) !== 1 || !this.allowed(t) || isOther(t) || !disc.has(t) || !this.mountainFree(t)) return null;
+
+      // Rule R12: the ring beyond the shore is padded with moss, so no other river may run there.
+      for (let d = 0; d < 6; d++) if (isOther(nb(t, d))) return null;
+    }
+
+    // Mouth candidates: a shore tile with exactly one lake neighbour.
+    const mouthDir = new Map<string, number>();
+    for (const t of shore) {
+      const mask = this.lakeMask(t, lake);
+      if (popCount(mask) === 1) {
+        for (let d = 0; d < 6; d++) if (((mask >> d) & 1) === 1) mouthDir.set(coordKey(t), d);
+      }
+    }
+
+    return { lake, mouthDir };
+  }
+
   private trialOk(trial: BogPaths, widthTrial: WidthTrial, mustSurvive: Iterable<AxialCoord>, mustBeRiver: Set<string>): boolean {
     const tiles = widthTrial(trial);
     const byCoord = new Map<string, RiverTile>();
@@ -852,7 +1113,13 @@ export class BogGenerator {
       const nk = coordKey(n);
       const w = mouthDir.get(nk);
       if (w !== undefined && w === dir && !this.mouth.has(nk)) {
-        if (!routes.has(nk)) routes.set(nk, buildRoute(n, w, fromState, dir, parent));
+        if (!routes.has(nk)) {
+          // The search runs over (tile, direction) states, so a route can loop back across its own track to come at a
+          // mouth from the right side. That would lay one creek tile twice (two flows in one tile, rule R3): it is not a
+          // route, and a later state may still reach the same mouth cleanly.
+          const route = buildRoute(n, w, fromState, dir, parent);
+          if (new Set(route.tiles.map((t) => coordKey(t))).size === route.tiles.length) routes.set(nk, route);
+        }
         return;
       }
 
@@ -978,10 +1245,12 @@ export class BogGenerator {
 
       const creekOk = (c: AxialCoord): boolean =>
         (site.ring.has(c) || this.allowed(c, site.id)) &&
+        this.mountainFree(c) &&
         !lake.has(c) &&
         !count.has(coordKey(c)) &&
         this.lakeMask(c, lake) === 0 &&
-        hexDistance(c, t) <= reach + MAX_CREEK_LENGTH;
+        hexDistance(c, t) <= reach + MAX_CREEK_LENGTH &&
+        !this.anyNeighbour(c, (n) => !sameCoord(n, t) && count.has(coordKey(n)));
 
       const routes = this.routesFrom(t, dirOf(t, path[j - 1]!), creekOk, mouthDir);
       if (routes.size === 0) continue;
@@ -1017,7 +1286,8 @@ export class BogGenerator {
           !this.mouth.has(coordKey(t)) &&
           BogGenerator.minDistance(t, lake) >= 3 &&
           BogGenerator.minDistance(t, site.creeks) >= 2 &&
-          !count.has(coordKey(t)),
+          !count.has(coordKey(t)) &&
+          this.mountainFree(t),
       )
       .sort((a, b) => hash2(b.q, b.r, this.seed + 97) - hash2(a.q, a.r, this.seed + 97) || a.q - b.q || a.r - b.r)
       .slice(0, 3);
@@ -1029,7 +1299,9 @@ export class BogGenerator {
         !lake.has(c) &&
         this.lakeMask(c, lake) === 0 &&
         !this.creek.has(coordKey(c)) &&
-        !this.mouth.has(coordKey(c));
+        !this.mouth.has(coordKey(c)) &&
+        this.mountainFree(c) &&
+        !this.anyNeighbour(c, (n) => count.has(coordKey(n)));
 
       // Breadth-first over (tile, heading), exits are tiles just outside the region.
       const parent = new Map<string, RouteState | null>();
@@ -1070,6 +1342,10 @@ export class BogGenerator {
         for (const t of this.lake) blocked.add(t);
         for (const t of route.tiles) blocked.add(t);
         blocked.add(s);
+
+        // Rule R12: the spawned river keeps off the creek's neighbours (only its own start touches the creek).
+        for (const t of [...route.tiles, s, ...site.core]) for (let d = 0; d < 6; d++) blocked.add(nb(t, d));
+        blocked.delete(exit);
         const traced = traceRiver(exit, opp(dir), bp, blocked);
         if (traced === null) continue;
 
@@ -1103,6 +1379,415 @@ export class BogGenerator {
     }
 
     return false;
+  }
+
+  // ---------------------------------------------------------------- guarantee
+
+  /** Whether the guarantee is on for this island (by its size) — mirrors `GuaranteeApplies`. */
+  get guaranteeApplies(): boolean {
+    return this.islandTiles.length >= BOG_GUARANTEE_MIN_TILES;
+  }
+
+  /** The guarantee alone, for an island with no river candidates at all: only a spawn bog — mirrors `PlaceGuaranteeOnly`. */
+  placeGuaranteeOnly(bp: BogPaths, widthTrial: WidthTrial, traceRiver: TraceRiver): void {
+    this.placeGuarantee(bp, widthTrial, traceRiver);
+    this.fillHoles(bp);
+  }
+
+  private static within(c: AxialCoord, radius: number): AxialCoord[] {
+    const result: AxialCoord[] = [];
+    for (let dq = -radius; dq <= radius; dq++) {
+      for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) result.push({ q: c.q + dq, r: c.r + dr });
+    }
+    return result;
+  }
+
+  /** Landing-spot candidates by terrain alone — mirrors `GuaranteeCandidates`. */
+  private guaranteeCandidates(): AxialCoord[] {
+    const result: AxialCoord[] = [];
+    for (const tile of this.islandTiles) {
+      if (this.terrainOf(tile) !== 'grass') continue;
+
+      let forest = 0;
+      let grass = 0;
+      for (let d = 0; d < 6; d++) {
+        const n = nb(tile, d);
+        if (!this.inIsland(n)) continue;
+        const terrain = this.terrainOf(n);
+        if (terrain === 'forest') forest++;
+        else if (terrain === 'grass') grass++;
+      }
+      if (forest < 1 || grass < 2) continue;
+
+      let coastal = false;
+      for (const nearby of BogGenerator.within(tile, 2)) {
+        if (!this.inIsland(nearby)) {
+          coastal = true;
+          break;
+        }
+      }
+      if (!coastal) result.push(tile);
+    }
+    return result;
+  }
+
+  /** Whether `c` is still a candidate with the bog placed so far laid over the terrain — mirrors `StillCandidate`. */
+  private stillCandidate(c: AxialCoord): boolean {
+    if (this.bog.has(c) || this.lake.has(c)) return false;
+
+    let forest = 0;
+    let grass = 0;
+    for (let d = 0; d < 6; d++) {
+      const n = nb(c, d);
+      if (!this.inIsland(n) || this.lake.has(n) || this.bog.has(n)) continue;
+      const terrain = this.terrainOf(n);
+      if (terrain === 'forest') forest++;
+      else if (terrain === 'grass') grass++;
+    }
+    if (forest < 1 || grass < 2) return false;
+
+    for (const nearby of BogGenerator.within(c, 2)) if (this.lake.has(nearby)) return false;
+    return true;
+  }
+
+  /** How many candidates are still candidates and have plain bog moss within `reach` — mirrors `CoveredCandidates`. */
+  private coveredCandidates(candidates: AxialCoord[], reach: number): number {
+    const reachSet = new HexSet();
+    for (const t of this.bog) {
+      const tk = coordKey(t);
+      if (this.lake.has(t) || this.creek.has(tk) || this.mouth.has(tk) || this.spring.has(tk) || this.lakeMask(t, this.lake) !== 0) continue;
+      for (const n of BogGenerator.within(t, reach)) reachSet.add(n);
+    }
+    if (reachSet.size === 0) return 0;
+
+    let covered = 0;
+    for (const c of candidates) if (reachSet.has(c) && this.stillCandidate(c)) covered++;
+    return covered;
+  }
+
+  /** For every tile, how many candidates lie within `reach` of it — mirrors `CoverageMap`. */
+  private static coverageMap(candidates: AxialCoord[], reach: number): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const c of candidates) {
+      for (const n of BogGenerator.within(c, reach)) {
+        const k = coordKey(n);
+        map.set(k, (map.get(k) ?? 0) + 1);
+      }
+    }
+    return map;
+  }
+
+  private save(bp: BogPaths): Saved {
+    return {
+      lake: [...this.lake],
+      bog: [...this.bog],
+      buffer: new Map(this.lakeBuffer),
+      creek: new Map(this.creek),
+      mouth: new Map(this.mouth),
+      spring: new Map(this.spring),
+      sites: this.sites.length,
+      paths: bp.clone(),
+    };
+  }
+
+  private restore(saved: Saved, bp: BogPaths): void {
+    this.lake.clear();
+    for (const t of saved.lake) this.lake.add(t);
+    this.bog.clear();
+    for (const t of saved.bog) this.bog.add(t);
+    this.lakeBuffer.clear();
+    for (const [k, v] of saved.buffer) this.lakeBuffer.set(k, v);
+    this.creek.clear();
+    for (const [k, v] of saved.creek) this.creek.set(k, v);
+    this.mouth.clear();
+    for (const [k, v] of saved.mouth) this.mouth.set(k, v);
+    this.spring.clear();
+    for (const [k, v] of saved.spring) this.spring.set(k, v);
+    this.sites.length = saved.sites;
+    bp.paths.length = 0;
+    for (const path of saved.paths.paths) bp.paths.push(path.map((c) => ({ q: c.q, r: c.r })));
+    bp.merged.length = 0;
+    bp.merged.push(...saved.paths.merged);
+    bp.forcedOut.clear();
+    for (const [k, v] of saved.paths.forcedOut) bp.forcedOut.set(k, v);
+    bp.bogIn.clear();
+    for (const [k, v] of saved.paths.bogIn) bp.bogIn.set(k, v);
+    bp.requireRiver.clear();
+    for (const c of saved.paths.requireRiver) bp.requireRiver.add(c);
+  }
+
+  /** The bog guarantee — mirrors `PlaceGuarantee`. */
+  private placeGuarantee(bp: BogPaths, widthTrial: WidthTrial, traceRiver: TraceRiver): void {
+    if (!this.guaranteeApplies) return;
+
+    const candidates = this.guaranteeCandidates();
+    if (candidates.length === 0 || this.coveredCandidates(candidates, BOG_REACH) > 0) return;
+
+    if (this.stats) {
+      this.stats.guaranteeIslands++;
+      if (this.sites.length === 0) this.stats.guaranteeWithoutBog++;
+    }
+
+    const coverage = BogGenerator.coverageMap(candidates, BOG_REACH);
+    if (this.guaranteeThrough(bp, candidates, coverage, widthTrial)) {
+      if (this.stats) this.stats.guaranteeThrough++;
+      return;
+    }
+
+    if (this.guaranteeSpawn(bp, candidates, coverage, widthTrial, traceRiver)) {
+      if (this.stats) this.stats.guaranteeSpawns++;
+      return;
+    }
+
+    if (this.stats) this.stats.guaranteeMissed++;
+  }
+
+  private guaranteeThrough(bp: BogPaths, candidates: AxialCoord[], coverage: Map<string, number>, widthTrial: WidthTrial): boolean {
+    const radius = BOG_GUARANTEE_RADIUS;
+    const anchors: { tile: AxialCoord; path: number; index: number; cover: number; hash: number }[] = [];
+    for (let p = 0; p < bp.paths.length; p++) {
+      const path = bp.paths[p]!;
+      for (let i = GUARANTEE_MIN_FROM_SPRING; i <= path.length - 1 - GUARANTEE_MIN_FROM_MOUTH; i++) {
+        const tile = path[i]!;
+        const cover = coverage.get(coordKey(tile)) ?? 0;
+        const cd = this.coastDist.get(coordKey(tile));
+        if (cover === 0 || cd === undefined || cd < GUARANTEE_MIN_COAST_DIST) continue;
+        anchors.push({ tile, path: p, index: i, cover, hash: hash2(tile.q, tile.r, this.seed + 103) });
+      }
+    }
+
+    anchors.sort((a, b) => {
+      const byCover = b.cover - a.cover;
+      if (byCover !== 0) return byCover;
+      const byHash = b.hash - a.hash;
+      if (byHash !== 0) return byHash;
+      const byTile = cmp(a.tile, b.tile);
+      return byTile !== 0 ? byTile : a.path !== b.path ? a.path - b.path : a.index - b.index;
+    });
+
+    let attempts = 0;
+    for (const anchor of anchors) {
+      if (attempts >= MAX_SITE_ATTEMPTS) break;
+      if (!this.discIsClear(anchor.tile, 2)) continue;
+
+      attempts++;
+      const saved = this.save(bp);
+      const site = this.tryPlaceSite(bp, pathCount(bp), anchor.path, anchor.index, radius, GUARANTEE_LAKE_MAX, GUARANTEE_MIN_FROM_SPRING, widthTrial, true);
+      if (site !== null) {
+        this.buildRegion(bp, site);
+        if (this.padOrCount(bp, site) && this.coveredCandidates(candidates, BOG_REACH) > 0) return true;
+      }
+
+      this.restore(saved, bp);
+    }
+
+    return false;
+  }
+
+  private guaranteeSpawn(
+    bp: BogPaths,
+    candidates: AxialCoord[],
+    coverage: Map<string, number>,
+    widthTrial: WidthTrial,
+    traceRiver: TraceRiver,
+  ): boolean {
+    const count = pathCount(bp);
+    const anchors: { tile: AxialCoord; cover: number; hash: number }[] = [];
+    for (const tile of this.islandTiles) {
+      const cover = coverage.get(coordKey(tile)) ?? 0;
+      const cd = this.coastDist.get(coordKey(tile));
+      if (cover === 0 || cd === undefined || cd < GUARANTEE_MIN_COAST_DIST || !this.allowed(tile)) continue;
+      anchors.push({ tile, cover, hash: hash2(tile.q, tile.r, this.seed + 107) });
+    }
+
+    anchors.sort((a, b) => {
+      const byCover = b.cover - a.cover;
+      if (byCover !== 0) return byCover;
+      const byHash = b.hash - a.hash;
+      return byHash !== 0 ? byHash : cmp(a.tile, b.tile);
+    });
+
+    let attempts = 0;
+    for (const anchor of anchors) {
+      if (attempts >= MAX_SPAWN_ATTEMPTS) break;
+      if (BogGenerator.within(anchor.tile, 3).some((c) => count.has(coordKey(c)))) continue;
+
+      attempts++;
+      const saved = this.save(bp);
+      if (this.trySpawnSite(bp, anchor.tile, widthTrial, traceRiver)) {
+        if (this.padOrCount(bp, this.sites[this.sites.length - 1]!) && this.coveredCandidates(candidates, BOG_REACH) > 0) return true;
+      }
+
+      this.restore(saved, bp);
+    }
+
+    return false;
+  }
+
+  /** A small bog on river-free ground with a spring creek into its lake and a river out of it — mirrors `TrySpawnSite`. */
+  private trySpawnSite(bp: BogPaths, a: AxialCoord, widthTrial: WidthTrial, traceRiver: TraceRiver): boolean {
+    const radius = BOG_GUARANTEE_RADIUS;
+    const count = pathCount(bp);
+    const isOther = (t: AxialCoord): boolean => count.has(coordKey(t));
+    const disc = new HexSet(BogGenerator.within(a, radius));
+    const grown = this.growLake(a, disc, radius, GUARANTEE_LAKE_MAX, isOther, true);
+    if (grown === null) return false;
+
+    const { lake, mouthDir } = grown;
+    const creekOk = (t: AxialCoord): boolean =>
+      disc.has(t) &&
+      this.allowed(t) &&
+      this.mountainFree(t) &&
+      !lake.has(t) &&
+      !isOther(t) &&
+      this.lakeMask(t, lake) === 0 &&
+      !this.anyNeighbour(t, isOther);
+
+    const springs = sorted(disc)
+      .filter((t) => creekOk(t) && BogGenerator.minDistance(t, lake) >= 3)
+      .sort((x, y) => hash2(y.q, y.r, this.seed + 109) - hash2(x.q, x.r, this.seed + 109) || x.q - y.q || x.r - y.r)
+      .slice(0, MAX_SPRING_CANDIDATES);
+
+    for (const s of springs) {
+      const inRoutes = this.routesFrom(s, -1, creekOk, mouthDir);
+      if (inRoutes.size === 0) continue;
+
+      const inRoute = [...inRoutes.values()].sort((x, y) => x.tiles.length - y.tiles.length || x.mouth.q - y.mouth.q || x.mouth.r - y.mouth.r)[0]!;
+      const taken = new HexSet(inRoute.tiles);
+      taken.add(s);
+      taken.add(inRoute.mouth);
+      const outOk = (t: AxialCoord): boolean => creekOk(t) && !taken.has(t);
+
+      const mouthTiles = [...mouthDir.keys()]
+        .map((k) => {
+          const [q, r] = k.split(',').map(Number) as [number, number];
+          return { q, r };
+        })
+        .sort(cmp);
+      for (const mouth of mouthTiles) {
+        if (sameCoord(mouth, inRoute.mouth) || hexDistance(mouth, inRoute.mouth) < 3) continue;
+
+        const water = mouthDir.get(coordKey(mouth))!;
+        const { exits, parent } = this.outflowExits(mouth, opp(water), lake, disc, count, taken, outOk);
+        for (const { exit, dir, from } of exits.slice(0, 4)) {
+          const flow = buildRoute(exit, dir, from, dir, parent);
+          const blocked = new HexSet(this.bog);
+          for (const t of this.lake) blocked.add(t);
+          for (const t of lake) blocked.add(t);
+          for (const t of BogGenerator.neighboursOf(lake)) blocked.add(t);
+          for (const t of taken) blocked.add(t);
+          for (const t of flow.tiles) blocked.add(t);
+          blocked.add(mouth);
+
+          // Rule R12: the spawned river keeps off the creeks' neighbours (only its own start touches the creek).
+          for (const t of [...flow.tiles, ...inRoute.tiles, s, ...BogGenerator.neighboursOf(lake)]) for (let d = 0; d < 6; d++) blocked.add(nb(t, d));
+          blocked.delete(exit);
+          const traced = traceRiver(exit, opp(dir), bp, blocked);
+          if (traced === null) continue;
+
+          const trial = bp.clone();
+          trial.paths.push(traced);
+          trial.merged.push(count.has(coordKey(traced[traced.length - 1]!)));
+          trial.bogIn.set(coordKey(exit), opp(dir));
+          if (!this.trialOk(trial, widthTrial, traced.filter((c) => !count.has(coordKey(c))), trial.requireRiver)) continue;
+
+          // Commit: the lake, the spring's creek into it, the creek out of it (reversed: it is laid out from the river tile).
+          const site: Site = {
+            id: this.sites.length,
+            anchor: a,
+            pocket: false,
+            lake: new HexSet(),
+            ring: new HexSet(),
+            creeks: [],
+            core: new HexSet(),
+            radius,
+            up: null,
+            down: null,
+          };
+          for (const t of lake) {
+            site.lake.add(t);
+            site.core.add(t);
+            this.lake.add(t);
+          }
+
+          this.addBuffer(site);
+          this.spring.set(coordKey(s), inRoute.dirs[0]!);
+          this.bog.add(s);
+          site.creeks.push(s);
+          site.core.add(s);
+          this.commitRoute(site, inRoute, true, lake);
+
+          const back: Route = { mouth, water, tiles: [], dirs: [] };
+          for (let j = flow.tiles.length - 1; j >= 0; j--) back.tiles.push(flow.tiles[j]!);
+          for (let j = flow.dirs.length - 1; j >= 0; j--) back.dirs.push(opp(flow.dirs[j]!));
+
+          this.commitRoute(site, back, false, lake);
+          this.sites.push(site);
+
+          bp.paths.push(traced);
+          bp.merged.push(count.has(coordKey(traced[traced.length - 1]!)));
+          bp.bogIn.set(coordKey(exit), opp(dir));
+          this.buildRegion(bp, site);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /** The free tiles a creek leaving `mouth` in direction `first` can reach the outside of the disc by — mirrors `OutflowExits`. */
+  private outflowExits(
+    mouth: AxialCoord,
+    first: number,
+    lake: HexSet,
+    disc: HexSet,
+    count: Map<string, number>,
+    taken: HexSet,
+    creekOk: (t: AxialCoord) => boolean,
+  ): { exits: { exit: AxialCoord; dir: number; from: RouteState | null }[]; parent: Map<string, RouteState | null> } {
+    const parent = new Map<string, RouteState | null>();
+    const depth = new Map<string, number>();
+    const queue: RouteState[] = [];
+    const exits: { exit: AxialCoord; dir: number; from: RouteState | null }[] = [];
+
+    const visit = (origin: AxialCoord, fromState: RouteState | null, dir: number, d: number): void => {
+      const n = nb(origin, dir);
+      if (!this.inIsland(n) || d > MAX_CREEK_LENGTH) return;
+
+      // A creek tile stays inside the disc on fit ground; anything else that is free land is where the river starts.
+      if (disc.has(n) && creekOk(n)) {
+        const key = stateKey(n, dir);
+        if (depth.has(key)) return;
+        depth.set(key, d);
+        parent.set(key, fromState);
+        queue.push({ tile: n, dir });
+        return;
+      }
+
+      const nk = coordKey(n);
+      if (
+        !taken.has(n) &&
+        !count.has(nk) &&
+        !this.bog.has(n) &&
+        !this.lake.has(n) &&
+        !this.lakeBuffer.has(nk) &&
+        !lake.has(n) &&
+        this.lakeMask(n, lake) === 0 &&
+        !this.pocketRing.has(n)
+      ) {
+        exits.push({ exit: n, dir, from: fromState });
+      }
+    };
+
+    visit(mouth, null, first, 1);
+    for (let head = 0; head < queue.length && exits.length < 4; head++) {
+      const state = queue[head]!;
+      const d = depth.get(stateKey(state.tile, state.dir))!;
+      for (const turn of [0, 1, 5]) visit(state.tile, state, (state.dir + turn) % 6, d + 1);
+    }
+
+    return { exits, parent };
   }
 
   // ---------------------------------------------------------------- region

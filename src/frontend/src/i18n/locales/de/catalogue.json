@@ -24,7 +24,11 @@
     "smithy": "Waffenschmiede",
     "druidhut": "Druidenhütte",
     "cartworkshop": "Wagnerei",
-    "claybrickworks": "Ziegelei"
+    "claybrickworks": "Ziegelei",
+    "bogoreworks": "Raseneisenerz-Grube",
+    "hammerschmiede": "Hammerschmiede",
+    "odinstatue": "Odin-Statue",
+    "reindeerherder": "Rentierhirte"
   },
   "units": {
     "thrall": "Knecht",
@@ -35,7 +39,8 @@
     "provisioner": "Versorger",
     "catapult": "Katapult",
     "karve": "Karve",
-    "longship": "Langschiff"
+    "longship": "Langschiff",
+    "settlercrew": "Siedlertrupp"
   },
   "giants": {
     "giantmountain": "Riesenberg",

@@ -36,20 +36,21 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
 import { useMediaQuery } from '../composables/useMediaQuery';
-import { hudBarHeightPx } from '../composables/hudBarHeight';
+import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
+import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
+import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import {
-  BOOST_TERRAIN,
-  buildingStatsFor,
+  buildingStatsAt,
   buildingUpgradeCost,
-  matchingNeighbourCount,
   type BuildingModifier,
   type BuildingOutput,
+  SHRINE_BUILDING_TYPES,
 } from '../lib/map/buildingEconomy';
 import {
   cropAllowedHere,
@@ -57,6 +58,7 @@ import {
   formatMissingResources,
   longhouseLock,
   riverBuildingAllowedHere,
+  shrineLimitLock,
   storageHouseLock,
   towerLimitLock,
 } from '../lib/map/ringCatalogue';
@@ -82,7 +84,11 @@ const hudPrefs = useHudPrefsStore();
 // isExpanded), so this reads the real, currently-measured height
 // (TopBar.vue's own ResizeObserver) rather than assuming a fixed number.
 const isCompactHud = useMediaQuery(HUD_COMPACT_QUERY);
-const hudBarAtBottom = computed(() => isCompactHud.value && hudPrefs.barPosition === 'bottom');
+// Landscape rail mode ignores the docking preference (the rail has no edge to
+// dock to) and writes a 0 top band: `--hud-inset-left` carries the rail's
+// width instead, for the overlays that must not sit under it.
+const hudBarAtBottom = computed(() => isCompactHud.value && !isHudRail.value && hudPrefs.barPosition === 'bottom');
+const hudInsetLeftPx = computed(() => (isHudRail.value ? hudRailWidthPx.value + 8 : 0));
 const hudInsetTopPx = computed(() => (hudBarAtBottom.value ? 0 : hudBarHeightPx.value));
 const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? hudBarHeightPx.value : 0));
 const unitCatalogue = useUnitCatalogueStore();
@@ -333,7 +339,9 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
       : selected.movement.path
     : [];
   const draftWaypoints = world.dispatchDraft?.route ?? world.fieldOrderDraft?.route ?? [];
-  return { armies, route, draftWaypoints, targets: overlayTargets(selected) };
+  // Odin's Ravens widen the live vision of this settlement's travelling armies.
+  const visionBonusRings = world.selectedSettlementId ? world.model.ravensRingsFor(world.selectedSettlementId) : 0;
+  return { armies, route, draftWaypoints, targets: overlayTargets(selected), visionBonusRings };
 });
 
 // Issue #93 "attack/raid target indicator": the settlement an attack/support
@@ -403,6 +411,16 @@ watch(
   [() => canvasRef.value?.renderer, rangeOverlayHexes],
   ([renderer, hexes]) => {
     renderer?.setRangeOverlay(hexes ?? null);
+  },
+  { immediate: true },
+);
+
+// Construction progress dials over buildings still being built; the renderer
+// animates the progress itself every tick from these absolute timestamps.
+watch(
+  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  ([renderer]) => {
+    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
   },
   { immediate: true },
 );
@@ -588,6 +606,7 @@ function onRingOutsidePointerDown(e: PointerEvent) {
 
 type BuildableType =
   | 'hut'
+  | 'reindeerherder'
   | 'farm'
   | 'tower'
   | 'fishinghut'
@@ -596,6 +615,7 @@ type BuildableType =
   | 'shrineoffreyja'
   | 'shrineofullr'
   | 'shrineofnjord'
+  | 'odinstatue'
   | 'lumberjack'
   | 'quarry'
   | 'storagehouse'
@@ -611,7 +631,9 @@ type BuildableType =
   | 'smithy'
   | 'druidhut'
   | 'cartworkshop'
-  | 'claybrickworks';
+  | 'claybrickworks'
+  | 'bogoreworks'
+  | 'hammerschmiede';
 
 interface BuildCategory {
   id: string;
@@ -634,6 +656,7 @@ const SHRINE_CATEGORY: BuildCategory = {
     { type: 'shrineofthor' },
     { type: 'shrineoffreyja' },
     { type: 'shrineofullr' },
+    { type: 'odinstatue' },
   ],
 };
 // The Shrine of Njörd (a shrine on a skerry) is built
@@ -644,12 +667,22 @@ const WATER_CATEGORY: BuildCategory = {
   id: 'water',
   buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'shrineofnjord' }],
 };
-const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog', BuildCategory[]> = {
+// Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
+// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
+// Hammerschmiede (with the river hammer-mill art for now: TODO(art) bog-creek Hammerschmiede) and a lake's half shore the
+// Fishing Hut with its lake art. Shores, mouths and springs take nothing.
+const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
+  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }],
+  creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
+  half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
+};
+const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
     { id: 'housing', buildings: [{ type: 'hut' }] },
     {
       id: 'resource',
       buildings: [
+        { type: 'reindeerherder' },
         { type: 'farm' },
         { type: 'pumpkinfarm' },
         // Sawmill and Crop Mill are only actually buildable on a Grass hex
@@ -661,7 +694,6 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog',
         { type: 'sawmill' },
         { type: 'cropmill' },
         { type: 'meadery' },
-        { type: 'claybrickworks' },
       ],
     },
     {
@@ -688,14 +720,13 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog',
   sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }],
   mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
-  // Bogland has its own buildings (bog-ore works, Clay Brickworks), which come with the next change.
-  bog: [],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
   if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY] : [];
-  // A bog lake is water nothing is built on (the lake Fisher Hut comes with the bog buildings).
+  // A bog lake is water nothing is built on (the lake Fishing Hut stands on its half shore, a bog hex).
   if (tile.terrain === 'lake') return [];
+  if (tile.terrain === 'bog') return (tile.bog && BOG_CATEGORIES[tile.bog.kind]) || [];
   return BUILD_CATEGORIES[tile.terrain];
 }
 
@@ -840,17 +871,21 @@ const rootActions = computed<RingAction[]>(() => {
     // giant is always land, so `buildableSea` alone would otherwise show
     // "Build" as available on it.
     const blockedByGiant = !!tile.giant;
+    // A bog shore, mouth or spring takes no building at all (only plain moss, a creek and a half shore do).
+    const bareBog = tile.terrain === 'bog' && categoriesFor(tile).length === 0;
     return [
       { id: 'details', label: t('hud.ringMenu.actions.details') },
       {
         id: 'build',
         label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea || blockedByGiant,
+        disabled: !buildableSea || blockedByGiant || bareBog,
         hint: blockedByGiant
           ? t('hud.ringMenu.actions.giantOccupied')
-          : buildableSea
-            ? undefined
-            : t('hud.ringMenu.actions.openWater'),
+          : bareBog
+            ? t('hud.ringMenu.actions.bogNothingHere')
+            : buildableSea
+              ? undefined
+              : t('hud.ringMenu.actions.openWater'),
       },
       sendArmyAction(tile),
     ];
@@ -910,11 +945,22 @@ function formatModifier(modifier: BuildingModifier): string {
         percent: modifier.percent,
         domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
       });
+    case 'odinFavour':
+      return t('hud.hoverTooltip.modifierOdinFavour', {
+        percent: modifier.buildTimePercent,
+        rings: modifier.visionRings,
+      });
     case 'radiusBoost':
       return t('hud.hoverTooltip.modifierRadiusBoost', {
         percent: modifier.percent,
         range: modifier.range,
-        resource: t(modifier.resource === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
+        resource: t(
+          modifier.resource === 'wood'
+            ? 'hud.hoverTooltip.domainWood'
+            : modifier.resource === 'iron'
+              ? 'hud.hoverTooltip.domainIron'
+              : 'hud.hoverTooltip.domainFood',
+        ),
       });
   }
 }
@@ -960,6 +1006,18 @@ function towersHeld(): number {
   return hexes.size;
 }
 
+// Shrines held by the selected settlement (standing plus queued new-shrine
+// orders, by distinct hex): a settlement raises one shrine in total.
+function shrinesHeld(): number {
+  const id = world.selectedSettlementId;
+  if (!id) return 0;
+  const hexes = new Set(world.model.shrineCoords(id).map((c) => `${c.q},${c.r}`));
+  for (const order of world.hud.queue) {
+    if (SHRINE_BUILDING_TYPES.has(order.building)) hexes.add(`${order.q},${order.r}`);
+  }
+  return hexes.size;
+}
+
 // Storage houses held (standing plus queued, distinct hexes like
 // Settlement.PlanBuild counts them) and the best standing level, for the
 // additional-storage-house lock.
@@ -971,23 +1029,29 @@ function storageHouseLockFor(): string | undefined {
   for (const order of world.hud.queue) {
     if (order.building === 'storagehouse') hexes.add(`${order.q},${order.r}`);
   }
-  return storageHouseLock(hexes.size, Math.max(0, ...standing.map((h) => h.level)));
+  return storageHouseLock(hexes.size, standing.map((h) => h.level));
+}
+
+// Odin's Wisdom for the selected settlement: the multiplier on build times shown on the ring cards.
+function wisdomFactor(): number {
+  const id = world.selectedSettlementId;
+  return id ? world.model.wisdomFactor(id) : 1;
 }
 
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
-  const boostTerrain = BOOST_TERRAIN[type];
-  const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
-  const stats = buildingStatsFor(type, 1, matching);
+  const stats = buildingStatsAt(type, 1, tileAt(coord.q, coord.r), tileAt);
   return {
     id: type,
     label: buildingName(type),
     cost: definition?.cost ?? buildingUpgradeCost(type, 1),
-    time: definition ? formatBuildTime(definition.buildSeconds) : undefined,
+    // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
+    time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
     gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
     lock:
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
       ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
+      ?? (SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined)
       ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined),
     art: buildingArt(type, 1),
   };
@@ -1247,7 +1311,11 @@ async function upgrade() {
   <div
     ref="stageRef"
     class="map-view"
-    :style="{ '--hud-inset-top': hudInsetTopPx + 'px', '--hud-inset-bottom': hudInsetBottomPx + 'px' }"
+    :style="{
+      '--hud-inset-top': hudInsetTopPx + 'px',
+      '--hud-inset-bottom': hudInsetBottomPx + 'px',
+      '--hud-inset-left': hudInsetLeftPx + 'px',
+    }"
   >
     <!-- Outside the canvas v-if: shows while the settlement is still loading. -->
     <MapStatusOverlay :step="overlayStep" :error="overlayError" @retry="retryLoad" />

@@ -7,10 +7,13 @@
 // `complete` adds one.
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
+import { useMediaQuery } from '../../composables/useMediaQuery';
+import { TOUCH_QUERY } from '../../lib/breakpoints';
 
 defineProps<{ variant: 'landfall' | 'complete' }>();
 const emit = defineEmits<{ continue: [] }>();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const isTouch = useMediaQuery(TOUCH_QUERY);
 </script>
 
 <template>
@@ -20,7 +23,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
       {{ variant === 'landfall' ? t('landing.banner.landfallTitle') : t('landing.banner.completeTitle') }}
     </span>
     <span class="body">
-      {{ variant === 'landfall' ? t('landing.banner.landfallBody') : t('landing.banner.completeBody') }}
+      {{ variant === 'landfall' ? t('landing.banner.landfallBody') : isTouch ? t('landing.banner.completeBodyTouch') : t('landing.banner.completeBody') }}
     </span>
     <button v-if="variant === 'complete'" type="button" class="continue" data-testid="onboarding-continue" @click="emit('continue')">
       {{ t('landing.banner.continueCta') }}
@@ -102,11 +105,17 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
    LandingView's root from the HUD bar's measured height) say which edge the
    bar occupies and how tall it is, so the banners clear it whether it's
    docked at the top or the bottom. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
+  /* `--hud-inset-left` (the landscape rail's width, 0 everywhere else) keeps
+     the banner out from under the rail: left-anchored and narrowed by it,
+     which is the same centred 100vw - 32px box as before when it is 0. */
   .banner {
+    left: calc(var(--hud-inset-left, 0px) + 16px);
+    transform: none;
+    max-width: none;
     border-radius: 16px;
     flex-wrap: wrap;
-    width: calc(100vw - 24px);
+    width: calc(100vw - 32px - var(--hud-inset-left, 0px));
     padding: 10px 14px;
     gap: 6px 10px;
   }
@@ -116,11 +125,8 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
   .body {
     flex: 1 1 100%;
   }
-  /* `--overlay-row-top`: extra rows LandingView reserves above the banner
-     (the demo badge, once the tutorial has unmounted the bar it normally
-     sits under). */
   .banner.landfall {
-    top: calc(var(--hud-inset-top, 64px) + 12px + var(--overlay-row-top, 0px));
+    top: calc(var(--hud-inset-top, 64px) + 12px);
   }
   .banner.complete {
     bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));

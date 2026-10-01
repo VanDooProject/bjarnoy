@@ -38,6 +38,12 @@ export interface OverlayCanvas {
   /** Map-pixel position of the centre of hex (q, r). */
   toPixel(q: number, r: number): { x: number; y: number };
   marker(x: number, y: number, shape: MarkerShape, radius: number, colour: Rgb): void;
+  /** A straight line of `width` pixels (round-ish ends), for centrelines and routes. */
+  line(x0: number, y0: number, x1: number, y1: number, width: number, colour: Rgb): void;
+  /** A filled axis-aligned rectangle in map pixels. */
+  rect(x: number, y: number, w: number, h: number, colour: Rgb): void;
+  /** Bitmap-font text with its top-left corner at (x, y) (upper case; the font has no lower case). */
+  text(x: number, y: number, text: string, colour: Rgb, scale?: number): void;
 }
 
 export interface Layer {
@@ -126,10 +132,11 @@ export function lastRiverField(): RiverField | null {
   return riverField;
 }
 
-function riverColourAt(tile: RiverTile, dx: number, dy: number, fine: boolean): Rgb {
+export function riverColourAt(tile: RiverTile, dx: number, dy: number, fine: boolean, markers = true): Rgb {
   const width = tile.width ?? 'river';
-  const markerColour =
-    tile.shape === 'spring'
+  const markerColour = !markers
+    ? null
+    : tile.shape === 'spring'
       ? SPRING_COLOUR
       : tile.shape === 'confluence'
         ? CONFLUENCE_COLOUR
@@ -143,8 +150,8 @@ function riverColourAt(tile: RiverTile, dx: number, dy: number, fine: boolean): 
 
   const dist = Math.hypot(dx, dy);
   // Marks first: springs and widening tiles are a filled dot, confluences and mouths a ring.
-  if (tile.shape === 'spring' || (width === 'widen' && tile.shape !== 'confluence' && tile.shape !== 'mouth')) {
-    if (dist < 0.4) return markerColour!;
+  if (markerColour && (tile.shape === 'spring' || (width === 'widen' && tile.shape !== 'confluence' && tile.shape !== 'mouth'))) {
+    if (dist < 0.4) return markerColour;
   } else if (dist > 0.42 && dist < 0.68 && markerColour) {
     return markerColour;
   }
@@ -198,7 +205,7 @@ export const SHORE_COLOUR: Rgb = [52, 84, 116];
 export const HALF_COLOUR: Rgb = [38, 66, 108];
 export const CREEK_COLOUR: Rgb = [90, 150, 225];
 export const BOG_MOUTH_COLOUR: Rgb = [255, 170, 40];
-export const CREEK_SPRING_COLOUR: Rgb = [255, 255, 255];
+export const CREEK_SPRING_COLOUR: Rgb = [120, 255, 60];
 
 const CREEK_HALF_WIDTH = 0.3;
 
@@ -247,6 +254,7 @@ const RULE_LABELS: [keyof RiverField['bogViolations'], string][] = [
   ['R9', 'R9 SPRING/SINK RULES'],
   ['R10', 'R10 POCKETS RINGED'],
   ['R11', 'R11 CREEKS AT RIVER WIDTH'],
+  ['R12', 'R12 BOG PADDING AROUND WATER'],
 ];
 
 export function bogStatsLines(f: RiverField): string[] {
@@ -305,8 +313,13 @@ export const RADIUS_OUTLINE: Rgb = [235, 90, 70];
 
 /** The legend of `layerIds`, in layer order, plus the fixed frame entries. */
 export function legendFor(layerIds: readonly string[]): LegendEntry[] {
+  return legendOf(layerIds.map((id) => LAYERS[id]));
+}
+
+/** The legend of layer objects (a layer built outside `LAYERS`, like the pathing preview's), plus the frame entries. */
+export function legendOf(layers: readonly Layer[]): LegendEntry[] {
   const entries: LegendEntry[] = [];
-  for (const id of layerIds) entries.push(...LAYERS[id].legend);
+  for (const layer of layers) entries.push(...layer.legend);
   entries.push({ label: 'world radius', colour: RADIUS_OUTLINE });
   return entries;
 }

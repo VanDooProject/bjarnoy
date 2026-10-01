@@ -64,11 +64,15 @@
     "modifierShrineFavour": "+{percent}% {domain}-Produktion",
     "modifierShrineFavourLandAttack": "+{percent}% Angriff für Landeinheiten",
     "modifierShrineFavourShipAttack": "+{percent}% Schiffsangriff",
+    "modifierOdinFavour": "-{percent}% Bauzeit, +{rings} Ringe Sichtweite",
     "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
     "domainFood": "Nahrung",
+    "domainIron": "Eisen",
     "domainWood": "Holz"
   },
   "ringMenu": {
+    "shrineLimitLock": "Diese Siedlung hat bereits einen Schrein",
+    "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "back": "Zurück",
     "backButton": "‹ ZURÜCK",
     "buildHub": "BAUEN",
@@ -100,7 +104,8 @@
       "trainUnits": "Einheiten ausbilden",
       "build": "Bauen",
       "openWater": "Offenes Wasser",
-      "giantOccupied": "Von einem Riesenwahrzeichen belegt"
+      "giantOccupied": "Von einem Riesenwahrzeichen belegt",
+      "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -275,6 +280,7 @@
       "storagehouse": "Lagerhaus",
       "tower": "Wachturm",
       "fishinghut": "Fischerhütte",
+      "reindeerherder": "Rentierhirte",
       "pumpkinfarm": "Kürbisfarm"
     },
     "missionAttack": "Angriff",

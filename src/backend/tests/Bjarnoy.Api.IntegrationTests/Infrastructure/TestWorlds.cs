@@ -4,7 +4,7 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Api.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// How integration tests get a world with islands in it. A production-size world is 260-hex
+/// How integration tests get a world with islands in it. A production-size world is 150-hex
 /// cells with 150-hex islands and takes seconds to generate, and an island that could cross
 /// the world radius is not generated at all — so the old habit of asking for "radius 30" or
 /// "radius 60" now yields an empty sea. Tests use the compact preset (see
@@ -42,5 +42,7 @@ internal static class TestWorlds
         IslandCoastNoise: o.IslandCoastNoise,
         IslandCoastNoiseScale: o.IslandCoastNoiseScale,
         IslandSmallShare: o.IslandSmallShare,
-        IslandLargeShare: o.IslandLargeShare);
+        IslandLargeShare: o.IslandLargeShare,
+        IslandMaxReach: o.IslandMaxReach,
+        IslandMinGap: o.IslandMinGap);
 }

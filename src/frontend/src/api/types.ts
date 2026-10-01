@@ -47,6 +47,8 @@ export interface WorldGenerationResponse {
   worldRadius: number;
   islandCellSize: number;
   islandChance: number;
+  islandMaxReach: number;
+  islandMinGap: number;
   islandMinWidth: number;
   islandMaxWidth: number;
   islandMinSegments: number;
@@ -543,6 +545,9 @@ export interface AdminWorldResponse {
   status: string;
   maxPlayers: number;
   playerCount: number;
+  /** How many new players could still found on the map right now; nearby start positions block each other. */
+  freeSpawnCount: number;
+  spawnCount: number;
   speedFactor: number;
   startsAt: string | null;
   joinsClosed: boolean;
@@ -585,6 +590,8 @@ export interface WorldGenerationSettings {
   mountainRockiness: number;
   forestRockiness: number;
   minimumIslandTiles: number;
+  islandMaxReach: number;
+  islandMinGap: number;
 }
 
 /**
@@ -614,6 +621,8 @@ export interface WorldGenerationSettingsOverrides {
   mountainRockiness?: number;
   forestRockiness?: number;
   minimumIslandTiles?: number;
+  islandMaxReach?: number;
+  islandMinGap?: number;
 }
 
 /**

@@ -86,8 +86,7 @@ public class ReportsModalTests
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
+        var appHost = await TestAppHost.CreateAsync(cancellationToken);
 
         await using var app = await appHost.BuildAsync(cancellationToken);
         await app.StartAsync(cancellationToken);
@@ -115,6 +114,11 @@ public class ReportsModalTests
                 cancellationToken);
             previewResponse.EnsureSuccessStatusCode();
             var preview = (await previewResponse.Content.ReadFromJsonAsync<WorldSeedPreviewResponse>(cancellationToken))!;
+
+            // The preview keeps the world's own radius, so this also checks that
+            // TestAppHost's --World:DefaultRadius actually reached the API's
+            // startup world (otherwise every test silently pays for radius 4000).
+            Assert.Equal(TestAppHost.WorldRadius, preview.Radius);
 
             foreach (var island in preview.Islands)
             {

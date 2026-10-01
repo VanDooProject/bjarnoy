@@ -5,8 +5,14 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
-import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
-import { cropAllowedHere, isWaterOnlyBuilding, riverBuildingAllowedHere } from './ringCatalogue';
+import {
+  SHRINE_BUILDING_TYPES,
+  additionalStorageHouseRequirement,
+  maxTowers,
+  ravensRings,
+  wisdomBuildTimeFactor,
+} from './buildingEconomy';
+import { buildingAllowedOnHex, cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
@@ -32,6 +38,8 @@ import {
   type WorldSeed,
 } from './worldGenerator';
 import { generateRiversWithBogs } from './riverGenerator';
+import { BOG_REACH } from './bogGenerator';
+import { placeLakeProps, type LakeProp, type LakePropBuilding } from './lakeProps';
 import {
   emptyResources,
   mouthSeaDirection,
@@ -303,6 +311,10 @@ export class WorldModel {
   private riverTiles = new Map<string, RiverTile>();
   /** The island bogland known so far (live mode: every island at once; demo mode: island by island), by coordinate — see `setBogTiles`. */
   private bogByHex = new Map<string, BogTile>();
+  /** The lake decorations (fish weir, boats) the buildings on the shores ask for, by coordinate — see `lakeProps.ts` and `recomputeLakeProps`. */
+  private lakePropByHex = new Map<string, LakeProp>();
+  /** Set whenever the bog or a building that can ask for a lake decoration changes; `getTile` recomputes them lazily. */
+  private lakePropsDirty = false;
   /** Demo mode's client-only trade offers — see `postTradeOffer` and friends. */
   private demoTradeOffers = new Map<string, DemoTradeOffer>();
   /**
@@ -320,6 +332,12 @@ export class WorldModel {
    * `applyServerSnapshot` (live mode) and `placeBuilding` (demo mode).
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
+  /**
+   * The level of each settlement's standing Odin Statue (absent: none) — what
+   * Ravens (`ravensRingsFor`, extra fog-vision rings) and Wisdom
+   * (`wisdomFactor`, shorter builds) read. Updated alongside `settlementTowers`.
+   */
+  private settlementOdinLevels = new Map<string, number>();
   /**
    * Every hex belonging to a giant's 7-hex footprint, mapped to that giant's
    * own anchor coord — this model's own `IGiantIndex` (see the backend's
@@ -419,6 +437,7 @@ export class WorldModel {
     for (const tile of this.bogByHex.values()) this.tiles.delete(coordKey(tile));
     this.bogByHex = new Map();
     this.addBogTiles(tiles);
+    this.lakePropsDirty = true;
   }
 
   /**
@@ -439,6 +458,46 @@ export class WorldModel {
     }
     this.islandFootprintCache.clear();
     this.previewIslandTilesCache.clear();
+    this.lakePropsDirty = true;
+  }
+
+  /**
+   * Recomputes the lake decorations (`lakeProps.ts`) from the bog and the buildings standing on it: a lake Fishing Hut (on a
+   * half shore) may bring a fish weir and a fishing boat, a bog-ore works an ore boat. Sets `Tile.lakeProp` on the hexes that
+   * carry one and clears it where one went away; pure in (seed, bog, buildings), so every client draws the same lake.
+   */
+  private recomputeLakeProps() {
+    this.lakePropsDirty = false;
+    const openLake: AxialCoord[] = [];
+    for (const bog of this.bogByHex.values()) if (bog.kind === 'lake') openLake.push({ q: bog.q, r: bog.r });
+
+    const buildings: LakePropBuilding[] = [];
+    if (openLake.length > 0) {
+      for (const tile of this.tiles.values()) {
+        if (tile.buildingType === 'bogoreworks' || (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half')) {
+          buildings.push({ q: tile.q, r: tile.r, type: tile.buildingType });
+        }
+      }
+    }
+
+    const placed = placeLakeProps(this.seed, openLake, buildings);
+    for (const key of this.lakePropByHex.keys()) {
+      if (!placed.has(key)) {
+        const tile = this.tiles.get(key);
+        if (tile) tile.lakeProp = undefined;
+      }
+    }
+    this.lakePropByHex = placed;
+    for (const [key, prop] of placed) {
+      const { q, r } = parseKey(key);
+      this.getTile(q, r).lakeProp = prop;
+    }
+  }
+
+  /** The decoration standing on the open-lake hex `(q, r)`, if a building on the shore asked for one. */
+  lakePropAt(q: number, r: number): LakeProp | undefined {
+    if (this.lakePropsDirty) this.recomputeLakeProps();
+    return this.lakePropByHex.get(coordKey({ q, r }));
   }
 
   /** Makes a materialised tile read as the bog hex `bog` says it is (terrain, art rotation and variant, no longer coastal water). */
@@ -732,12 +791,15 @@ export class WorldModel {
   }
 
   getTile(q: number, r: number): Tile {
+    if (this.lakePropsDirty) this.recomputeLakeProps();
     const k = coordKey({ q, r });
     let tile = this.tiles.get(k);
     if (!tile) {
       tile = generateTile(q, r, { seed: this.seed, generation: this.generation }, this.terrainOf);
       const bog = this.bogByHex.get(k);
       if (bog) tile.bog = bog;
+      const lakeProp = this.lakePropByHex.get(k);
+      if (lakeProp) tile.lakeProp = lakeProp;
       if (this.wastedRevealed) {
         if (this.isWastedLandAt(q, r)) {
           tile.wasted = true;
@@ -864,6 +926,7 @@ export class WorldModel {
     for (const s of this.settlements.values()) {
       signature += `|${s.id}:${s.level}:${s.q},${s.r}`;
       for (const t of this.settlementTowers.get(s.id) ?? []) signature += `;${t.q},${t.r},${t.level}`;
+      signature += `;odin${this.settlementOdinLevels.get(s.id) ?? 0}`;
     }
     return signature;
   }
@@ -905,7 +968,7 @@ export class WorldModel {
   /**
    * Whether `at` would satisfy the backend's own start-position rule
    * (`WorldGenerator.FindStartPositions`): a Grass hex with at least one
-   * Forest and two Grass neighbours, and no sea within two hexes. Demo mode
+   * Forest and two Grass neighbours, no sea within two hexes, and plain bog within `BOG_REACH`. Demo mode
    * has no backend to ask for a real start position — `findLandfall` uses
    * this to steer clear of a coastal sliver of sand or a lone tile at an
    * island's tip, which the literal nearest land hex to a click can
@@ -924,7 +987,21 @@ export class WorldModel {
     }
     if (forest < 1 || grass < 2) return false;
 
-    return hexesInRadius(at, 2).every((c) => this.isLand(c.q, c.r));
+    if (!hexesInRadius(at, 2).every((c) => this.isLand(c.q, c.r))) return false;
+    return this.hasPlainBogInReach(at);
+  }
+
+  /**
+   * Whether a plain bog hex (moss, not a shore, creek or lake) lies within `BOG_REACH` of `at` — the landing-spot
+   * rule of `WorldGenerator.FindStartPositions` (`docs/design/bog.md`, "Decisions"): the start's stone (Clay
+   * Brickworks) and iron (bog-ore works) stand on plain bog.
+   */
+  hasPlainBogInReach(at: AxialCoord): boolean {
+    // Bog is generated island by island together with giants and camps (`placeGiantsForIsland`); before that has run
+    // (the provisional landfall that picks the island, a bare model) no bog is known, and "none in reach" would be a lie.
+    if (this.giantPlacedIslands.size === 0) return true;
+    if (this.bogByHex.size === 0) return false;
+    return hexesInRadius(at, BOG_REACH).some((c) => this.bogByHex.get(coordKey(c))?.kind === 'bog');
   }
 
   /**
@@ -1185,14 +1262,32 @@ export class WorldModel {
    * guaranteed to move together" reason that backend class documents.
    */
   visionDiscsFor(settlement: Settlement): ClaimDisc[] {
+    // Odin's Ravens widen the claim's own disc and every tower's alike
+    // (`FogVisionRadii.ToVisionSource`/`ToTowerVisionSource`'s `bonusRings`).
+    const ravens = this.ravensRingsFor(settlement.id);
     return [
-      { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) },
+      { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) + ravens },
       ...(this.settlementTowers.get(settlement.id) ?? []).map((t) => ({
         q: t.q,
         r: t.r,
-        radius: Math.max(0, t.level),
+        radius: Math.max(0, t.level) + ravens,
       })),
     ];
+  }
+
+  /** This settlement's standing Odin Statue level, 0 without one. */
+  odinLevel(settlementId: string): number {
+    return this.settlementOdinLevels.get(settlementId) ?? 0;
+  }
+
+  /** Odin's Ravens: extra rings of vision for this settlement's claim, towers and armies (`ravensRings`). */
+  ravensRingsFor(settlementId: string): number {
+    return ravensRings(this.odinLevel(settlementId));
+  }
+
+  /** Odin's Wisdom: the multiplier on this settlement's build times (`wisdomBuildTimeFactor`). */
+  wisdomFactor(settlementId: string): number {
+    return wisdomBuildTimeFactor(this.odinLevel(settlementId));
   }
 
   /**
@@ -1366,13 +1461,18 @@ export class WorldModel {
       towers.some((t, i) => t.q !== previousTowers[i]?.q || t.r !== previousTowers[i]?.r || t.level !== previousTowers[i]?.level);
     this.settlementTowers.set(settlementId, towers);
 
+    const previousOdin = this.odinLevel(settlementId);
+    const odin = snapshot.buildings.reduce((best, b) => (b.type === 'odinstatue' && b.level > best ? b.level : best), 0);
+    this.settlementOdinLevels.set(settlementId, odin);
+    const ravensChanged = ravensRings(odin) !== ravensRings(previousOdin);
+
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
     // Re-claim whenever the centre disc grew (a longhouse level-up) or the
     // set of Tower satellite discs changed (a new/levelled-up tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    if (levelIncreased || towersChanged) {
+    if (levelIncreased || towersChanged || ravensChanged) {
       for (const c of this.claimedHexes(settlement)) {
         const tile = this.getTile(c.q, c.r);
         if (!tile.ownerId) tile.ownerId = settlementId;
@@ -1410,6 +1510,10 @@ export class WorldModel {
       'druidhut',
       'cartworkshop',
       'claybrickworks',
+      'reindeerherder',
+      'odinstatue',
+      'bogoreworks',
+      'hammerschmiede',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1423,6 +1527,7 @@ export class WorldModel {
       nowRendered.add(key);
       const tile = this.getTile(building.q, building.r);
       tile.ownerId = settlementId;
+      if ((type === 'bogoreworks' || type === 'fishinghut') && tile.buildingType !== type) this.lakePropsDirty = true;
       tile.buildingType = type as Tile['buildingType'];
       tile.buildingLevel = building.level;
       // The fishing hut is the only building with its own orientation (a
@@ -1443,6 +1548,7 @@ export class WorldModel {
         const { q, r } = parseKey(key);
         const tile = this.getTile(q, r);
         if (tile.ownerId !== settlementId) continue;
+        if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
         tile.buildingType = undefined;
         tile.buildingLevel = undefined;
       }
@@ -1460,10 +1566,21 @@ export class WorldModel {
     return (this.settlementTowers.get(settlementId) ?? []).map((t) => ({ q: t.q, r: t.r }));
   }
 
+  /** Where this settlement's shrines (of any god) stand — at most one is allowed. */
+  shrineCoords(settlementId: string): { q: number; r: number }[] {
+    const coords: { q: number; r: number }[] = [];
+    for (const tile of this.tiles.values()) {
+      if (tile.ownerId === settlementId && tile.buildingType && SHRINE_BUILDING_TYPES.has(tile.buildingType)) {
+        coords.push({ q: tile.q, r: tile.r });
+      }
+    }
+    return coords;
+  }
+
   /**
    * This settlement's standing storage houses (hex and level), for the
-   * additional-storage-house rule (`ADDITIONAL_STORAGE_HOUSE_LEVEL`): a new
-   * one needs one of these at level 10.
+   * additional-storage-house rule (`additionalStorageHouseRequirement`): a new
+   * one needs enough of these at a high enough level.
    */
   storageHouses(settlementId: string): { q: number; r: number; level: number }[] {
     const levels: { q: number; r: number; level: number }[] = [];
@@ -1500,7 +1617,9 @@ export class WorldModel {
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
     // BuildingDefinition.RequiresCoastalWater).
-    if (isWaterOnlyBuilding(type) ? !tile.isCoastalWater : tile.terrain === 'sea' || tile.terrain === 'lake') return false;
+    // The bog buildings stand only on their own bog kinds (plain moss, creek), the Fishing Hut also on a lake's half
+    // shore, and nothing stands on a lake or on bog it has no business on (matches BuildingDefinition.AllowsHex).
+    if (!type || !buildingAllowedOnHex(type, tile)) return false;
     if (tile.buildingType) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes (and, for the Sawmill, only some variants — see
@@ -1525,15 +1644,27 @@ export class WorldModel {
     if (type === 'tower' && this.towerCoords(settlementId).length >= maxTowers(settlement.level)) {
       return false;
     }
-    // An additional storage house needs one standing at level 10 (matches
-    // BuildRejection.StorageHouseTooLow). Upgrades never go through here.
+    // A settlement raises one shrine in total, of any god (matches
+    // BuildRejection.SettlementAlreadyHasShrine).
+    if (type && SHRINE_BUILDING_TYPES.has(type) && this.shrineCoords(settlementId).length >= 1) return false;
+    // An additional storage house needs enough standing ones at a high enough
+    // level (matches BuildRejection.StorageHouseTooLow). Upgrades never go
+    // through here.
     if (type === 'storagehouse') {
       const held = this.storageHouses(settlementId);
-      if (held.length >= 1 && Math.max(...held.map((h) => h.level)) < ADDITIONAL_STORAGE_HOUSE_LEVEL) return false;
+      const need = additionalStorageHouseRequirement(held.length);
+      if (held.length >= 1 && held.filter((h) => h.level >= need.level).length < need.count) return false;
     }
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;
+    if (type === 'odinstatue') {
+      this.settlementOdinLevels.set(settlementId, 1);
+      for (const c of this.exploredHexesFor(settlement)) {
+        this.explored.add(coordKey(c));
+      }
+    }
+    if (type === 'bogoreworks' || type === 'fishinghut') this.lakePropsDirty = true;
     if (type === 'tower') {
       const towers = this.settlementTowers.get(settlementId) ?? [];
       towers.push({ q: at.q, r: at.r, level: 1 });
@@ -1565,6 +1696,8 @@ export class WorldModel {
         if (index !== -1) towers.splice(index, 1);
       }
     }
+    if (tile.buildingType === 'odinstatue') this.settlementOdinLevels.delete(settlementId);
+    if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
     return true;
@@ -1836,6 +1969,8 @@ export class WorldModel {
       if (existing) existing.level = nextLevel;
       else towers.push({ q: at.q, r: at.r, level: nextLevel });
       this.settlementTowers.set(settlementId, towers);
+    } else if (tile.buildingType === 'odinstatue') {
+      this.settlementOdinLevels.set(settlementId, nextLevel);
     } else {
       // Every other building type levels up cosmetically only — it has no
       // claim-radius contribution to re-derive (see BuildingDefinition.ClaimRadius).

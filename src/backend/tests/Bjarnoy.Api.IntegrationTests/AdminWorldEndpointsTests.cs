@@ -125,6 +125,63 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task Admin_world_list_counts_free_spawn_spots_left_by_first_and_expansion_settlements()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var islands = (await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct))!
+            .Where(i => i.StartPositions.Count > 0)
+            .ToList();
+        Assert.True(islands.Count >= 2, "the test seed needs two islands with start positions");
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var empty = await ListedAsync();
+        Assert.Equal(islands.Sum(i => i.StartPositions.Count), empty.SpawnCount);
+        Assert.InRange(empty.FreeSpawnCount, 1, empty.SpawnCount);
+
+        var first = await FoundSettlementAsync(client, world);
+        var afterFirst = await ListedAsync();
+        Assert.True(afterFirst.FreeSpawnCount < empty.FreeSpawnCount);
+
+        // An expansion: a second settlement on another island, owned by the
+        // same player. It is not a new player, but it still takes spawn spots
+        // a new player could have joined on.
+        var island = islands.First(i => i.Id != first.IslandId);
+        var plot = island.StartPositions[0];
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var firstRow = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == first.Id, Ct);
+            db.Settlements.Add(new SettlementEntity
+            {
+                WorldId = world.Id,
+                IslandId = island.Id,
+                UserId = firstRow.UserId,
+                Name = "Grimhold",
+                OwnerName = firstRow.OwnerName,
+                OwnerId = firstRow.OwnerId,
+                CentreQ = plot.Q,
+                CentreR = plot.R,
+                FoundedAt = firstRow.FoundedAt,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var afterExpansion = await ListedAsync();
+        Assert.True(afterExpansion.FreeSpawnCount < afterFirst.FreeSpawnCount);
+        Assert.Equal(empty.SpawnCount, afterExpansion.SpawnCount);
+
+        async Task<AdminWorldResponse> ListedAsync()
+        {
+            var listResponse = await client.GetAsync("/api/v1/admin/worlds", Ct);
+            Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+            var worlds = await listResponse.ReadStrictAsync<IReadOnlyList<AdminWorldResponse>>(Ct);
+            return Assert.Single(worlds, w => w.Id == world.Id);
+        }
+    }
+
+    [Fact]
     public async Task Admin_can_update_speed_factor_start_date_stop_join_and_endboss()
     {
         using var client = _fixture.CreateClient();
@@ -711,10 +768,10 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
                 new PreviewWorldSeedRequest(Seed: 2024, Radius: 600, Generation: overrides),
                 Ct)).ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
 
-        // The created world is a compact one (see TestWorlds): widths 8-14 on 90-hex cells.
+        // The created world is a compact one (see TestWorlds): widths 8-14 on 66-hex cells.
         var defaultSized = await PreviewAsync(overrides: null);
         var bigIslands = await PreviewAsync(new WorldGenerationSettingsOverrides(
-            IslandMinWidth: 20.0, IslandMaxWidth: 28.0, IslandCellSize: 200));
+            IslandMinWidth: 20.0, IslandMaxWidth: 28.0, IslandCellSize: 200, IslandMaxReach: 240.0));
 
         // Same seed, only the island-size knobs changed: far fewer, much
         // bigger islands than the default-sized preview of the same seed.

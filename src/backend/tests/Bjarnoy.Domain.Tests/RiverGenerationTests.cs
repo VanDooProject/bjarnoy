@@ -295,7 +295,9 @@ public class RiverGenerationTests
                 }
                 else
                 {
-                    Assert.True(springCount <= world.Options.MaxSpringsPerIsland, $"seed {seed} island {island.Index}: {springCount} springs");
+                    // Valley streams (each with a spring of its own) come on top of the picked springs.
+                    var valleySprings = springCount > world.Options.MaxSpringsPerIsland ? ValleyStreamTests.ValleyStreamsOf(island, world.Options) : 0;
+                    Assert.True(springCount - valleySprings <= world.Options.MaxSpringsPerIsland, $"seed {seed} island {island.Index}: {springCount} springs");
                 }
             }
         }

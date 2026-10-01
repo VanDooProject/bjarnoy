@@ -201,7 +201,8 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         var levelResponse = await client.PutJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/buildings/{plot.Q}/{plot.R}/level",
-            new SetBuildingLevelRequest(5), Ct);
+            // Longhouse 10: the Cart Workshop, and with it the Settler Crew, opens at 10 (UnitCatalogue).
+            new SetBuildingLevelRequest(10), Ct);
         Assert.Equal(HttpStatusCode.OK, levelResponse.StatusCode);
 
         var grantResponse = await client.PostJsonAsync(
@@ -282,8 +283,8 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var (worldId, _, player, _) = await SetUpPlayerReadyToExpandAsync(client);
         Authorize(client, player.AccessToken);
 
-        // Longhouse level 5 + a Cart Workshop => 6 renown/hour; 100 hours is
-        // hundreds of renown, nowhere near the 55 000 the 2nd settlement needs.
+        // Longhouse level 10 + a Cart Workshop => 11 renown/hour; 100 hours is
+        // about a thousand renown, nowhere near the 55 000 the 2nd settlement needs.
         _factory.Time.Advance(TimeSpan.FromHours(100));
         await RefreshAsync(client, player.RefreshToken);
 

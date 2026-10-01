@@ -81,8 +81,14 @@ const fogChunkCache = new FogChunkCache();
 let fogViewportTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Demo mode's seed — kept as its own constant since both the initial
-// `WorldModel` below and its island labels have to agree on it.
-const DEMO_SEED = 20260824;
+// `WorldModel` below and its island labels have to agree on it. The e2e suite
+// founds on this seed's landfall and needs sand in the level-1 realm and coastal
+// water within the level-8 one (SettlementPage.findHex), and open sea in view of
+// the settlement (water-shader.spec). 20260824 lost all three when the
+// island-density change moved its landfall inland, and 20260830 when the bog
+// guarantee did (demo founding re-runs findLandfall after placing the island's
+// giants, which pushed it to 58,244); 20260831 founds on the coast at 51,48.
+const DEMO_SEED = 20260831;
 
 /**
  * Discriminated result of `refreshPlotSuggestion`, replacing the bare

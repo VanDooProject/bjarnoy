@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Bjarnoy.Api.Json;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -11,6 +12,8 @@ public sealed record AdminWorldResponse(
     string Status,
     int MaxPlayers,
     int PlayerCount,
+    int FreeSpawnCount,
+    int SpawnCount,
     double SpeedFactor,
     DateTimeOffset? StartsAt,
     bool JoinsClosed,
@@ -23,7 +26,7 @@ public sealed record AdminWorldResponse(
     int Seed,
     WorldGenerationSettingsResponse Generation)
 {
-    public static AdminWorldResponse From(WorldEntity world, int playerCount)
+    public static AdminWorldResponse From(WorldEntity world, int playerCount, SpawnCapacity spawns)
     {
         ArgumentNullException.ThrowIfNull(world);
 
@@ -33,6 +36,8 @@ public sealed record AdminWorldResponse(
             world.Status.ToString().ToLowerInvariant(),
             world.MaxPlayers,
             playerCount,
+            spawns.Free,
+            spawns.Total,
             world.SpeedFactor,
             world.StartsAt,
             world.JoinsClosed,
@@ -76,7 +81,9 @@ public sealed record WorldGenerationSettingsResponse(
     double MountainThreshold,
     double MountainRockiness,
     double ForestRockiness,
-    int MinimumIslandTiles)
+    int MinimumIslandTiles,
+    double IslandMaxReach,
+    double IslandMinGap)
 {
     public static WorldGenerationSettingsResponse From(WorldGenerationOptions options)
     {
@@ -103,7 +110,9 @@ public sealed record WorldGenerationSettingsResponse(
             options.MountainThreshold,
             options.MountainRockiness,
             options.ForestRockiness,
-            options.MinimumIslandTiles);
+            options.MinimumIslandTiles,
+            options.IslandMaxReach,
+            options.IslandMinGap);
     }
 }
 
@@ -134,7 +143,9 @@ public sealed record WorldGenerationSettingsOverrides(
     double? MountainThreshold = null,
     double? MountainRockiness = null,
     double? ForestRockiness = null,
-    int? MinimumIslandTiles = null);
+    int? MinimumIslandTiles = null,
+    double? IslandMaxReach = null,
+    double? IslandMinGap = null);
 
 /// <remarks>
 /// Init-only properties rather than the positional parameters this used to

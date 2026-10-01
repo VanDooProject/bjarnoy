@@ -17,19 +17,18 @@ import { formatCountdown } from '../../composables/useQueueOrders';
 import { formatFullNumber } from '../../lib/hud/compactNumber';
 import { useWorldStore } from '../../stores/world';
 import {
-  BOOST_TERRAIN,
-  buildingStatsFor,
+  buildingStatsAt,
   buildingUpgradeCost,
-  matchingNeighbourCount,
   type BuildingKind,
   type BuildingOutput,
   type BuildingModifier,
+  SHRINE_BUILDING_TYPES,
 } from '../../lib/map/buildingEconomy';
 
 const world = useWorldStore();
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-import { buildingArt, terrainArt } from '../../lib/map/buildingArt';
+import { buildingArtOnTile, terrainArt } from '../../lib/map/buildingArt';
 import { tileIsBuildable } from '../../lib/map/ringCatalogue';
 import AtlasSprite from '../AtlasSprite.vue';
 
@@ -54,8 +53,7 @@ function shrineSlotsFor(level: number): number {
   return 1;
 }
 
-const SHRINE_TYPES = new Set(['shrineofthor', 'shrineoffreyja', 'shrineofullr', 'shrineofnjord']);
-const isShrine = computed(() => SHRINE_TYPES.has(props.tile.buildingType ?? ''));
+const isShrine = computed(() => SHRINE_BUILDING_TYPES.has(props.tile.buildingType ?? ''));
 // Level 0 is the foundation stub while the shrine is still under
 // construction (Enqueue) — it grants no favour and has no slots yet, mirrored
 // by Settlement.SlotRune/ActiveEffect rejecting it backend-side.
@@ -196,7 +194,7 @@ async function holdFeast() {
 
 const art = computed(() => {
   const { buildingType, buildingLevel, terrain } = props.tile;
-  return (buildingType ? buildingArt(buildingType, buildingLevel ?? 1) : undefined) ?? terrainArt(terrain);
+  return (buildingType ? buildingArtOnTile(buildingType, buildingLevel ?? 1, props.tile) : undefined) ?? terrainArt(terrain);
 });
 // Open water is otherwise unbuildable, but a water building (fishing hut,
 // dockyard, shrine of Njörd — see `isWaterOnlyBuilding`) already standing
@@ -220,10 +218,6 @@ const level = computed(() => props.tile.buildingLevel ?? 0);
 // HexMapRenderer.ts, so the modal's "current stats" match whatever the hover
 // tooltip just showed.
 const getTile = (q: number, r: number): Tile => world.model.getTile(q, r);
-const matchingNeighbours = computed(() => {
-  const boostTerrain = props.tile.buildingType ? BOOST_TERRAIN[props.tile.buildingType] : undefined;
-  return boostTerrain ? matchingNeighbourCount(props.tile, boostTerrain, getTile) : 0;
-});
 
 // Mirrors HexTooltip.vue's formatOutput/formatModifier.
 function formatOutput(output: BuildingOutput): string {
@@ -266,11 +260,22 @@ function formatModifier(modifier: BuildingModifier): string {
         percent: modifier.percent,
         domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
       });
+    case 'odinFavour':
+      return t('hud.hoverTooltip.modifierOdinFavour', {
+        percent: modifier.buildTimePercent,
+        rings: modifier.visionRings,
+      });
     case 'radiusBoost':
       return t('hud.hoverTooltip.modifierRadiusBoost', {
         percent: modifier.percent,
         range: modifier.range,
-        resource: t(modifier.resource === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
+        resource: t(
+          modifier.resource === 'wood'
+            ? 'hud.hoverTooltip.domainWood'
+            : modifier.resource === 'iron'
+              ? 'hud.hoverTooltip.domainIron'
+              : 'hud.hoverTooltip.domainFood',
+        ),
       });
   }
 }
@@ -278,7 +283,7 @@ function formatModifier(modifier: BuildingModifier): string {
 // The existing building's current-level output/modifier/workers — undefined
 // (and hidden) for an empty tile, since there's nothing standing yet.
 const buildingStats = computed(() =>
-  props.tile.buildingType ? buildingStatsFor(props.tile.buildingType, level.value, matchingNeighbours.value) : undefined,
+  props.tile.buildingType ? buildingStatsAt(props.tile.buildingType, level.value, props.tile, getTile) : undefined,
 );
 const currentStats = computed(() =>
   buildingStats.value
@@ -720,7 +725,7 @@ const actionLabel = computed(() => {
    `.body` at a 367px content width, so this stacks art above body and lets
    the whole modal scroll vertically instead. Last in the file so it wins
    over the desktop `.art`/`.body` rules above at equal specificity. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .modal {
     flex-direction: column;
     max-height: 90vh;

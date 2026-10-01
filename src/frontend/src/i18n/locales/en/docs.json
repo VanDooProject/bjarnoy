@@ -52,7 +52,11 @@
     "cropmill": "Crop mill",
     "druidhut": "Druid's hut",
     "cartworkshop": "Cart workshop",
-    "claybrickworks": "Clay brickworks"
+    "claybrickworks": "Clay brickworks",
+    "bogoreworks": "Bog-ore works",
+    "hammerschmiede": "Hammerschmiede",
+    "odinstatue": "Odin statue",
+    "reindeerherder": "Reindeer herder"
   },
   "techTree": {
     "title": "Tech tree",
@@ -87,15 +91,17 @@
       "longhouse": "The heart of the settlement. Its level sets claim radius, build slots and how many settlers call the village home — every settlement starts with one, standing on grass.",
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
-      "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil.",
+      "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
+      "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
+      "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest on grass, so a full warehouse never stalls production.",
       "tower": "A watch built on grass or sand at the border, pushing the claimed ground further out.",
-      "fishinghut": "A dock over shallow water, fishing the shallows a farm never could.",
+      "fishinghut": "A dock over shallow water, fishing the shallows a farm never could. It also stands on stilts on the half shore of a bog lake.",
       "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player) — the bonus crop a \"more fertile\" island unlocks.",
-      "shrineofthor": "Raised to Thor on grass — its favour boosts Wood and Stone production. Only one shrine per god may stand on an island — a settlement can still raise all four, just never a second Thor.",
-      "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production. Only one shrine per god may stand on an island — a settlement can still raise all four, just never a second Freyja.",
-      "shrineofullr": "Raised to Ullr on grass — its favour boosts Wood production. Only one shrine per god may stand on an island — a settlement can still raise all four, just never a second Ullr.",
-      "shrineofnjord": "Raised to Njörd on grass — its favour boosts storage capacity rather than any resource's production. Only one shrine per god may stand on an island — a settlement can still raise all four, just never a second Njörd.",
+      "shrineofthor": "Raised to Thor on grass — its favour boosts Wood and Stone production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
+      "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
+      "shrineofullr": "Raised to Ullr on grass — its favour boosts Wood production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
+      "shrineofnjord": "Raised to Njörd on grass — its favour boosts storage capacity rather than any resource's production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "archeryrange": "Trains the land army's ranged specialists on grass or sand — bowmen, and once a Barracks-trained berserker line stands, catapults — in place of the longhouse.",
       "dockyard": "Trains ships on shallow (coastal) water, in place of the longhouse.",
       "greatstorehouse": "A late-game storage tier on grass, needing both the longhouse and this settlement's own storage house at level 15.",
@@ -107,7 +113,9 @@
       "smithy": "The settlement's forge, with an anvil, on grass or sand behind a level-10 Barracks — the military line's capstone and the feeder of the Shrine of Thor. It produces nothing: it is where troops will be upgraded, a mechanic still to come.",
       "druidhut": "A turf-roofed roundhouse on grass behind a Town Square, with a ring of runestones — no effect of its own yet, but meant for a future favour or rune mechanic.",
       "cartworkshop": "Builds the settlement's carts on grass behind a Town Square — trains provisioners and settler crews in place of the longhouse. No storage of its own.",
-      "claybrickworks": "Digs and fires clay on grass — a pit, a drying rack and a kiln turning red earth into stone where no mountain stands."
+      "claybrickworks": "Digs and fires clay on bog moss — a pit, a drying rack and a kiln turning red earth into stone where no mountain stands.",
+      "bogoreworks": "The iron producer, on plain bog moss (not a shore, creek or lake): from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake hex next to it adds 10% to its output, up to +50%. Unlocks at longhouse 6.",
+      "hammerschmiede": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works. No iron of its own: it raises every bog-ore works within its level's range instead (a wider range and a bigger boost at higher levels). It is drawn as the river hammer mill until its own art exists."
     },
     "table": {
       "level": "Level",
@@ -428,7 +436,7 @@
   "bogLands": {
     "title": "Bog lands",
     "intro": "Wet moss ground (Old Norse mýrr), cut by slow creeks and dark lakes. Rust-coloured seeps mark the bog iron that is dug here, and clay is cut from the lake shores. Bogs are part of the living lands and meet grass at a hex edge.",
-    "status": "Bogs now appear in worlds: a lake with a river running through it on most big islands, and a lake with a bog ring where an island encloses a pocket of sea. The bog buildings (the bog-ore works, the Clay Brickworks on bog and the lake Fisher Hut) are still to come.",
+    "status": "Bogs now appear in worlds: a lake with a river running through it on most big islands, and a lake with a bog ring where an island encloses a pocket of sea. The bog buildings are in: the bog-ore works and the Clay Brickworks on plain bog, the Fishing Hut on a lake's half shore, and the Hammerschmiede on a creek (with the river mill's art until it has its own).",
     "looks": "Look",
     "camera": "Facing",
     "stage": "Stage",
@@ -478,7 +486,7 @@
         },
         "half": {
           "name": "Half shore",
-          "body": "A shore with three water edges, where the lake Fisher Hut stands."
+          "body": "A shore with three water edges, where the lake Fishing Hut stands."
         },
         "mouth": {
           "name": "Creek mouth",
@@ -488,18 +496,22 @@
     },
     "buildings": {
       "heading": "Buildings on the bog",
-      "body": "Three buildings stand on bog ground. Step through the stages each one grows through as it is built up.",
+      "body": "Four buildings belong to the bog. Step through the stages each one grows through as it is built up.",
       "bogoreworks": {
         "name": "Bog-ore works",
-        "body": "The iron producer: from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake tile next to it adds to its output."
+        "body": "The iron producer, on plain bog moss: from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake tile next to it adds to its output."
       },
       "fisherhut": {
-        "name": "Fisher Hut (lake)",
-        "body": "The Fisher Hut, on stilts over a bog-lake shore. The same building as the coastal one, with its own art."
+        "name": "Fishing Hut (lake)",
+        "body": "The Fishing Hut, on stilts over a bog-lake shore (a half shore). The same building as the coastal one, with its own art; it counts the lake tiles around it the way the coastal hut counts sea."
+      },
+      "hammerschmiede": {
+        "name": "Hammerschmiede",
+        "body": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works: it raises every bog-ore works within its range. It shows the river hammer mill until it gets art of its own."
       },
       "claybrickworks": {
         "name": "Clay Brickworks",
-        "body": "Clay dug from the bog and fired into bricks: a new player's first source of stone. It now stands on bog ground instead of grass."
+        "body": "Clay dug from the bog and fired into bricks: a new player's first source of stone. It stands on plain bog moss instead of grass."
       }
     },
     "rules": {
@@ -509,10 +521,19 @@
       "lakesApart": "Separate lakes are at least two tiles apart.",
       "creeks": "Creeks run straight or bend 120°, and end in a spring or a lake mouth.",
       "mouth": "A creek meets a lake only at a mouth.",
-      "weir": "The fish weir only appears near a lake Fisher Hut.",
+      "weir": "The fish weir only appears near a lake Fishing Hut.",
+      "boats": "Boats appear on a lake only where a lake Fishing Hut or a bog-ore works stands beside it, and not for every building: each one has an even chance, a small lake holds one boat at most, a big lake one per twelve water tiles, and boats and weirs keep three tiles apart.",
       "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
       "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
       "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
+    }
+  },
+  "animations": {
+    "play": "Play animations",
+    "paused": {
+      "reducedMotion": "Animations are paused because your device asks for reduced motion.",
+      "saveData": "Animations are paused because your browser is saving data.",
+      "off": "Animations are switched off on this device."
     }
   }
 }

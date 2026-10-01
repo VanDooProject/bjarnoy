@@ -1,5 +1,6 @@
 import { FEAST_HOURS, RENOWN_BASE_THRESHOLD, feastCost, feastRenown } from './feasts';
 import type { BuildingDefinitionResponse, BuildingPrerequisiteResponse, ResourceLine } from '../../api/types';
+import { additionalStorageHouseRequirement } from '../map/buildingEconomy';
 
 // Deterministic minute-step pacing model of ONE settlement, generic over
 // whatever building catalogue it is handed (live or bundled snapshot). It is
@@ -22,7 +23,7 @@ export const BASE_STORAGE_CAPACITY = 500;
 export const FOUNDING_STOCK: ResourceLine = { wood: 700, stone: 700, food: 700, iron: 0 };
 /** Fallback for 3 x SettlerCrew.trainingCost when the unit catalogue has no settlercrew row. */
 export const FALLBACK_SETTLER_COST: ResourceLine = { wood: 600, stone: 450, food: 300, iron: 300 };
-export const DEFAULT_PRODUCER_COUNTS: Record<string, number> = { lumberjack: 3, quarry: 3, farm: 3 };
+export const DEFAULT_PRODUCER_COUNTS: Record<string, number> = { lumberjack: 3, quarry: 3, reindeerherder: 3 };
 
 const check = (start: string): Session => ({ start, minutes: 10 });
 /** Daily schedules (design §9). `always24` is a reference line, not a realistic player. */
@@ -45,13 +46,15 @@ const TOWN_SQUARE = 'townsquare';
 const TOWN_SQUARE_MAX_LEVEL = 10;
 const STORAGE = 'storagehouse';
 const STORAGE_FULL_FRACTION = 0.85;
-/** BuildingCatalogue.AdditionalStorageHouseLevel: another storage house needs one at this level. */
-const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
 
 export interface PacingParams {
   startStock: ResourceLine;
   horizonDays: number;
-  /** Owned producers per building type (each starts at level 1). */
+  /**
+   * Owned producers per building type. Each starts at level 1, except one whose level-1 gate is above Longhouse 1 (the
+   * bog-ore works, LH 6): those are not built yet at the start and are placed, one per count, as soon as the Longhouse,
+   * their prerequisites, a free slot and the stock allow.
+   */
   producerCounts: Record<string, number>;
   settlerCost: ResourceLine;
   /** Settlers count as affordable once this type's level-1 definition is placeable and stock covers settlerCost. */
@@ -87,6 +90,8 @@ export interface PacingSeries {
   minute: number[];
   lh: number[];
   rate: Record<Resource, number[]>;
+  /** Stock of each resource at each sample: the sim never spends on units, so this is what the settlement has banked (capped by storage). */
+  stock: Record<Resource, number[]>;
 }
 
 export interface PacingResult {
@@ -222,7 +227,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     for (let i = 0; i < Math.floor(params.producerCounts[type]); i++) {
       pType.push(type);
       pDefs.push(defs);
-      pLevel.push(1);
+      pLevel.push(defs[0].reqLh > 1 ? 0 : 1);
       pBusy.push(false);
       pResource.push(primary);
     }
@@ -279,6 +284,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     sumLevels = lh;
     for (const level of storageLevels) sumLevels += level;
     for (let i = 0; i < pLevel.length; i++) {
+      if (pLevel[i] === 0) continue; // not built yet
       addDef(pDefs[i][pLevel[i] - 1]);
       sumLevels += pLevel[i];
       if ((standingBest.get(pType[i]) ?? 0) < pLevel[i]) standingBest.set(pType[i], pLevel[i]);
@@ -325,6 +331,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     minute: [],
     lh: [],
     rate: { wood: [], stone: [], food: [], iron: [] },
+    stock: { wood: [], stone: [], food: [], iron: [] },
   };
 
   for (let minute = 0; minute <= horizon; minute++) {
@@ -375,6 +382,10 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       series.rate.stone.push(rate[1]);
       series.rate.food.push(rate[2]);
       series.rate.iron.push(rate[3]);
+      series.stock.wood.push(stock[0]);
+      series.stock.stone.push(stock[1]);
+      series.stock.food.push(stock[2]);
+      series.stock.iron.push(stock[3]);
     }
     for (let r = 0; r < 4; r++) stock[r] = Math.min(capacity[r], stock[r] + rate[r] / 60);
     renown += (sumLevels * renownPerLevelHour) / 60;
@@ -424,8 +435,10 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     // level costs more than can be stored, raise the lowest storage house —
     // placing a new one (level 0 -> 1) before upgrading one already standing.
     // An additional house (level 0) may only be started once another stands
-    // at level 10 (BuildingCatalogue.AdditionalStorageHouseLevel).
-    const additionalAllowed = Math.max(0, ...storageLevels) >= ADDITIONAL_STORAGE_HOUSE_LEVEL;
+    // at the level BuildingCatalogue.AdditionalStorageHouseRequirement asks for.
+    const heldHouses = storageLevels.filter((l) => l > 0).length;
+    const need = additionalStorageHouseRequirement(heldHouses);
+    const additionalAllowed = heldHouses < 1 || storageLevels.filter((l) => l >= need.level).length >= need.count;
     let target = -1;
     for (let i = 0; i < storageLevels.length; i++) {
       if (storageLevels[i] >= storageMax) continue;
@@ -459,7 +472,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       const level = pLevel[i];
       if (level >= defs.length || level >= lh + ahead) continue;
       const next = defs[level];
-      const gain = next.prodTotal - defs[level - 1].prodTotal;
+      const gain = next.prodTotal - (level > 0 ? defs[level - 1].prodTotal : 0);
       if (gain <= 0 || !placeable(next, true) || !affordable(next) || usedSlots + next.slotCost > slots) continue;
       const weight = 1 + 1 / (1 + rate[pResource[i]] / 50);
       const score = next.total / gain / weight;

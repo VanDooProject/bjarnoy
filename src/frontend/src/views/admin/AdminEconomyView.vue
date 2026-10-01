@@ -29,7 +29,7 @@ const catalogue = useBuildingCatalogueStore();
 const units = useUnitCatalogueStore();
 
 const PALETTE = ['#ffc55c', '#5cb8ff', '#7bd88f', '#ff7a7a', '#c39bff', '#ff9f5c', '#5ce1d6', '#e6e07a', '#ff8fc7', '#a3b1c2'];
-const DEFAULT_TYPES = ['longhouse', 'lumberjack', 'quarry', 'farm', 'storagehouse', 'barracks'];
+const DEFAULT_TYPES = ['longhouse', 'lumberjack', 'quarry', 'reindeerherder', 'storagehouse', 'barracks'];
 
 onMounted(() => {
   void catalogue.load();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import catalogue from '../../data/building-catalogue.json';
 import type { BuildingDefinitionResponse } from '../../api/types';
-import { buildTechTreeNodes, prerequisitesOf, unlockLevel } from './nodes';
+import { MERGED_CARDS, buildTechTreeNodes, prerequisitesOf, unlockLevel } from './nodes';
 import { HIDDEN_FROM_DOCS, TECH_TREE_LAYOUT } from './layout';
 
 const byType: Record<string, BuildingDefinitionResponse[]> = {};
@@ -16,6 +16,11 @@ const byName = new Map(nodes.map((n) => [n.type, n]));
 describe('buildTechTreeNodes', () => {
   it('draws one card per laid-out building the catalogue knows', () => {
     expect(nodes).toHaveLength(Object.keys(TECH_TREE_LAYOUT).length);
+    // every catalogue type is either laid out or absorbed into a merged card
+    const absorbed = Object.values(MERGED_CARDS).flatMap((c) => c.absorbs);
+    for (const type of Object.keys(byType)) {
+      expect(type in TECH_TREE_LAYOUT || absorbed.includes(type), `${type} has a card`).toBe(true);
+    }
   });
 
   it('leaves the buildings hidden from the docs out entirely', () => {
@@ -23,6 +28,31 @@ describe('buildTechTreeNodes', () => {
       expect(byType[type], `${type} should still be in the catalogue`).toBeTruthy();
       expect(byName.has(type), `${type} should not be drawn`).toBe(false);
     }
+  });
+
+  it('shows Farm and Pumpkin Farm as one card behind the Reindeer Herder', () => {
+    expect(byName.has('pumpkinfarm')).toBe(false);
+    const farm = byName.get('farm')!;
+    expect(farm.label).toBe('Farm / Pumpkin Farm (by soil)');
+    expect(farm.chips).toEqual([
+      { text: 'LH 4', kind: 'longhouse' },
+      { text: 'Herder 3', kind: 'building' },
+    ]);
+    // The Pumpkin Farm is a separate type with the same gate, merged into the card.
+    expect(byType.pumpkinfarm).toBeTruthy();
+    expect(unlockLevel(byType.pumpkinfarm!)).toBe(unlockLevel(byType.farm!));
+    expect(prerequisitesOf(byType, 'pumpkinfarm')).toEqual(prerequisitesOf(byType, 'farm'));
+    expect(byName.get('reindeerherder')!.chips).toEqual([{ text: 'LH 1', kind: 'longhouse' }]);
+  });
+
+  it('draws the Odin Statue behind the Druid Hut, with both favours on the card', () => {
+    const odin = byName.get('odinstatue')!;
+    expect(odin.chips).toEqual([
+      { text: 'LH 25', kind: 'longhouse' },
+      { text: 'Druid 10', kind: 'building' },
+    ]);
+    expect(odin.gives).toBe('-2% build time, +2 rings of vision'); // level 1; level 5 reads -10% / +10
+    expect(odin.category).toBe('religion');
   });
 
   it('takes the longhouse chip from the real unlock level', () => {

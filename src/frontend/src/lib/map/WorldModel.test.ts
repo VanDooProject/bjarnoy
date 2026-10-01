@@ -9,9 +9,11 @@ import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, hexRing, neighbors, type AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import { guardRange, placeCamps } from './campPlacement';
+import { BOG_REACH } from './bogGenerator';
+import { placeLakeProps } from './lakeProps';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
-import type { RiverTile } from './types';
+import type { BogTile, RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
   const at = model.findLandfall({ q: 0, r: 0 });
@@ -30,7 +32,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 }
 
 // Regression: findLandfall used to return the literal nearest land hex to
-// the click, which for some seeds (see the demo seed, 20260824 — the case
+// the click, which for some seeds (see the old demo seed, 20260824 — the case
 // that surfaced this after WorldGenerationOptions.IslandMinRadius/
 // IslandMaxRadius grew) can be a lone tile at an island's tip: almost every
 // hex in the settlement's own realm ends up sea. findLandfall now prefers a
@@ -38,7 +40,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 // enforces (Grass, >=1 Forest and >=2 Grass neighbours, no sea within two
 // hexes) over the merely-nearest land hex.
 describe('WorldModel.findLandfall', () => {
-  it.each([1, 7, 42, 20260824, 20260826])(
+  it.each([1, 7, 42, 20260824, 20260826, 20260830, 20260831])(
     'prefers a start-quality hex over the merely-nearest land hex (seed %i)',
     (seed) => {
       const model = new WorldModel(seed);
@@ -214,22 +216,113 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.placeBuilding(settlement.id, spots[2], 'farm')).toBe(true);
   });
 
-  it('refuses an additional storage house until one stands at level 10 (ADDITIONAL_STORAGE_HOUSE_LEVEL)', () => {
+  it('raises the bar for each further storage house (additionalStorageHouseRequirement)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
       (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
     );
-    expect(spots.length).toBeGreaterThan(2);
+    expect(spots.length).toBeGreaterThan(5);
 
     settlement.level = 3; // widen the claim so the spots are reachable
     expect(model.storageHouses(settlement.id)).toEqual([]);
-    // The first is never refused; the second is, while the first is below 10.
+    const setLevel = (i: number, level: number) => {
+      model.getTile(spots[i].q, spots[i].r).buildingLevel = level;
+    };
+    // 1st: never refused. 2nd: needs 1 at L10.
     expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
     expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(false);
-
-    model.getTile(spots[0].q, spots[0].r).buildingLevel = 10;
+    setLevel(0, 10);
     expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(true);
+    // 3rd: needs 2 at L15.
+    setLevel(1, 14);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
+    setLevel(0, 15);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
+    setLevel(1, 15);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(true);
+    // 4th: needs 3 at L20.
+    setLevel(0, 20);
+    setLevel(1, 20);
+    setLevel(2, 19);
+    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(false);
+    setLevel(2, 20);
+    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(true);
+    // 5th: needs 4 at L25, and from then on there is no limit.
+    for (const i of [0, 1, 2]) setLevel(i, 25);
+    setLevel(3, 24);
+    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(false);
+    setLevel(3, 25);
+    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(true);
+    expect(model.placeBuilding(settlement.id, spots[5], 'storagehouse')).toBe(true);
+  });
+
+  it('lets a settlement hold only one shrine in total, of any god', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    settlement.level = 3;
+
+    expect(model.shrineCoords(settlement.id)).toEqual([]);
+    expect(model.placeBuilding(settlement.id, spots[0], 'shrineofthor')).toBe(true);
+    expect(model.shrineCoords(settlement.id)).toEqual([{ q: spots[0].q, r: spots[0].r }]);
+    // neither another god's shrine nor a second one of the same god
+    expect(model.placeBuilding(settlement.id, spots[1], 'shrineoffreyja')).toBe(false);
+    expect(model.placeBuilding(settlement.id, spots[2], 'shrineofthor')).toBe(false);
+    // other buildings are unaffected
+    expect(model.placeBuilding(settlement.id, spots[1], 'farm')).toBe(true);
+  });
+
+  it("widens a settlement's vision discs by Odin's Ravens and shortens its builds with Wisdom", () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    settlement.level = 3;
+    const before = model.visionDiscsFor(settlement)[0].radius;
+    const exploredBefore = model.exploredRadius(settlement);
+    expect(model.ravensRingsFor(settlement.id)).toBe(0);
+    expect(model.wisdomFactor(settlement.id)).toBe(1);
+    const signatureBefore = model.fogSignature();
+
+    expect(model.placeBuilding(settlement.id, spots[0], 'odinstatue')).toBe(true);
+
+    expect(model.odinLevel(settlement.id)).toBe(1);
+    expect(model.ravensRingsFor(settlement.id)).toBe(2);
+    expect(model.visionDiscsFor(settlement)[0].radius).toBe(before + 2);
+    expect(model.exploredRadius(settlement)).toBe(exploredBefore + 2);
+    expect(model.wisdomFactor(settlement.id)).toBeCloseTo(0.98, 9);
+    expect(model.fogSignature()).not.toBe(signatureBefore);
+    // it is the settlement's one shrine
+    expect(model.placeBuilding(settlement.id, spots[1], 'shrineofthor')).toBe(false);
+
+    model.getTile(spots[0].q, spots[0].r).buildingLevel = 4;
+    expect(model.upgradeBuilding(settlement.id, spots[0])).toBe(true);
+    expect(model.odinLevel(settlement.id)).toBe(5);
+    expect(model.visionDiscsFor(settlement)[0].radius).toBe(before + 10);
+    expect(model.wisdomFactor(settlement.id)).toBeCloseTo(0.9, 9);
+  });
+
+  it('reads the Odin level from a live snapshot, so Ravens follow the backend', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 3 }]));
+    expect(model.ravensRingsFor(settlement.id)).toBe(6);
+
+    // a level-0 foundation stub grants nothing yet
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 0 }]));
+    expect(model.ravensRingsFor(settlement.id)).toBe(0);
   });
 
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
@@ -421,7 +514,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
 
     expect(model.placeBuilding(settlement.id, grass, 'fishinghut')).toBe(false);
     expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
@@ -433,7 +526,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     settlement.level = 6;
     model.claimTerritory(settlement.id);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
     const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
 
     expect(model.placeBuilding(settlement.id, grass, 'shrineofnjord')).toBe(false);
@@ -446,7 +539,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
     model.setRiverTiles([riverTile(grass, 'bend')]);
 
     expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(true);
@@ -457,7 +550,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
 
     expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(false);
     expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
@@ -469,7 +562,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
       const model = new WorldModel(20260825);
       const { settlement } = foundLandedSettlement(model);
       const radius = model.borderRadius(settlement);
-      const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+      const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
       model.setRiverTiles([riverTile(grass, shape)]);
 
       expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(false);
@@ -895,7 +988,7 @@ describe('WorldModel.previewCropTiles', () => {
 });
 
 
-// Same demo seed the app itself boots into (stores/world.ts's DEMO_SEED).
+// The app's demo seed until the island-density change (stores/world.ts's DEMO_SEED is now 20260831).
 const DEMO_SEED = 20260824;
 
 function foundLandedSettlementAt(model: WorldModel, seedHex: AxialCoord) {
@@ -1202,7 +1295,7 @@ describe('WorldModel.setGiants (live mode)', () => {
 });
 
 describe('placeGiantsForIsland (demo giant placement v2)', () => {
-  // The default demo seed's nearest island to the origin: big enough (hundreds of tiles) to
+  // The old demo seed's nearest island to the origin: big enough (hundreds of tiles) to
   // get mountain giants. The anchors are read back off the model rather than pinned.
   const DEMO_SEED = 20260824;
 
@@ -1345,13 +1438,13 @@ describe('WorldModel wildlife camps', () => {
 });
 
 describe('WorldModel wasted-island reveal', () => {
-  // Seed 40 has a small wasted island around (-105, 460) — the first window of
-  // src/shared/wasted-terrain-golden.json. (-142, 471) is a wasted-forest hex whose 6
-  // neighbours are also wasted land (fully interior); (-143, 470) is plain open sea that
+  // Seed 40 has a small wasted island nearest the origin around cell (-1, 1) (found by
+  // scanning the wasted island cells after the island-density change). (-81, 256) is a wasted-forest hex whose 6
+  // neighbours are also wasted land (fully interior); (-83, 256) is plain open sea that
   // borders wasted land.
   const WASTED_SEED = 40;
-  const wastedForest = { q: -142, r: 471 };
-  const seaBorderingWasted = { q: -143, r: 470 };
+  const wastedForest = { q: -81, r: 256 };
+  const seaBorderingWasted = { q: -83, r: 256 };
 
   it('hides a wasted hex as sea before the reveal', () => {
     const model = new WorldModel(WASTED_SEED);
@@ -1408,7 +1501,7 @@ describe('WorldModel wasted-island reveal', () => {
   });
 
   it('never wipes green-island state (buildings, ownership, giant tags) on reveal', () => {
-    // Seed 20260824 (the app's own demo seed): the landfall nearest the origin, and a
+    // Seed 20260824 (the app's demo seed until the island-density change): the landfall nearest the origin, and a
     // giant-placeable anchor near it whose footprint includes a Forest hex (found by
     // scanning canPlaceGiant), so this also covers tagGiantHex's Forest->Grass flattening
     // surviving a reveal.
@@ -1555,5 +1648,184 @@ describe('WorldModel bogland', () => {
     const landfall = model.findLandfall(near)!;
     expect(model.getBogTile(landfall.q, landfall.r)).toBeUndefined();
     expect(model.getTile(landfall.q, landfall.r).terrain).toBe('grass');
+  });
+
+  // docs/design/bog.md, "Decisions": a landing spot needs plain bog moss within BOG_REACH hexes
+  // (WorldGenerator.FindStartPositions, the same rule on the server).
+  it('lands on a hex with plain bog in reach once the island is generated', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+
+    const plainBog = model.listBogTiles().filter((t) => t.kind === 'bog');
+    expect(plainBog.length).toBeGreaterThan(0);
+
+    const landfall = model.findLandfall(near)!;
+    expect(model.hasPlainBogInReach(landfall)).toBe(true);
+    expect(plainBog.some((b) => hexDistance(b, landfall) <= BOG_REACH)).toBe(true);
+  });
+
+  it('counts only plain moss as bog in reach, and stops exactly at the reach', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+    const plainBog = model.listBogTiles().filter((t) => t.kind === 'bog');
+    const target = plainBog[0]!;
+
+    // Keep only one plain moss hex and a lake/creek elsewhere: only the moss hex's surroundings are in reach.
+    const notPlain = model.listBogTiles().find((t) => t.kind !== 'bog' && hexDistance(t, target) > 3 * BOG_REACH);
+    model.setBogTiles([target, ...(notPlain ? [notPlain] : [])]);
+    const exactly = hexRing(target, BOG_REACH)[0]!;
+    const beyond = hexRing(target, BOG_REACH + 1)[0]!;
+    expect(model.hasPlainBogInReach(exactly)).toBe(true);
+    expect(model.hasPlainBogInReach(beyond)).toBe(false);
+    if (notPlain) expect(model.hasPlainBogInReach(notPlain)).toBe(false);
+  });
+
+  it('does not apply the bog rule before any island is generated (no bog is known yet)', () => {
+    const model = new WorldModel(DEMO_SEED);
+    expect(model.hasPlainBogInReach({ q: 0, r: 0 })).toBe(true);
+  });
+});
+
+// The bog buildings (docs/design/bog.md, "Buildings"): where each may be placed, and the lake decorations they ask for.
+describe('WorldModel bog buildings', () => {
+  const bogTile = (
+    q: number,
+    r: number,
+    kind: BogTile['kind'],
+    inDirections: BogTile['inDirections'] = [],
+    outDirection: BogTile['outDirection'] = null,
+    waterEdges: BogTile['waterEdges'] = [],
+  ): BogTile => ({ q, r, kind, inDirections, outDirection, waterEdges });
+
+  /** A settlement of the given level with one bog hex of every kind laid out in its claim, and a lake beyond. */
+  function bogSettlement(level = 3, seed = DEMO_SEED) {
+    const model = new WorldModel(seed);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+    settlement.level = level;
+    model.claimTerritory(settlement.id);
+    const ring = hexRing(at, 2);
+    const hex = (i: number) => ring[i]!;
+    const tiles: BogTile[] = [
+      bogTile(hex(0).q, hex(0).r, 'bog'),
+      bogTile(hex(1).q, hex(1).r, 'creek', ['W'], 'E'),
+      bogTile(hex(2).q, hex(2).r, 'half', [], null, ['E', 'NE', 'NW']),
+      bogTile(hex(3).q, hex(3).r, 'shore', [], null, ['E', 'NE']),
+      bogTile(hex(4).q, hex(4).r, 'mouth', ['W'], 'E', ['E']),
+      bogTile(hex(5).q, hex(5).r, 'creekspring', [], 'E'),
+      bogTile(hex(6).q, hex(6).r, 'inlet', [], null, ['E']),
+      bogTile(hex(7).q, hex(7).r, 'lake'),
+    ];
+    model.setBogTiles(tiles);
+    return { model, settlement, at, hex };
+  }
+
+  it('places the Clay Brickworks and the bog-ore works on plain moss only', () => {
+    for (const type of ['claybrickworks', 'bogoreworks'] as const) {
+      const { model, settlement, hex } = bogSettlement();
+      expect(model.placeBuilding(settlement.id, hex(3), type), `${type} on a shore`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(1), type), `${type} on a creek`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(4), type), `${type} on a mouth`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(5), type), `${type} on a spring`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(6), type), `${type} on an inlet`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(7), type), `${type} on a lake`).toBe(false);
+      expect(model.placeBuilding(settlement.id, hex(0), type), `${type} on plain moss`).toBe(true);
+    }
+  });
+
+  it('places the Hammerschmiede on a creek only', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const i of [0, 2, 3, 4, 5, 6, 7]) {
+      expect(model.placeBuilding(settlement.id, hex(i), 'hammerschmiede'), `hex ${i}`).toBe(false);
+    }
+    expect(model.placeBuilding(settlement.id, hex(1), 'hammerschmiede')).toBe(true);
+    expect(model.getTile(hex(1).q, hex(1).r).buildingType).toBe('hammerschmiede');
+  });
+
+  it('places the Fishing Hut on a lake half shore, and on no other bog hex', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const i of [0, 1, 3, 4, 5, 6, 7]) {
+      expect(model.placeBuilding(settlement.id, hex(i), 'fishinghut'), `hex ${i}`).toBe(false);
+    }
+    expect(model.placeBuilding(settlement.id, hex(2), 'fishinghut')).toBe(true);
+  });
+
+  it('refuses every grass building on bog ground (the PR3 open point)', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const type of ['farm', 'tower', 'storagehouse', 'townsquare', 'meadery', 'barracks', 'smithy', 'lumberjack', 'quarry'] as const) {
+      for (const i of [0, 1, 2, 3, 4, 5, 6]) {
+        expect(model.placeBuilding(settlement.id, hex(i), type), `${type} on hex ${i}`).toBe(false);
+      }
+    }
+  });
+
+  it('no longer builds the Clay Brickworks on grass', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+    const grass = hexesInRadius(at, 2).find((c) => model.getTile(c.q, c.r).terrain === 'grass' && !model.getTile(c.q, c.r).buildingType);
+    expect(grass).toBeDefined();
+    expect(model.placeBuilding(settlement.id, grass!, 'claybrickworks')).toBe(false);
+    expect(model.placeBuilding(settlement.id, grass!, 'farm')).toBe(true);
+  });
+
+  describe('lake decorations', () => {
+    /** A lake of radius 3 whose shore ring holds half-shore tiles; the settlement (LH 3, radius 3) claims the ring's near side. */
+    function lakeWorld(seed: number) {
+      const model = new WorldModel(seed);
+      const at = model.findLandfall({ q: 0, r: 0 })!;
+      const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+      settlement.level = 3;
+      model.claimTerritory(settlement.id);
+      const centre = { q: at.q + 6, r: at.r };
+      const lake = hexesInRadius(centre, 3).map((c) => bogTile(c.q, c.r, 'lake'));
+      const shore = hexRing(centre, 4).map((c) => bogTile(c.q, c.r, 'half', [], null, ['E', 'NE', 'NW']));
+      model.setBogTiles([...lake, ...shore]);
+      const huts = shore.filter((s) => model.placeBuilding(settlement.id, s, 'fishinghut'));
+      return { model, settlement, lake, shore, huts, centre };
+    }
+
+    it('shows the props the pure placement gives for the huts on the shore, and only on open-lake hexes', () => {
+      let seen = 0;
+      for (const seed of [1, 2, 3, 7, 42, DEMO_SEED]) {
+        const { model, lake, huts } = lakeWorld(seed);
+        if (huts.length === 0) continue;
+        const expected = placeLakeProps(
+          seed,
+          lake,
+          huts.map((h) => ({ q: h.q, r: h.r, type: 'fishinghut' as const })),
+        );
+        for (const l of lake) {
+          expect(model.getTile(l.q, l.r).lakeProp, `seed ${seed} at ${l.q},${l.r}`).toBe(expected.get(`${l.q},${l.r}`));
+          expect(model.lakePropAt(l.q, l.r)).toBe(expected.get(`${l.q},${l.r}`));
+        }
+        seen += expected.size;
+      }
+      expect(seen).toBeGreaterThan(0);
+    });
+
+    it('takes the props away again when the hut is torn down, and a bog-ore works far from the water asks for none', () => {
+      for (const seed of [1, 2, 3, 7, 42, DEMO_SEED]) {
+        const { model, settlement, lake, huts } = lakeWorld(seed);
+        if (huts.length === 0) continue;
+        const withProps = lake.filter((l) => model.getTile(l.q, l.r).lakeProp);
+        if (withProps.length === 0) continue;
+
+        for (const h of huts) model.razeBuilding(settlement.id, h);
+        for (const l of lake) expect(model.getTile(l.q, l.r).lakeProp, `seed ${seed}`).toBeUndefined();
+        return;
+      }
+      throw new Error('no seed put a prop on the lake');
+    });
+
+    it('never puts a prop on a plain lake with no building beside it', () => {
+      const { model, lake } = lakeWorld(DEMO_SEED);
+      const far = new WorldModel(DEMO_SEED);
+      far.setBogTiles(lake);
+      for (const l of lake) expect(far.getTile(l.q, l.r).lakeProp).toBeUndefined();
+      expect(model.listBogTiles().length).toBeGreaterThan(0);
+    });
   });
 });
