@@ -7,7 +7,7 @@ namespace Bjarnoy.Domain.World;
 /// <c>docs/design/river-generation.md</c> for the full rationale — this is a
 /// direct implementation of that doc, not an independent design.
 /// </summary>
-internal static class RiverGenerator
+internal static partial class RiverGenerator
 {
     /// <summary>Counters a caller can pass to <see cref="Generate"/> to see what the tracer did (tests, the preview tool).</summary>
     internal sealed class RiverStats
@@ -20,6 +20,26 @@ internal static class RiverGenerator
         public int RiverStreamJoins;
         public int TruncatedBranches;
         public int DroppedRivers;
+
+        /// <summary>Mountain-enclosed valleys of at least <see cref="ValleyMinHexes"/> hexes cut off from the island's main walkable region.</summary>
+        public int ValleyCandidates;
+
+        /// <summary>Valley streams carved.</summary>
+        public int ValleyStreams;
+
+        /// <summary>Of those, streams that run over the mountains straight into a river (the rest start on plain land and run on to one).</summary>
+        public int ValleyStreamsIntoRivers;
+
+        /// <summary>Candidates an earlier valley stream had already connected.</summary>
+        public int ValleysJoined;
+
+        public int ValleySkippedNoPath;
+        public int ValleySkippedTrace;
+        public int ValleySkippedLayout;
+        public int ValleySkippedWidths;
+        public int ValleySkippedRules;
+        public int ValleySkippedCutsOff;
+        public int ValleySkippedChanged;
         public int BogSites;
         public int BogSinks;
         public int BogSpawns;
@@ -73,6 +93,17 @@ internal static class RiverGenerator
             RiverStreamJoins += other.RiverStreamJoins;
             TruncatedBranches += other.TruncatedBranches;
             DroppedRivers += other.DroppedRivers;
+            ValleyCandidates += other.ValleyCandidates;
+            ValleyStreams += other.ValleyStreams;
+            ValleyStreamsIntoRivers += other.ValleyStreamsIntoRivers;
+            ValleysJoined += other.ValleysJoined;
+            ValleySkippedNoPath += other.ValleySkippedNoPath;
+            ValleySkippedTrace += other.ValleySkippedTrace;
+            ValleySkippedLayout += other.ValleySkippedLayout;
+            ValleySkippedWidths += other.ValleySkippedWidths;
+            ValleySkippedRules += other.ValleySkippedRules;
+            ValleySkippedCutsOff += other.ValleySkippedCutsOff;
+            ValleySkippedChanged += other.ValleySkippedChanged;
         }
     }
 
@@ -181,7 +212,7 @@ internal static class RiverGenerator
     /// when the natural meeting is not drawable. Then a width pass (stream -> widening -> river).
     /// See <c>docs/design/river-generation.md</c>.
     /// </summary>
-    private static Result GenerateGreen(
+    internal static Result GenerateGreen(
         IReadOnlyList<HexCoord> islandTiles,
         Dictionary<HexCoord, Terrain> land,
         HashSet<HexCoord> islandLand,
@@ -295,9 +326,23 @@ internal static class RiverGenerator
             bogs.PlaceSites(bp, widthTrial, traceRiver);
         }
 
+        // A stream out of every mountain-enclosed valley that the rivers and bogs left cut off.
+        var bogTiles = bogs.Classify();
+        var settled = AssignWidths(BuildRiverTiles(bp), riverLand, seed, null, bp.RequireRiver);
+        CarveValleyStreams(
+            islandTiles,
+            land,
+            islandLand,
+            riverLand,
+            options,
+            seed,
+            bogTiles,
+            bp,
+            settled,
+            stats);
         var nodes = BuildRiverTiles(bp);
         var rivers = AssignWidths(nodes, riverLand, seed, stats, bp.RequireRiver);
-        return new Result(rivers, bogs.Classify());
+        return new Result(rivers, bogTiles);
     }
 
     /// <summary>What a legacy walk ended on.</summary>

@@ -178,6 +178,11 @@ wide river stays impassable): ~600 stream tiles per world run over mountains, an
 drops from 21,794 hexes (2.46 % of walkable) to 8,190 (0.92 %), regions from 380 to 304, mountain-only valleys of 100+ hexes
 from 31 to 14 and of 10-99 from 131 to 92; no region over 1,000 hexes is left (`--no-streams` gives the old numbers).
 
+Valley streams (`docs/design/river-generation.md`) then give every mountain-only valley of 100+ hexes a stream out through the mountains: on
+the same seeds 12 of the 14 are carved (the other two are skipped: a trace without a drawable junction, a join that would have cut a
+bank off), cut-off land drops from 8,190 hexes (0.92 % of walkable) to 6,300 (0.71 %) and mountain-only valleys of 100+ hexes from 14
+to 2. The `rivers` layer's footer and `riverStatsLines` print the valley counters.
+
 ### Whole-world statistics
 
 `pathing-stats.ts --seeds 1-8 --radius 1000 [--islands]` measures, per island (a landmass of at least 6 hexes), how much

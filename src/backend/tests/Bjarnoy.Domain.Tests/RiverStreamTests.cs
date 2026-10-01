@@ -271,15 +271,21 @@ public class RiverStreamTests
         foreach (var (seed, island, _) in GreenIslands())
         {
             var springs = island.RiverTiles.Where(t => t.Shape == RiverTileShape.Spring).Select(t => t.Coord).ToList();
+            var tooClose = new List<string>();
             for (var i = 0; i < springs.Count; i++)
             {
                 for (var j = i + 1; j < springs.Count; j++)
                 {
-                    Assert.True(
-                        HexCoord.Distance(springs[i], springs[j]) >= 8,
-                        $"seed {seed}: springs {springs[i]} and {springs[j]} are closer than MinSpringSpacing");
+                    if (HexCoord.Distance(springs[i], springs[j]) < 8)
+                    {
+                        tooClose.Add($"seed {seed}: springs {springs[i]} and {springs[j]} are closer than MinSpringSpacing");
+                    }
                 }
             }
+
+            // A valley stream's spring rises wherever its valley is, so it may stand near a picked one: one pair per valley stream.
+            var allowed = tooClose.Count > 0 ? ValleyStreamTests.ValleyStreamsOf(island, TestWorlds.Default(seed).Options) : 0;
+            Assert.True(tooClose.Count <= allowed, string.Join("; ", tooClose));
         }
     }
 

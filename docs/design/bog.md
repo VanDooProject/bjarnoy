@@ -93,6 +93,10 @@ grass at a hex edge, like the wasteland does.
       sea, on grass or forest, and a lake with its shore ring needs about 6 hexes of such ground across.
    Islands without mountains (no river candidates at all) take path b too. The guarantee rolls no sinks or spawns of its own.
 
+7. **Valley streams** (after the width pass, once the bogland is final): a stream out of every mountain-enclosed valley of 100+ hexes (see
+   `river-generation.md`, "Valley streams"). The bogland is a wall to it: a new stream never touches a bog tile or a neighbour of
+   a water feature, and `BogRules` may not get worse.
+
 *Before/after the padding and hole fill* (R12, seeds 1-8 at radius 1000; the earlier table is the state before). The measure is the same as the table
 below: Domain tests, `FindStartPositions`, `bog-stats.ts`. Padding costs sites because a ring of bog around every water feature needs
 grass or forest all round it (no mountain beside a shore or creek, no foreign river):
