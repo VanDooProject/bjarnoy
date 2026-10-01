@@ -156,10 +156,17 @@ public class LandingOnboardingCompletionTests
 
         // Onboarding is complete (both guided buildings actually standing —
         // onboardingGuidance.deriveOnboardingGuidance's `complete`) the
-        // moment both rows flip — the completion banner (OnboardingBanner.vue)
-        // replaces the checklist and its own explicit "Enter your
-        // settlement" button is what hands off to /settlement now.
+        // moment both rows flip. For an anonymous player the "Name your
+        // jarl" nudge is the one call to action first; the completion banner
+        // (OnboardingBanner.vue) and its "Enter your settlement" hand-off
+        // follow once the nudge is answered.
+        var profileNudge = page.GetByTestId("profile-nudge");
+        await Assertions.Expect(profileNudge).ToBeVisibleAsync(new() { Timeout = 10_000 });
         var completionBanner = page.GetByTestId("onboarding-banner");
+        await Assertions.Expect(completionBanner).ToHaveCountAsync(0);
+
+        await page.GetByTestId("profile-nudge-later").ClickAsync();
+        await Assertions.Expect(profileNudge).ToHaveCountAsync(0);
         await Assertions.Expect(completionBanner).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await Assertions.Expect(completionBanner).ToContainTextAsync("All three placed.");
 
