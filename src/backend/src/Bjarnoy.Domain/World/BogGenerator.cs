@@ -1182,7 +1182,14 @@ internal sealed class BogGenerator
             {
                 if (!routes.ContainsKey(n))
                 {
-                    routes[n] = BuildRoute(n, w, fromState, dir, parent);
+                    // The search runs over (tile, direction) states, so a route can loop back across its own track to come
+                    // at a mouth from the right side. That would lay one creek tile twice (two flows in one tile, rule R3):
+                    // it is not a route, and a later state may still reach the same mouth cleanly.
+                    var route = BuildRoute(n, w, fromState, dir, parent);
+                    if (new HashSet<HexCoord>(route.Tiles).Count == route.Tiles.Count)
+                    {
+                        routes[n] = route;
+                    }
                 }
 
                 return;

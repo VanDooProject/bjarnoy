@@ -852,7 +852,13 @@ export class BogGenerator {
       const nk = coordKey(n);
       const w = mouthDir.get(nk);
       if (w !== undefined && w === dir && !this.mouth.has(nk)) {
-        if (!routes.has(nk)) routes.set(nk, buildRoute(n, w, fromState, dir, parent));
+        if (!routes.has(nk)) {
+          // The search runs over (tile, direction) states, so a route can loop back across its own track to come at a
+          // mouth from the right side. That would lay one creek tile twice (two flows in one tile, rule R3): it is not a
+          // route, and a later state may still reach the same mouth cleanly.
+          const route = buildRoute(n, w, fromState, dir, parent);
+          if (new Set(route.tiles.map((t) => coordKey(t))).size === route.tiles.length) routes.set(nk, route);
+        }
         return;
       }
 
