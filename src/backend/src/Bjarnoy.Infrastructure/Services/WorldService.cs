@@ -575,30 +575,105 @@ public sealed class WorldService(
     /// added as a fresh settlement (a level-1 longhouse on its centre, exactly
     /// what founding builds) before the next position is checked.
     /// </summary>
+    /// <remarks>
+    /// A radius-4000 island can carry thousands of start positions and pick
+    /// hundreds of them, so checking every candidate against every pick took
+    /// seconds per world. Settlements are bucketed in a coarse grid instead,
+    /// and <see cref="Founding.CheckSpacing"/> only sees the ones whose reach
+    /// (see <see cref="SpacingReach"/>) could cover the candidate — the rest
+    /// can never reject it, so the verdict is the same.
+    /// </remarks>
     public static int CountFreeSpawns(
         IEnumerable<HexPoint> startPositions,
         IEnumerable<Founding.NeighbourSnapshot> existing)
     {
-        var neighbours = existing.ToList();
+        const int cellSize = 32;
+        var grid = new Dictionary<(int, int), List<(Founding.NeighbourSnapshot Snapshot, int Reach)>>();
+        var maxReach = 0;
+
+        static (int, int) CellOf(HexCoord c) =>
+            ((int)Math.Floor(c.Q / (double)cellSize), (int)Math.Floor(c.R / (double)cellSize));
+
+        void Add(Founding.NeighbourSnapshot snapshot)
+        {
+            var reach = SpacingReach(snapshot);
+            maxReach = Math.Max(maxReach, reach);
+            var cell = CellOf(snapshot.Centre);
+            if (!grid.TryGetValue(cell, out var bucket))
+            {
+                grid[cell] = bucket = [];
+            }
+
+            bucket.Add((snapshot, reach));
+        }
+
+        foreach (var snapshot in existing)
+        {
+            Add(snapshot);
+        }
+
+        var nearby = new List<Founding.NeighbourSnapshot>();
         var free = 0;
         foreach (var position in startPositions)
         {
             var candidate = new HexCoord(position.Q, position.R);
+
+            // Hex distance is at least max(|dq|, |dr|), so every settlement
+            // within maxReach sits in a cell overlapping this q/r window.
+            nearby.Clear();
+            var (minQ, minR) = CellOf(new HexCoord(candidate.Q - maxReach, candidate.R - maxReach));
+            var (maxQ, maxR) = CellOf(new HexCoord(candidate.Q + maxReach, candidate.R + maxReach));
+            for (var cq = minQ; cq <= maxQ; cq++)
+            {
+                for (var cr = minR; cr <= maxR; cr++)
+                {
+                    if (!grid.TryGetValue((cq, cr), out var bucket))
+                    {
+                        continue;
+                    }
+
+                    foreach (var (snapshot, reach) in bucket)
+                    {
+                        if (candidate.DistanceTo(snapshot.Centre) <= reach)
+                        {
+                            nearby.Add(snapshot);
+                        }
+                    }
+                }
+            }
+
             if (Founding.CheckSpacing(
                     candidate,
-                    neighbours,
+                    nearby,
                     SettlementService.MinimumSpacing,
                     SettlementService.FoundingSafetyMargin) != Founding.SpacingVerdict.Ok)
             {
                 continue;
             }
 
-            neighbours.Add(new Founding.NeighbourSnapshot(
+            Add(new Founding.NeighbourSnapshot(
                 candidate, [new PlacedBuilding(candidate, BuildingType.Longhouse, 1)]));
             free++;
         }
 
         return free;
+    }
+
+    /// <summary>
+    /// The farthest hex distance from <paramref name="snapshot"/>'s centre at
+    /// which <see cref="Founding.CheckSpacing"/> can still reject a candidate
+    /// because of it: closer than the minimum spacing, or inside one of its
+    /// claim discs plus the safety margin.
+    /// </summary>
+    private static int SpacingReach(Founding.NeighbourSnapshot snapshot)
+    {
+        var reach = SettlementService.MinimumSpacing - 1;
+        foreach (var (centre, radius) in Settlement.ClaimDiscsFor(snapshot.Centre, snapshot.Buildings))
+        {
+            reach = Math.Max(reach, snapshot.Centre.DistanceTo(centre) + radius + SettlementService.FoundingSafetyMargin);
+        }
+
+        return reach;
     }
 
     /// <summary>Island count per world, for listing worlds without loading their islands.</summary>
