@@ -198,7 +198,7 @@ export const SHORE_COLOUR: Rgb = [52, 84, 116];
 export const HALF_COLOUR: Rgb = [38, 66, 108];
 export const CREEK_COLOUR: Rgb = [90, 150, 225];
 export const BOG_MOUTH_COLOUR: Rgb = [255, 170, 40];
-export const CREEK_SPRING_COLOUR: Rgb = [255, 255, 255];
+export const CREEK_SPRING_COLOUR: Rgb = [120, 255, 60];
 
 const CREEK_HALF_WIDTH = 0.3;
 
