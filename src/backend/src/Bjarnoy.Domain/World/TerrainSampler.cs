@@ -92,9 +92,20 @@ public sealed class TerrainSampler
 
     /// <summary>
     /// Fraction of <see cref="WorldGenerationOptions.IslandChance"/> a wasted
-    /// island cell rolls against — wasted islands are rarer than green ones.
+    /// island cell rolls against in a world on the density rules
+    /// (<see cref="WorldGenerationOptions.IslandMaxReach"/> above 0). The min-gap rule drops
+    /// every wasted island within the gap of a green one, so the roll is higher
+    /// than the legacy factor to keep about as many wasted islands as before.
     /// </summary>
-    public const double WastedIslandChanceFactor = 0.1;
+    public const double WastedIslandChanceFactor = 0.5;
+
+    /// <summary>
+    /// The wasted-island factor of a legacy world (<see cref="WorldGenerationOptions.IslandMaxReach"/> 0,
+    /// which the migration gives every world created before the density rules), kept so its wasted
+    /// terrain stays byte-identical. Keyed on the reach rather than the gap so that switching only the
+    /// gap rule off still rolls the same candidates.
+    /// </summary>
+    public const double LegacyWastedIslandChanceFactor = 0.1;
 
     /// <summary>
     /// Same shape as <see cref="IslandDepthAt(HexCoord)"/> but seeded with
@@ -328,7 +339,9 @@ public sealed class TerrainSampler
     private int SeedFor(bool wasted) => wasted ? _options.Seed + WastedSeedOffset : _options.Seed;
 
     private double ChanceFor(bool wasted) =>
-        wasted ? _options.IslandChance * WastedIslandChanceFactor : _options.IslandChance;
+        wasted
+            ? _options.IslandChance * (_options.IslandMaxReach > 0.0 ? WastedIslandChanceFactor : LegacyWastedIslandChanceFactor)
+            : _options.IslandChance;
 
     // Whether the cell rolls an island at all. The wasted grid additionally skips every
     // cell that is a green island cell (world seed, full chance), so a wasted island's

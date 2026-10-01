@@ -316,7 +316,8 @@ function cellKey(cellCol: number, cellRow: number): number {
 // cell grid never overlaps a green island's.
 function cellPresent(cellCol: number, cellRow: number, worldSeed: number, wasted: boolean, gen: WorldGenerationConstants): boolean {
   const seed = wasted ? worldSeed + WASTED_SEED_OFFSET : worldSeed;
-  const chance = wasted ? gen.islandChance * WASTED_ISLAND_CHANCE_FACTOR : gen.islandChance;
+  const factor = gen.islandMaxReach > 0 ? WASTED_ISLAND_CHANCE_FACTOR : LEGACY_WASTED_ISLAND_CHANCE_FACTOR;
+  const chance = wasted ? gen.islandChance * factor : gen.islandChance;
   if (hash2(cellCol, cellRow, seed) > chance) return false;
   return !wasted || hash2(cellCol, cellRow, worldSeed) > gen.islandChance;
 }
@@ -776,10 +777,20 @@ function closestIsland(col: number, row: number, world: WorldSeed, wasted: boole
 export const WASTED_SEED_OFFSET = 1_000_003;
 
 /**
- * Fraction of `islandChance` a wasted island cell rolls against — mirrors
- * the backend's `TerrainSampler.WastedIslandChanceFactor` exactly.
+ * Fraction of `islandChance` a wasted island cell rolls against in a world on
+ * the density rules (`islandMaxReach` above 0) — mirrors the backend's
+ * `TerrainSampler.WastedIslandChanceFactor` exactly. The min-gap rule drops every
+ * wasted island within the gap of a green one, so the roll is higher than the
+ * legacy factor to keep about as many wasted islands as before.
  */
-export const WASTED_ISLAND_CHANCE_FACTOR = 0.1;
+export const WASTED_ISLAND_CHANCE_FACTOR = 0.5;
+
+/**
+ * The wasted-island factor of a legacy world (`islandMaxReach` 0, as the
+ * migration gives every world created before the density rules), kept so its
+ * wasted terrain stays byte-identical — mirrors `TerrainSampler.LegacyWastedIslandChanceFactor`.
+ */
+export const LEGACY_WASTED_ISLAND_CHANCE_FACTOR = 0.1;
 
 /**
  * Wasted islands are extra islands generated from the same seed on a

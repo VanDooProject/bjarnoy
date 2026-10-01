@@ -58,7 +58,8 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
   on evaluation order or on the world radius, and checks every ring two islands could meet in
   (`IslandShapeConstants.GapSpan`, 4 at the defaults). No two kept islands are ever closer than the gap.
 - **Wasted (end-game) islands keep the same gap.** They are seeded per cell on their own grid
-  (`WastedSeedOffset`, `WastedIslandChanceFactor` 0.1, never in a green island's cell) and go through the same
+  (`WastedSeedOffset`, `WastedIslandChanceFactor` 0.5 on worlds with the density rules, `LegacyWastedIslandChanceFactor` 0.1 on
+  legacy worlds, never in a green island's cell) and go through the same
   min-gap rule among themselves (ranked the same way, candidates against candidates). On top of that a wasted
   island is not generated when its nominal coast comes within `IslandMinGap` of any *kept* green island's (the
   same `IslandsTooClose` measure, `GapSpan` rings): green land always wins. Before this, a wasted island was only
@@ -117,7 +118,22 @@ shoreline noise):
 
 Two thirds of the wasted cells sat within the gap of a green island (on 150-hex cells almost every cell
 borders a green one), so the count falls to about a third; the many fragments a crowded wasted island broke
-into go with it. `WastedIslandChanceFactor` stays 0.1 for now: raising it is an open decision.
+into go with it.
+
+Owner decision: keep about as many wasted islands as the denser grid gave before the gap rule, without any
+touching green land. `WastedIslandChanceFactor` is therefore 0.5 (from 0.1) for worlds on the density rules
+(`IslandMaxReach` above 0); legacy worlds (`IslandMaxReach` 0) keep `LegacyWastedIslandChanceFactor` 0.1 and their
+wasted terrain byte-identical. The factor is keyed on the reach rather than the gap so that turning only the gap
+rule off (as the tests do) still rolls the same candidates. Wasted landmasses per seed (preview tool footer,
+radius 4000):
+
+| seed | 1 | 2 | 3 | 4 | 5 | 6 | mean |
+|---|---|---|---|---|---|---|---|
+| 0.1, no gap rule | 94 | 94 | 91 | 83 | 51 | 72 | 80.8 |
+| 0.1, gap rule | 28 | 29 | 31 | 37 | 15 | 24 | 27.3 |
+| **0.5, gap rule** | 103 | 123 | 147 | 106 | 99 | 115 | 115.5 |
+
+Every one of them keeps the 24-hex gap from green land and from each other.
 
 ## Rivers and streams
 

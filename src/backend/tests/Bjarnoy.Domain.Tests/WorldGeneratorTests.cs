@@ -55,7 +55,8 @@ public class WorldGeneratorTests
 
         foreach (var island in world.Islands)
         {
-            Assert.All(island.Tiles, t => Assert.True(sampler.TerrainAt(t).IsLand()));
+            // A wasted island's tiles are land on the hidden wasted layer, not on the green one.
+            Assert.All(island.Tiles, t => Assert.True((island.IsWasted ? sampler.WastedTerrainAt(t) : sampler.TerrainAt(t)).IsLand()));
             Assert.All(island.Tiles, t => Assert.True(seen.Add(t), $"{t} belongs to two islands"));
 
             // Every tile is reachable from the island's first tile through
