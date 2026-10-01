@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { BuildOrderResponse } from '../../api/types';
-import { constructionDialsFromQueue, dialProgress, dialRemainingSeconds, hexPerimeterPath, polygonPerimeterPath } from './constructionDial';
+import {
+  constructionDialsFromQueue,
+  DIAL_FINISH_MS,
+  dialFinishFrame,
+  dialProgress,
+  dialRemainingSeconds,
+  hexPerimeterPath,
+  polygonPerimeterPath,
+  polylinePartial,
+  retainFinishingDials,
+} from './constructionDial';
 
 function order(p: Partial<BuildOrderResponse>): BuildOrderResponse {
   return {
@@ -107,5 +117,80 @@ describe('polygonPerimeterPath', () => {
   });
   it('closes at vertex 0 at 1', () => {
     expect(polygonPerimeterPath(rect, 1)).toEqual([0, 0, 10, 0, 10, 30, 0, 30, 0, 0]);
+  });
+});
+
+describe('polylinePartial', () => {
+  const pts = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }];
+  it('is empty at 0', () => expect(polylinePartial(pts, 0)).toEqual([]));
+  it('stops mid first segment', () => expect(polylinePartial(pts, 0.25)).toEqual([0, 0, 5, 0]));
+  it('runs into the second segment', () => expect(polylinePartial(pts, 0.75)).toEqual([0, 0, 10, 0, 10, 5]));
+  it('does not close at 1 (open path)', () => expect(polylinePartial(pts, 1)).toEqual([0, 0, 10, 0, 10, 10]));
+});
+
+describe('dialFinishFrame', () => {
+  it('is null before the end and once the animation is over', () => {
+    expect(dialFinishFrame(-1)).toBeNull();
+    expect(dialFinishFrame(DIAL_FINISH_MS)).toBeNull();
+    expect(dialFinishFrame(2599)).not.toBeNull();
+  });
+  it('starts at rest with full flash and one ring', () => {
+    const f = dialFinishFrame(0)!;
+    expect(f).toMatchObject({ scale: 1, flash: 1, check: 0, alpha: 1 });
+    expect(f.rings[0]).toEqual({ scale: 1, alpha: 0.9 });
+    expect(f.rings[1].alpha).toBe(0);
+  });
+  it('pops to 1.22 at 180ms and is back to 1 at 480ms', () => {
+    expect(dialFinishFrame(180)!.scale).toBeCloseTo(1.22, 6);
+    expect(dialFinishFrame(480)!.scale).toBeCloseTo(1, 6);
+    expect(dialFinishFrame(1000)!.scale).toBe(1);
+  });
+  it('flash decays linearly to 0 by 400ms', () => {
+    expect(dialFinishFrame(200)!.flash).toBeCloseTo(0.5, 6);
+    expect(dialFinishFrame(400)!.flash).toBe(0);
+  });
+  it('draws the check from 200ms to 520ms', () => {
+    expect(dialFinishFrame(200)!.check).toBe(0);
+    expect(dialFinishFrame(360)!.check).toBeCloseTo(0.5, 6);
+    expect(dialFinishFrame(520)!.check).toBe(1);
+  });
+  it('staggers two shockwaves lasting 700ms each', () => {
+    const f = dialFinishFrame(160)!;
+    expect(f.rings[1]).toEqual({ scale: 1, alpha: 0.9 });
+    expect(f.rings[0].scale).toBeGreaterThan(1);
+    const late = dialFinishFrame(700)!;
+    expect(late.rings[0].alpha).toBe(0);
+    expect(late.rings[1].alpha).toBeGreaterThan(0);
+    expect(dialFinishFrame(860)!.rings.every((r) => r.alpha === 0)).toBe(true);
+    expect(dialFinishFrame(500)!.rings[0].scale).toBeLessThanOrEqual(2.1);
+  });
+  it('holds alpha 1 until 1900ms then fades linearly to 0', () => {
+    expect(dialFinishFrame(1900)!.alpha).toBe(1);
+    expect(dialFinishFrame(2250)!.alpha).toBeCloseTo(0.5, 6);
+    expect(dialFinishFrame(2599)!.alpha).toBeCloseTo(1 / 700, 6);
+  });
+});
+
+describe('retainFinishingDials', () => {
+  const now = 100_000;
+  const dial = (q: number, endMs: number | null) => ({ coord: { q, r: 0 }, startMs: endMs === null ? null : endMs - 10_000, endMs });
+  it('keeps a just-finished dial that vanished from next', () => {
+    const out = retainFinishingDials([dial(1, now - 500)], [], now);
+    expect(out).toEqual([dial(1, now - 500)]);
+  });
+  it('clamps endMs to now when the server finished early', () => {
+    const [d] = retainFinishingDials([dial(1, now + 3000)], [], now);
+    expect(d.endMs).toBe(now);
+    expect(d.startMs).toBe(now + 3000 - 10_000);
+  });
+  it('drops cancelled (far future / unknown timing) dials', () => {
+    expect(retainFinishingDials([dial(1, now + 60_000), dial(2, null)], [], now)).toEqual([]);
+  });
+  it('drops dials whose animation already expired', () => {
+    expect(retainFinishingDials([dial(1, now - DIAL_FINISH_MS)], [], now)).toEqual([]);
+  });
+  it('does not duplicate a coord still present in next', () => {
+    const next = [dial(1, now + 9000)];
+    expect(retainFinishingDials([dial(1, now - 100)], next, now)).toEqual(next);
   });
 });

@@ -39,7 +39,10 @@ import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../
 import type { Camera } from './camera';
 import { formatCountdownShort } from '../hud/countdown';
 import {
-  constructionDialTuning,
+  DIAL_FINISH_MS,
+  dialFinishFrame,
+  polylinePartial,
+  retainFinishingDials,
   dialProgress,
   dialRemainingSeconds,
   hexPerimeterPath,
@@ -788,6 +791,8 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 // badge) over a building under construction — white track, yellow elapsed arc,
 // remaining time inside.
 const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
+// Dial height above the tile centre.
+const CONSTRUCTION_DIAL_LIFT = TILE_H * 0.9;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
@@ -4412,28 +4417,27 @@ export class HexMapRenderer {
    * Construction progress dials, in screen space (markerLayer): a constant
    * on-screen size at/below the settlement's default zoom that grows past it,
    * like the settlement badge. Must run before the unused-label hide loop in
-   * `rebuildMarkers` since it acquires pooled labels. Look is picked by
-   * `constructionDialTuning.style`.
+   * `rebuildMarkers` since it acquires pooled labels. A completed dial plays
+   * `dialFinishFrame` (pop, flash, shockwaves, check mark) and is then pruned.
    */
   private drawConstructionDials() {
     if (!this.constructionDials) return;
-    const style = constructionDialTuning.style;
-    const lift = TILE_H * constructionDialTuning.lift;
+    const lift = CONSTRUCTION_DIAL_LIFT;
     const nowMs = Date.now();
     const zs = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
     const g = this.markerLayer;
-    const strokePath = (path: number[], width: number) => {
+    const strokePath = (path: number[], width: number, color: number, alpha: number) => {
       if (path.length < 4) return;
       g.moveTo(path[0], path[1]);
       for (let i = 2; i < path.length; i += 2) g.lineTo(path[i], path[i + 1]);
-      g.stroke({ width, color: CONSTRUCTION_DIAL_ELAPSED_COLOR, cap: 'round', join: 'round' });
+      g.stroke({ width, color, alpha, cap: 'round', join: 'round' });
     };
-    for (const dial of this.constructionDials) {
+    const live = this.constructionDials.filter((d) => d.endMs === null || nowMs - d.endMs < DIAL_FINISH_MS);
+    if (live.length !== this.constructionDials.length) this.constructionDials = live.length > 0 ? live : null;
+    for (const dial of live) {
       const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
       const progress = dialProgress(dial, nowMs);
       const remaining = dialRemainingSeconds(dial, nowMs);
-      const done = remaining !== null && remaining <= 0.5;
-      const text = remaining === null ? '…' : done ? '✓' : formatCountdownShort(remaining);
       const anchor = this.toScreen({
         x: grid.x + TILE_W / 2,
         y: grid.y + TILE_CENTER_Y_OFFSET - lift,
@@ -4441,41 +4445,42 @@ export class HexMapRenderer {
       const cx = anchor.x;
       const cy = anchor.y;
       const r = 22 * zs * 1.25;
-      const hex = hexPoints(cx, cy, r);
-      const trackColor = done ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
-      const trackWidth = style === 'inset' ? 4 * zs : 6 * zs;
-      const trackAlpha = style === 'dimTrack' && !done ? 0.3 : 0.9;
+      const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
 
-      if (style === 'pin') {
-        // Map-pin tail, drawn first so the hex covers its top.
-        const bottomY = cy + r;
-        g.poly([cx - 6 * zs, bottomY - 2 * zs, cx + 6 * zs, bottomY - 2 * zs, cx, bottomY + 9 * zs]).fill({
-          color: 0xffffff,
-          alpha: 0.9,
-        });
-      }
-      g.poly(hex)
-        .fill({ color: 0x08121a, alpha: 0.85 })
-        .stroke({ width: trackWidth, color: trackColor, alpha: trackAlpha, join: 'round' });
-      if (!done) {
-        if (style === 'inset') {
-          const innerR = r - 6 * zs;
-          strokePath(hexPerimeterPath(cx, cy, innerR, progress), 4 * zs);
-        } else {
-          strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs);
+      if (frame) {
+        const fr = r * frame.scale;
+        const a = frame.alpha;
+        g.poly(hexPoints(cx, cy, fr)).fill({ color: 0x08121a, alpha: 0.85 * a });
+        g.poly(hexPoints(cx, cy, fr)).fill({ color: CONSTRUCTION_DIAL_ELAPSED_COLOR, alpha: 0.75 * frame.flash * a });
+        strokePath(hexPerimeterPath(cx, cy, fr, 1), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, a);
+        for (const ring of frame.rings) {
+          if (ring.alpha <= 0) continue;
+          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
+            width: 3 * zs,
+            color: CONSTRUCTION_DIAL_ELAPSED_COLOR,
+            alpha: ring.alpha * a,
+            join: 'round',
+          });
         }
-      } else {
-        const pulse = 0.25 + (0.25 * (Math.sin(performance.now() / 300) + 1)) / 2;
-        g.poly(hexPoints(cx, cy, r + 4 * zs)).stroke({
-          width: 4 * zs,
-          color: CONSTRUCTION_DIAL_ELAPSED_COLOR,
-          alpha: pulse,
-          join: 'round',
-        });
+        const check = polylinePartial(
+          [
+            { x: cx - 0.38 * fr, y: cy + 0.02 * fr },
+            { x: cx - 0.1 * fr, y: cy + 0.3 * fr },
+            { x: cx + 0.4 * fr, y: cy - 0.25 * fr },
+          ],
+          frame.check,
+        );
+        strokePath(check, 5 * zs, 0xffffff, a);
+        continue;
       }
+
+      g.poly(hexPoints(cx, cy, r))
+        .fill({ color: 0x08121a, alpha: 0.85 })
+        .stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3, join: 'round' });
+      strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, 1);
       const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2);
-      label.text = text;
-      label.tint = style === 'dimTrack' && remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
+      label.text = remaining === null ? '…' : formatCountdownShort(remaining);
+      label.tint = remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
       label.anchor.set(0.5);
       label.position.set(cx, cy);
       label.visible = true;
@@ -4722,7 +4727,8 @@ export class HexMapRenderer {
    * the animated progress every tick (settlement mode only). `null` clears.
    */
   setConstructionDials(dials: ConstructionDial[] | null) {
-    this.constructionDials = dials && dials.length > 0 ? dials : null;
+    const merged = retainFinishingDials(this.constructionDials ?? [], dials ?? [], Date.now());
+    this.constructionDials = merged.length > 0 ? merged : null;
   }
 
   /**

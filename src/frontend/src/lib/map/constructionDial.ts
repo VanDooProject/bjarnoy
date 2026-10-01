@@ -99,10 +99,88 @@ export function hexPerimeterPath(cx: number, cy: number, r: number, fraction: nu
   return polygonPerimeterPath(vertices, fraction);
 }
 
-export type ConstructionDialStyle = 'bold' | 'pin' | 'dimTrack' | 'inset';
+/**
+ * Flat [x, y, ...] open polyline through `points`, covering `fraction`
+ * (clamped 0..1) of its total LENGTH.
+ */
+export function polylinePartial(points: { x: number; y: number }[], fraction: number): number[] {
+  const f = Math.min(1, Math.max(0, fraction));
+  if (f <= 0 || points.length < 2) return [];
+  let total = 0;
+  for (let i = 0; i < points.length - 1; i++) total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+  if (total <= 0) return [];
+  let remaining = f * total;
+  const out: number[] = [points[0].x, points[0].y];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    if (remaining >= l - 1e-9) {
+      out.push(b.x, b.y);
+      remaining -= l;
+      if (remaining <= 1e-9) break;
+    } else {
+      const t = remaining / l;
+      out.push(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+      break;
+    }
+  }
+  return out;
+}
+
+/** How long the completion animation plays after a build ends. */
+export const DIAL_FINISH_MS = 2600;
+
+export interface DialFinishFrame {
+  /** Dial size multiplier (pop). */
+  scale: number;
+  /** Yellow fill overlay strength 0..1. */
+  flash: number;
+  /** Expanding hex shockwaves. */
+  rings: { scale: number; alpha: number }[];
+  /** Check-mark draw progress 0..1. */
+  check: number;
+  /** Whole-dial opacity 0..1. */
+  alpha: number;
+}
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
+const easeInOut = (t: number) => t * t * (3 - 2 * t);
+
+/** Completion animation state `msSinceEnd` after the build ended; null outside it. */
+export function dialFinishFrame(msSinceEnd: number): DialFinishFrame | null {
+  if (msSinceEnd < 0 || msSinceEnd >= DIAL_FINISH_MS) return null;
+  const t = msSinceEnd;
+  let scale = 1;
+  if (t < 180) scale = 1 + 0.22 * easeOut(t / 180);
+  else if (t < 480) scale = 1.22 - 0.22 * easeInOut((t - 180) / 300);
+  const rings = [0, 160].map((start) => {
+    const p = clamp01((t - start) / 700);
+    return t < start || p >= 1 ? { scale: 1, alpha: 0 } : { scale: 1 + 1.1 * easeOut(p), alpha: 0.9 * (1 - p) };
+  });
+  return {
+    scale,
+    flash: clamp01(1 - t / 400),
+    rings,
+    check: clamp01((t - 200) / 320),
+    alpha: t <= 1900 ? 1 : clamp01(1 - (t - 1900) / (DIAL_FINISH_MS - 1900)),
+  };
+}
 
 /**
- * Live-tweakable dial look (exposed as `window.__dialTuning` in demo mode).
- * `lift` is the dial's height above the tile centre in TILE_H units.
+ * Carry dials that just completed server-side (and so vanished from `next`)
+ * over so their finish animation can play. Cancelled orders (end far in the
+ * future / unknown) and expired animations are dropped.
  */
-export const constructionDialTuning = { style: 'bold' as ConstructionDialStyle, lift: 0.9 };
+export function retainFinishingDials(prev: ConstructionDial[], next: ConstructionDial[], nowMs: number): ConstructionDial[] {
+  const out = [...next];
+  for (const d of prev) {
+    if (d.endMs === null || d.endMs > nowMs + 5000) continue;
+    if (next.some((n) => n.coord.q === d.coord.q && n.coord.r === d.coord.r)) continue;
+    const endMs = Math.min(d.endMs, nowMs);
+    if (nowMs - endMs >= DIAL_FINISH_MS) continue;
+    out.push({ ...d, endMs });
+  }
+  return out;
+}
