@@ -199,6 +199,61 @@ public class IslandGenerationTests
         Assert.Contains(unruled, a => unruled.Any(b => !ReferenceEquals(a, b) && TerrainSampler.IslandsTooClose(a, b, options.IslandMinGap)));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void No_kept_wasted_island_comes_within_the_min_gap_of_a_green_or_another_wasted_island(int seed)
+    {
+        // A wasted island keeps the same sea lane as green islands do: from every kept green island
+        // (green always wins) and from every other kept wasted island (ranked like green ones).
+        var options = WorldGenerationOptions.ForSeed(seed);
+        var sampler = new TerrainSampler(options);
+        var green = sampler.EnumerateIslandShapes().ToList();
+        var wasted = sampler.EnumerateIslandShapes(wasted: true).ToList();
+        Assert.True(wasted.Count >= 5, $"only {wasted.Count} wasted islands");
+        foreach (var w in wasted)
+        {
+            Assert.DoesNotContain(green, g => TerrainSampler.IslandsTooClose(w, g, options.IslandMinGap));
+            Assert.DoesNotContain(wasted, o => !ReferenceEquals(o, w) && TerrainSampler.IslandsTooClose(w, o, options.IslandMinGap));
+        }
+
+        // ... while without the rule wasted islands do crowd (or sit on) green ones, so the test has teeth.
+        var unruled = new TerrainSampler(options with { IslandMinGap = 0.0 });
+        var unruledGreen = unruled.EnumerateIslandShapes().ToList();
+        Assert.Contains(unruled.EnumerateIslandShapes(wasted: true), w => unruledGreen.Any(g => TerrainSampler.IslandsTooClose(w, g, options.IslandMinGap)));
+    }
+
+    [Fact]
+    public void A_wasted_island_is_only_dropped_for_being_too_close_to_green_or_an_outranking_wasted_island()
+    {
+        // The rule drops nothing else: every wasted island the default world has but a world without
+        // the rule keeps is too close to a kept green island or to a wasted candidate.
+        var options = WorldGenerationOptions.ForSeed(1);
+        var sampler = new TerrainSampler(options);
+        var green = sampler.EnumerateIslandShapes().ToList();
+        var kept = sampler.EnumerateIslandShapes(wasted: true).Select(s => (s.CellCol, s.CellRow)).ToHashSet();
+        var all = new TerrainSampler(options with { IslandMinGap = 0.0 }).EnumerateIslandShapes(wasted: true).ToList();
+        var dropped = all.Where(s => !kept.Contains((s.CellCol, s.CellRow))).ToList();
+        Assert.NotEmpty(dropped);
+        Assert.All(dropped, d => Assert.True(
+            green.Any(g => TerrainSampler.IslandsTooClose(d, g, options.IslandMinGap))
+                || all.Any(o => !ReferenceEquals(o, d) && TerrainSampler.IslandsTooClose(d, o, options.IslandMinGap)),
+            $"wasted cell {d.CellCol},{d.CellRow} was dropped with nothing near it"));
+    }
+
+    [Fact]
+    public void Legacy_worlds_keep_their_wasted_islands_where_they_touch_green_ones()
+    {
+        // Old worlds (IslandMinGap 0) keep the old wasted terrain: no wasted island is dropped for a
+        // green neighbour, so wasted islands that crowd green ones are still there. (The shapes and
+        // terrain themselves are pinned bit for bit by the legacy scenario in island-shape-golden.json.)
+        var legacy = WorldGenerationOptions.ForSeed(1) with { IslandCellSize = 260, IslandMaxReach = 0.0, IslandMinGap = 0.0, IslandLargeShare = 0.12 };
+        var sampler = new TerrainSampler(legacy);
+        var green = sampler.EnumerateIslandShapes().ToList();
+        Assert.Contains(sampler.EnumerateIslandShapes(wasted: true), w => green.Any(g => TerrainSampler.IslandsTooClose(w, g, 24.0)));
+    }
+
     [Fact]
     public void An_island_is_only_dropped_for_an_outranking_neighbour_too_close()
     {

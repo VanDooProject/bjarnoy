@@ -370,6 +370,18 @@ export function islandShapeAt(
         }
       }
     }
+    // A wasted island also keeps the min gap from every kept green island: green land always
+    // outranks wasted land, so the wasted one is dropped. (Kept green shapes, not candidates: a
+    // green island that is not generated leaves its sea free.)
+    for (let dc = -span; wasted && dc <= span && shape; dc++) {
+      for (let dr = -span; dr <= span; dr++) {
+        const green = islandShapeAt(cellCol + dc, cellRow + dr, world, false);
+        if (green && islandsTooClose(shape, green, gen.islandMinGap)) {
+          shape = null;
+          break;
+        }
+      }
+    }
   }
   cells.set(key, shape);
   return shape;

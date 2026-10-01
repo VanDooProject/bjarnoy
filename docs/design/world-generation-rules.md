@@ -57,6 +57,15 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
   compared before the world edge and the rule itself (candidates), so it needs no recursion, does not depend
   on evaluation order or on the world radius, and checks every ring two islands could meet in
   (`IslandShapeConstants.GapSpan`, 4 at the defaults). No two kept islands are ever closer than the gap.
+- **Wasted (end-game) islands keep the same gap.** They are seeded per cell on their own grid
+  (`WastedSeedOffset`, `WastedIslandChanceFactor` 0.1, never in a green island's cell) and go through the same
+  min-gap rule among themselves (ranked the same way, candidates against candidates). On top of that a wasted
+  island is not generated when its nominal coast comes within `IslandMinGap` of any *kept* green island's (the
+  same `IslandsTooClose` measure, `GapSpan` rings): green land always wins. Before this, a wasted island was only
+  kept off green hexes and their neighbours, so it was generated hard against (or wrapped around) a green coast
+  and broke into fragments there. Legacy worlds (`IslandMinGap` 0) skip both checks and keep their wasted terrain
+  byte-identical (`legacy_density_seed_2_with_wasted_islands` in `island-shape-golden.json` pins one with a wasted
+  island crowding a green one).
 - **`IslandLargeShare` 0.07** (from 0.12): on smaller cells the "large clears its 8 neighbours" rule clears
   less sea, so C would otherwise grow to ~23% of the islands; 0.07 keeps the class mix where it was.
 - **Legacy worlds keep their map**: both new knobs are persisted per world; the migration gives existing worlds
@@ -93,6 +102,22 @@ about what doubling the islands must cost (1/sqrt(2) of the spacing), but the ne
 let through are almost gone. Exactly 2x is reachable (gap 20 with large share 0.08: 1.99x) at more lanes under
 20 hexes; a gap of 32 would keep the old p10 lane (39) at 1.74x. 24 is the middle: about twice the islands with
 fewer close calls than before.
+
+Wasted islands at the default world, seeds 1-6 at radius 4000 (same scratch script; nominal gap = the
+`IslandsTooClose` measure; hex gap = sea steps from wasted land to the nearest green land, through the
+shoreline noise):
+
+| per seed (mean of 6) | before the wasted gap rule | after |
+|---|---|---|
+| wasted island cells kept | 32.2 | 11.7 |
+| wasted landmasses >= 6 tiles (seed 1) | 80.8 (94) | 27.3 (28) |
+| wasted cells within 24 hexes of a green island | 20.5 | 0 |
+| smallest nominal gap wasted-green / wasted-wasted | overlap by up to 67 / 44 | 25.2 / 103 |
+| smallest hex gap to green land (any seed) | 2 steps (one sea hex, the neighbour rule) | 18 steps |
+
+Two thirds of the wasted cells sat within the gap of a green island (on 150-hex cells almost every cell
+borders a green one), so the count falls to about a third; the many fragments a crowded wasted island broke
+into go with it. `WastedIslandChanceFactor` stays 0.1 for now: raising it is an open decision.
 
 ## Rivers and streams
 

@@ -77,6 +77,8 @@ const scenarios: { name: string; seed: number; generation: WorldGenerationConsta
   { name: 'compact_seed_4242', seed: 4242, generation: COMPACT },
   { name: 'odd_knobs_seed_99', seed: 99, generation: ODD },
   { name: 'legacy_density_seed_11', seed: 11, generation: LEGACY_1000 },
+  // Legacy wasted islands, one of them crowding a green island: min gap 0 must keep it.
+  { name: 'legacy_density_seed_2_with_wasted_islands', seed: 2, generation: LEGACY_1000 },
 ];
 
 function mulberry32(a: number) {

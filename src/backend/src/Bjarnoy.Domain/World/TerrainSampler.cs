@@ -161,6 +161,22 @@ public sealed class TerrainSampler
                     }
                 }
             }
+
+            // A wasted island also keeps the min gap from every kept green island: green land
+            // always outranks wasted land, so the wasted one is dropped. (Kept green shapes, not
+            // candidates: a green island that is not generated leaves its sea free.)
+            for (var dc = -span; wasted && dc <= span && shape is not null; dc++)
+            {
+                for (var dr = -span; dr <= span; dr++)
+                {
+                    var green = IslandShapeAt(cellCol + dc, cellRow + dr, wasted: false);
+                    if (green is not null && IslandsTooClose(shape, green, _options.IslandMinGap))
+                    {
+                        shape = null;
+                        break;
+                    }
+                }
+            }
         }
 
         _shapes.TryAdd(key, shape);
