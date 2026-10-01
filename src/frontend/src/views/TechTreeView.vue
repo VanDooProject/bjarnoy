@@ -226,7 +226,7 @@ function formatAmount(value: number): string {
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <div class="page">
+    <div class="page docs-scale">
     <div class="head">
       <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.techTree.title') }}</h1>
@@ -263,7 +263,7 @@ function formatAmount(value: number): string {
         <section v-for="type in cat.types" :key="type" :id="type" class="building">
           <div class="building-header">
             <div
-              class="thumb"
+              class="thumb floating-art"
               :class="{ large: thumbsLarge }"
               role="button"
               tabindex="0"
@@ -274,6 +274,7 @@ function formatAmount(value: number): string {
               @keydown.enter="toggleThumbSize($event)"
               @keydown.space.prevent="toggleThumbSize($event)"
             >
+              <span class="floating-art-shadow" aria-hidden="true" />
               <AnimatedBuildingSprite v-if="thumbAnimatedLayers(type)" :layers="thumbAnimatedLayers(type)!" />
               <AtlasSprite v-else-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
               <img v-else-if="thumbUrl(type)" class="thumb-img" :src="thumbUrl(type)!" alt="" />
@@ -501,16 +502,16 @@ function formatAmount(value: number): string {
   flex: none;
   width: 96px;
   height: 144px;
-  overflow: hidden;
   border-radius: 8px;
-  background: var(--panel, #1c1710);
-  border: 1px solid var(--panel-border);
   cursor: pointer;
 }
-.thumb:hover,
+.thumb:hover > :not(.floating-art-shadow),
+.thumb:focus-visible > :not(.floating-art-shadow) {
+  filter: drop-shadow(0 8px 6px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px rgba(214, 170, 82, 0.45));
+}
 .thumb:focus-visible {
-  border-color: var(--gold);
-  outline: none;
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 .thumb.large {
   width: 176px;
