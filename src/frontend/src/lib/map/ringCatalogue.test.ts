@@ -234,7 +234,7 @@ describe('buildingAllowedOnHex', () => {
     expect(buildingAllowedOnHex(type, { terrain: 'bog' })).toBe(false); // bog kind unknown
   });
 
-  it('the Hammerschmiede stands on a creek and nothing else', () => {
+  it('the Hammer Forge stands on a creek and nothing else', () => {
     expect(buildingAllowedOnHex('hammerschmiede', bogHex('creek'))).toBe(true);
     for (const kind of ALL_KINDS.filter((k) => k !== 'creek')) {
       expect(buildingAllowedOnHex('hammerschmiede', bogHex(kind)), `on ${kind}`).toBe(false);

@@ -103,7 +103,7 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   smithy: [3, 7],
   shrineofthor: [4, 7],
 
-  // Row 8 — Bog-ore works (LH 6) -> Hammerschmiede (LH 20): the iron chain.
+  // Row 8 — Bog-ore works (LH 6) -> Hammer Forge (LH 20): the iron chain.
   bogoreworks: [1, 8],
   hammerschmiede: [2, 8],
 

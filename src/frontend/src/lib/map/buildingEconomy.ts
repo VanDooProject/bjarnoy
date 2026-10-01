@@ -347,7 +347,7 @@ export function buildingStatsFor(
       };
     }
     // Iron, from bog moss only; boosted by the bog, creeks and lakes around it (10% each, capped at 50%) and by the
-    // Hammerschmiede. P1 is BuildingCatalogue.BogOreWorksIronAtLevelOne, tuned in the Economy lab.
+    // Hammer Forge. P1 is BuildingCatalogue.BogOreWorksIronAtLevelOne, tuned in the Economy lab.
     case 'bogoreworks': {
       const multiplier = boostMultiplier(matchingNeighbours);
       return {

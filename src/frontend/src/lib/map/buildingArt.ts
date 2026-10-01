@@ -64,7 +64,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   cartworkshop: 'cartworkshop',
   claybrickworks: 'claybrickworks',
   bogoreworks: 'bogoreworks',
-  // The river hammer mill: a placeholder for the Hammerschmiede on a bog creek (TODO(art): bog-creek Hammerschmiede).
+  // The river hammer mill: a placeholder for the Hammer Forge on a bog creek (TODO(art): bog-creek Hammer Forge).
   hammerschmiede: 'hammerschmiede',
 };
 
@@ -167,7 +167,7 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
 
 /**
  * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
- * (`fisherhut_lake`), a Hammerschmiede on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
+ * (`fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
  * placeholder art for now). Everything else is `buildingArt`.
  */
 export function buildingArtOnTile(

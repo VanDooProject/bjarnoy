@@ -169,7 +169,7 @@ export function formatMissingResources(cost: ResourceLine, stock: ResourceLine):
 
 /**
  * The bog kinds each bog-bound building stands on — mirrors `BuildingDefinition.RequiresBogKind` in `BuildingCatalogue.cs`:
- * Clay Brickworks and bog-ore works on plain moss (not a shore, mouth, creek or lake), the Hammerschmiede on a creek
+ * Clay Brickworks and bog-ore works on plain moss (not a shore, mouth, creek or lake), the Hammer Forge on a creek
  * (straight or bend; not a mouth or a spring).
  */
 const BOG_KINDS_BY_TYPE: Readonly<Partial<Record<string, ReadonlySet<BogTileKind>>>> = {
@@ -183,7 +183,7 @@ const LAKE_SHORE_KINDS_BY_TYPE: Readonly<Partial<Record<string, ReadonlySet<BogT
   fishinghut: new Set<BogTileKind>(['half']),
 };
 
-/** Whether `type` is one of the buildings that stand only on some bog kind (bog-ore works, Clay Brickworks, Hammerschmiede). */
+/** Whether `type` is one of the buildings that stand only on some bog kind (bog-ore works, Clay Brickworks, Hammer Forge). */
 export function isBogBoundBuilding(type: string | undefined): boolean {
   return type !== undefined && BOG_KINDS_BY_TYPE[type] !== undefined;
 }

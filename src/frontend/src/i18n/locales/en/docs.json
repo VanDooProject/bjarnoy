@@ -54,7 +54,7 @@
     "cartworkshop": "Cart workshop",
     "claybrickworks": "Clay brickworks",
     "bogoreworks": "Bog-ore works",
-    "hammerschmiede": "Hammerschmiede",
+    "hammerschmiede": "Hammer Forge",
     "odinstatue": "Odin statue",
     "reindeerherder": "Reindeer herder"
   },
@@ -447,7 +447,7 @@
   "bogLands": {
     "title": "Bog lands",
     "intro": "Wet moss ground (Old Norse mýrr), cut by slow creeks and dark lakes. Rust-coloured seeps mark the bog iron that is dug here, and clay is cut from the lake shores. Bogs are part of the living lands and meet grass at a hex edge.",
-    "status": "Bogs now appear in worlds: a lake with a river running through it on most big islands, and a lake with a bog ring where an island encloses a pocket of sea. The bog buildings are in: the bog-ore works and the Clay Brickworks on plain bog, the Fishing Hut on a lake's half shore, and the Hammerschmiede on a creek (with the river mill's art until it has its own).",
+    "status": "Bogs now appear in worlds: a lake with a river running through it on most big islands, and a lake with a bog ring where an island encloses a pocket of sea. The bog buildings are in: the bog-ore works and the Clay Brickworks on plain bog, the Fishing Hut on a lake's half shore, and the Hammer Forge on a creek (with the river mill's art until it has its own).",
     "looks": "Look",
     "camera": "Facing",
     "stage": "Stage",
@@ -517,7 +517,7 @@
         "body": "The Fishing Hut, on stilts over a bog-lake shore (a half shore). The same building as the coastal one, with its own art; it counts the lake tiles around it the way the coastal hut counts sea."
       },
       "hammerschmiede": {
-        "name": "Hammerschmiede",
+        "name": "Hammer Forge",
         "body": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works: it raises every bog-ore works within its range. It shows the river hammer mill until it gets art of its own."
       },
       "claybrickworks": {

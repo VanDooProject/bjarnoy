@@ -1,7 +1,7 @@
 # Economy & tech tree
 
 Status: **agreed design.** The catalogue runs these numbers; the bog-ore works,
-the Hammerschmiede and the unit iron rework (§8) are in the game. Numbers are
+the Hammer Forge and the unit iron rework (§8) are in the game. Numbers are
 tuned against the pacing simulator (the admin *Economy lab* page,
 `/admin/economy`); change them together with it. Buildings marked * don't exist
 in the game yet and come in their own PRs.
@@ -33,14 +33,14 @@ Wood, Stone, Food, Iron.
 - **Food** — Reindeer Herder (the default, any grass), later Farm / Pumpkin
   Farm by island soil (one tech-tree card), Fishing Hut on coastal water.
 - **Iron** — comes from **bog ore**: the bog-ore works stand on bog ground
-  (§8, `bog.md`), and a **Hammerschmiede** (water-powered hammer mill) on a
+  (§8, `bog.md`), and a **Hammer Forge** (water-powered hammer mill) on a
   bog creek boosts them later, the way the Sawmill boosts Lumberjacks. Before
   the bog-ore works, the Longhouse is the only iron source, so buildings
   cost no iron; iron is a military resource (units, Tower).
 
 The **Magic Tower is removed**. The **Smithy** is renamed **Weaponsmith**
 (Waffenschmiede; its art has an anvil) so it doesn't clash with the
-Hammerschmiede. It produces nothing and is a troop-upgrade building only.
+Hammer Forge. It produces nothing and is a troop-upgrade building only.
 Only its display name changes; the internal type stays `smithy`.
 
 ## 3. Level formulas
@@ -91,7 +91,7 @@ has 3–8 stages per building, and each level maps onto a stage
 | Longhouse | 30 (also drives build slots and claim radius) |
 | Resource producers (incl. the bog-ore works), Storage House | 25 |
 | Military and civic buildings (Barracks, Archery Range, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
-| Mills (Sawmill, Crop Mill, Hammerschmiede) | 20 |
+| Mills (Sawmill, Crop Mill, Hammer Forge) | 20 |
 | Tower | 10 |
 | Great Storehouse | 10 |
 | Shrines | 5 (one per settlement) |
@@ -135,7 +135,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
-| 20 | Sawmill, Crop Mill, Hammerschmiede | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
+| 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
 | 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
@@ -197,7 +197,7 @@ play.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
   take an ordinary building, but it is the only place for the mills, and a
   mill boosts every Lumberjack / Farm within its range (up to +100% at max
-  level); a bog creek hex is the only place for the Hammerschmiede, which does
+  level); a bog creek hex is the only place for the Hammer Forge, which does
   the same for bog-ore works. A river or creek running through a claim is a
   trade: fewer producer hexes, and a much stronger boost on the ones that are
   left.
@@ -388,7 +388,7 @@ The art for this is the **bog set** in `VanDooProject/3D_assets`
 - **Clay Brickworks** moves from grass onto plain bog moss.
 - A **lake Fishing Hut** on stilts on a lake's half shore, the same building
   as the coastal one.
-- A **Hammerschmiede** on a bog creek (straight or bend): boosts bog-ore works
+- A **Hammer Forge** on a bog creek (straight or bend): boosts bog-ore works
   within range, with the mills' percent and range curve. It is drawn with the
   river hammer-mill art until its own bog-creek art exists.
 
@@ -404,7 +404,7 @@ sources have to line up with the unit unlocks:
 |---|---|---|
 | LH 1–5 | Longhouse trickle only (2–10 iron/h) | Thrall (no iron), then the first Spearmen when the Barracks opens at LH 5 |
 | from ~LH 6 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
-| LH 20 | Hammerschmiede (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
+| LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
 So bog ground and the bog-ore works are needed by about LH 6, not as a
 late add-on. The unit costs and unlock levels are reworked together with
@@ -423,11 +423,11 @@ them so the levels match. *Implemented:*
   | Karve | Dockyard | 8 (5) |
   | Bowman | Archery Range | 9 (4) |
   | Provisioner, Settler Crew | Cart Workshop | 10 (4, 5) |
-  | Berserker, Catapult, Longship | Barracks, Archery Range, Dockyard | 20 (6, 10, 8): with the Hammerschmiede |
+  | Berserker, Catapult, Longship | Barracks, Archery Range, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
 
   (Berserker still needs the Axeman, Catapult the Berserker, Longship the
   Karve.) The elite units are gated by the Longhouse level only, not by a
-  standing Hammerschmiede: not every settlement has a creek.
+  standing Hammer Forge: not every settlement has a creek.
 
 ### Bog-ore works numbers (Economy lab)
 
@@ -606,7 +606,7 @@ Open work, in rough order. Each is its own PR.
    Wisdom, §5) and the Palisade (§5).
 6. ~~**Bogs and iron** (§8, `bog.md`): bog ground, creeks and lakes in world
    generation, the bog-ore works, Clay Brickworks on bog ground, the lake
-   Fishing Hut, and the Hammerschmiede.~~ Done (the Hammerschmiede with the
+   Fishing Hut, and the Hammer Forge.~~ Done (the Hammer Forge with the
    river mill's art until the bog-creek art exists).
 7. ~~**Units and iron:** every unit except the Thrall costs iron, and the unit
    unlock levels follow the building ladder, matched to the iron sources.~~

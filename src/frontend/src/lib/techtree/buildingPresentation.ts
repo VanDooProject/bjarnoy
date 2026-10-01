@@ -55,7 +55,7 @@ const TYPE_LABELS: Record<string, string> = {
   cartworkshop: 'Cart workshop',
   claybrickworks: 'Clay brickworks',
   bogoreworks: 'Bog-ore works',
-  hammerschmiede: 'Hammerschmiede',
+  hammerschmiede: 'Hammer Forge',
   // Display name only; the internal type stays `smithy`.
   smithy: 'Weaponsmith',
 };
