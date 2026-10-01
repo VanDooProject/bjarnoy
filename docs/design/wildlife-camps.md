@@ -165,8 +165,15 @@ costs and a late one is only moderate:
 
 `pool(L) = base × L^0.7` (strong base 1 800, weak base 450), split over the camp's loot kinds
 (section Loot below) by weight: each kind 1, a `++` kind 2. The army takes what its survivors can carry
-(`BattleResolver.ComputeLootWithCapacity`, the same carry cap as raids); the rest is lost. Strong pool:
+(`BattleResolver.ComputeLootWithCapacity`, the same carry cap as raids). Strong pool:
 L1 1 800, L5 5 000, L10 9 000, L25 17 700, L100 45 200.
+
+- **Leftover**: what a clearing army cannot carry stays at the camp (`CampState.Leftover`, capped at one
+  full pool of the camp's new effective level).
+- **Partly regrown camp**: a hunt pays `Leftover + pool × f`, `f` = the garrison's current defense power /
+  its full defense power, so re-clearing a barely regrown camp pays little.
+- **Empty camp**: a hunt that reaches an empty camp fights nothing and takes what it can carry of the
+  leftover (possibly nothing). It is not a clear: clears, regrowth and calm are unchanged.
 
 ### Hunting a camp
 
@@ -178,11 +185,11 @@ L1 1 800, L5 5 000, L10 9 000, L25 17 700, L100 45 200.
   loses everything, the winner `(loser/winner)^1.5`). No raid caps, no tower bonus.
 - Army wins: the camp is **cleared** (garrison 0, `ClearedAt`, `Clears + 1`), loot as above, the survivors
   walk home on the precomputed return leg. Camp wins: the army is gone, the camp keeps its survivors.
-- An empty camp (already cleared) gives nothing; the army turns home.
+- An empty camp (already cleared): no fight; the army picks up leftover loot (see Loot) and turns home.
 
 ### Regrowth, calm and respawn
 
-- **Regrowth**: a damaged camp regrows each tier linearly to its full count over **4 h (weak) / 8 h
+- **Regrowth**: a damaged camp regrows gradually, each tier linearly to its full count over **4 h (weak) / 8 h
   (strong)** (`floor(full × elapsed / regrow)` on top of the snapshot), computed lazily from the stored
   snapshot like the resource pool.
 - **Calm**: after any fight (hunt, ambush, tower attack) a camp is calm for **24 h** (`CalmUntil`): it
@@ -225,7 +232,7 @@ under "Camps".
 
 ### State and API
 
-- `camp_states` (world, q, r): tier counts at `SnapshotAt`, `ClearedAt`, `CalmUntil`, `Clears`. No row
+- `camp_states` (world, q, r): tier counts at `SnapshotAt`, `ClearedAt`, `CalmUntil`, `Clears`, `Leftover`. No row
   means a pristine camp: full garrison at its rolled level, aggressive.
 - `GET /worlds/{worldId}/camps[?islandId=]`: every camp's live state (effective level, garrison per tier,
   cleared, calm until, clears, removed by a building).
