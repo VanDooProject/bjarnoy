@@ -166,7 +166,7 @@ costs and a late one is only moderate:
 `pool(L) = base × L^0.7` (strong base 1 800, weak base 450), split over the camp's loot kinds
 (section Loot below) by weight: each kind 1, a `++` kind 2. The army takes what its survivors can carry
 (`BattleResolver.ComputeLootWithCapacity`, the same carry cap as raids). Strong pool:
-L1 1 800, L5 5 000, L10 9 000, L25 17 700, L100 45 200.
+L1 1 800, L5 5 550, L10 9 020, L25 17 130, L100 45 210; weak L1 450, L5 1 390, L25 4 280.
 
 - **Leftover**: what a clearing army cannot carry stays at the camp (`CampState.Leftover`, capped at one
   full pool of the camp's new effective level).
