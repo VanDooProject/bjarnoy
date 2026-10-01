@@ -42,11 +42,34 @@ describe('progressive building art', () => {
   it('loadAnimAtlases only ever hands out complete clips, growing page by page', async () => {
     const partials: TileTextures[] = [];
     const final = await loadAnimAtlases((t) => partials.push(t));
-    await new Promise((r) => setTimeout(r, 0)); // partial callbacks are detached microtasks
     expect(partials.length).toBeGreaterThan(0);
     const counts = partials.map((p) => count(p).anim);
     expect(counts.every((c, i) => i === 0 || c >= counts[i - 1])).toBe(true);
     expect(count(final).anim).toBeGreaterThanOrEqual(counts.at(-1)!);
     expect(count(final).anim).toBeGreaterThan(0);
+  });
+
+  it('hands out every anim partial before the full result', async () => {
+    // Fresh module state, so this load really runs page by page (the tests
+    // above already cached buildings-anim). Each partial waits on the static
+    // atlases asynchronously; a partial landing after the full result would
+    // overwrite it with fewer clips, so loadAnimAtlases chains them - this
+    // guards that order.
+    vi.resetModules();
+    const { registerAtlasManifestsForTests } = await import('./atlasManifests');
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const dir = join(process.cwd(), 'vendor/bg_assets_hextile/atlas/');
+    const manifests: Parameters<typeof registerAtlasManifestsForTests>[0] = {};
+    for (const file of readdirSync(dir)) if (file.endsWith('.json')) manifests[file] = JSON.parse(readFileSync(join(dir, file), 'utf8'));
+    registerAtlasManifestsForTests(manifests);
+    const fresh = await import('./textures');
+    await fresh.loadBuildingAtlases();
+
+    const events: string[] = [];
+    await fresh.loadAnimAtlases(() => events.push('partial')).then(() => events.push('final'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(events.filter((e) => e === 'partial').length).toBeGreaterThan(0);
+    expect(events.at(-1)).toBe('final');
   });
 });

@@ -1135,17 +1135,29 @@ export function loadAnimAtlases(onPartial?: (textures: TileTextures) => void): P
   if (!animLoading) {
     // A clip whose frames aren't all on the pages loaded so far is dropped by
     // the classifiers, so a partial only ever carries complete clips.
+    // A partial waits on the static atlases asynchronously; one landing after
+    // the full result would overwrite it with fewer clips (`mergeTileTextures`'
+    // animTop lets the later merge win). Microtask timing happens to keep them
+    // in order today, so partials and the full result share one chain to make
+    // that a guarantee: the full result is always handed out last.
+    let chain: Promise<unknown> = Promise.resolve();
+    const statics = () => Promise.all([loadAtlasCategory('buildings-static'), loadOptionalAtlasCategory('buildings-level1')]);
     const onAnimPartial =
       onPartial &&
-      ((partial: LoadedAtlas) =>
-        void Promise.all([loadAtlasCategory('buildings-static'), loadOptionalAtlasCategory('buildings-level1')])
+      ((partial: LoadedAtlas) => {
+        chain = chain
+          .then(statics)
           .then(([staticAtlas, level1Atlas]) => onPartial(buildTileTextures([staticAtlas, level1Atlas], partial)))
-          .catch(() => {})); // The full load's own rejection is what callers handle.
+          .catch(() => {}); // The full load's own rejection is what callers handle.
+      });
     const promise = Promise.all([
       loadAtlasCategory('buildings-static'),
       loadOptionalAtlasCategory('buildings-level1'),
       loadAtlasCategory('buildings-anim', undefined, onAnimPartial),
-    ]).then(([staticAtlas, level1Atlas, animAtlas]) => buildTileTextures([staticAtlas, level1Atlas], animAtlas));
+    ]).then(async ([staticAtlas, level1Atlas, animAtlas]) => {
+      await chain;
+      return buildTileTextures([staticAtlas, level1Atlas], animAtlas);
+    });
     animLoading = evictOnReject(promise, () => {
       if (animLoading === promise) animLoading = null;
     });
@@ -1219,22 +1231,31 @@ export function loadPackAnimAtlases(pack: AtlasPack, onPartial?: (textures: Tile
   const cached = packAnimLoading.get(pack);
   if (cached) return cached;
 
+  // Partials and the full result share one chain — see loadAnimAtlases.
+  let chain: Promise<unknown> = Promise.resolve();
+  const statics = () =>
+    Promise.all([
+      loadAtlasPackCategory(pack, 'terrain'),
+      loadAtlasPackCategory(pack, 'buildings-static'),
+      loadAtlasPackCategory(pack, 'buildings-level1'),
+    ]);
   const onAnimPartial =
     onPartial &&
-    ((partial: LoadedAtlas) =>
-      void Promise.all([
-        loadAtlasPackCategory(pack, 'terrain'),
-        loadAtlasPackCategory(pack, 'buildings-static'),
-        loadAtlasPackCategory(pack, 'buildings-level1'),
-      ])
+    ((partial: LoadedAtlas) => {
+      chain = chain
+        .then(statics)
         .then(([terrain, buildings, level1]) => onPartial(buildTileTextures([terrain, buildings, level1], partial)))
-        .catch(() => {}));
+        .catch(() => {});
+    });
   const promise = Promise.all([
     loadAtlasPackCategory(pack, 'terrain'),
     loadAtlasPackCategory(pack, 'buildings-static'),
     loadAtlasPackCategory(pack, 'buildings-level1'),
     loadAtlasPackCategory(pack, 'buildings-anim', onAnimPartial),
-  ]).then(([terrain, buildings, level1, animAtlas]) => buildTileTextures([terrain, buildings, level1], animAtlas));
+  ]).then(async ([terrain, buildings, level1, animAtlas]) => {
+    await chain;
+    return buildTileTextures([terrain, buildings, level1], animAtlas);
+  });
 
   packAnimLoading.set(pack, promise);
   return evictOnReject(promise, () => {
