@@ -59,7 +59,7 @@ function waves(cx: number, cy: number): string {
 function marks(cell: Cell, cx: number, cy: number): { d: string; cls: string } | null {
   if (cell === 'mountain') return { d: peak(cx, cy), cls: 'peak' };
   if (cell === 'water') return { d: waves(cx, cy), cls: 'waves' };
-  if (cell === 'seaEnd') return { d: `M${cx} ${cy - R + 2} L${cx} ${cy + 2}`, cls: 'stub' };
+  if (cell === 'seaEnd') return { d: `M${cx} ${cy - 2} L${cx} ${cy + R - 2}`, cls: 'stub' };
   return null;
 }
 </script>
@@ -152,11 +152,9 @@ svg {
 .cell.water {
   fill: #2f6f9e;
 }
-/* The sea end: a wall hex standing in the water, so wall-coloured with a water rim. */
+/* The sea end: a wall hex standing in the water, so water-coloured with the wall's stub on it. */
 .cell.seaEnd {
-  fill: #8a5a2b;
-  stroke: #4fa3d9;
-  stroke-width: 2.5;
+  fill: #2f6f9e;
 }
 .peak,
 .waves,
@@ -174,8 +172,8 @@ svg {
   stroke-width: 1.3;
 }
 .stub {
-  stroke: #4fa3d9;
-  stroke-width: 2;
+  stroke: #8a5a2b;
+  stroke-width: 5;
 }
 .legend {
   grid-column: 1 / -1;
