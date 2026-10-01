@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { resolveAuthGuard } from './authGuard';
-import { startAtlasManifestLoad } from './atlasGuard';
+import { awaitShowcaseManifests, startAtlasManifestLoad } from './atlasGuard';
 import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
 // Not lazy-loaded like the other views below: App.vue's ProfileModal.vue
@@ -176,14 +176,14 @@ export const router = createRouter({
       name: 'wildlife-camps-docs',
       component: () => import('../views/WildlifeCampsView.vue'),
       // Computes its art synchronously at setup — see atlasGuard.ts.
-      beforeEnter: () => startAtlasManifestLoad(),
+      beforeEnter: () => awaitShowcaseManifests(),
     },
     {
       path: '/docs/bog-lands',
       name: 'bog-lands-docs',
       component: () => import('../views/BogLandsView.vue'),
       // Computes its art synchronously at setup — see atlasGuard.ts.
-      beforeEnter: () => startAtlasManifestLoad(),
+      beforeEnter: () => awaitShowcaseManifests(),
     },
     {
       path: '/admin',

@@ -694,6 +694,17 @@ export async function preloadAtlasManifests(categories?: string[]): Promise<void
   if (failed) throw firstError;
 }
 
+/**
+ * Just the showcase manifests (`showcase` and every `<group>-showcase`) —
+ * what the docs pages that build their initial state from the showcase art
+ * at setup (the wildlife camps and bog lands pages) wait for before they
+ * render; see `router/atlasGuard.ts`. Small next to the rest: the animation
+ * manifests alone are about six times their size.
+ */
+export function preloadShowcaseManifests(): Promise<void> {
+  return preloadAtlasManifests(discoveredCategories().filter(isShowcaseCategory));
+}
+
 const prefetchedPages = new Set<string>();
 
 /**

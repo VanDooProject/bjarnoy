@@ -26,6 +26,7 @@ import {
   loadAtlasManifests,
   prefetchAtlasPages,
   preloadAtlasManifests,
+  preloadShowcaseManifests,
   startBackgroundAtlasLoad,
   type AtlasManifest,
   type AtlasPageIndex,
@@ -191,6 +192,27 @@ describe('preloadAtlasManifests', () => {
   afterEach(() => {
     registerAtlasManifestsForTests(removed);
     vi.unstubAllGlobals();
+  });
+
+  it('preloadShowcaseManifests fetches only the showcase categories', async () => {
+    const categoryOfUrl = new Map<string, string>();
+    const byUrl = new Map<string, AtlasManifest>();
+    for (const c of all) {
+      for (const p of discoveredPages(c)) {
+        categoryOfUrl.set(p.jsonUrl, c);
+        byUrl.set(p.jsonUrl, removed[p.path.split('/').pop()!]);
+      }
+    }
+    const fetched = new Set<string>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        fetched.add(categoryOfUrl.get(url)!);
+        return { ok: true, json: async () => byUrl.get(url) };
+      }),
+    );
+    await preloadShowcaseManifests();
+    expect([...fetched]).toEqual(['showcase']);
   });
 
   it('fetches terrain, level1, static, showcase, anim, then packs — one category at a time', async () => {
