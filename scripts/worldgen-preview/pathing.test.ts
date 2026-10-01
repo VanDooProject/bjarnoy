@@ -161,7 +161,8 @@ describe('scenario files', () => {
     expect(wide!.path!.length).toBeGreaterThan(3 * wide!.before!.length);
     expect(wide!.path!.every((c) => !run.pw.isWideRiver(c))).toBe(true);
     expect(stream!.path!.some((c) => run.pw.isRiver(c))).toBe(true);
-    expect(stream!.cost).toBe(stream!.before!.cost);
+    // A stream is a flat 9 now, not terrain + 8: never dearer than the pre-rules cost, cheaper where it runs over sand/forest/bog.
+    expect(stream!.cost).toBeLessThanOrEqual(stream!.before!.cost + 1e-9);
   });
 
   it('b and e: mountains force a detour, a wall from a mountain to a wide river seals', { timeout: 60_000 }, () => {

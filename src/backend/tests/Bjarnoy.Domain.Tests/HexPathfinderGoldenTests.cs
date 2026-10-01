@@ -5,7 +5,8 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Tests;
 
 /// <summary>
-/// Issue #159 part B's anti-drift guard. <c>src/shared/river-pathing-golden.json</c>
+/// Issue #159 part B's anti-drift guard, now also the movement rules (wide rivers and mountains
+/// impassable, a stream a flat 9). <c>src/shared/river-pathing-golden.json</c>
 /// is read by this suite and by <c>hexPath.golden.test.ts</c> on the frontend —
 /// each side computes against the same terrain patch and cases using its OWN
 /// production cost tables/river rule, then asserts the fixture's frozen
@@ -24,25 +25,41 @@ public class HexPathfinderGoldenTests
     public void Matches_the_shared_golden_fixture(FindPathCase testCase)
     {
         Terrain TerrainAt(HexCoord c) => Fixture.Terrain.GetValueOrDefault(Key(c), Terrain.Sea);
-        bool IsRiver(HexCoord c) => Fixture.RiverTiles.Contains(Key(c));
 
         var from = new HexCoord(testCase.From.Q, testCase.From.R);
         var to = new HexCoord(testCase.To.Q, testCase.To.R);
 
-        var path = HexPathfinder.FindPath(from, to, TerrainAt, testCase.IsLandUnit, IsRiver);
+        var path = HexPathfinder.FindPath(from, to, TerrainAt, testCase.IsLandUnit, Fixture.Rivers.IsRiver, Fixture.Rivers.IsWide);
+
+        if (testCase.ExpectedPath is null)
+        {
+            Assert.True(path is null, $"{testCase.Name}: expected no route, found {path?.Count} hexes");
+            return;
+        }
 
         Assert.True(path is not null, $"{testCase.Name}: expected a path, found none");
         var expectedPath = testCase.ExpectedPath.Select(p => new HexCoord(p.Q, p.R)).ToList();
         Assert.Equal(expectedPath, path);
 
-        var hours = HexPathfinder.CumulativeHours(path!, TerrainAt, hexesPerHour: 1.0, testCase.IsLandUnit, isRiver: IsRiver);
-        Assert.Equal(testCase.ExpectedCumulativeHours.Count, hours.Count);
+        var hours = HexPathfinder.CumulativeHours(
+            path!, TerrainAt, hexesPerHour: 1.0, testCase.IsLandUnit, isRiver: Fixture.Rivers.IsRiver, isWideRiver: Fixture.Rivers.IsWide);
+        var expectedHours = testCase.ExpectedCumulativeHours!;
+        Assert.Equal(expectedHours.Count, hours.Count);
         for (var i = 0; i < hours.Count; i++)
         {
             Assert.True(
-                Math.Abs(testCase.ExpectedCumulativeHours[i] - hours[i]) < 1e-9,
-                $"{testCase.Name}: hour {i} expected {testCase.ExpectedCumulativeHours[i]}, got {hours[i]}");
+                Math.Abs(expectedHours[i] - hours[i]) < 1e-9,
+                $"{testCase.Name}: hour {i} expected {expectedHours[i]}, got {hours[i]}");
         }
+    }
+
+    [Fact]
+    public void The_fixture_covers_a_wide_river_and_a_mountain_that_stop_a_land_army_and_a_stream_on_a_mountain()
+    {
+        var byName = Fixture.FindPathCases.ToDictionary(c => c.Name);
+        Assert.Null(byName["wide_river_is_impassable"].ExpectedPath);
+        Assert.Null(byName["mountain_with_no_way_round_has_no_route"].ExpectedPath);
+        Assert.Equal([0.0, 9.0, 10.0], byName["stream_on_a_mountain_costs_a_flat_9"].ExpectedCumulativeHours);
     }
 
     private static string Key(HexCoord c) => $"{c.Q},{c.R}";
@@ -55,9 +72,19 @@ public class HexPathfinderGoldenTests
             ?? throw new InvalidOperationException("river-pathing-golden.json deserialized to null.");
 
         var terrain = raw.Terrain.ToDictionary(kv => kv.Key, kv => ParseTerrain(kv.Value));
-        var riverTiles = new HashSet<string>(raw.RiverTiles);
-        return new GoldenFixture(terrain, riverTiles, raw.FindPathCases);
+        var rivers = new RiverIndex(raw.RiverTiles.Select(ToRiverTile));
+        return new GoldenFixture(terrain, rivers, raw.FindPathCases);
     }
+
+    private static TileOrientation ParseOrientation(string name) =>
+        Enum.Parse<TileOrientation>(name, ignoreCase: true);
+
+    private static RiverTile ToRiverTile(RiverTileDto t) => new(
+        new HexCoord(t.Q, t.R),
+        Enum.Parse<RiverTileShape>(t.Shape, ignoreCase: true),
+        [.. t.InDirections.Select(ParseOrientation)],
+        t.OutDirection is { } o ? ParseOrientation(o) : null,
+        Enum.Parse<RiverWidth>(t.Width, ignoreCase: true));
 
     private static Terrain ParseTerrain(string name) => name switch
     {
@@ -94,14 +121,14 @@ public class HexPathfinderGoldenTests
 
     private sealed record GoldenFixture(
         IReadOnlyDictionary<string, Terrain> Terrain,
-        IReadOnlySet<string> RiverTiles,
+        RiverIndex Rivers,
         IReadOnlyList<FindPathCase> FindPathCases);
 
     private sealed class RawFixture
     {
         public Dictionary<string, string> Terrain { get; set; } = [];
 
-        public List<string> RiverTiles { get; set; } = [];
+        public List<RiverTileDto> RiverTiles { get; set; } = [];
 
         public List<FindPathCase> FindPathCases { get; set; } = [];
     }
@@ -116,9 +143,10 @@ public class HexPathfinderGoldenTests
 
         public bool IsLandUnit { get; set; }
 
-        public List<HexCoordDto> ExpectedPath { get; set; } = [];
+        /// <summary>Null: no land route exists.</summary>
+        public List<HexCoordDto>? ExpectedPath { get; set; }
 
-        public List<double> ExpectedCumulativeHours { get; set; } = [];
+        public List<double>? ExpectedCumulativeHours { get; set; }
 
         public override string ToString() => Name;
     }
@@ -128,5 +156,20 @@ public class HexPathfinderGoldenTests
         public int Q { get; set; }
 
         public int R { get; set; }
+    }
+
+    public sealed class RiverTileDto
+    {
+        public int Q { get; set; }
+
+        public int R { get; set; }
+
+        public string Shape { get; set; } = "";
+
+        public string Width { get; set; } = "river";
+
+        public List<string> InDirections { get; set; } = [];
+
+        public string? OutDirection { get; set; }
     }
 }

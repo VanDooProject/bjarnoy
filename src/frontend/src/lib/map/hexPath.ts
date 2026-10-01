@@ -1,8 +1,9 @@
 // Issue #159 part B: the client-side range tint. Pure, dependency-free (same
 // spirit as lib/units/armyDispatch.ts) so it can run every provisions-slider
 // tick with no round trip — but it mirrors HexPathfinder.cs's own cost model
-// hex for hex: additive-on-entry terrain + river cost, sea impassable to land
-// units, no distance-circle shortcut. `rules` always comes from the backend
+// hex for hex: the movement rules (wide rivers and mountains impassable, a
+// stream a flat 1.0 + riverCrossingCost whatever it runs over), sea impassable
+// to land units, no distance-circle shortcut. `rules` always comes from the backend
 // (`WorldResponse.movement`), never a hardcoded literal here, so this and the
 // server can't quietly drift apart — see hexPath.golden.test.ts.
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
@@ -16,23 +17,23 @@ export interface MovementRules {
 }
 
 /**
- * Optional movement rules beyond the backend's current cost model (the pathing preview's
- * "decided rules": wide rivers, mountains and palisades stop land armies). Every field is off
- * by default, so a context without `restrictions` prices exactly what HexPathfinder.cs does and
- * the golden fixture stays valid. Not on the wire yet: `rules` still comes from the backend.
+ * The movement rules every land army follows (HexPathfinder.cs), applied by default: a context
+ * without `restrictions` prices exactly what the backend does. Each rule has an opt-out for the
+ * pathing preview tool, which compares them against the old numbers; the game never sets them.
  */
 /** What entering a half-open palisade end costs, in place of the terrain cost. */
 export const HALF_OPEN_END_COST = 3.0;
 
 export interface PathRestrictions {
-  /** A river hex for which `isWideRiver` holds is impassable (streams stay crossable at the river cost). */
+  /** Default `true`. A river hex for which `isWideRiver` holds is impassable (streams stay crossable at the river cost). */
   wideRiversImpassable?: boolean;
-  /** Mountain hexes are impassable instead of costing `rules.land.mountain`. */
+  /** Default `true`. Mountain hexes are impassable instead of costing `rules.land.mountain`. */
   mountainsImpassable?: boolean;
   /**
-   * A crossable river tile (one `isWideRiver` does not hold for) costs a flat `1.0 + riverCrossingCost`
-   * whatever terrain it runs over: mountain impassability and the terrain's own cost do not apply to it.
-   * A wide river stays impassable when `wideRiversImpassable` is on.
+   * Default `true`. A crossable river tile (one `isWideRiver` does not hold for) costs a flat
+   * `1.0 + riverCrossingCost` whatever terrain it runs over: mountain impassability and the terrain's own
+   * cost do not apply to it. A wide river stays impassable when `wideRiversImpassable` is on. Off, a river
+   * tile costs its terrain plus `riverCrossingCost` (the pre-rules model).
    */
   streamsIgnoreTerrain?: boolean;
   /** Extra impassable hexes (a palisade). */
@@ -51,8 +52,8 @@ export interface PathRestrictions {
 export interface PathContext {
   terrainAt(c: AxialCoord): Terrain;
   isRiver(c: AxialCoord): boolean;
-  /** Which river hexes are wide; only read when `restrictions.wideRiversImpassable` is on (default: every river hex). */
-  isWideRiver?(c: AxialCoord): boolean;
+  /** Which river hexes are wide (`isWideRiverTile`, riverArms.ts): impassable to a land army; every other river hex is a crossable stream. */
+  isWideRiver(c: AxialCoord): boolean;
   rules: MovementRules;
   /** Army speed (hexes/hour) already scaled by the world's speedFactor. */
   hexesPerHour: number;
@@ -68,22 +69,24 @@ export interface PathContext {
  */
 export const MAX_TINT_HEXES = 4000;
 
-/** Step cost for a land unit entering `c`, or `null` if impassable (sea). */
+/**
+ * Step cost for a land unit entering `c`, or `null` if impassable (sea, a lake, a wide river, a mountain
+ * that is not also a stream, a palisade). A stream costs a flat `1.0 + riverCrossingCost` whatever
+ * terrain it runs over — the C# twin is `HexPathfinder.LandStepCost`.
+ */
 function stepCost(c: AxialCoord, ctx: PathContext): number | null {
   const terrain = ctx.terrainAt(c);
   const base = ctx.rules.land[terrain];
-  const r = ctx.restrictions;
   if (base === undefined) return null;
-  if (r) {
-    const river = ctx.isRiver(c);
-    const wide = river && (ctx.isWideRiver?.(c) ?? r.wideRiversImpassable === true);
-    if (r.wideRiversImpassable && wide) return null;
-    if (r.streamsIgnoreTerrain && river && !wide) return 1.0 + ctx.rules.riverCrossingCost;
-    if (r.mountainsImpassable && terrain === 'mountain') return null;
-    if (r.halfOpen?.(c)) return r.halfOpenCost ?? HALF_OPEN_END_COST;
-    if (r.blocked?.(c) && !r.friendlyGate?.(c)) return null;
-  }
-  return ctx.isRiver(c) ? base + ctx.rules.riverCrossingCost : base;
+  const r = ctx.restrictions;
+  const river = ctx.isRiver(c);
+  const wide = river && ctx.isWideRiver(c);
+  if ((r?.wideRiversImpassable ?? true) && wide) return null;
+  if ((r?.streamsIgnoreTerrain ?? true) && river && !wide) return 1.0 + ctx.rules.riverCrossingCost;
+  if ((r?.mountainsImpassable ?? true) && terrain === 'mountain') return null;
+  if (r?.halfOpen?.(c)) return r.halfOpenCost ?? HALF_OPEN_END_COST;
+  if (r?.blocked?.(c) && !r.friendlyGate?.(c)) return null;
+  return river ? base + ctx.rules.riverCrossingCost : base;
 }
 
 /** Binary min-heap keyed by priority — Dijkstra's usual decrease-key stand-in (push a new entry, ignore stale pops). */
@@ -216,8 +219,7 @@ export const MAX_EXPANDED_NODES = 20_000;
  * twin of `HexPathfinder.FindPath` for land armies. Same A* (plain hex distance as the
  * heuristic), same endpoint check (both must be land terrain),
  * same bounding box (the endpoints padded by their distance, at least 10) and expansion cap.
- * The optional `ctx.restrictions` make more hexes impassable; with none set it prices exactly
- * what the backend does.
+ * Prices exactly what the backend does; `ctx.restrictions` can add a palisade or (preview tool only) switch a rule off.
  */
 export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): AxialCoord[] | null {
   if (ctx.rules.land[ctx.terrainAt(from)] === undefined || ctx.rules.land[ctx.terrainAt(to)] === undefined) return null;

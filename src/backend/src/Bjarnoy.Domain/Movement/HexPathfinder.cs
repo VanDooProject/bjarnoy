@@ -30,6 +30,13 @@ public static class HexPathfinder
     /// <see cref="Heuristic"/> (plain hex distance) admissible: it can never
     /// overestimate the true cost of a step.
     /// </summary>
+    /// <remarks>
+    /// <see cref="Terrain.Mountain"/> is still listed (it is a land terrain, so an army may
+    /// stand on one, and the wire contract projects this table) but a land army can no longer
+    /// <em>enter</em> one: <see cref="FindPath"/> and <see cref="CumulativeHours"/> reject a
+    /// mountain hex unless it carries a crossable river tile (a stream), which costs a flat
+    /// <c>1.0 + <see cref="RiverCrossingCost"/></c> whatever lies under it.
+    /// </remarks>
     private static readonly IReadOnlyDictionary<Terrain, double> LandTerrainCost = new Dictionary<Terrain, double>
     {
         [Terrain.Grass] = 1.0,
@@ -72,13 +79,14 @@ public static class HexPathfinder
         SeaTerrainCost.ToDictionary(kv => kv.Key.ToWireName(), kv => kv.Value);
 
     /// <summary>
-    /// Flat penalty charged, on top of terrain cost, for entering a river hex
-    /// (issue #159 part A). Twice the median generated river's length and
-    /// above the median detour-preferring penalty measured across 40 worlds
-    /// at default <c>WorldGenerationOptions</c> — see the issue for the full
-    /// table. Troops route around a river at roughly 63% of river tiles;
-    /// crossing is never refused outright, only made expensive, so a river
-    /// can never make a route impossible.
+    /// Flat cost of crossing a stream, on top of the base 1.0 step: a land army entering a
+    /// crossable river hex (one that is not a wide river — see <see cref="RiverArms"/>) pays
+    /// <c>1.0 + RiverCrossingCost</c> whatever terrain lies under it, instead of the terrain
+    /// cost plus this penalty (issue #159 part A set the penalty; the movement rules made wide
+    /// rivers and mountains impassable and the stream cost flat). Twice the median generated
+    /// river's length and above the median detour-preferring penalty measured across 40 worlds
+    /// at default <c>WorldGenerationOptions</c> — see the issue for the full table. Troops
+    /// route around a stream at roughly 63% of river tiles.
     /// </summary>
     /// <remarks>
     /// Charged additively on entry only — never on exit, and never as a
@@ -89,6 +97,36 @@ public static class HexPathfinder
     /// stays admissible and consistent.
     /// </remarks>
     public const double RiverCrossingCost = 8.0;
+
+    /// <summary>
+    /// What a land army pays to enter a hex, or <see langword="null"/> if it cannot: the single
+    /// rule both <see cref="FindPath"/> and <see cref="CumulativeHours"/> price a step with.
+    /// A wide river and a plain mountain are impassable; a stream is a flat
+    /// <c>1.0 + <see cref="RiverCrossingCost"/></c> over any land terrain (mountain included);
+    /// sea and lakes are not in the cost table; <paramref name="blocked"/> hexes are impassable.
+    /// </summary>
+    private static double? LandStepCost(
+        HexCoord hex, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool>? isRiver,
+        Func<HexCoord, bool>? isWideRiver, Func<HexCoord, bool>? blocked)
+    {
+        var terrain = terrainAt(hex);
+        if (!LandTerrainCost.TryGetValue(terrain, out var cost))
+        {
+            return null;
+        }
+
+        if (blocked is not null && blocked(hex))
+        {
+            return null;
+        }
+
+        if (isRiver is not null && isRiver(hex))
+        {
+            return isWideRiver is not null && isWideRiver(hex) ? null : 1.0 + RiverCrossingCost;
+        }
+
+        return terrain == Terrain.Mountain ? null : cost;
+    }
 
     /// <summary>
     /// Hard cap on nodes a single search may expand. A world is unbounded, so
@@ -132,15 +170,31 @@ public static class HexPathfinder
     /// </param>
     /// <param name="isRiver">
     /// Optional river-tile lookup (issue #159 part A) — a land unit's step
-    /// cost onto a hex this returns <see langword="true"/> for is charged an
-    /// extra <see cref="RiverCrossingCost"/>. <see langword="null"/> (the
-    /// default) prices no hex as a river, matching every caller from before
-    /// rivers existed. Ignored for a fleet: river tiles are land terrain,
-    /// already impassable to ships regardless of this predicate.
+    /// onto a hex this returns <see langword="true"/> for costs a flat
+    /// <c>1.0 + <see cref="RiverCrossingCost"/></c> whatever terrain lies under it,
+    /// unless <paramref name="isWideRiver"/> also holds (then it is impassable).
+    /// <see langword="null"/> (the default) prices no hex as a river. Ignored
+    /// for a fleet: river tiles are land terrain, already impassable to ships
+    /// regardless of this predicate.
     /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide (<see cref="RiverArms.IsWide"/>) and so impassable to a land
+    /// army. Only consulted for hexes <paramref name="isRiver"/> accepts. <see langword="null"/>
+    /// (the default) treats every river hex as a crossable stream.
+    /// </param>
+    /// <param name="blocked">
+    /// Optional extra impassable hexes for a land army (the hook a palisade will use; nothing
+    /// passes one yet). <see langword="null"/> (the default) blocks nothing. Never applied to the
+    /// start hex or to a fleet.
+    /// </param>
+    /// <returns>
+    /// The route, or <see langword="null"/> when there is none — which, for a land army, now
+    /// includes a target walled in by mountains or wide rivers.
+    /// </returns>
     public static IReadOnlyList<HexCoord>? FindPath(
         HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
-        Func<HexCoord, bool>? isRiver = null)
+        Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
+        Func<HexCoord, bool>? blocked = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -209,18 +263,22 @@ public static class HexPathfinder
                 // see the isLandUnit remarks above); every other hex still
                 // has to pass the ordinary cost-table check.
                 double stepCost;
-                if (!isLandUnit && neighbour == to)
+                if (isLandUnit)
+                {
+                    if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked) is not { } landCost)
+                    {
+                        continue;
+                    }
+
+                    stepCost = landCost;
+                }
+                else if (neighbour == to)
                 {
                     stepCost = costTable.TryGetValue(terrainAt(neighbour), out var seaCost) ? seaCost : 1.0;
                 }
                 else if (!costTable.TryGetValue(terrainAt(neighbour), out stepCost))
                 {
                     continue;
-                }
-
-                if (isLandUnit && isRiver is not null && isRiver(neighbour))
-                {
-                    stepCost += RiverCrossingCost;
                 }
 
                 var tentativeG = gScore[current] + stepCost;
@@ -288,11 +346,16 @@ public static class HexPathfinder
     /// whatever call produced <paramref name="path"/>, or the reported hours
     /// silently disagree with the route that was actually chosen (see
     /// <see cref="RiverCrossingCost"/>'s remarks on why both sides have to
-    /// agree). <see langword="null"/> (the default) charges no river penalty.
+    /// agree). <see langword="null"/> (the default) charges no river cost.
+    /// </param>
+    /// <param name="isWideRiver">
+    /// Same wide-river lookup <see cref="FindPath"/> takes. A path hex it rejects (a wide river
+    /// or a mountain with no stream, which only a path stored before the movement rules can
+    /// contain) is charged <see cref="double.PositiveInfinity"/>, like any other impassable hex.
     /// </param>
     public static IReadOnlyList<double> CumulativeHours(
         IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true,
-        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -322,13 +385,16 @@ public static class HexPathfinder
             // charges the same flat fallback cost FindPath itself used to
             // reach it, rather than the double.PositiveInfinity every other
             // impassable hex gets.
-            var stepCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
-                ? cost
-                : !isLandUnit && i == path.Count - 1 ? 1.0 : double.PositiveInfinity;
-
-            if (isLandUnit && isRiver is not null && isRiver(path[i]))
+            double stepCost;
+            if (isLandUnit)
             {
-                stepCost += RiverCrossingCost;
+                stepCost = LandStepCost(path[i], terrainAt, isRiver, isWideRiver, blocked: null) ?? double.PositiveInfinity;
+            }
+            else
+            {
+                stepCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
+                    ? cost
+                    : i == path.Count - 1 ? 1.0 : double.PositiveInfinity;
             }
 
             hours[i] = hours[i - 1] + (stepCost / effectiveHexesPerHour);
