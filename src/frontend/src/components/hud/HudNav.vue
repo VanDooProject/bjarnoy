@@ -188,7 +188,7 @@ watch(() => route.fullPath, closeAccountMenu);
     <button
       class="link reports-link"
       :class="{ active: String(route.name).startsWith('report') }"
-      @click="router.push('/reports')"
+      @click="router.push(modalLocation(router, '/reports'))"
     >
       {{ t('hud.nav.reports') }}
       <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>

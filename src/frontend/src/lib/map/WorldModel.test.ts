@@ -6,10 +6,11 @@
 // (HexMapRenderer's outerEdgesOf) against a non-convex shape, not just the
 // perfect hexagon every other settlement in the demo produces.
 import { describe, expect, it } from 'vitest';
-import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
+import { hexDistance, hexesInRadius, hexRing, neighbors, type AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
+import { guardRange, placeCamps } from './campPlacement';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
-import { DEFAULT_GENERATION, soilAt, springMountainShapeAt } from './worldGenerator';
+import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
@@ -522,25 +523,44 @@ function riverTile(at: AxialCoord, shape: RiverTile['shape']): RiverTile {
 // against real in/out directions) — WorldModel no longer has its own
 // sawmillArtVariantOf query for it.
 
+describe('WorldModel.islandFootprint', () => {
+  it('covers a whole production-size island, so its label clears the real bottom edge', () => {
+    const model = new WorldModel(20260824);
+    const islands = enumerateIslands({ seed: 20260824, generation: model.generation }, model.generation.worldRadius);
+    const footprints = islands.slice(0, 12).map((island) => model.islandFootprint(island).length);
+    // Islands are 1.5k-40k tiles; a footprint capped at a few hundred would put labels inside them.
+    expect(Math.max(...footprints)).toBeGreaterThan(3000);
+  });
+});
+
 describe('WorldModel.seaFacingDirectionOf', () => {
+  // Found by search rather than pinned to coordinates: the first coastal land hex near the
+  // nearest island to the origin with exactly one sea neighbour (and one with none).
+  function findByNeighbourSeaCount(model: WorldModel, count: number): AxialCoord {
+    const start = model.findLandfall({ q: 0, r: 0 });
+    if (!start) throw new Error('no land in reach of the origin for this seed — pick a different test seed');
+    for (let radius = 0; radius <= 200; radius++) {
+      for (const c of hexRing(start, radius)) {
+        if (!model.isLand(c.q, c.r)) continue;
+        if (neighbors(c).filter((n) => !model.isLand(n.q, n.r)).length === count) return c;
+      }
+    }
+    throw new Error(`no land hex with exactly ${count} sea neighbours found — pick a different test seed`);
+  }
+
   it('finds the real sea neighbour of a coastal tile', () => {
-    // Confirmed against DEFAULT_GENERATION's own terrainAt for this seed: of
-    // (-70,-31)'s six neighbours, only SW is sea — the rest are land.
-    // Originally reproduced a real in-game bug where a mouth tile rendered a
-    // straight line toward the inflow's geometric opposite instead of
-    // curving toward the actual sea neighbour; the coordinates here were
-    // re-picked when the island generator's defaults were de-rounded (see
-    // WorldGenerationOptions's IslandMaxElongation/IslandCellSize doc
-    // comments), which moved every seed's terrain.
+    // Originally reproduced a real in-game bug where a mouth tile rendered a straight line
+    // toward the inflow's geometric opposite instead of curving toward the actual sea
+    // neighbour.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -70, r: -31 })).toBe('SW');
+    const coastal = findByNeighbourSeaCount(model, 1);
+    const seaIndex = neighbors(coastal).findIndex((n) => !model.isLand(n.q, n.r));
+    expect(model.seaFacingDirectionOf(coastal)).toBe(['E', 'NE', 'NW', 'W', 'SW', 'SE'][seaIndex]);
   });
 
   it('returns null when no neighbour is sea', () => {
-    // Same seed as above; (-70,-36) confirmed to have all six neighbours as
-    // land.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -70, r: -36 })).toBeNull();
+    expect(model.seaFacingDirectionOf(findByNeighbourSeaCount(model, 0))).toBeNull();
   });
 });
 
@@ -894,11 +914,16 @@ function foundLandedSettlementAt(model: WorldModel, seedHex: AxialCoord) {
  * mechanics tests just need *some* valid anchor to exercise against — this
  * gives them one without depending on production code that no longer exists.
  */
-function findValidGiantAnchor(model: WorldModel, home: AxialCoord, minRadius = 3, maxRadius = 20): AxialCoord | null {
+function findValidGiantAnchor(
+  model: WorldModel,
+  home: AxialCoord,
+  minRadius = 3,
+  maxRadius = 40,
+  accept: (anchor: AxialCoord) => boolean = () => true,
+): AxialCoord | null {
   for (let radius = minRadius; radius <= maxRadius; radius++) {
-    for (const c of hexesInRadius(home, radius)) {
-      if (hexDistance(home, c) !== radius) continue;
-      if (model.canPlaceGiant(c)) return c;
+    for (const c of hexRing(home, radius)) {
+      if (model.canPlaceGiant(c) && accept(c)) return c;
     }
   }
   return null;
@@ -988,12 +1013,20 @@ describe('WorldModel.placeGiant / canPlaceGiant', () => {
   it('rejects an anchor whose footprint overlaps an existing building', () => {
     const model = new WorldModel(DEMO_SEED);
     const { settlement, at } = foundLandedSettlementAt(model, { q: 0, r: 0 });
-    const anchor = findValidGiantAnchor(model, at)!;
-    const buildOn = giantCoverage(anchor)[1].coord; // a non-anchor covered hex
+    // A footprint with a hex (not the anchor itself) inside the fresh longhouse's own claim
+    // disc (radius 2), to put a building on.
+    const farmable = (a: AxialCoord) =>
+      giantCoverage(a)
+        .slice(1)
+        .map((c) => c.coord)
+        .filter((c) => hexDistance(at, c) <= 2);
+    const anchor = findValidGiantAnchor(model, at, 3, 40, (a) => farmable(a).length > 0)!;
+    expect(anchor).not.toBeNull();
+    const buildOn = farmable(anchor)[0];
     // placeBuilding requires ownership — claim the hex directly rather than
     // growing the settlement's border out to reach it.
     model.getTile(buildOn.q, buildOn.r).ownerId = settlement.id;
-    expect(model.placeBuilding(settlement.id, buildOn, 'farm')).toBe(true);
+    expect(model.placeBuilding(settlement.id, buildOn, 'hut')).toBe(true);
 
     expect(model.canPlaceGiant(anchor)).toBe(false);
     expect(model.placeGiant(anchor, 'giantmountain')).toBe(false);
@@ -1169,45 +1202,156 @@ describe('WorldModel.setGiants (live mode)', () => {
 });
 
 describe('placeGiantsForIsland (demo giant placement v2)', () => {
-  // The default demo seed's home island (284 tiles) gets one mountain giant
-  // anchored at (-7, -15) — a footprint that sits on real Mountain hexes.
+  // The default demo seed's nearest island to the origin: big enough (hundreds of tiles) to
+  // get mountain giants. The anchors are read back off the model rather than pinned.
   const DEMO_SEED = 20260824;
-  const mountainAnchor = { q: -7, r: -15 };
+
+  function giantAnchorsNear(model: WorldModel, near: AxialCoord): AxialCoord[] {
+    const anchors = new Map<string, AxialCoord>();
+    for (const c of hexesInRadius(near, 150)) {
+      const anchor = model.giantAnchorAt(c);
+      if (anchor) anchors.set(`${anchor.q},${anchor.r}`, anchor);
+    }
+    return [...anchors.values()];
+  }
 
   it('tags a mountain giant even though its footprint is Mountain terrain', () => {
     const model = new WorldModel(DEMO_SEED);
-    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
-    for (const { coord } of giantCoverage(mountainAnchor)) {
-      expect(model.getTile(coord.q, coord.r).giant?.family).toBe('giantmountain');
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+    const anchors = giantAnchorsNear(model, near);
+    expect(anchors.length).toBeGreaterThan(0);
+    let sawMountainFootprint = false;
+    for (const anchor of anchors) {
+      const tags = giantCoverage(anchor).map(({ coord }) => model.getTile(coord.q, coord.r).giant?.family);
+      const family = tags[0];
+      expect(family).toBeDefined();
+      expect(tags.every((f) => f === family)).toBe(true);
+      if (family === 'giantmountain') sawMountainFootprint = true;
     }
+    expect(sawMountainFootprint).toBe(true);
   });
 
   it('keeps the landfall clear of every placed giant', () => {
     const model = new WorldModel(DEMO_SEED);
-    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
-    const at = model.findLandfall(mountainAnchor);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+    const anchors = giantAnchorsNear(model, near);
+    expect(anchors.length).toBeGreaterThan(0);
+    const at = model.findLandfall(near);
     expect(at).not.toBeNull();
-    expect(hexDistance(at!, mountainAnchor)).toBeGreaterThanOrEqual(5);
+    for (const anchor of anchors) expect(hexDistance(at!, anchor)).toBeGreaterThanOrEqual(5);
   });
 
   it('places an island’s giants once, however many times it is visited', () => {
     const model = new WorldModel(DEMO_SEED);
-    model.placeGiantsForIsland(mountainAnchor, DEMO_SEED);
-    const tagged = () => [...hexesInRadius(mountainAnchor, 40)].filter((c) => model.getTile(c.q, c.r).giant).length;
-    const first = tagged();
-    model.placeGiantsForIsland({ q: mountainAnchor.q + 1, r: mountainAnchor.r }, DEMO_SEED);
-    expect(tagged()).toBe(first);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+    const before = giantAnchorsNear(model, near);
+    model.placeGiantsForIsland({ q: near.q + 1, r: near.r }, DEMO_SEED);
+    expect(giantAnchorsNear(model, near)).toEqual(before);
+  });
+});
+
+describe('WorldModel wildlife camps', () => {
+  const DEMO_SEED = 20260824;
+
+  it('setCamps tags the hex, derives strength and guard range from the family table, and is idempotent', () => {
+    const model = new WorldModel();
+    model.terrainOf = () => 'grass';
+    const coord: AxialCoord = { q: 3, r: 4 };
+
+    model.setCamps([{ family: 'wolfden', coord, level: 4, orientation: 'SE' }]);
+    expect(model.getTile(3, 4).camp).toEqual({ family: 'wolfden', level: 4, orientation: 'SE', strong: true, guardRange: 6 });
+    expect(model.campAt(coord)).toMatchObject({ family: 'wolfden', q: 3, r: 4 });
+
+    model.setCamps([{ family: 'sealhaulout', coord: { q: 9, r: 9 }, level: 5, orientation: 'E' }]);
+    expect(model.getTile(9, 9).camp).toEqual({ family: 'sealhaulout', level: 5, orientation: 'E', strong: false, guardRange: 3 });
+
+    // A second call for a hex that already has a camp leaves it alone.
+    model.setCamps([{ family: 'boarwallow', coord, level: 1, orientation: 'W' }]);
+    expect(model.getTile(3, 4).camp?.family).toBe('wolfden');
+  });
+
+  it('a camp hex is not buildable', () => {
+    // Control: a model with no camp, to find a hex the farm can go on...
+    const control = new WorldModel(DEMO_SEED);
+    const { settlement: controlSettlement, at } = foundLandedSettlement(control);
+    const candidate = hexesInRadius(at, 3).find(
+      (c) => hexDistance(at, c) >= 2 && control.placeBuilding(controlSettlement.id, c, 'farm'),
+    );
+    expect(candidate).toBeDefined();
+
+    // ...and the same hex in an identical model, with a camp on it, is refused.
+    const model = new WorldModel(DEMO_SEED);
+    const { settlement } = foundLandedSettlement(model);
+    model.setCamps([{ family: 'wolfden', coord: candidate!, level: 2, orientation: 'SE' }]);
+    expect(model.placeBuilding(settlement.id, candidate!, 'farm')).toBe(false);
+    expect(model.getTile(candidate!.q, candidate!.r).buildingType).toBeUndefined();
+  });
+
+  it('findLandfall keeps out of a strong camp\'s guard range plus the margin, but not a weak camp\'s', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const spot = model.findLandfall({ q: 0, r: 0 })!;
+
+    model.setCamps([{ family: 'sealhaulout', coord: spot, level: 5, orientation: 'SE' }]);
+    expect(model.findLandfall({ q: 0, r: 0 })).toEqual(spot);
+
+    const strongModel = new WorldModel(DEMO_SEED);
+    strongModel.setCamps([{ family: 'wolfden', coord: spot, level: 3, orientation: 'SE' }]);
+    const away = strongModel.findLandfall({ q: 0, r: 0 })!;
+    expect(hexDistance(away, spot)).toBeGreaterThan(guardRange(3, 'strong') + 2);
+  });
+
+  it('demo mode places an island\'s camps with the shared core, clear of giants, once', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+
+    const island = floodFillLandmass(near, (c) => model.isLand(c.q, c.r), 400)!;
+    const camps = island.map((c) => ({ c, camp: model.campAt(c) })).filter((x) => x.camp);
+    expect(camps.length).toBeGreaterThan(0);
+    for (const { c } of camps) expect(model.giantAnchorAt(c)).toBeNull();
+
+    expect(camps.length).toBeLessThanOrEqual(24);
+
+    const before = camps.map((x) => `${x.c.q},${x.c.r},${x.camp!.family},${x.camp!.level}`).sort();
+    model.placeGiantsForIsland({ q: near.q + 1, r: near.r }, DEMO_SEED);
+    const after = island
+      .map((c) => ({ c, camp: model.campAt(c) }))
+      .filter((x) => x.camp)
+      .map((x) => `${x.c.q},${x.c.r},${x.camp!.family},${x.camp!.level}`)
+      .sort();
+    expect(after).toEqual(before);
+
+    // And the landfall now keeps away from every strong one.
+    const landfall = model.findLandfall(near)!;
+    for (const { c, camp } of camps) {
+      if (camp!.strong) expect(hexDistance(landfall, c)).toBeGreaterThan(camp!.guardRange + 2);
+    }
+  });
+
+  it('placeCamps is deterministic and never puts two camps closer than the minimum spacing', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    const island = floodFillLandmass(near, (c) => model.isLand(c.q, c.r), 400)!;
+    const run = () => placeCamps(island, (c) => model.terrainOf(c.q, c.r), [], [], DEMO_SEED, 7);
+    expect(run()).toEqual(run());
+    const camps = run();
+    for (let i = 0; i < camps.length; i++) {
+      for (let j = i + 1; j < camps.length; j++) expect(hexDistance(camps[i].coord, camps[j].coord)).toBeGreaterThanOrEqual(6);
+    }
   });
 });
 
 describe('WorldModel wasted-island reveal', () => {
-  // Seed 12, radius-40 region — matches src/shared/wasted-terrain-golden.json.
-  // (18, -29) is a wasted-forest hex whose 6 neighbours are also wasted land
-  // (fully interior, so a coastal check on it would be misleading); (17, -30)
-  // borders wasted land (17, -29) but is plain open sea itself.
-  const WASTED_SEED = 12;
-  const wastedForest = { q: 18, r: -29 };
-  const seaBorderingWasted = { q: 17, r: -30 };
+  // Seed 40 has a small wasted island around (-105, 460) — the first window of
+  // src/shared/wasted-terrain-golden.json. (-142, 471) is a wasted-forest hex whose 6
+  // neighbours are also wasted land (fully interior); (-143, 470) is plain open sea that
+  // borders wasted land.
+  const WASTED_SEED = 40;
+  const wastedForest = { q: -142, r: 471 };
+  const seaBorderingWasted = { q: -143, r: 470 };
 
   it('hides a wasted hex as sea before the reveal', () => {
     const model = new WorldModel(WASTED_SEED);
@@ -1264,19 +1408,22 @@ describe('WorldModel wasted-island reveal', () => {
   });
 
   it('never wipes green-island state (buildings, ownership, giant tags) on reveal', () => {
-    // Seed 20260824 (the app's own demo seed): (-5,-7) is a real landfall
-    // near origin; (-12,-17) is a real giant-placeable anchor whose
-    // footprint includes a Forest hex (found by scanning canPlaceGiant), so
-    // this also covers tagGiantHex's Forest->Grass flattening surviving a
-    // reveal.
+    // Seed 20260824 (the app's own demo seed): the landfall nearest the origin, and a
+    // giant-placeable anchor near it whose footprint includes a Forest hex (found by
+    // scanning canPlaceGiant), so this also covers tagGiantHex's Forest->Grass flattening
+    // surviving a reveal.
     const model = new WorldModel(20260824);
-    const settlement = model.foundSettlement('owner-1', 'Owner', 'Home', { q: -5, r: -7 });
+    const landfall = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('owner-1', 'Owner', 'Home', landfall);
 
     // A claimed, non-giant, non-longhouse hex next to home to build a hut on.
-    const buildAt = { q: settlement.q + 1, r: settlement.r };
-    expect(model.placeBuilding(settlement.id, buildAt, 'hut')).toBe(true);
+    const buildAt = neighbors(settlement).find((n) => model.placeBuilding(settlement.id, n, 'hut'))!;
+    expect(buildAt).toBeDefined();
 
-    const giantAnchor = { q: -12, r: -17 };
+    const giantAnchor = findValidGiantAnchor(model, landfall, 3, 40, (a) =>
+      giantCoverage(a).some((c) => model.getTile(c.coord.q, c.coord.r).terrain === 'forest'),
+    )!;
+    expect(giantAnchor).not.toBeNull();
     const footprint = giantCoverage(giantAnchor).map((c) => c.coord);
     const forestHex = footprint.find((c) => model.getTile(c.q, c.r).terrain === 'forest');
     expect(forestHex).toBeDefined();
@@ -1337,5 +1484,76 @@ describe('WorldModel frozen isles flag', () => {
 
     model.setFrozenEnabled(false);
     expect(model.isFrozenEnabled()).toBe(false);
+  });
+});
+
+describe('WorldModel bogland', () => {
+  const DEMO_SEED = 20260824;
+
+  it('lays a bog over the seed terrain: bog moss is land, a lake is neither land nor sea, and tiles seen earlier follow', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    const moss = near;
+    const lake = neighbors(near)[0]!;
+    // Materialise both before the overlay lands: a tile already cached must be rewritten, not left on its seed terrain.
+    const before = model.getTile(moss.q, moss.r);
+    expect(before.bog).toBeUndefined();
+    model.getTile(lake.q, lake.r);
+
+    model.setBogTiles([
+      { q: moss.q, r: moss.r, kind: 'inlet', inDirections: [], outDirection: null, waterEdges: ['E'] },
+      { q: lake.q, r: lake.r, kind: 'lake', inDirections: [], outDirection: null, waterEdges: [] },
+    ]);
+
+    expect(model.terrainOf(moss.q, moss.r)).toBe('bog');
+    expect(model.isLand(moss.q, moss.r)).toBe(true);
+    expect(model.terrainOf(lake.q, lake.r)).toBe('lake');
+    expect(model.isLand(lake.q, lake.r)).toBe(false);
+    expect(model.getTile(moss.q, moss.r).bog?.kind).toBe('inlet');
+    expect(model.getTile(lake.q, lake.r)).toMatchObject({ terrain: 'lake', isCoastalWater: false });
+    expect(model.getBogTile(lake.q, lake.r)?.kind).toBe('lake');
+    expect(model.listBogTiles()).toHaveLength(2);
+
+    // A new call replaces the overlay: the hexes go back to what the seed says.
+    model.setBogTiles([]);
+    expect(model.getBogTile(lake.q, lake.r)).toBeUndefined();
+    expect(model.terrainOf(moss.q, moss.r)).not.toBe('bog');
+  });
+
+  it('refuses to build on a lake', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+    const lake = neighbors(at)[0]!;
+    model.setBogTiles([{ q: lake.q, r: lake.r, kind: 'lake', inDirections: [], outDirection: null, waterEdges: [] }]);
+    expect(model.placeBuilding(settlement.id, lake, 'farm')).toBe(false);
+    expect(model.placeBuilding(settlement.id, lake, 'fishinghut')).toBe(false);
+
+    // The same hex is fine once it is land again: it was the lake that refused, not the claim or the terrain.
+    model.setBogTiles([]);
+    expect(model.placeBuilding(settlement.id, lake, 'farm')).toBe(true);
+  });
+
+  it('generates the home island’s bog with its rivers and keeps giants, camps and the landfall off it', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+
+    const bog = model.listBogTiles();
+    expect(bog.length).toBeGreaterThan(50);
+    expect(bog.some((t) => t.kind === 'lake')).toBe(true);
+    expect(bog.some((t) => t.kind === 'mouth')).toBe(true);
+
+    for (const tile of bog) {
+      const t = model.getTile(tile.q, tile.r);
+      expect(t.terrain).toBe(tile.kind === 'lake' ? 'lake' : 'bog');
+      expect(t.bog).toBe(tile);
+      expect(t.giant, `giant on bog hex ${tile.q},${tile.r}`).toBeUndefined();
+      if (t.camp) expect(tile.kind).toBe('bog');
+    }
+
+    const landfall = model.findLandfall(near)!;
+    expect(model.getBogTile(landfall.q, landfall.r)).toBeUndefined();
+    expect(model.getTile(landfall.q, landfall.r).terrain).toBe('grass');
   });
 });

@@ -232,7 +232,7 @@ public sealed class ArmyService(
             effectiveDestination = move;
         }
 
-        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World, cancellationToken).ConfigureAwait(false);
         var riverTiles = await LoadRiverTilesAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var dispatchGiantIndex = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
@@ -410,7 +410,7 @@ public sealed class ArmyService(
             return new RecallResult(RecallOutcome.NothingToRecall);
         }
 
-        var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
@@ -485,7 +485,7 @@ public sealed class ArmyService(
             return new RetargetFoundingApiResult(RetargetFoundingRejection.NothingToRetarget);
         }
 
-        var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
@@ -575,7 +575,7 @@ public sealed class ArmyService(
         var isPremium = callerUserId is { } userId
             && await _authService.GetIsPremiumAsync(userId, cancellationToken).ConfigureAwait(false) == true;
 
-        var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
@@ -686,7 +686,7 @@ public sealed class ArmyService(
 
         if (teleportTo is { } destination)
         {
-            var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+            var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
             var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
             var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 

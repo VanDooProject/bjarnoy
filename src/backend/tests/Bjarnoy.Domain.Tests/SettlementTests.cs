@@ -918,6 +918,30 @@ public class SettlementTests
     }
 
     [Fact]
+    public void Building_on_a_camp_hex_is_refused_even_when_claimed()
+    {
+        var campHex = new HexCoord(1, 0);
+        var camps = new CampIndex([new Camp(campHex, CampFamilies.Sealhaulout, 1, TileOrientation.E)]);
+        var settlement = Found();
+
+        Assert.True(settlement.Claims(campHex), "sanity: the claim reaches the camp hex");
+
+        var refused = settlement.PlanBuild(
+            BuildingType.Farm, campHex, Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps);
+        Assert.Equal(BuildRejection.HexOccupiedByCamp, refused.Rejection);
+
+        // A weak camp counts too (every camp is guarded for now), and only its own hex is refused.
+        var elsewhere = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps);
+        Assert.NotEqual(BuildRejection.HexOccupiedByCamp, elsewhere.Rejection);
+
+        // No camp index on hand: the same hex is not refused for a camp.
+        var noIndex = settlement.PlanBuild(
+            BuildingType.Farm, campHex, Terrain.Grass, T0, Guid.CreateVersion7());
+        Assert.NotEqual(BuildRejection.HexOccupiedByCamp, noIndex.Rejection);
+    }
+
+    [Fact]
     public void Building_on_the_wrong_terrain_is_refused()
     {
         var settlement = Found();

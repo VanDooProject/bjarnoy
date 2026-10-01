@@ -1,0 +1,37 @@
+{
+  "title": "Quests",
+  "progress": "{done} of {total}",
+  "claim": "Claim",
+  "claiming": "Claiming…",
+  "ready": "Ready to claim",
+  "alsoReady": "Also ready",
+  "rewardLabel": "Reward",
+  "overflowNote": "Some of this reward won't fit in storage.",
+  "claimError": "Couldn't claim that reward. Try again.",
+  "items": {
+    "producers3": {
+      "title": "Build 3 resource producers",
+      "hint": "Place Lumberjacks, Quarries or Farms on free hexes and let them finish building."
+    },
+    "longhouse2": {
+      "title": "Upgrade your Longhouse to level 2",
+      "hint": "Open the Longhouse and choose Upgrade."
+    },
+    "storagehouse1": {
+      "title": "Build a Storage House",
+      "hint": "Place a Storage House on an empty grass hex."
+    },
+    "producers6": {
+      "title": "Build 6 resource producers",
+      "hint": "Keep adding Lumberjacks, Quarries and Farms until six of them stand."
+    },
+    "longhouse3": {
+      "title": "Upgrade your Longhouse to level 3",
+      "hint": "Open the Longhouse and choose Upgrade again."
+    },
+    "longhouse5": {
+      "title": "Upgrade your Longhouse to level 5",
+      "hint": "Keep upgrading the Longhouse. Each level takes a little longer."
+    }
+  }
+}

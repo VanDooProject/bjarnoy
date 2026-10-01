@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { Texture } from 'pixi.js';
 import {
   baseTextureFor,
+  BOG_TEXTURE_KEYS,
+  bogOrientationFor,
+  bogTextureKey,
+  campArtFor,
   classifyFamilyClips,
   classifyFamilyFrames,
   collapseLetteredLevels,
@@ -11,6 +15,7 @@ import {
   riverBuildingArtFor,
   riverTexturesFor,
   mergeTileTextures,
+  normalizeBogFrames,
   textureKeyFor,
   topAnimFor,
   topAnimTextures,
@@ -21,7 +26,7 @@ import {
   type TileTextures,
 } from './textures';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
-import type { RiverTile, Tile } from './types';
+import type { BogTile, RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
 
 /** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
@@ -97,13 +102,46 @@ describe('riverArtFor', () => {
   });
 
   it('resolves a representable Confluence tile through confluenceOrientationOf (y_narrow), not the untransformed fallback', () => {
-    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'SE' };
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['SE', 'SW'], outDirection: 'NW' };
     const result = riverArtFor(tile, null);
 
     expect(result.shape).toBe('confluencenarrow');
     expect(result.orientation).toBe('E');
     // The untransformed fallback this used to always return.
-    expect(result.orientation).not.toBe('SE');
+    expect(result.orientation).not.toBe('NW');
+  });
+
+  it('draws two streams joining as the smallwide Y (narrow or wide) with the same rotation as the river Y', () => {
+    const narrow: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['SE', 'SW'], outDirection: 'NW', width: 'widen' };
+    expect(riverArtFor(narrow, null)).toEqual({ shape: 'widen_yn', orientation: 'E' });
+    const wide: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'E', width: 'widen' };
+    expect(riverArtFor(wide, null).shape).toBe('widen_yw');
+  });
+
+  it('picks the stream families for stream tiles, with the river tile rotation', () => {
+    const straight = riverTile('straight', 'E', 'W');
+    expect(riverArtFor({ ...straight, width: 'stream' }, null)).toEqual({
+      shape: 'small_straight',
+      orientation: riverArtFor(straight, null).orientation,
+    });
+    const bend = riverTile('bend', 'NW', 'SW');
+    expect(riverArtFor({ ...bend, width: 'stream' }, null).shape).toBe('small_bend');
+    const bend60 = riverTile('bend60', 'NE', 'NW');
+    expect(riverArtFor({ ...bend60, width: 'stream' }, null).shape).toBe('small_bend60');
+  });
+
+  it('draws a widening straight from its stream (inflow) end and a widening mouth toward the sea', () => {
+    const widen = { ...riverTile('straight', 'E', 'W'), width: 'widen' as const };
+    expect(riverArtFor(widen, null)).toEqual({ shape: 'widen_straight', orientation: 'NW' });
+    const mouth: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['E'], outDirection: null, width: 'widen' };
+    expect(riverArtFor(mouth, 'W')).toEqual({ shape: 'widen_straight', orientation: 'NW' });
+  });
+
+  it('draws a river meeting the sea head-on as a delta, but a bent mouth and a lava mouth as before', () => {
+    const mouth: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['E'], outDirection: null };
+    expect(riverArtFor(mouth, 'W')).toEqual({ shape: 'delta', orientation: 'NW' });
+    expect(riverArtFor(mouth, 'NW').shape).toBe('bend');
+    expect(riverArtFor({ ...mouth, wasted: true }, 'W').shape).toBe('straight');
   });
 
   it('resolves a Confluence tile matching the wide junction (ywide), not the narrow one', () => {
@@ -113,6 +151,7 @@ describe('riverArtFor', () => {
     const result = riverArtFor(tile, null);
 
     expect(result.shape).toBe('confluencewide');
+    expect(result.orientation).toBe('NW');
   });
 
   it('falls back to the untransformed outDirection for a Confluence angle neither asset can represent', () => {
@@ -196,6 +235,15 @@ describe('textureKeyFor: a Sawmill never resolves to the grass family', () => {
   it('uses whatever key a riverArt override supplies', () => {
     const tile: Tile = { q: 0, r: 0, terrain: 'grass', buildingType: 'sawmill' };
     expect(textureKeyFor(tile, { key: 'sawmillbend60', orientation: 'NE' })).toBe('sawmillbend60');
+  });
+});
+
+describe('riverBuildingArtFor on streams', () => {
+  it('has no building art on a stream or widening tile', () => {
+    const straight = { ...riverTile('straight', 'E', 'W') };
+    expect(riverBuildingArtFor('sawmill', straight)).toBeDefined();
+    expect(riverBuildingArtFor('sawmill', { ...straight, width: 'stream' })).toBeUndefined();
+    expect(riverBuildingArtFor('cropmill', { ...straight, width: 'widen' })).toBeUndefined();
   });
 });
 
@@ -704,6 +752,17 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
         confluencewide: orientationMap('r' as unknown as never),
+        small_straight: orientationMap('r' as unknown as never),
+        small_straight_meander: orientationMap('r' as unknown as never),
+        small_bend: orientationMap('r' as unknown as never),
+        small_bend_meander: orientationMap('r' as unknown as never),
+        small_bend60: orientationMap('r' as unknown as never),
+        small_bend60_loop: orientationMap('r' as unknown as never),
+        widen_straight: orientationMap('r' as unknown as never),
+        widen_yn: orientationMap('r' as unknown as never),
+        widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
+        delta: orientationMap('r' as unknown as never),
       },
       riverTop: {
         straight: orientationMap('r' as unknown as never),
@@ -718,6 +777,17 @@ describe('baseTextureFor wasted mountain/giant base', () => {
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
         confluencewide: orientationMap('r' as unknown as never),
+        small_straight: orientationMap('r' as unknown as never),
+        small_straight_meander: orientationMap('r' as unknown as never),
+        small_bend: orientationMap('r' as unknown as never),
+        small_bend_meander: orientationMap('r' as unknown as never),
+        small_bend60: orientationMap('r' as unknown as never),
+        small_bend60_loop: orientationMap('r' as unknown as never),
+        widen_straight: orientationMap('r' as unknown as never),
+        widen_yn: orientationMap('r' as unknown as never),
+        widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
+        delta: orientationMap('r' as unknown as never),
       },
       lavaRiverBase: {},
       lavaRiverTop: {},
@@ -833,6 +903,17 @@ describe('riverTexturesFor lava-island shapes', () => {
         springsaddleback: orientationMap('plain-spring-base' as unknown as never),
         confluencenarrow: orientationMap('plain-river-base' as unknown as never),
         confluencewide: orientationMap('plain-river-base' as unknown as never),
+        small_straight: orientationMap('plain-river-base' as unknown as never),
+        small_straight_meander: orientationMap('plain-river-base' as unknown as never),
+        small_bend: orientationMap('plain-river-base' as unknown as never),
+        small_bend_meander: orientationMap('plain-river-base' as unknown as never),
+        small_bend60: orientationMap('plain-river-base' as unknown as never),
+        small_bend60_loop: orientationMap('plain-river-base' as unknown as never),
+        widen_straight: orientationMap('plain-river-base' as unknown as never),
+        widen_yn: orientationMap('plain-river-base' as unknown as never),
+        widen_yw: orientationMap('plain-river-base' as unknown as never),
+        riverstream: orientationMap('plain-river-base' as unknown as never),
+        delta: orientationMap('plain-river-base' as unknown as never),
       },
       riverTop: {
         straight: orientationMap('plain-river-top' as unknown as never),
@@ -847,6 +928,17 @@ describe('riverTexturesFor lava-island shapes', () => {
         springsaddleback: orientationMap('plain-spring-top' as unknown as never),
         confluencenarrow: orientationMap('plain-river-top' as unknown as never),
         confluencewide: orientationMap('plain-river-top' as unknown as never),
+        small_straight: orientationMap('plain-river-top' as unknown as never),
+        small_straight_meander: orientationMap('plain-river-top' as unknown as never),
+        small_bend: orientationMap('plain-river-top' as unknown as never),
+        small_bend_meander: orientationMap('plain-river-top' as unknown as never),
+        small_bend60: orientationMap('plain-river-top' as unknown as never),
+        small_bend60_loop: orientationMap('plain-river-top' as unknown as never),
+        widen_straight: orientationMap('plain-river-top' as unknown as never),
+        widen_yn: orientationMap('plain-river-top' as unknown as never),
+        widen_yw: orientationMap('plain-river-top' as unknown as never),
+        riverstream: orientationMap('plain-river-top' as unknown as never),
+        delta: orientationMap('plain-river-top' as unknown as never),
       },
       lavaRiverBase: {
         straight: orientationMap('lava-base' as unknown as never),
@@ -951,6 +1043,17 @@ describe('riverTexturesFor river-art variants', () => {
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
         confluencewide: orientationMap('r' as unknown as never),
+        small_straight: orientationMap('r' as unknown as never),
+        small_straight_meander: orientationMap('r' as unknown as never),
+        small_bend: orientationMap('r' as unknown as never),
+        small_bend_meander: orientationMap('r' as unknown as never),
+        small_bend60: orientationMap('r' as unknown as never),
+        small_bend60_loop: orientationMap('r' as unknown as never),
+        widen_straight: orientationMap('r' as unknown as never),
+        widen_yn: orientationMap('r' as unknown as never),
+        widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
+        delta: orientationMap('r' as unknown as never),
       },
       riverTop: {
         straight: orientationMap('plain-top' as unknown as never),
@@ -965,6 +1068,17 @@ describe('riverTexturesFor river-art variants', () => {
         springsaddleback: orientationMap('r' as unknown as never),
         confluencenarrow: orientationMap('r' as unknown as never),
         confluencewide: orientationMap('r' as unknown as never),
+        small_straight: orientationMap('r' as unknown as never),
+        small_straight_meander: orientationMap('r' as unknown as never),
+        small_bend: orientationMap('r' as unknown as never),
+        small_bend_meander: orientationMap('r' as unknown as never),
+        small_bend60: orientationMap('r' as unknown as never),
+        small_bend60_loop: orientationMap('r' as unknown as never),
+        widen_straight: orientationMap('r' as unknown as never),
+        widen_yn: orientationMap('r' as unknown as never),
+        widen_yw: orientationMap('r' as unknown as never),
+        riverstream: orientationMap('r' as unknown as never),
+        delta: orientationMap('r' as unknown as never),
       },
       lavaRiverBase: {},
       lavaRiverTop: {},
@@ -1224,5 +1338,241 @@ describe('level-1-first loading: sparse top/baseIndexed arrays', () => {
     // must read animTop's index 1 too, not animTop[0] (undefined) or throw.
     expect(topTextureFor(textures, huntTile(0))).toBe('hut-level1-top');
     expect(topAnimFor(textures, huntTile(0))).toEqual({ textures: ['f0'], fps: 6, playback: 'loop' });
+  });
+});
+
+// Wildlife camps: an animated topping at art level 1 (guarded). The guarded art only ships
+// the rotations that show the animals best (wolfden: SW and SE; bearrapids: E, NE and SE), and
+// campArtFor maps the tile's own orientation onto them, reading the kept ones off the frames.
+describe('wildlife camps', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+
+  function emptyTileTextures(): TileTextures {
+    const orientationMap = <T,>(value: T) => Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+    return {
+      base: {},
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      riverBase: {},
+      riverTop: {},
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+  }
+
+  /** `family` with a cleared frame in every orientation and a guarded frame (and clip) only in `kept`. */
+  function withCamp(textures: TileTextures, family: string, kept: readonly string[]) {
+    const top: Record<string, unknown[]> = {};
+    const anim: Record<string, unknown[]> = {};
+    for (const o of ORIENTATIONS) {
+      top[o] = kept.includes(o) ? [`${family}-${o}-cleared`, `${family}-${o}-guarded`] : [`${family}-${o}-cleared`];
+      anim[o] = kept.includes(o) ? [undefined, { textures: [`${family}-${o}-f0`], fps: 6, playback: 'loop' }] : [undefined];
+    }
+    (textures.top as Record<string, unknown>)[family] = top;
+    (textures.animTop as Record<string, unknown>)[family] = anim;
+  }
+
+  function campTile(family: string, orientation: Tile['orientation'], terrain: Tile['terrain'] = 'grass'): Tile {
+    return { q: 0, r: 0, terrain, orientation, camp: { family, level: 3, orientation: orientation!, strong: true, guardRange: 5 } };
+  }
+
+  it('maps the tile orientation onto the guarded rotations by modulo, in TILE_ORIENTATIONS order', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'wolfden', ['SE', 'SW']);
+    // kept in TILE_ORIENTATIONS order: [SW, SE]; index % 2 picks SW for E/NW/SW, SE for NE/W/SE.
+    const mapped = ORIENTATIONS.map((o) => campArtFor(textures, campTile('wolfden', o), undefined)?.orientation);
+    expect(mapped).toEqual(['SW', 'SE', 'SW', 'SE', 'SW', 'SE']);
+  });
+
+  it('a camp with one kept rotation always takes it; with no art loaded yet it keeps its own', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'eagleeyrie', ['SW']);
+    for (const o of ORIENTATIONS) expect(campArtFor(textures, campTile('eagleeyrie', o, 'mountain'), undefined)?.orientation).toBe('SW');
+    expect(campArtFor(emptyTileTextures(), campTile('wolfden', 'NW'), undefined)?.orientation).toBe('NW');
+  });
+
+  it('renders the camp family at the guarded level, and its clip', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'wolfden', ['SE', 'SW']);
+    const tile = { ...campTile('wolfden', 'SW'), variant: 2 };
+    expect(topTextureFor(textures, tile)).toBe('wolfden-SW-guarded');
+    expect(topAnimFor(textures, tile)).toEqual({ textures: ['wolfden-SW-f0'], fps: 6, playback: 'loop' });
+  });
+
+  it('a tile without a camp is untouched by the camp lookup', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'wolfden', ['SE']);
+    expect(campArtFor(textures, { q: 0, r: 0, terrain: 'grass', orientation: 'SE' }, undefined)).toBeUndefined();
+    expect(topTextureFor(textures, { q: 0, r: 0, terrain: 'grass', orientation: 'SE' })).toBeUndefined();
+  });
+
+  it('the walrus haul-out is drawn with the seal haul-out art until its own exists', () => {
+    expect(KEY_FAMILY.walrushaulout).toBe('sealhaulout');
+    expect(KEY_FAMILY.otterslide).toBe('otterslide');
+  });
+
+  describe('bearrapids on a river', () => {
+    const straight = (inDirection: Tile['orientation'], outDirection: Tile['orientation']): RiverTile => ({
+      q: 0,
+      r: 0,
+      shape: 'straight',
+      inDirections: [inDirection!],
+      outDirection: outDirection!,
+    });
+
+    it('the otter slide is a river camp like the bear rapids: it keeps its channel and brings its own river base', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'otterslide', ['E', 'NE', 'SE']);
+      const art = campArtFor(textures, campTile('otterslide', 'E', 'grass'), straight('W', 'E'));
+      expect(art?.orientation).toBe('SE');
+      expect(art?.riverArt).toEqual({ key: 'otterslide', orientation: 'SE' });
+      expect(campArtFor(textures, campTile('otterslide', 'E'), undefined)).toBeUndefined();
+    });
+
+    it('keeps its channel: the kept rotation with the river\'s own index mod 3 (a straight channel is symmetric)', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'bearrapids', ['E', 'NE', 'SE']);
+      // The plain straight art for a river flowing E<->W is orientation `straightOrientationOf(E)` = NW, whose
+      // channel (index 2, mod 3 = 2) is SE's (index 5, mod 3 = 2).
+      const art = campArtFor(textures, campTile('bearrapids', 'E', 'grass'), straight('W', 'E'));
+      expect(art?.orientation).toBe('SE');
+      expect(art?.riverArt).toEqual({ key: 'bearrapids', orientation: 'SE' });
+      // Every straight river maps to one of the three kept rotations, and opposite flows agree.
+      for (const flow of [
+        ['E', 'W'],
+        ['NE', 'SW'],
+        ['NW', 'SE'],
+      ] as const) {
+        const forward = campArtFor(textures, campTile('bearrapids', 'E'), straight(flow[0], flow[1]));
+        const backward = campArtFor(textures, campTile('bearrapids', 'E'), straight(flow[1], flow[0]));
+        expect(forward?.orientation).toBe(backward?.orientation);
+        expect(['E', 'NE', 'SE']).toContain(forward?.orientation);
+      }
+    });
+
+    it('is drawn as plain river off a straight river tile (or a lava one)', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'bearrapids', ['E', 'NE', 'SE']);
+      const tile = campTile('bearrapids', 'E');
+      expect(campArtFor(textures, tile, undefined)).toBeUndefined();
+      expect(campArtFor(textures, tile, { ...straight('W', 'E'), shape: 'bend' })).toBeUndefined();
+      expect(campArtFor(textures, tile, { ...straight('W', 'E'), wasted: true })).toBeUndefined();
+    });
+
+    it('uses its own river base and top at the guarded level', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'bearrapids', ['E', 'NE', 'SE']);
+      const bases = Object.fromEntries(ORIENTATIONS.map((o) => [o, [`base-${o}-0`, `base-${o}-1`]]));
+      (textures.baseIndexed as Record<string, unknown>).bearrapids = bases;
+      const tile = campTile('bearrapids', 'E');
+      const art = campArtFor(textures, tile, straight('W', 'E'))!;
+      const drawn = { ...tile, orientation: art.orientation };
+      expect(baseTextureFor(textures, drawn, art.riverArt)).toBe('base-SE-1');
+      expect(topTextureFor(textures, drawn, art.riverArt)).toBe('bearrapids-SE-guarded');
+    });
+  });
+});
+
+// The bog set (3D_assets docs/bog-tiles.md): nine families, each a plain frame plus `variantNNN` frames numbered from 001
+// (no variant000), the plain lake's `variant004` fish weir and the two boat clips' static frames among them.
+describe('bog art', () => {
+  it('lines every bog family up variant by variant, plain first, dropping what the game does not roll', () => {
+    const frames: FamilyFrame<string>[] = [];
+    for (const suffix of ['', '_variant001', '_variant002', '_variant003', '_variant004', '_variant005']) {
+      frames.push(frame(`boglake_E${suffix}`, 'top'));
+      frames.push(frame(`boglake_E${suffix}_base`, 'base'));
+    }
+    const normalised = normalizeBogFrames(frames, 3);
+    // 4 looks x (top + base): the fish weir (004) and the ore boat (005) are gone.
+    expect(normalised.map((f) => f.name).sort()).toEqual(
+      [
+        'boglake_E',
+        'boglake_E_base',
+        'boglake_E_variant000',
+        'boglake_E_variant000_base',
+        'boglake_E_variant001',
+        'boglake_E_variant001_base',
+        'boglake_E_variant002',
+        'boglake_E_variant002_base',
+      ].sort(),
+    );
+    // ...and the classifier now sees the contiguous 0..3 numbering it needs (it throws on a gap).
+    const classified = classifyFamilyFrames(normalised);
+    // (The classified values are the original frames, in order: plain, variant001, 002, 003.)
+    expect(classified.top!.E).toEqual(['boglake_E', 'boglake_E_variant001', 'boglake_E_variant002', 'boglake_E_variant003']);
+    expect(classified.baseIndexed!.E).toEqual([
+      'boglake_E_base',
+      'boglake_E_variant001_base',
+      'boglake_E_variant002_base',
+      'boglake_E_variant003_base',
+    ]);
+  });
+
+  it('keeps the moss family as one base under eight decorated tops', () => {
+    const frames: FamilyFrame<string>[] = [frame('bog_W_base', 'base'), frame('bog_W', 'top')];
+    for (let v = 1; v <= 8; v++) frames.push(frame(`bog_W_variant00${v}`, 'top'));
+    const classified = classifyFamilyFrames(normalizeBogFrames(frames));
+    expect(classified.base!.W).toBe('bog_W_base');
+    expect(classified.top!.W).toHaveLength(9);
+    expect(classified.top!.W[8]).toBe('bog_W_variant008');
+  });
+
+  it('gives every bog family its own key and family, all of them terrain keys', () => {
+    for (const key of BOG_TEXTURE_KEYS) expect(KEY_FAMILY[key], key).toBeDefined();
+    expect(KEY_FAMILY.bog).toBe('bog');
+    expect(KEY_FAMILY.lake).toBe('boglake');
+    expect(KEY_FAMILY.lakemouth).toBe('boglake_mouth');
+    expect(KEY_FAMILY.bogcreekbend).toBe('bogcreek_bend');
+    expect(new Set([...BOG_TEXTURE_KEYS].map((k) => KEY_FAMILY[k])).size).toBe(BOG_TEXTURE_KEYS.size);
+  });
+
+  const bogTile = (kind: BogTile['kind'], inDirections: BogTile['inDirections'] = [], outDirection: BogTile['outDirection'] = null, waterEdges: BogTile['waterEdges'] = []): BogTile => ({
+    q: 0,
+    r: 0,
+    kind,
+    inDirections,
+    outDirection,
+    waterEdges,
+  });
+
+  it('picks the texture key from the kind: shores by water edges, creeks straight or bend by their directions', () => {
+    expect(bogTextureKey(bogTile('bog'))).toBe('bog');
+    expect(bogTextureKey(bogTile('lake'))).toBe('lake');
+    expect(bogTextureKey(bogTile('inlet', [], null, ['E']))).toBe('lakeinlet');
+    expect(bogTextureKey(bogTile('shore', [], null, ['E', 'NE']))).toBe('lakeshore');
+    expect(bogTextureKey(bogTile('half', [], null, ['E', 'NE', 'NW']))).toBe('lakehalf');
+    expect(bogTextureKey(bogTile('mouth', ['W'], 'E', ['E']))).toBe('lakemouth');
+    expect(bogTextureKey(bogTile('creekspring', [], 'E'))).toBe('bogcreekspring');
+    // Opposite in/out is the straight crossing; 60 degrees off straight (two indices apart) is the bend.
+    expect(bogTextureKey(bogTile('creek', ['W'], 'E'))).toBe('bogcreek');
+    expect(bogTextureKey(bogTile('creek', ['E'], 'SW'))).toBe('bogcreekbend');
+  });
+
+  it('rotates each family the way its art was measured (see types.test.ts for the measurements)', () => {
+    // Water to the SE, shore with SE, E: the run starts at SE and continues to E (5, 0): file (5 - 5) = E.
+    expect(bogOrientationFor(bogTile('shore', [], null, ['SE', 'E']), 'NW')).toBe('E');
+    // A mouth to the lake in the SE uses the inlet's file for that water direction.
+    expect(bogOrientationFor(bogTile('mouth', ['NW'], 'SE', ['SE']), 'W')).toBe('E');
+    // The creeks reuse the river conventions.
+    expect(bogOrientationFor(bogTile('creek', ['W'], 'E'), 'W')).toBe('SE');
+    expect(bogOrientationFor(bogTile('creek', ['E'], 'W'), 'W')).toBe('NW');
+    expect(bogOrientationFor(bogTile('creek', ['E'], 'NW'), 'W')).toBe('NW');
+    expect(bogOrientationFor(bogTile('creekspring', [], 'E'), 'W')).toBe('NW');
+    // Moss and open water have no direction: they keep the tile's own cosmetic rotation.
+    expect(bogOrientationFor(bogTile('bog'), 'SW')).toBe('SW');
+    expect(bogOrientationFor(bogTile('lake'), 'NE')).toBe('NE');
+  });
+
+  it('draws a bog tile with the family of its kind, and a building on it with the building family', () => {
+    const shore: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'SW', variant: 0, bog: bogTile('inlet', [], null, ['E']) };
+    expect(textureKeyFor(shore)).toBe('lakeinlet');
+    expect(textureKeyFor({ ...shore, buildingType: 'hut' })).toBe('hut');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'lake' })).toBe('lake');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'bog' })).toBe('bog');
   });
 });

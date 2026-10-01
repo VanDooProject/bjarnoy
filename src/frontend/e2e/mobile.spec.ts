@@ -221,6 +221,19 @@ test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
 test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
   test.use({ viewport: { width: 667, height: 375 }, hasTouch: true, isMobile: true });
 
+  // The corner-docked checklist used to stand ~150px tall here and cover
+  // the landfall plot, so the founding tap hit the tray. The plot's own
+  // screen point must reach the canvas, and a tap there must found.
+  test('the slim checklist leaves the landing plot tappable', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/');
+    await waitForMapReady(page);
+    expect(await plotHitsCanvas(page)).toBe(true);
+
+    await claimLandfall(page);
+    await expect(page.getByTestId('onboarding-checklist')).toContainText('Step 2 of 3');
+  });
+
   // guidance-chip-edge: this short-but-wide viewport is where "centred
   // above the arrow" (the old mobile CSS fallback) pushed the chip up under
   // the HUD bar, off the top of the screen entirely.

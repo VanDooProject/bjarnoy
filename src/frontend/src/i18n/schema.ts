@@ -3,6 +3,7 @@ import catalogue from './locales/en/catalogue.json';
 import landing from './locales/en/landing.json';
 import worlds from './locales/en/worlds.json';
 import onboarding from './locales/en/onboarding.json';
+import quests from './locales/en/quests.json';
 import demoModeBadge from './locales/en/demoModeBadge.json';
 import login from './locales/en/login.json';
 import register from './locales/en/register.json';
@@ -41,6 +42,7 @@ export interface MessageSchema {
   landing: typeof landing;
   worlds: typeof worlds;
   onboarding: typeof onboarding;
+  quests: typeof quests;
   demoModeBadge: typeof demoModeBadge;
   login: typeof login;
   register: typeof register;

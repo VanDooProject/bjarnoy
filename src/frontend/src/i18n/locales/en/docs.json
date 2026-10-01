@@ -17,6 +17,14 @@
         "title": "Wasted lands",
         "description": "The endgame: Utgard, the islands that rise from the sea, and what they are made of."
       },
+      "wildlifeCamps": {
+        "title": "Wildlife camps",
+        "description": "The beasts that hold the land on unclaimed islands: every camp, guarded and cleared, how far each one reaches, and what clearing it does."
+      },
+      "bogLands": {
+        "title": "Bog lands",
+        "description": "Moss ground, creeks and bog lakes, where bog iron is dug and clay is cut."
+      },
       "showcase": {
         "title": "Showcase",
         "description": "A player-first pitch for the game, plus a look under the hood for anyone curious how it's built."
@@ -302,6 +310,209 @@
       "bend": "Bend",
       "bend60": "Sharp bend",
       "spring": "Spring"
+    }
+  },
+  "wildlifeCamps": {
+    "title": "Wildlife camps",
+    "intro": "Unclaimed islands are not empty. Wolves, bears, seals and worse hold them, each pack in a camp of its own. You may land and settle, but no tower goes up near a guarded camp, so on a big island you clear the camps in your way and build where the land is free.",
+    "status": "Camps now appear on the map, guarded, on the ground each one belongs to. Clearing them, their loot and the tower rule below are still to come; the bog camps (moose mire, beaver lodge, crane dance) stand on plain bog moss.",
+    "rules": {
+      "heading": "How a camp works",
+      "towers": "A guarded camp holds the land around it: no tower can be built within its range (the wolves eat the builders). Beyond that range the island is open to build on.",
+      "range": "How far a camp reaches depends on its level, which is rolled at random when the camp appears. A strong camp can hold a wide stretch of land; a weak one only its nearest hexes.",
+      "bigIslands": "A small island may be held entirely by one camp. On a big island you can clear just the camps in the way and put up towers where the land is then free.",
+      "states": "A camp has two states: guarded, with its animals, and cleared. A half-cleared or a respawned camp still counts as guarded.",
+      "building": "Clearing a camp pays loot. Once it is cleared you can build on its hex, and the building replaces the camp for as long as it stands.",
+      "respawn": "The animals come back only once the hex has no building and lies outside every realm. A cleared camp inside a realm stays cleared.",
+      "neverBuilt": "The eagle's eyrie on its sea stack and Fenrir's brood in the wastes are never built on: the empty nest stays on the map, and Fenrir's brood keeps coming back."
+    },
+    "camps": {
+      "heading": "The camps",
+      "body": "Each kind of ground has its own camps, a strong one and sometimes a weak one. Filter them by strength or ground, switch a camp between guarded and cleared, and turn it through the six directions a tile can face.",
+      "rotations": "A guarded camp only has art for the directions that show its animals best; the other directions are greyed out, and on the map the camp is turned to one of those. A cleared camp can face any direction."
+    },
+    "state": {
+      "all": "All camps",
+      "label": "State",
+      "guarded": "Guarded",
+      "cleared": "Cleared"
+    },
+    "strength": {
+      "label": "Strength",
+      "strong": "Strong",
+      "weak": "Weak",
+      "help": "Strong camps roll high levels and hold a wide stretch of land; no new player lands near one. Weak camps roll low and hold only their nearest hexes: a new player's first, safe fights."
+    },
+    "filters": {
+      "all": "All",
+      "ground": "Ground",
+      "none": "No camp matches these filters."
+    },
+    "range": "Guards {min} to {max} hexes around it, by its level (1 to {levels}).",
+    "loot": {
+      "label": "Loot",
+      "food": "Food",
+      "stone": "Stone",
+      "wood": "Wood",
+      "iron": "Iron",
+      "more": "{kind} ++",
+      "moreHint": "A larger share of this than other camps pay",
+      "note": "Clearing a camp pays loot. Every camp gives food from the hunt and a strong camp adds iron, the gear of earlier settlers its pack has eaten; some camps add what their ground holds, and ++ marks a camp's biggest share. How much grows with the camp's level; the amounts are still to be set."
+    },
+    "camera": "Facing",
+    "notKept": "Guarded art only exists for the directions that show the animals best",
+    "grounds": {
+      "grass": "Grass",
+      "sand": "Sand",
+      "forest": "Forest",
+      "mountain": "Mountain",
+      "wasteland": "Wasteland",
+      "bog": "Bog",
+      "riverStraight": "River"
+    },
+    "list": {
+      "wolfden": {
+        "name": "Wolf den",
+        "guards": "A wolf howling from the boulder crown, two wolves on the prowl and two pups."
+      },
+      "bearrapids": {
+        "name": "Bear rapids",
+        "guards": "A bear fishing from a boulder in the river, a bear and a cub on the north bank, another cub across the water."
+      },
+      "sealhaulout": {
+        "name": "Seal haul-out",
+        "guards": "Five seals basking on the slabs and the sand, two heaving themselves along, and three white pups."
+      },
+      "walrushaulout": {
+        "name": "Walrus haul-out",
+        "guards": "Walrus bulls with long tusks on the shore, one rearing up to fight, among the bones of their kills. Drawn with the seal art until its own is ready."
+      },
+      "boarwallow": {
+        "name": "Boar wallow",
+        "guards": "Two boars lying in the mud, one on patrol, and three striped piglets."
+      },
+      "eagleeyrie": {
+        "name": "Eagle eyrie",
+        "guards": "An eagle and two eaglets on a nest on top of a sea stack, while its mate circles overhead."
+      },
+      "fenrirbrood": {
+        "name": "Fenrir's brood",
+        "guards": "Black wolves with ember eyes on an ash floor: one on guard, two on the prowl, and two pups."
+      },
+      "moosemire": {
+        "name": "Moose mire",
+        "guards": "A bull moose wading, a cow browsing and two calves."
+      },
+      "beaverlodge": {
+        "name": "Beaver lodge",
+        "guards": "Two beavers swimming by the lodge and two more on the bank."
+      },
+      "cranedance": {
+        "name": "Crane dance",
+        "guards": "A pair of cranes dancing, three standing, one walking, and a juvenile."
+      },
+      "deerglade": {
+        "name": "Deer glade",
+        "guards": "A stag by the salt lick, two hinds grazing and a spotted fawn."
+      },
+      "harewarren": {
+        "name": "Hare warren",
+        "guards": "Two hares sitting up on the warren mound, three bounding round it and one grazing."
+      },
+      "otterslide": {
+        "name": "Otter slide",
+        "guards": "One otter swimming, one on the drift log with a fish, one running the bank and one waiting at the holt."
+      }
+    }
+  },
+  "bogLands": {
+    "title": "Bog lands",
+    "intro": "Wet moss ground (Old Norse mýrr), cut by slow creeks and dark lakes. Rust-coloured seeps mark the bog iron that is dug here, and clay is cut from the lake shores. Bogs are part of the living lands and meet grass at a hex edge.",
+    "status": "Bogs now appear in worlds: a lake with a river running through it on most big islands, and a lake with a bog ring where an island encloses a pocket of sea. The bog buildings (the bog-ore works, the Clay Brickworks on bog and the lake Fisher Hut) are still to come.",
+    "looks": "Look",
+    "camera": "Facing",
+    "stage": "Stage",
+    "ground": {
+      "heading": "Bog ground",
+      "body": "Plain moss, with decorated looks mixed across a bog region the way the wasteland mixes its looks. The ore seep and the seep chain are where bog iron shows at the surface.",
+      "looks": {
+        "plain": "Plain moss",
+        "mire1": "Open mire 1",
+        "mire2": "Open mire 2",
+        "mire3": "Open mire 3",
+        "oreSeep": "Ore seep",
+        "fen": "Fen",
+        "peat": "Peat cuttings",
+        "copse": "Birch copse",
+        "seepChain": "Seep chain"
+      }
+    },
+    "water": {
+      "heading": "Creeks and bog lakes",
+      "body": "Creeks have a river's profile, so they join rivers without a seam; lakes are open water with shore tiles around them. All of them are water tiles.",
+      "shape": "Tile",
+      "shapes": {
+        "creek": {
+          "name": "Creek",
+          "body": "A straight creek. Its looks add sedge banks or a reed bed."
+        },
+        "creekBend": {
+          "name": "Creek bend",
+          "body": "A creek turning 120°. Creeks never turn sharper and never fork."
+        },
+        "spring": {
+          "name": "Spring",
+          "body": "Where a creek begins: a round pool that wells up, ringed by pale stones."
+        },
+        "lake": {
+          "name": "Lake",
+          "body": "Open water. Its looks add an islet, a floating moss mat, a reed island or a fish weir."
+        },
+        "inlet": {
+          "name": "Inlet shore",
+          "body": "A shore with one water edge; one look has a clay bank."
+        },
+        "shore": {
+          "name": "Shore",
+          "body": "A shore with two water edges; one look has a clay bank."
+        },
+        "half": {
+          "name": "Half shore",
+          "body": "A shore with three water edges, where the lake Fisher Hut stands."
+        },
+        "mouth": {
+          "name": "Creek mouth",
+          "body": "Where a creek runs into a lake, arriving opposite the inlet's water edge."
+        }
+      }
+    },
+    "buildings": {
+      "heading": "Buildings on the bog",
+      "body": "Three buildings stand on bog ground. Step through the stages each one grows through as it is built up.",
+      "bogoreworks": {
+        "name": "Bog-ore works",
+        "body": "The iron producer: from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake tile next to it adds to its output."
+      },
+      "fisherhut": {
+        "name": "Fisher Hut (lake)",
+        "body": "The Fisher Hut, on stilts over a bog-lake shore. The same building as the coastal one, with its own art."
+      },
+      "claybrickworks": {
+        "name": "Clay Brickworks",
+        "body": "Clay dug from the bog and fired into bricks: a new player's first source of stone. It now stands on bog ground instead of grass."
+      }
+    },
+    "rules": {
+      "heading": "How bogs are laid out",
+      "body": "The bog tiles only fit together in certain ways, so the map follows a few rules:",
+      "waterEdges": "A bog tile touches at most three water tiles, and they are next to each other.",
+      "lakesApart": "Separate lakes are at least two tiles apart.",
+      "creeks": "Creeks run straight or bend 120°, and end in a spring or a lake mouth.",
+      "mouth": "A creek meets a lake only at a mouth.",
+      "weir": "The fish weir only appears near a lake Fisher Hut.",
+      "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
+      "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
+      "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
     }
   }
 }

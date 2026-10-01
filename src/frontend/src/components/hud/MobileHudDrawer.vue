@@ -124,7 +124,7 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
     >
       {{ t('hud.nav.messages') }}
     </button>
-    <button class="link" :class="{ active: String(route.name).startsWith('report') }" @click="go('/reports')">
+    <button class="link" :class="{ active: String(route.name).startsWith('report') }" @click="goToModal('/reports')">
       {{ t('hud.nav.reports') }}
       <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
     </button>

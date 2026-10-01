@@ -324,6 +324,9 @@ public sealed class WorldService(
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
+        // The old islands' bogland is gone with them.
+        WorldTerrain.Invalidate(worldId);
+
         // Every settlement this world had is now gone — RealmDirectory's
         // cached realms for it (by settlement id, by user, by owner id) would
         // otherwise keep answering with rows that no longer exist until they
@@ -416,7 +419,9 @@ public sealed class WorldService(
         TileCount = island.TileCount,
         StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
+        BogTiles = [.. island.BogTiles.Select(ToBogTileRecord)],
         Giants = [.. island.Giants.Select(ToGiantRecord)],
+        Camps = [.. island.Camps.Select(ToCampRecord)],
         IsWasted = island.IsWasted,
     };
 
@@ -692,11 +697,16 @@ public sealed class WorldService(
         int qMin,
         int qMax,
         int rMin,
-        int rMax)
+        int rMax,
+        IReadOnlyDictionary<HexCoord, Terrain>? bog = null)
     {
         ArgumentNullException.ThrowIfNull(world);
 
         var sampler = new TerrainSampler(world.ToGenerationOptions());
+        if (bog is not null)
+        {
+            sampler = sampler.WithBogOverlay(bog);
+        }
 
         for (var q = qMin; q <= qMax; q++)
         {
@@ -713,6 +723,10 @@ public sealed class WorldService(
         }
     }
 
+    /// <summary>The bog overlay (bog / lake per hex) of every island of a world, for <see cref="GetTiles"/> and the game rules.</summary>
+    public Task<IReadOnlyDictionary<HexCoord, Terrain>> GetBogOverlayAsync(Guid worldId, CancellationToken cancellationToken = default) =>
+        WorldTerrain.OverlayAsync(_dbContext, worldId, cancellationToken);
+
     /// <summary>
     /// Most tiles one request may ask for. Roughly a 90x90 window, comfortably
     /// more than a screen at full zoom-out.
@@ -725,7 +739,23 @@ public sealed class WorldService(
         tile.Coord.R,
         (int)tile.Shape,
         [.. tile.InDirections.Select(d => (int)d)],
-        tile.OutDirection is { } outDirection ? (int)outDirection : null);
+        tile.OutDirection is { } outDirection ? (int)outDirection : null,
+        (int)tile.Width);
+
+    private static BogTileRecord ToBogTileRecord(BogTile tile) => new(
+        tile.Coord.Q,
+        tile.Coord.R,
+        (int)tile.Kind,
+        [.. tile.InDirections.Select(d => (int)d)],
+        tile.OutDirection is { } outDirection ? (int)outDirection : null,
+        [.. tile.WaterEdges.Select(d => (int)d)]);
+
+    private static CampRecord ToCampRecord(Camp camp) => new(
+        camp.Coord.Q,
+        camp.Coord.R,
+        camp.Family,
+        camp.Level,
+        (int)camp.Orientation);
 
     private static GiantRecord ToGiantRecord(Giant giant) => new(
         giant.Anchor.Q,

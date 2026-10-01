@@ -4,6 +4,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminWorldReseedView from './AdminWorldReseedView.vue';
 import type { AdminWorldResponse, WorldSeedPreviewResponse } from '../../api/types';
+import { generationResponse, generationSettings } from '../../lib/map/testing/generationFixture';
+import { DEFAULT_GENERATION } from '../../lib/map/worldGenerator';
 import { createTestI18n } from '../../test/i18n';
 import adminWorldReseed from '../../i18n/locales/en/adminWorldReseed.json';
 
@@ -46,24 +48,7 @@ vi.mock('../../components/map/WorldMapCanvas.vue', () => ({
   },
 }));
 
-const DEFAULT_GENERATION = {
-  islandCellSize: 20,
-  islandChance: 0.45,
-  islandMinRadius: 4.8,
-  islandMaxRadius: 11.2,
-  islandMinLobes: 2,
-  islandMaxLobes: 4,
-  islandMaxElongation: 1.0,
-  islandBendiness: 1.6,
-  islandLobeBlend: 0.25,
-  islandCoastWarp: 1.5,
-  islandCoastWarpScale: 5.0,
-  beachThreshold: 0.82,
-  mountainThreshold: 0.4,
-  mountainRockiness: 0.72,
-  forestRockiness: 0.52,
-  minimumIslandTiles: 6,
-};
+const DEFAULT_SETTINGS = generationSettings();
 
 function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse {
   return {
@@ -82,7 +67,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
     seed: 1234,
-    generation: DEFAULT_GENERATION,
+    generation: DEFAULT_SETTINGS,
     ...overrides,
   };
 }
@@ -91,7 +76,7 @@ function preview(overrides: Partial<WorldSeedPreviewResponse> = {}): WorldSeedPr
   return {
     worldId: 'world-1',
     seed: 4242,
-    radius: 30,
+    radius: 1000,
     islandCount: 1,
     landTileCount: 42,
     islands: [
@@ -103,8 +88,13 @@ function preview(overrides: Partial<WorldSeedPreviewResponse> = {}): WorldSeedPr
         tileCount: 42,
         startPositions: [{ q: 3, r: -1 }],
         riverTiles: [{ q: 3, r: -1, shape: 'spring', inDirections: [], outDirection: 'E' }],
+        giants: [{ family: 'giantmountain', q: 5, r: -2, orientation: 'NE' }],
+        camps: [],
+        bogTiles: [],
+        wasted: false,
       },
     ],
+    generation: generationResponse(),
     ...overrides,
   };
 }
@@ -164,7 +154,7 @@ describe('AdminWorldReseedView', () => {
 
     expect(adminPreviewWorldSeed).toHaveBeenCalledWith('world-1', {
       seed: 4242,
-      generation: DEFAULT_GENERATION,
+      generation: DEFAULT_SETTINGS,
     });
     expect(adminReseedWorld).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="preview-summary"]').text()).toContain('1 islands');
@@ -187,6 +177,55 @@ describe('AdminWorldReseedView', () => {
     // Rivers can't be derived client-side, so they have to come from the
     // preview response — terrain itself is generated from the seed.
     expect(model.getRiverTile(3, -1)).toBeTruthy();
+  });
+
+  it('builds the preview model from the generation the candidate was generated with, not the defaults', async () => {
+    const wrapper = await mountView();
+    const generation = { ...generationResponse(), worldRadius: 2500, islandMinWidth: 33, islandCellSize: 300 };
+    adminPreviewWorldSeed.mockResolvedValue(preview({ seed: 555, generation }));
+    await wrapper.find('#seed').setValue('555');
+    await wrapper.findAll('button').find((b) => b.text() === 'Preview seed')!.trigger('click');
+    await flushPromises();
+
+    const model = wrapper.findComponent({ name: 'WorldMapCanvas' }).props('worldModel') as {
+      generation: typeof generation;
+    };
+    expect(model.generation).toEqual(generation);
+    expect(model.generation).not.toEqual(DEFAULT_GENERATION);
+  });
+
+  it("passes the preview's giants to the model and marks a wasted island's river tiles wasted", async () => {
+    const wrapper = await mountView();
+    const base = preview({ seed: 42 });
+    adminPreviewWorldSeed.mockResolvedValue({
+      ...base,
+      islands: [
+        ...base.islands,
+        {
+          ...base.islands[0],
+          index: 1,
+          name: 'Utgard',
+          q: 40,
+          r: 0,
+          riverTiles: [{ q: 40, r: 0, shape: 'spring', inDirections: [], outDirection: 'E' }],
+          giants: [],
+          camps: [],
+          bogTiles: [],
+          wasted: true,
+        },
+      ],
+    });
+    await wrapper.find('#seed').setValue('42');
+    await wrapper.findAll('button').find((b) => b.text() === 'Preview seed')!.trigger('click');
+    await flushPromises();
+
+    const model = wrapper.findComponent({ name: 'WorldMapCanvas' }).props('worldModel') as {
+      getRiverTile: (q: number, r: number) => { wasted?: boolean } | undefined;
+      giantAnchorAt: (c: { q: number; r: number }) => { q: number; r: number } | null;
+    };
+    expect(model.giantAnchorAt({ q: 5, r: -2 })).toEqual({ q: 5, r: -2 });
+    expect(model.getRiverTile(3, -1)?.wasted).toBeFalsy();
+    expect(model.getRiverTile(40, 0)?.wasted).toBe(true);
   });
 
   it('starts with a randomized seed and can randomize it again', async () => {
@@ -232,7 +271,7 @@ describe('AdminWorldReseedView', () => {
     expect(adminReseedWorld).toHaveBeenCalledWith('world-1', {
       confirmWorldName: 'Midgard',
       seed: 9001,
-      generation: DEFAULT_GENERATION,
+      generation: DEFAULT_SETTINGS,
     });
     expect(wrapper.find('[data-testid="reseed-done"]').text()).toContain('2 settlement(s) deleted');
   });
@@ -268,44 +307,50 @@ describe('AdminWorldReseedView', () => {
   it("pre-fills the generation form with the world's current values", async () => {
     const wrapper = await mountView();
 
-    expect((wrapper.find('#gen-islandMinRadius').element as HTMLInputElement).value).toBe('4.8');
-    expect((wrapper.find('#gen-islandMaxRadius').element as HTMLInputElement).value).toBe('11.2');
+    expect((wrapper.find('#gen-islandMinWidth').element as HTMLInputElement).value).toBe('21');
+    expect((wrapper.find('#gen-islandMaxWidth').element as HTMLInputElement).value).toBe('40');
     expect((wrapper.find('#gen-minimumIslandTiles').element as HTMLInputElement).value).toBe('6');
   });
 
   it("pre-fills the island-shape form fields with the world's current values", async () => {
     const wrapper = await mountView();
 
-    expect((wrapper.find('#gen-islandMinLobes').element as HTMLInputElement).value).toBe('2');
-    expect((wrapper.find('#gen-islandMaxLobes').element as HTMLInputElement).value).toBe('4');
-    expect((wrapper.find('#gen-islandMaxElongation').element as HTMLInputElement).value).toBe('1');
-    expect((wrapper.find('#gen-islandBendiness').element as HTMLInputElement).value).toBe('1.6');
-    expect((wrapper.find('#gen-islandLobeBlend').element as HTMLInputElement).value).toBe('0.25');
-    expect((wrapper.find('#gen-islandCoastWarp').element as HTMLInputElement).value).toBe('1.5');
-    expect((wrapper.find('#gen-islandCoastWarpScale').element as HTMLInputElement).value).toBe('5');
+    const value = (id: string) => (wrapper.find(`#gen-${id}`).element as HTMLInputElement).value;
+    expect(value('islandMinSegments')).toBe('5');
+    expect(value('islandMaxSegments')).toBe('9');
+    expect(value('islandMinElongation')).toBe('5');
+    expect(value('islandMaxElongation')).toBe('8');
+    expect(value('islandMinBend')).toBe('0.12');
+    expect(value('islandMaxBend')).toBe('0.35');
+    expect(value('islandCoastWarp')).toBe('9.5');
+    expect(value('islandCoastWarpScale')).toBe('42');
+    expect(value('islandCoastNoise')).toBe('1');
+    expect(value('islandCoastNoiseScale')).toBe('49');
+    expect(value('islandSmallShare')).toBe('0.3');
+    expect(value('islandLargeShare')).toBe('0.12');
   });
 
   it('sends an edited island-shape parameter to the preview endpoint', async () => {
     const wrapper = await mountView();
 
-    await wrapper.find('#gen-islandMaxLobes').setValue('3');
+    await wrapper.find('#gen-islandMaxSegments').setValue('7');
     await previewSeed(wrapper);
 
     expect(adminPreviewWorldSeed).toHaveBeenCalledWith('world-1', {
       seed: 4242,
-      generation: { ...DEFAULT_GENERATION, islandMaxLobes: 3 },
+      generation: { ...DEFAULT_SETTINGS, islandMaxSegments: 7 },
     });
   });
 
   it('sends an edited generation parameter to the preview endpoint', async () => {
     const wrapper = await mountView();
 
-    await wrapper.find('#gen-islandMinRadius').setValue('9.5');
+    await wrapper.find('#gen-islandMinWidth').setValue('25.5');
     await previewSeed(wrapper);
 
     expect(adminPreviewWorldSeed).toHaveBeenCalledWith('world-1', {
       seed: 4242,
-      generation: { ...DEFAULT_GENERATION, islandMinRadius: 9.5 },
+      generation: { ...DEFAULT_SETTINGS, islandMinWidth: 25.5 },
     });
   });
 
@@ -328,9 +373,9 @@ describe('AdminWorldReseedView', () => {
   it('restores the generation form to the world\'s current values on "Reset to current"', async () => {
     const wrapper = await mountView();
 
-    await wrapper.find('#gen-islandMinRadius').setValue('9.5');
+    await wrapper.find('#gen-islandMinWidth').setValue('25.5');
     await wrapper.find('[data-testid="reset-generation"]').trigger('click');
 
-    expect((wrapper.find('#gen-islandMinRadius').element as HTMLInputElement).value).toBe('4.8');
+    expect((wrapper.find('#gen-islandMinWidth').element as HTMLInputElement).value).toBe('21');
   });
 });

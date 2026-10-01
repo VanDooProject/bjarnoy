@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -11,6 +9,23 @@ namespace Bjarnoy.Domain.Tests;
 /// </summary>
 public class TileFeatureTests
 {
+    /// <summary>
+    /// A sampler over the compact preset plus the middle of its widest island, so a
+    /// window around it holds coast, sea and every inland terrain. (At the
+    /// production scale islands are 150 hexes across: a radius-60 window around the
+    /// origin is usually open sea or solid grass.)
+    /// </summary>
+    private static (TerrainSampler Sampler, HexCoord Centre) IslandWorld(int seed)
+    {
+        var sampler = new TerrainSampler(WorldGenerationOptions.Compact(seed, 400));
+        var widest = sampler.EnumerateIslandShapes().MaxBy(s => s.Width.Max())!;
+        var mid = widest.SpineX.Count / 2;
+        var centre = HexCoord.FromOddQ(new OffsetCoord(
+            (int)Math.Floor(widest.CentreX + widest.SpineX[mid] + 0.5),
+            (int)Math.Floor(widest.CentreY + widest.SpineY[mid] + 0.5)));
+        return (sampler, centre);
+    }
+
     [Fact]
     public void Open_sea_is_never_coastal()
     {
@@ -40,10 +55,10 @@ public class TileFeatureTests
     [Fact]
     public void A_sea_hex_next_to_land_is_coastal()
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(7));
+        var (sampler, centre) = IslandWorld(7);
 
         var found = false;
-        foreach (var coord in HexCoord.Origin.WithinRadius(40))
+        foreach (var coord in centre.WithinRadius(40))
         {
             if (!sampler.IsLand(coord))
             {
@@ -66,10 +81,10 @@ public class TileFeatureTests
     [Fact]
     public void Coastal_orientation_faces_the_land_neighbour_when_there_is_exactly_one()
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(7));
+        var (sampler, centre) = IslandWorld(7);
         var checkedAny = false;
 
-        foreach (var coord in HexCoord.Origin.WithinRadius(40))
+        foreach (var coord in centre.WithinRadius(40))
         {
             if (!sampler.IsCoastalWater(coord))
             {
@@ -115,10 +130,10 @@ public class TileFeatureTests
     [Fact]
     public void FishingHutOrientation_faces_the_settlements_own_shore_not_a_strangers()
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(7));
+        var (sampler, centre) = IslandWorld(7);
         var checkedAny = false;
 
-        foreach (var coord in HexCoord.Origin.WithinRadius(40))
+        foreach (var coord in centre.WithinRadius(40))
         {
             if (!sampler.IsCoastalWater(coord))
             {
@@ -163,10 +178,10 @@ public class TileFeatureTests
     [InlineData(Terrain.Mountain)]
     public void Variants_stay_within_the_terrains_known_range(Terrain terrain)
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(11));
+        var (sampler, centre) = IslandWorld(11);
         var maxSeen = 0;
 
-        foreach (var coord in HexCoord.Origin.WithinRadius(60))
+        foreach (var coord in centre.WithinRadius(60))
         {
             if (sampler.TerrainAt(coord) != terrain)
             {
@@ -189,9 +204,9 @@ public class TileFeatureTests
     [Fact]
     public void Terrains_without_known_variants_always_fall_back_to_zero()
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(11));
+        var (sampler, centre) = IslandWorld(11);
 
-        foreach (var coord in HexCoord.Origin.WithinRadius(60))
+        foreach (var coord in centre.WithinRadius(60))
         {
             var terrain = sampler.TerrainAt(coord);
             if (terrain is Terrain.Sea or Terrain.Sand)
@@ -204,10 +219,10 @@ public class TileFeatureTests
     [Fact]
     public void MountainShapeAt_matches_VariantAt_for_mountain_hexes()
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(11));
+        var (sampler, centre) = IslandWorld(11);
         var checkedAny = false;
 
-        foreach (var coord in HexCoord.Origin.WithinRadius(60))
+        foreach (var coord in centre.WithinRadius(60))
         {
             if (sampler.TerrainAt(coord) != Terrain.Mountain)
             {
@@ -286,66 +301,23 @@ public class TileFeatureTests
 
     /// <summary>
     /// Locks the server's orientation/variant functions to the frontend's, the
-    /// same way <see cref="TerrainSamplerParityTests"/> does for terrain.
-    /// Checksums produced by running the mirrored logic in
-    /// <c>src/frontend/src/lib/map/worldGenerator.ts</c> under Node over
-    /// <c>[-60, 60]^2</c> for each seed: the orientation's numeric index
-    /// (0-5, matching <see cref="TileOrientation"/>'s own values — a first
-    /// letter would collide between NE/NW and SW/SE) for the orientation
-    /// checksum, and the variant digit itself for the variant checksum, both
-    /// in q-major order.
+    /// same way <see cref="TerrainSamplerParityTests"/> does for terrain: digests of
+    /// every hex on a lattice over the default world, from
+    /// <c>src/shared/terrain-checksum-golden.json</c> (see <see cref="TerrainChecksumFixture"/>).
     /// </summary>
-    // NB: the variant checksums below intentionally match the frontend's
-    // variantAt *without* its coastal-water weighting branch — that branch
-    // (COASTAL_WATER_VARIANT_WEIGHTS in worldGenerator.ts) has no backend
-    // counterpart at all, a pre-existing frontend/backend drift discovered
-    // while regenerating these fixtures for the bigger-island change, not
-    // introduced by it. Out of scope here; left for a follow-up.
-    //
-    // Regenerated again for the de-rounded island-shape retune (see
-    // WorldGenerationOptions's IslandMaxElongation/IslandCellSize doc
-    // comments) — both the default radius/cellSize/elongation/lobe values
-    // changed, which moves every seed's terrain and, with it, orientation
-    // and variant.
-    public static TheoryData<int, string, string> FrontendChecksums => new()
-    {
-        { 1, "5cda829c7a61a1db4fb11a7d3e80b3777eb984425c88dbbc834500e0aa3ab006", "203c2bf505745a7cc2c335170ae10578f35cf84bd26051e01444b14067b06688" },
-        { 7, "f4b0ed310d0d6b6258ebdec73192398a1ed43a6931f951e67283ff9cb3863d48", "fb36916cd980eaef15d770eb36e4a8ed224cae52543123308ef4b17ec46443a5" },
-        { 42, "e07986114909a18be4955d2a2ceb8861a014b2edf31a1c106b2f61a06dfcac7c", "232c00c468f3d611f0fc7b637400655069f3ca175fcc365781911e4c8fdd4a12" },
-        { 1337, "078f11e7487ae33a92b0bb1c54b4c8e92ade7df0c8ce2d47b87dd3af98e28fbd", "b5044cfa12ca4074f8ec4bc77f3a3a621f9210a57796af6873a530b629fc6d21" },
-        { -5, "9487f166a78af661b72ccc96058e796f66ba793e7406d30508fcf4b01a4f0c2f", "4698ea7c33a1c3e766c114cd613f83310d8831ae154dc40a468e671f036f53db" },
-        { 2147483, "4c15491175ffde03cd24c993e6ac54112c4140a552295126fd7f0699e3b9202c", "050cb12228a38f6e472843ccc096b768e1fd06c71ca1dd7ab21a1c57dc21651f" },
-        { 0, "ac2a959db5fe774c26bae3693c60bad60988643120372a3141996041b8c1dcad", "bce472b021db23a20f7376ae4808e46df02787cf1b976f904f75e888edcf552f" },
-    };
+    // NB: the variant digests intentionally pin sea to variant 0 — the frontend's
+    // variantAt has a coastal-water weighting branch (COASTAL_WATER_VARIANT_WEIGHTS in
+    // worldGenerator.ts) with no backend counterpart at all, a pre-existing
+    // frontend/backend drift, out of scope here.
+    public static TheoryData<int> Seeds => TerrainChecksumFixture.Seeds();
 
     [Theory]
-    [MemberData(nameof(FrontendChecksums))]
-    public void Orientation_and_variant_match_the_frontend_generator_hex_for_hex(
-        int seed,
-        string expectedOrientation,
-        string expectedVariant)
+    [MemberData(nameof(Seeds))]
+    public void Orientation_and_variant_match_the_frontend_generator_hex_for_hex(int seed)
     {
-        const int extent = 60;
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(seed));
-        var orientationIndices = new StringBuilder((((2 * extent) + 1) * ((2 * extent) + 1)));
-        var variantDigits = new StringBuilder((((2 * extent) + 1) * ((2 * extent) + 1)));
+        var (_, orientation, variant) = TerrainChecksumFixture.Compute(seed);
 
-        for (var q = -extent; q <= extent; q++)
-        {
-            for (var r = -extent; r <= extent; r++)
-            {
-                var coord = new HexCoord(q, r);
-                orientationIndices.Append((int)sampler.OrientationAt(coord));
-                variantDigits.Append(sampler.VariantAt(coord));
-            }
-        }
-
-        var actualOrientation = Convert.ToHexStringLower(
-            SHA256.HashData(Encoding.UTF8.GetBytes(orientationIndices.ToString())));
-        var actualVariant = Convert.ToHexStringLower(
-            SHA256.HashData(Encoding.UTF8.GetBytes(variantDigits.ToString())));
-
-        Assert.Equal(expectedOrientation, actualOrientation);
-        Assert.Equal(expectedVariant, actualVariant);
+        Assert.Equal(TerrainChecksumFixture.Expected(seed, "orientation"), orientation);
+        Assert.Equal(TerrainChecksumFixture.Expected(seed, "variant"), variant);
     }
 }

@@ -14,6 +14,7 @@ import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import TradePanel from '../components/hud/TradePanel.vue';
+import QuestTray from '../components/onboarding/QuestTray.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
@@ -274,10 +275,19 @@ watch(mode, (m) => {
 // below uses, since the renderer may not exist yet on the tick a fetch
 // resolves.
 watch(
-  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.worldRadius],
-  ([renderer, bitmap, radius]) => {
-    if (renderer && bitmap && radius !== null) renderer.setFogMask(radius, bitmap);
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds],
+  ([renderer, bitmap, bounds]) => {
+    if (renderer && bitmap && bounds) renderer.setFogMask(bounds, bitmap);
   },
+);
+
+// Fog chunks are fetched for the ground the camera actually sees (§3): the
+// renderer reports which chunks that is as it pans/zooms, the store debounces
+// and refetches only once the view leaves the window it already holds.
+watch(
+  () => canvasRef.value?.renderer,
+  (renderer) => renderer?.setFogViewportListener((range) => world.requestFogViewport(range)),
+  { immediate: true },
 );
 
 // Issue #40 phase 2: pushes armies/route/draft-waypoints into the renderer's
@@ -634,7 +644,7 @@ const WATER_CATEGORY: BuildCategory = {
   id: 'water',
   buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'shrineofnjord' }],
 };
-const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
+const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain' | 'bog', BuildCategory[]> = {
   grass: [
     { id: 'housing', buildings: [{ type: 'hut' }] },
     {
@@ -678,10 +688,14 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
   sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }],
   mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
+  // Bogland has its own buildings (bog-ore works, Clay Brickworks), which come with the next change.
+  bog: [],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
   if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY] : [];
+  // A bog lake is water nothing is built on (the lake Fisher Hut comes with the bog buildings).
+  if (tile.terrain === 'lake') return [];
   return BUILD_CATEGORIES[tile.terrain];
 }
 
@@ -819,7 +833,7 @@ const rootActions = computed<RingAction[]>(() => {
     return actions;
   }
   if (isMineTile.value) {
-    const buildableSea = tile.terrain !== 'sea' || tile.isCoastalWater;
+    const buildableSea = (tile.terrain !== 'sea' && tile.terrain !== 'lake') || tile.isCoastalWater;
     // A giant hex is never buildable, claimed or not — its own art fully
     // occupies the ground there (mirrors WorldModel.placeBuilding's own
     // `tile.giant` refusal). Checked ahead of the open-water hint since a
@@ -914,6 +928,10 @@ function riverShapeAt(coord: AxialCoord): string | undefined {
   return world.model.getRiverTile(coord.q, coord.r)?.shape;
 }
 
+function riverWidthAt(coord: AxialCoord): string | undefined {
+  return world.model.getRiverTile(coord.q, coord.r)?.width;
+}
+
 // Only meaningful once riverShapeAt(coord) has a shape at all — see
 // riverBuildingAllowedHere's own riverVariant parameter.
 function riverVariantAt(coord: AxialCoord): RiverVariant | undefined {
@@ -984,7 +1002,7 @@ const ringCategories = computed<RingCategory[]>(() => {
     label: t(`hud.ringMenu.categories.${category.id}`),
     color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
     buildings: category.buildings
-      .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord), riverVariantAt(coord)))
+      .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)))
       .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
       .map((b) => ringBuildingFor(b.type, coord)),
   }));
@@ -1282,6 +1300,7 @@ async function upgrade() {
       </template>
       <ExpansionPanel />
       <TradePanel />
+      <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
       <RingMenu

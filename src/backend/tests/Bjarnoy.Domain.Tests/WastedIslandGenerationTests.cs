@@ -11,22 +11,35 @@ namespace Bjarnoy.Domain.Tests;
 /// </summary>
 public class WastedIslandGenerationTests
 {
-    // Seed 61 at radius 90 is known to place two wasted islands, both with
-    // lava rivers and a giant (found by scanning seeds 1-200).
-    private const int TwoWastedIslandSeed = 61;
+    // Seed 6 (default-size world) places nine wasted islands, eight of them with
+    // lava rivers and seven with a giant (found by scanning seeds 1-60).
+    private const int TwoWastedIslandSeed = 6;
 
-    private static GeneratedWorld Generate(int seed, int radius = 90) =>
-        new WorldGenerator(WorldGenerationOptions.ForSeed(seed) with { Radius = radius })
-            .Generate(TestContext.Current.CancellationToken);
+    private static GeneratedWorld Generate(int seed) => TestWorlds.Default(seed);
 
     [Fact]
-    public void Across_many_seeds_at_least_one_world_places_a_wasted_island()
+    public void Worlds_place_wasted_islands_and_generation_finds_every_wasted_island_cell()
     {
-        var anyWasted = Enumerable.Range(1, 100)
-            .Select(seed => Generate(seed))
-            .Any(world => world.Islands.Any(i => i.IsWasted));
+        var world = Generate(TwoWastedIslandSeed);
+        var sampler = new TerrainSampler(world.Options);
 
-        Assert.True(anyWasted, "expected at least one wasted island across 100 scanned seeds");
+        Assert.Contains(world.Islands, i => i.IsWasted);
+
+        // Wasted islands are made of wasted land only, and never of green land.
+        var wastedTiles = world.Islands.Where(i => i.IsWasted).SelectMany(i => i.Tiles).ToHashSet();
+        Assert.All(wastedTiles, t => Assert.True(sampler.WastedTerrainAt(t).IsLand()));
+        Assert.All(wastedTiles, t => Assert.False(sampler.IsLand(t)));
+    }
+
+    [Fact]
+    public void Wasted_island_cells_exist_across_many_seeds()
+    {
+        // Cheap (no generation): the wasted cell grid must not be so thin that most
+        // worlds never see one.
+        var worldsWithWasted = Enumerable.Range(1, 60).Count(seed =>
+            new TerrainSampler(TestWorlds.Options(seed)).EnumerateIslandShapes(wasted: true).Any());
+
+        Assert.True(worldsWithWasted >= 20, $"only {worldsWithWasted} of 60 worlds have a wasted island cell");
     }
 
     [Fact]
@@ -54,7 +67,7 @@ public class WastedIslandGenerationTests
     [Fact]
     public void Wasted_islands_never_carry_a_shrine()
     {
-        foreach (var seed in Enumerable.Range(1, 60))
+        foreach (var seed in new[] { 6, 10, 37 })
         {
             var world = Generate(seed);
             foreach (var island in world.Islands.Where(i => i.IsWasted))

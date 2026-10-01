@@ -33,6 +33,8 @@ function testRouter(initialPath = '/settlement', { lazySettlement = false } = {}
       { path: '/profile/:userName', name: 'profile', component: WorldStub },
       { path: '/leaderboards', name: 'leaderboards', component: WorldStub },
       { path: '/guild', name: 'guild', component: WorldStub },
+      { path: '/reports', name: 'reports', component: WorldStub },
+      { path: '/reports/:reportId', name: 'report-detail', component: WorldStub },
     ],
   });
   router.push(initialPath);
@@ -50,6 +52,7 @@ function mountApp(router: ReturnType<typeof testRouter>) {
         ProfileModal: true,
         LeaderboardModal: true,
         GuildModal: true,
+        ReportsModal: true,
       },
     },
   });
@@ -161,5 +164,41 @@ describe('App background-route pattern', () => {
 
     expect(wrapper.find('.settlement-stub').exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'LeaderboardModal' }).exists()).toBe(true);
+  });
+
+  it('renders reports as a modal over the background view, keeping it mounted from list to detail', async () => {
+    const router = testRouter('/settlement');
+    await router.isReady();
+    const wrapper = mountApp(router);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+
+    await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(true);
+
+    // List -> detail stays on a modal route, with the same background.
+    await router.push({ path: '/reports/report-1', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(true);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+
+    await router.push('/settlement');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(false);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the settlement view behind a directly-loaded report detail (no backgroundView state)', async () => {
+    const router = testRouter('/reports/report-1');
+    await router.isReady();
+    const wrapper = mountApp(router);
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(true);
   });
 });

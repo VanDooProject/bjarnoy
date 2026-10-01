@@ -40,7 +40,7 @@ internal readonly record struct CallerRealmResult(CallerRealmOutcome Outcome, st
 /// <summary>
 /// Resolves which <see cref="SettlementEntity.OwnerId"/> a read-only,
 /// per-world request should act under — <c>GET .../membership</c>,
-/// <c>.../fog-mask</c> and <c>.../plot-suggestion</c> (GET and DELETE). These
+/// <c>.../fog-chunks</c> and <c>.../plot-suggestion</c> (GET and DELETE). These
 /// endpoints predate accounts and so were built purely around
 /// <see cref="OwnershipGate.OwnerIdHeaderName"/>, which breaks the moment a
 /// claimed player logs in from a browser that never founded anything: the

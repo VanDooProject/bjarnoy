@@ -16,6 +16,7 @@ import type {
   TrainingOrderResponse,
   FeastOfferResponse,
   FeastResponse,
+  QuestResponse,
   RenownResponse,
   UnitStackResponse,
   WorldMovementResponse,
@@ -30,10 +31,25 @@ import {
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
-import { WorldModel } from '../lib/map/WorldModel';
+import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
+import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
 import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
-import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
+import { buildDemoFogMask, demoMaskBounds } from '../lib/map/fog/demoFogMask';
+import {
+  FOG_CHUNK_SIZE,
+  FogChunkCache,
+  fogWindowFor,
+  rangeContains,
+  rangesEqual,
+  stitchWindow,
+  windowBounds,
+  worldChunkRange,
+  chunkOfTexel,
+  type ChunkRange,
+} from '../lib/map/fog/fogChunks';
+import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
+import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
@@ -50,6 +66,19 @@ const LIVE_POLL_MS = 4000;
 // that discrete position from ever looking stale for long) rather than a
 // full websocket/animation loop, which the design doc explicitly defers.
 const ARMY_POLL_MS = 2000;
+
+// How long the camera has to sit still before a viewport that left the loaded
+// fog window triggers a refetch (map-fog-v2.md §3: chunks are fetched "as the
+// camera moves", debounced — a fast pan across many chunks is one request at
+// the end of it, not one per chunk boundary crossed).
+const FOG_VIEWPORT_DEBOUNCE_MS = 150;
+
+// The decoded chunks behind the fog window, and the pending viewport-refetch
+// timer. Module scope, not Pinia state: neither is app state Vue needs to
+// proxy (a cache of pixel buffers, a timer handle), same reasoning as
+// `fogMaskBitmap`'s markRaw.
+const fogChunkCache = new FogChunkCache();
+let fogViewportTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Demo mode's seed — kept as its own constant since both the initial
 // `WorldModel` below and its island labels have to agree on it.
@@ -104,7 +133,7 @@ export class AlreadyFoundedError extends Error {
 function buildDemoModel(): WorldModel {
   const model = new WorldModel(DEMO_SEED);
   if (DEMO_MODE) {
-    model.setIslands(enumerateIslands({ seed: DEMO_SEED, generation: DEFAULT_GENERATION }, DEMO_MASK_RADIUS));
+    model.setIslands(enumerateIslands({ seed: DEMO_SEED, generation: DEFAULT_GENERATION }, DEFAULT_GENERATION.worldRadius));
   }
   return model;
 }
@@ -117,6 +146,8 @@ export const useWorldStore = defineStore('world', {
   state: () => ({
     model: markRaw(buildDemoModel()),
     selectedSettlementId: null as string | null,
+    /** Demo mode only: bitmask of the onboarding quests already claimed (the server keeps this in live mode). */
+    demoClaimedQuests: 0,
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
     // knows it's safe to paint every rival's territory — the world map is
     // the one legitimate place that shows the whole world, unlike the
@@ -217,6 +248,10 @@ export const useWorldStore = defineStore('world', {
       feast: null as FeastResponse | null,
       nextFeast: null as FeastOfferResponse | null,
       feastFetchedAt: 0,
+      // Onboarding quests (economy.md section 7): live mode mirrors
+      // `SettlementResponse.quests`; demo mode evaluates the same list locally
+      // in `syncHud` (`lib/quests.ts`) against `demoClaimedQuests`.
+      quests: [] as QuestResponse[],
       // The account's renown progress (Town Square modal); null in demo mode
       // and until the first live read.
       renown: null as RenownResponse | null,
@@ -349,6 +384,21 @@ export const useWorldStore = defineStore('world', {
     // with no explanation).
     fogMaskError: null as unknown,
     /**
+     * Where `fogMaskBitmap` sits in mask-texel space: the chunk window a live
+     * mask is stitched to (`windowBounds`), or the whole demo world. The
+     * renderer places the texture by it (`HexMapRenderer.setFogMask`).
+     */
+    fogMaskBounds: null as MaskBounds | null,
+    /**
+     * The chunk rectangle the camera currently sees, as last reported by the
+     * renderer (`requestFogViewport`). Null until it has reported once.
+     */
+    fogViewport: null as ChunkRange | null,
+    /** The chunk window `fogMaskBitmap` was last stitched from — the fetch's `ETag` scope. */
+    fogWindow: null as ChunkRange | null,
+    /** `ETag` of the last successful fog-chunks response for `fogWindow`. */
+    fogEtag: null as string | null,
+    /**
      * `WorldModel.fogSignature()` as of the last demo fog bake, so the poll
      * can skip a bake that would reproduce the mask already on screen. Null
      * until the first one lands.
@@ -372,7 +422,7 @@ export const useWorldStore = defineStore('world', {
     // hexPath.ts) for the same reason worldGenerator.ts's constants moved
     // out — a live world's numbers always take priority once fetched.
     movementRules: {
-      land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0 },
+      land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0, bog: 2.0 },
       sea: { sea: 1.0 },
       riverCrossingCost: 8.0,
     } as WorldMovementResponse,
@@ -476,7 +526,22 @@ export const useWorldStore = defineStore('world', {
             shape: tile.shape,
             inDirections: tile.inDirections as TileOrientation[],
             outDirection: tile.outDirection as TileOrientation | null,
+            width: tile.width ?? 'river',
             wasted: island.wasted,
+          })),
+        ),
+      );
+      // Server-generated bogland (see `IslandResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
+      // terrain the seed alone cannot give, so it goes in before anything that reads terrain (giants, camps).
+      this.model.setBogTiles(
+        this.islands.flatMap((island) =>
+          (island.bogTiles ?? []).map((tile) => ({
+            q: tile.q,
+            r: tile.r,
+            kind: tile.kind,
+            inDirections: tile.inDirections as TileOrientation[],
+            outDirection: tile.outDirection as TileOrientation | null,
+            waterEdges: tile.waterEdges as TileOrientation[],
           })),
         ),
       );
@@ -490,6 +555,19 @@ export const useWorldStore = defineStore('world', {
             family: giant.family,
             anchor: { q: giant.q, r: giant.r },
             orientation: giant.orientation as TileOrientation,
+          })),
+        ),
+      );
+      // Server-generated wildlife camps (see `IslandResponse.camps`): the server is
+      // authoritative on where they stand, their family, level and rotation; this
+      // only tags the tiles for rendering (`WorldModel.setCamps`).
+      this.model.setCamps(
+        this.islands.flatMap((island) =>
+          (island.camps ?? []).map((camp) => ({
+            family: camp.family,
+            coord: { q: camp.q, r: camp.r },
+            level: camp.level,
+            orientation: camp.orientation as TileOrientation,
           })),
         ),
       );
@@ -732,6 +810,34 @@ export const useWorldStore = defineStore('world', {
       await this.loadRenownLive();
     },
     /**
+     * Claims a completed onboarding quest's resource reward, exactly once
+     * (economy.md section 7). Live mode posts to the backend and refreshes the
+     * settlement; throws `ApiError` on rejection (not completed, already
+     * claimed). Demo mode has no backend, so it checks the same rules against
+     * the local model and pays into the local stock (clamped to storage).
+     */
+    async claimQuest(questId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      if (!DEMO_MODE) {
+        await api.claimQuest(this.selectedSettlementId, questId, this.ownerId ?? undefined);
+        await this.refreshLiveSettlement();
+        return;
+      }
+      this.syncHud();
+      const settlement = this.model.getSettlement(this.selectedSettlementId);
+      const bit = questBit(questId);
+      if (!settlement || bit < 0) throw new DemoTradeError('UnknownQuest');
+      const quest = this.hud.quests.find((q) => q.id === questId);
+      if (!quest || quest.claimed) throw new DemoTradeError('AlreadyClaimed');
+      if (!quest.completed) throw new DemoTradeError('NotCompleted');
+      const cap = this.model.storageCapForDisplay(settlement.id);
+      for (const kind of ['wood', 'stone', 'food'] as const) {
+        settlement.resources[kind] = Math.min(cap[kind], settlement.resources[kind] + quest.reward[kind]);
+      }
+      this.demoClaimedQuests |= 1 << bit;
+      this.syncHud();
+    },
+    /**
      * Live mode: reads the account's renown (total, rate, next-settlement
      * target, pending feast renown) into `hud.renown`. No-op in demo mode;
      * a failed read keeps whatever was last shown.
@@ -790,6 +896,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.feast = response.feast;
       this.hud.nextFeast = response.nextFeast;
       this.hud.feastFetchedAt = Date.now();
+      this.hud.quests = response.quests ?? [];
       this.syncHud();
     },
     /**
@@ -1009,13 +1116,21 @@ export const useWorldStore = defineStore('world', {
       this.hud.runes = [];
       this.hud.feast = null;
       this.hud.nextFeast = null;
+      this.hud.quests = [];
+      this.demoClaimedQuests = 0;
       this.hud.renown = null;
       this.hud.tradeBoard = [];
       this.hud.myTradeOffers = [];
       this.hud.shipments = [];
       this.fogMaskBitmap?.close();
       this.fogMaskBitmap = null;
+      this.fogMaskBounds = null;
+      this.fogWindow = null;
+      this.fogEtag = null;
       this.fogMaskError = null;
+      fogChunkCache.clear();
+      if (fogViewportTimer) clearTimeout(fogViewportTimer);
+      fogViewportTimer = null;
     },
     /**
      * Recovers from a world that has stopped existing out from under this
@@ -1518,6 +1633,12 @@ export const useWorldStore = defineStore('world', {
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
       this.hud.placedBuildingTypes = this.model.listPlacedBuildings(settlement.id);
       this.hud.claimedHexes = this.model.claimedHexCount(settlement.id);
+      if (DEMO_MODE) {
+        this.hud.quests = evaluateDemoQuests(
+          { level: settlement.level, counts: this.model.countPlacedBuildingsByType(settlement.id) },
+          this.demoClaimedQuests,
+        );
+      }
       this.hud.population = this.model.populationFor(settlement.id);
       this.hud.tick += 1;
     },
@@ -1573,14 +1694,54 @@ export const useWorldStore = defineStore('world', {
       this.demoFogPollHandle = null;
     },
     /**
-     * Fetches and decodes the current player's fog mask (map-fog-v2.md
-     * §2.2/§3), stashing it on `fogMaskBitmap` and the fetch's own timing/
-     * version on `fogPerfStats` (read by FogPerfPanel). A no-op in demo mode
-     * (there is no backend to ask) or before a world/owner is known. Polled
-     * alongside the rest of live mode's HUD sync (startHudSync, LIVE_POLL_MS)
-     * — the view layer (WorldMapView.vue/SettlementView.vue) watches
-     * `fogMaskBitmap` and pushes it into the renderer via
-     * `HexMapRenderer.setFogMask`.
+     * The chunk window to fetch now. While the camera stays inside the window
+     * already loaded, that same window (no refetch, no shift — the margin is
+     * the hysteresis); once it leaves, a fresh window around it. Before the
+     * renderer has reported a viewport, the ground around the player's own
+     * settlement, so the first fetch already has what they will look at.
+     */
+    desiredFogWindow(): ChunkRange {
+      const world = this.worldRadius !== null ? worldChunkRange(this.worldRadius) : null;
+      let viewport = this.fogViewport;
+      if (!viewport) {
+        const own = this.selectedSettlementId ? this.model.getSettlement(this.selectedSettlementId) : undefined;
+        const texel = toTexel({ q: own?.q ?? 0, r: own?.r ?? 0 });
+        const chunk = chunkOfTexel(texel.u, texel.v);
+        viewport = { cuMin: chunk.cu, cuMax: chunk.cu, cvMin: chunk.cv, cvMax: chunk.cv };
+      }
+      const needed = fogWindowFor(viewport, world, 0);
+      return this.fogWindow && rangeContains(this.fogWindow, needed) ? this.fogWindow : fogWindowFor(viewport, world);
+    },
+    /**
+     * The renderer's report of which chunks the camera sees (it calls this
+     * when that rectangle changes, not per frame). Cheap when the viewport is
+     * still inside the loaded window; otherwise schedules one debounced
+     * `fetchFogMask`. A no-op in demo mode (its mask is the whole demo world).
+     */
+    requestFogViewport(range: ChunkRange) {
+      this.fogViewport = range;
+      if (DEMO_MODE || !this.worldId || !this.ownerId) return;
+      const world = this.worldRadius !== null ? worldChunkRange(this.worldRadius) : null;
+      if (this.fogWindow && rangeContains(this.fogWindow, fogWindowFor(range, world, 0))) return;
+      if (fogViewportTimer) clearTimeout(fogViewportTimer);
+      fogViewportTimer = setTimeout(() => {
+        fogViewportTimer = null;
+        void this.fetchFogMask();
+      }, FOG_VIEWPORT_DEBOUNCE_MS);
+    },
+    /**
+     * Fetches the current player's fog mask for the chunk window around the
+     * camera (map-fog-v2.md §3): one batched call, only the chunks whose
+     * server `version` changed are decoded, and everything held is stitched
+     * into one window bitmap (the shader keeps sampling a single texture),
+     * stashed on `fogMaskBitmap` + `fogMaskBounds`, with the fetch's own
+     * timing/version on `fogPerfStats` (read by FogPerfPanel). A no-op in
+     * demo mode (there is no backend to ask) or before a world/owner is
+     * known. Polled alongside the rest of live mode's HUD sync (startHudSync,
+     * LIVE_POLL_MS — an unchanged window is a body-less 304) and re-run by
+     * `requestFogViewport` when the camera leaves the window; the view layer
+     * (MapView.vue/LandingView.vue) watches `fogMaskBitmap` and pushes it
+     * into the renderer via `HexMapRenderer.setFogMask`.
      */
     async fetchFogMask() {
       if (DEMO_MODE || !this.worldId || !this.ownerId) return;
@@ -1596,17 +1757,51 @@ export const useWorldStore = defineStore('world', {
 
       fogPerfStats.maskFetchInFlight = true;
       const startedAt = performance.now();
+      let succeeded = false;
       try {
-        const { bitmap, version } = await api.getFogMask(this.worldId, this.ownerId);
-        // Close the previous bitmap only once the new one is actually in
-        // hand — closing it eagerly before the fetch settles would leave a
-        // failed request having discarded the one usable bitmap this store
-        // had.
-        this.fogMaskBitmap?.close();
-        this.fogMaskBitmap = markRaw(bitmap);
-        fogPerfStats.maskVersion = version;
+        const window = this.desiredFogWindow();
+        const sameWindow = rangesEqual(window, this.fogWindow);
+        const result = await api.getFogChunks(this.worldId, this.ownerId, window, sameWindow ? this.fogEtag : null);
+
+        if (!result.notModified) {
+          const { data } = result;
+          if (data.chunkSize !== FOG_CHUNK_SIZE) {
+            throw new Error(`fog chunk size ${data.chunkSize} does not match this client's ${FOG_CHUNK_SIZE}`);
+          }
+
+          fogChunkCache.retain(window);
+          const stale = data.chunks.filter((chunk) => !fogChunkCache.isCurrent(chunk));
+          const decoded = await Promise.all(
+            stale.map(async (chunk) => (chunk.png ? decodeChunkPng(chunk.png) : null)),
+          );
+          stale.forEach((chunk, i) => fogChunkCache.set(chunk, decoded[i]));
+
+          if (stale.length > 0 || !sameWindow) {
+            const bounds = windowBounds(window);
+            const bitmap = await pixelsToBitmap(
+              stitchWindow(window, fogChunkCache.pixelsByKey()),
+              bounds.width,
+              bounds.height,
+            );
+            // Close the previous bitmap only once the new one is actually in
+            // hand — closing it eagerly before the fetch settles would leave
+            // a failed request having discarded the one usable bitmap this
+            // store had.
+            this.fogMaskBitmap?.close();
+            this.fogMaskBitmap = markRaw(bitmap);
+            this.fogMaskBounds = bounds;
+          }
+
+          this.fogWindow = window;
+          this.fogEtag = result.etag;
+          fogPerfStats.maskVersion = result.etag;
+        } else {
+          this.fogWindow = window;
+        }
+
         this.fogMaskError = null;
         useConnectionStatusStore().clear('fogMask');
+        succeeded = true;
       } catch (err) {
         if (isWorldNotFound(err)) {
           // Unlike a transient failure, this world is never going to start
@@ -1631,6 +1826,17 @@ export const useWorldStore = defineStore('world', {
         fogPerfStats.maskFetchMs = performance.now() - startedAt;
         fogPerfStats.maskFetchInFlight = false;
       }
+
+      // The camera may have left the window while this fetch was in flight
+      // (its own viewport request found the guard held and dropped out). Only
+      // after a success: a failing fetch must wait for the next poll, not
+      // spin.
+      if (succeeded && this.fogViewport) {
+        const world = this.worldRadius !== null ? worldChunkRange(this.worldRadius) : null;
+        if (this.fogWindow && !rangeContains(this.fogWindow, fogWindowFor(this.fogViewport, world, 0))) {
+          this.requestFogViewport(this.fogViewport);
+        }
+      }
     },
     /**
      * Demo mode's counterpart to `fetchFogMask` — there is no backend to
@@ -1646,7 +1852,7 @@ export const useWorldStore = defineStore('world', {
       // mask (generateCells' nested texel loop, then an OffscreenCanvas
       // PNG encode/decode round trip through convertToBlob/createImageBitmap)
       // is real synchronous+CPU work, not a network wait — measured at
-      // several *seconds* against DEMO_MASK_RADIUS on a loaded machine,
+      // several *seconds* on a loaded machine,
       // i.e. comparable to or longer than LIVE_POLL_MS itself. With no
       // guard, the interval fires again before the previous bake finishes,
       // so a second bake's cell loop runs concurrently with the first —
@@ -1668,14 +1874,16 @@ export const useWorldStore = defineStore('world', {
       fogPerfStats.maskFetchInFlight = true;
       const startedAt = performance.now();
       try {
-        const bitmap = await buildDemoFogMask(this.model);
+        const bounds = demoMaskBounds(this.model);
+        const bitmap = await buildDemoFogMask(this.model, bounds);
         if (!bitmap) return;
         // Recorded only once a bake actually produced a mask, so a bail-out
         // (no settlement yet) doesn't suppress the first real bake.
         this.demoFogSignature = signature;
         this.fogMaskBitmap?.close();
         this.fogMaskBitmap = markRaw(bitmap);
-        this.worldRadius = DEMO_MASK_RADIUS;
+        this.fogMaskBounds = bounds;
+        this.worldRadius = DEFAULT_GENERATION.worldRadius;
         fogPerfStats.maskVersion = 'demo';
       } finally {
         fogPerfStats.maskFetchMs = performance.now() - startedAt;

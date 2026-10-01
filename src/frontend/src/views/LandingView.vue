@@ -643,7 +643,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     // back into a real one — the panel's own "Start a new realm instead"
     // button is the only way to fall through to founding here.
     if (showReturningLoginGate.value) return;
-    if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
+    if (tile.terrain === 'sea' || tile.terrain === 'lake' || founding.value || joinBlocked.value) return;
     // Live mode only founds on an exact, unclaimed start position (see
     // `startPositionAt`, issue #96) — a click elsewhere used to silently
     // found on the nearest one instead; that's gone (issue #96 covers why),
@@ -674,7 +674,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // full settlement view's job once onboarding hands off to it), so any
   // other click (the longhouse, a rival's tile, open water) just closes
   // whatever ring is open rather than opening some other UI for it.
-  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea') {
+  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea' && tile.terrain !== 'lake') {
     if (!withinBuildableRange(coord)) {
       showInvalidClickMessage(t('landing.invalidClick.beyondClaim'));
       closeRing();
@@ -858,10 +858,19 @@ async function foundHere(coord: AxialCoord) {
 // isFogActive() flips true. Watching both together covers the renderer not
 // existing yet on the tick a mask resolves.
 watch(
-  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.worldRadius],
-  ([renderer, bitmap, radius]) => {
-    if (renderer && bitmap && radius !== null) renderer.setFogMask(radius, bitmap);
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds],
+  ([renderer, bitmap, bounds]) => {
+    if (renderer && bitmap && bounds) renderer.setFogMask(bounds, bitmap);
   },
+);
+
+// Fog chunks are fetched for the ground the camera actually sees (§3): the
+// renderer reports which chunks that is as it pans/zooms, the store debounces
+// and refetches only once the view leaves the window it already holds.
+watch(
+  () => canvasRef.value?.renderer,
+  (renderer) => renderer?.setFogViewportListener((range) => world.requestFogViewport(range)),
+  { immediate: true },
 );
 
 // Live mode: same "a fresh settlement snapshot arrived, force a redraw"
@@ -1004,6 +1013,7 @@ watch(
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
       :target-radius="pointerTarget.targetRadius"
+      clear-below-selector=".hero--founding"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 

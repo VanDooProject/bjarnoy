@@ -95,10 +95,9 @@ public static class AdminWorldEndpoints
             });
         }
 
-        var options = WorldGenerationOptions.ForSeed(request.Seed ?? Random.Shared.Next()) with
-        {
-            Radius = request.Radius,
-        };
+        var options = ApplyOverrides(
+            WorldGenerationOptions.ForSeed(request.Seed ?? Random.Shared.Next()) with { Radius = request.Radius },
+            request.Generation);
 
         try
         {
@@ -225,7 +224,8 @@ public static class AdminWorldEndpoints
             options.Radius,
             generated.Islands.Count,
             generated.LandTileCount,
-            [.. generated.Islands.Select(PreviewIslandResponse.From)]));
+            [.. generated.Islands.Select(PreviewIslandResponse.From)],
+            WorldGenerationResponse.From(options)));
     }
 
     /// <summary>
@@ -299,6 +299,37 @@ public static class AdminWorldEndpoints
     }
 
     /// <summary>
+    /// <paramref name="current"/> with every non-null field of <paramref name="generation"/>
+    /// laid over it — a <see langword="null"/> field keeps the current value, which is what
+    /// makes every one of them optional to send.
+    /// </summary>
+    private static WorldGenerationOptions ApplyOverrides(
+        WorldGenerationOptions current, WorldGenerationSettingsOverrides? generation) => current with
+    {
+        IslandCellSize = generation?.IslandCellSize ?? current.IslandCellSize,
+        IslandChance = generation?.IslandChance ?? current.IslandChance,
+        IslandMinWidth = generation?.IslandMinWidth ?? current.IslandMinWidth,
+        IslandMaxWidth = generation?.IslandMaxWidth ?? current.IslandMaxWidth,
+        IslandMinSegments = generation?.IslandMinSegments ?? current.IslandMinSegments,
+        IslandMaxSegments = generation?.IslandMaxSegments ?? current.IslandMaxSegments,
+        IslandMinElongation = generation?.IslandMinElongation ?? current.IslandMinElongation,
+        IslandMaxElongation = generation?.IslandMaxElongation ?? current.IslandMaxElongation,
+        IslandMinBend = generation?.IslandMinBend ?? current.IslandMinBend,
+        IslandMaxBend = generation?.IslandMaxBend ?? current.IslandMaxBend,
+        IslandCoastWarp = generation?.IslandCoastWarp ?? current.IslandCoastWarp,
+        IslandCoastWarpScale = generation?.IslandCoastWarpScale ?? current.IslandCoastWarpScale,
+        IslandCoastNoise = generation?.IslandCoastNoise ?? current.IslandCoastNoise,
+        IslandCoastNoiseScale = generation?.IslandCoastNoiseScale ?? current.IslandCoastNoiseScale,
+        IslandSmallShare = generation?.IslandSmallShare ?? current.IslandSmallShare,
+        IslandLargeShare = generation?.IslandLargeShare ?? current.IslandLargeShare,
+        BeachThreshold = generation?.BeachThreshold ?? current.BeachThreshold,
+        MountainThreshold = generation?.MountainThreshold ?? current.MountainThreshold,
+        MountainRockiness = generation?.MountainRockiness ?? current.MountainRockiness,
+        ForestRockiness = generation?.ForestRockiness ?? current.ForestRockiness,
+        MinimumIslandTiles = generation?.MinimumIslandTiles ?? current.MinimumIslandTiles,
+    };
+
+    /// <summary>
     /// The generation options a preview/reseed request asks for: the world's own
     /// parameters, with the seed, radius, and any <paramref name="generation"/>
     /// overrides the admin chose laid over them. A <see langword="null"/> field
@@ -313,27 +344,13 @@ public static class AdminWorldEndpoints
         out WorldGenerationOptions options,
         out Dictionary<string, string[]> errors)
     {
-        options = world.ToGenerationOptions() with
-        {
-            Seed = seed ?? Random.Shared.Next(),
-            Radius = radius ?? world.Radius,
-            IslandCellSize = generation?.IslandCellSize ?? world.IslandCellSize,
-            IslandChance = generation?.IslandChance ?? world.IslandChance,
-            IslandMinRadius = generation?.IslandMinRadius ?? world.IslandMinRadius,
-            IslandMaxRadius = generation?.IslandMaxRadius ?? world.IslandMaxRadius,
-            BeachThreshold = generation?.BeachThreshold ?? world.BeachThreshold,
-            MountainThreshold = generation?.MountainThreshold ?? world.MountainThreshold,
-            MountainRockiness = generation?.MountainRockiness ?? world.MountainRockiness,
-            ForestRockiness = generation?.ForestRockiness ?? world.ForestRockiness,
-            MinimumIslandTiles = generation?.MinimumIslandTiles ?? world.MinimumIslandTiles,
-            IslandMinLobes = generation?.IslandMinLobes ?? world.IslandMinLobes,
-            IslandMaxLobes = generation?.IslandMaxLobes ?? world.IslandMaxLobes,
-            IslandMaxElongation = generation?.IslandMaxElongation ?? world.IslandMaxElongation,
-            IslandBendiness = generation?.IslandBendiness ?? world.IslandBendiness,
-            IslandLobeBlend = generation?.IslandLobeBlend ?? world.IslandLobeBlend,
-            IslandCoastWarp = generation?.IslandCoastWarp ?? world.IslandCoastWarp,
-            IslandCoastWarpScale = generation?.IslandCoastWarpScale ?? world.IslandCoastWarpScale,
-        };
+        options = ApplyOverrides(
+            world.ToGenerationOptions() with
+            {
+                Seed = seed ?? Random.Shared.Next(),
+                Radius = radius ?? world.Radius,
+            },
+            generation);
 
         try
         {

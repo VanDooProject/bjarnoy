@@ -4,16 +4,18 @@
 // tile map that can span thousands of hexes as the camera roams. The
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
-import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
 import { cropAllowedHere, isWaterOnlyBuilding, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
+import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import {
   DEFAULT_GENERATION,
+  defaultOrientation,
   generateTile,
   hash2,
   islandDepthAt,
@@ -21,16 +23,20 @@ import {
   soilAt,
   springMountainShapeAt,
   terrainAt,
+  variantForTerrain,
   wastedDepthAt,
   wastedTerrainAt,
   wastedVariantAt,
   type RiverVariant,
   type WorldGenerationConstants,
+  type WorldSeed,
 } from './worldGenerator';
-import { generateRivers } from './riverGenerator';
+import { generateRiversWithBogs } from './riverGenerator';
 import {
   emptyResources,
+  mouthSeaDirection,
   TILE_ORIENTATIONS,
+  type BogTile,
   type CartShipment,
   type IslandLabel,
   type ResourceKind,
@@ -155,7 +161,7 @@ export const PREVIEW_ISLAND_RADIUS = 7;
 // fill. Hitting the bound falls back to the pre-L5 hexDistance-disc rule
 // (still `PREVIEW_ISLAND_RADIUS`) instead of drawing a silently-truncated
 // island.
-export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 24;
+export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 200;
 
 // Demo mode's `placeGiantsForIsland` needs the landfall's *whole* island
 // (giant placement rules — size thresholds, spacing — care about the real
@@ -166,7 +172,7 @@ export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 24;
 // island" below) rather than getting its due giants. Generous rather than
 // unbounded for the same "must not hang on a pathological seed" reason
 // `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` itself gives.
-const GIANT_ISLAND_FLOOD_MAX_RADIUS = 60;
+const GIANT_ISLAND_FLOOD_MAX_RADIUS = 400;
 
 /**
  * Iterative flood fill (an explicit queue, not recursion — the same "one
@@ -195,9 +201,10 @@ export function floodFillLandmass(
   if (!isLand(start)) return [];
   const seen = new Set<string>([coordKey(start)]);
   const tiles: AxialCoord[] = [start];
-  const queue: AxialCoord[] = [start];
-  while (queue.length) {
-    const c = queue.shift()!;
+  // `tiles` doubles as the queue (breadth-first: every tile is appended once and read once
+  // via `head`), so a 40k-tile island costs O(n) rather than O(n^2) `Array.shift`s.
+  for (let head = 0; head < tiles.length; head++) {
+    const c = tiles[head];
     for (const n of neighbors(c)) {
       const k = coordKey(n);
       if (seen.has(k)) continue;
@@ -205,7 +212,6 @@ export function floodFillLandmass(
       if (!isLand(n)) continue;
       if (hexDistance(start, n) > maxRadius) return null;
       tiles.push(n);
-      queue.push(n);
     }
   }
   return tiles;
@@ -295,6 +301,8 @@ export class WorldModel {
   private previewIslandTilesCache = new Map<string, AxialCoord[]>();
   /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
   private riverTiles = new Map<string, RiverTile>();
+  /** The island bogland known so far (live mode: every island at once; demo mode: island by island), by coordinate — see `setBogTiles`. */
+  private bogByHex = new Map<string, BogTile>();
   /** Demo mode's client-only trade offers — see `postTradeOffer` and friends. */
   private demoTradeOffers = new Map<string, DemoTradeOffer>();
   /**
@@ -333,6 +341,13 @@ export class WorldModel {
    * server's authoritative giants directly.
    */
   private giantPlacedIslands = new Set<string>();
+  /**
+   * Wildlife camps by hex (see `setCamps`, `campAt`), populated by
+   * `placeGiantsForIsland` (demo mode) and `setCamps` (live mode). Kept beside
+   * the materialised `Tile.camp` for the same reason `giantAnchorByHex` is:
+   * `findLandfall` and the build rule read it without materialising tiles.
+   */
+  private campByHex = new Map<string, NonNullable<Tile['camp']> & { q: number; r: number }>();
 
   constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
@@ -394,6 +409,59 @@ export class WorldModel {
   }
 
   /**
+   * Live mode: every fetched island's bogland (moss, lake water, shores, creeks — see `bogGenerator.ts`), replacing what was
+   * known. Bog is terrain the seed alone cannot give (it is placed per island with its river through it), so a bog hex
+   * reads as terrain `bog` (`lake` for the water) from here on: `terrainOf`, the materialised tiles and everything built on
+   * them (pathing, buildability, art) follow this overlay.
+   */
+  setBogTiles(tiles: BogTile[]) {
+    for (const tile of this.bogByHex.values()) this.terrain.delete(terrainKey(tile.q, tile.r));
+    for (const tile of this.bogByHex.values()) this.tiles.delete(coordKey(tile));
+    this.bogByHex = new Map();
+    this.addBogTiles(tiles);
+  }
+
+  /**
+   * Demo mode's own bog generation — adds `tiles` to what this model knows instead of replacing it (islands are
+   * discovered one at a time, see `placeGiantsForIsland`). Updates the pure terrain cache and any tile already
+   * materialised, so a hex a river or a preview already looked at does not keep its seed terrain.
+   */
+  private addBogTiles(tiles: BogTile[]) {
+    if (tiles.length === 0) return;
+    const world = { seed: this.seed, generation: this.generation };
+    for (const bog of tiles) {
+      const key = coordKey(bog);
+      this.bogByHex.set(key, bog);
+      const terrain: Terrain = bog.kind === 'lake' ? 'lake' : 'bog';
+      this.terrain.set(terrainKey(bog.q, bog.r), terrain);
+      const existing = this.tiles.get(key);
+      if (existing) this.decorateBogTile(existing, bog, world);
+    }
+    this.islandFootprintCache.clear();
+    this.previewIslandTilesCache.clear();
+  }
+
+  /** Makes a materialised tile read as the bog hex `bog` says it is (terrain, art rotation and variant, no longer coastal water). */
+  private decorateBogTile(tile: Tile, bog: BogTile, world: WorldSeed) {
+    const terrain: Terrain = bog.kind === 'lake' ? 'lake' : 'bog';
+    tile.terrain = terrain;
+    tile.bog = bog;
+    tile.isCoastalWater = false;
+    tile.orientation = defaultOrientation(tile.q, tile.r, world);
+    tile.variant = variantForTerrain(tile.q, tile.r, world, terrain);
+  }
+
+  /** Every bog hex known so far (all islands the model has been given or has generated), for debug hooks and screenshot scripts. */
+  listBogTiles(): BogTile[] {
+    return [...this.bogByHex.values()];
+  }
+
+  /** The bog hex on `(q, r)`, if the island there has one. */
+  getBogTile(q: number, r: number): BogTile | undefined {
+    return this.bogByHex.get(coordKey({ q, r }));
+  }
+
+  /**
    * `coord`'s giant anchor, or `null` if it isn't part of any giant's 7-hex
    * footprint — this model's `IGiantIndex`-equivalent lookup (see
    * `giantAnchorByHex`), the `giantAt` callback `claimsWithGiants` (the
@@ -426,6 +494,24 @@ export class WorldModel {
     return false;
   }
 
+  /** The wildlife camp standing on `coord`, or `undefined`. */
+  campAt(coord: AxialCoord) {
+    return this.campByHex.get(coordKey(coord));
+  }
+
+  /**
+   * Whether `coord` is within `GuardRange + StartPositionMargin` of a strong
+   * camp — the same exclusion `WorldGenerator.FindStartPositions` (backend)
+   * enforces, so `findLandfall` steers a demo-mode landfall clear of one. Weak
+   * camps do not matter.
+   */
+  private isNearAnyStrongCamp(coord: AxialCoord): boolean {
+    for (const camp of this.campByHex.values()) {
+      if (camp.strong && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
+    }
+    return false;
+  }
+
   /**
    * Issue #16 "map island names": the renderer needs to draw each island's
    * label *below* its tiles, but islands are procedurally generated at
@@ -446,23 +532,23 @@ export class WorldModel {
   islandFootprint(island: IslandLabel): AxialCoord[] {
     const cached = this.islandFootprintCache.get(island.id);
     if (cached) return cached;
-    const MAX_FOOTPRINT_TILES = 200;
+    // A hard backstop against runaway growth, sized for the largest islands (a C-class island is
+    // 15k-40k tiles): the label has to clear the island's real bottom edge, so a cap that cut the
+    // flood short would put the name inside the island. Only explored islands are ever measured
+    // (the renderer skips fogged labels), and the result is cached.
+    const MAX_FOOTPRINT_TILES = 100_000;
     const start = { q: island.q, r: island.r };
     const tiles: AxialCoord[] = [];
-    if (this.isLand(start.q, start.r)) {
+    if (this.isLandOrLake(start.q, start.r)) {
       const seen = new Set<string>([coordKey(start)]);
-      const queue: AxialCoord[] = [start];
       tiles.push(start);
-      while (queue.length && tiles.length < MAX_FOOTPRINT_TILES) {
-        const c = queue.shift()!;
-        for (const n of neighbors(c)) {
+      // `tiles` doubles as the breadth-first queue (read via `head`): O(n), no Array.shift.
+      for (let head = 0; head < tiles.length && tiles.length < MAX_FOOTPRINT_TILES; head++) {
+        for (const n of neighbors(tiles[head])) {
           const k = coordKey(n);
           if (seen.has(k)) continue;
           seen.add(k);
-          if (this.isLand(n.q, n.r)) {
-            tiles.push(n);
-            queue.push(n);
-          }
+          if (this.isLandOrLake(n.q, n.r)) tiles.push(n);
         }
       }
     }
@@ -489,7 +575,7 @@ export class WorldModel {
     if (cached) return cached;
 
     const tiles =
-      floodFillLandmass(center, (c) => this.isLand(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS) ??
+      floodFillLandmass(center, (c) => this.isLandOrLake(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS) ??
       this.previewIslandFallback(center);
     this.previewIslandTilesCache.set(key, tiles);
     return tiles;
@@ -497,7 +583,7 @@ export class WorldModel {
 
   /** The pre-L5 rule, kept only as `previewIslandTiles`'s safety-bound fallback (see there). */
   private previewIslandFallback(center: AxialCoord): AxialCoord[] {
-    return hexesInRadius(center, PREVIEW_ISLAND_RADIUS).filter((c) => this.isLand(c.q, c.r));
+    return hexesInRadius(center, PREVIEW_ISLAND_RADIUS).filter((c) => this.isLandOrLake(c.q, c.r));
   }
 
   /**
@@ -650,6 +736,8 @@ export class WorldModel {
     let tile = this.tiles.get(k);
     if (!tile) {
       tile = generateTile(q, r, { seed: this.seed, generation: this.generation }, this.terrainOf);
+      const bog = this.bogByHex.get(k);
+      if (bog) tile.bog = bog;
       if (this.wastedRevealed) {
         if (this.isWastedLandAt(q, r)) {
           tile.wasted = true;
@@ -687,12 +775,14 @@ export class WorldModel {
    * in `TILE_ORIENTATIONS` order — arbitrary among ties, but a `Mouth` only
    * ever needs one.
    */
-  seaFacingDirectionOf(coord: AxialCoord): TileOrientation | null {
+  seaFacingDirectionOf(coord: AxialCoord, inDirection?: TileOrientation): TileOrientation | null {
     const dirs = neighbors(coord);
-    for (let i = 0; i < dirs.length; i++) {
-      if (this.getTile(dirs[i].q, dirs[i].r).terrain === 'sea') return TILE_ORIENTATIONS[i];
-    }
-    return null;
+    const isSea = dirs.map((d) => this.getTile(d.q, d.r).terrain === 'sea');
+    // With the river's inflow known, prefer the sea straight ahead (the only angle the delta and
+    // the widening mouth draw), then a bend, then the hairpin - see `mouthSeaDirection`.
+    if (inDirection) return mouthSeaDirection(inDirection, isSea);
+    const first = isSea.indexOf(true);
+    return first < 0 ? null : TILE_ORIENTATIONS[first]!;
   }
 
   /**
@@ -801,8 +891,15 @@ export class WorldModel {
     return keys;
   }
 
+  /** Everything an island's picture is made of: land and the bog lakes among it (not the sea). */
+  private isLandOrLake(q: number, r: number): boolean {
+    return this.isLand(q, r) || this.terrainOf(q, r) === 'lake';
+  }
+
+  /** Land: everything that is neither the sea nor a bog lake (a lake is water, but not the sea). */
   isLand(q: number, r: number): boolean {
-    return this.terrainOf(q, r) !== 'sea';
+    const terrain = this.terrainOf(q, r);
+    return terrain !== 'sea' && terrain !== 'lake';
   }
 
   /**
@@ -838,10 +935,12 @@ export class WorldModel {
    * failing outright — better than refusing to land at all on a world too
    * small or too rocky to offer a "good" spot.
    */
-  findLandfall(near: AxialCoord, maxRadius = 40): AxialCoord | null {
+  findLandfall(near: AxialCoord, maxRadius = 400): AxialCoord | null {
     let firstLand: AxialCoord | null = null;
     for (let radius = 0; radius <= maxRadius; radius++) {
-      for (const c of hexesInRadius(near, radius)) {
+      // Ring by ring (not the whole disc again per radius): islands are ~150 hexes across
+      // and ~100+ hexes apart, so the nearest land can be far from a click in open sea.
+      for (const c of hexRing(near, radius)) {
         if (!this.isLand(c.q, c.r)) continue;
         // Giant placement v2: never land within a giant's own start-position
         // exclusion — mirrors `WorldGenerator.FindStartPositions` (backend)
@@ -850,6 +949,8 @@ export class WorldModel {
         // `giantAnchorByHex` already reflects the island's giants by the
         // time this scan happens.
         if (this.isNearAnyGiantAnchor(c)) continue;
+        // Wildlife camps: never land within a strong camp's guard range + margin.
+        if (this.isNearAnyStrongCamp(c)) continue;
         firstLand ??= c;
         if (this.isGoodStartCandidate(c)) return c;
       }
@@ -963,6 +1064,24 @@ export class WorldModel {
       if (tile.ownerId === settlementId && tile.buildingType) types.add(tile.buildingType);
     }
     return [...types];
+  }
+
+  /**
+   * How many of each building type a settlement has standing (by wire name) —
+   * `listPlacedBuildings` keeps only the distinct types, but the onboarding
+   * quests ("3 producers built") need the counts. The longhouse is included.
+   */
+  countPlacedBuildingsByType(settlementId: string): Record<string, number> {
+    const settlement = this.settlements.get(settlementId);
+    const counts: Record<string, number> = {};
+    if (!settlement) return counts;
+    for (const c of this.claimedHexes(settlement)) {
+      const tile = this.getTile(c.q, c.r);
+      if (tile.ownerId === settlementId && tile.buildingType) {
+        counts[tile.buildingType] = (counts[tile.buildingType] ?? 0) + 1;
+      }
+    }
+    return counts;
   }
 
   listSettlements(): Settlement[] {
@@ -1374,11 +1493,14 @@ export class WorldModel {
     // since a giant whose whole 7-hex footprint *is* fully enclosed reads as
     // claimed but must still refuse building on it.
     if (tile.giant) return false;
+    // A wildlife camp hex is not buildable for now (camp gameplay - clearing
+    // it - comes later).
+    if (tile.camp) return false;
     // Every other building needs dry land; the fishing hut, dockyard and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
     // BuildingDefinition.RequiresCoastalWater).
-    if (isWaterOnlyBuilding(type) ? !tile.isCoastalWater : tile.terrain === 'sea') return false;
+    if (isWaterOnlyBuilding(type) ? !tile.isCoastalWater : tile.terrain === 'sea' || tile.terrain === 'lake') return false;
     if (tile.buildingType) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes (and, for the Sawmill, only some variants — see
@@ -1388,7 +1510,7 @@ export class WorldModel {
     // riverBuildingArtFor reads this same own-hex river tile to pick which
     // composite (and orientation) to render.
     const riverAtHex = this.getRiverTile(at.q, at.r);
-    if (type && !riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined)) {
+    if (type && !riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined, riverAtHex?.width)) {
       return false;
     }
     // PumpkinFarm is only buildable on a Pumpkin-soil island (matches
@@ -1547,7 +1669,7 @@ export class WorldModel {
     // choice (never `this.isLand`, which folds in a revealed wasted layer
     // `terrainAt` alone knows nothing about).
     const globalIsLand = (c: AxialCoord) => terrainAt(c.q, c.r, world) !== 'sea';
-    const riverTiles = generateRivers(
+    const { rivers: riverTiles, bogs: bogTiles } = generateRiversWithBogs(
       islandTiles,
       (c) => this.terrainOf(c.q, c.r),
       depthAt,
@@ -1558,6 +1680,10 @@ export class WorldModel {
       !wasted,
     );
     this.addRiverTiles(riverTiles);
+    // Bogland (placed inside the river pipeline: a river runs through every lake) is terrain from here on, so
+    // giants and camps below see it: no giant stands on a bog or a lake, and only plain moss holds a bog camp.
+    this.addBogTiles(bogTiles);
+    const plainBog = new Set(bogTiles.filter((t) => t.kind === 'bog').map((t) => coordKey(t)));
     const riverKeys = new Set(riverTiles.map((t) => coordKey(t)));
     const isRiver = (c: AxialCoord) => riverKeys.has(coordKey(c));
 
@@ -1574,6 +1700,52 @@ export class WorldModel {
         orientation: this.getTile(p.anchor.q, p.anchor.r).orientation ?? 'SE',
       })),
     );
+
+    // Wildlife camps, after giants and before any start position — the backend's
+    // own order (`WorldGenerator.Generate`). Same island index and the same
+    // river/giant inputs, so a demo island gets the camps a live one would.
+    const campPlacements = placeCamps(
+      islandTiles,
+      (c) => this.terrainOf(c.q, c.r),
+      riverTiles,
+      placements.map((p) => p.anchor),
+      worldSeed,
+      islandIndex,
+      wasted,
+      plainBog,
+    );
+    this.setCamps(
+      campPlacements.map((p) => ({
+        family: p.family,
+        coord: p.coord,
+        level: p.level,
+        orientation: p.orientation ?? this.getTile(p.coord.q, p.coord.r).orientation ?? 'SE',
+      })),
+    );
+  }
+
+  /**
+   * Tags each camp's hex with `Tile.camp`. Live mode feeds it the server's
+   * authoritative camps (`IslandResponse.camps`); demo mode feeds it
+   * `placeCamps` output. Idempotent and additive, like `setGiants`: a hex that
+   * already has a camp is left untouched. Strength and guard range are derived
+   * from the shared family table, so they cannot disagree with the server.
+   */
+  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]) {
+    for (const camp of camps) {
+      const tile = this.getTile(camp.coord.q, camp.coord.r);
+      if (tile.camp) continue;
+      const strong = isStrongCampFamily(camp.family);
+      const strength: CampStrength = strong ? 'strong' : 'weak';
+      tile.camp = {
+        family: camp.family,
+        level: camp.level,
+        orientation: camp.orientation,
+        strong,
+        guardRange: guardRange(camp.level, strength),
+      };
+      this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
+    }
   }
 
   /**

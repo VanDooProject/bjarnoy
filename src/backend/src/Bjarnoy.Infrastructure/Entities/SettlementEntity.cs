@@ -129,6 +129,9 @@ public class SettlementEntity
     /// </summary>
     public double PendingFeastRenown { get; set; }
 
+    /// <summary>Bitmask of claimed onboarding quests (<see cref="Settlement.ClaimedQuests"/>).</summary>
+    public int ClaimedQuests { get; set; }
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
@@ -207,6 +210,7 @@ public class SettlementEntity
             ? new Feast(startedAt, endsAt, FeastRenownGain)
             : null,
         PendingFeastRenown = PendingFeastRenown,
+        ClaimedQuests = ClaimedQuests,
         Runes =
         [
             .. Runes.OrderBy(r => r.Id).Select(r => new RuneInstance
@@ -252,6 +256,7 @@ public class SettlementEntity
         FeastEndsAt = settlement.Feast?.EndsAt;
         FeastRenownGain = settlement.Feast?.RenownGain ?? 0;
         PendingFeastRenown = settlement.PendingFeastRenown;
+        ClaimedQuests = settlement.ClaimedQuests;
 
         SyncBuildings(settlement);
         SyncQueue(settlement);

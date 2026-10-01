@@ -10,7 +10,7 @@ namespace Bjarnoy.Domain.Buildings;
 /// <remarks>
 /// Cost, production and build time are all geometric in the level (the
 /// Travian shape): cost ×1.30 per level (Longhouse ×1.34), production ×1.20,
-/// build time ×1.33 (Longhouse ×1.30). Because cost outgrows output, a
+/// build time ×1.33 (the Longhouse starts at 1.5 min, so level 2 takes about 2). Because cost outgrows output, a
 /// producer's payback time rises about 8% per level — the next level is
 /// always worth building, just less obviously. Buildings cost no iron. Each
 /// building has its own maximum level (<see cref="MaxLevelFor"/>). The
@@ -31,8 +31,6 @@ public static class BuildingCatalogue
     private const double ProductionGrowth = 1.20;
 
     private const double BuildTimeGrowth = 1.33;
-
-    private const double LonghouseBuildTimeGrowth = 1.30;
 
     /// <summary>
     /// The highest level <paramref name="type"/> can be built to
@@ -601,7 +599,7 @@ public static class BuildingCatalogue
         Type = BuildingType.Longhouse,
         Level = level,
         Cost = new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * CostFactor(level, LonghouseCostGrowth),
-        BuildDuration = Duration(3, level, LonghouseBuildTimeGrowth),
+        BuildDuration = Duration(1.5, level),
         // The anchor feeds its own settlement a little, so a new holding is
         // never completely stalled. Linear in level (unlike every other
         // producer): +15 wood, +12 stone, +15 food, +2 iron per level.

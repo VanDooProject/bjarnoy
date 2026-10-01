@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it, vi } from 'vitest';
+import { generationResponse } from '../lib/map/testing/generationFixture';
 
 // Issue #40 phase 4: `refreshArmies` now also pulls the host's guest-army
 // view (`GET /settlements/{id}/guests`) in the same tick as the owner's own
@@ -17,8 +18,11 @@ const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
 const getSettlement = vi.fn();
+const claimQuest = vi.fn();
 const getSettlementView = vi.fn();
-const getFogMask = vi.fn();
+const getFogChunks = vi.fn();
+const decodeChunkPng = vi.fn();
+const pixelsToBitmap = vi.fn();
 const getPlotSuggestion = vi.fn();
 const releasePlotSuggestion = vi.fn();
 const buildDemoFogMask = vi.fn();
@@ -68,8 +72,9 @@ async function loadStoreModule(demoMode: boolean) {
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
       getShipments: (...args: unknown[]) => getShipments(...args),
       getSettlement: (...args: unknown[]) => getSettlement(...args),
+      claimQuest: (...args: unknown[]) => claimQuest(...args),
       getSettlementView: (...args: unknown[]) => getSettlementView(...args),
-      getFogMask: (...args: unknown[]) => getFogMask(...args),
+      getFogChunks: (...args: unknown[]) => getFogChunks(...args),
       getPlotSuggestion: (...args: unknown[]) => getPlotSuggestion(...args),
       releasePlotSuggestion: (...args: unknown[]) => releasePlotSuggestion(...args),
       getWorld: (...args: unknown[]) => getWorld(...args),
@@ -99,7 +104,16 @@ async function loadStoreModule(demoMode: boolean) {
   // of the real bake body, with just those two globals stubbed.)
   vi.doMock('../lib/map/fog/demoFogMask', () => ({
     buildDemoFogMask: (...args: unknown[]) => buildDemoFogMask(...args),
-    DEMO_MASK_RADIUS: 60,
+    demoMaskBounds: () => ({ minU: -61, minV: -121, maxU: 62, maxV: 122, width: 123, height: 243 }),
+  }));
+  // fogChunkCodec.ts decodes PNGs and builds the window bitmap through
+  // createImageBitmap/OffscreenCanvas/ImageData, none of which exist in this
+  // node test environment — stubbed at the module boundary the same way. The
+  // pure half (fogChunks.ts: window maths, stitching) runs for real here and
+  // has its own suite (fogChunks.test.ts).
+  vi.doMock('../lib/map/fog/fogChunkCodec', () => ({
+    decodeChunkPng: (...args: unknown[]) => decodeChunkPng(...args),
+    pixelsToBitmap: (...args: unknown[]) => pixelsToBitmap(...args),
   }));
   const { useWorldStore } = await import('./world');
   setActivePinia(createPinia());
@@ -365,6 +379,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         startPositions: [NEAR_ISLAND.at],
         riverTiles: [],
         giants: [],
+        camps: [],
+        bogTiles: [],
         wasted: false,
       },
       {
@@ -377,6 +393,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         startPositions: [FAR_ISLAND.at],
         riverTiles: [],
         giants: [],
+        camps: [],
+        bogTiles: [],
         wasted: false,
       },
     ];
@@ -522,6 +540,8 @@ describe('useWorldStore founding a settlement (L6b: persist before reconciling)'
         startPositions: [ISLAND.at],
         riverTiles: [],
         giants: [],
+        camps: [],
+        bogTiles: [],
         wasted: false,
       },
     ];
@@ -849,7 +869,7 @@ describe('useWorldStore newestWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     };
     getWorld.mockReset().mockResolvedValue(fullWorld);
@@ -911,7 +931,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
@@ -955,7 +975,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockRejectedValue(new Error('network error'));
@@ -994,7 +1014,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: true,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
@@ -1044,9 +1064,35 @@ describe('useWorldStore restoreLiveSettlement', () => {
   });
 });
 
+/** A fog-chunks response for `range`, every chunk empty unless overridden by `chunks`. */
+function fogChunksResponse(
+  range: { cuMin: number; cuMax: number; cvMin: number; cvMax: number },
+  etag: string,
+  chunks: Record<string, { version: string; png: string | null }> = {},
+) {
+  const list = [];
+  for (let cv = range.cvMin; cv <= range.cvMax; cv++) {
+    for (let cu = range.cuMin; cu <= range.cuMax; cu++) {
+      list.push({ cu, cv, ...(chunks[`${cu},${cv}`] ?? { version: '0', png: null }) });
+    }
+  }
+  return { notModified: false, etag, data: { chunkSize: 64, ...range, chunks: list } };
+}
+
+/** What the default window (no viewport, no settlement) is: the origin's chunk plus a one-chunk margin. */
+const ORIGIN_WINDOW = { cuMin: -1, cuMax: 1, cvMin: -1, cvMax: 1 };
+
+function resetFogMocks() {
+  getFogChunks.mockReset();
+  decodeChunkPng.mockReset().mockImplementation(async () => new Uint8ClampedArray(64 * 64 * 4));
+  pixelsToBitmap
+    .mockReset()
+    .mockImplementation(async (_pixels: unknown, width: number, height: number) => ({ width, height, close: vi.fn() }));
+}
+
 describe('useWorldStore fetchFogMask', () => {
   it('is a no-op in demo mode', async () => {
-    getFogMask.mockReset();
+    resetFogMocks();
 
     const store = await loadStoreModule(true);
     store.worldId = 'world-1';
@@ -1054,64 +1100,110 @@ describe('useWorldStore fetchFogMask', () => {
 
     await store.fetchFogMask();
 
-    expect(getFogMask).not.toHaveBeenCalled();
+    expect(getFogChunks).not.toHaveBeenCalled();
     expect(store.fogMaskBitmap).toBeNull();
   });
 
   it('is a no-op before a world/owner is known', async () => {
-    getFogMask.mockReset();
+    resetFogMocks();
 
     const store = await loadStoreModule(false);
 
     await store.fetchFogMask();
 
-    expect(getFogMask).not.toHaveBeenCalled();
+    expect(getFogChunks).not.toHaveBeenCalled();
   });
 
-  it('fetches and stashes the decoded bitmap, closing the previous one', async () => {
-    const firstBitmap = { close: vi.fn() };
-    const secondBitmap = { close: vi.fn() };
-    getFogMask
-      .mockReset()
-      .mockResolvedValueOnce({ bitmap: firstBitmap, version: '"v1"' })
-      .mockResolvedValueOnce({ bitmap: secondBitmap, version: '"v2"' });
+  it('asks for the chunk window around the player before the renderer has reported a viewport, and stitches it into one bitmap', async () => {
+    resetFogMocks();
+    getFogChunks.mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"', { '0,0': { version: 'a', png: 'PNG-A' } }));
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';
     store.ownerId = 'player-1';
 
     await store.fetchFogMask();
-    expect(getFogMask).toHaveBeenCalledWith('world-1', 'player-1');
-    expect(store.fogMaskBitmap).toBe(firstBitmap);
+
+    expect(getFogChunks).toHaveBeenCalledWith('world-1', 'player-1', ORIGIN_WINDOW, null);
+    // Only the one non-empty chunk was decoded; the eight empty ones need no image.
+    expect(decodeChunkPng).toHaveBeenCalledTimes(1);
+    expect(decodeChunkPng).toHaveBeenCalledWith('PNG-A');
+    // One window bitmap, placed by the window's own texel bounds.
+    expect(pixelsToBitmap).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 192, 192);
+    expect(store.fogMaskBounds).toEqual({ minU: -64, minV: -64, maxU: 128, maxV: 128, width: 192, height: 192 });
+    expect(store.fogMaskBitmap).not.toBeNull();
+  });
+
+  it('decodes only the chunks whose version changed and closes the bitmap it replaces', async () => {
+    resetFogMocks();
+    getFogChunks
+      .mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"', { '0,0': { version: 'a1', png: 'PNG-A1' } }))
+      .mockResolvedValueOnce(
+        fogChunksResponse(ORIGIN_WINDOW, '"e2"', {
+          '0,0': { version: 'a1', png: 'PNG-A1' },
+          '1,0': { version: 'b1', png: 'PNG-B1' },
+        }),
+      );
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
 
     await store.fetchFogMask();
-    expect(firstBitmap.close).toHaveBeenCalledOnce();
-    expect(store.fogMaskBitmap).toBe(secondBitmap);
+    const first = store.fogMaskBitmap as unknown as { close: ReturnType<typeof vi.fn> };
+    await store.fetchFogMask();
+
+    // Chunk (0,0) kept its version: not decoded a second time. (1,0) is new.
+    expect(decodeChunkPng.mock.calls.map((c) => c[0])).toEqual(['PNG-A1', 'PNG-B1']);
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(store.fogMaskBitmap).not.toBe(first);
+  });
+
+  it('sends the previous ETag for the same window and keeps the bitmap on a 304', async () => {
+    resetFogMocks();
+    getFogChunks
+      .mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"'))
+      .mockResolvedValueOnce({ notModified: true });
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogMask();
+    const bitmap = store.fogMaskBitmap;
+    await store.fetchFogMask();
+
+    expect(getFogChunks).toHaveBeenLastCalledWith('world-1', 'player-1', ORIGIN_WINDOW, '"e1"');
+    expect(store.fogMaskBitmap).toBe(bitmap);
+    expect(pixelsToBitmap).toHaveBeenCalledTimes(1);
   });
 
   it('leaves the previous bitmap in place if the fetch fails', async () => {
-    const firstBitmap = { close: vi.fn() };
-    getFogMask
-      .mockReset()
-      .mockResolvedValueOnce({ bitmap: firstBitmap, version: '"v1"' })
+    resetFogMocks();
+    getFogChunks
+      .mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"'))
       .mockRejectedValueOnce(new Error('network error'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';
     store.ownerId = 'player-1';
 
     await store.fetchFogMask();
+    const bitmap = store.fogMaskBitmap;
     await store.fetchFogMask();
 
-    expect(store.fogMaskBitmap).toBe(firstBitmap);
+    expect(store.fogMaskBitmap).toBe(bitmap);
+    warn.mockRestore();
   });
 
   it('records a failed fetch on fogMaskError so a view with no bitmap yet can say why, and clears it on success', async () => {
+    resetFogMocks();
     const failure = new Error('network error');
-    getFogMask
-      .mockReset()
+    getFogChunks
       .mockRejectedValueOnce(failure)
-      .mockResolvedValueOnce({ bitmap: { close: vi.fn() }, version: '"v1"' });
+      .mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';
@@ -1124,6 +1216,25 @@ describe('useWorldStore fetchFogMask', () => {
     await store.fetchFogMask();
     expect(store.fogMaskError).toBeNull();
     expect(store.fogMaskBitmap).not.toBeNull();
+    warn.mockRestore();
+  });
+
+  it('refuses a response cut for a different chunk size instead of stitching it wrongly', async () => {
+    resetFogMocks();
+    const response = fogChunksResponse(ORIGIN_WINDOW, '"e1"');
+    response.data.chunkSize = 32;
+    getFogChunks.mockResolvedValueOnce(response);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogMask();
+
+    expect(store.fogMaskBitmap).toBeNull();
+    expect(store.fogMaskError).toBeInstanceOf(Error);
+    warn.mockRestore();
   });
 
   // Regression: startHudSync polls this on a fixed LIVE_POLL_MS timer with no
@@ -1139,12 +1250,12 @@ describe('useWorldStore fetchFogMask', () => {
   // FogPerfPanel) but was only ever set, never checked — this is what
   // actually wires it up as a guard.
   it('does not start a second fetch while one is still in flight', async () => {
-    getFogMask.mockReset();
-    let resolveFirst: (v: { bitmap: unknown; version: string }) => void;
-    const firstCall = new Promise<{ bitmap: unknown; version: string }>((resolve) => {
+    resetFogMocks();
+    let resolveFirst: (v: unknown) => void;
+    const firstCall = new Promise((resolve) => {
       resolveFirst = resolve;
     });
-    getFogMask.mockReturnValueOnce(firstCall);
+    getFogChunks.mockReturnValueOnce(firstCall);
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';
@@ -1152,20 +1263,91 @@ describe('useWorldStore fetchFogMask', () => {
 
     const firstFetch = store.fetchFogMask();
     const secondFetch = store.fetchFogMask(); // fired before the first resolves
-    expect(getFogMask).toHaveBeenCalledTimes(1);
+    expect(getFogChunks).toHaveBeenCalledTimes(1);
 
-    resolveFirst!({ bitmap: { close: vi.fn() }, version: '"v1"' });
+    resolveFirst!(fogChunksResponse(ORIGIN_WINDOW, '"e1"'));
     await Promise.all([firstFetch, secondFetch]);
-    expect(getFogMask).toHaveBeenCalledTimes(1);
+    expect(getFogChunks).toHaveBeenCalledTimes(1);
 
     // Once the in-flight fetch has actually settled, a later poll tick must
     // still go through — this isn't a one-shot latch.
-    getFogMask.mockResolvedValueOnce({ bitmap: { close: vi.fn() }, version: '"v2"' });
+    getFogChunks.mockResolvedValueOnce({ notModified: true });
     await store.fetchFogMask();
-    expect(getFogMask).toHaveBeenCalledTimes(2);
+    expect(getFogChunks).toHaveBeenCalledTimes(2);
   });
 
-  // Regression: WorldEndpoints.GetFogMask 404s exactly when the world itself
+  describe('as the camera moves (requestFogViewport)', () => {
+    async function loadedStore() {
+      resetFogMocks();
+      getFogChunks.mockResolvedValue({ notModified: true });
+      getFogChunks.mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"'));
+      const store = await loadStoreModule(false);
+      store.worldId = 'world-1';
+      store.ownerId = 'player-1';
+      store.worldRadius = 4000;
+      await store.fetchFogMask();
+      getFogChunks.mockClear();
+      return store;
+    }
+
+    it('does nothing while the viewport stays inside the loaded window', async () => {
+      vi.useFakeTimers();
+      try {
+        const store = await loadedStore();
+
+        store.requestFogViewport({ cuMin: -1, cuMax: 1, cvMin: 0, cvMax: 0 });
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(getFogChunks).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('debounces a viewport that left the window into one fetch of a window around it', async () => {
+      vi.useFakeTimers();
+      try {
+        const store = await loadedStore();
+        getFogChunks.mockResolvedValue(
+          fogChunksResponse({ cuMin: 4, cuMax: 6, cvMin: 4, cvMax: 6 }, '"e2"'),
+        );
+
+        // A fast pan across several chunk boundaries reports several rectangles ...
+        store.requestFogViewport({ cuMin: 2, cuMax: 2, cvMin: 2, cvMax: 2 });
+        store.requestFogViewport({ cuMin: 3, cuMax: 3, cvMin: 3, cvMax: 3 });
+        store.requestFogViewport({ cuMin: 5, cuMax: 5, cvMin: 5, cvMax: 5 });
+        expect(getFogChunks).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1000);
+
+        // ... and costs exactly one request, for where the camera came to rest.
+        expect(getFogChunks).toHaveBeenCalledTimes(1);
+        expect(getFogChunks).toHaveBeenCalledWith(
+          'world-1', 'player-1', { cuMin: 4, cuMax: 6, cvMin: 4, cvMax: 6 }, null);
+        expect(store.fogMaskBounds).toMatchObject({ minU: 256, minV: 256, maxU: 448, maxV: 448 });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('never fetches for a viewport in demo mode (the demo mask is the whole demo world)', async () => {
+      resetFogMocks();
+      vi.useFakeTimers();
+      try {
+        const store = await loadStoreModule(true);
+        store.worldId = 'world-1';
+        store.ownerId = 'player-1';
+
+        store.requestFogViewport({ cuMin: 9, cuMax: 9, cvMin: 9, cvMax: 9 });
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(getFogChunks).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // Regression: WorldEndpoints.GetFogChunks 404s exactly when the world itself
   // is gone (see WorldEndpoints.WorldNotFoundProblem) — before this, that
   // just fell into fetchFogMask's ordinary "leave the previous bitmap in
   // place" catch, so a client whose world stopped existing kept asking after
@@ -1176,7 +1358,7 @@ describe('useWorldStore fetchFogMask', () => {
     const store = await loadStoreModule(false);
     const { ApiError: MockedApiError } = await import('../api/client');
     const staleBitmap = { close: vi.fn() };
-    getFogMask.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
+    getFogChunks.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
     listWorlds.mockReset().mockResolvedValue([
       {
         id: 'world-2',
@@ -1205,7 +1387,7 @@ describe('useWorldStore fetchFogMask', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
@@ -1350,7 +1532,7 @@ describe('useWorldStore joinWorld', () => {
       endbossTriggered: false,
       frozenIslesEnabled: false,
       speedFactor: 1,
-      generation: {},
+      generation: generationResponse(),
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     };
   }
@@ -1420,7 +1602,7 @@ describe('useWorldStore joinWorld', () => {
       reservedUntil: null,
     };
     store.islands = [
-      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [], giants: [], wasted: false },
+      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [], giants: [], camps: [], bogTiles: [], wasted: false },
     ];
     store.armies = [{ id: 'old-army' } as never];
     store.liveReady = true;
@@ -1517,10 +1699,10 @@ describe('useWorldStore poll failure reporting', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { store, connection } = await loadWithConnection();
     const failure = new Error('network error');
-    getFogMask
-      .mockReset()
+    resetFogMocks();
+    getFogChunks
       .mockRejectedValueOnce(failure)
-      .mockResolvedValueOnce({ bitmap: { close: vi.fn() }, version: '"v1"' });
+      .mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"'));
     store.worldId = 'world-1';
     store.ownerId = 'player-1';
 
@@ -1530,5 +1712,124 @@ describe('useWorldStore poll failure reporting', () => {
     await store.fetchFogMask();
     expect(connection.issues.fogMask).toBeUndefined();
     warn.mockRestore();
+  });
+});
+
+describe('useWorldStore claimQuest (onboarding quests)', () => {
+  const quest = (id: string, completed: boolean, claimed = false) => ({
+    id,
+    completed,
+    claimed,
+    reward: { wood: 250, stone: 200, food: 150, iron: 0 },
+  });
+
+  function settlementResponse(quests: unknown[], wood: number) {
+    return {
+      id: 'settlement-1',
+      longhouseLevel: 2,
+      resources: {
+        stock: { wood, stone: 0, food: 0, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+      },
+      buildings: [],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+      quests,
+    };
+  }
+
+  function register(store: Awaited<ReturnType<typeof loadStoreModule>>, level = 1) {
+    store.model.registerSettlement({
+      id: 'settlement-1',
+      ownerId: 'player-1',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: 0,
+      r: 0,
+      level,
+      resources: { wood: 100, stone: 100, food: 100, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      capacity: { wood: 500, stone: 500, food: 500, iron: 500 },
+      foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+  }
+
+  it('live: posts the claim, then refreshes the settlement so the quest reads claimed', async () => {
+    claimQuest.mockReset().mockResolvedValue(undefined);
+    getSettlement.mockReset().mockResolvedValue(
+      settlementResponse([quest('longhouse2', true, true)], 500),
+    );
+    const store = await loadStoreModule(false);
+    register(store, 2);
+    store.ownerId = 'player-1';
+
+    await store.claimQuest('longhouse2');
+
+    expect(claimQuest).toHaveBeenCalledWith('settlement-1', 'longhouse2', 'player-1');
+    expect(getSettlement).toHaveBeenCalledTimes(1);
+    expect(store.hud.quests).toEqual([quest('longhouse2', true, true)]);
+    expect(store.hud.resources.wood).toBe(500);
+  });
+
+  it('live: a rejected claim propagates and does not refresh', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+    claimQuest.mockReset().mockRejectedValue(new MockedApiError(409, { rejection: 'AlreadyClaimed' }));
+    getSettlement.mockReset();
+    register(store);
+
+    await expect(store.claimQuest('longhouse2')).rejects.toMatchObject({ problem: { rejection: 'AlreadyClaimed' } });
+    expect(getSettlement).not.toHaveBeenCalled();
+  });
+
+  it('live: mirrors the quest list of the settlement response', async () => {
+    getSettlement.mockReset().mockResolvedValue(
+      settlementResponse([quest('producers3', false), quest('longhouse2', true)], 0),
+    );
+    const store = await loadStoreModule(false);
+    register(store);
+
+    await store.refreshLiveSettlement();
+
+    expect(store.hud.quests.map((q) => q.id)).toEqual(['producers3', 'longhouse2']);
+  });
+
+  it('demo: a quest is not claimable until its condition holds', async () => {
+    claimQuest.mockReset();
+    const store = await loadStoreModule(true);
+    register(store, 1);
+    store.syncHud();
+
+    await expect(store.claimQuest('longhouse2')).rejects.toMatchObject({ rejection: 'NotCompleted' });
+    expect(claimQuest).not.toHaveBeenCalled();
+  });
+
+  it('demo: claiming pays the reward locally, clamped to storage, exactly once', async () => {
+    const store = await loadStoreModule(true);
+    register(store, 2);
+    store.syncHud();
+    expect(store.hud.quests.find((q) => q.id === 'longhouse2')).toMatchObject({ completed: true, claimed: false });
+
+    await store.claimQuest('longhouse2');
+
+    // 100 + 250 wood, 100 + 200 stone, 100 + 150 food; all within the 500 cap.
+    expect(store.hud.resources).toMatchObject({ wood: 350, stone: 300, food: 250 });
+    expect(store.hud.quests.find((q) => q.id === 'longhouse2')?.claimed).toBe(true);
+    await expect(store.claimQuest('longhouse2')).rejects.toMatchObject({ rejection: 'AlreadyClaimed' });
+    expect(store.hud.resources.wood).toBe(350);
+  });
+
+  it('demo: the reward is clamped to the storage capacity', async () => {
+    const store = await loadStoreModule(true);
+    register(store, 3);
+    store.model.getSettlement('settlement-1')!.resources = { wood: 400, stone: 400, food: 400, iron: 0 };
+    store.syncHud();
+
+    await store.claimQuest('longhouse2');
+
+    expect(store.hud.resources).toMatchObject({ wood: 500, stone: 500, food: 500 });
   });
 });

@@ -11,118 +11,93 @@ public sealed record WorldGenerationOptions
 
     /// <summary>
     /// Radius of the generated sea, in hexes from the origin. The number of hexes
-    /// is <c>3r(r+1)+1</c>, so a radius of 90 is ~25k hexes. Raised alongside
-    /// <see cref="IslandMinRadius"/>/<see cref="IslandMaxRadius"/> so a bigger
-    /// default world still has room for several islands rather than one or two
-    /// dominating the whole sea.
+    /// is <c>3r(r+1)+1</c>, so the default 4000 is ~48M hexes. Terrain is never
+    /// enumerated hex by hex at this size: <see cref="WorldGenerator"/> walks the
+    /// island cells instead. An island that could cross this radius is not
+    /// generated at all (see <see cref="TerrainSampler"/>), so the world edge
+    /// never cuts an island in half.
     /// </summary>
-    public int Radius { get; init; } = 90;
+    public int Radius { get; init; } = 4000;
 
     /// <summary>
     /// Edge length, in offset columns/rows, of the grid cell each island is seeded
-    /// in. Larger cells mean fewer, further-apart islands. Bumped 23-&gt;36 to fit
-    /// the reach budget of the wider <see cref="IslandMaxElongation"/> range below
-    /// (de-rounding islands needs more spine length, which needs more headroom
-    /// per cell) — <see cref="Radius"/> is deliberately left alone rather than
-    /// scaled to match, so island density drops a bit instead of ~2.4x'ing the
-    /// world's hex count and risking the render-time regressions a bigger map
-    /// already caused once this PR (see zoom-transition.spec.ts's history).
-    /// Also the hard reach budget for the multi-lobe shape below: see
-    /// <see cref="Validate"/> and <c>docs/design/river-generation.md</c>.
+    /// in. Larger cells mean fewer, further-apart islands. Also the hard reach
+    /// budget of every island: an island's land never leaves the 3x3 block of
+    /// cells around its own, so an island is shrunk (never cut) to fit.
     /// </summary>
-    public int IslandCellSize { get; init; } = 36;
+    public int IslandCellSize { get; init; } = 260;
 
     /// <summary>Probability that a given cell holds an island at all.</summary>
-    public double IslandChance { get; init; } = 0.45;
+    public double IslandChance { get; init; } = 0.8;
 
     /// <summary>
-    /// Raised alongside <see cref="IslandCellSize"/> to compensate for the
-    /// multi-lobe shape (below) covering less area than a single disc of the
-    /// same radius would — without this bump, elongated/bent islands would
-    /// read as noticeably smaller than the round ones they replaced. Trimmed
-    /// slightly (12.9-&gt;11.5) from the "bigger islands" pass now that the lobe
-    /// chain itself, not the envelope disc, supplies most of an island's reach.
+    /// Smallest and largest half-width, in hexes, of a class-B island's body
+    /// (the width at the middle of its spine, before the per-vertex jitter and
+    /// the class scale). A-class islands use <see cref="IslandShapeConstants.SmallScale"/>
+    /// of it, C-class <see cref="IslandShapeConstants.LargeScale"/>.
     /// </summary>
-    public double IslandMinRadius { get; init; } = 5.0;
+    public double IslandMinWidth { get; init; } = 21.0;
 
-    public double IslandMaxRadius { get; init; } = 11.5;
+    public double IslandMaxWidth { get; init; } = 40.0;
+
+    /// <summary>How many spine vertices (min/max) an island's spine is walked through.</summary>
+    public int IslandMinSegments { get; init; } = 5;
+
+    public int IslandMaxSegments { get; init; } = 9;
 
     /// <summary>
-    /// How many lobes (offset discs chained along a bending spine) an island's
-    /// shape is built from. 1 lobe is exactly the old single-disc circle;
-    /// 2-4 lobes is what turns the silhouette into an elongated, L- or
-    /// U-like shape. Raised 2-4 -&gt; 3-6: at low elongation a 2-lobe chain barely
-    /// left the envelope disc's own footprint, which is why islands still read
-    /// as circles even after the initial multi-lobe rewrite. The hard ceiling
-    /// (see <see cref="Validate"/>) is raised 5-&gt;8 alongside it so 6 sits with
-    /// headroom below the cap rather than pinned at the edge, for further
-    /// UI-based tuning. See <c>docs/design/river-generation.md</c> for the
-    /// full shape algorithm and the hash-offset registry.
+    /// Total spine length (min/max), as a multiple of the island's half-width.
+    /// Large values give long crescents and bent fjord islands.
     /// </summary>
-    public int IslandMinLobes { get; init; } = 3;
+    public double IslandMinElongation { get; init; } = 5.0;
 
-    public int IslandMaxLobes { get; init; } = 6;
+    public double IslandMaxElongation { get; init; } = 8.0;
 
     /// <summary>
-    /// Total spine length an island's lobe chain can stretch to, as a
-    /// multiple of its envelope radius. 0 collapses every lobe onto the
-    /// centre (back to a circle); 1.0 lets the chain reach out to roughly
-    /// the island's own radius beyond the first lobe. At the original default
-    /// of 1.0 the spine averaged only ~0.5x the radius, so extra lobes landed
-    /// almost on top of the core disc instead of actually breaking its
-    /// silhouette — raised to 2.0 (validation ceiling raised 1.5-&gt;4.0 to give
-    /// room both below and above this default) so the chain visibly leaves
-    /// the disc's own footprint.
+    /// Per-step bend of the spine as the tangent of the half turn angle
+    /// (min/max; the sign is random per island). 0 is straight, 0.35 is a
+    /// tight C.
     /// </summary>
-    public double IslandMaxElongation { get; init; } = 2.0;
+    public double IslandMinBend { get; init; } = 0.12;
+
+    public double IslandMaxBend { get; init; } = 0.35;
 
     /// <summary>
-    /// How sharply the lobe spine can turn from one segment to the next.
-    /// 0 keeps the spine straight (elongated ovals); larger values let it
-    /// curl into an L or, near the top of the range, a U/C shape. Raised
-    /// alongside <see cref="IslandMaxElongation"/> — a longer spine needs more
-    /// bend to read as a natural coastline rather than a straight sliver.
+    /// Amplitude, in hexes, of the large-scale domain warp applied to the
+    /// sample point before distance is measured: the fjords, bays and
+    /// headlands. 0 disables it. See also <see cref="IslandShapeConstants.Warp2"/>,
+    /// the fine second octave.
     /// </summary>
-    public double IslandBendiness { get; init; } = 2.8;
-
-    /// <summary>
-    /// Smooth-minimum blend factor applied where two lobes' depths meet, so
-    /// the waist between them fills in rather than pinching to a hairline.
-    /// 0 is a hard union (today's min-of-discs behaviour). Lowered so the
-    /// notches between lobes read as real bays/inlets instead of being
-    /// smoothed away into one uniform blob.
-    /// </summary>
-    public double IslandLobeBlend { get; init; } = 0.12;
-
-    /// <summary>
-    /// Smallest a non-primary lobe's radius can be, as a fraction of the
-    /// envelope radius. Widened alongside <see cref="IslandLobeMaxScale"/> so
-    /// lobes vary enough in size to read as headlands/islets rather than a
-    /// chain of same-sized lumps.
-    /// </summary>
-    public double IslandLobeMinScale { get; init; } = 0.32;
-
-    /// <summary>Largest a non-primary lobe's radius can be, as a fraction of the envelope radius.</summary>
-    public double IslandLobeMaxScale { get; init; } = 0.98;
-
-    /// <summary>
-    /// Amplitude, in hexes, of the domain warp applied to the sample point
-    /// before measuring distance to a lobe — makes coastlines wobble instead
-    /// of tracing perfect arcs. 0 disables the warp entirely. Raised (with
-    /// <see cref="IslandCoastWarpScale"/> lowered) so the warp amplitude is a
-    /// large-enough fraction of its own wavelength to actually ragged-up the
-    /// coast instead of just gently rippling it.
-    /// </summary>
-    public double IslandCoastWarp { get; init; } = 2.8;
+    public double IslandCoastWarp { get; init; } = 9.5;
 
     /// <summary>Wavelength, in hexes, of the coastline warp's underlying noise field.</summary>
-    public double IslandCoastWarpScale { get; init; } = 4.5;
+    public double IslandCoastWarpScale { get; init; } = 42.0;
+
+    /// <summary>
+    /// Amplitude of the depth noise added to the normalised distance (in units of
+    /// island half-width): the roughness of the shoreline itself. Three octaves,
+    /// see <see cref="IslandShapeConstants"/>.
+    /// </summary>
+    public double IslandCoastNoise { get; init; } = 1.0;
+
+    /// <summary>Wavelength, in hexes, of the coarsest depth-noise octave.</summary>
+    public double IslandCoastNoiseScale { get; init; } = 49.0;
+
+    /// <summary>Probability that an island cell holds a small (A) island rather than a B.</summary>
+    public double IslandSmallShare { get; init; } = 0.3;
+
+    /// <summary>
+    /// Probability that an island cell holds a large (C) island. A large island
+    /// clears the cells around it, so this is also the share of the map given
+    /// to open sea around the big ones.
+    /// </summary>
+    public double IslandLargeShare { get; init; } = 0.12;
 
     /// <summary>
     /// Fraction of an island's radius, measured from its centre, beyond which
     /// land becomes beach. The coastal ring the settlers land on.
     /// </summary>
-    public double BeachThreshold { get; init; } = 0.82;
+    public double BeachThreshold { get; init; } = 0.9;
 
     /// <summary>
     /// Fraction of an island's radius within which terrain is allowed to rise to
@@ -156,6 +131,62 @@ public sealed record WorldGenerationOptions
     public double RiverMeanderWeight { get; init; } = 0.35;
 
     /// <summary>
+    /// Land tiles an island needs per river spring: an island gets
+    /// <c>round(land / RiverTilesPerSpring)</c> springs, at least 1 and at most
+    /// <see cref="MaxSpringsPerIsland"/>. See <c>docs/design/river-generation.md</c>.
+    /// </summary>
+    public int RiverTilesPerSpring { get; init; } = 500;
+
+    /// <summary>Most springs (and so rivers) one island gets.</summary>
+    public int MaxSpringsPerIsland { get; init; } = 24;
+
+    /// <summary>Springs are picked farthest-first; picking stops once the best is closer than this (hexes) to a chosen one.</summary>
+    public int MinSpringSpacing { get; init; } = 8;
+
+    /// <summary>
+    /// Land tiles an island needs per river outlet (a mouth the whole drainage network of that
+    /// part of the island runs to): <c>round(land / OutletTilesPer)</c>, at least 1, at most
+    /// <see cref="MaxOutlets"/>.
+    /// </summary>
+    public int OutletTilesPer { get; init; } = 2000;
+
+    /// <summary>Most outlets one island gets.</summary>
+    public int MaxOutlets { get; init; } = 12;
+
+    /// <summary>Outlets are picked farthest-first among bays; picking stops once the best is closer than this (hexes) to a chosen one.</summary>
+    public int MinOutletSpacing { get; init; } = 25;
+
+    /// <summary>Weight of the per-tile noise in a drainage step's cost (<c>1 + DrainageNoise * noise</c>): larger meanders the network more.</summary>
+    public double DrainageNoise { get; init; } = 1.5;
+
+    /// <summary>Weight of the smooth valley noise (wavelength <see cref="ValleyScale"/>) in a drainage step's cost: coherent valleys make rivers bend and wander.</summary>
+    public double ValleyNoise { get; init; } = 6.0;
+
+    /// <summary>Wavelength in hexes of the valley noise.</summary>
+    public double ValleyScale { get; init; } = 4.0;
+
+    /// <summary>Extra drainage cost of a mountain tile: rivers go round ranges rather than across them.</summary>
+    public double MountainCost { get; init; } = 2.0;
+
+    /// <summary>Drainage cost of a 60 degree turn (a Bend tile).</summary>
+    public double BendCost { get; init; } = 0.03;
+
+    /// <summary>Drainage cost of a 120 degree turn (a Bend60 tile).</summary>
+    public double SharpBendCost { get; init; } = 1.0;
+
+    /// <summary>
+    /// How much longer (in drainage cost) a tributary's way via a drawable junction with an earlier river may be than
+    /// running to an outlet on its own and still be taken: larger merges more eagerly.
+    /// </summary>
+    public double MergeSlack { get; init; } = 6.0;
+
+    /// <summary>Drainage cost within which a tributary looks for a trunk to join (about 1.4 per hex).</summary>
+    public double MergeReach { get; init; } = 20.0;
+
+    /// <summary>Drainage cost a junction search takes off a wide-Y junction into a river-width trunk (a stream joining there needs no widening first).</summary>
+    public double RiverStreamBonus { get; init; } = 3.0;
+
+    /// <summary>
     /// Subtracted from a candidate step's score when it would turn 120° off
     /// straight-ahead (a <see cref="RiverTileShape.Bend60"/> tile) rather than
     /// continue straight or take the gentler 60°-off <see cref="RiverTileShape.Bend"/>
@@ -166,7 +197,73 @@ public sealed record WorldGenerationOptions
     /// </summary>
     public double SharpBendPenalty { get; init; } = 0.5;
 
+    /// <summary>
+    /// Land tiles an island needs per bog site (a lake with a river through it): <c>floor(land / BogTilesPerSite)</c>
+    /// sites, at least 1 and at most <see cref="BogMaxSites"/>. See <c>docs/design/bog.md</c>.
+    /// </summary>
+    public int BogTilesPerSite { get; init; } = 6000;
+
+    /// <summary>Most bog sites (lakes with a through river) one island gets. Enclosed sea pockets come on top.</summary>
+    public int BogMaxSites { get; init; } = 3;
+
+    /// <summary>Radius of a site's disc: only grass and forest, none of it near the coast. Islands of <see cref="BogLargeIslandTiles"/> or more get 2 more.</summary>
+    public int BogSiteRadius { get; init; } = 7;
+
+    /// <summary>Land tiles from which an island counts as large for bog sites (wider disc, bigger lakes).</summary>
+    public int BogLargeIslandTiles { get; init; } = 15000;
+
+    /// <summary>A lake is grown to <c>3 + floor(hash * (BogLakeMax - 3))</c> tiles before the notch fill; a lake that ends above this + 6 is rejected. Large islands use <see cref="BogLakeMaxLarge"/>.</summary>
+    public int BogLakeMax { get; init; } = 12;
+
+    public int BogLakeMaxLarge { get; init; } = 18;
+
+    /// <summary>A river's tile must be at least this many tiles from its spring, and at least <see cref="BogMinFromMouth"/> from its mouth, to anchor a site.</summary>
+    public int BogMinFromSpring { get; init; } = 4;
+
+    public int BogMinFromMouth { get; init; } = 6;
+
+    /// <summary>Chance (per site) that a second river is sunk into the lake, on top of the through river. The owner wants sinks and spawns together under 20%.</summary>
+    public double BogSinkChance { get; init; } = 0.15;
+
+    /// <summary>Chance (per site) that the bog spawns a river (a creek spring inside the bog whose creek leaves it as a normal river).</summary>
+    public double BogSpawnChance { get; init; } = 0.05;
+
+    /// <summary>An enclosed sea pocket (sea not connected to the open sea) of at least this many tiles becomes a bog lake.</summary>
+    public int BogPocketMinTiles { get; init; } = 3;
+
+    /// <summary>A pocket of more than this many tiles is left as sea.</summary>
+    public int BogPocketMaxTiles { get; init; } = 400;
+
+    /// <summary>Bog ring around a pocket lake, in hexes (sand, grass and forest all turn to bog there).</summary>
+    public int BogPocketRadius { get; init; } = 4;
+
+    /// <summary>A river passing within this many hexes of a pocket lake is sunk into it (the nearest one at least).</summary>
+    public int BogMaxSinkReroute { get; init; } = 12;
+
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
+
+    /// <summary>
+    /// A scaled-down archipelago — islands of roughly 5-40 hexes across on a 90-hex
+    /// cell grid — for tests, previews and small dev worlds. Same algorithm and
+    /// shape as the production-scale default, just smaller, so a world of radius
+    /// 120-200 already holds a handful of islands with mountains and rivers.
+    /// </summary>
+    public static WorldGenerationOptions Compact(int seed, int radius = 150) => new()
+    {
+        Seed = seed,
+        Radius = radius,
+        IslandCellSize = 90,
+        IslandMinWidth = 8.0,
+        IslandMaxWidth = 14.0,
+        IslandMinSegments = 3,
+        IslandMaxSegments = 5,
+        IslandMinElongation = 2.0,
+        IslandMaxElongation = 4.0,
+        IslandCoastWarp = 3.0,
+        IslandCoastWarpScale = 14.0,
+        IslandCoastNoise = 0.6,
+        IslandCoastNoiseScale = 16.0,
+    };
 
     /// <summary>
     /// Validates the options as a set. Called before generation so a bad world
@@ -175,35 +272,71 @@ public sealed record WorldGenerationOptions
     public void Validate()
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(Radius, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(Radius, 1000);
-        ArgumentOutOfRangeException.ThrowIfLessThan(IslandCellSize, 2);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(Radius, MaxRadius);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandCellSize, 16);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCellSize, 4096);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(IslandChance);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandChance, 1.0);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(IslandMinRadius);
-        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxRadius, IslandMinRadius);
         ArgumentOutOfRangeException.ThrowIfNegative(MinimumIslandTiles);
         ArgumentOutOfRangeException.ThrowIfLessThan(MinRiverLength, 2);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverMeanderWeight);
+        ArgumentOutOfRangeException.ThrowIfLessThan(RiverTilesPerSpring, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MaxSpringsPerIsland, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(MinSpringSpacing);
+        ArgumentOutOfRangeException.ThrowIfLessThan(OutletTilesPer, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MaxOutlets, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(MinOutletSpacing);
+        ArgumentOutOfRangeException.ThrowIfNegative(DrainageNoise);
+        ArgumentOutOfRangeException.ThrowIfNegative(ValleyNoise);
+        ArgumentOutOfRangeException.ThrowIfLessThan(ValleyScale, 1.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(MountainCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(BendCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(SharpBendCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(MergeSlack);
+        ArgumentOutOfRangeException.ThrowIfNegative(MergeReach);
+        ArgumentOutOfRangeException.ThrowIfNegative(RiverStreamBonus);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogTilesPerSite, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogMaxSites, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogSiteRadius, 5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSiteRadius, 20);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogLargeIslandTiles, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogLakeMax, 4);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogLakeMaxLarge, BogLakeMax);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogMinFromSpring);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogMinFromMouth);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogSinkChance);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSinkChance, 1.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogSpawnChance);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSpawnChance, 1.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketMinTiles, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketMaxTiles, BogPocketMinTiles);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketRadius, 2);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogMaxSinkReroute);
 
-        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinLobes, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMinLobes, 8);
-        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxLobes, IslandMinLobes);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxLobes, 8);
-        ArgumentOutOfRangeException.ThrowIfNegative(IslandMaxElongation);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxElongation, 4.0);
-        ArgumentOutOfRangeException.ThrowIfNegative(IslandBendiness);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandBendiness, 3.0);
-        ArgumentOutOfRangeException.ThrowIfNegative(IslandLobeBlend);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandLobeBlend, 0.5);
-        ArgumentOutOfRangeException.ThrowIfLessThan(IslandLobeMinScale, 0.3);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandLobeMinScale, 1.0);
-        ArgumentOutOfRangeException.ThrowIfLessThan(IslandLobeMaxScale, IslandLobeMinScale);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandLobeMaxScale, 1.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxWidth, IslandMinWidth);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxWidth, 200.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinSegments, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxSegments, IslandMinSegments);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxSegments, 24);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandMinElongation);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxElongation, IslandMinElongation);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxElongation, 20.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandMinBend);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxBend, IslandMinBend);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxBend, 1.0);
         ArgumentOutOfRangeException.ThrowIfNegative(IslandCoastWarp);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCoastWarp, 4.0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCoastWarp, 60.0);
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandCoastWarpScale, 2.0);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCoastWarpScale, 12.0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCoastWarpScale, 400.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandCoastNoise);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCoastNoise, 3.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandCoastNoiseScale, 2.0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCoastNoiseScale, 400.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandSmallShare);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandLargeShare);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandSmallShare + IslandLargeShare, 1.0);
 
         if (MountainThreshold >= BeachThreshold)
         {
@@ -213,31 +346,32 @@ public sealed record WorldGenerationOptions
                 nameof(MountainThreshold));
         }
 
-        // Reach budget: an island's shape is only ever looked up by hexes in the
-        // 3x3 block of cells around its own (jittered by up to 0.275*cellSize),
-        // so the farthest any lobe/warp can put land from the island's cell
-        // centre must stay inside that block. See docs/design/river-generation.md.
-        var maxReach = IslandMaxRadius * (IslandMaxElongation + IslandLobeMaxScale) + IslandCoastWarp;
-        var reachBudget = 1.225 * IslandCellSize;
-        if (maxReach > reachBudget)
-        {
-            throw new ArgumentException(
-                $"Island shape can reach {maxReach:0.##} hexes from its centre, which exceeds the " +
-                $"{reachBudget:0.##}-hex budget the {nameof(IslandCellSize)} scan allows; raise " +
-                $"{nameof(IslandCellSize)} or lower {nameof(IslandMaxRadius)}/{nameof(IslandMaxElongation)}/" +
-                $"{nameof(IslandLobeMaxScale)}/{nameof(IslandCoastWarp)}.",
-                nameof(IslandCellSize));
-        }
-
-        // Keeps the coastline warp a diffeomorphism (max gradient 1.5/scale per
-        // axis, staying below 1) so it can never fold the sample space onto
-        // itself and detach a sliver of land from its island.
-        if (IslandCoastWarp * 1.5 >= IslandCoastWarpScale)
+        // Keeps the two-octave coastline warp a diffeomorphism (max gradient
+        // 1.5/scale per axis and octave, the sum staying below 1) so it can never
+        // fold the sample space onto itself and detach a sliver of land from its
+        // island.
+        var warpGradient = 1.5 * ((IslandCoastWarp / IslandCoastWarpScale)
+            + (IslandShapeConstants.Warp2 / IslandShapeConstants.WarpScale2));
+        if (warpGradient >= 1.0)
         {
             throw new ArgumentException(
                 $"{nameof(IslandCoastWarp)} ({IslandCoastWarp}) is too large relative to " +
-                $"{nameof(IslandCoastWarpScale)} ({IslandCoastWarpScale}); it could tear the coastline apart.",
+                $"{nameof(IslandCoastWarpScale)} ({IslandCoastWarpScale}); with the fine warp octave it could " +
+                "tear the coastline apart.",
                 nameof(IslandCoastWarp));
         }
+
+        // The reach clamp shrinks every island to (1.5 - jitter/2) cells minus the warps;
+        // a cell too small for the warps alone has no room for any island.
+        if (IslandShapeConstants.ReachBudget(IslandCellSize, IslandCoastWarp) <= 0.0)
+        {
+            throw new ArgumentException(
+                $"{nameof(IslandCellSize)} ({IslandCellSize}) is too small for the coastline warp " +
+                $"({nameof(IslandCoastWarp)} {IslandCoastWarp}).",
+                nameof(IslandCellSize));
+        }
     }
+
+    /// <summary>The largest <see cref="Radius"/> <see cref="Validate"/> accepts.</summary>
+    public const int MaxRadius = 5000;
 }

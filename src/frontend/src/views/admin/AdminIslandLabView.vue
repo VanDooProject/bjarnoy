@@ -5,7 +5,7 @@
 // every variant card below renders straight from a seed + parameter set with
 // no API call — this is what makes a live, multi-variant compare possible.
 import { nextTick, reactive, ref, toRaw } from 'vue';
-import { DEFAULT_GENERATION, terrainAt, type WorldGenerationConstants, type WorldSeed } from '../../lib/map/worldGenerator';
+import { COMPACT_GENERATION, DEFAULT_GENERATION, terrainAt, type WorldGenerationConstants, type WorldSeed } from '../../lib/map/worldGenerator';
 import { oddQToAxial } from '../../lib/hex/coords';
 import type { Terrain } from '../../lib/map/types';
 
@@ -24,31 +24,13 @@ interface Variant {
   viewport: Viewport;
 }
 
-/** The two presets the docs section's buttons write into a chosen variant. */
+/** The presets the docs section's buttons write into a chosen variant. */
 const PRESETS: { key: string; labelKey: string; generation: WorldGenerationConstants }[] = [
-  {
-    key: 'baseline',
-    labelKey: 'presetBaseline',
-    generation: {
-      ...DEFAULT_GENERATION,
-      islandCellSize: 23,
-      islandMinRadius: 5.5,
-      islandMaxRadius: 12.9,
-      islandMinLobes: 2,
-      islandMaxLobes: 4,
-      islandMaxElongation: 1.0,
-      islandBendiness: 1.6,
-      islandLobeBlend: 0.25,
-      islandLobeMinScale: 0.55,
-      islandLobeMaxScale: 0.85,
-      islandCoastWarp: 1.5,
-      islandCoastWarpScale: 5.0,
-    },
-  },
-  { key: 'recommended', labelKey: 'presetRecommended', generation: { ...DEFAULT_GENERATION } },
+  { key: 'default', labelKey: 'presetDefault', generation: { ...DEFAULT_GENERATION } },
+  { key: 'compact', labelKey: 'presetCompact', generation: { ...COMPACT_GENERATION } },
 ];
 
-/** Order the form renders in, plus each field's i18n label key and `<input>` constraints — mirrors AdminWorldReseedView's GENERATION_FIELDS, extended with the two lobe-scale fields worldGenerator.ts also exposes. */
+/** Order the form renders in, plus each field's i18n label key and `<input>` constraints — mirrors AdminWorldReseedView's GENERATION_FIELDS. */
 const GENERATION_FIELDS: {
   key: keyof WorldGenerationConstants;
   labelKey: string;
@@ -56,19 +38,22 @@ const GENERATION_FIELDS: {
   max?: number;
   step: number;
 }[] = [
-  { key: 'islandCellSize', labelKey: 'islandCellSizeLabel', min: 2, step: 1 },
+  { key: 'islandCellSize', labelKey: 'islandCellSizeLabel', min: 16, max: 4096, step: 1 },
   { key: 'islandChance', labelKey: 'islandChanceLabel', min: 0.01, max: 1, step: 0.01 },
-  { key: 'islandMinRadius', labelKey: 'islandMinRadiusLabel', min: 0.1, step: 0.1 },
-  { key: 'islandMaxRadius', labelKey: 'islandMaxRadiusLabel', min: 0.1, step: 0.1 },
-  { key: 'islandMinLobes', labelKey: 'islandMinLobesLabel', min: 1, max: 8, step: 1 },
-  { key: 'islandMaxLobes', labelKey: 'islandMaxLobesLabel', min: 1, max: 8, step: 1 },
-  { key: 'islandMaxElongation', labelKey: 'islandMaxElongationLabel', min: 0, max: 4, step: 0.05 },
-  { key: 'islandBendiness', labelKey: 'islandBendinessLabel', min: 0, max: 3, step: 0.1 },
-  { key: 'islandLobeBlend', labelKey: 'islandLobeBlendLabel', min: 0, max: 0.5, step: 0.01 },
-  { key: 'islandLobeMinScale', labelKey: 'islandLobeMinScaleLabel', min: 0.3, max: 1.0, step: 0.02 },
-  { key: 'islandLobeMaxScale', labelKey: 'islandLobeMaxScaleLabel', min: 0.3, max: 1.0, step: 0.02 },
-  { key: 'islandCoastWarp', labelKey: 'islandCoastWarpLabel', min: 0, max: 4, step: 0.1 },
-  { key: 'islandCoastWarpScale', labelKey: 'islandCoastWarpScaleLabel', min: 2, max: 12, step: 0.5 },
+  { key: 'islandMinWidth', labelKey: 'islandMinWidthLabel', min: 2, max: 200, step: 0.5 },
+  { key: 'islandMaxWidth', labelKey: 'islandMaxWidthLabel', min: 2, max: 200, step: 0.5 },
+  { key: 'islandMinSegments', labelKey: 'islandMinSegmentsLabel', min: 1, max: 24, step: 1 },
+  { key: 'islandMaxSegments', labelKey: 'islandMaxSegmentsLabel', min: 1, max: 24, step: 1 },
+  { key: 'islandMinElongation', labelKey: 'islandMinElongationLabel', min: 0, max: 20, step: 0.1 },
+  { key: 'islandMaxElongation', labelKey: 'islandMaxElongationLabel', min: 0, max: 20, step: 0.1 },
+  { key: 'islandMinBend', labelKey: 'islandMinBendLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'islandMaxBend', labelKey: 'islandMaxBendLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'islandCoastWarp', labelKey: 'islandCoastWarpLabel', min: 0, max: 60, step: 0.5 },
+  { key: 'islandCoastWarpScale', labelKey: 'islandCoastWarpScaleLabel', min: 2, max: 400, step: 0.5 },
+  { key: 'islandCoastNoise', labelKey: 'islandCoastNoiseLabel', min: 0, max: 3, step: 0.05 },
+  { key: 'islandCoastNoiseScale', labelKey: 'islandCoastNoiseScaleLabel', min: 2, max: 400, step: 0.5 },
+  { key: 'islandSmallShare', labelKey: 'islandSmallShareLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'islandLargeShare', labelKey: 'islandLargeShareLabel', min: 0, max: 1, step: 0.01 },
   { key: 'beachThreshold', labelKey: 'beachThresholdLabel', min: 0, max: 1, step: 0.01 },
   { key: 'mountainThreshold', labelKey: 'mountainThresholdLabel', min: 0, max: 1, step: 0.01 },
   { key: 'mountainRockiness', labelKey: 'mountainRockinessLabel', min: 0, max: 1, step: 0.01 },
@@ -91,6 +76,8 @@ const TERRAIN_COLORS: Record<Terrain, string> = {
   grass: '#4c7a3f',
   forest: '#2e5730',
   mountain: '#7c7466',
+  bog: '#5b6234',
+  lake: '#27445e',
 };
 
 /** A seed the backend would accept: a non-negative signed-32-bit integer. */
@@ -98,8 +85,10 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
 }
 
+// Islands are ~150 hexes across at the default scale, so the lab opens fully
+// zoomed out (MIN_ZOOM): a ~320-hex window that shows one island and its neighbours.
 function defaultViewport(): Viewport {
-  return { centerCol: 0, centerRow: 0, zoom: 1 };
+  return { centerCol: 0, centerRow: 0, zoom: 0.25 };
 }
 
 let nextId = 1;

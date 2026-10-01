@@ -8,6 +8,7 @@ import { useAdminWorldStore } from '../../stores/adminWorld';
 import type { AdminWorldResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
 import adminLayout from '../../i18n/locales/en/adminLayout.json';
+import { generationSettings } from '../../lib/map/testing/generationFixture';
 
 // AdminLayout renders <router-link> tabs and its own <router-view> for
 // child tabs — a real (memory-history) router resolves those, same
@@ -49,24 +50,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
     seed: 1234,
-    generation: {
-      islandCellSize: 20,
-      islandChance: 0.45,
-      islandMinRadius: 4.8,
-      islandMaxRadius: 11.2,
-      islandMinLobes: 2,
-      islandMaxLobes: 4,
-      islandMaxElongation: 1.0,
-      islandBendiness: 1.6,
-      islandLobeBlend: 0.25,
-      islandCoastWarp: 1.5,
-      islandCoastWarpScale: 5.0,
-      beachThreshold: 0.82,
-      mountainThreshold: 0.4,
-      mountainRockiness: 0.72,
-      forestRockiness: 0.52,
-      minimumIslandTiles: 6,
-    },
+    generation: generationSettings(),
     ...overrides,
   };
 }

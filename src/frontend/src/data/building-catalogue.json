@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-29T23:35:16.044Z"
+    "generatedAt": "2026-09-30T01:28:47.585Z"
   },
   "data": [
     {
@@ -13,7 +13,7 @@
         "food": 60,
         "iron": 0
       },
-      "buildSeconds": 180,
+      "buildSeconds": 90,
       "productionPerHour": {
         "wood": 15,
         "stone": 12,
@@ -45,7 +45,7 @@
         "food": 80.4,
         "iron": 0
       },
-      "buildSeconds": 234,
+      "buildSeconds": 120,
       "productionPerHour": {
         "wood": 30,
         "stone": 24,
@@ -77,7 +77,7 @@
         "food": 107.73600000000002,
         "iron": 0
       },
-      "buildSeconds": 304,
+      "buildSeconds": 159,
       "productionPerHour": {
         "wood": 45,
         "stone": 36,
@@ -109,7 +109,7 @@
         "food": 144.36624000000003,
         "iron": 0
       },
-      "buildSeconds": 395,
+      "buildSeconds": 212,
       "productionPerHour": {
         "wood": 60,
         "stone": 48,
@@ -141,7 +141,7 @@
         "food": 193.45076160000005,
         "iron": 0
       },
-      "buildSeconds": 514,
+      "buildSeconds": 282,
       "productionPerHour": {
         "wood": 75,
         "stone": 60,
@@ -173,7 +173,7 @@
         "food": 259.22402054400004,
         "iron": 0
       },
-      "buildSeconds": 668,
+      "buildSeconds": 375,
       "productionPerHour": {
         "wood": 90,
         "stone": 72,
@@ -205,7 +205,7 @@
         "food": 347.3601875289601,
         "iron": 0
       },
-      "buildSeconds": 869,
+      "buildSeconds": 498,
       "productionPerHour": {
         "wood": 105,
         "stone": 84,
@@ -237,7 +237,7 @@
         "food": 465.4626512888066,
         "iron": 0
       },
-      "buildSeconds": 1129,
+      "buildSeconds": 663,
       "productionPerHour": {
         "wood": 120,
         "stone": 96,
@@ -269,7 +269,7 @@
         "food": 623.7199527270009,
         "iron": 0
       },
-      "buildSeconds": 1468,
+      "buildSeconds": 881,
       "productionPerHour": {
         "wood": 135,
         "stone": 108,
@@ -301,7 +301,7 @@
         "food": 835.7847366541813,
         "iron": 0
       },
-      "buildSeconds": 1909,
+      "buildSeconds": 1172,
       "productionPerHour": {
         "wood": 150,
         "stone": 120,
@@ -333,7 +333,7 @@
         "food": 1119.9515471166028,
         "iron": 0
       },
-      "buildSeconds": 2481,
+      "buildSeconds": 1559,
       "productionPerHour": {
         "wood": 165,
         "stone": 132,
@@ -365,7 +365,7 @@
         "food": 1500.7350731362478,
         "iron": 0
       },
-      "buildSeconds": 3226,
+      "buildSeconds": 2073,
       "productionPerHour": {
         "wood": 180,
         "stone": 144,
@@ -397,7 +397,7 @@
         "food": 2010.9849980025726,
         "iron": 0
       },
-      "buildSeconds": 4194,
+      "buildSeconds": 2757,
       "productionPerHour": {
         "wood": 195,
         "stone": 156,
@@ -429,7 +429,7 @@
         "food": 2694.719897323447,
         "iron": 0
       },
-      "buildSeconds": 5452,
+      "buildSeconds": 3667,
       "productionPerHour": {
         "wood": 210,
         "stone": 168,
@@ -461,7 +461,7 @@
         "food": 3610.9246624134194,
         "iron": 0
       },
-      "buildSeconds": 7087,
+      "buildSeconds": 4877,
       "productionPerHour": {
         "wood": 225,
         "stone": 180,
@@ -493,7 +493,7 @@
         "food": 4838.639047633982,
         "iron": 0
       },
-      "buildSeconds": 9213,
+      "buildSeconds": 6487,
       "productionPerHour": {
         "wood": 240,
         "stone": 192,
@@ -525,7 +525,7 @@
         "food": 6483.7763238295365,
         "iron": 0
       },
-      "buildSeconds": 11977,
+      "buildSeconds": 8627,
       "productionPerHour": {
         "wood": 255,
         "stone": 204,
@@ -557,7 +557,7 @@
         "food": 8688.26027393158,
         "iron": 0
       },
-      "buildSeconds": 15571,
+      "buildSeconds": 11474,
       "productionPerHour": {
         "wood": 270,
         "stone": 216,
@@ -589,7 +589,7 @@
         "food": 11642.268767068317,
         "iron": 0
       },
-      "buildSeconds": 20242,
+      "buildSeconds": 15261,
       "productionPerHour": {
         "wood": 285,
         "stone": 228,
@@ -621,7 +621,7 @@
         "food": 15600.640147871547,
         "iron": 0
       },
-      "buildSeconds": 26315,
+      "buildSeconds": 20297,
       "productionPerHour": {
         "wood": 300,
         "stone": 240,
@@ -653,7 +653,7 @@
         "food": 20904.857798147874,
         "iron": 0
       },
-      "buildSeconds": 34209,
+      "buildSeconds": 26995,
       "productionPerHour": {
         "wood": 315,
         "stone": 252,
@@ -685,7 +685,7 @@
         "food": 28012.509449518155,
         "iron": 0
       },
-      "buildSeconds": 44472,
+      "buildSeconds": 35903,
       "productionPerHour": {
         "wood": 330,
         "stone": 264,
@@ -717,7 +717,7 @@
         "food": 37536.762662354326,
         "iron": 0
       },
-      "buildSeconds": 57813,
+      "buildSeconds": 47751,
       "productionPerHour": {
         "wood": 345,
         "stone": 276,
@@ -749,7 +749,7 @@
         "food": 50299.2619675548,
         "iron": 0
       },
-      "buildSeconds": 75157,
+      "buildSeconds": 63508,
       "productionPerHour": {
         "wood": 360,
         "stone": 288,
@@ -781,7 +781,7 @@
         "food": 67401.01103652344,
         "iron": 0
       },
-      "buildSeconds": 97704,
+      "buildSeconds": 84466,
       "productionPerHour": {
         "wood": 375,
         "stone": 300,
@@ -813,7 +813,7 @@
         "food": 90317.35478894142,
         "iron": 0
       },
-      "buildSeconds": 127015,
+      "buildSeconds": 112340,
       "productionPerHour": {
         "wood": 390,
         "stone": 312,
@@ -845,7 +845,7 @@
         "food": 121025.2554171815,
         "iron": 0
       },
-      "buildSeconds": 165120,
+      "buildSeconds": 149412,
       "productionPerHour": {
         "wood": 405,
         "stone": 324,
@@ -877,7 +877,7 @@
         "food": 162173.8422590232,
         "iron": 0
       },
-      "buildSeconds": 214656,
+      "buildSeconds": 198718,
       "productionPerHour": {
         "wood": 420,
         "stone": 336,
@@ -909,7 +909,7 @@
         "food": 217312.94862709113,
         "iron": 0
       },
-      "buildSeconds": 279053,
+      "buildSeconds": 264295,
       "productionPerHour": {
         "wood": 435,
         "stone": 348,
@@ -941,7 +941,7 @@
         "food": 291199.3511603021,
         "iron": 0
       },
-      "buildSeconds": 362769,
+      "buildSeconds": 351512,
       "productionPerHour": {
         "wood": 450,
         "stone": 360,

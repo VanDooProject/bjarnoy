@@ -558,6 +558,14 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("BogTiles")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Camps")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("CentreQ")
                         .HasColumnType("INTEGER");
 
@@ -774,31 +782,33 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("placed_buildings", (string)null);
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredChunkEntity", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("Bits")
-                        .IsRequired()
-                        .HasColumnType("BLOB");
 
                     b.Property<string>("OwnerId")
-                        .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("ChunkU")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ChunkV")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte[]>("Bits")
+                        .HasColumnType("BLOB");
+
+                    b.Property<bool>("IsFull")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("WorldId")
-                        .HasColumnType("TEXT");
+                    b.HasKey("WorldId", "OwnerId", "ChunkU", "ChunkV");
 
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorldId", "OwnerId")
-                        .IsUnique();
-
-                    b.ToTable("player_explored", (string)null);
+                    b.ToTable("player_explored_chunks", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
@@ -941,6 +951,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("CentreR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ClaimedQuests")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("FeastEndsAt")
@@ -1435,13 +1448,16 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<bool>("FrozenIslesEnabled")
                         .HasColumnType("INTEGER");
 
-                    b.Property<double>("IslandBendiness")
-                        .HasColumnType("REAL");
-
                     b.Property<int>("IslandCellSize")
                         .HasColumnType("INTEGER");
 
                     b.Property<double>("IslandChance")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandCoastNoise")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandCoastNoiseScale")
                         .HasColumnType("REAL");
 
                     b.Property<double>("IslandCoastWarp")
@@ -1450,28 +1466,34 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("IslandCoastWarpScale")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("IslandLobeBlend")
+                    b.Property<double>("IslandLargeShare")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("IslandLobeMaxScale")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("IslandLobeMinScale")
+                    b.Property<double>("IslandMaxBend")
                         .HasColumnType("REAL");
 
                     b.Property<double>("IslandMaxElongation")
                         .HasColumnType("REAL");
 
-                    b.Property<int>("IslandMaxLobes")
+                    b.Property<int>("IslandMaxSegments")
                         .HasColumnType("INTEGER");
 
-                    b.Property<double>("IslandMaxRadius")
+                    b.Property<double>("IslandMaxWidth")
                         .HasColumnType("REAL");
 
-                    b.Property<int>("IslandMinLobes")
+                    b.Property<double>("IslandMinBend")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandMinElongation")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("IslandMinSegments")
                         .HasColumnType("INTEGER");
 
-                    b.Property<double>("IslandMinRadius")
+                    b.Property<double>("IslandMinWidth")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandSmallShare")
                         .HasColumnType("REAL");
 
                     b.Property<bool>("JoinsClosed")
@@ -1754,7 +1776,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Settlement");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredChunkEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
                         .WithMany()

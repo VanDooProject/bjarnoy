@@ -149,9 +149,12 @@ that acquire state (an owner, a building) will ever become rows.
 `TerrainSampler` is a bit-exact port of the frontend's
 `src/frontend/src/lib/map/worldGenerator.ts`, down to JavaScript's
 integer-coercion semantics. That is what lets the client render terrain it was
-never sent. The parity tests hold the two together with checksums taken from
-running the TypeScript under Node over 102,487 hexes across seven seeds; if
-either side is changed deliberately, regenerate them **from the TypeScript**.
+never sent. The parity tests hold the two together with shared fixtures generated from
+the TypeScript (`src/shared/island-shape-golden.json`, `terrain-checksum-golden.json`,
+plus the river and wasted-terrain goldens; `scripts/regen-goldens/` builds them, and
+`GoldenRegenerationTests` rebuilds the river one from a real generation run); if
+either side is changed deliberately, regenerate them **from the TypeScript** and
+run both suites.
 
 The server owns what the client cannot derive, and those are the parts that get
 persisted:
@@ -502,10 +505,10 @@ Two things in the build are easy to miss:
   so the image's `HEALTHCHECK` has something to probe `/health` with — that is
   what `depends_on: service_healthy` and an orchestrator's status both read.
   And `libfontconfig1`, which SkiaSharp's `libSkiaSharp.so` links against:
-  without it the fog-mask endpoint is the one thing that 500s in a container
+  without it the fog-chunks endpoint is the one thing that 500s in a container
   and nowhere else, reporting `/app/liblibSkiaSharp: cannot open shared object
   file` — a missing *dependency of* a native asset, not a missing asset. The
-  image smoke test fetches a fog mask for that reason.
+  image smoke test founds a settlement and fetches its fog chunk for that reason (an empty chunk is never encoded, so it has to be one with something in reach).
 
 ## Behind a proxy
 

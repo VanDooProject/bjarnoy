@@ -563,6 +563,14 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BogTiles")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Camps")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("CentreQ")
                         .HasColumnType("integer");
 
@@ -779,31 +787,33 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.ToTable("placed_buildings", (string)null);
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredChunkEntity", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("OwnerId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("ChunkU")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ChunkV")
+                        .HasColumnType("integer");
+
                     b.Property<byte[]>("Bits")
-                        .IsRequired()
                         .HasColumnType("bytea");
 
-                    b.Property<string>("OwnerId")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<bool>("IsFull")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("WorldId")
-                        .HasColumnType("uuid");
+                    b.HasKey("WorldId", "OwnerId", "ChunkU", "ChunkV");
 
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorldId", "OwnerId")
-                        .IsUnique();
-
-                    b.ToTable("player_explored", (string)null);
+                    b.ToTable("player_explored_chunks", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
@@ -946,6 +956,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("CentreR")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ClaimedQuests")
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset?>("FeastEndsAt")
@@ -1440,13 +1453,16 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<bool>("FrozenIslesEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<double>("IslandBendiness")
-                        .HasColumnType("double precision");
-
                     b.Property<int>("IslandCellSize")
                         .HasColumnType("integer");
 
                     b.Property<double>("IslandChance")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandCoastNoise")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandCoastNoiseScale")
                         .HasColumnType("double precision");
 
                     b.Property<double>("IslandCoastWarp")
@@ -1455,28 +1471,34 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("IslandCoastWarpScale")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("IslandLobeBlend")
+                    b.Property<double>("IslandLargeShare")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("IslandLobeMaxScale")
-                        .HasColumnType("double precision");
-
-                    b.Property<double>("IslandLobeMinScale")
+                    b.Property<double>("IslandMaxBend")
                         .HasColumnType("double precision");
 
                     b.Property<double>("IslandMaxElongation")
                         .HasColumnType("double precision");
 
-                    b.Property<int>("IslandMaxLobes")
+                    b.Property<int>("IslandMaxSegments")
                         .HasColumnType("integer");
 
-                    b.Property<double>("IslandMaxRadius")
+                    b.Property<double>("IslandMaxWidth")
                         .HasColumnType("double precision");
 
-                    b.Property<int>("IslandMinLobes")
+                    b.Property<double>("IslandMinBend")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandMinElongation")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("IslandMinSegments")
                         .HasColumnType("integer");
 
-                    b.Property<double>("IslandMinRadius")
+                    b.Property<double>("IslandMinWidth")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandSmallShare")
                         .HasColumnType("double precision");
 
                     b.Property<bool>("JoinsClosed")
@@ -1759,7 +1781,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("Settlement");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredChunkEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
                         .WithMany()

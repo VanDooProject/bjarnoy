@@ -193,19 +193,44 @@ asked for, is hex-shaped.
 
 ### 1e. Persisted explored history — third input, adopted
 
-**Implemented, whole-world rather than per-chunk.** `PersistedExploredBitset`
-(pure bit-packing, `Bjarnoy.Domain.World`) + `PlayerExploredEntity`
-(`Bjarnoy.Infrastructure`, one row per `(WorldId, OwnerId)`) + `FogMaskService`
-OR-ing in each settlement's explored ring and each in-transit army's
+**Implemented, per chunk.** `PersistedExploredBitset` (pure bit-packing,
+`Bjarnoy.Domain.World`) + `PlayerExploredChunkEntity` (`Bjarnoy.Infrastructure`,
+table `player_explored_chunks`) + `ExploredAreaService` OR-ing in each
+settlement's explored ring, each tower's, and each in-transit army's
 walked-over ground (§1c's radius, but only ever *appended*, never the live
-per-frame bonus itself) on every call, saved back only when it actually
-grew. Chunked delivery (§3) still isn't built anywhere in this codebase, so
-this keys by `(WorldId, OwnerId)` rather than the `(playerId, worldId,
-chunkCoord)` this section originally specified — splitting the bitset per
-chunk is real follow-up work for whenever §3 lands, not something to
-half-build ahead of it. Guild-wide merging (§1a) isn't implemented either —
-the persisted set today is exactly the requesting player's own history,
-same single-player scope as everything else in this file's §1a note.
+per-frame bonus itself) on every fog-chunks request, saved back only for the
+chunks that actually grew. Guild-wide merging (§1a) isn't implemented — the
+persisted set today is exactly the requesting player's own history, same
+single-player scope as everything else in this file's §1a note.
+
+- **Key and layout.** One row per touched 64 x 64-texel chunk, primary key
+  `(WorldId, OwnerId, ChunkU, ChunkV)`; the grid is `FogChunkLayout`
+  (`ChunkU = floor(u / 64)`, `ChunkV = floor(v / 64)` on the §2.1 texel grid,
+  anchored at texel (0, 0) so a chunk address does not depend on the world's
+  radius). A chunk's bitset is a fixed 512 bytes (one bit per texel, hex
+  texels only ever set), indexed by `FogChunkLayout.LocalIndex`.
+- **Compression: the full-chunk flag.** A chunk whose every one of its 2048
+  hex texels is explored is promoted to `IsFull = true` and its `Bits` are
+  dropped (`null`); merging into a full chunk is a no-op. A chunk nobody has
+  touched has no row at all. Storage therefore scales with the ground a player
+  has explored — a player with ~2000 explored hexes holds a handful of rows,
+  a few KB — not with the world's radius (the whole-world bitset it replaces
+  was 8003 x 16003 bits, 16 MB per player at radius 4000). A chunk that
+  straddles the world edge can never be complete unless the rings happen to
+  cover the sea beyond it; those few chunks just keep their bitset.
+- **No whole-world iteration.** `WorldBounds` is closed form
+  (`u in [-R, R]`, `v = 2r + q in [-2R, 2R]`, padded by the interpolation
+  texel). Merge groups only the *current discs'* hexes by chunk and reads/writes
+  just those rows. The fog gates on other realms' settlements and buildings
+  (`GET /settlements/{id}/view`, `GET /worlds/{id}/settlements`) ask
+  `ExploredAreaService.ExploredAmongAsync` per candidate hex — current discs
+  first, then only the stored chunks the remaining candidates fall in; no set
+  of the explored world is ever materialised.
+- **Migration.** `ChunkPlayerExplored` (both providers) drops the old
+  `player_explored` table instead of converting it: old worlds' fog history is
+  not worth a data migration. A player keeps everything their settlements,
+  towers and armies currently cover (re-merged into chunks on the next fog
+  request); only ground scouted by things that no longer exist is forgotten.
 
 An external review of this doc caught a real gap: §1 defines black fog as
 *history* ("you've been here, can't see it now"), but Option B's cache key
@@ -704,6 +729,74 @@ uses — and the shader keeps sampling that single assembled texture exactly
 as designed. Each chunk carries a small (1–2 texel) overlap border when
 stitched, so bilinear sampling right at a chunk boundary doesn't bleed
 into unfetched territory.
+
+### Implementation (what shipped)
+
+Chunk size is **64 x 64 texels** (`FogChunkLayout.ChunkSize`; the default
+radius-60 world already spans 2 x 4 chunks, so the multi-chunk path is the only
+one that runs). The whole-world `GET .../fog-mask` PNG is gone.
+
+**Endpoint.** `GET /api/v1/worlds/{worldId}/fog-chunks?cuMin&cuMax&cvMin&cvMax`
+(`RequireCallerRealm`, same owner scoping as before; rectangle inclusive on both
+ends, at most 256 chunks — 16 x 16 — else a 400 validation problem, mirroring
+`/tiles`). One batched call per viewport rectangle. Response, JSON:
+
+```json
+{
+  "chunkSize": 64,
+  "cuMin": -1, "cuMax": 1, "cvMin": 0, "cvMax": 1,
+  "chunks": [
+    { "cu": -1, "cv": 0, "version": "0",                "png": null },
+    { "cu":  0, "cv": 0, "version": "9F2C41D07AB3E615", "png": "<base64 RGBA8 PNG, 64 x 64>" }
+  ]
+}
+```
+
+Chunks come row-major (`cv` outer, `cu` inner). `png` is `null` for an *empty*
+chunk — nothing explored in or next to it and no vision source in reach — which
+is never generated or encoded and is the common case (at radius 4000, nearly the
+whole map). `version` changes exactly when that chunk's pixels would (`"0"` for
+empty). The response `ETag` covers the rectangle and every chunk's version, so a
+re-poll of an unchanged viewport is a body-less 304. JSON with base64 was picked
+over a bespoke binary framing: a chunk PNG is a few KB, a batch a few dozen
+chunks, and it needs no second parser on either side.
+
+**Server (`FogChunkService`).** Per requested chunk: the sources within reach of
+it (`FogMaskGenerator.SourcesAffecting` — §3's halo, a conservative
+`u ± steps` / `v ± 2·steps` box because `v = 2r + q`), the explored history of
+the chunk and its eight neighbours, and a one-texel border. The border matters:
+an odd-parity interpolation texel on a chunk edge averages diagonal neighbours
+that live in the next chunk, so `GenerateWindow` bakes the chunk grown by one
+texel per side and crops (this is what removes seams; a test compares every
+chunk against the same window of the old whole-world mask, texel for texel).
+The version hashes exactly those inputs and keys an `IMemoryCache` PNG cache
+(sliding 10 minutes; no size cap — the process-wide cache is shared, so a
+`SizeLimit` would force a size on every other entry). A settlement change
+therefore dirties only the chunks its ring plus ramp reach, and a neighbouring
+chunk's *history* change dirties only the chunks touching it. A reseed needs no
+wholesale invalidation: the grid is radius-independent and any change to sources
+or history is already in the version; chunks outside the world are answered
+empty.
+
+**Client.** The renderer reports the chunk rectangle under the camera when it
+changes (`HexMapRenderer.setFogViewportListener`); the world store
+(`requestFogViewport`) fetches the viewport plus a one-chunk margin once the
+camera leaves the window it already holds (debounced 150 ms, so a fast pan is one
+request), clamped to the world and capped at 16 x 16 chunks. Only chunks whose
+`version` changed are decoded (`FogChunkCache`), and everything held is stitched
+(`stitchWindow`) into **one** window bitmap, so the shader still samples a single
+texture and the seam problem never reaches it. Missing and empty chunks stitch
+as fully unknown — §3's default — and ground beyond the window reads unknown via
+the shader's own out-of-range rule. The placement affine is derived from the
+window's texel bounds (`fogMaskPlacement`), and the cross-fade keeps the outgoing
+texture's own placement (`uWorldToMaskScalePrev`/`OffsetPrev`) because the window
+moves with the camera. The LIVE_POLL_MS poll re-requests the current window with
+the last `ETag`; demo mode keeps its whole-world bake.
+
+**Not done here** (still the plans above): guild-shared sources (§1a), the
+per-player raw-distance-buffer tier of the cache (only the final PNG is cached),
+eager prefetch of a player's own history on session start, and the §2.8 debug
+panel rewrite.
 
 ### Sequencing — dynamic chunking, not a deferred 1×1 shortcut
 

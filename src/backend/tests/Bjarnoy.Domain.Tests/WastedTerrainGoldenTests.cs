@@ -23,11 +23,10 @@ public class WastedTerrainGoldenTests
     [MemberData(nameof(Cases))]
     public void Matches_the_shared_golden_fixture(Scenario scenario)
     {
-        var options = WorldGenerationOptions.ForSeed(scenario.Seed) with { Radius = scenario.Radius };
-        var sampler = new TerrainSampler(options);
+        var sampler = new TerrainSampler(TestWorlds.Options(scenario.Seed));
 
         var actual = new List<(int Q, int R, string Terrain)>();
-        foreach (var coord in HexCoord.Origin.WithinRadius(scenario.Radius))
+        foreach (var coord in new HexCoord(scenario.CentreQ, scenario.CentreR).WithinRadius(scenario.Radius))
         {
             var terrain = sampler.WastedTerrainAt(coord);
             if (terrain.IsLand())
@@ -59,16 +58,13 @@ public class WastedTerrainGoldenTests
     /// <see cref="TerrainSampler.WastedTerrainAt"/> instead.
     /// </summary>
     [Theory]
-    [InlineData(12)]
-    [InlineData(19)]
-    [InlineData(36)]
-    [InlineData(9000)]
-    public void TerrainAt_is_unchanged_by_the_existence_of_wasted_islands(int seed)
+    [MemberData(nameof(Cases))]
+    public void TerrainAt_is_unchanged_by_the_existence_of_wasted_islands(Scenario scenario)
     {
-        var options = WorldGenerationOptions.ForSeed(seed) with { Radius = 40 };
-        var sampler = new TerrainSampler(options);
+        var sampler = new TerrainSampler(TestWorlds.Options(scenario.Seed));
+        var landWasted = 0;
 
-        foreach (var coord in HexCoord.Origin.WithinRadius(40))
+        foreach (var coord in new HexCoord(scenario.CentreQ, scenario.CentreR).WithinRadius(scenario.Radius))
         {
             var terrain = sampler.TerrainAt(coord);
             var wasted = sampler.WastedTerrainAt(coord);
@@ -79,9 +75,12 @@ public class WastedTerrainGoldenTests
             // IslandDepthAt (green) is null.
             if (wasted.IsLand())
             {
+                landWasted++;
                 Assert.Equal(Terrain.Sea, terrain);
             }
         }
+
+        Assert.True(landWasted > 0, "the window must actually contain wasted land");
     }
 
     private static IReadOnlyList<Scenario> LoadScenarios()
@@ -119,6 +118,10 @@ public class WastedTerrainGoldenTests
     public sealed class Scenario
     {
         public int Seed { get; set; }
+
+        public int CentreQ { get; set; }
+
+        public int CentreR { get; set; }
 
         public int Radius { get; set; }
 

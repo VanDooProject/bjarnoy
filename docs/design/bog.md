@@ -45,6 +45,60 @@ alternative stone source.
 Bogs are part of the living lands (not a wasted or frozen pack). A bog meets
 grass at a hex edge, like the wasteland does.
 
+## Implemented generation (bog PR)
+
+*Implemented.* `BogGenerator` (C#, `Bjarnoy.Domain/World/BogGenerator.cs`) and its byte-identical twin
+`src/frontend/src/lib/map/bogGenerator.ts` run inside the green river pipeline
+(`RiverGenerator.GenerateWithBogs`); the shared golden is `src/shared/bog-generation-golden.json`. Order:
+
+1. **Pockets first.** Enclosed sea pockets of an island (3 to `BogPocketMaxTiles` tiles) are found before rivers
+   are traced. The pocket ring and the filled lake tiles are blocked for the drainage and count as land for
+   rivers, so rivers sink into the pocket. A pocket's bog ring may touch sand (it lies inside the island); a pocket
+   that is too thin or touches open sea is left as it is.
+2. **Through-river sites.** After tracing, before the width pass, sites are placed on scratch state: a lake with
+   its shore tiles, and a creek from the lake's mouth to a river tile. Each site is validated with a trial
+   `AssignWidths` (R11: the feeding river must have widened before the creek meets it) and committed only when
+   valid. Exactly one river runs through each lake (one outflow mouth, at least one inflow).
+3. **Sinks and spawns.** A bog may sink an extra river (`BogSinkChance`) or spawn one from a creek spring
+   (`BogSpawnChance`), both below 20%; a sink is tried before a spawn.
+4. **Moss region** last, around the lake, creeks and the anchor; it never touches sea or sand (R7).
+
+Creeks are routed by a BFS over (tile, heading) with turns {0, +60, -60}: only straight tiles and 60-degree bends
+(see the tile kinds in `BogTileKind`). Giants, camps and start positions see bog through `BogTerrain.Overlay`; bog
+costs 2x grass in `HexPathfinder`, a lake is impassable and not coastal water, and nothing can be built on a lake.
+Fish weir and boat variants (lake variants 4-6) are not placed. Bog camps (moosemire, beaverlodge, cranedance)
+are weak camps on plain bog tiles.
+
+Persistence: `IslandEntity.BogTiles` (text column, `BogTileListConverter`, token `q,r,kind,ins,out,water`),
+migration `AddIslandBogTiles` for Sqlite and PostgreSql; the API serves `IslandResponse.BogTiles`.
+
+Knobs (`WorldGenerationOptions`, defaults): `BogTilesPerSite` 6000, `BogMaxSites` 3 (at least 1), `BogSiteRadius` 7,
+`BogLargeIslandTiles` 15000, `BogLakeMax` 12, `BogLakeMaxLarge` 18, `BogMinFromSpring` 4, `BogMinFromMouth` 6,
+`BogSinkChance` 0.15, `BogSpawnChance` 0.05, `BogPocketMinTiles` 3, `BogPocketMaxTiles` 400,
+`BogPocketRadius` 4, `BogMaxSinkReroute` 12.
+
+Measured over seeds 1-8 at radius 1000: 273 islands, 95 with a bog (87 of the islands of 3000+ tiles); 124
+through-river bogs, 165 lakes (median 7 tiles, max 176); sinks 3.2%, spawns 7.3%; 48 pockets found, 41 filled;
+no inland river mouths; R1-R11 violations 0 (`BogRuleViolations` / `bogRules.ts`, counted by the preview tool).
+
+## Art pack orientation convention
+
+Pixel-measured against the vendored art (bg_assets_hextile edba233). Directions 0..5 = E, NE, NW, W, SW, SE;
+`file D` is the texture rendered for orientation index `D`. The measured table lives in
+`src/frontend/src/lib/map/types.test.ts`; the helpers are in `types.ts`.
+
+| Family | Rule | Helper |
+|---|---|---|
+| `bogcreek` (straight) | touches edges `D+1` and `D+4`, so `D = (2 - dir) mod 6` | `straightOrientationOf` |
+| `bogcreek_bend` | same as the river bend | `bendOrientationOf` |
+| `bogcreek_spring` | `D = (2 - out) mod 6` | `springOrientationOf` |
+| `boglake_inlet/shore/half` | water on edges `a, a+1, a+2` (first water edge `a`): `D = (5 - a) mod 6` | `bogShoreOrientationOf` |
+| `boglake_mouth` | as an inlet for the water edge; the creek is on the opposite edge | `bogMouthOrientationOf` |
+
+Texture keys: `bog`, `lake`, `bogcreek`, `bogcreekbend`, `bogcreekspring`, `lakeinlet`, `lakeshore`, `lakehalf`,
+`lakemouth`. `normalizeBogFrames` renames `variantNNN` to contiguous variants; lake variants above 3 (fish weir,
+both boats) are dropped. The variant is `tile.variant % variants.length`.
+
 ## Buildings
 
 - **Bog-ore works**: new building on bog ground; the iron producer. Unlocks

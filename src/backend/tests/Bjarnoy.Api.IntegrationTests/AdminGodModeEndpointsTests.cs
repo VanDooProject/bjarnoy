@@ -136,7 +136,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, garrison.StatusCode);
 
         var world = await playerWriting.PostJsonAsync(
-            "/api/v1/admin/worlds", new CreateWorldRequest(Unique("w"), 7, 40), Ct);
+            "/api/v1/admin/worlds", TestWorlds.CreateRequest(Unique("w"), 7, 40), Ct);
         Assert.Equal(HttpStatusCode.Forbidden, world.StatusCode);
     }
 
@@ -470,7 +470,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var name = Unique("world");
         var created = await client.PostJsonAsync(
-            "/api/v1/admin/worlds", new CreateWorldRequest(name, Seed: 21, Radius: 40, MaxPlayers: 42), Ct);
+            "/api/v1/admin/worlds", TestWorlds.CreateRequest(name, seed: 21, radius: 40, maxPlayers: 42), Ct);
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var world = await created.ReadStrictAsync<AdminWorldResponse>(Ct);
@@ -482,7 +482,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Contains(listed!, w => w.Id == world.Id);
 
         var duplicate = await client.PostJsonAsync(
-            "/api/v1/admin/worlds", new CreateWorldRequest(name, Seed: 22, Radius: 40), Ct);
+            "/api/v1/admin/worlds", TestWorlds.CreateRequest(name, seed: 22, radius: 40), Ct);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
     }
 
@@ -493,7 +493,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Authorize(client, await CreateAdminTokenAsync(client));
 
         var response = await client.PostJsonAsync(
-            "/api/v1/admin/worlds", new CreateWorldRequest(Unique("seedless"), Seed: null, Radius: 30), Ct);
+            "/api/v1/admin/worlds", TestWorlds.CreateRequest(Unique("seedless"), seed: null, radius: 30), Ct);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         // Whatever seed was drawn must be persisted, or the map is not reproducible.
@@ -508,7 +508,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
     [InlineData("", 4242, 30)]
     [InlineData("ab", 4242, 30)]
     [InlineData("valid-name", 4242, 0)]
-    [InlineData("valid-name", 4242, 5000)]
+    [InlineData("valid-name", 4242, 5001)]
     public async Task Invalid_admin_world_creation_requests_are_rejected(string name, int seed, int radius)
     {
         using var client = Client();

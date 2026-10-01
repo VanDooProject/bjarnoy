@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { AdminWorldResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { DEFAULT_GENERATION } from '../../lib/map/worldGenerator';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -59,7 +60,7 @@ function fromLocalInput(local: string): string | null {
 const newWorld = reactive({
   name: '',
   seed: '',
-  radius: '60',
+  radius: String(DEFAULT_GENERATION.worldRadius),
   maxPlayers: '500',
   creating: false,
   error: null as string | null,
@@ -81,7 +82,7 @@ async function createWorld() {
       // An omitted seed means "draw one" — the backend does that, so an empty
       // field must send nothing rather than 0, which is a real seed.
       seed: newWorld.seed === '' ? undefined : Number(newWorld.seed),
-      radius: Number(newWorld.radius) || 60,
+      radius: Number(newWorld.radius) || DEFAULT_GENERATION.worldRadius,
       maxPlayers: Number(newWorld.maxPlayers) || 500,
     });
 
@@ -192,7 +193,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
         </label>
         <label>
           {{ $t('adminWorlds.create.radius') }}
-          <input v-model="newWorld.radius" type="number" min="1" max="1000" step="1" />
+          <input v-model="newWorld.radius" type="number" min="1" max="5000" step="1" />
         </label>
         <label>
           {{ $t('adminWorlds.create.maxPlayers') }}

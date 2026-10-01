@@ -40,6 +40,7 @@ import {
   type AtlasPageProgress,
   type LoadedAtlas,
 } from './atlas';
+import type { CampFamily } from './campPlacement';
 import {
   classifyGiantClips,
   classifyGiantFrames,
@@ -48,17 +49,22 @@ import {
   type GiantPart,
   type GiantTextureMap,
 } from './giantTiles';
-import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
+import type { BogTile, RiverTile, Terrain, Tile, TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
   bend60OrientationOf,
   bendOrientationOf,
   confluenceOrientationOf,
   confluenceWideOrientationOf,
+  deltaOrientationOf,
   mouthOrientationOf,
+  bogMouthOrientationOf,
+  bogShoreOrientationOf,
   springOrientationOf,
   straightOrientationOf,
   TILE_ORIENTATIONS,
+  tributaryOrientationOf,
+  widenStraightOrientationOf,
 } from './types';
 
 export const TILE_ART_NATIVE_W = 200;
@@ -102,7 +108,17 @@ export type TextureKey =
   | 'deadforest'
   | 'blacksand'
   | 'wastedmountain'
-  | 'taintedwater';
+  | 'taintedwater'
+  // Bogland art (3D_assets hextile109-117): `bog` and `lake` are the plain moss and open water (a `Terrain` each);
+  // the shores, mouth and creeks are told apart by the hex's `BogTile` kind (`bogTextureKey`).
+  | 'bogcreek'
+  | 'bogcreekbend'
+  | 'bogcreekspring'
+  | 'lakeinlet'
+  | 'lakeshore'
+  | 'lakehalf'
+  | 'lakemouth'
+  | CampFamily;
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
@@ -166,10 +182,38 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   deadforest: 'deadforest',
   blacksand: 'blacksand',
   wastedmountain: 'mountaintile_jagged',
+  // Wildlife camps (3D_assets hextile120-128): a top on the ground tile's own base, level000
+  // cleared / level001 guarded. Bearrapids also carries its own river base per level.
+  wolfden: 'wolfden',
+  boarwallow: 'boarwallow',
+  bearrapids: 'bearrapids',
+  fenrirbrood: 'fenrirbrood',
+  sealhaulout: 'sealhaulout',
+  // No walrus art yet: the strong sand camp borrows the seal haul-out's until its own is rendered.
+  walrushaulout: 'sealhaulout',
+  eagleeyrie: 'eagleeyrie',
+  moosemire: 'moosemire',
+  beaverlodge: 'beaverlodge',
+  cranedance: 'cranedance',
+  harewarren: 'harewarren',
+  deerglade: 'deerglade',
+  otterslide: 'otterslide',
   // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
   // own doc comment for why this key exists at all despite `WorldModel`
   // itself never producing a wasted open-sea tile today.
   taintedwater: 'taintedwater',
+  // The bog set (3D_assets docs/bog-tiles.md): moss ground, open lake, the three shores (1, 2 or 3 water edges), the
+  // mouth (an inlet with the creek on the opposite edge) and the creeks. Every family has a base plus numbered
+  // variants; see `normalizeBogFrames` for how they are lined up.
+  bog: 'bog',
+  lake: 'boglake',
+  bogcreek: 'bogcreek',
+  bogcreekbend: 'bogcreek_bend',
+  bogcreekspring: 'bogcreek_spring',
+  lakeinlet: 'boglake_inlet',
+  lakeshore: 'boglake_shore',
+  lakehalf: 'boglake_half',
+  lakemouth: 'boglake_mouth',
 };
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
@@ -248,7 +292,22 @@ type RiverArtShape =
   | 'springcorrie'
   | 'springsaddleback'
   | 'confluencenarrow'
-  | 'confluencewide';
+  | 'confluencewide'
+  // Stream width (half the river's), same crossings and rotation convention as their river twins.
+  | 'small_straight'
+  | 'small_straight_meander'
+  | 'small_bend'
+  | 'small_bend_meander'
+  | 'small_bend60'
+  | 'small_bend60_loop'
+  // Stream in, river out: the widening straight, and the Y where two streams join.
+  | 'widen_straight'
+  | 'widen_yn'
+  | 'widen_yw'
+  // A stream joining a river: river arms at s+2 / s+4, the stream arm at s.
+  | 'riverstream'
+  // A river meeting the sea head-on.
+  | 'delta';
 
 // Exported (only) so textures.test.ts can guard the family name a shape
 // resolves to, the same reason riverArtFor below is exported.
@@ -283,6 +342,20 @@ export const RIVER_FAMILY: Record<RiverArtShape, string> = {
   // reaching for one.
   confluencenarrow: 'rivertile_y_narrow',
   confluencewide: 'rivertile_ywide',
+  // The stream set (3D_assets docs/river-tiles.md, "The stream set"): `_small_` is stream width
+  // on every edge, `_smallwide_` mixes stream and river. Names carry the crossing (bend180 is the
+  // straight, bend120 the bend, bend60 the hairpin).
+  small_straight: 'rivertile_small_bend180',
+  small_straight_meander: 'rivertile_small_bend180_meander',
+  small_bend: 'rivertile_small_bend120',
+  small_bend_meander: 'rivertile_small_bend120_meander',
+  small_bend60: 'rivertile_small_bend60',
+  small_bend60_loop: 'rivertile_small_bend60_loop',
+  widen_straight: 'rivertile_smallwide_bend180_island',
+  widen_yn: 'rivertile_smallwide_y_narrow',
+  widen_yw: 'rivertile_smallwide_ywide',
+  riverstream: 'rivertile_smallwide_bend120_tributary',
+  delta: 'rivertile_delta',
 };
 
 /** The lava-river shapes that have a dedicated wasted-island art family — see `TileTextures.lavaRiverBase`/`lavaRiverTop`'s own doc comment for why this doesn't cover every `RiverArtShape`. */
@@ -464,6 +537,46 @@ export function renumberTopVariants<T>(frames: FamilyFrame<T>[]): FamilyFrame<T>
       const name = i === 0 ? `renumbered_${orientation}` : `renumbered_${orientation}_variant${String(i - 1).padStart(3, '0')}`;
       result.push({ name, layer: entry.layer, value: entry.value });
     });
+  }
+  return result;
+}
+
+/**
+ * The bog set's texture keys, each backed by a family that numbers its variants `variant001`... with no `variant000`
+ * (the plain frame is index 0): `normalizeBogFrames` renames them to the contiguous numbering
+ * `classifyFamilyFrames` needs (`variantNNN` is index `NNN + 1`, so `variant001` becomes `variant000`).
+ */
+export const BOG_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
+  'bog',
+  'lake',
+  'bogcreek',
+  'bogcreekbend',
+  'bogcreekspring',
+  'lakeinlet',
+  'lakeshore',
+  'lakehalf',
+  'lakemouth',
+]);
+
+/**
+ * How many of a bog family's variants the game shows. The lake's `variant004` (fish weir), `variant005` (ore boat) and
+ * `variant006` (fishing boat) are placed by the buildings that use them (a lake Fisher Hut, the bog-ore works), never
+ * rolled for a plain lake tile, so they are dropped here; every other family shows all it has.
+ */
+const BOG_MAX_VARIANT: Partial<Record<TextureKey, number>> = { lake: 3 };
+
+const BOG_FRAME_RE = /^(.+)_(NE|NW|SW|SE|E|W)(?:_variant(\d{3}))?(_base)?$/;
+
+/** Lines a bog family's frames up for `classifyFamilyFrames` — see `BOG_TEXTURE_KEYS`. Exported for the tests. */
+export function normalizeBogFrames<T>(frames: FamilyFrame<T>[], maxVariant = Number.POSITIVE_INFINITY): FamilyFrame<T>[] {
+  const result: FamilyFrame<T>[] = [];
+  for (const frame of frames) {
+    const match = BOG_FRAME_RE.exec(frame.name);
+    if (!match) continue;
+    const variant = match[3] === undefined ? 0 : Number(match[3]);
+    if (variant > maxVariant) continue;
+    const suffix = variant === 0 ? '' : `_variant${String(variant - 1).padStart(3, '0')}`;
+    result.push({ name: `${match[1]}_${match[2]}${suffix}${match[4] ?? ''}`, layer: frame.layer, value: frame.value });
   }
   return result;
 }
@@ -741,7 +854,10 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
   const top: TileTextures['top'] = {};
   const animTop: TileTextures['animTop'] = {};
   for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
-    const frames = collapseLetteredLevels(framesOfFamily(merged, family));
+    const rawFrames = framesOfFamily(merged, family);
+    const frames = BOG_TEXTURE_KEYS.has(key)
+      ? normalizeBogFrames(rawFrames, BOG_MAX_VARIANT[key])
+      : collapseLetteredLevels(rawFrames);
     const keySparse = sparse && !TERRAIN_TEXTURE_KEYS.has(key);
     const classified = classifyFamilyFrames(GAPPY_VARIANT_FAMILIES.has(family) ? renumberTopVariants(frames) : frames, {
       sparse: keySparse,
@@ -869,6 +985,7 @@ const TERRAIN_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
   'deadforest',
   'blacksand',
   'wastedmountain',
+  ...BOG_TEXTURE_KEYS,
 ]);
 
 function mergeKeyed<V>(a: Partial<Record<TextureKey, V>>, b: Partial<Record<TextureKey, V>>): Partial<Record<TextureKey, V>> {
@@ -1258,7 +1375,77 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.buildingType === 'sawmill') return 'sawmillriver';
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
+  if (tile.bog) return bogTextureKey(tile.bog);
   return tile.terrain;
+}
+
+/**
+ * The texture key of a bog hex: moss and open water are the `bog` / `lake` terrain keys, the shores and the mouth
+ * are told apart by how many lake edges they carry, and a creek is straight or a bend by its in and out directions
+ * (a straight crossing has them opposite; the game only ever makes Straight and 60-degree Bend creeks).
+ */
+export function bogTextureKey(bog: BogTile): TextureKey {
+  switch (bog.kind) {
+    case 'bog':
+      return 'bog';
+    case 'lake':
+      return 'lake';
+    case 'inlet':
+      return 'lakeinlet';
+    case 'shore':
+      return 'lakeshore';
+    case 'half':
+      return 'lakehalf';
+    case 'mouth':
+      return 'lakemouth';
+    case 'creekspring':
+      return 'bogcreekspring';
+    case 'creek': {
+      const inIndex = bog.inDirections[0] ? TILE_ORIENTATIONS.indexOf(bog.inDirections[0]) : -1;
+      const outIndex = bog.outDirection ? TILE_ORIENTATIONS.indexOf(bog.outDirection) : -1;
+      return inIndex >= 0 && outIndex >= 0 && (inIndex + 3) % 6 === outIndex ? 'bogcreek' : 'bogcreekbend';
+    }
+  }
+}
+
+/**
+ * The art rotation of a bog hex, from the pixel-measured conventions of each family (`types.ts`, and
+ * `docs/design/bog.md`'s "Art pack orientation convention"): the shores and the mouth by where their water is,
+ * the creeks exactly like the river crossings they are (straight, bend) and the mountain springs (spring). Moss and
+ * open water have no direction, so they keep the tile's own cosmetic rotation (`fallback`).
+ */
+export function bogOrientationFor(bog: BogTile, fallback: TileOrientation): TileOrientation {
+  switch (bog.kind) {
+    case 'bog':
+    case 'lake':
+      return fallback;
+    case 'inlet':
+    case 'shore':
+    case 'half':
+      return bog.waterEdges.length > 0 ? bogShoreOrientationOf(bog.waterEdges) : fallback;
+    case 'mouth':
+      return bog.waterEdges[0] ? bogMouthOrientationOf(bog.waterEdges[0]) : fallback;
+    case 'creekspring':
+      return bog.outDirection ? springOrientationOf(bog.outDirection) : fallback;
+    case 'creek': {
+      const inDirection = bog.inDirections[0];
+      const outDirection = bog.outDirection;
+      if (!inDirection || !outDirection) return fallback;
+      return bogTextureKey(bog) === 'bogcreek' ? straightOrientationOf(inDirection) : bendOrientationOf(inDirection, outDirection);
+    }
+  }
+}
+
+/** The rotation a tile renders with: a river's or bog's own art rotation where it has one, else the tile's cosmetic one. */
+function tileOrientationFor(tile: Tile, riverArt?: RiverArt): TileOrientation {
+  if (riverArt) return riverArt.orientation;
+  const own = tile.orientation ?? 'SE';
+  return tile.bog && !tile.buildingType && !tile.camp ? bogOrientationFor(tile.bog, own) : own;
+}
+
+/** A bog family's variant slot for a tile: its hashed variant, wrapped onto however many the family has (creeks have 2, shores 1-2, ...). */
+function bogVariantIn<T>(tile: Tile, arr: readonly T[]): number {
+  return arr.length <= 1 ? 0 : (tile.variant ?? 0) % arr.length;
 }
 
 /** Clamps an index into `[0, length)` — the shared fallback for both terrain variants and building levels: an index the art pack doesn't have falls back to its richest known one. */
@@ -1317,7 +1504,7 @@ function pickIndexed<T>(arr: (T | undefined)[] | undefined, index: number): T | 
  * already included.
  */
 export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture {
-  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
+  const orientation = tileOrientationFor(tile, riverArt);
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
     const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
@@ -1334,7 +1521,12 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   }
   const key = textureKeyFor(tile, riverArt);
   const indexed = textures.baseIndexed[key];
-  if (indexed) {
+  if (indexed && BOG_TEXTURE_KEYS.has(key)) {
+    // A bog family's base differs per variant (its submerged props), not per building level.
+    const arr = indexed[orientation];
+    if (arr.length > 0) return arr[bogVariantIn(tile, arr)]!;
+  }
+  if (indexed && !BOG_TEXTURE_KEYS.has(key)) {
     const picked = pickIndexed(indexed[orientation], tile.buildingLevel ?? 1);
     if (picked !== undefined) return picked;
   }
@@ -1348,13 +1540,63 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   return base![orientation];
 }
 
+/**
+ * A camp's art level: every camp is guarded for now (`level001`, animated); the cleared
+ * state (`level000`, static) arrives with camp gameplay.
+ */
+const CAMP_GUARDED_LEVEL = 1;
+
+/** The texture key and art-level index a tile's top layer resolves to: a camp's own family (guarded level), a building's level, or a terrain variant. */
+function topKeyAndIndex(tile: Tile, riverArt?: RiverArt): { key: TextureKey; index: number } {
+  if (tile.camp && !riverArt) return { key: tile.camp.family as CampFamily, index: CAMP_GUARDED_LEVEL };
+  const key = textureKeyFor(tile, riverArt);
+  if (tile.camp && riverArt?.key === tile.camp.family) return { key, index: CAMP_GUARDED_LEVEL };
+  return { key, index: tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0) };
+}
+
+/** Camps that stand on a straight river tile and bring their own river base per level: the bears and the otters. */
+const RIVER_CAMPS: ReadonlySet<CampFamily> = new Set<CampFamily>(['bearrapids', 'otterslide']);
+
+/**
+ * Which art rotation a camp renders with, and (river camps only) its river art override.
+ *
+ * The guarded art ships only the one to three rotations that show its animals best (3D_assets
+ * `docs/wildlife-camps.md`, "Kept orientations"), which are read off the loaded frames rather
+ * than typed out: the tile's own orientation is mapped onto them by modulo, in
+ * `TILE_ORIENTATIONS` order. A river camp (`RIVER_CAMPS`) stands on its river, so it keeps its channel: a
+ * straight channel is the same picture 180 degrees round (orientation index mod 3), and the
+ * kept rotation with the river's own index mod 3 is used. Returns `undefined` when the tile has
+ * no camp, or a river camp is not on a straight river tile (drawn as plain river then).
+ */
+export function campArtFor(
+  textures: TileTextures,
+  tile: Tile,
+  river: RiverTile | undefined,
+): { orientation: TileOrientation; riverArt?: RiverArt } | undefined {
+  const camp = tile.camp;
+  if (!camp) return undefined;
+  const family = camp.family as CampFamily;
+  const kept = TILE_ORIENTATIONS.filter((o) => textures.top[family]?.[o]?.[CAMP_GUARDED_LEVEL] !== undefined);
+
+  if (RIVER_CAMPS.has(family)) {
+    if (!river || river.shape !== 'straight' || river.wasted) return undefined;
+    const channel = riverArtFor(river, null).orientation;
+    const channelClass = TILE_ORIENTATIONS.indexOf(channel) % 3;
+    const orientation = kept.find((o) => TILE_ORIENTATIONS.indexOf(o) % 3 === channelClass) ?? channel;
+    return { orientation, riverArt: { key: family, orientation } };
+  }
+
+  if (kept.length === 0) return { orientation: camp.orientation };
+  return { orientation: kept[TILE_ORIENTATIONS.indexOf(camp.orientation) % kept.length]! };
+}
+
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
 export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture | undefined {
-  const key = textureKeyFor(tile, riverArt);
-  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
+  const { key, index } = topKeyAndIndex(tile, riverArt);
+  const orientation = tileOrientationFor(tile, riverArt);
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
-  const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
+  if (BOG_TEXTURE_KEYS.has(key)) return arr[bogVariantIn(tile, arr)];
   return pickIndexed(arr, index);
 }
 
@@ -1366,11 +1608,12 @@ export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: Riv
  * given tile is showing.
  */
 export function topAnimFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): TileAnimClip | undefined {
-  const key = textureKeyFor(tile, riverArt);
-  const orientation = riverArt?.orientation ?? tile.orientation ?? 'SE';
+  const { key, index } = topKeyAndIndex(tile, riverArt);
+  const orientation = tileOrientationFor(tile, riverArt);
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
-  const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
+  // Bog art has no animated toppings of its own on a plain tile (the boats are placed by the buildings that use them).
+  if (BOG_TEXTURE_KEYS.has(key)) return undefined;
   // Resolved through the same `pickIndexedEntry` walk as `topTextureFor`
   // (not a plain `clampIndex`) so the two always agree on which rung is
   // actually showing — including while only `buildings-level1` has loaded
@@ -1434,30 +1677,67 @@ export function riverArtFor(
   seaDirection: TileOrientation | null,
   springShape: 'corrie' | 'saddleback' = 'corrie',
 ): { shape: RiverArtShape; orientation: TileOrientation } {
+  const width = river.width ?? 'river';
+  const stream = width === 'stream';
   if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
-    return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
+    return {
+      shape: stream ? 'small_bend' : 'bend',
+      orientation: bendOrientationOf(river.inDirections[0], river.outDirection),
+    };
   }
   if (river.shape === 'bend60' && river.outDirection && river.inDirections[0]) {
-    return { shape: 'bend60', orientation: bend60OrientationOf(river.inDirections[0], river.outDirection) };
+    return {
+      shape: stream ? 'small_bend60' : 'bend60',
+      orientation: bend60OrientationOf(river.inDirections[0], river.outDirection),
+    };
   }
   if (river.shape === 'spring' && river.outDirection) {
     const shape = springShape === 'saddleback' ? 'springsaddleback' : 'springcorrie';
     return { shape, orientation: springOrientationOf(river.outDirection) };
   }
   if (river.shape === 'confluence') {
+    // A stream joining a river (width 'riverstream'): the tributary tile. The generator stores the
+    // stream inflow first; pixel-measured, file D carries the stream on polygon edge D+3 and the river
+    // on D+1 / D+5, so a stream arriving from direction s uses file (6 - s) mod 6.
+    if (width === 'riverstream' && river.inDirections[0]) {
+      return { shape: 'riverstream', orientation: tributaryOrientationOf(river.inDirections[0]) };
+    }
+    // Two streams meeting: the smallwide Y (river out); otherwise the river Y.
     const narrow = confluenceOrientationOf(river.inDirections, river.outDirection);
-    if (narrow) return { shape: 'confluencenarrow', orientation: narrow };
+    if (narrow) return { shape: width === 'widen' ? 'widen_yn' : 'confluencenarrow', orientation: narrow };
     const wide = confluenceWideOrientationOf(river.inDirections, river.outDirection);
-    if (wide) return { shape: 'confluencewide', orientation: wide };
+    if (wide) return { shape: width === 'widen' ? 'widen_yw' : 'confluencewide', orientation: wide };
     const orientation = river.outDirection ?? river.inDirections[0] ?? 'SE';
     return { shape: 'confluencenarrow', orientation };
   }
   if (river.shape === 'mouth' && river.inDirections[0]) {
-    return mouthOrientationOf(river.inDirections[0], seaDirection);
+    const inDirection = river.inDirections[0];
+    // A stream that reaches the sea head-on widens on the mouth tile itself (the generator only
+    // allows that when the sea is straight ahead).
+    if (width === 'widen') return { shape: 'widen_straight', orientation: widenStraightOrientationOf(inDirection) };
+    // A river meeting the sea head-on is a delta (green islands: it is sand-based art).
+    if (!river.wasted && seaDirection) {
+      const inIndex = TILE_ORIENTATIONS.indexOf(inDirection);
+      if (TILE_ORIENTATIONS.indexOf(seaDirection) === (inIndex + 3) % 6) {
+        return { shape: 'delta', orientation: deltaOrientationOf(inDirection) };
+      }
+    }
+    return mouthOrientationOf(inDirection, seaDirection);
   }
 
+  if (width === 'widen') {
+    const inDirection = river.inDirections[0] ?? (river.outDirection ? oppositeOf(river.outDirection) : null);
+    return { shape: 'widen_straight', orientation: inDirection ? widenStraightOrientationOf(inDirection) : 'SE' };
+  }
   const direction = river.inDirections[0] ?? river.outDirection;
-  return { shape: 'straight', orientation: direction ? straightOrientationOf(direction) : 'SE' };
+  return {
+    shape: stream ? 'small_straight' : 'straight',
+    orientation: direction ? straightOrientationOf(direction) : 'SE',
+  };
+}
+
+function oppositeOf(direction: TileOrientation): TileOrientation {
+  return TILE_ORIENTATIONS[(TILE_ORIENTATIONS.indexOf(direction) + 3) % 6]!;
 }
 
 /**
@@ -1485,6 +1765,8 @@ export function riverBuildingArtFor(buildingType: string, river: RiverTile): Riv
   // and CropMillRiverShapes) — checking the raw shape here keeps this in
   // lockstep with riverBuildingAllowedHere instead of accidentally drawing
   // river-building art on a shape it was never actually built on.
+  // Their art is river width: a stream or widening hex has no building art.
+  if ((river.width ?? 'river') !== 'river') return undefined;
   if (buildingType === 'sawmill') {
     if (river.shape !== 'straight' && river.shape !== 'bend' && river.shape !== 'bend60') return undefined;
   } else if (buildingType === 'cropmill') {
@@ -1512,6 +1794,10 @@ const VARIANT_SHAPE: Partial<Record<RiverArtShape, Partial<Record<Exclude<RiverV
   straight: { meander: 'straight_meander', island: 'straight_island' },
   bend: { meander: 'bend_meander', island: 'bend_island' },
   bend60: { loop: 'bend60_loop' },
+  // Streams have the meander and loop cuts but no gravel-bar island: an `island` roll draws plain.
+  small_straight: { meander: 'small_straight_meander' },
+  small_bend: { meander: 'small_bend_meander' },
+  small_bend60: { loop: 'small_bend60_loop' },
 };
 
 /**

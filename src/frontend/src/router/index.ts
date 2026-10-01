@@ -15,6 +15,7 @@ import ProfileView from '../views/ProfileView.vue';
 // "ineffective dynamic import" warning for no benefit.
 import LeaderboardView from '../views/LeaderboardView.vue';
 import GuildView from '../views/GuildView.vue';
+import ReportsView from '../views/ReportsView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -93,12 +94,12 @@ export const router = createRouter({
       // shared, e.g. from a future notification) — see ReportsView.vue.
       path: '/reports',
       name: 'reports',
-      component: () => import('../views/ReportsView.vue'),
+      component: ReportsView,
     },
     {
       path: '/reports/:reportId',
       name: 'report-detail',
-      component: () => import('../views/ReportsView.vue'),
+      component: ReportsView,
     },
     {
       // Issue #40 phase 7: the premium fight simulator — the one endpoint in
@@ -160,6 +161,16 @@ export const router = createRouter({
       path: '/docs/wasted-lands',
       name: 'wasted-lands-docs',
       component: () => import('../views/WastedLandsView.vue'),
+    },
+    {
+      path: '/docs/wildlife-camps',
+      name: 'wildlife-camps-docs',
+      component: () => import('../views/WildlifeCampsView.vue'),
+    },
+    {
+      path: '/docs/bog-lands',
+      name: 'bog-lands-docs',
+      component: () => import('../views/BogLandsView.vue'),
     },
     {
       path: '/admin',

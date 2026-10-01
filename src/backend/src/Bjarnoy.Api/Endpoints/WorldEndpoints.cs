@@ -53,9 +53,11 @@ public static class WorldEndpoints
             .WithName("GetWorldTiles")
             .WithSummary("Returns the terrain of an axial rectangle of hexes.");
 
-        worlds.MapGet("/{worldId:guid}/fog-mask", GetFogMask)
-            .WithName("GetWorldFogMask")
-            .WithSummary("The requesting player's fog-of-war mask, as an RGBA8 PNG (map-fog-v2.md §2.2).")
+        worlds.MapGet("/{worldId:guid}/fog-chunks", GetFogChunks)
+            .WithName("GetWorldFogChunks")
+            .WithSummary(
+                "The requesting player's fog-of-war mask for a rectangle of 64x64-texel chunks, " +
+                "one RGBA8 PNG per chunk (map-fog-v2.md §2.2/§3).")
             .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/plot-suggestion", GetPlotSuggestion)
@@ -267,9 +269,10 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
+        var bog = await worlds.GetBogOverlayAsync(worldId, cancellationToken);
         IReadOnlyList<TileResponse> tiles =
         [
-            .. WorldService.GetTiles(world, qMin, qMax, rMin, rMax).Select(TileResponse.From),
+            .. WorldService.GetTiles(world, qMin, qMax, rMin, rMax, bog).Select(TileResponse.From),
         ];
 
         return TypedResults.Ok(new TileChunkResponse(worldId, qMin, qMax, rMin, rMax, tiles));
@@ -284,15 +287,26 @@ public static class WorldEndpoints
     /// realm is refused with 403 rather than handed that realm's fog history.
     /// Per <c>map-fog-v2.md</c> §1f, this endpoint must stay player-scoped
     /// even though <c>/tiles</c> above is deliberately open. The resolved
-    /// owner id is passed straight through to <see cref="FogMaskService"/>
+    /// owner id is passed straight through to <see cref="FogChunkService"/>
     /// unchanged — its explored-tile history is keyed by <c>OwnerId</c>,
     /// which is exactly why the resolver hands back the realm's original one
     /// rather than anything from this request.
     /// </summary>
-    private static async Task<IResult> GetFogMask(
+    /// <remarks>
+    /// The rectangle is inclusive on both ends, in chunk coordinates
+    /// (<c>cuMin..cuMax</c> x <c>cvMin..cvMax</c>, see <c>FogChunkLayout</c>),
+    /// mirroring <see cref="GetTiles"/>'s <c>qMin..qMax</c> shape. The
+    /// response's <c>ETag</c> covers the whole rectangle, so the SPA's
+    /// re-poll of an unchanged viewport is a 304 with no body.
+    /// </remarks>
+    private static async Task<IResult> GetFogChunks(
         Guid worldId,
+        int cuMin,
+        int cuMax,
+        int cvMin,
+        int cvMax,
         HttpContext httpContext,
-        FogMaskService fogMask,
+        FogChunkService fogChunks,
         RealmDirectory realms,
         CancellationToken cancellationToken)
     {
@@ -307,13 +321,21 @@ public static class WorldEndpoints
             return NotOwnerRefusal();
         }
 
-        var result = await fogMask.GeneratePlayerMaskAsync(worldId, realm.OwnerId!, cancellationToken);
-        if (!result.Accepted)
+        var result = await fogChunks.GetChunksAsync(worldId, realm.OwnerId!, cuMin, cuMax, cvMin, cvMax, cancellationToken);
+        switch (result.Rejection)
         {
-            // FogMaskRejection's only value besides None: the world itself
-            // doesn't exist (map-fog-v2.md's slice never rejects for an
-            // owner having no settlements — that renders an all-fog mask).
-            return TypedResults.NotFound(WorldNotFoundProblem());
+            case FogChunkRejection.WorldNotFound:
+                return TypedResults.NotFound(WorldNotFoundProblem());
+            case FogChunkRejection.InvalidRange:
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["range"] = ["cuMax/cvMax must be greater than or equal to cuMin/cvMin."],
+                });
+            case FogChunkRejection.TooManyChunks:
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["range"] = [$"At most {FogChunkService.MaxChunksPerRequest} chunks may be fetched in one call."],
+                });
         }
 
         var eTag = $"\"{result.ETag}\"";
@@ -323,13 +345,13 @@ public static class WorldEndpoints
         }
 
         httpContext.Response.Headers.ETag = eTag;
-        return TypedResults.File(result.Png!, "image/png");
+        return TypedResults.Ok(FogChunksResponse.From(cuMin, cuMax, cvMin, cvMax, result.Chunks!));
     }
 
     /// <summary>
     /// Backend-owned counterpart to the landing page's old client-side plot
     /// finder — see <see cref="PlotReservationService"/>. Same
-    /// <see cref="CallerRealmResolver"/>-based scoping as <see cref="GetFogMask"/>
+    /// <see cref="CallerRealmResolver"/>-based scoping as <see cref="GetFogChunks"/>
     /// (a claimed player's JWT resolves to their realm even from a fresh
     /// browser, and someone else's already-claimed realm under the header is
     /// refused with 403) — never echoes any owner id, IP, or another
@@ -454,7 +476,7 @@ public static class WorldEndpoints
     };
 
     /// <summary>
-    /// The 403 the fog-mask and plot-suggestion endpoints answer with on
+    /// The 403 the fog-chunks and plot-suggestion endpoints answer with on
     /// <see cref="CallerRealmOutcome.Refused"/> — the same body
     /// <see cref="OwnershipGate"/> uses for a mutation from the wrong caller,
     /// since this is the same rule applied to a read.

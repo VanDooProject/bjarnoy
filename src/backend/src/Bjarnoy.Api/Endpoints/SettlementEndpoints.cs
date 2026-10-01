@@ -88,6 +88,13 @@ public static class SettlementEndpoints
             .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
+        settlements.MapPost("/{settlementId:guid}/quests/{questId}/claim", ClaimQuest)
+            .WithName("ClaimQuest")
+            .WithSummary("Claims a completed onboarding quest's resource reward, once per settlement.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
             .WithName("SlotRune")
             .WithSummary("Slots an unslotted rune into the shrine standing on a hex.")
@@ -221,7 +228,7 @@ public static class SettlementEndpoints
         if (realm.Outcome != CallerRealmOutcome.Resolved)
         {
             // MissingHeader/Refused: nothing to check explored ground
-            // against — same 403 the fog-mask/plot-suggestion reads answer
+            // against — same 403 the fog-chunks/plot-suggestion reads answer
             // with for the same two outcomes.
             return NotOwnerRefusal();
         }
@@ -236,7 +243,14 @@ public static class SettlementEndpoints
         }
 
         var isOwnSettlement = string.Equals(entity.OwnerId, realm.OwnerId, StringComparison.Ordinal);
-        if (!isOwnSettlement && !area.Hexes.Contains(new HexCoord(entity.CentreQ, entity.CentreR)))
+        var explored = isOwnSettlement
+            ? []
+            : await exploredArea.ExploredAmongAsync(
+                area,
+                entity.Buildings.Select(b => new HexCoord(b.Q, b.R))
+                    .Append(new HexCoord(entity.CentreQ, entity.CentreR)),
+                cancellationToken);
+        if (!isOwnSettlement && !explored.Contains(new HexCoord(entity.CentreQ, entity.CentreR)))
         {
             // Never reveal that an unexplored settlement even exists.
             return TypedResults.NotFound(SettlementNotFoundProblem());
@@ -245,7 +259,7 @@ public static class SettlementEndpoints
         IReadOnlyList<PlacedBuildingResponse> buildings =
         [
             .. entity.Buildings
-                .Where(b => isOwnSettlement || area.Hexes.Contains(new HexCoord(b.Q, b.R)))
+                .Where(b => isOwnSettlement || explored.Contains(new HexCoord(b.Q, b.R)))
                 .Select(b => new PlacedBuildingResponse(b.Q, b.R, b.Type.ToWireName(), b.Level)),
         ];
 
@@ -301,12 +315,21 @@ public static class SettlementEndpoints
 
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
 
+        // Only rivals' centres need the fog check; the explored lookup reads
+        // just the stored chunks those centres fall in.
+        var explored = await exploredArea.ExploredAmongAsync(
+            area,
+            entities
+                .Where(s => s.OwnerId != realm.OwnerId && !(callerUserId is not null && s.UserId == callerUserId))
+                .Select(s => new HexCoord(s.CentreQ, s.CentreR)),
+            cancellationToken);
+
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
                 .Where(s => s.OwnerId == realm.OwnerId
                     || (callerUserId is not null && s.UserId == callerUserId)
-                    || area.Hexes.Contains(new HexCoord(s.CentreQ, s.CentreR)))
+                    || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
                 .Select(s => new SettlementSummary(
                     s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
                     s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
@@ -486,6 +509,43 @@ public static class SettlementEndpoints
         return TypedResults.Conflict(problem);
     }
 
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> ClaimQuest(
+        Guid settlementId,
+        string questId,
+        SettlementService settlements,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.ClaimQuestAsync(settlementId, questId, cancellationToken);
+
+        if (result.SettlementNotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        if (!result.Accepted)
+        {
+            var problem = new ProblemDetails
+            {
+                Title = "The quest reward was refused.",
+                Detail = DescribeQuest(result.Rejection),
+                Status = StatusCodes.Status409Conflict,
+            };
+            problem.Extensions["rejection"] = result.Rejection.ToString();
+
+            return TypedResults.Conflict(problem);
+        }
+
+        var clock = result.Clock!.Value;
+        return TypedResults.Ok(
+            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+    }
+
     private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> SlotRune(
         Guid settlementId,
         Guid runeId,
@@ -632,7 +692,7 @@ public static class SettlementEndpoints
     /// resolves neither a JWT realm nor a usable <c>X-Owner-Id</c> header, or
     /// refuses one naming someone else's already-claimed realm — the same
     /// body <see cref="OwnershipGate"/> and <see cref="WorldEndpoints"/>'s
-    /// fog-mask/plot-suggestion reads use for the same outcomes.
+    /// fog-chunks/plot-suggestion reads use for the same outcomes.
     /// </summary>
     private static IResult NotOwnerRefusal() =>
         Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
@@ -716,6 +776,7 @@ public static class SettlementEndpoints
         BuildRejection.TerrainNotAllowed => "That building cannot stand on that terrain.",
         BuildRejection.HexNotInSettlement => "That hex is outside the settlement's borders.",
         BuildRejection.HexOccupiedByGiant => "That hex is part of a giant feature and can never be built on.",
+        BuildRejection.HexOccupiedByCamp => "A wildlife camp stands on that hex and it cannot be built on.",
         BuildRejection.HexOccupied => "Another building already stands there.",
         BuildRejection.NotEnoughResources =>
             "Not enough resources (some may be reserved for queued construction).",
@@ -733,6 +794,14 @@ public static class SettlementEndpoints
             "Raise a storage house to level 10 before building another.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
+        _ => "Refused.",
+    };
+
+    private static string DescribeQuest(QuestRejection rejection) => rejection switch
+    {
+        QuestRejection.UnknownQuest => "There is no such quest.",
+        QuestRejection.AlreadyClaimed => "This quest's reward was already claimed.",
+        QuestRejection.NotCompleted => "This quest is not completed yet.",
         _ => "Refused.",
     };
 

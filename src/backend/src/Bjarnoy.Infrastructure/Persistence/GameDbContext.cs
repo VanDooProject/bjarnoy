@@ -86,7 +86,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<UserActivitySessionEntity> UserActivitySessions => Set<UserActivitySessionEntity>();
 
-    public DbSet<PlayerExploredEntity> PlayerExplored => Set<PlayerExploredEntity>();
+    public DbSet<PlayerExploredChunkEntity> PlayerExploredChunks => Set<PlayerExploredChunkEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -142,9 +142,17 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new RiverTileListConverter())
                 .Metadata.SetValueComparer(RiverTileListConverter.Comparer);
 
+            island.Property(i => i.BogTiles)
+                .HasConversion(new BogTileListConverter())
+                .Metadata.SetValueComparer(BogTileListConverter.Comparer);
+
             island.Property(i => i.Giants)
                 .HasConversion(new GiantListConverter())
                 .Metadata.SetValueComparer(GiantListConverter.Comparer);
+
+            island.Property(i => i.Camps)
+                .HasConversion(new CampListConverter())
+                .Metadata.SetValueComparer(CampListConverter.Comparer);
         });
 
         modelBuilder.Entity<SettlementEntity>(settlement =>
@@ -881,21 +889,19 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             session.HasIndex(s => s.StartedAtUtc);
         });
 
-        modelBuilder.Entity<PlayerExploredEntity>(explored =>
+        modelBuilder.Entity<PlayerExploredChunkEntity>(chunk =>
         {
-            explored.ToTable("player_explored");
-            explored.HasKey(e => e.Id);
-            explored.Property(e => e.Id).ValueGeneratedNever();
-            explored.Property(e => e.OwnerId).IsRequired();
+            chunk.ToTable("player_explored_chunks");
 
-            // One row per player per world — FogMaskService reads/writes it
-            // by this exact pair every call, and it's what "the same player
-            // asking again" means for this table.
-            explored.HasIndex(e => new { e.WorldId, e.OwnerId }).IsUnique();
+            // (WorldId, OwnerId) first so "everything this player explored in
+            // this world" and any chunk-rectangle read are range scans on the
+            // primary key itself; no separate index needed.
+            chunk.HasKey(c => new { c.WorldId, c.OwnerId, c.ChunkU, c.ChunkV });
+            chunk.Property(c => c.OwnerId).HasMaxLength(200).IsRequired();
 
-            explored.HasOne(e => e.World)
+            chunk.HasOne(c => c.World)
                 .WithMany()
-                .HasForeignKey(e => e.WorldId)
+                .HasForeignKey(c => c.WorldId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

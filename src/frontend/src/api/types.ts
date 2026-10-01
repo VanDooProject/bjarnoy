@@ -43,23 +43,28 @@ export interface WorldSummaryResponse {
 
 /** Mirrors `WorldGenerationResponse` — see that record's own doc comments for field semantics. */
 export interface WorldGenerationResponse {
+  /** The world radius: an island that could cross it is not generated, so terrain depends on it. */
+  worldRadius: number;
   islandCellSize: number;
   islandChance: number;
-  islandMinRadius: number;
-  islandMaxRadius: number;
+  islandMinWidth: number;
+  islandMaxWidth: number;
+  islandMinSegments: number;
+  islandMaxSegments: number;
+  islandMinElongation: number;
+  islandMaxElongation: number;
+  islandMinBend: number;
+  islandMaxBend: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
+  islandCoastNoise: number;
+  islandCoastNoiseScale: number;
+  islandSmallShare: number;
+  islandLargeShare: number;
   beachThreshold: number;
   mountainThreshold: number;
   mountainRockiness: number;
   forestRockiness: number;
-  islandMinLobes: number;
-  islandMaxLobes: number;
-  islandMaxElongation: number;
-  islandBendiness: number;
-  islandLobeBlend: number;
-  islandLobeMinScale: number;
-  islandLobeMaxScale: number;
-  islandCoastWarp: number;
-  islandCoastWarpScale: number;
 }
 
 /** Mirrors `WorldMovementResponse` — see that record's own doc comments for field semantics. */
@@ -81,6 +86,22 @@ export interface RiverTileResponse {
   shape: 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth' | 'bend60';
   inDirections: string[];
   outDirection: string | null;
+  /** `river` (default when absent), `stream` (half width) or `widen` (stream in, river out) or `riverstream` (a wide-Y join of a river and a stream). */
+  width?: 'river' | 'stream' | 'widen' | 'riverstream';
+}
+
+/**
+ * Mirrors `BogTileResponse` — one hex of an island's bogland (see `lib/map/bogGenerator.ts` and
+ * `docs/design/bog.md`). A `lake` hex is terrain `lake`, every other kind terrain `bog`; `inDirections`/
+ * `outDirection` are the flow of a creek, mouth or spring, `waterEdges` the lake neighbours of a shore or mouth.
+ */
+export interface BogTileResponse {
+  q: number;
+  r: number;
+  kind: 'bog' | 'lake' | 'inlet' | 'shore' | 'half' | 'mouth' | 'creek' | 'creekspring';
+  inDirections: string[];
+  outDirection: string | null;
+  waterEdges: string[];
 }
 
 /**
@@ -97,6 +118,21 @@ export interface GiantResponse {
   orientation: string;
 }
 
+/**
+ * Mirrors `CampResponse` — a wildlife camp (see `lib/map/campPlacement.ts` and
+ * `docs/design/wildlife-camps.md`). Spawn and render only for now; every camp is
+ * guarded. `orientation` is the tile's own rotation wire name.
+ */
+export interface CampResponse {
+  family: string;
+  q: number;
+  r: number;
+  level: number;
+  orientation: string;
+  strong: boolean;
+  guardRange: number;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;
@@ -107,6 +143,9 @@ export interface IslandResponse {
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
+  camps: CampResponse[];
+  /** This island's bogland (empty when it has none). */
+  bogTiles: BogTileResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
 }
@@ -258,6 +297,18 @@ export interface FeastOfferResponse {
   renownGain: number;
 }
 
+/**
+ * An onboarding quest and where the settlement stands on it (economy.md
+ * section 7). Mirrors `QuestResponse`; the reward is wood/stone/food, paid
+ * once per settlement on claim and clamped to storage.
+ */
+export interface QuestResponse {
+  id: string;
+  completed: boolean;
+  claimed: boolean;
+  reward: ResourceLine;
+}
+
 export interface SettlementResponse {
   id: string;
   worldId: string;
@@ -280,6 +331,8 @@ export interface SettlementResponse {
   feast: FeastResponse | null;
   /** Cost and gain of the next feast; null without a Town Square. */
   nextFeast: FeastOfferResponse | null;
+  /** The onboarding quests, in presentation order. */
+  quests: QuestResponse[];
   world: WorldClockResponse;
 }
 
@@ -513,20 +566,25 @@ export interface AdminWorldResponse {
 export interface WorldGenerationSettings {
   islandCellSize: number;
   islandChance: number;
-  islandMinRadius: number;
-  islandMaxRadius: number;
+  islandMinWidth: number;
+  islandMaxWidth: number;
+  islandMinSegments: number;
+  islandMaxSegments: number;
+  islandMinElongation: number;
+  islandMaxElongation: number;
+  islandMinBend: number;
+  islandMaxBend: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
+  islandCoastNoise: number;
+  islandCoastNoiseScale: number;
+  islandSmallShare: number;
+  islandLargeShare: number;
   beachThreshold: number;
   mountainThreshold: number;
   mountainRockiness: number;
   forestRockiness: number;
   minimumIslandTiles: number;
-  islandMinLobes: number;
-  islandMaxLobes: number;
-  islandMaxElongation: number;
-  islandBendiness: number;
-  islandLobeBlend: number;
-  islandCoastWarp: number;
-  islandCoastWarpScale: number;
 }
 
 /**
@@ -537,20 +595,25 @@ export interface WorldGenerationSettings {
 export interface WorldGenerationSettingsOverrides {
   islandCellSize?: number;
   islandChance?: number;
-  islandMinRadius?: number;
-  islandMaxRadius?: number;
+  islandMinWidth?: number;
+  islandMaxWidth?: number;
+  islandMinSegments?: number;
+  islandMaxSegments?: number;
+  islandMinElongation?: number;
+  islandMaxElongation?: number;
+  islandMinBend?: number;
+  islandMaxBend?: number;
+  islandCoastWarp?: number;
+  islandCoastWarpScale?: number;
+  islandCoastNoise?: number;
+  islandCoastNoiseScale?: number;
+  islandSmallShare?: number;
+  islandLargeShare?: number;
   beachThreshold?: number;
   mountainThreshold?: number;
   mountainRockiness?: number;
   forestRockiness?: number;
   minimumIslandTiles?: number;
-  islandMinLobes?: number;
-  islandMaxLobes?: number;
-  islandMaxElongation?: number;
-  islandBendiness?: number;
-  islandLobeBlend?: number;
-  islandCoastWarp?: number;
-  islandCoastWarpScale?: number;
 }
 
 /**
@@ -592,6 +655,11 @@ export interface PreviewIslandResponse {
   tileCount: number;
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
+  giants: GiantResponse[];
+  camps: CampResponse[];
+  bogTiles: BogTileResponse[];
+  /** True for an island generated from the wasted-island terrain layer (its river tiles are lava streams). */
+  wasted: boolean;
 }
 
 export interface WorldSeedPreviewResponse {
@@ -601,6 +669,8 @@ export interface WorldSeedPreviewResponse {
   islandCount: number;
   landTileCount: number;
   islands: PreviewIslandResponse[];
+  /** The full generation constants (world radius included) the candidate was generated with. */
+  generation: WorldGenerationResponse;
 }
 
 /**
@@ -1461,4 +1531,23 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+}
+
+/** Mirrors `FogChunkResponse` — one 64 x 64-texel chunk of the fog mask (map-fog-v2.md §3). `png` is base64, or null for an empty (fully unknown) chunk. */
+export interface FogChunkResponse {
+  cu: number;
+  cv: number;
+  /** Changes exactly when this chunk's pixels would; "0" for an empty chunk. */
+  version: string;
+  png: string | null;
+}
+
+/** Mirrors `FogChunksResponse` — `GET /worlds/{worldId}/fog-chunks`: every chunk of the requested inclusive rectangle. */
+export interface FogChunksResponse {
+  chunkSize: number;
+  cuMin: number;
+  cuMax: number;
+  cvMin: number;
+  cvMax: number;
+  chunks: FogChunkResponse[];
 }

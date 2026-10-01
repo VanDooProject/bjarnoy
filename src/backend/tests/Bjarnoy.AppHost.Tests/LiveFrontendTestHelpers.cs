@@ -1,3 +1,9 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using Aspire.Hosting;
+using Aspire.Hosting.ApplicationModel;
+using Aspire.Hosting.Testing;
+using Bjarnoy.Api.Contracts;
 using Microsoft.Playwright;
 
 namespace Bjarnoy.AppHost.Tests;
@@ -225,5 +231,42 @@ public static class LiveFrontendTestHelpers
             """,
             new { q, r });
         await page.Mouse.ClickAsync(box.X + (float)point[0], box.Y + (float)point[1]);
+    }
+
+    /// <summary>
+    /// Logs in as the seeded admin account and returns an <see cref="HttpClient"/>
+    /// carrying its bearer token — the "Log in as admin" dashboard-URL trick
+    /// <see cref="TroopTrainingAndDispatchTests"/> and several other tests each
+    /// re-implement inline (the generated one-time admin username/password is
+    /// otherwise only discoverable from outside the AppHost process via that
+    /// query string — see <c>AppHost.cs</c>). Extracted here as a single
+    /// reusable helper for new tests to build on, without touching any of
+    /// those existing call sites' own inline copies.
+    /// </summary>
+    public static async Task<HttpClient> LoginAsAdminAsync(
+        DistributedApplication app, ResourceNotificationService resourceNotifications, CancellationToken cancellationToken)
+    {
+        var frontendEvent = await resourceNotifications.WaitForResourceAsync(
+            "frontend",
+            evt => evt.Snapshot.Urls.Any(u => u.DisplayProperties?.DisplayName == "Log in as admin"),
+            cancellationToken);
+        var adminLoginUrl = frontendEvent.Snapshot.Urls
+            .First(u => u.DisplayProperties?.DisplayName == "Log in as admin").Url;
+        var adminQuery = new Uri(adminLoginUrl).Query.TrimStart('?')
+            .Split('&')
+            .Select(pair => pair.Split('=', 2))
+            .ToDictionary(pair => pair[0], pair => Uri.UnescapeDataString(pair[1]));
+
+        var adminHttpClient = app.CreateHttpClient("api");
+        var adminLogin = await adminHttpClient.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LoginRequest(adminQuery["username"], adminQuery["password"]),
+            cancellationToken);
+        adminLogin.EnsureSuccessStatusCode();
+        var adminAuth = (await adminLogin.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken))!;
+        adminHttpClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminAuth.AccessToken);
+
+        return adminHttpClient;
     }
 }

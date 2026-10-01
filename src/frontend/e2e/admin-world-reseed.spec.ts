@@ -30,18 +30,23 @@ const WORLD = {
   runStateSince: '2026-01-01T00:00:00Z',
   createdAt: '2026-01-01T00:00:00Z',
   generation: {
-    islandCellSize: 20,
-    islandChance: 0.45,
-    islandMinRadius: 4.8,
-    islandMaxRadius: 11.2,
-    islandMinLobes: 2,
-    islandMaxLobes: 4,
-    islandMaxElongation: 1.0,
-    islandBendiness: 1.6,
-    islandLobeBlend: 0.25,
-    islandCoastWarp: 1.5,
-    islandCoastWarpScale: 5.0,
-    beachThreshold: 0.82,
+    islandCellSize: 260,
+    islandChance: 0.8,
+    islandMinWidth: 21,
+    islandMaxWidth: 40,
+    islandMinSegments: 5,
+    islandMaxSegments: 9,
+    islandMinElongation: 5,
+    islandMaxElongation: 8,
+    islandMinBend: 0.12,
+    islandMaxBend: 0.35,
+    islandCoastWarp: 9.5,
+    islandCoastWarpScale: 42,
+    islandCoastNoise: 1,
+    islandCoastNoiseScale: 49,
+    islandSmallShare: 0.3,
+    islandLargeShare: 0.12,
+    beachThreshold: 0.9,
     mountainThreshold: 0.4,
     mountainRockiness: 0.72,
     forestRockiness: 0.52,
@@ -51,35 +56,46 @@ const WORLD = {
 
 /**
  * A small but real preview payload: two islands with a river, positioned where
- * seed 4242's terrain actually puts land, so the labels the renderer draws sit
- * over the generated islands rather than in open sea.
+ * seed 4242's terrain (default generation, radius 4000) actually puts land, so
+ * the labels the renderer draws sit over the generated islands rather than in
+ * open sea. Islands are ~150 hexes across and far apart now, so these are the
+ * two nearest the origin.
  */
 const PREVIEW = {
   worldId: WORLD.id,
   seed: 4242,
-  radius: 30,
+  radius: 4000,
   islandCount: 2,
-  landTileCount: 96,
+  landTileCount: 9600,
   islands: [
     {
       index: 0,
       name: 'Skarnsey',
-      q: 0,
-      r: 0,
-      tileCount: 52,
-      startPositions: [{ q: 0, r: 0 }],
-      riverTiles: [{ q: 0, r: 0, shape: 'spring', inDirections: [], outDirection: 'E' }],
+      q: -119,
+      r: -125,
+      tileCount: 5200,
+      startPositions: [{ q: -119, r: -125 }],
+      riverTiles: [{ q: -119, r: -125, shape: 'spring', inDirections: [], outDirection: 'E' }],
+      giants: [],
+      camps: [],
+      bogTiles: [],
+      wasted: false,
     },
     {
       index: 1,
       name: 'Vargholm',
-      q: 9,
-      r: -4,
-      tileCount: 44,
-      startPositions: [{ q: 9, r: -4 }],
+      q: 315,
+      r: -308,
+      tileCount: 4400,
+      startPositions: [{ q: 315, r: -308 }],
       riverTiles: [],
+      giants: [],
+      camps: [],
+      bogTiles: [],
+      wasted: false,
     },
   ],
+  generation: { ...WORLD.generation, worldRadius: 4000 },
 };
 
 test.describe('admin world reseed', { tag: '@g2' }, () => {

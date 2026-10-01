@@ -74,6 +74,9 @@
     "invalid_credentials": "Wrong username or password.",
     "invalid_refresh_token": "Your session has expired — please sign in again.",
     "AlreadyRunning": "Only one feast can run at a time here.",
-    "NoTownSquare": "There is no Town Square standing here to hold a feast."
+    "NoTownSquare": "There is no Town Square standing here to hold a feast.",
+    "AlreadyClaimed": "That quest reward was already claimed.",
+    "NotCompleted": "That quest isn't completed yet.",
+    "UnknownQuest": "There is no such quest."
   }
 }

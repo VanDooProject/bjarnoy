@@ -50,7 +50,8 @@ import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
 import { hasWaterProp, type TerrainLookup, type WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
-import { fogMaskPlacement } from './fog/fogMaskLayout';
+import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
+import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
 import { riverPathFor } from './riverPath';
 import {
   TILE_ART_NATIVE_H,
@@ -58,6 +59,7 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  campArtFor,
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
@@ -123,6 +125,8 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   grass: 0x4e7a3a,
   forest: 0x365e2f,
   mountain: 0x5f6b6d,
+  bog: 0x5b6234, // the moss: duller and yellower than the grass, like the art
+  lake: 0x27445e, // dark slate blue, the bog water's own colour
 };
 
 // zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()
@@ -568,7 +572,10 @@ export type HoverSubject =
   // fully covers that terrain. Generic over `family` (not a `'giantmountain'`
   // literal) so a future giant building needs no change here; HexTooltip.vue
   // falls back to the family id itself for one with no translated name yet.
-  | { kind: 'giant'; family: string };
+  | { kind: 'giant'; family: string }
+  // A wildlife camp (campPlacement.ts): named for the camp with its level; HexTooltip.vue
+  // shows the localised family name, level and whether it is a strong camp.
+  | { kind: 'camp'; family: string; level: number; strong: boolean };
 
 export interface HoverInfo {
   screenX: number;
@@ -617,6 +624,7 @@ export function terrainTitleFor(
  */
 export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
   if (tile.giant) return { kind: 'giant', family: tile.giant.family };
+  if (tile.camp) return { kind: 'camp', family: tile.camp.family, level: tile.camp.level, strong: tile.camp.strong };
   if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
   const { terrain, isRiver, wasted } = terrainTitleFor(tile, river);
   return { kind: 'terrain', terrain, isRiver, wasted };
@@ -2052,6 +2060,7 @@ export class HexMapRenderer {
     // itself (fogShader.ts's own screenToWorld-equivalent).
     this.blackFogLayer.setCamera(this.camera, this.viewport);
     this.whiteMistLayer.setCamera(this.camera, this.viewport);
+    this.notifyFogViewport();
   }
 
   private onTick = () => {
@@ -3502,6 +3511,25 @@ export class HexMapRenderer {
         fogPerfStats.terrainDrawnCount++;
         continue;
       }
+      // A wildlife camp (see campPlacement.ts) is an animated topping on the hex's own
+      // ground: the ground's base, the camp's guarded (level 1) art on top, its tile
+      // rotation mapped onto the rotations that art ships (campArtFor). A river camp
+      // (bears, otters) stands on its river tile and brings its own river base with it. A camp
+      // whose art cannot be resolved (a river camp off a straight river) falls through
+      // and draws as plain ground.
+      if (tile.camp) {
+        const campArt = campArtFor(textures, tile, river);
+        if (campArt) {
+          const campTile = { ...tile, orientation: campArt.orientation };
+          baseEntries.set(key, { texture: baseTextureFor(textures, campTile, campArt.riverArt), coord: c });
+          const campTop = topTextureFor(textures, campTile, campArt.riverArt);
+          if (campTop) {
+            topEntries.set(key, { texture: campTop, coord: c, anim: topAnimFor(textures, campTile, campArt.riverArt) });
+          }
+          fogPerfStats.terrainDrawnCount++;
+          continue;
+        }
+      }
       // A Sawmill/Crop Mill is built directly on a river tile
       // (WorldModel.placeBuilding mirrors BuildingCatalogue's
       // RequiresRiverShape) — its building+river composite art replaces the
@@ -3524,7 +3552,7 @@ export class HexMapRenderer {
         // Only a Mouth's orientation actually needs this (see
         // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
         // for every other shape.
-        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
         // Likewise, only a Spring's art actually branches on this.
         const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
         // Only straight/bend/bend60 (and never a wasted/lava tile — see
@@ -3638,8 +3666,10 @@ export class HexMapRenderer {
         continue;
       }
 
-      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
       const { segments, springDot } = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      // A stream is half a river's width: draw its line thinner.
+      const streamScale = river.width === 'stream' ? 0.55 : 1;
 
       for (const { from, control, to } of segments) {
         // Double stroke, same "wide soft casing under a crisp line" trick
@@ -3649,11 +3679,11 @@ export class HexMapRenderer {
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 5, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
+          .stroke({ width: 5 * streamScale, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 2.2, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
+          .stroke({ width: 2.2 * streamScale, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
       }
       if (springDot) {
         this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color: RIVER_COLOR, alpha: 0.95 });
@@ -4588,24 +4618,25 @@ export class HexMapRenderer {
 
   /**
    * Fog v2 (docs/design/map-fog-v2.md §2.4/§3): hands the renderer a freshly
-   * fetched (or, in demo mode, generated) mask bitmap for a world of the
-   * given `radius`. `radius` picks the same world-to-mask-UV placement
-   * (worldMaskBounds, mirroring the backend's FogMaskLayout.WorldBounds) on
-   * every call, so this is cheap to call again even when only the texture
-   * itself changed. `bitmap` null is a no-op — both fog layers already
-   * default an unbound mask to fully-unknown, so there's nothing useful to
-   * do before the first real fetch resolves.
+   * fetched (or, in demo mode, generated) mask bitmap and the texel
+   * rectangle it covers — the chunk window a live mask is stitched into, or
+   * the whole demo world (`worldMaskBounds`). The placement is derived from
+   * `bounds` on every call, so this is cheap to call again even when only the
+   * texture itself changed, and the previous texture keeps its own placement
+   * for the cross-fade (FogMaskLayer.setMaskTexture). Ground outside `bounds`
+   * reads as fully unknown (fogShader.ts's sampleMask) — §3's default for a
+   * chunk that isn't loaded. `bitmap` null is a no-op — both fog layers
+   * already default an unbound mask to fully-unknown, so there's nothing
+   * useful to do before the first real fetch resolves.
    */
-  setFogMask(radius: number, bitmap: ImageBitmap | null) {
+  setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null) {
     if (!bitmap) return;
 
-    const placement = fogMaskPlacement(radius, TILE_W, TILE_H);
-    this.blackFogLayer.setPlacement(placement);
-    this.whiteMistLayer.setPlacement(placement);
+    const placement = fogMaskPlacement(bounds, TILE_W, TILE_H);
 
     const texture = Texture.from(bitmap);
-    this.blackFogLayer.setMaskTexture(texture);
-    this.whiteMistLayer.setMaskTexture(texture);
+    this.blackFogLayer.setMaskTexture(texture, placement);
+    this.whiteMistLayer.setMaskTexture(texture, placement);
 
     // Both layers now hold `texture` as their current mask and the previous
     // one as uMaskPrev, mid cross-fade (FogMaskLayer.setMaskTexture, §2.6).
@@ -4615,6 +4646,42 @@ export class HexMapRenderer {
     this.previousFogMaskTexture?.destroy(true);
     this.previousFogMaskTexture = this.fogMaskTexture;
     this.fogMaskTexture = texture;
+  }
+
+  /**
+   * Registers who wants to know which fog chunks the camera sees (the world
+   * store's `requestFogViewport`). Called with the current rectangle at once
+   * and again whenever it changes — chunk-granular, so a pan inside one
+   * chunk costs nothing — never per frame. Pass `null` to unregister.
+   */
+  setFogViewportListener(listener: ((range: ChunkRange) => void) | null) {
+    this.fogViewportListener = listener;
+    this.lastFogViewportRange = null;
+    this.notifyFogViewport();
+  }
+
+  private fogViewportListener: ((range: ChunkRange) => void) | null = null;
+  private lastFogViewportRange: ChunkRange | null = null;
+
+  /**
+   * The chunk rectangle under the camera, from the same texel maths as the
+   * mask placement (u = world x / (0.75 tile width), v = 2 * world y / tile
+   * height — half-texel corrections omitted: the window's margin is far
+   * bigger than that). Reported only when it changes.
+   */
+  private notifyFogViewport() {
+    if (!this.fogViewportListener || this.viewport.width <= 0 || this.viewport.height <= 0) return;
+    const rect = visibleWorldRect(this.camera, this.viewport);
+    const colPitch = 0.75 * TILE_W;
+    const range = chunkRangeOfTexels(
+      rect.minX / colPitch,
+      rect.maxX / colPitch,
+      (2 * rect.minY) / TILE_H,
+      (2 * rect.maxY) / TILE_H,
+    );
+    if (rangesEqual(range, this.lastFogViewportRange)) return;
+    this.lastFogViewportRange = range;
+    this.fogViewportListener(range);
   }
 
   /** World-space centre of a hex's top face — `hexCenterScreen` before the camera transform. */
