@@ -214,22 +214,45 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.placeBuilding(settlement.id, spots[2], 'farm')).toBe(true);
   });
 
-  it('refuses an additional storage house until one stands at level 10 (ADDITIONAL_STORAGE_HOUSE_LEVEL)', () => {
+  it('raises the bar for each further storage house (additionalStorageHouseRequirement)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
       (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
     );
-    expect(spots.length).toBeGreaterThan(2);
+    expect(spots.length).toBeGreaterThan(5);
 
     settlement.level = 3; // widen the claim so the spots are reachable
     expect(model.storageHouses(settlement.id)).toEqual([]);
-    // The first is never refused; the second is, while the first is below 10.
+    const setLevel = (i: number, level: number) => {
+      model.getTile(spots[i].q, spots[i].r).buildingLevel = level;
+    };
+    // 1st: never refused. 2nd: needs 1 at L10.
     expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
     expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(false);
-
-    model.getTile(spots[0].q, spots[0].r).buildingLevel = 10;
+    setLevel(0, 10);
     expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(true);
+    // 3rd: needs 2 at L15.
+    setLevel(1, 14);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
+    setLevel(0, 15);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
+    setLevel(1, 15);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(true);
+    // 4th: needs 3 at L20.
+    setLevel(0, 20);
+    setLevel(1, 20);
+    setLevel(2, 19);
+    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(false);
+    setLevel(2, 20);
+    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(true);
+    // 5th: needs 4 at L25, and from then on there is no limit.
+    for (const i of [0, 1, 2]) setLevel(i, 25);
+    setLevel(3, 24);
+    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(false);
+    setLevel(3, 25);
+    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(true);
+    expect(model.placeBuilding(settlement.id, spots[5], 'storagehouse')).toBe(true);
   });
 
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {

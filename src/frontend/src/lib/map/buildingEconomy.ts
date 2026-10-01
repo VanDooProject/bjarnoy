@@ -137,10 +137,16 @@ export function maxTowers(longhouseLevel: number): number {
 }
 
 /**
- * Mirrors `BuildingCatalogue.AdditionalStorageHouseLevel`: an additional
- * storage house may only be placed once one already stands at this level.
+ * Mirrors `BuildingCatalogue.AdditionalStorageHouseRequirement`: with
+ * `existing` storage houses held (standing plus queued), one more needs
+ * `min(existing, 4)` of them at level `min(10 + 5·(existing − 1), 25)` — 1 at
+ * L10, 2 at L15, 3 at L20, then 4 at L25 (the max), after which any number
+ * more is allowed. `{ count: 0, level: 0 }` for the first house.
  */
-export const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
+export function additionalStorageHouseRequirement(existing: number): { count: number; level: number } {
+  if (existing < 1) return { count: 0, level: 0 };
+  return { count: Math.min(existing, 4), level: Math.min(10 + 5 * (existing - 1), 25) };
+}
 
 /** Mirrors `BuildingCatalogue.ProductionFor`: a level's total output is `perHourAtLevelOne · 1.20^(level−1)`. */
 function producerOutput(perHourAtLevelOne: number, level: number, multiplier = 1): number {

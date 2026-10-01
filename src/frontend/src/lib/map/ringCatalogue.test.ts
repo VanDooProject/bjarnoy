@@ -43,14 +43,25 @@ describe('longhouseLock', () => {
 });
 
 describe('storageHouseLock', () => {
-  it('locks an additional storage house until the best one is level 10', () => {
-    expect(storageHouseLock(1, 1)).toBe('Raise a storage house to level 10 before building another');
-    expect(storageHouseLock(2, 9)).toBe('Raise a storage house to level 10 before building another');
+  it('states the requirement: 1 at L10, 2 at L15, 3 at L20, 4 at L25', () => {
+    expect(storageHouseLock(1, [1])).toBe('Needs 1 Storehouse at level 10');
+    expect(storageHouseLock(2, [15, 14])).toBe('Needs 2 Storehouses at level 15');
+    expect(storageHouseLock(3, [20, 20, 19])).toBe('Needs 3 Storehouses at level 20');
+    expect(storageHouseLock(4, [25, 25, 25, 24])).toBe('Needs 4 Storehouses at level 25');
+    expect(storageHouseLock(7, [25, 25, 25, 24, 1, 1, 1])).toBe('Needs 4 Storehouses at level 25');
   });
 
-  it('never locks the first storage house, nor once one is level 10', () => {
-    expect(storageHouseLock(0, 0)).toBeUndefined();
-    expect(storageHouseLock(1, 10)).toBeUndefined();
+  it('never locks the first storage house, nor once the requirement is met', () => {
+    expect(storageHouseLock(0, [])).toBeUndefined();
+    expect(storageHouseLock(1, [10])).toBeUndefined();
+    expect(storageHouseLock(2, [15, 15])).toBeUndefined();
+    expect(storageHouseLock(3, [25, 20, 20])).toBeUndefined();
+    expect(storageHouseLock(5, [25, 25, 25, 25, 1])).toBeUndefined();
+  });
+
+  it('counts a queued (not yet standing) house as held but not as meeting the level', () => {
+    // two held (one standing L10, one queued): the third needs two at L15
+    expect(storageHouseLock(2, [10])).toBe('Needs 2 Storehouses at level 15');
   });
 });
 

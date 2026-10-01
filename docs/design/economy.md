@@ -106,9 +106,12 @@ keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
 Farm, Pumpkin Farm, Fishing Hut) are capped by **storage**
 instead: they only need their unlock LH at every level, and a level whose cost
 exceeds what the settlement can store can never be afforded, so the next level
-has to fit in storage. An **additional Storage House** can only be placed once
-one already stands at **level 10** (the first is never held back, and
-upgrading is always allowed). See §5 for why.
+has to fit in storage. Each **additional Storage House** raises the bar: with `n` held (standing plus
+queued), the next needs `min(n, 4)` Storage Houses at level
+`min(10 + 5·(n − 1), 25)`, so the second needs one at L10, the third two at L15,
+the fourth three at L20, the fifth four at L25, and once four are maxed any
+number more is allowed (the first is never held back, and upgrading is always
+allowed). See §5 for why.
 
 ## 5. Unlock ladder
 
@@ -160,8 +163,9 @@ stalls at the cap; without it the active player's lead keeps growing.
 
 Storage stays a real brake because a higher producer level costs more than
 base capacity plus the Longhouse can hold, so storage has to grow with it.
-Storage Houses themselves keep the Longhouse cap, and an additional one needs
-one at level 10, so storage cannot be stacked cheaply in place of upgrading.
+Storage Houses themselves keep the Longhouse cap, and each additional one needs
+more houses at a higher level (1 at L10, 2 at L15, 3 at L20, 4 at L25), so
+storage cannot be stacked cheaply in place of upgrading.
 
 **Design principle.** When an active player's first settlement slows down (the
 Longhouse and storage become the limit), the answer is a second settlement,

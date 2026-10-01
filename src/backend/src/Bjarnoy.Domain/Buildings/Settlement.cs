@@ -1187,7 +1187,8 @@ public sealed record Settlement
         }
 
         // Storage houses keep their Longhouse cap, and an additional one is only
-        // allowed once one stands at AdditionalStorageHouseLevel. Only a *new*
+        // allowed once enough of them stand high enough
+        // (BuildingCatalogue.AdditionalStorageHouseRequirement). Only a *new*
         // storage house counts (baseLevel 0) — upgrading one is never refused.
         if (type == BuildingType.StorageHouse && baseLevel == 0)
         {
@@ -1195,8 +1196,9 @@ public sealed record Settlement
                 .Concat(Queue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord))
                 .Distinct()
                 .Count();
+            var (needCount, needLevel) = BuildingCatalogue.AdditionalStorageHouseRequirement(storageHexes);
             if (storageHexes >= 1
-                && HighestLevelOf(BuildingType.StorageHouse) < BuildingCatalogue.AdditionalStorageHouseLevel)
+                && Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel) < needCount)
             {
                 return BuildDecision.Rejected(BuildRejection.StorageHouseTooLow);
             }

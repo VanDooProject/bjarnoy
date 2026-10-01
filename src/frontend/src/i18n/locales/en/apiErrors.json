@@ -11,6 +11,7 @@
     "AlreadyQueuedOnHex": "That hex already has a build order queued.",
     "MaxLevelReached": "This building is already at its maximum level.",
     "LonghousePlacementNotAllowed": "The longhouse can't be placed there.",
+    "StorageHouseTooLow": "Raise your storehouses first: another one needs 1 at level 10, 2 at level 15, 3 at level 20 or 4 at level 25.",
     "RequiredBuildingTooLow": "A required building isn't high enough level yet.",
     "ShrineGodAlreadyOnIsland": "This god already has a shrine somewhere on the island.",
     "NoFreeSlot": "No free construction slot — Premium unlocks a waiting queue.",

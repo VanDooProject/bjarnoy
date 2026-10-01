@@ -69,6 +69,7 @@
     "domainWood": "Holz"
   },
   "ringMenu": {
+    "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "back": "Zurück",
     "backButton": "‹ ZURÜCK",
     "buildHub": "BAUEN",

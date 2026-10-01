@@ -791,7 +791,7 @@ public static class SettlementEndpoints
         BuildRejection.TowerLimitReached =>
             "You already hold as many towers as your longhouse level allows. Upgrade the longhouse to raise the limit.",
         BuildRejection.StorageHouseTooLow =>
-            "Raise a storage house to level 10 before building another.",
+            "Raise your storage houses before building another: 1 at level 10, then 2 at 15, 3 at 20, 4 at 25.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",

@@ -3,6 +3,7 @@
 // server-authoritative one in BuildingCatalogue.cs.
 import { describe, expect, it } from 'vitest';
 import {
+  additionalStorageHouseRequirement,
   buildingStatsFor,
   buildingUpgradeCost,
   isNearAnyOf,
@@ -190,5 +191,16 @@ describe('maxTowers (mirrors BuildingCatalogue.MaxTowers)', () => {
     for (const [level, expected] of Object.entries(table)) {
       expect(maxTowers(Number(level)), `LH ${level}`).toBe(expected);
     }
+  });
+});
+
+describe('additionalStorageHouseRequirement (mirrors BuildingCatalogue.AdditionalStorageHouseRequirement)', () => {
+  it('asks for min(n, 4) houses at min(10 + 5(n - 1), 25)', () => {
+    expect(additionalStorageHouseRequirement(0)).toEqual({ count: 0, level: 0 });
+    expect(additionalStorageHouseRequirement(1)).toEqual({ count: 1, level: 10 });
+    expect(additionalStorageHouseRequirement(2)).toEqual({ count: 2, level: 15 });
+    expect(additionalStorageHouseRequirement(3)).toEqual({ count: 3, level: 20 });
+    expect(additionalStorageHouseRequirement(4)).toEqual({ count: 4, level: 25 });
+    expect(additionalStorageHouseRequirement(9)).toEqual({ count: 4, level: 25 });
   });
 });

@@ -11,6 +11,7 @@
     "AlreadyQueuedOnHex": "Für dieses Feld ist bereits ein Bauauftrag eingereiht.",
     "MaxLevelReached": "Dieses Gebäude hat bereits die Höchststufe erreicht.",
     "LonghousePlacementNotAllowed": "Das Langhaus kann dort nicht platziert werden.",
+    "StorageHouseTooLow": "Baue zuerst deine Lagerhäuser aus: ein weiteres braucht 1 auf Stufe 10, 2 auf Stufe 15, 3 auf Stufe 20 oder 4 auf Stufe 25.",
     "RequiredBuildingTooLow": "Ein benötigtes Gebäude ist noch nicht hoch genug ausgebaut.",
     "ShrineGodAlreadyOnIsland": "Für diesen Gott steht bereits ein Schrein auf der Insel.",
     "NoFreeSlot": "Kein freier Bauplatz — Premium schaltet eine Warteschlange frei.",

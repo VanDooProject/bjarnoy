@@ -982,7 +982,7 @@ function storageHouseLockFor(): string | undefined {
   for (const order of world.hud.queue) {
     if (order.building === 'storagehouse') hexes.add(`${order.q},${order.r}`);
   }
-  return storageHouseLock(hexes.size, Math.max(0, ...standing.map((h) => h.level)));
+  return storageHouseLock(hexes.size, standing.map((h) => h.level));
 }
 
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {

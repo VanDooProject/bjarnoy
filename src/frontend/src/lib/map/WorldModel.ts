@@ -5,7 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
-import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
+import { additionalStorageHouseRequirement, maxTowers } from './buildingEconomy';
 import { cropAllowedHere, isWaterOnlyBuilding, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
@@ -1462,8 +1462,8 @@ export class WorldModel {
 
   /**
    * This settlement's standing storage houses (hex and level), for the
-   * additional-storage-house rule (`ADDITIONAL_STORAGE_HOUSE_LEVEL`): a new
-   * one needs one of these at level 10.
+   * additional-storage-house rule (`additionalStorageHouseRequirement`): a new
+   * one needs enough of these at a high enough level.
    */
   storageHouses(settlementId: string): { q: number; r: number; level: number }[] {
     const levels: { q: number; r: number; level: number }[] = [];
@@ -1525,11 +1525,13 @@ export class WorldModel {
     if (type === 'tower' && this.towerCoords(settlementId).length >= maxTowers(settlement.level)) {
       return false;
     }
-    // An additional storage house needs one standing at level 10 (matches
-    // BuildRejection.StorageHouseTooLow). Upgrades never go through here.
+    // An additional storage house needs enough standing ones at a high enough
+    // level (matches BuildRejection.StorageHouseTooLow). Upgrades never go
+    // through here.
     if (type === 'storagehouse') {
       const held = this.storageHouses(settlementId);
-      if (held.length >= 1 && Math.max(...held.map((h) => h.level)) < ADDITIONAL_STORAGE_HOUSE_LEVEL) return false;
+      const need = additionalStorageHouseRequirement(held.length);
+      if (held.length >= 1 && held.filter((h) => h.level >= need.level).length < need.count) return false;
     }
     tile.ownerId = settlementId;
     tile.buildingType = type;

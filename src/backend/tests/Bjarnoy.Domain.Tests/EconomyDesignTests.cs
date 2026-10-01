@@ -420,7 +420,6 @@ public class EconomyDesignTests
     {
         var settlement = SettlementWith(12, (BuildingType.StorageHouse, 9));
 
-        Assert.Equal(BuildingCatalogue.AdditionalStorageHouseLevel, 10);
         Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(settlement, new HexCoord(1, 0)).Rejection);
     }
 
@@ -441,6 +440,63 @@ public class EconomyDesignTests
         var settlement = SettlementWith(12, (BuildingType.StorageHouse, 10));
 
         Assert.True(PlanStorage(settlement, new HexCoord(1, 0)).Accepted);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(1, 1, 10)]
+    [InlineData(2, 2, 15)]
+    [InlineData(3, 3, 20)]
+    [InlineData(4, 4, 25)]
+    [InlineData(5, 4, 25)]
+    [InlineData(9, 4, 25)]
+    public void The_additional_storage_house_requirement_rises_with_the_houses_held(int existing, int count, int level)
+    {
+        Assert.Equal((count, level), BuildingCatalogue.AdditionalStorageHouseRequirement(existing));
+    }
+
+    [Fact]
+    public void A_third_storage_house_needs_two_at_level_15()
+    {
+        var oneHigh = SettlementWith(25, (BuildingType.StorageHouse, 15), (BuildingType.StorageHouse, 14));
+        var bothHigh = SettlementWith(25, (BuildingType.StorageHouse, 15), (BuildingType.StorageHouse, 20));
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(oneHigh, new HexCoord(1, 0)).Rejection);
+        Assert.True(PlanStorage(bothHigh, new HexCoord(1, 0)).Accepted);
+    }
+
+    [Fact]
+    public void A_fourth_storage_house_needs_three_at_level_20()
+    {
+        var two = SettlementWith(25, (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 19));
+        var three = SettlementWith(25, (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 21), (BuildingType.StorageHouse, 25));
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(two, new HexCoord(1, 0)).Rejection);
+        Assert.True(PlanStorage(three, new HexCoord(1, 0)).Accepted);
+    }
+
+    [Fact]
+    public void A_fifth_storage_house_needs_four_at_level_25_and_then_they_are_unlimited()
+    {
+        var threeMaxed = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 24));
+        var fourMaxed = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25));
+        var sixHouses = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 1));
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(threeMaxed, new HexCoord(1, 0)).Rejection);
+        Assert.True(PlanStorage(fourMaxed, new HexCoord(1, 0)).Accepted);
+        Assert.True(PlanStorage(sixHouses, new HexCoord(1, 1)).Accepted);
+    }
+
+    [Fact]
+    public void A_queued_new_storage_house_counts_toward_the_houses_held()
+    {
+        // One standing L10 house plus one queued new house = 2 held, so the third needs two at L15.
+        var settlement = SettlementWith(25, (BuildingType.StorageHouse, 10));
+        var second = PlanStorage(settlement, new HexCoord(1, 0));
+        Assert.True(second.Accepted);
+        var queued = settlement.Enqueue(second.Order!, T0);
+
+        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(queued, new HexCoord(1, 1)).Rejection);
     }
 
     [Fact]

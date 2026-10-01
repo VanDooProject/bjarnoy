@@ -153,10 +153,15 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// A settlement may only place an additional storage house once one
-    /// already stands at this level.
+    /// What a settlement must already hold before it may place one more storage
+    /// house, given it has <paramref name="existing"/> (standing plus queued) of
+    /// them: <c>min(existing, 4)</c> storage houses at level
+    /// <c>min(10 + 5·(existing − 1), 25)</c>. So 1 house at L10 unlocks the
+    /// second, 2 at L15 the third, 3 at L20 the fourth, and four maxed (L25)
+    /// houses unlock any number more. Returns <c>(0, 0)</c> for the first house.
     /// </summary>
-    public const int AdditionalStorageHouseLevel = 10;
+    public static (int Count, int Level) AdditionalStorageHouseRequirement(int existing) =>
+        existing < 1 ? (0, 0) : (Math.Min(existing, 4), Math.Min(10 + 5 * (existing - 1), 25));
 
     /// <summary>
     /// The Longhouse level needed to build <paramref name="type"/> at
