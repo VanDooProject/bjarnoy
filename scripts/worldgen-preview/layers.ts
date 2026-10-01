@@ -247,6 +247,7 @@ const RULE_LABELS: [keyof RiverField['bogViolations'], string][] = [
   ['R9', 'R9 SPRING/SINK RULES'],
   ['R10', 'R10 POCKETS RINGED'],
   ['R11', 'R11 CREEKS AT RIVER WIDTH'],
+  ['R12', 'R12 BOG PADDING AROUND WATER'],
 ];
 
 export function bogStatsLines(f: RiverField): string[] {

@@ -27,6 +27,10 @@ let guaranteeThrough = 0;
 let guaranteeSpawns = 0;
 let guaranteeMissed = 0;
 let guaranteeIslands = 0;
+let paddingRejected = 0;
+let guaranteePaddingRejected = 0;
+let holeTiles = 0;
+let bogTiles = 0;
 let violations = noViolations();
 const lakes: number[] = [];
 const bogsPerIsland: number[] = [];
@@ -41,6 +45,10 @@ for (let seed = from; seed <= to; seed++) {
   violations = addViolations(violations, field.bogViolations);
   guaranteeMissed += field.stats.guaranteeMissed;
   guaranteeIslands += field.stats.guaranteeIslands;
+  paddingRejected += field.stats.paddingRejected;
+  guaranteePaddingRejected += field.stats.guaranteePaddingRejected;
+  holeTiles += field.stats.holeTiles;
+  bogTiles += field.bogs.size;
   for (const i of field.bogIslands) {
     sites += i.sites;
     sinks += i.sinks;
@@ -74,6 +82,7 @@ console.log(
   `of all ${allBogs} bogs (pockets excluded): sinks ${((100 * sinks) / allBogs).toFixed(1)}%, spawns ${((100 * (spawns + guaranteeSpawns)) / allBogs).toFixed(1)}% ` +
     `(${((100 * spawns) / allBogs).toFixed(1)}% rolled + ${((100 * guaranteeSpawns) / allBogs).toFixed(1)}% guarantee)`,
 );
+console.log(`bog tiles ${bogTiles}; padding (R12): sites rejected ${paddingRejected} by the normal pass, ${guaranteePaddingRejected} guarantee attempts; ${holeTiles} enclosed grass/forest tiles filled with moss`);
 console.log(`pockets found ${pocketsFound}, filled ${pocketsFilled}, rivers sunk into pockets ${pocketSinks}`);
 console.log(`inland mouths (rivers): ${inlandMouths}`);
 console.log(`RULE VIOLATIONS: ${JSON.stringify(violations)} total ${totalViolations(violations)}`);

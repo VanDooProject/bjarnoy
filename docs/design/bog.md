@@ -38,6 +38,8 @@ The generator has to follow the art's map rules, or tiles are missing:
    edge.
 5. The fish weir (a lake variant) goes only near a lake Fisher Hut.
 6. No walkways or causeways.
+7. Padding (R12): every lake, shore, mouth, creek and spring tile has all six neighbours inside the bog, so water
+   features never touch grass or forest (a creek may touch its own river).
 
 On top of that, the economy needs one thing: **bog ground in reach of every
 start**. The Clay Brickworks on bog is the start's stone source (LH 1), and
@@ -64,8 +66,20 @@ grass at a hex edge, like the wasteland does.
    valid. Exactly one river runs through each lake (one outflow mouth, at least one inflow).
 3. **Sinks and spawns.** A bog may sink an extra river (`BogSinkChance`) or spawn one from a creek spring
    (`BogSpawnChance`), both below 20%; a sink is tried before a spawn.
-4. **Moss region** last, around the lake, creeks and the anchor; it never touches sea or sand (R7).
-5. **The bog guarantee** (bog buildings PR), after everything above. An island of at least `BogGuaranteeMinTiles` (150) land tiles that has a
+4. **Moss region** around the lake, creeks and the anchor; it never touches sea or sand (R7).
+   **Padding (R12), per site, right after its region**: every lake, shore, mouth, creek and spring tile of the site must have all six
+   neighbours inside the bog (`TryPad`). Missing neighbours become plain moss when they are grass or forest, not a river and not
+   beside sand or the open sea (`CanPad`, so R7 holds); a creek tile may touch only the river its own in/out link leads to (the
+   creek's upstream or downstream river tile). A site that cannot be padded is restored from its snapshot and dropped like any
+   other unplaceable site (`BogPaddingRejected`); the guarantee's attempts count theirs apart. To keep that rare the site search
+   avoids what cannot be padded: shore, creek and spring tiles take no mountain neighbour (`MountainFree`), creek routes avoid
+   foreign river tiles beside them, the shore ring takes no foreign river, and a spawned river is traced with the creeks' and the
+   lake ring's neighbours blocked. A pocket's two inner rings must be free of mountains and open sea (not only the first), else the
+   pocket stays sea.
+5. **Holes** (`FillHoles`) once all sites, sinks, spawns, pockets and the guarantee are done: any group of non-bog island tiles with no
+   path out that does not cross bog or lake turns its grass and forest (river tiles stay) into plain moss. Mountains inside stay
+   mountains. The noisy region outline used to leave such patches, which made one bog look like two.
+6. **The bog guarantee** (bog buildings PR), after step 4 for the normal sites (its attempts pad too, and holes are filled after it). An island of at least `BogGuaranteeMinTiles` (150) land tiles that has a
    landing-spot candidate by terrain alone (grass with a forest and two grass neighbours, no water within two; giants and strong camps do
    not exist yet at this point) but no candidate with plain bog moss within `BogReach` is given a bog. Anchors are tried best-covered first
    (most candidates within reach), and a bog that would leave no candidate covered is rolled back (the generator snapshots its state):
@@ -73,11 +87,35 @@ grass at a hex edge, like the wasteland does.
       spring to 3 before the mouth), the same `TryPlaceSite` as the normal pass;
    b. otherwise a **spawn bog** on river-free inland grass or forest: a small lake, a creek from a spring inside the disc (at least three
       from the lake) into one mouth, and a creek out of another mouth to a tile just outside the disc where a normal river starts, traced
-      to the sea (or a trunk) by the drainage tracer, so exactly one river runs through the lake and it is the spawned one. Rules R1-R11
+      to the sea (or a trunk) by the drainage tracer, so exactly one river runs through the lake and it is the spawned one. Rules R1-R12
       hold as for any site; R9 accepts a spring whose creek ends in a lake that has its outflow;
    c. otherwise the island is left as it is: no room. Rule R7 keeps every lake tile, shore and creek more than two hexes from sand and
       sea, on grass or forest, and a lake with its shore ring needs about 6 hexes of such ground across.
    Islands without mountains (no river candidates at all) take path b too. The guarantee rolls no sinks or spawns of its own.
+
+*Before/after the padding and hole fill* (R12, seeds 1-8 at radius 1000; the earlier table is the state before). The measure is the same as the table
+below: Domain tests, `FindStartPositions`, `bog-stats.ts`. Padding costs sites because a ring of bog around every water feature needs
+grass or forest all round it (no mountain beside a shore or creek, no foreign river):
+
+| | before R12 | with padding and hole fill |
+|---|---|---|
+| islands with a bog | 146 | 142 |
+| bog tiles in total | 25 933 | 23 541 |
+| islands with a candidate / with landing spots (bog rule on) | 177 / 144 | 177 / 140 |
+| landing spots (bog rule on) | 15 396 | 14 010 |
+| bogs by the normal pass / guarantee through-river / guarantee spawn | 124 / 20 / 32 | 100 / 31 / 29 |
+| sites dropped for padding (normal pass / guarantee attempts) | - | 1 / 0 |
+| rolled sinks, rolled spawns, guarantee spawns (% of all bogs) | 2.3%, 5.1%, 18.2% | 0.0%, 4.4%, 18.1% |
+| all spawns (the 20% rule, see below) | 23.3% | 22.5% |
+| R12 violations / enclosed grass-forest groups | 1 773 / 18 | 0 / 0 |
+| grass/forest tiles filled into bogs by the hole fill | - | 26 |
+| pockets found / filled (a pocket's two inner rings must be mountain- and sea-free) | 48 / 41 | 48 / 37 |
+| R1-R11 violations, inland river mouths | 0, 0 | 0, 0 |
+
+The "sites dropped" row is small because the search steers clear of unpaddable ground up front; the real cost is in the second row from
+the top and in the normal pass (124 to 100 bogs): rivers start on mountains and most candidate lakes have one near. The 37 islands with a
+candidate and no bog are 5 more than before; the largest has 438 tiles (a mountainous island: every anchor has a mountain within one ring of
+the shore or creek).
 
 Creeks are routed by a BFS over (tile, heading) with turns {0, +60, -60}: only straight tiles and 60-degree bends
 (see the tile kinds in `BogTileKind`). Giants, camps and start positions see bog through `BogTerrain.Overlay`; bog
@@ -203,7 +241,7 @@ client that knows the same buildings draws the same lake:
 - **More bogs** (owner decision): every island big enough to hold landing spots gets
   at least one bog, by the guarantee in "Implemented generation", step 5, so the
   rule above no longer empties islands. Islands with a landing candidate and a bog:
-  94 to 144 of 176; landing spots 13 617 to 15 396. The islands left are
+  94 to 144 of 176 (140 of 177 with the padding ring, R12); landing spots 13 617 to 15 396 (14 010 with it). The islands left are
   narrow or mountainous (no inland room for a lake, R7) or under 150 tiles.
   The compact test preset switches the rule and the guarantee off (its islands are too
   small for bog).

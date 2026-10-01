@@ -62,12 +62,17 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
 
 ## Bog and lakes
 
-*Implemented (bog PR): see [`bog.md`](./bog.md) for the algorithm, knobs and measured stats. The rules below hold as R1-R11 checks (`BogRules.cs`, `bogRules.ts`, preview tool).*
+*Implemented (bog PR): see [`bog.md`](./bog.md) for the algorithm, knobs and measured stats. The rules below hold as R1-R12 checks (`BogRules.cs`, `bogRules.ts`, preview tool).*
 
 - Always one river hits the bogland and runs through its lake.
 - Bogland may spawn or sink rivers as an exception (below 20% chance); the best use is to sink an
   additional river while one still runs through.
 - Bogland never touches the sea or the coastal sand (inland only).
+- Padding (R12, owner: "bog+lake tiles should have some padding bog around"): every lake, shore, mouth, creek and creek-spring tile has
+  all six neighbours inside the bog, so at least one ring of bog separates water features from grass and forest; only a creek may touch
+  the river its own flow link leads to. A site that cannot get its ring (a mountain or a foreign river beside it) is dropped.
+- No holes (owner: forest/grass patches inside a bog made one bog look like two): a group of grass or forest enclosed by bog with no
+  path out that does not cross bog becomes plain moss; mountains inside stay mountains.
 - The art's map rules: a bog tile touches at most 3 lake tiles and they are contiguous (fill notches);
   separate lakes are at least 2 tiles apart; creeks are straight or a 120-degree bend only, and end in a
   spring or a lake mouth; a creek meets a lake only at a mouth (inlet shore with the creek opposite its water
@@ -76,10 +81,11 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   on a bog-lake half shore, Hammerschmiede on a bog creek; landing spots need bog in reach. *Implemented (bog buildings PR)*:
   see [`bog.md`](./bog.md), "Buildings" and "Decisions".
 - More bogs (owner decision): every island of 150 or more land tiles that has a landing-spot candidate gets at least one bog, so the
-  landing-spot rule keeps spots on 144 of the 273 islands of seeds 1-8 at radius 1000 (94 without the guarantee; 176 have a candidate).
+  landing-spot rule keeps spots on 140 of the 273 islands of seeds 1-8 at radius 1000 (94 without the guarantee; 177 have a candidate; the
+  padding ring (R12) costs four islands the bog they had, 144 before it).
   The bog comes from a relaxed through-river site first, else a small **spawn bog** (a creek spring feeds the lake, its outflow is traced
   as a river to the sea, so one river still runs through the lake). Consequence for the 20% rule above: rolled sinks and spawns are
-  7.4% of all bogs, but the guarantee's spawn bogs (18.2% of all bogs) spawn a river by construction, 23.3% together. Islands with no
+  4.4% of all bogs, but the guarantee's spawn bogs (18.1% of all bogs) spawn a river by construction, 22.5% together. Islands with no
   inland room stay without bog. See [`bog.md`](./bog.md), "Implemented generation" step 5.
 
 ## Wildlife camps
