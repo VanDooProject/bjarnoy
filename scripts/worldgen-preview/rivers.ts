@@ -204,6 +204,7 @@ export function riverStatsLines(f: RiverField): string[] {
   return [
     `RIVERS ${f.stats.rivers} ON ${f.islandsWithRivers}/${f.islands} ISLANDS (${perIsland} PER ISLAND WITH RIVERS)  SPRINGS ${f.stats.springs}  TILES ${f.riverTiles} (STREAM ${f.streamTiles}  WIDEN ${f.widenTiles})`,
     `MERGES ${f.stats.merges}  WIDENINGS ${f.stats.widenings}  TRUNCATED BRANCHES ${f.stats.truncatedBranches}  DROPPED RIVERS ${f.stats.droppedRivers}  INLAND MOUTHS ${f.inlandMouths}`,
+    `VALLEY STREAMS ${f.stats.valleyStreams} OF ${f.stats.valleyCandidates} CUT-OFF VALLEYS (${f.stats.valleyStreamsIntoRivers} INTO A RIVER, JOINED EARLIER ${f.stats.valleysJoined}, SKIPPED: NO PATH ${f.stats.valleySkippedNoPath} TRACE ${f.stats.valleySkippedTrace} LAYOUT ${f.stats.valleySkippedLayout} WIDTHS ${f.stats.valleySkippedWidths} RULES ${f.stats.valleySkippedRules} CUTS OFF ${f.stats.valleySkippedCutsOff} CHANGED ${f.stats.valleySkippedChanged})`,
     `PARALLEL RUNS ${f.parallelAdjacencies} ADJACENT PAIRS OF DIFFERENT RIVERS (${f.riverTiles > 0 ? ((1000 * f.parallelAdjacencies) / f.riverTiles).toFixed(1) : '0'} PER 1000 TILES)  MS RIVERS ${f.ms.toFixed(0)}`,
   ];
 }
