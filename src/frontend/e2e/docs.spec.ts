@@ -289,7 +289,8 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await expect(page.locator('.wall-example .sprite').first()).toBeVisible();
     expect(await page.locator('.wall-example .sprite').count()).toBeGreaterThanOrEqual(14);
     await expect(page.locator('.walls figure.ground')).toHaveCount(4);
-    await expect(page.getByTestId('wall-movement-diagram').locator('figure')).toHaveCount(3);
+    await expect(page.getByTestId('wall-movement-diagram').locator('figure')).toHaveCount(4);
+    await expect(page.getByTestId('wall-movement-legend').locator('li')).toHaveCount(6);
 
     await page.locator('.docs-page .breadcrumb').click();
     await expect(page).toHaveURL(/\/docs$/);
