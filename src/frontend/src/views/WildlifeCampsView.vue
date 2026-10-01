@@ -3,9 +3,7 @@ import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { beastName } from '../i18n/catalogueNames';
-import TopBar from '../components/hud/TopBar.vue';
-import HudNav from '../components/hud/HudNav.vue';
-import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
+import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
 import AnimationPausedNote from '../components/docs/AnimationPausedNote.vue';
@@ -130,224 +128,195 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
 </script>
 
 <template>
-  <div class="wildlife-camps">
-    <TopBar docked :title="$t('docs.wildlifeCamps.title')" caption="DOCS · WILDLIFE CAMPS">
-      <HudNav />
-      <template #drawer="{ close }">
-        <MobileHudDrawer @close="close" />
-      </template>
-    </TopBar>
-    <main class="body docs-scale">
-      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
-      <h1>{{ $t('docs.wildlifeCamps.title') }}</h1>
-      <p class="intro">{{ $t('docs.wildlifeCamps.intro') }}</p>
+  <DocsPageLayout
+    class="wildlife-camps"
+    :title="$t('docs.wildlifeCamps.title')"
+    caption="DOCS · WILDLIFE CAMPS"
+    :intro="$t('docs.wildlifeCamps.intro')"
+  >
+    <template #status>
       <p class="status">{{ $t('docs.wildlifeCamps.status') }}</p>
+    </template>
 
-      <section id="rules">
-        <h2>{{ $t('docs.wildlifeCamps.rules.heading') }}</h2>
-        <ul class="rules">
-          <li>{{ $t('docs.wildlifeCamps.rules.towers') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.range') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.bigIslands') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.states') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.building') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.respawn') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.neverBuilt') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.hunting') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.regrowth') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.calm') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.leveling') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.ambush') }}</li>
-          <li>{{ $t('docs.wildlifeCamps.rules.leftover') }}</li>
-        </ul>
-      </section>
+    <section id="rules">
+      <h2>{{ $t('docs.wildlifeCamps.rules.heading') }}</h2>
+      <ul class="rules">
+        <li>{{ $t('docs.wildlifeCamps.rules.towers') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.range') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.bigIslands') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.states') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.building') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.respawn') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.neverBuilt') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.hunting') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.regrowth') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.calm') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.leveling') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.ambush') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.leftover') }}</li>
+      </ul>
+    </section>
 
-      <section id="camps">
-        <h2>{{ $t('docs.wildlifeCamps.camps.heading') }}</h2>
-        <p>{{ $t('docs.wildlifeCamps.camps.body') }}</p>
-        <p>{{ $t('docs.wildlifeCamps.strength.help') }}</p>
-        <p>{{ $t('docs.wildlifeCamps.loot.note') }}</p>
-        <AnimationPausedNote />
-        <div class="filters">
-          <div class="pills" data-testid="state-switch">
-            <span class="pills-label">{{ $t('docs.wildlifeCamps.state.all') }}</span>
-            <button type="button" class="pill" :class="{ active: allState === 'guarded' }" @click="setAll(true)">
+    <section id="camps">
+      <h2>{{ $t('docs.wildlifeCamps.camps.heading') }}</h2>
+      <p>{{ $t('docs.wildlifeCamps.camps.body') }}</p>
+      <p>{{ $t('docs.wildlifeCamps.strength.help') }}</p>
+      <p>{{ $t('docs.wildlifeCamps.loot.note') }}</p>
+      <AnimationPausedNote />
+      <div class="filters">
+        <div class="pills" data-testid="state-switch">
+          <span class="pills-label">{{ $t('docs.wildlifeCamps.state.all') }}</span>
+          <button type="button" class="pill" :class="{ active: allState === 'guarded' }" @click="setAll(true)">
+            {{ $t('docs.wildlifeCamps.state.guarded') }}
+          </button>
+          <button type="button" class="pill" :class="{ active: allState === 'cleared' }" @click="setAll(false)">
+            {{ $t('docs.wildlifeCamps.state.cleared') }}
+          </button>
+        </div>
+        <div class="pills" data-testid="strength-filter">
+          <span class="pills-label">{{ $t('docs.wildlifeCamps.strength.label') }}</span>
+          <button
+            type="button"
+            class="pill"
+            :class="{ active: strengthFilter === 'all' }"
+            @click="strengthFilter = 'all'"
+          >
+            {{ $t('docs.wildlifeCamps.filters.all') }}
+          </button>
+          <button
+            v-for="strength in STRENGTHS"
+            :key="strength"
+            type="button"
+            class="pill"
+            :class="{ active: strengthFilter === strength }"
+            @click="strengthFilter = strength"
+          >
+            {{ t(`docs.wildlifeCamps.strength.${strength}`) }}
+          </button>
+        </div>
+        <div class="pills" data-testid="ground-filter">
+          <span class="pills-label">{{ $t('docs.wildlifeCamps.filters.ground') }}</span>
+          <button type="button" class="pill" :class="{ active: groundFilter === 'all' }" @click="groundFilter = 'all'">
+            {{ $t('docs.wildlifeCamps.filters.all') }}
+          </button>
+          <button
+            v-for="ground in GROUNDS"
+            :key="ground"
+            type="button"
+            class="pill"
+            :class="{ active: groundFilter === ground }"
+            @click="groundFilter = ground"
+          >
+            {{ t(`docs.wildlifeCamps.grounds.${ground}`) }}
+          </button>
+        </div>
+      </div>
+      <p v-if="shownCamps.length === 0" class="empty">{{ $t('docs.wildlifeCamps.filters.none') }}</p>
+      <div class="cards">
+        <div v-for="camp in shownCamps" :id="`camp-${camp.id}`" :key="camp.id" class="card">
+          <h3>{{ t(`docs.wildlifeCamps.list.${camp.id}.name`) }}</h3>
+          <div class="tags">
+            <span class="ground">{{ t(`docs.wildlifeCamps.grounds.${camp.ground}`) }}</span>
+            <span class="strength" :class="camp.strength" :data-strength="camp.strength">
+              {{ t(`docs.wildlifeCamps.strength.${camp.strength}`) }}
+            </span>
+          </div>
+          <div class="art-box">
+            <AnimatedCamp
+              v-if="view[camp.id].guarded && hasClip(camp.id, view[camp.id].camera)"
+              :family="artOf(camp.id)"
+              :orientation="view[camp.id].camera"
+            />
+            <AtlasSprite
+              v-else-if="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)"
+              :frame="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)!"
+              :style="fit(frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded), BOX_H)"
+            />
+          </div>
+          <p>{{ t(`docs.wildlifeCamps.list.${camp.id}.guards`) }}</p>
+          <p class="beasts" data-testid="beasts">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.beasts.label') }}</span>
+            {{
+              t('docs.wildlifeCamps.beasts.tiers', {
+                young: beastName(camp.id, 'young'),
+                adult: beastName(camp.id, 'adult'),
+                alpha: beastName(camp.id, 'alpha'),
+              })
+            }}
+          </p>
+          <p class="loot" data-testid="loot">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.loot.label') }}</span>
+            <span
+              v-for="share in lootOf(camp)"
+              :key="share.kind"
+              class="loot-kind"
+              :class="{ more: share.more }"
+              :data-loot="share.kind"
+              :data-more="share.more ? 'true' : undefined"
+              :title="share.more ? t('docs.wildlifeCamps.loot.moreHint') : undefined"
+            >
+              {{
+                share.more
+                  ? t('docs.wildlifeCamps.loot.more', { kind: t(`docs.wildlifeCamps.loot.${share.kind}`) })
+                  : t(`docs.wildlifeCamps.loot.${share.kind}`)
+              }}
+            </span>
+          </p>
+          <p v-for="level in AMOUNT_LEVELS" :key="level" class="loot-amounts" data-testid="loot-amounts">
+            <span class="pills-label">{{ t('docs.wildlifeCamps.loot.atLevel', { level }) }}</span>
+            <span v-for="share in lootOf(camp)" :key="share.kind" class="loot-kind">
+              {{ lootPoolByKind(camp.id, level)[share.kind] }} {{ t(`docs.wildlifeCamps.loot.${share.kind}`) }}
+            </span>
+          </p>
+          <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
+          <div class="pills">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.state.label') }}</span>
+            <button
+              type="button"
+              class="pill"
+              :class="{ active: view[camp.id].guarded }"
+              :disabled="keptCameras(camp.id).length === 0"
+              @click="setGuarded(camp.id, true)"
+            >
               {{ $t('docs.wildlifeCamps.state.guarded') }}
             </button>
-            <button type="button" class="pill" :class="{ active: allState === 'cleared' }" @click="setAll(false)">
+            <button
+              type="button"
+              class="pill"
+              :class="{ active: !view[camp.id].guarded }"
+              @click="setGuarded(camp.id, false)"
+            >
               {{ $t('docs.wildlifeCamps.state.cleared') }}
             </button>
           </div>
-          <div class="pills" data-testid="strength-filter">
-            <span class="pills-label">{{ $t('docs.wildlifeCamps.strength.label') }}</span>
+          <div class="pills">
+            <span class="pills-label">{{ $t('docs.wildlifeCamps.camera') }}</span>
             <button
+              v-for="cam in TILE_ORIENTATIONS"
+              :key="cam"
               type="button"
               class="pill"
-              :class="{ active: strengthFilter === 'all' }"
-              @click="strengthFilter = 'all'"
+              :class="{ active: view[camp.id].camera === cam }"
+              :disabled="!cameraAvailable(camp.id, cam)"
+              :title="cameraAvailable(camp.id, cam) ? undefined : t('docs.wildlifeCamps.notKept')"
+              @click="view[camp.id].camera = cam"
             >
-              {{ $t('docs.wildlifeCamps.filters.all') }}
-            </button>
-            <button
-              v-for="strength in STRENGTHS"
-              :key="strength"
-              type="button"
-              class="pill"
-              :class="{ active: strengthFilter === strength }"
-              @click="strengthFilter = strength"
-            >
-              {{ t(`docs.wildlifeCamps.strength.${strength}`) }}
-            </button>
-          </div>
-          <div class="pills" data-testid="ground-filter">
-            <span class="pills-label">{{ $t('docs.wildlifeCamps.filters.ground') }}</span>
-            <button
-              type="button"
-              class="pill"
-              :class="{ active: groundFilter === 'all' }"
-              @click="groundFilter = 'all'"
-            >
-              {{ $t('docs.wildlifeCamps.filters.all') }}
-            </button>
-            <button
-              v-for="ground in GROUNDS"
-              :key="ground"
-              type="button"
-              class="pill"
-              :class="{ active: groundFilter === ground }"
-              @click="groundFilter = ground"
-            >
-              {{ t(`docs.wildlifeCamps.grounds.${ground}`) }}
+              {{ cam }}
             </button>
           </div>
         </div>
-        <p v-if="shownCamps.length === 0" class="empty">{{ $t('docs.wildlifeCamps.filters.none') }}</p>
-        <div class="cards">
-          <div v-for="camp in shownCamps" :id="`camp-${camp.id}`" :key="camp.id" class="card">
-            <h3>{{ t(`docs.wildlifeCamps.list.${camp.id}.name`) }}</h3>
-            <div class="tags">
-              <span class="ground">{{ t(`docs.wildlifeCamps.grounds.${camp.ground}`) }}</span>
-              <span class="strength" :class="camp.strength" :data-strength="camp.strength">
-                {{ t(`docs.wildlifeCamps.strength.${camp.strength}`) }}
-              </span>
-            </div>
-            <div class="art-box">
-              <AnimatedCamp
-                v-if="view[camp.id].guarded && hasClip(camp.id, view[camp.id].camera)"
-                :family="artOf(camp.id)"
-                :orientation="view[camp.id].camera"
-              />
-              <AtlasSprite
-                v-else-if="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)"
-                :frame="frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded)!"
-                :style="fit(frameFor(camp.id, view[camp.id].camera, view[camp.id].guarded), BOX_H)"
-              />
-            </div>
-            <p>{{ t(`docs.wildlifeCamps.list.${camp.id}.guards`) }}</p>
-            <p class="beasts" data-testid="beasts">
-              <span class="pills-label">{{ $t('docs.wildlifeCamps.beasts.label') }}</span>
-              {{
-                t('docs.wildlifeCamps.beasts.tiers', {
-                  young: beastName(camp.id, 'young'),
-                  adult: beastName(camp.id, 'adult'),
-                  alpha: beastName(camp.id, 'alpha'),
-                })
-              }}
-            </p>
-            <p class="loot" data-testid="loot">
-              <span class="pills-label">{{ $t('docs.wildlifeCamps.loot.label') }}</span>
-              <span
-                v-for="share in lootOf(camp)"
-                :key="share.kind"
-                class="loot-kind"
-                :class="{ more: share.more }"
-                :data-loot="share.kind"
-                :data-more="share.more ? 'true' : undefined"
-                :title="share.more ? t('docs.wildlifeCamps.loot.moreHint') : undefined"
-              >
-                {{
-                  share.more
-                    ? t('docs.wildlifeCamps.loot.more', { kind: t(`docs.wildlifeCamps.loot.${share.kind}`) })
-                    : t(`docs.wildlifeCamps.loot.${share.kind}`)
-                }}
-              </span>
-            </p>
-            <p v-for="level in AMOUNT_LEVELS" :key="level" class="loot-amounts" data-testid="loot-amounts">
-              <span class="pills-label">{{ t('docs.wildlifeCamps.loot.atLevel', { level }) }}</span>
-              <span v-for="share in lootOf(camp)" :key="share.kind" class="loot-kind">
-                {{ lootPoolByKind(camp.id, level)[share.kind] }} {{ t(`docs.wildlifeCamps.loot.${share.kind}`) }}
-              </span>
-            </p>
-            <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
-            <div class="pills">
-              <span class="pills-label">{{ $t('docs.wildlifeCamps.state.label') }}</span>
-              <button
-                type="button"
-                class="pill"
-                :class="{ active: view[camp.id].guarded }"
-                :disabled="keptCameras(camp.id).length === 0"
-                @click="setGuarded(camp.id, true)"
-              >
-                {{ $t('docs.wildlifeCamps.state.guarded') }}
-              </button>
-              <button
-                type="button"
-                class="pill"
-                :class="{ active: !view[camp.id].guarded }"
-                @click="setGuarded(camp.id, false)"
-              >
-                {{ $t('docs.wildlifeCamps.state.cleared') }}
-              </button>
-            </div>
-            <div class="pills">
-              <span class="pills-label">{{ $t('docs.wildlifeCamps.camera') }}</span>
-              <button
-                v-for="cam in TILE_ORIENTATIONS"
-                :key="cam"
-                type="button"
-                class="pill"
-                :class="{ active: view[camp.id].camera === cam }"
-                :disabled="!cameraAvailable(camp.id, cam)"
-                :title="cameraAvailable(camp.id, cam) ? undefined : t('docs.wildlifeCamps.notKept')"
-                @click="view[camp.id].camera = cam"
-              >
-                {{ cam }}
-              </button>
-            </div>
-          </div>
-        </div>
-        <p class="caption-note">
-          {{ $t('docs.wildlifeCamps.camps.rotations') }}
-        </p>
-      </section>
-    </main>
-  </div>
+      </div>
+      <p class="caption-note">
+        {{ $t('docs.wildlifeCamps.camps.rotations') }}
+      </p>
+    </section>
+  </DocsPageLayout>
 </template>
 
 <style scoped>
-.wildlife-camps {
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  overflow: auto;
-  background: var(--shell);
-}
-.body {
-  max-width: 90ch;
-  margin: 0 auto;
-  padding: 24px 28px 60px;
-  color: var(--text);
-}
-.intro,
 section > p {
   color: var(--muted);
   line-height: 1.6;
-}
-.status {
-  font-size: 13px;
-  border-left: 3px solid var(--gold);
-  padding-left: 12px;
-  color: var(--muted);
 }
 section {
   margin-top: 36px;
@@ -496,16 +465,5 @@ h2 {
   margin-top: 16px;
   font-size: 12px;
   font-style: italic;
-}
-.breadcrumb {
-  display: inline-block;
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: var(--muted);
-  text-decoration: none;
-}
-.breadcrumb:hover {
-  color: var(--gold);
-  text-decoration: underline;
 }
 </style>

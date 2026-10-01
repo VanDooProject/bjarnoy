@@ -2,9 +2,7 @@
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
-import TopBar from '../components/hud/TopBar.vue';
-import HudNav from '../components/hud/HudNav.vue';
-import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
+import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -36,47 +34,23 @@ const PAGES: DocPage[] = [
 </script>
 
 <template>
-  <div class="docs">
-    <TopBar docked :title="$t('docs.hub.title')" caption="DOCS">
-      <HudNav />
-      <template #drawer="{ close }">
-        <MobileHudDrawer @close="close" />
-      </template>
-    </TopBar>
-    <main class="body docs-scale">
-      <h1>{{ $t('docs.hub.title') }}</h1>
-      <p class="intro">{{ $t('docs.hub.intro') }}</p>
-
-      <div class="pages">
-        <button v-for="page in PAGES" :key="page.to" class="page-card" @click="router.push(page.to)">
-          <span class="page-title">{{ t(page.titleKey) }}</span>
-          <span class="page-description">{{ t(page.descriptionKey) }}</span>
-        </button>
-      </div>
-    </main>
-  </div>
+  <DocsPageLayout
+    class="docs"
+    :title="$t('docs.hub.title')"
+    caption="DOCS"
+    :intro="$t('docs.hub.intro')"
+    :breadcrumb="false"
+  >
+    <div class="pages">
+      <button v-for="page in PAGES" :key="page.to" class="page-card" @click="router.push(page.to)">
+        <span class="page-title">{{ t(page.titleKey) }}</span>
+        <span class="page-description">{{ t(page.descriptionKey) }}</span>
+      </button>
+    </div>
+  </DocsPageLayout>
 </template>
 
 <style scoped>
-.docs {
-  width: 100%;
-  height: 100vh;
-  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
-     viewport, as a progressive enhancement over the 100vh above. */
-  height: 100dvh;
-  overflow: auto;
-  background: var(--shell);
-}
-.body {
-  max-width: 90ch;
-  margin: 0 auto;
-  padding: 24px 28px 60px;
-  color: var(--text);
-}
-.intro {
-  color: var(--muted);
-  line-height: 1.6;
-}
 .pages {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

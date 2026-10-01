@@ -4,9 +4,10 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
-import TopBar from '../components/hud/TopBar.vue';
-import HudNav from '../components/hud/HudNav.vue';
-import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
+import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
+import DocsPicker from '../components/docs/DocsPicker.vue';
+import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
+import DocsToc from '../components/docs/DocsToc.vue';
 import { coastalWaterArt, riverArt, terrainArt, terrainArtByFamily, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 
@@ -156,144 +157,102 @@ const buildingsByTile = computed(() => {
 </script>
 
 <template>
-  <div class="tile-docs">
-    <TopBar docked :title="$t('docs.tiles.title')" caption="DOCS · TILES">
-      <HudNav />
-      <template #drawer="{ close }">
-        <MobileHudDrawer @close="close" />
-      </template>
-    </TopBar>
-    <main class="body docs-scale">
-      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
-      <h1>{{ $t('docs.tiles.title') }}</h1>
-      <p class="intro">{{ $t('docs.tiles.intro') }}</p>
+  <DocsPageLayout
+    class="tile-docs"
+    :title="$t('docs.tiles.title')"
+    caption="DOCS · TILES"
+    :intro="$t('docs.tiles.intro')"
+  >
+    <p v-if="catalogue.loading" class="status">{{ $t('docs.status.loading') }}</p>
+    <p v-else-if="catalogue.error" class="status error">{{ catalogue.error }}</p>
+    <p v-else-if="catalogue.source === 'fallback'" class="status">
+      {{
+        $t('docs.status.fallback', {
+          snapshot: catalogue.generatedAt
+            ? $t('docs.status.fallbackSnapshot', { date: d(new Date(catalogue.generatedAt), 'short') })
+            : '',
+        })
+      }}
+    </p>
 
-      <p v-if="catalogue.loading" class="status">{{ $t('docs.status.loading') }}</p>
-      <p v-else-if="catalogue.error" class="status error">{{ catalogue.error }}</p>
-      <p v-else-if="catalogue.source === 'fallback'" class="status">
-        {{
-          $t('docs.status.fallback', {
-            snapshot: catalogue.generatedAt
-              ? $t('docs.status.fallbackSnapshot', { date: d(new Date(catalogue.generatedAt), 'short') })
-              : '',
-          })
-        }}
+    <DocsToc
+      :links="
+        TILES.map((tile) => ({ href: `#${tile.id}`, label: t(`docs.tiles.entries.${tileEntryKey(tile.id)}.title`) }))
+      "
+    />
+
+    <DocsTileEntry
+      v-for="tile in TILES"
+      :id="tile.id"
+      :key="tile.id"
+      :title="t(`docs.tiles.entries.${tileEntryKey(tile.id)}.title`)"
+    >
+      <template #thumb>
+        <AtlasSprite v-if="thumbFrame(tile)" :frame="thumbFrame(tile)!" />
+        <img v-else-if="thumbUrl(tile)" class="thumb-img" :src="thumbUrl(tile)!" alt="" />
+      </template>
+      <p class="lore">{{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.lore`) }}</p>
+      <p class="generation">
+        {{ $t('docs.tiles.generation') }} {{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.generation`) }}
+      </p>
+      <p v-if="tile.river" class="buildings">{{ $t('docs.tiles.riverSawmillNote') }}</p>
+      <p v-else class="buildings">
+        {{ $t('docs.tiles.buildings') }}
+        <span v-if="buildingsByTile[tile.id]?.length">{{ buildingsByTile[tile.id]!.join(', ') }}</span>
+        <span v-else>{{ $t('docs.tiles.none') }}</span>
       </p>
 
-      <nav class="toc" :aria-label="$t('docs.status.toc')">
-        <a v-for="tile in TILES" :key="tile.id" class="toc-link" :href="`#${tile.id}`">{{
-          t(`docs.tiles.entries.${tileEntryKey(tile.id)}.title`)
-        }}</a>
-      </nav>
-
-      <section v-for="tile in TILES" :key="tile.id" :id="tile.id" class="tile">
-        <div class="tile-header">
-          <div class="thumb floating-art">
-            <span class="floating-art-shadow" aria-hidden="true" />
-            <AtlasSprite v-if="thumbFrame(tile)" :frame="thumbFrame(tile)!" />
-            <img v-else-if="thumbUrl(tile)" class="thumb-img" :src="thumbUrl(tile)!" alt="" />
-          </div>
-          <div class="tile-intro">
-            <h2>{{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.title`) }}</h2>
-            <p class="lore">{{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.lore`) }}</p>
-            <p class="generation">
-              {{ $t('docs.tiles.generation') }} {{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.generation`) }}
-            </p>
-            <p v-if="tile.river" class="buildings">{{ $t('docs.tiles.riverSawmillNote') }}</p>
-            <p v-else class="buildings">
-              {{ $t('docs.tiles.buildings') }}
-              <span v-if="buildingsByTile[tile.id]?.length">{{ buildingsByTile[tile.id]!.join(', ') }}</span>
-              <span v-else>{{ $t('docs.tiles.none') }}</span>
-            </p>
-          </div>
-        </div>
-
+      <template #pickers>
         <!-- A river's picture depends on its shape (Straight/Bend/Bend60/Spring/
              Confluence — see docs/design/river-generation.md), so instead of one
              static thumbnail this is a small gallery: pick a shape, the thumbnail
              above updates to it. -->
-        <div v-if="tile.river" class="variants">
-          <span class="variants-label">{{ $t('docs.tiles.riverVariants') }}</span>
-          <button
-            v-for="shape in RIVER_SHAPES"
-            :key="shape"
-            type="button"
-            class="variant-button"
-            :class="{ active: riverShape === shape }"
-            @click="riverShape = shape; riverLook = ''"
-          >
-            {{ t(`docs.tiles.riverShapes.${shape}`) }}
-          </button>
-        </div>
+        <DocsPicker
+          v-if="tile.river"
+          :label="$t('docs.tiles.riverVariants')"
+          :options="RIVER_SHAPES.map((shape) => ({ value: shape, label: t(`docs.tiles.riverShapes.${shape}`) }))"
+          :model-value="riverShape"
+          @update:model-value="
+            riverShape = $event;
+            riverLook = '';
+          "
+        />
 
         <!-- The pack shipped more than one look for most shapes (a plain
              channel vs. one that divides round a gravel bar, or meanders, or
              loops back on itself) — a second picker, only shown for shapes
              that actually have alternates. -->
-        <div v-if="tile.river && riverLooksFor(riverShape).length > 0" class="variants">
-          <span class="variants-label">{{ $t('docs.tiles.riverLookLabel') }}</span>
-          <button
-            v-for="look in riverLooksFor(riverShape)"
-            :key="look.id"
-            type="button"
-            class="variant-button"
-            :class="{ active: selectedRiverLookId(riverShape) === look.id }"
-            @click="riverLook = look.id"
-          >
-            {{ t(look.labelKey) }}
-          </button>
-        </div>
+        <DocsPicker
+          v-if="tile.river && riverLooksFor(riverShape).length > 0"
+          :label="$t('docs.tiles.riverLookLabel')"
+          :options="riverLooksFor(riverShape).map((look) => ({ value: look.id, label: t(look.labelKey) }))"
+          :model-value="selectedRiverLookId(riverShape)"
+          @update:model-value="riverLook = $event"
+        />
 
         <!-- Same idea for Mountain's landform (Plain/Corrie/Saddleback/Table) —
              the Quarry building's own variant picker sits on one of these. -->
-        <div v-if="tile.mountain" class="variants">
-          <span class="variants-label">{{ $t('docs.tiles.mountainVariants') }}</span>
-          <button
-            v-for="variant in MOUNTAIN_VARIANTS"
-            :key="variant"
-            type="button"
-            class="variant-button"
-            :class="{ active: mountainVariant === variant }"
-            @click="mountainVariant = variant"
-          >
-            {{ t(`docs.tiles.mountainLandforms.${variant}`) }}
-          </button>
-        </div>
-      </section>
-    </main>
-  </div>
+        <DocsPicker
+          v-if="tile.mountain"
+          :label="$t('docs.tiles.mountainVariants')"
+          :options="
+            MOUNTAIN_VARIANTS.map((variant) => ({
+              value: variant,
+              label: t(`docs.tiles.mountainLandforms.${variant}`),
+            }))
+          "
+          :model-value="mountainVariant"
+          @update:model-value="mountainVariant = $event"
+        />
+      </template>
+    </DocsTileEntry>
+  </DocsPageLayout>
 </template>
 
 <style scoped>
+/* The tiles list sat 4px looser than the shared entry default. */
 .tile-docs {
-  width: 100%;
-  height: 100vh;
-  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
-     viewport, as a progressive enhancement over the 100vh above. */
-  height: 100dvh;
-  overflow: auto;
-  background: var(--shell);
-}
-.body {
-  max-width: 90ch;
-  margin: 0 auto;
-  padding: 24px 28px 60px;
-  color: var(--text);
-}
-.breadcrumb {
-  display: inline-block;
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: var(--muted);
-  text-decoration: none;
-}
-.breadcrumb:hover {
-  color: var(--gold);
-  text-decoration: underline;
-}
-.intro {
-  color: var(--muted);
-  line-height: 1.6;
+  --docs-entry-gap: 32px;
 }
 .status {
   color: var(--muted);
@@ -302,94 +261,12 @@ const buildingsByTile = computed(() => {
 .status.error {
   color: #d97b6c;
 }
-.toc {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  margin-top: 20px;
-  padding: 14px 18px;
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  background: var(--panel, #1c1710);
-}
-.toc-link {
-  font-size: 13px;
-  color: var(--muted);
-  text-decoration: none;
-}
-.toc-link:hover {
-  color: var(--text);
-  text-decoration: underline;
-}
-.tile {
-  margin-top: 32px;
-  scroll-margin-top: 84px;
-}
-.tile-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.thumb {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  flex: none;
-  width: 96px;
-  height: 144px;
-}
 .thumb-img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
 }
-.tile-intro h2 {
-  margin: 0 0 4px;
-}
-.lore,
-.generation,
-.buildings {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0 0 4px;
-  max-width: 60ch;
-}
-.buildings {
+.tile-docs p.buildings {
   margin-bottom: 0;
-}
-.variants {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin-top: 12px;
-}
-.variants-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  margin-right: 4px;
-}
-.variant-button {
-  background: var(--panel, #1c1710);
-  border: 1px solid var(--panel-border);
-  color: var(--muted);
-  padding: 5px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: inherit;
-}
-.variant-button:hover {
-  color: var(--text);
-  border-color: var(--gold);
-}
-.variant-button.active {
-  color: #20160a;
-  background: var(--gold);
-  border-color: var(--gold);
 }
 </style>

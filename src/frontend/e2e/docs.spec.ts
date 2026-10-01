@@ -246,4 +246,18 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await page.getByRole('link', { name: '← Docs' }).click();
     await expect(page).toHaveURL(/\/docs$/);
   });
+
+  // Every docs page sits on the shared DocsPageLayout: the same top bar, a breadcrumb back to the hub
+  // (the hub itself has none), a title and the lede.
+  for (const path of ['/tech-tree', '/docs/tiles', '/docs/wasted-lands', '/docs/wildlife-camps', '/docs/bog-lands']) {
+    test(`${path} shows its breadcrumb back to the docs hub`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.locator('.docs-page h1')).toBeVisible();
+      await expect(page.locator('.docs-page .intro')).toBeVisible();
+      await page.locator('.docs-page .breadcrumb').click();
+      await expect(page).toHaveURL(/\/docs$/);
+      await expect(page.locator('.docs-page h1')).toBeVisible();
+      await expect(page.locator('.docs-page .breadcrumb')).toHaveCount(0);
+    });
+  }
 });
