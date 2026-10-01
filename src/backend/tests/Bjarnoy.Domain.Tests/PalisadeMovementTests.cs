@@ -36,8 +36,9 @@ public sealed class PalisadeMovementTests
         Enumerable.Range(fromR, toR - fromR + 1)
             .Select(r => new StandingWall(new HexCoord(3, r), r == gateAtR, Owner));
 
-    private static PalisadeIndex Index(IReadOnlyDictionary<HexCoord, Terrain> terrain, IEnumerable<StandingWall> walls) =>
-        new(walls, h => terrain.GetValueOrDefault(h, Terrain.Sea), _ => false);
+    private static PalisadeIndex Index(
+        IReadOnlyDictionary<HexCoord, Terrain> terrain, IEnumerable<StandingWall> walls, Func<Guid, Guid, bool>? areFriends = null) =>
+        new(walls, h => terrain.GetValueOrDefault(h, Terrain.Sea), _ => false, areFriends);
 
     private static IReadOnlyList<HexCoord>? Route(
         IReadOnlyDictionary<HexCoord, Terrain> terrain, PalisadeIndex walls, Guid walker, bool landUnit = true)
@@ -84,6 +85,24 @@ public sealed class PalisadeMovementTests
             path, h => terrain.GetValueOrDefault(h, Terrain.Sea), hexesPerHour: 1.0,
             blocked: walls.ForOwner(Owner)!.Blocked, friendlyGate: walls.ForOwner(Owner)!.FriendlyGate, halfOpen: walls.ForOwner(Owner)!.HalfOpen);
         Assert.Equal(4.0, hours[^1]); // four grass steps through the gate: the gate costs what grass costs
+    }
+
+    [Fact]
+    public void A_gate_of_a_friend_opens_but_a_plain_wall_of_a_friend_does_not()
+    {
+        var terrain = Strip();
+        terrain[new HexCoord(3, 4)] = Terrain.Mountain;
+        bool Friends(Guid a, Guid b) => (a == Owner && b == Stranger) || (a == Stranger && b == Owner);
+        var gate = new StandingWall(new HexCoord(3, 0), IsGate: true, Stranger);
+        var withGate = Index(terrain, [.. Column(-3, 3).Where(w => w.Coord.R != 0), gate], Friends);
+        Assert.NotNull(Route(terrain, withGate, Owner));
+
+        // A friend's plain wall hex still blocks everyone.
+        var plainWall = Index(terrain, Column(-3, 3).Select(w => w with { OwnerKey = Stranger }), Friends);
+        Assert.Null(Route(terrain, plainWall, Owner));
+
+        // Without the friendship the same gate stays shut.
+        Assert.Null(Route(terrain, Index(terrain, [.. Column(-3, 3).Where(w => w.Coord.R != 0), gate]), Owner));
     }
 
     [Fact]

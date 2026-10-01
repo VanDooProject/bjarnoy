@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Guilds;
 using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.Palisades;
 using Bjarnoy.Domain.World;
@@ -36,11 +37,39 @@ public static class WorldPalisades
             .Select(b => new { b.Q, b.R, b.Type, b.SettlementId, b.Settlement!.UserId })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        // Only a gate cares who the friends are, so a world without one skips the guild queries.
+        var areFriends = rows.Any(r => r.Type == BuildingType.PalisadeGate)
+            ? await FriendsAsync(db, worldId, cancellationToken).ConfigureAwait(false)
+            : null;
+
         return new PalisadeIndex(
             rows.Select(r => new StandingWall(
                 new HexCoord(r.Q, r.R), r.Type == BuildingType.PalisadeGate, OwnerKeyOf(r.UserId, r.SettlementId))),
             terrainAt,
-            isWideRiver);
+            isWideRiver,
+            areFriends);
+    }
+
+    /// <summary>
+    /// Who a gate also opens for besides its owner: two accounts are friends when they are in the same guild or in guilds with an active
+    /// peace treaty. An anonymous settlement's key (the settlement itself) is in no guild and so nobody's friend.
+    /// </summary>
+    private static async Task<Func<Guid, Guid, bool>> FriendsAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
+    {
+        var memberships = await db.GuildMemberships
+            .AsNoTracking()
+            .Where(m => m.Guild!.WorldId == worldId && m.Guild.DisbandedAt == null)
+            .Select(m => new { m.UserId, m.GuildId })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var treaties = await db.GuildPeaceTreaties
+            .AsNoTracking()
+            .Where(t => t.Status == PeaceTreatyStatus.Active && t.ProposerGuild!.WorldId == worldId)
+            .Select(t => new { t.ProposerGuildId, t.TargetGuildId })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var guildOf = memberships.ToDictionary(m => m.UserId, m => m.GuildId);
+        var atPeace = treaties.SelectMany(t => new[] { (t.ProposerGuildId, t.TargetGuildId), (t.TargetGuildId, t.ProposerGuildId) }).ToHashSet();
+        return (a, b) => guildOf.TryGetValue(a, out var ga) && guildOf.TryGetValue(b, out var gb) && (ga == gb || atPeace.Contains((ga, gb)));
     }
 
     /// <summary>
