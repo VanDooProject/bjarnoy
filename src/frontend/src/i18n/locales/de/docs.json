@@ -314,7 +314,7 @@
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",
-    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber in der Nähe eines bewachten Lagers wird kein Turm gebaut. Auf einer großen Insel räumst du die Lager, die im Weg sind, und baust dort, wo das Land frei ist.",
+    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber ein starkes Lager brennt jeden Turm in seiner Nähe nieder, den keine Armee bewacht. Auf einer großen Insel räumst du die Lager, die im Weg sind, und baust dort, wo das Land frei ist.",
     "status": "Die Lager leben: Du kannst sie jagen, sie wachsen nach, und starke Lager wehren sich. Die Regeln unten sind die, nach denen das Spiel läuft; die Moorlager (Elchmoor, Biberburg, Kranichtanz) stehen auf freiem Moosboden.",
     "rules": {
       "heading": "Wie ein Lager funktioniert",

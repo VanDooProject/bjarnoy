@@ -314,7 +314,7 @@
   },
   "wildlifeCamps": {
     "title": "Wildlife camps",
-    "intro": "Unclaimed islands are not empty. Wolves, bears, seals and worse hold them, each pack in a camp of its own. You may land and settle, but no tower goes up near a guarded camp, so on a big island you clear the camps in your way and build where the land is free.",
+    "intro": "Unclaimed islands are not empty. Wolves, bears, seals and worse hold them, each pack in a camp of its own. You may land and settle, but a strong camp burns down any tower near it that no army guards, so on a big island you clear the camps in your way and build where the land is free.",
     "status": "Camps are alive: you can hunt them, they regrow, and strong camps fight back. The rules below are the ones the game plays by; the bog camps (moose mire, beaver lodge, crane dance) stand on plain bog moss.",
     "rules": {
       "heading": "How a camp works",
