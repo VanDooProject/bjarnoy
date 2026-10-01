@@ -68,7 +68,11 @@
     "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
     "domainFood": "Nahrung",
     "domainIron": "Eisen",
-    "domainWood": "Holz"
+    "domainWood": "Holz",
+    "campEmpty": "Geräumt: leer",
+    "campCalmUntil": "Ruhig bis {time}",
+    "campAggressive": "Aggressiv",
+    "campClears": "Einmal geräumt | {count}-mal geräumt"
   },
   "ringMenu": {
     "shrineLimitLock": "Diese Siedlung hat bereits einen Schrein",
@@ -105,7 +109,10 @@
       "build": "Bauen",
       "openWater": "Offenes Wasser",
       "giantOccupied": "Von einem Riesenwahrzeichen belegt",
-      "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden"
+      "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden",
+      "hunt": "Jagen",
+      "campOccupied": "Von wilden Tieren belegt",
+      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -121,7 +128,8 @@
     "errors": {
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
       "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden."
-    }
+    },
+    "towerCampWarning": "Wilde Tiere brennen diesen Turm nieder, wenn keine Armee ihn bewacht."
   },
   "buildQueue": {
     "title": "Bau",
@@ -330,7 +338,8 @@
     "supportingNamed": "Unterstützt {name}",
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
-    "inTransit": "Unterwegs"
+    "inTransit": "Unterwegs",
+    "hunting": "Auf der Jagd"
   },
   "armyPanel": {
     "title": "Armeen",
@@ -421,5 +430,50 @@
     "retry": "Erneut versuchen",
     "pollErrorTitle": "Verbindungsproblem — neuer Versuch läuft",
     "dismiss": "Schließen"
+  },
+  "huntTarget": {
+    "instructions": "Wähle Landeinheiten für die Jagd auf dieses Lager. Optionale Zwischenstopps: {count} {waypointWord}.",
+    "status": {
+      "empty": "Geräumt: nichts bewacht es, eine Armee sammelt nur die Restbeute ein",
+      "calm": "Ruhig: es wächst nach, greift aber nicht an",
+      "aggressive": "Aggressiv: es überfällt Armeen, die in seine Reichweite kommen",
+      "guarded": "Bewacht"
+    },
+    "calmUntil": "Ruhig bis {time}",
+    "loot": "Beute",
+    "noLoot": "keine",
+    "power": "Dein Angriff {attack} gegen Lagerverteidigung {defense}",
+    "outlook": {
+      "noArmy": "Einheiten wählen",
+      "empty": "kein Kampf",
+      "win": "deine Armee sollte gewinnen",
+      "lose": "deine Armee würde verlieren"
+    },
+    "estimateNote": "Schätzung: das Lager wächst bis zu deiner Ankunft nach, und deine Armee trägt nur begrenzt Beute."
+  },
+  "campReport": {
+    "won": "Gewonnen",
+    "lost": "Verloren",
+    "kind": {
+      "hunt": "Jagd",
+      "ambush": "Hinterhalt",
+      "tower": "Turmangriff"
+    },
+    "title": {
+      "hunt": "Jagd bei {camp}",
+      "ambush": "Überfallen von {camp}",
+      "tower": "{camp} griff deinen Turm an"
+    },
+    "campLevel": "Lager Stufe {level} bei ({q}, {r})",
+    "armyPower": "Armee",
+    "campPower": "Lager",
+    "yourUnits": "Deine Einheiten",
+    "beasts": "Tiere",
+    "beast": "Tier",
+    "before": "Vorher",
+    "cleared": "{camp} ist geräumt.",
+    "towerBurned": "Der Turm bei ({q}, {r}) brannte nieder.",
+    "towerHeld": "Der Turm bei ({q}, {r}) hielt stand.",
+    "summary": "{title}: {lost} Einheiten verloren, {beasts} Tiere erlegt, {loot} Beute"
   }
 }

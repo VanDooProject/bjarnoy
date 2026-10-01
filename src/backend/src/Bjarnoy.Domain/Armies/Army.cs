@@ -62,6 +62,14 @@ public enum ArmyMission
     /// at all, letting it fall through to ordinary standing/auto-return.
     /// </summary>
     Found = 4,
+
+    /// <summary>
+    /// Travel to a wildlife camp's hex (<see cref="Army.TargetCampCoord"/>) and fight its garrison on arrival
+    /// (<c>docs/design/wildlife-camps.md</c>, "Hunting a camp"). Land units only. Like <see cref="Attack"/> there
+    /// is no standing at the destination: survivors (if any) and loot start the precomputed return leg at once,
+    /// see <see cref="Army.SettleHuntArrival"/>.
+    /// </summary>
+    Hunt = 5,
 }
 
 /// <summary>
@@ -140,6 +148,13 @@ public sealed record Army
     /// what checks whether a building still stands there.
     /// </summary>
     public HexCoord? TargetBuildingCoord { get; init; }
+
+    /// <summary>
+    /// The wildlife camp this <see cref="ArmyMission.Hunt"/> army was sent to fight. Its path may end on a
+    /// neighbour hex when the camp's own hex is not walkable, so this is not necessarily the route's last hex.
+    /// <see langword="null"/> for every other mission.
+    /// </summary>
+    public HexCoord? TargetCampCoord { get; init; }
 
     /// <summary>
     /// Resources looted from a won <see cref="ArmyMission.Attack"/> battle,
@@ -253,7 +268,8 @@ public sealed record Army
         bool renownAndSlotAllowed = true,
         double speedFactor = 1.0,
         Func<HexCoord, bool>? isRiver = null,
-        IGiantIndex? giants = null)
+        IGiantIndex? giants = null,
+        HexCoord? targetCampCoord = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -297,6 +313,21 @@ public sealed record Army
             if (!isFleet && requestedClasses.Contains(UnitClass.Ship))
             {
                 return DispatchDecision.Rejected(DispatchRejection.MixedFleetAndLandUnits);
+            }
+        }
+
+        if (mission == ArmyMission.Hunt)
+        {
+            // Beasts are fought on land; a fleet (or an empty request) cannot hunt. The camp itself is
+            // looked up by the caller, which passes its hex as targetCampCoord only when one exists.
+            if (isFleet)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.HuntRequiresLandUnits);
+            }
+
+            if (targetCampCoord is null)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.NoCampAtDestination);
             }
         }
 
@@ -485,6 +516,7 @@ public sealed record Army
             Mission = mission,
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null,
+            TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
         };
 
         return DispatchDecision.Accept(settlementDecision.Settlement!, army);
@@ -683,6 +715,74 @@ public sealed record Army
         };
 
         return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege);
+    }
+
+    /// <summary>
+    /// The army after a hunt fought at <paramref name="battleInstant"/> (the outbound leg's arrival): the
+    /// survivors of <paramref name="plan"/>, carrying <see cref="CampFightPlan.Loot"/>, are put straight onto the
+    /// precomputed return leg, retreat-immune like <see cref="SettleArrival"/>'s survivors, with the provisions
+    /// burned on the way out already deducted. Returns <see langword="null"/> when nobody survived.
+    /// An empty-camp pickup is a plan with every unit surviving, so it turns the army home the same way.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The army is not on its outbound leg.</exception>
+    public Army? SettleHuntArrival(CampFightPlan plan, DateTimeOffset battleInstant)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        if (Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
+        {
+            throw new InvalidOperationException("A hunt can only be settled on the outbound leg.");
+        }
+
+        if (plan.ArmySurvivors.Sum(s => s.Count) == 0)
+        {
+            return null;
+        }
+
+        var movement = inTransit.Movement;
+        var elapsedOutboundHours = (battleInstant - movement.DepartedAt).TotalHours;
+        var provisionsAtBattle = Math.Max(0, Provisions - (TotalUpkeepPerHour * elapsedOutboundHours));
+
+        var returning = new Movement.Movement
+        {
+            DepartedAt = battleInstant,
+            Path = movement.ReturnPath,
+            CumulativeHours = movement.ReturnCumulativeHours,
+            ReturnPath = movement.ReturnPath,
+            ReturnCumulativeHours = movement.ReturnCumulativeHours,
+            TurnAroundAt = battleInstant,
+            IsReturning = true,
+            RetreatImmune = true,
+        };
+
+        return this with
+        {
+            Stacks = plan.ArmySurvivors,
+            Location = new ArmyLocation.InTransit(returning),
+            Provisions = provisionsAtBattle,
+            Loot = plan.Loot,
+        };
+    }
+
+    /// <summary>
+    /// The hex a <see cref="ArmyMission.Hunt"/> route ends on: the camp's own hex when a land army can stand on it,
+    /// otherwise its walkable neighbour nearest to <paramref name="from"/> (ties by neighbour order). Falls back to the
+    /// camp's hex when no neighbour is walkable either, so the dispatch is refused as an unwalkable destination.
+    /// </summary>
+    public static HexCoord HuntRouteDestination(HexCoord camp, HexCoord from, Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (terrainAt(camp).IsTraversable(isLandUnit: true))
+        {
+            return camp;
+        }
+
+        return camp.Neighbours()
+            .Where(n => terrainAt(n).IsTraversable(isLandUnit: true))
+            .OrderBy(n => n.DistanceTo(from))
+            .Cast<HexCoord?>()
+            .FirstOrDefault() ?? camp;
     }
 
     /// <summary>Merges two stack lists into one, aggregated by type.</summary>
@@ -1640,6 +1740,12 @@ public enum DispatchRejection
     /// settlement — see <see cref="Founding.IsHexFoundable"/>.
     /// </summary>
     TargetHexNotFoundable,
+
+    /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch's destination hex holds no wildlife camp.</summary>
+    NoCampAtDestination,
+
+    /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch included ships; only land units hunt.</summary>
+    HuntRequiresLandUnits,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

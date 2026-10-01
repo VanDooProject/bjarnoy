@@ -348,3 +348,61 @@ public sealed record FieldBattleReportResponse(
             [.. entity.Lines.Select(FieldBattleReportLineResponse.From)]);
     }
 }
+
+/// <summary>The camp a <see cref="CampReportResponse"/> was fought at.</summary>
+public sealed record CampReportCampResponse(int Q, int R, string Family, int EffectiveLevel);
+
+/// <summary>One unit type's sent/lost counts on the player's side of a camp fight.</summary>
+public sealed record CampReportUnitLineResponse(string Type, int Sent, int Lost);
+
+/// <summary>One beast tier's count before a camp fight and how many died.</summary>
+public sealed record CampReportBeastLineResponse(string Tier, int Before, int Lost);
+
+/// <summary>
+/// A camp fight (hunt, ambush or tower attack), as read from the player's settlement inbox — see
+/// <c>docs/design/wildlife-camps.md</c>, "Reports".
+/// </summary>
+/// <param name="Kind"><c>"hunt"</c>, <c>"ambush"</c> or <c>"tower"</c>.</param>
+/// <param name="Winner"><c>"army"</c> (the player's side) or <c>"camp"</c>.</param>
+/// <param name="ArmyId">The army that fought; null when none did (a tower with no defenders).</param>
+/// <param name="Tower">The tower's hex for a <c>"tower"</c> report.</param>
+public sealed record CampReportResponse(
+    Guid Id,
+    string Kind,
+    DateTimeOffset OccurredAt,
+    CampReportCampResponse Camp,
+    Guid SettlementId,
+    Guid? ArmyId,
+    string Winner,
+    double ArmyPower,
+    double CampPower,
+    IReadOnlyList<CampReportUnitLineResponse> Units,
+    IReadOnlyList<CampReportBeastLineResponse> Beasts,
+    ResourceAmountsResponse Loot,
+    bool CampCleared,
+    HexPointResponse? Tower,
+    bool TowerBurned)
+{
+    public static CampReportResponse From(CampReportEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var report = entity.ToDomain();
+        return new CampReportResponse(
+            report.Id,
+            report.Kind.ToString().ToLowerInvariant(),
+            report.OccurredAt,
+            new CampReportCampResponse(report.CampCoord.Q, report.CampCoord.R, report.Family, report.EffectiveLevel),
+            report.SettlementId,
+            report.ArmyId,
+            report.Winner == CampFightWinner.Army ? "army" : "camp",
+            report.ArmyPower,
+            report.CampPower,
+            [.. report.UnitLines.Select(l => new CampReportUnitLineResponse(l.Type.ToWireName(), l.Sent, l.Lost))],
+            [.. report.BeastLines.Select(l => new CampReportBeastLineResponse(l.Tier.ToWireName(), l.Before, l.Lost))],
+            ResourceAmountsResponse.From(report.Loot),
+            report.CampCleared,
+            report.TowerCoord is { } tower ? HexPointResponse.From(tower) : null,
+            report.TowerBurned);
+    }
+}

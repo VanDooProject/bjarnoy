@@ -48,6 +48,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<FieldBattleReportLineEntity> FieldBattleReportLines => Set<FieldBattleReportLineEntity>();
 
+    public DbSet<CampStateEntity> CampStates => Set<CampStateEntity>();
+
+    public DbSet<CampReportEntity> CampReports => Set<CampReportEntity>();
+
+    public DbSet<CampReportUnitLineEntity> CampReportUnitLines => Set<CampReportUnitLineEntity>();
+
+    public DbSet<CampReportBeastLineEntity> CampReportBeastLines => Set<CampReportBeastLineEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -422,6 +430,62 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.Property(l => l.Id).ValueGeneratedNever();
             line.Property(l => l.Side).HasConversion<int>();
             line.Property(l => l.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<CampStateEntity>(state =>
+        {
+            state.ToTable("camp_states");
+            state.HasKey(c => new { c.WorldId, c.Q, c.R });
+            state.HasOne(c => c.World)
+                .WithMany()
+                .HasForeignKey(c => c.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CampReportEntity>(report =>
+        {
+            report.ToTable("camp_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.Family).HasMaxLength(32).IsRequired();
+
+            // The inbox reads by the player's settlement id — see CampReportService.GetForSettlementAsync.
+            report.HasIndex(r => r.SettlementId);
+
+            report.HasOne<WorldEntity>()
+                .WithMany()
+                .HasForeignKey(r => r.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasOne<SettlementEntity>()
+                .WithMany()
+                .HasForeignKey(r => r.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.UnitLines)
+                .WithOne(l => l.CampReport!)
+                .HasForeignKey(l => l.CampReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.BeastLines)
+                .WithOne(l => l.CampReport!)
+                .HasForeignKey(l => l.CampReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CampReportUnitLineEntity>(line =>
+        {
+            line.ToTable("camp_report_unit_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<CampReportBeastLineEntity>(line =>
+        {
+            line.ToTable("camp_report_beast_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<UserEntity>(user =>

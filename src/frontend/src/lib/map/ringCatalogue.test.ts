@@ -200,6 +200,15 @@ describe('isWaterOnlyBuilding / tileIsBuildable', () => {
   });
 });
 
+describe('tileIsBuildable on a wildlife camp hex', () => {
+  it('refuses a guarded camp, accepts a cleared one, never Fenrir\'s brood', () => {
+    expect(tileIsBuildable({ terrain: 'grass', camp: { family: 'wolfden' } })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', camp: { family: 'wolfden', empty: false } })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', camp: { family: 'wolfden', empty: true } })).toBe(true);
+    expect(tileIsBuildable({ terrain: 'sand', camp: { family: 'fenrirbrood', empty: true } })).toBe(false);
+  });
+});
+
 describe('shrineLimitLock', () => {
   it('locks every shrine once the settlement holds one, whichever god', () => {
     expect(shrineLimitLock(1)).toBe('This settlement already has a shrine');

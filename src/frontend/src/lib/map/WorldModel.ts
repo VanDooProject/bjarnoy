@@ -16,6 +16,8 @@ import { buildingAllowedOnHex, cropAllowedHere, riverBuildingAllowedHere } from 
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
+import { campHexBuildable } from './campRules';
+import type { CampStateResponse } from '../../api/types';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
 import { validateTradeRatio } from '../trade/tradeRatio';
@@ -1610,9 +1612,9 @@ export class WorldModel {
     // since a giant whose whole 7-hex footprint *is* fully enclosed reads as
     // claimed but must still refuse building on it.
     if (tile.giant) return false;
-    // A wildlife camp hex is not buildable for now (camp gameplay - clearing
-    // it - comes later).
-    if (tile.camp) return false;
+    // A wildlife camp hex is not buildable while the camp stands guarded; a cleared
+    // (empty) camp is, except Fenrir's brood (matches BuildRejection.HexOccupiedByCamp).
+    if (tile.camp && !campHexBuildable(tile.camp)) return false;
     // Every other building needs dry land; the fishing hut, dockyard and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
@@ -1879,6 +1881,44 @@ export class WorldModel {
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
     }
+  }
+
+  /**
+   * Merges the server's live camp states (`GET /worlds/{id}/camps`) onto the tagged camps by
+   * q,r. A state for a hex without a camp is ignored. Returns whether anything changed, so the
+   * caller only forces a redraw for a real change.
+   */
+  setCampStates(states: CampStateResponse[]): boolean {
+    let changed = false;
+    for (const state of states) {
+      const key = coordKey(state);
+      const known = this.campByHex.get(key);
+      if (!known) continue;
+      const tile = this.getTile(state.q, state.r);
+      if (!tile.camp) continue;
+      const next = {
+        ...tile.camp,
+        effectiveLevel: state.effectiveLevel,
+        garrison: { ...state.garrison },
+        fullGarrison: { ...state.fullGarrison },
+        empty: state.empty,
+        calmUntil: state.calmUntil,
+        aggressive: state.aggressive,
+        clears: state.clears,
+        removed: state.removed,
+        leftover: { ...state.leftover },
+      };
+      if (JSON.stringify(next) === JSON.stringify(tile.camp)) continue;
+      tile.camp = next;
+      this.campByHex.set(key, { ...next, q: state.q, r: state.r });
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Every tagged camp (live state included once `setCampStates` has run). */
+  camps() {
+    return [...this.campByHex.values()];
   }
 
   /**

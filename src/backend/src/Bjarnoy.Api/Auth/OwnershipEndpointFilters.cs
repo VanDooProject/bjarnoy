@@ -84,6 +84,36 @@ public sealed class FieldReportOwnershipEndpointFilter : IEndpointFilter
 }
 
 /// <summary>
+/// The camp-report sibling of <see cref="ReportOwnershipEndpointFilter"/>: a camp report belongs only to the
+/// player's settlement (<c>CampReportEntity.SettlementId</c>) — the camp has no owner — so only that settlement's
+/// owner may read it. Fits <c>ArmyEndpoints.GetCampReport</c>.
+/// </summary>
+public sealed class CampReportOwnershipEndpointFilter : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var reportId = context.GetArgument<Guid>(0);
+
+        var reports = context.HttpContext.RequestServices.GetRequiredService<CampReportService>();
+        var report = await reports.GetAsync(reportId, context.HttpContext.RequestAborted);
+        if (report is null)
+        {
+            return await next(context);
+        }
+
+        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
+        var refusal = await OwnershipGate.EnforceAnyAsync(
+            context.HttpContext, [report.SettlementId], realms, context.HttpContext.RequestAborted);
+
+        return refusal ?? await next(context);
+    }
+}
+
+/// <summary>
 /// Refuses a settlement-mutating request with 403 unless the caller can prove
 /// they own the target settlement. See <see cref="OwnershipGate"/> for the
 /// actual rule; this filter only resolves the settlement id.

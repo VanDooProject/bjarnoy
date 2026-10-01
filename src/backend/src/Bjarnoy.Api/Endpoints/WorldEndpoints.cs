@@ -49,6 +49,10 @@ public static class WorldEndpoints
             .WithName("GetWorldIslands")
             .WithSummary("Lists the islands of a world, with their start positions.");
 
+        worlds.MapGet("/{worldId:guid}/camps", GetCamps)
+            .WithName("GetWorldCamps")
+            .WithSummary("Every wildlife camp's live state (garrison, calm, clears, loot left) at the world's game time, optionally for one island.");
+
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
             .WithSummary("Returns the terrain of an axial rectangle of hexes.");
@@ -217,6 +221,35 @@ public static class WorldEndpoints
 
         IReadOnlyList<IslandResponse> response = [.. islands.Select(IslandResponse.From)];
 
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The live state of every wildlife camp at the world's game clock, optionally narrowed to one island. Public like
+    /// <see cref="GetIslands"/>: the camps themselves already ship in <see cref="IslandResponse.Camps"/>, and this is
+    /// world state, not per-player data. Read-only — a camp's garrison is settled in memory from its stored snapshot,
+    /// never written on this path. Wasted islands' camps stay hidden until the endboss has triggered, like the islands.
+    /// </summary>
+    private static async Task<Results<Ok<IReadOnlyList<CampStateResponse>>, NotFound<ProblemDetails>>> GetCamps(
+        Guid worldId,
+        Guid? islandId,
+        WorldService worlds,
+        CampService campService,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var now = world.ToClock().ToGameTime(timeProvider.GetUtcNow());
+        var camps = await campService.LoadCampsAsync(
+            worldId, now, islandId, includeWasted: world.EndbossTriggeredAt is not null, cancellationToken);
+        var realm = await campService.LoadRealmAsync(worldId, cancellationToken);
+
+        IReadOnlyList<CampStateResponse> response = [.. camps.Select(c => CampStateResponse.From(c, now, realm))];
         return TypedResults.Ok(response);
     }
 
