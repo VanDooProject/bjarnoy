@@ -2,7 +2,8 @@
 
 Camps are generated with the world, stored per island and drawn on the map. Players hunt them with
 armies, strong camps attack armies and towers inside their guard range, and camps repopulate and grow
-stronger the more often they are cleared: see [Gameplay](#gameplay). Requirements:
+stronger the more often they are cleared: see [Gameplay](#gameplay). Almost every camp stands on land; the
+**whale road** is the first **water camp**, on open sea and met by fleets only: see [Water camps](#water-camps). Requirements:
 `world-generation-rules.md`, "Wildlife camps"; `economy.md` section 10; owner decisions in issue #334.
 
 ## Families
@@ -23,12 +24,14 @@ One shared table, mirrored by `Camp.cs` (`CampFamilies.All`) and `campPlacement.
 | harewarren | grass | weak | quadratic |
 | deerglade | forest | weak | quadratic |
 | otterslide | a straight river tile (river width) | weak | quadratic |
+| whaleroad | open sea, 6-10 hexes off a coast ([Water camps](#water-camps)) | strong | cubic |
 
 Every main ground has a strong and a weak camp except the mountain (the eagle eyrie, strong; a weak mountain
 camp is still to be drawn) - owner decisions: the eyrie, the walrus and the moose are strong. The walrus
 haul-out has no art of its own yet and is drawn with the seal haul-out's (`KEY_FAMILY` in `textures.ts`).
 A ground with several families offers one candidate per family on each tile (see Placement, step 2), so
-the two budgets decide which one a tile gets.
+the two budgets decide which one a tile gets. The whale road is the last row of both tables, so no land
+family's candidate hash moves; it is placed by its own sea pass, never by `PlaceCore` / `placeCamps`.
 The bog camps are placed on plain bog tiles (moss that is not a shore, creek or lake; `plainBog` in
 `CampGenerator.PlaceCore` / `placeCamps`): the moose mire from the strong budget, the beaver lodge or the
 crane dance (whichever candidate's hash wins) from the weak one. Bearrapids goes on a river tile of shape
@@ -41,7 +44,7 @@ Per island, deterministic, run after rivers and giants and **before** start posi
 (`WorldGenerator.BuildIslands`). Pure core: `CampGenerator.PlaceCore` (C#) and `placeCamps` (TS),
 bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
 (`CampPlacementGoldenTests`, `campPlacement.golden.test.ts`; regenerate with
-`GoldenRegenerationTests`, `BJARNOY_REGEN_GOLDENS=1`).
+`GoldenRegenerationTests`, `BJARNOY_REGEN_GOLDENS=1`). The land camps below are placed from the island's land; the water camps (the whale road) follow in their own sea pass, see [Water camps](#water-camps).
 
 1. **Count**: an island with fewer than `MinCampIslandTiles` (60) land tiles gets **no camp** (islets stay
    camp-free). Otherwise two separate budgets: strong
@@ -83,7 +86,12 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
 
 ## Guard range
 
-`GuardRange(level, strength)`: weak `1 + floor(level / 2)` (1 to 3 hexes), strong `2 + level` (3 to 7).
+A **water camp has no guard range**: `Camp.GuardRange` is 0 for a family on `CampGround.Sea` (and `campGuardRange` in
+`campPlacement.ts`). It holds no land and locks no towers; the start-position margin below, the tower threat
+(`CampTowerThreat`, `towerThreatAt`) and the client's tower warning skip it. For a fleet's route a range of 0 means
+"the camp's own hex" (see [Water camps](#water-camps)).
+
+`GuardRange(level, strength)` for the land camps: weak `1 + floor(level / 2)` (1 to 3 hexes), strong `2 + level` (3 to 7).
 A start position is dropped when its distance to a **strong** camp is at most `GuardRange + 2`
 (`StartPositionMargin`); weak camps may sit next to a spot. Camps are placed first, so an island
 with strong camps everywhere can lose start positions.
@@ -117,9 +125,56 @@ walrushaulout 32, wolfden 23, eagleeyrie 22, boarwallow 16, otterslide 8, bearra
 generate bog, so no bog camps). The weak budget now fills; the start-position numbers above predate this
 change and were not re-measured.
 
-Tuning defaults (all in `CampGenerator` and `campPlacement.ts`): `StrongCampTilesPer` 1500, `WeakCampTilesPer` 600, `MaxStrongCampsPerIsland` 16, `MaxWeakCampsPerIsland` 24,
+Tuning defaults for the land camps (all in `CampGenerator` and `campPlacement.ts`; the whale road's are under [Water camps](#water-camps)): `StrongCampTilesPer` 1500, `WeakCampTilesPer` 600, `MaxStrongCampsPerIsland` 16, `MaxWeakCampsPerIsland` 24,
 `MinCampIslandTiles` 60, `SandTilesPerSealCamp` 2000, `MountainTilesPerEyrieCamp` 2000, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
 guard-range formulas above.
+
+## Water camps
+
+The whale road (3D_assets `hextile134_whaleroad`: a humpback cow and calf surfacing on open sea, with gulls; the empty
+state is the gulls only; the guarded art is kept in rotations SE and NE) is the first camp on the sea. The name is a sea
+kenning, the camp does not move. Family `whaleroad`, ground `CampGround.Sea` (appended last in the enum), **strong**,
+`CampLevelSkew.Cubic`, last row of `CampFamilies.All` / `CAMP_FAMILIES`.
+
+- **No range, no land.** Guard range 0: it holds no land, locks no towers and costs no start positions (it sits 6+ hexes
+  off the coast, the margin is `range + 2`).
+- **Placement**: a separate, pure, deterministic sea pass per island, run after the island's land camps
+  (`CampGenerator.PlaceWhaleRoads` in C#, `placeWhaleRoads` in TS, bit-identical; `GenerateWhaleRoads` and the demo
+  `WorldModel` wire them in). Only **green** islands with at least `MinCampIslandTiles` (60) land tiles get any.
+  - Candidates: hexes whose distance to the island's nearest land tile is `WhaleMinShoreDistance` (6) to
+    `WhaleMaxShoreDistance` (10) inclusive, and whose nearest land **of any island** (wasted ones and specks included) is
+    this island's: no land of another island at the same or a shorter distance, so there is none within 5 and two
+    islands never offer the same hex (ties are skipped). They are enumerated by expanding rings from the island's coast,
+    not by scanning the world, and the open-sea check is made lazily for the candidates that would win a pick.
+  - Count: `clamp(round(land / WhaleTilesPer), 1, MaxWhaleCampsPerIsland)` with `WhaleTilesPer` 3000 and
+    `MaxWhaleCampsPerIsland` 3 (1 up to 4 499 land tiles, 2 up to 7 499, then 3).
+  - Selection: farthest-point sampling like the land camps (first pick the hash-best candidate, each next the one
+    farthest from the picks so far, at least `MinWhaleSpacing` (12) apart; ties by hash, then q, r) on its own hash salts
+    (`WhaleHashSalt` 4093, level `WhaleLevelSalt` 5419), so it is independent of the land camps. Level: cubic, like the
+    other strong camps (`1 + floor(u^3 * 5)`).
+  - Golden: `src/shared/whale-placement-golden.json` (an island's tiles plus the land of its neighbours, asserted by
+    `WhalePlacementGoldenTests` and `whalePlacement.golden.test.ts`; regenerated by
+    `GoldenRegenerationTests.Regenerate_whale_placement_golden`). The land-camp golden is untouched.
+- **Ambush at sea**: a **fleet** is attacked when its route **enters the whale road's own hex** while the camp is
+  aggressive (strong, not calm, adults or alphas alive; `CampAmbush.FindEarliest` with range 0). Land armies are only
+  checked against land camps and fleets only against water camps (`CampAmbushService`). Same fight as on land: the
+  beasts' attack against the units' defense, raid-capped; a beaten fleet turns home from where it is
+  (`Army.ForceFieldRetreat` works for a fleet: it paths over sea to the home settlement), a winning one sails on; the camp
+  is calm for 24 h and a `CampReport` of kind `ambush` is written. A fleet hunting this camp is exempt, like a land hunt.
+- **Hunted by fleets**: `ArmyMission.Hunt` takes ships when the target is a water camp (`Army.PlanDispatch`'s
+  `targetCampIsWater`); the route ends on the camp's own sea hex (`Army.HuntRouteDestination(..., isFleet: true)`). Land
+  units at a water camp are refused with `HuntRequiresFleet`, ships at a land camp with `HuntRequiresLandUnits` (HTTP 409
+  `rejection`, both in `apiErrors`). Battle, report and the empty-camp pickup are the ordinary hunt rules
+  (`CampBattleResolver.Hunt`, the fleet fights with the settlement's ship attack bonus).
+- **Loot: food only**, though the camp is strong (no automatic iron): `CampRules.LootKinds` / `lootKindsOf` special-case
+  it. The pool is the strong one (`1800 x L^0.7`, all of it food), capped by the ships' carry capacity
+  (`CarryCapacity` of the surviving ships); the rest stays as leftover.
+- **Always regrows**: a sea hex is never held by a realm, so a cleared whale road refills (`CampState.GarrisonAt`
+  treats a water camp like Fenrir's brood and ignores a realm that might reach the hex).
+- Beasts: whale calf / humpback / old bull (`catalogue.beasts.whaleroad`).
+
+Still to do on the client: drawing the whale road on the map, the docs page card, a hunt order for fleets and the camp
+report UI (its docs card and strings are minimal for now).
 
 ## Gameplay
 
@@ -141,7 +196,8 @@ Names: wolfden wolf pup / wolf / alpha wolf; boarwallow piglet / boar / tusker; 
 great bear; fenrirbrood black pup / black wolf / Fenrir's get; walrushaulout calf / walrus / walrus bull;
 eagleeyrie eaglet / sea eagle / old sea eagle; moosemire calf / moose / moose bull; sealhaulout pup /
 seal / seal bull; beaverlodge kit / beaver / old beaver; cranedance chick / crane / lead crane;
-harewarren leveret / hare / jack hare; deerglade fawn / deer / stag; otterslide pup / otter / old otter.
+harewarren leveret / hare / jack hare; deerglade fawn / deer / stag; otterslide pup / otter / old otter;
+whaleroad whale calf / humpback / old bull.
 
 **Full garrison** at effective level `L`:
 
@@ -177,8 +233,9 @@ L1 1 800, L5 5 550, L10 9 020, L25 17 130, L100 45 210; weak L1 450, L5 1 390, L
 
 ### Hunting a camp
 
-- New mission `hunt` (`ArmyMission.Hunt`): land units only, sent to the camp's hex (to the nearest
-  reachable neighbour when the camp's own hex is not walkable, e.g. a river camp), with the usual
+- New mission `hunt` (`ArmyMission.Hunt`): land units against land camps, **fleets against water camps** (the
+  whale road) and neither the other; sent to the camp's hex (to the nearest reachable neighbour when the camp's
+  own hex is not walkable, e.g. a river camp; a fleet sails to the water camp's own hex), with the usual
   round-trip food check.
 - On arrival the garrison is settled to the arrival instant and the battle is fought with the ordinary
   attack rules (`BattleResolver` maths: army attack vs. beast defense, a tie goes to the camp, the loser
@@ -198,7 +255,7 @@ L1 1 800, L5 5 550, L10 9 020, L25 17 130, L100 45 210; weak L1 450, L5 1 390, L
   realm** (no settlement's claim covers it). An empty camp inside a realm never refills; it keeps its
   empty art. The realm test is made when the state is read, so a camp whose realm disappears refills as
   if it had been outside all along (an accepted approximation).
-- **Fenrir's brood** always regrows, inside a realm too, and is never removed.
+- **Fenrir's brood** always regrows, inside a realm too, and is never removed. So does every water camp (the whale road).
 - **Building on a camp**: a cleared, empty camp is buildable under its ground's normal rules (not
   Fenrir's brood; the eyrie's mountain is never buildable). A building on the hex removes the camp from
   the map for as long as it stands; when the building is gone and the hex is outside every realm, the
@@ -210,7 +267,8 @@ Only **strong** camps attack, and only when **aggressive**: not calm and with at
 alpha alive. Camp-initiated fights use the beasts' **attack** against the units' **defense** and are
 **raid-capped** (both sides lose at most half), so a camp is never cleared by its own attack.
 
-- **Ambush**: an army (land, not retreat-immune) whose route enters an aggressive strong camp's guard
+- **Ambush**: an army (not retreat-immune; land armies by land camps, fleets by water camps, see
+  [Water camps](#water-camps)) whose route enters an aggressive strong camp's guard
   range is attacked at the instant it enters (`CampAmbush.EarliestAmbush`, the earliest over all camps,
   checked when the army is settled, like field battles). A hunting army is not ambushed by the camp it
   hunts; an army that sets out from inside the range is attacked as it leaves. Army loses: it retreats home from where it stands (`Army.ForceFieldRetreat`). Army wins: it
@@ -243,7 +301,7 @@ Clearing a camp pays loot (`economy.md` section 10) in the four resources. The k
 base rule and each camp's own extras from the design roster (#334's brainstorm); the amounts are still open.
 
 - **Base rule:** every camp gives food, from the hunt; a strong camp adds iron, the gear of earlier settlers
-  its pack has eaten.
+  its pack has eaten (the whale road is the exception: food only, the sea holds no gear).
 - **Extras:** what the camp's ground holds. **++** marks the kind a camp pays a larger share of, so a camp's
   type shapes its loot once amounts exist.
 
@@ -261,6 +319,7 @@ base rule and each camp's own extras from the design roster (#334's brainstorm);
 | cranedance | weak | food |
 | otterslide | weak | food, wood |
 | deerglade, harewarren | weak | food |
+| whaleroad | strong | **food only** (no iron: the one strong camp that does not add it) |
 
 Amounts: see [Loot](#loot) under Gameplay (`CampRules.LootPool`); the docs page (`WildlifeCampsView.vue`,
 `LOOT_EXTRAS`/`lootOf`) shows the kinds per card.
