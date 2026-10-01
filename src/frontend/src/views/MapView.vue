@@ -42,6 +42,7 @@ import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
+import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import {
   BOOST_TERRAIN,
@@ -403,6 +404,16 @@ watch(
   [() => canvasRef.value?.renderer, rangeOverlayHexes],
   ([renderer, hexes]) => {
     renderer?.setRangeOverlay(hexes ?? null);
+  },
+  { immediate: true },
+);
+
+// Construction progress dials over buildings still being built; the renderer
+// animates the progress itself every tick from these absolute timestamps.
+watch(
+  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  ([renderer]) => {
+    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
   },
   { immediate: true },
 );
