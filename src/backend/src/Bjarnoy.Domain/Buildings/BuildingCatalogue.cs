@@ -790,6 +790,7 @@ public static class BuildingCatalogue
     /// the gate is refused there by <see cref="Palisades.PalisadeRules"/>). Unlocks at LH 7 behind a level-5 Tower; no production,
     /// storage or claim of its own.
     /// </summary>
+    // TODO(docs/design/economy.md section 5): siege and fire take a level off a wall hex at a time until it is gone; nothing does yet.
     private static BuildingDefinition PalisadeHex(BuildingType type, int level) => new()
     {
         Type = type,
