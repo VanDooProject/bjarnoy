@@ -694,6 +694,20 @@ export async function preloadAtlasManifests(categories?: string[]): Promise<void
   if (failed) throw firstError;
 }
 
+/**
+ * What a docs route waits for before it renders (see `router/atlasGuard.ts`):
+ * every manifest except the animation ones. Those are most of the bytes
+ * (6.7 of 10.5 MB at the pinned art) and only add motion, and every docs
+ * lookup of a clip sits in a computed or template that re-runs on
+ * `atlasManifestVersion` — so they load right after, without holding the
+ * page back. Resolves once the blocking part is in; the rest keeps loading.
+ */
+export async function preloadDocsAtlasManifests(): Promise<void> {
+  const all = discoveredCategories();
+  await preloadAtlasManifests(all.filter((category) => !category.endsWith('buildings-anim')));
+  void preloadAtlasManifests(all).catch((err) => console.warn('atlas.ts: animation manifest preload failed', err));
+}
+
 const prefetchedPages = new Set<string>();
 
 /**

@@ -26,6 +26,7 @@ import {
   loadAtlasManifests,
   prefetchAtlasPages,
   preloadAtlasManifests,
+  preloadDocsAtlasManifests,
   startBackgroundAtlasLoad,
   type AtlasManifest,
   type AtlasPageIndex,
@@ -191,6 +192,34 @@ describe('preloadAtlasManifests', () => {
   afterEach(() => {
     registerAtlasManifestsForTests(removed);
     vi.unstubAllGlobals();
+  });
+
+  it('preloadDocsAtlasManifests resolves before the animation manifests are in, then loads them too', async () => {
+    const byUrl = new Map<string, AtlasManifest>();
+    const categoryOfUrl = new Map<string, string>();
+    for (const c of all) {
+      for (const p of discoveredPages(c)) {
+        byUrl.set(p.jsonUrl, removed[p.path.split('/').pop()!]);
+        categoryOfUrl.set(p.jsonUrl, c);
+      }
+    }
+    let releaseAnim!: () => void;
+    const animGate = new Promise<void>((resolve) => (releaseAnim = resolve));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (categoryOfUrl.get(url) === 'buildings-anim') await animGate;
+        return { ok: true, json: async () => byUrl.get(url) };
+      }),
+    );
+
+    await preloadDocsAtlasManifests();
+    expect(findAtlasFrame('showcase', Object.keys(removed[discoveredPages('showcase')[0]!.path.split('/').pop()!]!.frames)[0]!)).toBeDefined();
+    const animFrame = Object.keys(removed[discoveredPages('buildings-anim')[0]!.path.split('/').pop()!]!.frames)[0]!;
+    expect(findAtlasFrame('buildings-anim', animFrame)).toBeUndefined();
+
+    releaseAnim();
+    await vi.waitFor(() => expect(findAtlasFrame('buildings-anim', animFrame)).toBeDefined());
   });
 
   it('fetches terrain, level1, static, showcase, anim, then packs — one category at a time', async () => {
