@@ -543,6 +543,9 @@ export interface AdminWorldResponse {
   status: string;
   maxPlayers: number;
   playerCount: number;
+  /** Start positions no longer foundable because a settlement (first or expansion) blocks them. */
+  usedSpawnCount: number;
+  spawnCount: number;
   speedFactor: number;
   startsAt: string | null;
   joinsClosed: boolean;

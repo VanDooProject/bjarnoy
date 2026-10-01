@@ -20,6 +20,8 @@
     "status": "Status",
     "runState": "Run state",
     "players": "Players",
+    "spawns": "Spawn spots used",
+    "spawnsHint": "Start positions a new player can no longer found on: blocked by first settlements and by expansions alike",
     "joinable": "Joinable",
     "endboss": "Endboss",
     "frozenIsles": "Frozen isles",
