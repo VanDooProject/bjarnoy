@@ -70,7 +70,7 @@
     "campEmpty": "Cleared: empty",
     "campCalmUntil": "Calm until {time}",
     "campAggressive": "Aggressive",
-    "campClears": "Cleared {count} times"
+    "campClears": "Cleared once | Cleared {count} times"
   },
   "ringMenu": {
     "back": "Back",

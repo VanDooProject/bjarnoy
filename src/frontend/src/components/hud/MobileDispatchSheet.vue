@@ -478,10 +478,12 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 }
 .mission-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .mission-tab {
-  flex: 1;
+  /* Four tabs (move, attack, support, hunt) do not fit one row of the panel: wrap rather than clip. */
+  flex: 1 1 auto;
   padding: 6px 10px;
   background: transparent;
   border: 1px solid var(--panel-border);

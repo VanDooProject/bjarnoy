@@ -87,7 +87,7 @@ const campLines = computed(() => {
   if (live.empty) lines.push(t('hud.hoverTooltip.campEmpty'));
   else if (calm) lines.push(t('hud.hoverTooltip.campCalmUntil', { time: d(new Date(calm), 'long') }));
   else if (subject.strong && live.aggressive) lines.push(t('hud.hoverTooltip.campAggressive'));
-  if (live.clears > 0) lines.push(t('hud.hoverTooltip.campClears', { count: live.clears }));
+  if (live.clears > 0) lines.push(t('hud.hoverTooltip.campClears', { count: live.clears }, live.clears));
   return lines;
 });
 
