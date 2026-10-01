@@ -432,7 +432,7 @@ function back() {
           </button>
         </section>
         <WorldReviewPanel
-          v-if="preview"
+          v-if="preview?.review"
           class="review-panel"
           :review="preview.review"
           :selected="selectedFinding"
