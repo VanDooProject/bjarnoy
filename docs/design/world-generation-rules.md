@@ -105,3 +105,53 @@ weak camps are fine nearby.
 A repo dev tool renders world previews from the real TS generator, with a legend and layer toggles
 (rivers/streams, bog/lakes, wasted, camps). *Implemented: `scripts/worldgen-preview/` with the `terrain`, `wasted`, `rivers`
 `camps` and `bog` layers and a stats footer with per-rule violation counts (see its README).*
+
+A server-side review of a whole seed (cut-off land, missing bogs, islands without landing spots, broken guarantees) runs
+in the admin reseed panel and as a CLI: see "World review" below.
+
+## World review
+
+A seed can be fine by every generator rule and still play badly: a valley nobody can walk into, a big island without the
+bog its landing spots need. The world review (`Bjarnoy.Domain.World.Review.WorldReview`, server-side only) lists those per
+seed so an admin can switch seed before committing it. *Implemented: the admin reseed panel, the `review-seeds` endpoint and
+a CLI.*
+
+Checks (each independent, `WorldReview.DefaultChecks`; every threshold is a constant in `WorldReviewThresholds`):
+
+| Kind | Severity | What it finds |
+| --- | --- | --- |
+| `cutOffLand` | info, warn from 50 hexes or 5% of the island's walkable land, error from 500 hexes | Walkable land a land army cannot reach from its island's shore or landing spots when wide rivers and mountains are impassable - the rule set #366 previews. Walkable and wide river are #366's definitions exactly: grass, sand, forest or bog moss that is not a wide river; a river hex is wide when at least two of its arms are river width (river tiles and river-stream Ys, not widen tiles or streams). Regions under 6 hexes count towards the total but are not listed. |
+| `missingBog` | warn, error from 500 land tiles | A green island of `BogGuaranteeMinTiles` (150)+ land tiles with a landing candidate (the bog guarantee's terrain-only rule) but no bog at all. Off when the guarantee is (compact preset). |
+| `noLandingSpots` | warn | A green island with a landing candidate but no landing spot after giants, strong camps and the bog-in-reach rule. |
+| `bogRuleViolation` | error | Any bog rule R1-R12 broken (`BogRules`). The generator guarantees 0. |
+| `inlandRiverMouth` | error | A river mouth with no sea beside it. The generator guarantees 0. |
+| `wastedNearGreen` | info, warn when touching (1 hex or overlapping) | A wasted island within 4 hexes of a green one. |
+
+The summary also counts landing spots, islands with a landing candidate, every cut-off hex (also the small regions) and
+the cut-off share of all walkable land and of the worst island. Seeds rank best first by errors, then warnings, then
+cut-off hexes, then most landing spots.
+
+Where the cut-off measure differs from #366's own statistic (`pathing-stats.ts`): #366 counts what lies outside each
+island's largest walkable region; the review counts what cannot be walked to from any shore hex (a walkable hex beside the
+open sea, not a bog lake) or landing spot, because an army lands from the sea - a valley that opens onto a beach is reachable.
+
+**Admin panel** (`/admin/worlds/{id}/reseed`): "Preview seed" now shows the review beside the preview map - the counts, and
+a findings table (severity, kind, island, message) filtered by severity; clicking a finding centres the map on its hex.
+"Scan seeds" reviews up to 8 consecutive seeds with the generation parameters above
+(`POST /api/v1/admin/worlds/{id}/review-seeds`, admin only, persists nothing) and lists them best first, each with a
+button to preview it. Seeds run in parallel on half the cores; a radius-1000 seed takes 1-5 s, a radius-4000 seed 15-25 s
+to generate plus ~3 s to review (about 0.5-0.7 GB each while it runs), so 8 seeds at radius 4000 take a couple of minutes
+in one request - fine for an admin tool behind no proxy timeout, but a background job would be the next step if scans
+of production-size worlds become routine.
+
+**CLI** (for developers and agents re-pinning seeds or checking a generator change; no database, no server):
+
+```bash
+cd src/backend
+dotnet run -c Release --project tools/Bjarnoy.WorldReviewCli -- --seeds 1-8 --radius 1000
+dotnet run -c Release --project tools/Bjarnoy.WorldReviewCli -- --seeds 1-4 --radius 4000 --findings 20
+dotnet run -c Release --project tools/Bjarnoy.WorldReviewCli -- --seeds 7 --json   # one JSON object per seed
+```
+
+It prints per seed the generation and review time, the summary and the worst findings, then the findings per kind and the
+seeds ranked best first. `--compact` uses the compact preset; `--findings -1` prints every finding.
