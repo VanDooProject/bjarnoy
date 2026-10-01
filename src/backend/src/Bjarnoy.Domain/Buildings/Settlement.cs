@@ -1710,6 +1710,31 @@ public sealed record Settlement
         return this with { Buildings = buildings, Queue = queue, Resources = resources };
     }
 
+    /// <summary>
+    /// A wildlife camp burns the tower on <paramref name="coord"/> (<c>docs/design/wildlife-camps.md</c>, "Strong camps
+    /// attack"): the standing tower, or the stub of one still under construction, is removed together with every build
+    /// order on the hex, and nothing is refunded (an unfinished tower's cost is lost). Call on an already-settled
+    /// settlement. Returns this unchanged when no tower stands on the hex.
+    /// </summary>
+    public Settlement BurnTower(
+        HexCoord coord,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        if (!Buildings.Any(b => b.Coord == coord && b.Type == BuildingType.Tower))
+        {
+            return this;
+        }
+
+        var burned = WithSiegeDamage(
+            [.. Buildings.Where(b => b.Coord != coord)], coord, now, speedFactor, guestStacks, terrainAt);
+
+        // The dropped orders may have held construction slots: let the head of the waiting queue take them now.
+        return burned.PromoteWaitingOrders(now, speedFactor).Settlement;
+    }
+
     private Settlement WithBuildings(
         List<PlacedBuilding> buildings,
         HexCoord editedCoord,

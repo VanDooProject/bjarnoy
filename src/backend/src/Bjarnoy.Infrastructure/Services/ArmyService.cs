@@ -99,6 +99,7 @@ public sealed class ArmyService(
     AuthService authService,
     FieldBattleService fieldBattleService,
     CampService campService,
+    CampAmbushService campAmbushService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
@@ -108,6 +109,7 @@ public sealed class ArmyService(
     private readonly AuthService _authService = authService;
     private readonly FieldBattleService _fieldBattleService = fieldBattleService;
     private readonly CampService _campService = campService;
+    private readonly CampAmbushService _campAmbushService = campAmbushService;
     private readonly ILogger<ArmyService> _logger = logger;
 
     /// <summary>
@@ -805,6 +807,16 @@ public sealed class ArmyService(
         if (await _fieldBattleService.TryResolveAsync(army, domain, now, cancellationToken).ConfigureAwait(false))
         {
             return ArmySettleOutcome.Updated;
+        }
+
+        // A strong camp's ambush (docs/design/wildlife-camps.md) is likewise checked before any arrival handling and
+        // likewise leaves the rest of the settle to this army's next call.
+        switch (await _campAmbushService.TryResolveAsync(army, domain, now, cancellationToken).ConfigureAwait(false))
+        {
+            case CampAmbushOutcome.Fought:
+                return ArmySettleOutcome.Updated;
+            case CampAmbushOutcome.ArmyDestroyed:
+                return ArmySettleOutcome.FoldedHome;
         }
 
         if (domain.Mission is ArmyMission.Attack or ArmyMission.Raid

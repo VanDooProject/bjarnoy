@@ -1177,6 +1177,45 @@ public sealed class SettlementService(
         return new CancelBuildResult(CancelBuildRejection.None);
     }
 
+    /// <summary>
+    /// A wildlife camp burns the tower on <paramref name="coord"/> (see <see cref="Settlement.BurnTower"/>): the
+    /// settlement is settled to <paramref name="now"/> first so production and storage stay correct, then the
+    /// tower (standing, or the unfinished one with its build orders, no refund) is removed. Nothing is saved: the
+    /// caller commits it together with the fight's other writes.
+    /// </summary>
+    /// <returns>False when the settlement is gone or no tower stood on the hex (nothing changed).</returns>
+    public async Task<bool> BurnTowerAsync(
+        Guid settlementId, HexCoord coord, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return false;
+        }
+
+        var speedFactor = settlement.World.SpeedFactor;
+        var (settled, result, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, speedFactor, cancellationToken).ConfigureAwait(false);
+        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
+
+        if (!settled.Buildings.Any(b => b.Coord == coord && b.Type == BuildingType.Tower))
+        {
+            if (result.Changed)
+            {
+                settlement.ApplyDomain(settled);
+            }
+
+            return false;
+        }
+
+        var guestStacks = AggregateStacks(
+            guestArmies.Where(a => a.Stacks.Count > 0).SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+        var terrainAt = await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false);
+
+        settlement.ApplyDomain(settled.BurnTower(coord, now, speedFactor, guestStacks, terrainAt));
+        return true;
+    }
+
     /// <summary>Queues training a batch of units, charging for it up front.</summary>
     public async Task<TrainResult> TrainUnitsAsync(
         Guid settlementId,

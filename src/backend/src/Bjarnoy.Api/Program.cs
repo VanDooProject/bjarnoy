@@ -40,6 +40,8 @@ builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<RealmDirectory>();
 builder.Services.AddScoped<TradeService>();
 builder.Services.AddScoped<FieldBattleService>();
+builder.Services.AddScoped<CampAmbushService>();
+builder.Services.AddScoped<CampAggressionService>();
 builder.Services.AddScoped<ArmyService>();
 builder.Services.AddScoped<BattleReportService>();
 builder.Services.AddScoped<FieldBattleReportService>();
@@ -175,6 +177,14 @@ if (migrationCommand == MigrationCommandKind.None)
     // trigger) — the migrator never serves requests, so it has no business
     // running this. See EndbossTriggerHostedService.
     builder.Services.AddHostedService<EndbossTriggerHostedService>();
+
+    // Strong wildlife camps attacking towers inside their guard range — same reasoning as above; the scan is
+    // CampAggressionService.ProcessDueWorldsAsync. Tests that drive it by hand switch the timer off with
+    // CampAggression:Enabled=false so a tick cannot race them.
+    if (builder.Configuration.GetValue("CampAggression:Enabled", true))
+    {
+        builder.Services.AddHostedService<CampAggressionHostedService>();
+    }
 
     // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.

@@ -213,7 +213,7 @@ alpha alive. Camp-initiated fights use the beasts' **attack** against the units'
 - **Ambush**: an army (land, not retreat-immune) whose route enters an aggressive strong camp's guard
   range is attacked at the instant it enters (`CampAmbush.EarliestAmbush`, the earliest over all camps,
   checked when the army is settled, like field battles). A hunting army is not ambushed by the camp it
-  hunts. Army loses: it retreats home from where it stands (`Army.ForceFieldRetreat`). Army wins: it
+  hunts; an army that sets out from inside the range is attacked as it leaves. Army loses: it retreats home from where it stands (`Army.ForceFieldRetreat`). Army wins: it
   marches on. Either way the camp is then calm for 24 h.
 - **Towers**: building a tower inside an aggressive strong camp's guard range is **allowed** (the client
   warns). The camp attacks it **30 min** after its construction started, or for a standing tower as soon
