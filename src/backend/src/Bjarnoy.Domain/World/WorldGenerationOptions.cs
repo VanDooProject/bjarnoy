@@ -264,13 +264,32 @@ public sealed record WorldGenerationOptions
     /// <summary>A river passing within this many hexes of a pocket lake is sunk into it (the nearest one at least).</summary>
     public int BogMaxSinkReroute { get; init; } = 12;
 
+    /// <summary>
+    /// A landing spot (start position) needs a plain bog tile (moss, not a shore, creek or lake) within this many hexes: the
+    /// Clay Brickworks (the start's stone) and the bog-ore works (its iron) stand on it. An island without bog gets no landing
+    /// spots. 0 switches the rule off. See <c>docs/design/bog.md</c>, "Decisions".
+    /// </summary>
+    public int BogReach { get; init; } = 12;
+
+    /// <summary>
+    /// The bog guarantee: a green island of at least this many land tiles that has a landing-spot candidate (terrain only: grass with
+    /// a forest and two grass neighbours, no water within two) but no plain bog within <see cref="BogReach"/> of one is given a bog
+    /// after the normal placement: a through-river site with relaxed criteria, else a small spawn bog (a creek spring feeding the
+    /// lake, the outflow traced as a river to the sea). 0 switches the guarantee off. See <c>docs/design/bog.md</c>.
+    /// </summary>
+    public int BogGuaranteeMinTiles { get; init; } = 150;
+
+    /// <summary>Radius of the disc of a guaranteed bog (its lake, shores and creeks lie inside it); smaller than <see cref="BogSiteRadius"/>.</summary>
+    public int BogGuaranteeRadius { get; init; } = 5;
+
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
     /// <summary>
     /// A scaled-down archipelago — islands of roughly 5-40 hexes across on a 66-hex
     /// cell grid — for tests, previews and small dev worlds. Same algorithm and
     /// shape as the production-scale default, just smaller, so a world of radius
-    /// 120-200 already holds a handful of islands with mountains and rivers.
+    /// 120-200 already holds a handful of islands with mountains and rivers. Islands this small hold no bog,
+    /// so the landing spots' bog-in-reach rule (<see cref="BogReach"/>) is off: they would have none.
     /// </summary>
     public static WorldGenerationOptions Compact(int seed, int radius = 150) => new()
     {
@@ -289,6 +308,8 @@ public sealed record WorldGenerationOptions
         IslandCoastWarpScale = 14.0,
         IslandCoastNoise = 0.6,
         IslandCoastNoiseScale = 16.0,
+        BogReach = 0,
+        BogGuaranteeMinTiles = 0,
     };
 
     /// <summary>
@@ -339,6 +360,10 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketMaxTiles, BogPocketMinTiles);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketRadius, 2);
         ArgumentOutOfRangeException.ThrowIfNegative(BogMaxSinkReroute);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogReach);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogGuaranteeMinTiles);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogGuaranteeRadius, 5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(BogGuaranteeRadius, 7);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxWidth, IslandMinWidth);

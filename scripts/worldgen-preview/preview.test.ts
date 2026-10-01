@@ -106,7 +106,7 @@ describe('bog layer', () => {
     const line = withBog.statsLines.find((l) => l.startsWith('RULE VIOLATIONS'))!;
     expect(line).toBeDefined();
     expect(line).toMatch(/TOTAL 0$/);
-    for (const rule of ['R1', 'R2', 'R3', 'R4', 'R7', 'R8', 'R9', 'R10', 'R11']) expect(line).toMatch(new RegExp(`${rule} [^ ]*.* 0`));
+    for (const rule of ['R1', 'R2', 'R3', 'R4', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12']) expect(line).toMatch(new RegExp(`${rule} [^ ]*.* 0`));
     expect(withBog.statsLines.find((l) => l.startsWith('BOG ON'))).toMatch(/LAKES [1-9]/);
     // A river through the lake is not an inland mouth.
     expect(withBog.statsLines.find((l) => l.startsWith('MERGES'))).toContain('INLAND MOUTHS 0');

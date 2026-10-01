@@ -60,6 +60,35 @@ describe('checkBogRules: what each map rule flags', () => {
   });
 });
 
+describe('checkBogRules: R12 padding', () => {
+  const DQ = [1, 1, 0, -1, -1, 0];
+  const DR = [0, -1, -1, 0, 1, 1];
+  const ringed = (skip: number): BogTile[] => {
+    const tiles = [bog(0, 0, 'creek', ['W'], 'E')];
+    for (let d = 0; d < 6; d++) if (d !== skip) tiles.push(bog(DQ[d]!, DR[d]!, 'bog'));
+    return tiles;
+  };
+  const river = (q: number, r: number): RiverTile => ({ q, r, shape: 'straight', inDirections: ['W'], outDirection: 'E', width: 'river' });
+
+  it('flags a shore and a lake without their ring of bog', () => {
+    expect(checkBogRules([bog(0, 0, 'inlet', [], null, ['E']), bog(1, 0, 'lake')], [], grass).R12).toBeGreaterThanOrEqual(5);
+  });
+
+  it('accepts a creek ringed by bog and flags one missing a ring tile', () => {
+    expect(checkBogRules(ringed(-1), [], grass).R12).toBe(0);
+    expect(checkBogRules(ringed(1), [], grass).R12).toBe(1);
+  });
+
+  it('lets a creek touch the river its own flow link leads to, and no other river', () => {
+    expect(checkBogRules(ringed(0), [river(1, 0)], grass).R12).toBe(0);
+    expect(checkBogRules(ringed(1), [river(1, -1)], grass).R12).toBe(1);
+  });
+
+  it('asks nothing of plain moss', () => {
+    expect(checkBogRules([bog(0, 0, 'bog')], [], grass).R12).toBe(0);
+  });
+});
+
 describe('waterRun', () => {
   it('lists a contiguous run of water directions from where it starts, wrapping round the wheel', () => {
     expect(waterRun(0)).toEqual([]);

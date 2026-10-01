@@ -75,6 +75,23 @@ internal sealed class BogGenerator
     /// <summary>How many candidate anchors that pass the cheap tests a site placement tries before it gives up.</summary>
     private const int MaxSiteAttempts = 60;
 
+    /// <summary>The guarantee's through-river sites accept a river tile this close to its spring and (at most) this close to its mouth.</summary>
+    private const int GuaranteeMinFromSpring = 2;
+
+    private const int GuaranteeMinFromMouth = 3;
+
+    /// <summary>Largest lake grown for a guaranteed bog; smaller than a normal site's, since its disc is smaller too.</summary>
+    private const int GuaranteeLakeMax = 8;
+
+    /// <summary>A guaranteed bog's anchor is at least this far from the coast (the lake and its shore ring need more than 2).</summary>
+    private const int GuaranteeMinCoastDist = 4;
+
+    /// <summary>How many anchors a spawn bog tries.</summary>
+    private const int MaxSpawnAttempts = 80;
+
+    /// <summary>How many spring candidates a spawn bog tries per anchor.</summary>
+    private const int MaxSpringCandidates = 6;
+
     private readonly IReadOnlyList<HexCoord> _islandTiles;
     private readonly HashSet<HexCoord> _islandLand;
     private readonly IReadOnlyDictionary<HexCoord, Terrain> _land;
@@ -457,7 +474,7 @@ internal sealed class BogGenerator
 
                 if (!_islandLand.Contains(t))
                 {
-                    if (d == 1)
+                    if (d <= 2)
                     {
                         return false;
                     }
@@ -467,7 +484,7 @@ internal sealed class BogGenerator
 
                 if (_land[t] == Terrain.Mountain || OpenSea(t) || HasOpenSeaNeighbour(t, OpenSea))
                 {
-                    if (d == 1)
+                    if (d <= 2)
                     {
                         return false;
                     }
@@ -714,6 +731,24 @@ internal sealed class BogGenerator
         && (!_lakeBuffer.TryGetValue(t, out var owner) || owner == ownSite);
 
     /// <summary>
+    /// No neighbour of the tile is a mountain. A mountain cannot become padding (rule R12), so a shore or creek tile
+    /// beside one could never get its ring of bog.
+    /// </summary>
+    private bool MountainFree(HexCoord t)
+    {
+        for (var d = 0; d < 6; d++)
+        {
+            var n = Nb(t, d);
+            if (_islandLand.Contains(n) && _land[n] == Terrain.Mountain)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Through-river sites: <c>clamp(floor(land / BogTilesPerSite), 1, BogMaxSites)</c> of them, on the best-scored tiles
     /// of the traced rivers, then sinks and spawns, then the pockets' own sinks. Mutates <paramref name="bp"/>.
     /// </summary>
@@ -800,9 +835,29 @@ internal sealed class BogGenerator
 
             attempts++;
             count = PathCount(bp);
-            var site = TryPlaceSite(bp, count, pIndex, iIndex, radius, large, widthTrial);
+            var saved = Save(bp);
+            var site = TryPlaceSite(
+                bp, count, pIndex, iIndex, radius, large ? _options.BogLakeMaxLarge : _options.BogLakeMax, _options.BogMinFromSpring, widthTrial);
             if (site is null)
             {
+                continue;
+            }
+
+            var sunk = ValueNoise.Hash2(site.Anchor.Q, site.Anchor.R, _seed + 83) < _options.BogSinkChance
+                && TrySink(bp, site, radius + SinkExtraReach, widthTrial);
+            var spawned = ValueNoise.Hash2(site.Anchor.Q, site.Anchor.R, _seed + 89) < _options.BogSpawnChance
+                && TrySpawn(bp, site, widthTrial, traceRiver);
+            BuildRegion(bp, site);
+
+            // Rule R12: a ring of bog around every water feature; a site that cannot get it is dropped whole.
+            if (!TryPad(bp, site))
+            {
+                Restore(saved, bp);
+                if (_stats is not null)
+                {
+                    _stats.BogPaddingRejected++;
+                }
+
                 continue;
             }
 
@@ -811,36 +866,211 @@ internal sealed class BogGenerator
             if (_stats is not null)
             {
                 _stats.BogSites++;
-            }
-
-            if (ValueNoise.Hash2(site.Anchor.Q, site.Anchor.R, _seed + 83) < _options.BogSinkChance
-                && TrySink(bp, site, radius + SinkExtraReach, widthTrial))
-            {
-                if (_stats is not null)
+                if (sunk)
                 {
                     _stats.BogSinks++;
                 }
-            }
 
-            if (ValueNoise.Hash2(site.Anchor.Q, site.Anchor.R, _seed + 89) < _options.BogSpawnChance
-                && TrySpawn(bp, site, widthTrial, traceRiver))
-            {
-                if (_stats is not null)
+                if (spawned)
                 {
                     _stats.BogSpawns++;
                 }
             }
-
-            BuildRegion(bp, site);
         }
 
         // Pockets: the nearest river within reach sinks into each.
         foreach (var site in _sites.Where(s => s.Pocket).ToList())
         {
-            if (TrySink(bp, site, _options.BogMaxSinkReroute, widthTrial) && _stats is not null)
+            var saved = Save(bp);
+            var core = new HashSet<HexCoord>(site.Core);
+            var creeks = new List<HexCoord>(site.Creeks);
+            if (!TrySink(bp, site, _options.BogMaxSinkReroute, widthTrial))
             {
-                _stats.BogPocketSinks++;
+                continue;
             }
+
+            if (TryPad(bp, site))
+            {
+                if (_stats is not null)
+                {
+                    _stats.BogPocketSinks++;
+                }
+            }
+            else
+            {
+                Restore(saved, bp);
+                site.Core.Clear();
+                site.Core.UnionWith(core);
+                site.Creeks.Clear();
+                site.Creeks.AddRange(creeks);
+                if (_stats is not null)
+                {
+                    _stats.BogPaddingRejected++;
+                }
+            }
+        }
+
+        PlaceGuarantee(bp, widthTrial, traceRiver);
+        FillHoles(bp);
+    }
+
+    /// <summary><see cref="TryPad"/> for the guarantee's attempts, counting the sites it had to drop.</summary>
+    private bool PadOrCount(BogPaths bp, Site site)
+    {
+        if (TryPad(bp, site))
+        {
+            return true;
+        }
+
+        if (_stats is not null)
+        {
+            _stats.BogGuaranteePaddingRejected++;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Rule R12: every lake, shore, mouth, creek and spring tile of <paramref name="site"/> has all six neighbours inside the bog.
+    /// Missing ones become plain moss when they are grass or forest that is not a river and does not touch the sea or sand (R7); a creek
+    /// tile may touch the river its own flow links lead to. Returns false (and changes nothing) when a neighbour cannot be padded.
+    /// </summary>
+    private bool TryPad(BogPaths bp, Site site)
+    {
+        var count = PathCount(bp);
+        var pending = new HashSet<HexCoord>();
+        foreach (var f in Sorted(site.Core.Concat(site.Lake)))
+        {
+            var isLake = _lake.Contains(f);
+            int inDir = -1, outDir = -1;
+            if (_mouth.TryGetValue(f, out var m))
+            {
+                inDir = m.In;
+                outDir = m.Out;
+            }
+            else if (_creek.TryGetValue(f, out var c))
+            {
+                inDir = c.In;
+                outDir = c.Out;
+            }
+            else if (_spring.TryGetValue(f, out var sp))
+            {
+                outDir = sp;
+            }
+            else if (!isLake && LakeMask(f, _lake) == 0)
+            {
+                continue;
+            }
+
+            for (var d = 0; d < 6; d++)
+            {
+                var n = Nb(f, d);
+                if (_bog.Contains(n) || _lake.Contains(n) || pending.Contains(n))
+                {
+                    continue;
+                }
+
+                if (count.ContainsKey(n))
+                {
+                    if (d == inDir || d == outDir)
+                    {
+                        continue;
+                    }
+
+                    return false;
+                }
+
+                if (!CanPad(n))
+                {
+                    return false;
+                }
+
+                pending.Add(n);
+            }
+        }
+
+        _bog.UnionWith(pending);
+        return true;
+    }
+
+    /// <summary>A grass or forest tile of the island that touches neither the open sea nor sand, so moss on it keeps rule R7.</summary>
+    private bool CanPad(HexCoord n)
+    {
+        if (!_islandLand.Contains(n) || _land[n] is not (Terrain.Grass or Terrain.Forest))
+        {
+            return false;
+        }
+
+        for (var d = 0; d < 6; d++)
+        {
+            var m = Nb(n, d);
+            if (_bog.Contains(m) || _lake.Contains(m))
+            {
+                continue;
+            }
+
+            if (!_islandLand.Contains(m) || _land[m] == Terrain.Sand)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Fills the holes a noisy bog outline leaves: every connected group of non-bog island tiles that no path leaves without
+    /// crossing bog (or lake) turns its grass and forest, except river tiles, into plain moss. Mountains inside stay mountains.
+    /// </summary>
+    public void FillHoles(BogPaths? bp)
+    {
+        var count = bp is null ? [] : PathCount(bp);
+        var seen = new HashSet<HexCoord>();
+        var fill = new List<HexCoord>();
+        foreach (var start in Sorted(_islandLand))
+        {
+            if (_bog.Contains(start) || _lake.Contains(start) || !seen.Add(start))
+            {
+                continue;
+            }
+
+            var group = new List<HexCoord>();
+            var stack = new Stack<HexCoord>();
+            stack.Push(start);
+            var open = false;
+            while (stack.Count > 0)
+            {
+                var c = stack.Pop();
+                group.Add(c);
+                for (var d = 0; d < 6; d++)
+                {
+                    var n = Nb(c, d);
+                    if (_bog.Contains(n) || _lake.Contains(n))
+                    {
+                        continue;
+                    }
+
+                    if (!_islandLand.Contains(n))
+                    {
+                        open = true;
+                    }
+                    else if (seen.Add(n))
+                    {
+                        stack.Push(n);
+                    }
+                }
+            }
+
+            if (!open)
+            {
+                fill.AddRange(group.Where(t => _land[t] is Terrain.Grass or Terrain.Forest && !count.ContainsKey(t)));
+            }
+        }
+
+        _bog.UnionWith(fill);
+        if (_stats is not null)
+        {
+            _stats.BogHoleTiles += fill.Count;
         }
     }
 
@@ -877,7 +1107,8 @@ internal sealed class BogGenerator
         int p,
         int i,
         int radius,
-        bool large,
+        int lakeMax,
+        int minFromSpring,
         Func<BogPaths, List<RiverTile>> widthTrial)
     {
         var path = bp.Paths[p];
@@ -899,7 +1130,7 @@ internal sealed class BogGenerator
             }
         }
 
-        if (i0 < Math.Max(2, _options.BogMinFromSpring + 1) || i1 > path.Count - 2)
+        if (i0 < Math.Max(2, minFromSpring + 1) || i1 > path.Count - 2)
         {
             return null;
         }
@@ -919,122 +1150,27 @@ internal sealed class BogGenerator
 
         var inP = new HashSet<HexCoord>(path);
         bool IsOther(HexCoord t) => count.GetValueOrDefault(t) - (inP.Contains(t) ? 1 : 0) > 0;
-        bool NearOther(HexCoord t) => IsOther(t) || Nb6(t).Any(IsOther);
-
-        var lakeMax = large ? _options.BogLakeMaxLarge : _options.BogLakeMax;
-        var target = 3 + (int)Math.Floor(ValueNoise.Hash2(a.Q, a.R, _seed + 71) * (lakeMax - 3));
-        bool GrowOk(HexCoord t) => HexCoord.Distance(t, a) <= radius - 3 && disc.Contains(t) && Allowed(t) && !NearOther(t);
-
-        if (!GrowOk(a))
+        var grown = GrowLake(a, disc, radius, lakeMax, IsOther);
+        if (grown is null)
         {
             return null;
         }
 
-        var lake = new HashSet<HexCoord> { a };
-        while (lake.Count < target)
-        {
-            HexCoord? best = null;
-            var bestHash = -1.0;
-            foreach (var t in Sorted(NeighboursOf(lake)))
-            {
-                if (!GrowOk(t))
-                {
-                    continue;
-                }
-
-                var h = ValueNoise.Hash2(t.Q, t.R, _seed + 75);
-                if (h > bestHash)
-                {
-                    bestHash = h;
-                    best = t;
-                }
-            }
-
-            if (best is null)
-            {
-                break;
-            }
-
-            lake.Add(best.Value);
-        }
-
-        if (lake.Count < 3)
-        {
-            return null;
-        }
-
-        // R1: fill notches until every shore tile touches one contiguous run of at most three lake tiles.
-        for (var iteration = 0; iteration < 24; iteration++)
-        {
-            var add = new List<HexCoord>();
-            foreach (var t in Sorted(NeighboursOf(lake)))
-            {
-                var mask = LakeMask(t, lake);
-                if (PopCount(mask) >= 4 || Runs(mask) > 1)
-                {
-                    add.Add(t);
-                }
-            }
-
-            if (add.Count == 0)
-            {
-                break;
-            }
-
-            foreach (var t in add)
-            {
-                if (!GrowOk(t))
-                {
-                    return null;
-                }
-
-                lake.Add(t);
-            }
-
-            if (lake.Count > lakeMax + 6)
-            {
-                return null;
-            }
-        }
-
-        if (lake.Count > lakeMax + 6)
-        {
-            return null;
-        }
-
-        var shore = Sorted(NeighboursOf(lake));
-        foreach (var t in shore)
-        {
-            var mask = LakeMask(t, lake);
-            if (PopCount(mask) > 3 || Runs(mask) != 1 || !Allowed(t) || IsOther(t) || !disc.Contains(t))
-            {
-                return null;
-            }
-        }
-
-        // Mouth candidates: a shore tile with exactly one lake neighbour.
-        var mouthDir = new Dictionary<HexCoord, int>();
-        foreach (var t in shore)
-        {
-            var mask = LakeMask(t, lake);
-            if (PopCount(mask) == 1)
-            {
-                for (var d = 0; d < 6; d++)
-                {
-                    if (((mask >> d) & 1) == 1)
-                    {
-                        mouthDir[t] = d;
-                    }
-                }
-            }
-        }
+        var (lake, _, mouthDir) = grown.Value;
 
         var up = path[i0 - 1];
         var down = path[i1 + 1];
-        bool CreekOk(HexCoord t) => disc.Contains(t) && Allowed(t) && !lake.Contains(t) && !IsOther(t) && LakeMask(t, lake) == 0;
+        bool CreekOk(HexCoord t) => disc.Contains(t) && Allowed(t) && MountainFree(t) && !lake.Contains(t) && !IsOther(t) && LakeMask(t, lake) == 0;
 
-        var inRoutes = RoutesFrom(up, DirOf(up, path[i0 - 2]), CreekOk, mouthDir);
-        var outRoutes = RoutesFrom(down, i1 + 2 < path.Count ? DirOf(down, path[i1 + 2]) : -1, CreekOk, mouthDir);
+        // Rule R12: a creek tile may touch only the river tile it is linked to (and the stretch of this river that the lake replaces).
+        var removed = new HashSet<HexCoord>(path.GetRange(i0, i1 - i0 + 1));
+        bool KeptRiverBeside(HexCoord t, HexCoord link) =>
+            Nb6(t).Any(n => n != link && count.ContainsKey(n) && !removed.Contains(n));
+        bool CreekOkIn(HexCoord t) => CreekOk(t) && !KeptRiverBeside(t, up);
+        bool CreekOkOut(HexCoord t) => CreekOk(t) && !KeptRiverBeside(t, down);
+
+        var inRoutes = RoutesFrom(up, DirOf(up, path[i0 - 2]), CreekOkIn, mouthDir);
+        var outRoutes = RoutesFrom(down, i1 + 2 < path.Count ? DirOf(down, path[i1 + 2]) : -1, CreekOkOut, mouthDir);
         if (inRoutes.Count == 0 || outRoutes.Count == 0)
         {
             return null;
@@ -1124,6 +1260,136 @@ internal sealed class BogGenerator
         CommitRoute(site, bestOut, forward: false, lake);
         _sites.Add(site);
         return site;
+    }
+
+    /// <summary>
+    /// Grows a lake of 3 to <paramref name="lakeMax"/> (plus notch fill) tiles from <paramref name="a"/> inside <paramref name="disc"/>,
+    /// fills every notch (rule R1: each shore tile touches one contiguous run of at most three lake tiles) and checks the shore is
+    /// fit. Returns the lake, its shore and the mouth candidates (shore tiles with one lake neighbour, and that neighbour's direction),
+    /// or null when the lake does not fit.
+    /// </summary>
+    private (HashSet<HexCoord> Lake, List<HexCoord> Shore, Dictionary<HexCoord, int> MouthDir)? GrowLake(
+        HexCoord a,
+        HashSet<HexCoord> disc,
+        int radius,
+        int lakeMax,
+        Func<HexCoord, bool> isOther)
+    {
+        var target = 3 + (int)Math.Floor(ValueNoise.Hash2(a.Q, a.R, _seed + 71) * (lakeMax - 3));
+        bool NearOther(HexCoord t) => isOther(t) || Nb6(t).Any(isOther);
+        bool GrowOk(HexCoord t) => HexCoord.Distance(t, a) <= radius - 3 && disc.Contains(t) && Allowed(t) && !NearOther(t);
+
+        if (!GrowOk(a))
+        {
+            return null;
+        }
+
+        var lake = new HashSet<HexCoord> { a };
+        while (lake.Count < target)
+        {
+            HexCoord? best = null;
+            var bestHash = -1.0;
+            foreach (var t in Sorted(NeighboursOf(lake)))
+            {
+                if (!GrowOk(t))
+                {
+                    continue;
+                }
+
+                var h = ValueNoise.Hash2(t.Q, t.R, _seed + 75);
+                if (h > bestHash)
+                {
+                    bestHash = h;
+                    best = t;
+                }
+            }
+
+            if (best is null)
+            {
+                break;
+            }
+
+            lake.Add(best.Value);
+        }
+
+        if (lake.Count < 3)
+        {
+            return null;
+        }
+
+        // R1: fill notches until every shore tile touches one contiguous run of at most three lake tiles.
+        for (var iteration = 0; iteration < 24; iteration++)
+        {
+            var add = new List<HexCoord>();
+            foreach (var t in Sorted(NeighboursOf(lake)))
+            {
+                var mask = LakeMask(t, lake);
+                if (PopCount(mask) >= 4 || Runs(mask) > 1)
+                {
+                    add.Add(t);
+                }
+            }
+
+            if (add.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var t in add)
+            {
+                if (!GrowOk(t))
+                {
+                    return null;
+                }
+
+                lake.Add(t);
+            }
+
+            if (lake.Count > lakeMax + 6)
+            {
+                return null;
+            }
+        }
+
+        if (lake.Count > lakeMax + 6)
+        {
+            return null;
+        }
+
+        var shore = Sorted(NeighboursOf(lake));
+        foreach (var t in shore)
+        {
+            var mask = LakeMask(t, lake);
+            if (PopCount(mask) > 3 || Runs(mask) != 1 || !Allowed(t) || isOther(t) || !disc.Contains(t) || !MountainFree(t))
+            {
+                return null;
+            }
+
+            // Rule R12: the ring beyond the shore is padded with moss, so no other river may run there.
+            if (Nb6(t).Any(isOther))
+            {
+                return null;
+            }
+        }
+
+        // Mouth candidates: a shore tile with exactly one lake neighbour.
+        var mouthDir = new Dictionary<HexCoord, int>();
+        foreach (var t in shore)
+        {
+            var mask = LakeMask(t, lake);
+            if (PopCount(mask) == 1)
+            {
+                for (var d = 0; d < 6; d++)
+                {
+                    if (((mask >> d) & 1) == 1)
+                    {
+                        mouthDir[t] = d;
+                    }
+                }
+            }
+        }
+
+        return (lake, shore, mouthDir);
     }
 
     private bool TrialOk(
@@ -1399,9 +1665,10 @@ internal sealed class BogGenerator
 
             var occupied = new HashSet<HexCoord>(count.Keys);
             bool CreekOk(HexCoord c) =>
-                (site.Ring.Contains(c) || Allowed(c, site.Id))
+                (site.Ring.Contains(c) || Allowed(c, site.Id)) && MountainFree(c)
                 && !lake.Contains(c) && !occupied.Contains(c) && LakeMask(c, lake) == 0
-                && HexCoord.Distance(c, t) <= reach + MaxCreekLength;
+                && HexCoord.Distance(c, t) <= reach + MaxCreekLength
+                && !Nb6(c).Any(n => n != t && occupied.Contains(n));
 
             var routes = RoutesFrom(t, DirOf(t, path[j - 1]), CreekOk, mouthDir);
             if (routes.Count == 0)
@@ -1446,7 +1713,7 @@ internal sealed class BogGenerator
         var lake = site.Lake;
         var springCandidates = region
             .Where(t => !_creek.ContainsKey(t) && !_mouth.ContainsKey(t) && MinDistance(t, lake) >= 3
-                && MinDistance(t, site.Creeks) >= 2 && !count.ContainsKey(t))
+                && MinDistance(t, site.Creeks) >= 2 && !count.ContainsKey(t) && MountainFree(t))
             .OrderByDescending(t => ValueNoise.Hash2(t.Q, t.R, _seed + 97))
             .ThenBy(t => t.Q)
             .ThenBy(t => t.R)
@@ -1456,7 +1723,7 @@ internal sealed class BogGenerator
         foreach (var s in springCandidates)
         {
             bool CreekOk(HexCoord c) => region.Contains(c) && !count.ContainsKey(c) && !lake.Contains(c) && LakeMask(c, lake) == 0
-                && !_creek.ContainsKey(c) && !_mouth.ContainsKey(c);
+                && !_creek.ContainsKey(c) && !_mouth.ContainsKey(c) && MountainFree(c) && !Nb6(c).Any(count.ContainsKey);
 
             // Breadth-first over (tile, heading), exits are tiles just outside the region.
             var parent = new Dictionary<(HexCoord, int), (HexCoord, int)?>();
@@ -1523,6 +1790,14 @@ internal sealed class BogGenerator
                 }
 
                 blocked.Add(s);
+
+                // Rule R12: the spawned river keeps off the creek's neighbours (only its own start touches the creek).
+                foreach (var t in route.Tiles.Append(s).Concat(site.Core).ToList())
+                {
+                    blocked.UnionWith(Nb6(t));
+                }
+
+                blocked.Remove(exit);
                 var traced = traceRiver(exit, Opp(dir), bp, blocked);
                 if (traced is null)
                 {
@@ -1563,6 +1838,639 @@ internal sealed class BogGenerator
         }
 
         return false;
+    }
+
+    // ---------------------------------------------------------------- guarantee
+
+    /// <summary>
+    /// Landing-spot candidates by terrain alone (the rules of <c>WorldGenerator.FindStartPositions</c> minus giants, strong camps and the
+    /// bog rule, which do not exist yet at this point): grass with a forest and two grass neighbours and no water within two.
+    /// </summary>
+    private List<HexCoord> GuaranteeCandidates()
+    {
+        var result = new List<HexCoord>();
+        foreach (var tile in _islandTiles)
+        {
+            if (_land[tile] != Terrain.Grass)
+            {
+                continue;
+            }
+
+            var forest = 0;
+            var grass = 0;
+            for (var d = 0; d < 6; d++)
+            {
+                if (_land.TryGetValue(Nb(tile, d), out var terrain))
+                {
+                    if (terrain == Terrain.Forest)
+                    {
+                        forest++;
+                    }
+                    else if (terrain == Terrain.Grass)
+                    {
+                        grass++;
+                    }
+                }
+            }
+
+            if (forest < 1 || grass < 2)
+            {
+                continue;
+            }
+
+            var coastal = false;
+            foreach (var nearby in tile.WithinRadius(2))
+            {
+                if (!_land.ContainsKey(nearby))
+                {
+                    coastal = true;
+                    break;
+                }
+            }
+
+            if (!coastal)
+            {
+                result.Add(tile);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Whether <paramref name="c"/> is still a candidate with the bog placed so far laid over the terrain.</summary>
+    private bool StillCandidate(HexCoord c)
+    {
+        if (_bog.Contains(c) || _lake.Contains(c))
+        {
+            return false;
+        }
+
+        var forest = 0;
+        var grass = 0;
+        for (var d = 0; d < 6; d++)
+        {
+            var n = Nb(c, d);
+            if (!_land.TryGetValue(n, out var terrain) || _lake.Contains(n) || _bog.Contains(n))
+            {
+                continue;
+            }
+
+            if (terrain == Terrain.Forest)
+            {
+                forest++;
+            }
+            else if (terrain == Terrain.Grass)
+            {
+                grass++;
+            }
+        }
+
+        if (forest < 1 || grass < 2)
+        {
+            return false;
+        }
+
+        foreach (var nearby in c.WithinRadius(2))
+        {
+            if (_lake.Contains(nearby))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>How many of the candidates are still candidates and have plain bog moss within <paramref name="reach"/> of them.</summary>
+    private int CoveredCandidates(List<HexCoord> candidates, int reach)
+    {
+        var reachSet = new HashSet<HexCoord>();
+        foreach (var t in _bog)
+        {
+            if (_lake.Contains(t) || _creek.ContainsKey(t) || _mouth.ContainsKey(t) || _spring.ContainsKey(t) || LakeMask(t, _lake) != 0)
+            {
+                continue;
+            }
+
+            foreach (var n in t.WithinRadius(reach))
+            {
+                reachSet.Add(n);
+            }
+        }
+
+        if (reachSet.Count == 0)
+        {
+            return 0;
+        }
+
+        var covered = 0;
+        foreach (var c in candidates)
+        {
+            if (reachSet.Contains(c) && StillCandidate(c))
+            {
+                covered++;
+            }
+        }
+
+        return covered;
+    }
+
+    /// <summary>For every tile, how many candidates lie within <paramref name="reach"/> of it.</summary>
+    private static Dictionary<HexCoord, int> CoverageMap(List<HexCoord> candidates, int reach)
+    {
+        var map = new Dictionary<HexCoord, int>();
+        foreach (var c in candidates)
+        {
+            foreach (var n in c.WithinRadius(reach))
+            {
+                map[n] = map.GetValueOrDefault(n) + 1;
+            }
+        }
+
+        return map;
+    }
+
+    private sealed class Saved
+    {
+        public required HashSet<HexCoord> Lake;
+        public required HashSet<HexCoord> Bog;
+        public required Dictionary<HexCoord, int> Buffer;
+        public required Dictionary<HexCoord, (int In, int Out)> Creek;
+        public required Dictionary<HexCoord, (int In, int Out, int Water)> Mouth;
+        public required Dictionary<HexCoord, int> Spring;
+        public required int Sites;
+        public required BogPaths Paths;
+    }
+
+    private Saved Save(BogPaths bp) => new()
+    {
+        Lake = [.. _lake],
+        Bog = [.. _bog],
+        Buffer = new Dictionary<HexCoord, int>(_lakeBuffer),
+        Creek = new Dictionary<HexCoord, (int In, int Out)>(_creek),
+        Mouth = new Dictionary<HexCoord, (int In, int Out, int Water)>(_mouth),
+        Spring = new Dictionary<HexCoord, int>(_spring),
+        Sites = _sites.Count,
+        Paths = bp.Clone(),
+    };
+
+    private void Restore(Saved saved, BogPaths bp)
+    {
+        _lake.Clear();
+        _lake.UnionWith(saved.Lake);
+        _bog.Clear();
+        _bog.UnionWith(saved.Bog);
+        _lakeBuffer.Clear();
+        foreach (var kv in saved.Buffer)
+        {
+            _lakeBuffer[kv.Key] = kv.Value;
+        }
+
+        _creek.Clear();
+        foreach (var kv in saved.Creek)
+        {
+            _creek[kv.Key] = kv.Value;
+        }
+
+        _mouth.Clear();
+        foreach (var kv in saved.Mouth)
+        {
+            _mouth[kv.Key] = kv.Value;
+        }
+
+        _spring.Clear();
+        foreach (var kv in saved.Spring)
+        {
+            _spring[kv.Key] = kv.Value;
+        }
+
+        _sites.RemoveRange(saved.Sites, _sites.Count - saved.Sites);
+        bp.Paths.Clear();
+        bp.Merged.Clear();
+        bp.ForcedOut.Clear();
+        bp.BogIn.Clear();
+        bp.RequireRiver.Clear();
+        foreach (var path in saved.Paths.Paths)
+        {
+            bp.Paths.Add(new List<HexCoord>(path));
+        }
+
+        bp.Merged.AddRange(saved.Paths.Merged);
+        foreach (var kv in saved.Paths.ForcedOut)
+        {
+            bp.ForcedOut[kv.Key] = kv.Value;
+        }
+
+        foreach (var kv in saved.Paths.BogIn)
+        {
+            bp.BogIn[kv.Key] = kv.Value;
+        }
+
+        bp.RequireRiver.UnionWith(saved.Paths.RequireRiver);
+    }
+
+    /// <summary>
+    /// The bog guarantee (<c>docs/design/bog.md</c>): an island with a landing-spot candidate that has no plain bog within
+    /// <see cref="WorldGenerationOptions.BogReach"/> of one gets a bog after the normal placement. Anchors are tried best-covered
+    /// first (most candidates within reach). First a through-river site with relaxed criteria, else a spawn bog; a bog that
+    /// would leave no candidate covered is rolled back.
+    /// </summary>
+    /// <summary>Whether the guarantee is switched on for this island (by the options and the island's size).</summary>
+    public bool GuaranteeApplies =>
+        _options.BogGuaranteeMinTiles > 0 && _options.BogReach > 0 && _islandTiles.Count >= _options.BogGuaranteeMinTiles;
+
+    /// <summary>The guarantee alone, for an island with no river candidates at all (no mountains): no site to place, only a spawn bog.</summary>
+    public void PlaceGuaranteeOnly(
+        BogPaths bp,
+        Func<BogPaths, List<RiverTile>> widthTrial,
+        Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver)
+    {
+        PlaceGuarantee(bp, widthTrial, traceRiver);
+        FillHoles(bp);
+    }
+
+    private void PlaceGuarantee(
+        BogPaths bp,
+        Func<BogPaths, List<RiverTile>> widthTrial,
+        Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver)
+    {
+        var reach = _options.BogReach;
+        if (!GuaranteeApplies)
+        {
+            return;
+        }
+
+        var candidates = GuaranteeCandidates();
+        if (candidates.Count == 0 || CoveredCandidates(candidates, reach) > 0)
+        {
+            return;
+        }
+
+        if (_stats is not null)
+        {
+            _stats.BogGuaranteeIslands++;
+            if (_sites.Count == 0)
+            {
+                _stats.BogGuaranteeWithoutBog++;
+            }
+        }
+
+        var coverage = CoverageMap(candidates, reach);
+        if (GuaranteeThrough(bp, candidates, coverage, widthTrial))
+        {
+            if (_stats is not null)
+            {
+                _stats.BogGuaranteeThrough++;
+            }
+
+            return;
+        }
+
+        if (GuaranteeSpawn(bp, candidates, coverage, widthTrial, traceRiver))
+        {
+            if (_stats is not null)
+            {
+                _stats.BogGuaranteeSpawns++;
+            }
+
+            return;
+        }
+
+        if (_stats is not null)
+        {
+            _stats.BogGuaranteeMissed++;
+        }
+    }
+
+    private bool GuaranteeThrough(
+        BogPaths bp,
+        List<HexCoord> candidates,
+        Dictionary<HexCoord, int> coverage,
+        Func<BogPaths, List<RiverTile>> widthTrial)
+    {
+        var radius = _options.BogGuaranteeRadius;
+        var anchors = new List<(HexCoord Tile, int Path, int Index, int Cover, double Hash)>();
+        for (var p = 0; p < bp.Paths.Count; p++)
+        {
+            var path = bp.Paths[p];
+            for (var i = GuaranteeMinFromSpring; i <= path.Count - 1 - GuaranteeMinFromMouth; i++)
+            {
+                var tile = path[i];
+                var cover = coverage.GetValueOrDefault(tile);
+                if (cover == 0 || !_coastDist.TryGetValue(tile, out var cd) || cd < GuaranteeMinCoastDist)
+                {
+                    continue;
+                }
+
+                anchors.Add((tile, p, i, cover, ValueNoise.Hash2(tile.Q, tile.R, _seed + 103)));
+            }
+        }
+
+        anchors.Sort((a, b) =>
+        {
+            var byCover = b.Cover.CompareTo(a.Cover);
+            if (byCover != 0)
+            {
+                return byCover;
+            }
+
+            var byHash = b.Hash.CompareTo(a.Hash);
+            if (byHash != 0)
+            {
+                return byHash;
+            }
+
+            var byTile = Cmp(a.Tile, b.Tile);
+            return byTile != 0 ? byTile : a.Path != b.Path ? a.Path.CompareTo(b.Path) : a.Index.CompareTo(b.Index);
+        });
+
+        var attempts = 0;
+        foreach (var anchor in anchors)
+        {
+            if (attempts >= MaxSiteAttempts)
+            {
+                break;
+            }
+
+            if (!DiscIsClear(anchor.Tile, 2))
+            {
+                continue;
+            }
+
+            attempts++;
+            var saved = Save(bp);
+            var site = TryPlaceSite(
+                bp, PathCount(bp), anchor.Path, anchor.Index, radius, GuaranteeLakeMax, GuaranteeMinFromSpring, widthTrial);
+            if (site is not null)
+            {
+                BuildRegion(bp, site);
+                if (PadOrCount(bp, site) && CoveredCandidates(candidates, _options.BogReach) > 0)
+                {
+                    return true;
+                }
+            }
+
+            Restore(saved, bp);
+        }
+
+        return false;
+    }
+
+    private bool GuaranteeSpawn(
+        BogPaths bp,
+        List<HexCoord> candidates,
+        Dictionary<HexCoord, int> coverage,
+        Func<BogPaths, List<RiverTile>> widthTrial,
+        Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver)
+    {
+        var count = PathCount(bp);
+        var anchors = new List<(HexCoord Tile, int Cover, double Hash)>();
+        foreach (var tile in _islandTiles)
+        {
+            var cover = coverage.GetValueOrDefault(tile);
+            if (cover == 0 || !_coastDist.TryGetValue(tile, out var cd) || cd < GuaranteeMinCoastDist || !Allowed(tile))
+            {
+                continue;
+            }
+
+            anchors.Add((tile, cover, ValueNoise.Hash2(tile.Q, tile.R, _seed + 107)));
+        }
+
+        anchors.Sort((a, b) =>
+        {
+            var byCover = b.Cover.CompareTo(a.Cover);
+            if (byCover != 0)
+            {
+                return byCover;
+            }
+
+            var byHash = b.Hash.CompareTo(a.Hash);
+            return byHash != 0 ? byHash : Cmp(a.Tile, b.Tile);
+        });
+
+        var attempts = 0;
+        foreach (var anchor in anchors)
+        {
+            if (attempts >= MaxSpawnAttempts)
+            {
+                break;
+            }
+
+            if (anchor.Tile.WithinRadius(3).Any(count.ContainsKey))
+            {
+                continue;
+            }
+
+            attempts++;
+            var saved = Save(bp);
+            if (TrySpawnSite(bp, anchor.Tile, widthTrial, traceRiver))
+            {
+                if (PadOrCount(bp, _sites[^1]) && CoveredCandidates(candidates, _options.BogReach) > 0)
+                {
+                    return true;
+                }
+            }
+
+            Restore(saved, bp);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// A small bog on river-free ground: a lake, a creek from a spring inside the disc into one mouth, and a creek out of another mouth
+    /// that leaves the disc and continues as a normal river to the sea (or a trunk). The river that runs through the lake is the
+    /// spawned one. Commits only when the river traces and every width check holds.
+    /// </summary>
+    private bool TrySpawnSite(
+        BogPaths bp,
+        HexCoord a,
+        Func<BogPaths, List<RiverTile>> widthTrial,
+        Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver)
+    {
+        var radius = _options.BogGuaranteeRadius;
+        var count = PathCount(bp);
+        bool IsOther(HexCoord t) => count.ContainsKey(t);
+        var disc = new HashSet<HexCoord>(a.WithinRadius(radius));
+        var grown = GrowLake(a, disc, radius, GuaranteeLakeMax, IsOther);
+        if (grown is null)
+        {
+            return false;
+        }
+
+        var (lake, _, mouthDir) = grown.Value;
+        bool CreekOk(HexCoord t) => disc.Contains(t) && Allowed(t) && MountainFree(t) && !lake.Contains(t) && !IsOther(t) && LakeMask(t, lake) == 0
+            && !Nb6(t).Any(IsOther);
+
+        var springs = Sorted(disc)
+            .Where(t => CreekOk(t) && MinDistance(t, lake) >= 3)
+            .OrderByDescending(t => ValueNoise.Hash2(t.Q, t.R, _seed + 109))
+            .ThenBy(t => t.Q)
+            .ThenBy(t => t.R)
+            .Take(MaxSpringCandidates)
+            .ToList();
+
+        foreach (var s in springs)
+        {
+            var inRoutes = RoutesFrom(s, -1, CreekOk, mouthDir);
+            if (inRoutes.Count == 0)
+            {
+                continue;
+            }
+
+
+            var inRoute = inRoutes.Values.OrderBy(r => r.Tiles.Count).ThenBy(r => r.Mouth.Q).ThenBy(r => r.Mouth.R).First();
+            var taken = new HashSet<HexCoord>(inRoute.Tiles) { s, inRoute.Mouth };
+            bool OutOk(HexCoord t) => CreekOk(t) && !taken.Contains(t);
+
+            foreach (var mouth in Sorted(mouthDir.Keys))
+            {
+                if (mouth == inRoute.Mouth || HexCoord.Distance(mouth, inRoute.Mouth) < 3)
+                {
+                    continue;
+                }
+
+                var water = mouthDir[mouth];
+                var exits = OutflowExits(mouth, Opp(water), lake, disc, count, taken, OutOk, out var parent);
+                foreach (var (exit, dir, from) in exits.Take(4))
+                {
+                    var flow = BuildRoute(exit, dir, from, dir, parent);
+                    var blocked = new HashSet<HexCoord>(_bog);
+                    blocked.UnionWith(_lake);
+                    blocked.UnionWith(lake);
+                    blocked.UnionWith(NeighboursOf(lake));
+                    blocked.UnionWith(taken);
+                    blocked.UnionWith(flow.Tiles);
+                    blocked.Add(mouth);
+
+                    // Rule R12: the spawned river keeps off the creeks' neighbours (only its own start touches the creek).
+                    foreach (var t in flow.Tiles.Concat(inRoute.Tiles).Append(s).Concat(NeighboursOf(lake)).ToList())
+                    {
+                        blocked.UnionWith(Nb6(t));
+                    }
+
+                    blocked.Remove(exit);
+                    var traced = traceRiver(exit, Opp(dir), bp, blocked);
+                    if (traced is null)
+                    {
+                        continue;
+                    }
+
+                    var trial = bp.Clone();
+                    trial.Paths.Add(traced);
+                    trial.Merged.Add(count.ContainsKey(traced[^1]));
+                    trial.BogIn[exit] = Opp(dir);
+                    if (!TrialOk(trial, widthTrial, traced.Where(c => !count.ContainsKey(c)), trial.RequireRiver))
+                    {
+                        continue;
+                    }
+
+                    // Commit: the lake, the spring's creek into it, the creek out of it (reversed: it is laid out from the river tile).
+                    var site = new Site { Id = _sites.Count, Anchor = a, Radius = radius };
+                    foreach (var t in lake)
+                    {
+                        site.Lake.Add(t);
+                        site.Core.Add(t);
+                        _lake.Add(t);
+                    }
+
+                    AddBuffer(site);
+                    _spring[s] = inRoute.Dirs[0];
+                    _bog.Add(s);
+                    site.Creeks.Add(s);
+                    site.Core.Add(s);
+                    CommitRoute(site, inRoute, forward: true, lake);
+
+                    var back = new Route { Mouth = mouth, Water = water };
+                    for (var j = flow.Tiles.Count - 1; j >= 0; j--)
+                    {
+                        back.Tiles.Add(flow.Tiles[j]);
+                    }
+
+                    for (var j = flow.Dirs.Count - 1; j >= 0; j--)
+                    {
+                        back.Dirs.Add(Opp(flow.Dirs[j]));
+                    }
+
+                    CommitRoute(site, back, forward: false, lake);
+                    _sites.Add(site);
+
+                    bp.Paths.Add(traced);
+                    bp.Merged.Add(count.ContainsKey(traced[^1]));
+                    bp.BogIn[exit] = Opp(dir);
+                    BuildRegion(bp, site);
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The tiles just outside the disc that a creek leaving <paramref name="mouth"/> in direction <paramref name="first"/> can reach
+    /// through creek-fit tiles (straight or 60 degrees off straight per step), first found first; <paramref name="parent"/> holds the search tree.
+    /// </summary>
+    private List<(HexCoord Exit, int Dir, (HexCoord, int)? From)> OutflowExits(
+        HexCoord mouth,
+        int first,
+        HashSet<HexCoord> lake,
+        HashSet<HexCoord> disc,
+        Dictionary<HexCoord, int> count,
+        HashSet<HexCoord> taken,
+        Func<HexCoord, bool> creekOk,
+        out Dictionary<(HexCoord, int), (HexCoord, int)?> parent)
+    {
+        var parents = new Dictionary<(HexCoord, int), (HexCoord, int)?>();
+        parent = parents;
+        var depth = new Dictionary<(HexCoord, int), int>();
+        var queue = new Queue<(HexCoord Tile, int Fwd)>();
+        var exits = new List<(HexCoord Exit, int Dir, (HexCoord, int)? From)>();
+
+        void Visit(HexCoord origin, (HexCoord, int)? fromState, int dir, int d)
+        {
+            var n = Nb(origin, dir);
+            if (!_islandLand.Contains(n) || d > MaxCreekLength)
+            {
+                return;
+            }
+
+            // A creek tile stays inside the disc on fit ground; anything else that is free land is where the river starts (near the
+            // coast that is a tile the creek may not use: the river there is only a tile or two long).
+            if (disc.Contains(n) && creekOk(n))
+            {
+                if (depth.ContainsKey((n, dir)))
+                {
+                    return;
+                }
+
+                depth[(n, dir)] = d;
+                parents[(n, dir)] = fromState;
+                queue.Enqueue((n, dir));
+                return;
+            }
+
+            if (!taken.Contains(n) && !count.ContainsKey(n) && !_bog.Contains(n) && !_lake.Contains(n) && !_lakeBuffer.ContainsKey(n)
+                && !lake.Contains(n) && LakeMask(n, lake) == 0 && !PocketRing.Contains(n))
+            {
+                exits.Add((n, dir, fromState));
+            }
+
+            return;
+        }
+
+        Visit(mouth, null, first, 1);
+        while (queue.Count > 0 && exits.Count < 4)
+        {
+            var (tile, fwd) = queue.Dequeue();
+            var d = depth[(tile, fwd)];
+            foreach (var turn in new[] { 0, 1, 5 })
+            {
+                Visit(tile, (tile, fwd), (fwd + turn) % 6, d + 1);
+            }
+        }
+
+        return exits;
     }
 
     // ---------------------------------------------------------------- region

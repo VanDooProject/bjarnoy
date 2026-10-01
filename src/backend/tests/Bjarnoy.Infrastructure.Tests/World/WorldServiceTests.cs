@@ -48,6 +48,22 @@ public class WorldServiceTests : IDisposable
     private WorldService CreateService() =>
         new(_dbContext, _time, NullLogger<WorldService>.Instance);
 
+    /// <summary>
+    /// A radius larger than ~300 is used on purpose: at a tiny radius a random seed can
+    /// draw no island at all, which <c>SeedDefaultWorldIfNoneAsync</c> would swallow as a
+    /// lost race and leave this test flaky.
+    /// </summary>
+    [Fact]
+    public async Task Seeding_the_default_world_with_a_radius_stores_that_radius()
+    {
+        var service = CreateService();
+
+        await service.SeedDefaultWorldIfNoneAsync("radius-world", NullLogger.Instance, radius: 1000, Ct);
+
+        var world = await _dbContext.Worlds.SingleAsync(Ct);
+        Assert.Equal(1000, world.Radius);
+    }
+
     [Fact]
     public async Task An_explicit_seed_that_produces_no_islands_is_reported_as_a_conflict()
     {

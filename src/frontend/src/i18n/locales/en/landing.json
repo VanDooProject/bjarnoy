@@ -31,6 +31,7 @@
   },
   "pointer": {
     "clickThisPlot": "Click this plot",
+    "tapThisPlot": "Tap this plot",
     "anyGlowingPlot": "Any glowing plot",
     "nowBuildHere": "Now build here",
     "oneMore": "One more — the {terrain}",
@@ -46,7 +47,9 @@
     "longhouseName": "Longhouse & yard",
     "placed": "Placed",
     "clickToPlace": "Click your plot to place it",
+    "tapToPlace": "Tap your plot to place it",
     "clickEmptyHex": "Click an empty hex in your border",
+    "tapEmptyHex": "Tap an empty hex in your border",
     "foundFirst": "Found your longhouse first"
   },
   "footer": {
@@ -58,6 +61,7 @@
     "landfallBody": "Your longhouse stands. Two buildings to go.",
     "completeTitle": "All three placed.",
     "completeBody": "The grain is counting. Drag the map, or click any hex to keep building.",
+    "completeBodyTouch": "The grain is counting. Drag the map, or tap any hex to keep building.",
     "continueCta": "Enter your settlement"
   }
 }

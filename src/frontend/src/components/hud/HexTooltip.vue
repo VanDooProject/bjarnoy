@@ -118,7 +118,13 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierRadiusBoost', {
         percent: modifier.percent,
         range: modifier.range,
-        resource: t(modifier.resource === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
+        resource: t(
+          modifier.resource === 'wood'
+            ? 'hud.hoverTooltip.domainWood'
+            : modifier.resource === 'iron'
+              ? 'hud.hoverTooltip.domainIron'
+              : 'hud.hoverTooltip.domainFood',
+        ),
       });
   }
 }
