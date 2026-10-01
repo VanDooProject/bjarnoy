@@ -37,6 +37,7 @@ import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
+import { dialProgress, hexPerimeterPath, type ConstructionDial } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { RiverTile, Settlement, Terrain, Tile } from './types';
@@ -767,6 +768,12 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
   }
   return points;
 }
+
+// Construction progress dial (see `constructionDial.ts`): a hex outline that
+// floats over a building under construction — white track, yellow elapsed arc.
+const CONSTRUCTION_DIAL_LIFT = TILE_H * 0.9;
+const CONSTRUCTION_DIAL_RADIUS = TILE_H * 0.32;
+const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
@@ -1557,6 +1564,9 @@ export class HexMapRenderer {
   // hidden under fog with no extra check needed here.
   private rangeLayer = new Graphics();
   private rangeOverlay: AxialCoord[] | null = null;
+  // Construction progress dials — just stores data, drawn every tick into
+  // `highlightLayer` (above the buildings) in settlement mode only.
+  private constructionDials: ConstructionDial[] | null = null;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -2237,6 +2247,25 @@ export class HexMapRenderer {
           this.highlightLayer
             .ellipse(cx, cy, (TILE_W / 2) * ring.scale, (TILE_H / 2) * ring.scale)
             .stroke({ width: 3, color: GOLD, alpha: ring.alpha });
+        }
+      }
+    }
+    if (this.options.mode === 'settlement' && this.constructionDials) {
+      const nowMs = Date.now();
+      for (const dial of this.constructionDials) {
+        const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
+        const cx = grid.x + TILE_W / 2;
+        const cy = grid.y + TILE_CENTER_Y_OFFSET - CONSTRUCTION_DIAL_LIFT;
+        const r = CONSTRUCTION_DIAL_RADIUS;
+        this.highlightLayer
+          .poly(hexPoints(cx, cy, r))
+          .fill({ color: 0x000000, alpha: 0.35 })
+          .stroke({ width: 4, color: 0xffffff, alpha: 0.95, join: 'round' });
+        const path = hexPerimeterPath(cx, cy, r, dialProgress(dial, nowMs));
+        if (path.length >= 4) {
+          this.highlightLayer.moveTo(path[0], path[1]);
+          for (let i = 2; i < path.length; i += 2) this.highlightLayer.lineTo(path[i], path[i + 1]);
+          this.highlightLayer.stroke({ width: 4, color: CONSTRUCTION_DIAL_ELAPSED_COLOR, cap: 'round', join: 'round' });
         }
       }
     }
@@ -4614,6 +4643,15 @@ export class HexMapRenderer {
    */
   setRangeOverlay(hexes: AxialCoord[] | null) {
     this.rangeOverlay = hexes && hexes.length > 0 ? hexes : null;
+  }
+
+  /**
+   * Hands in the under-construction dials (`constructionDialsFromQueue`).
+   * Like `setRangeOverlay`, this only stores the data; `drawHighlight` redraws
+   * the animated progress every tick (settlement mode only). `null` clears.
+   */
+  setConstructionDials(dials: ConstructionDial[] | null) {
+    this.constructionDials = dials && dials.length > 0 ? dials : null;
   }
 
   /**
