@@ -7,6 +7,6 @@
   "px": 22,
   "routes": [
     { "from": [-160, 1], "to": [-167, 8], "army": "enemy" },
-    { "from": [-152, 16], "to": [-158, 16], "army": "enemy" }
+    { "from": [-166, 2], "to": [-173, 2], "army": "enemy" }
   ]
 }

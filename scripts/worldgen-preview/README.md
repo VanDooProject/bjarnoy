@@ -131,12 +131,12 @@ The shipped scenarios, all on seed 11 at radius 1000:
 
 | file | shows |
 | --- | --- |
-| `a-wide-river-vs-stream` | route A across a wide river walks 33 steps upstream to where it starts as a stream (cost 45.6, was 15.7); route B across a stream goes straight over at +8, same as before |
+| `a-wide-river-vs-stream` | route A across a wide river walks 37 steps upstream to where it starts as a stream (cost 52.0, was 15.7); route B across a stream goes straight over at +8, same as before |
 | `b-mountains-block` | mountains impassable: the route round a horseshoe ridge is 25 steps instead of 8 |
 | `c-sea-end-seals` | wall from a wide river to the sea, ending in `palisade_end_coast`, with a gate: the enemy has no route in, the friendly army walks through the gate |
 | `d-land-end-at-coast` | the same wall with a plain land end: the enemy walks over the half-open end at a penalty (see below) |
 | `d2-land-end-one-short` | the same wall one hex short of the coast: round the end or over it, whichever is cheaper |
-| `e-mountain-to-river-seals` | a five-hex wall from a mountain to a wide river seals 888 hexes |
+| `e-mountain-to-river-seals` | a five-hex wall from a mountain to a wide river seals the land behind it |
 | `f-every-piece` | every piece and rotation (ends and straights on all axes, gate, `bend120` as a ring and a meander, `bend60` as two triangles, sea end) with a refused branch and a refused gate marked |
 
 ### What the rules turned out to mean on the hex grid
