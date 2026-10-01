@@ -3,25 +3,34 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminWorldReseedView from './AdminWorldReseedView.vue';
-import type { AdminWorldResponse, WorldSeedPreviewResponse } from '../../api/types';
+import type {
+  AdminWorldResponse,
+  WorldReviewResponse,
+  WorldReviewSummary,
+  WorldSeedPreviewResponse,
+  WorldSeedReviewResponse,
+} from '../../api/types';
 import { generationResponse, generationSettings } from '../../lib/map/testing/generationFixture';
 import { DEFAULT_GENERATION } from '../../lib/map/worldGenerator';
 import { createTestI18n } from '../../test/i18n';
 import adminWorldReseed from '../../i18n/locales/en/adminWorldReseed.json';
+import adminWorldReview from '../../i18n/locales/en/adminWorldReview.json';
 
-const global = { plugins: [createTestI18n({ adminWorldReseed })] };
+const global = { plugins: [createTestI18n({ adminWorldReseed, adminWorldReview })] };
 
-const { adminListWorlds, adminPreviewWorldSeed, adminReseedWorld } = vi.hoisted(() => ({
+const { adminListWorlds, adminPreviewWorldSeed, adminReseedWorld, adminReviewWorldSeeds, panTo } = vi.hoisted(() => ({
   adminListWorlds: vi.fn(),
   adminPreviewWorldSeed: vi.fn(),
   adminReseedWorld: vi.fn(),
+  adminReviewWorldSeeds: vi.fn(),
+  panTo: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { adminListWorlds, adminPreviewWorldSeed, adminReseedWorld },
+    api: { adminListWorlds, adminPreviewWorldSeed, adminReseedWorld, adminReviewWorldSeeds },
   };
 });
 
@@ -44,6 +53,8 @@ vi.mock('../../components/map/WorldMapCanvas.vue', () => ({
   default: {
     name: 'WorldMapCanvas',
     props: ['worldModel', 'playerId'],
+    // The real component exposes its HexMapRenderer as `renderer`; the review panel pans it.
+    setup: () => ({ renderer: { panTo } }),
     template: '<div class="map-container" />',
   },
 }));
@@ -74,6 +85,42 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
   };
 }
 
+function summary(overrides: Partial<WorldReviewSummary> = {}): WorldReviewSummary {
+  return {
+    seed: 4242,
+    radius: 1000,
+    greenIslands: 1,
+    wastedIslands: 0,
+    landTiles: 42,
+    landingSpots: 1,
+    islandsWithLandingCandidate: 1,
+    islandsWithoutLandingSpots: 0,
+    islandsMissingBog: 1,
+    cutOffRegions: 1,
+    cutOffTiles: 12,
+    cutOffShare: 0.0134,
+    worstIslandCutOffShare: 0.2,
+    bogRuleViolations: 0,
+    inlandRiverMouths: 0,
+    wastedNearGreen: 0,
+    errors: 0,
+    warnings: 2,
+    infos: 0,
+    ...overrides,
+  };
+}
+
+function review(overrides: Partial<WorldReviewResponse> = {}): WorldReviewResponse {
+  return {
+    summary: summary(),
+    findings: [
+      { kind: 'missingBog', severity: 'warn', island: 0, q: 3, r: -1, size: 42, message: '42 land tiles and 3 landing candidates, but no bog' },
+      { kind: 'cutOffLand', severity: 'warn', island: 0, q: 4, r: -2, size: 12, message: '12 walkable hexes cut off' },
+    ],
+    ...overrides,
+  };
+}
+
 function preview(overrides: Partial<WorldSeedPreviewResponse> = {}): WorldSeedPreviewResponse {
   return {
     worldId: 'world-1',
@@ -97,6 +144,7 @@ function preview(overrides: Partial<WorldSeedPreviewResponse> = {}): WorldSeedPr
       },
     ],
     generation: generationResponse(),
+    review: review(),
     ...overrides,
   };
 }
@@ -329,7 +377,7 @@ describe('AdminWorldReseedView', () => {
     expect(value('islandCoastNoise')).toBe('1');
     expect(value('islandCoastNoiseScale')).toBe('49');
     expect(value('islandSmallShare')).toBe('0.3');
-    expect(value('islandLargeShare')).toBe('0.12');
+    expect(value('islandLargeShare')).toBe('0.07');
   });
 
   it('sends an edited island-shape parameter to the preview endpoint', async () => {
@@ -379,5 +427,122 @@ describe('AdminWorldReseedView', () => {
     await wrapper.find('[data-testid="reset-generation"]').trigger('click');
 
     expect((wrapper.find('#gen-islandMinWidth').element as HTMLInputElement).value).toBe('21');
+  });
+
+  describe('world review', () => {
+    it('shows the candidate\'s review counts and findings beside the preview map', async () => {
+      const wrapper = await mountView();
+      await previewSeed(wrapper);
+
+      const panel = wrapper.find('[data-testid="world-review"]');
+      expect(panel.exists()).toBe(true);
+      expect(panel.find('[data-testid="review-warnings"]').text()).toBe('2 warnings');
+      expect(panel.find('[data-testid="review-islandsMissingBog"]').text()).toBe('1');
+      expect(panel.find('[data-testid="review-cutOffShare"]').text()).toBe('1.3%');
+      const rows = panel.findAll('[data-testid="review-finding"]');
+      expect(rows).toHaveLength(2);
+      expect(rows[0]!.text()).toContain('Warning');
+      expect(rows[0]!.text()).toContain('Missing bog');
+      expect(rows[0]!.text()).toContain('no bog');
+    });
+
+    it('centres the preview map on a finding when it is clicked', async () => {
+      const wrapper = await mountView();
+      await previewSeed(wrapper);
+
+      const rows = wrapper.findAll('[data-testid="review-finding"]');
+      await rows[1]!.trigger('click');
+
+      expect(panTo).toHaveBeenCalledWith({ q: 4, r: -2 });
+      expect(wrapper.findAll('[data-testid="review-finding"]')[1]!.classes()).toContain('selected');
+    });
+
+    it('filters the findings by severity and says so when a seed is clean', async () => {
+      const wrapper = await mountView();
+      await previewSeed(wrapper);
+
+      await wrapper.find('[data-testid="review-filter"]').setValue('error');
+      expect(wrapper.findAll('[data-testid="review-finding"]')).toHaveLength(0);
+      expect(wrapper.find('[data-testid="review-empty"]').exists()).toBe(true);
+    });
+
+    it('renders a long findings list a page at a time', async () => {
+      const findings = Array.from({ length: 130 }, (_, i) => ({
+        kind: 'cutOffLand' as const,
+        severity: 'info' as const,
+        island: i,
+        q: i,
+        r: 0,
+        size: 6,
+        message: `region ${i}`,
+      }));
+      adminListWorlds.mockResolvedValue([world()]);
+      const wrapper = mount(AdminWorldReseedView, { global });
+      await flushPromises();
+      adminPreviewWorldSeed.mockResolvedValue(preview({ review: review({ findings }) }));
+      await wrapper.findAll('button').find((b) => b.text().includes('Preview seed'))!.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.findAll('[data-testid="review-finding"]')).toHaveLength(100);
+      await wrapper.find('[data-testid="review-show-all"]').trigger('click');
+      expect(wrapper.findAll('[data-testid="review-finding"]')).toHaveLength(130);
+    });
+  });
+
+  describe('seed scan', () => {
+    function scanResponse(): WorldSeedReviewResponse {
+      return {
+        worldId: 'world-1',
+        radius: 1000,
+        seeds: [summary({ seed: 12, warnings: 1 }), summary({ seed: 10, errors: 1, islandsMissingBog: 2 })],
+        generation: generationResponse(),
+      };
+    }
+
+    it('reviews the seed range with the generation form and lists the seeds best first as the backend ranked them', async () => {
+      const wrapper = await mountView();
+      adminReviewWorldSeeds.mockResolvedValue(scanResponse());
+
+      await wrapper.find('[data-testid="scan-from"]').setValue('10');
+      await wrapper.find('[data-testid="scan-count"]').setValue('3');
+      await wrapper.find('[data-testid="scan-seeds"]').trigger('click');
+      await flushPromises();
+
+      expect(adminReviewWorldSeeds).toHaveBeenCalledWith(
+        'world-1',
+        expect.objectContaining({ seedFrom: 10, count: 3, generation: expect.objectContaining({ islandCellSize: DEFAULT_GENERATION.islandCellSize }) }),
+      );
+      const rows = wrapper.findAll('[data-testid="scan-row"]');
+      expect(rows.map((r) => r.find('td').text())).toEqual(['12', '10']);
+      expect(rows[1]!.findAll('td')[1]!.classes()).toContain('bad');
+    });
+
+    it('previews a scanned seed from its row', async () => {
+      const wrapper = await mountView();
+      adminReviewWorldSeeds.mockResolvedValue(scanResponse());
+      await wrapper.find('[data-testid="scan-from"]').setValue('10');
+      await wrapper.find('[data-testid="scan-seeds"]').trigger('click');
+      await flushPromises();
+
+      adminPreviewWorldSeed.mockResolvedValue(preview({ seed: 12 }));
+      await wrapper.findAll('[data-testid="scan-preview"]')[0]!.trigger('click');
+      await flushPromises();
+
+      expect(adminPreviewWorldSeed).toHaveBeenCalledWith('world-1', expect.objectContaining({ seed: 12 }));
+      expect((wrapper.find('#seed').element as HTMLInputElement).value).toBe('12');
+      expect(wrapper.find('[data-testid="world-review"]').exists()).toBe(true);
+    });
+
+    it('refuses a count outside 1-8 without calling the backend', async () => {
+      const wrapper = await mountView();
+
+      await wrapper.find('[data-testid="scan-from"]').setValue('10');
+      await wrapper.find('[data-testid="scan-count"]').setValue('9');
+      await wrapper.find('[data-testid="scan-seeds"]').trigger('click');
+      await flushPromises();
+
+      expect(adminReviewWorldSeeds).not.toHaveBeenCalled();
+      expect(wrapper.find('[data-testid="scan-error"]').text()).toBe('Count must be between 1 and 8.');
+    });
   });
 });

@@ -3,6 +3,7 @@
   "title": "a wide river blocks (route A walks upstream to where it starts as a stream), a stream is crossed at +8 (route B goes straight over)",
   "seed": 11,
   "radius": 1000,
+  "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
   "window": { "q": -161, "r": 9, "size": 44 },
   "px": 22,
   "routes": [

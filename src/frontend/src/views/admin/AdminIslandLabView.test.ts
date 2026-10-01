@@ -108,7 +108,7 @@ describe('AdminIslandLabView', () => {
     const callsBefore = clearRect.mock.calls.length;
 
     const cellSizeInput = wrapper.find('[data-testid^="lab-gen-"][data-testid$="-islandCellSize"]');
-    await cellSizeInput.setValue(30);
+    await cellSizeInput.setValue(120);
     await flushFrame();
 
     expect(clearRect.mock.calls.length).toBeGreaterThan(callsBefore);
@@ -138,7 +138,7 @@ describe('AdminIslandLabView', () => {
     await cellSizeInput.setValue(99);
     await wrapper.find('[data-testid="reset-generation"]').trigger('click');
 
-    expect((cellSizeInput.element as HTMLInputElement).value).toBe('260');
+    expect((cellSizeInput.element as HTMLInputElement).value).toBe('150');
   });
 
   it('toggling the docs section shows and hides its explanation', async () => {
@@ -165,8 +165,8 @@ describe('AdminIslandLabView', () => {
     await wrapper.find('[data-testid="preset-compact"]').trigger('click');
 
     const cellSizeInputs = wrapper.findAll('[data-testid^="lab-gen-"][data-testid$="-islandCellSize"]');
-    expect((cellSizeInputs[0].element as HTMLInputElement).value).toBe('260');
-    expect((cellSizeInputs[1].element as HTMLInputElement).value).toBe('90');
+    expect((cellSizeInputs[0].element as HTMLInputElement).value).toBe('150');
+    expect((cellSizeInputs[1].element as HTMLInputElement).value).toBe('66');
   });
 
   it('applying a preset with a single variant open needs no target selector', async () => {
@@ -180,7 +180,7 @@ describe('AdminIslandLabView', () => {
     await wrapper.find('[data-testid="preset-compact"]').trigger('click');
 
     const cellSizeInput = wrapper.find('[data-testid^="lab-gen-"][data-testid$="-islandCellSize"]');
-    expect((cellSizeInput.element as HTMLInputElement).value).toBe('90');
+    expect((cellSizeInput.element as HTMLInputElement).value).toBe('66');
   });
 
   it('resetting a variant view restores its default pan/zoom', async () => {

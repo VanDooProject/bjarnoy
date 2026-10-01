@@ -24,8 +24,8 @@ import type { AtlasFrameRect } from '../lib/map/atlas';
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-// Same seed stores/world.ts's own demo model uses (DEMO_SEED) — a familiar,
-// known-good archipelago rather than a fresh roll on every page load.
+// A familiar, known-good archipelago rather than a fresh roll on every page
+// load (stores/world.ts's demo seed until the island-density change moved it).
 const DEFAULT_SEED = 20260824;
 // The whole default world: islands are ~150 hexes across and ~100+ apart, so a
 // small disc around the origin is usually open sea. Listing the labels costs

@@ -197,10 +197,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task Spacing_is_enforced_within_an_island_but_never_across_separate_islands()
     {
         using var client = Client();
-        // Compact seed 30 (found by scanning seeds 1-300 after the wildlife camps took start positions near strong camps): has an island with two
+        // Compact seed 31 (found by scanning seeds 1-300 after the island-density change): has an island with two
         // start positions closer than MinimumSpacing and a second island with a
         // start position that close to the first — the cross-island case below.
-        var world = await _factory.CreateWorldAsync(Unique("w"), 30, 300, cancellationToken: Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 31, 300, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -233,7 +233,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             }
         }
 
-        Assert.True(sameIsland is not null, "Compact seed 30 no longer has an island dense enough to exercise same-island spacing.");
+        Assert.True(sameIsland is not null, "Compact seed 31 no longer has an island dense enough to exercise same-island spacing.");
         var (islandId, first, second) = sameIsland!.Value;
 
         var founded = await client.PostJsonAsync(
@@ -264,7 +264,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             }
         }
 
-        Assert.True(crossIsland is not null, "Compact seed 30 no longer has two islands close enough to exercise cross-island spacing.");
+        Assert.True(crossIsland is not null, "Compact seed 31 no longer has two islands close enough to exercise cross-island spacing.");
         var (crossIslandId, crossPlot) = crossIsland!.Value;
 
         var crossFounded = await client.PostJsonAsync(

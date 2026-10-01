@@ -28,6 +28,7 @@ import adminSettlements from './locales/en/adminSettlements.json';
 import adminUsers from './locales/en/adminUsers.json';
 import adminWorldReseed from './locales/en/adminWorldReseed.json';
 import adminWorlds from './locales/en/adminWorlds.json';
+import adminWorldReview from './locales/en/adminWorldReview.json';
 import armyEditor from './locales/en/armyEditor.json';
 import garrisonForm from './locales/en/garrisonForm.json';
 import grantResourcesForm from './locales/en/grantResourcesForm.json';
@@ -69,6 +70,7 @@ export interface MessageSchema {
   adminUsers: typeof adminUsers;
   adminWorldReseed: typeof adminWorldReseed;
   adminWorlds: typeof adminWorlds;
+  adminWorldReview: typeof adminWorldReview;
   armyEditor: typeof armyEditor;
   garrisonForm: typeof garrisonForm;
   grantResourcesForm: typeof grantResourcesForm;

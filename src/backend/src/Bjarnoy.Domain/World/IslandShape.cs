@@ -42,12 +42,56 @@ public static class IslandShapeConstants
     public const double LargeScale = 1.6;
 
     /// <summary>
-    /// The farthest, in hexes, an island's land may be from its centre before the
-    /// island is shrunk: it must stay inside the 3x3 cell block every hex scans,
-    /// after the centre's jitter and both warp octaves.
+    /// The farthest, in hexes, an island's land may be from its centre (warps not counted)
+    /// before the island is shrunk: <see cref="WorldGenerationOptions.IslandMaxReach"/>, or
+    /// for a legacy world (0) what fits the 3x3 cell block after the centre's jitter and both
+    /// warp octaves.
     /// </summary>
-    public static double ReachBudget(double cellSize, double warp) =>
-        ((1.5 - (Jitter / 2)) * cellSize) - (warp + Warp2);
+    public static double ReachBudget(WorldGenerationOptions options) =>
+        options.IslandMaxReach > 0.0
+            ? options.IslandMaxReach
+            : ((1.5 - (Jitter / 2)) * options.IslandCellSize) - (options.IslandCoastWarp + Warp2);
+
+    /// <summary>
+    /// How many rings of cells around its own a hex scans for islands: the fewest whose
+    /// block holds every island that can reach the hex — an island's centre jitters
+    /// <see cref="Jitter"/>/2 of a cell off its cell's middle and its land reaches
+    /// <see cref="ReachBudget"/> plus both warps. 1 (the 3x3 block) for a legacy world.
+    /// </summary>
+    public static int ScanSpan(WorldGenerationOptions options)
+    {
+        if (options.IslandMaxReach <= 0.0)
+        {
+            return 1;
+        }
+
+        var need = options.IslandMaxReach + (options.IslandCoastWarp + Warp2);
+        var span = 1;
+        while (((span + 0.5) - (Jitter / 2)) * options.IslandCellSize < need)
+        {
+            span++;
+        }
+
+        return span;
+    }
+
+    /// <summary>
+    /// How many rings of cells around its own an island checks for an outranking neighbour
+    /// closer than <see cref="WorldGenerationOptions.IslandMinGap"/>: centres of cells
+    /// <c>s</c> rings apart are at least <c>(s - Jitter)</c> cells apart, so the rings
+    /// beyond the last one closer than two budgets plus the gap cannot hold a conflict.
+    /// </summary>
+    public static int GapSpan(WorldGenerationOptions options)
+    {
+        var reach = (2 * ReachBudget(options)) + options.IslandMinGap;
+        var span = 1;
+        while (((span + 1) - Jitter) * options.IslandCellSize <= reach)
+        {
+            span++;
+        }
+
+        return span;
+    }
 
     /// <summary>
     /// The largest fraction of an island's half-width the depth noise can add to
@@ -167,7 +211,7 @@ public sealed class IslandShape
 
     public IslandSizeClass SizeClass { get; }
 
-    /// <summary>1 unless the island was too big for its cell block and shrunk to fit.</summary>
+    /// <summary>1 unless the island was too big for its reach budget and shrunk to fit.</summary>
     public double ClampFactor { get; }
 
     /// <summary>Inclusive offset-space box (column/row) outside which no hex of this island can be land.</summary>

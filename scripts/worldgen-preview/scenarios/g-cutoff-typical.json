@@ -3,6 +3,7 @@
   "title": "a typical cut-off pocket (seed 1): a valley closed in by a ring of mountains, in magenta",
   "seed": 1,
   "radius": 1000,
+  "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
   "window": { "q": 605, "r": -146, "size": 34 },
   "px": 28,
   "cutoff": true
