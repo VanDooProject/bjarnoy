@@ -43,7 +43,6 @@ import {
   dialProgress,
   dialRemainingSeconds,
   hexPerimeterPath,
-  polygonPerimeterPath,
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -788,7 +787,6 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 // by `drawConstructionDials` (constant on-screen size, like the settlement
 // badge) over a building under construction — white track, yellow elapsed arc,
 // remaining time inside.
-const CONSTRUCTION_DIAL_LIFT = TILE_H * 0.9;
 const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
@@ -4420,6 +4418,7 @@ export class HexMapRenderer {
   private drawConstructionDials() {
     if (!this.constructionDials) return;
     const style = constructionDialTuning.style;
+    const lift = TILE_H * constructionDialTuning.lift;
     const nowMs = Date.now();
     const zs = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
     const g = this.markerLayer;
@@ -4433,59 +4432,50 @@ export class HexMapRenderer {
       const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
       const progress = dialProgress(dial, nowMs);
       const remaining = dialRemainingSeconds(dial, nowMs);
-      const text = remaining === null ? '…' : formatCountdownShort(remaining);
-      let labelScale = zs;
-      let cx: number;
-      let cy: number;
-
-      if (style === 'tile') {
-        const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-        const mid = { x: (top[1].x + top[2].x) / 2, y: (top[1].y + top[2].y) / 2 };
-        const ring = [mid, top[2], top[3], top[4], top[5], top[0], top[1]].map((p) => this.toScreen(p));
-        g.poly(ring.flatMap((p) => [p.x, p.y]), true).stroke({ width: 3, color: 0xffffff, alpha: 0.95, join: 'round' });
-        strokePath(polygonPerimeterPath(ring, progress), 3);
-        const c = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
-        cx = c.x;
-        cy = c.y;
-        const label = this.acquireLabel(LABEL_STYLES.dialTime, zs);
-        label.text = text;
-        label.anchor.set(0.5);
-        label.position.set(cx, cy);
-        label.visible = true;
-        const pw = label.width + 12 * zs;
-        const ph = 18 * zs;
-        // Pill drawn after the label was positioned; the label child renders
-        // above the Graphics regardless of draw order.
-        g.roundRect(cx - pw / 2, cy - ph / 2, pw, ph, ph / 2).fill({ color: 0x08121a, alpha: 0.8 });
-        continue;
-      }
-
+      const done = remaining !== null && remaining <= 0.5;
+      const text = remaining === null ? '…' : done ? '✓' : formatCountdownShort(remaining);
       const anchor = this.toScreen({
         x: grid.x + TILE_W / 2,
-        y: grid.y + TILE_CENTER_Y_OFFSET - CONSTRUCTION_DIAL_LIFT,
+        y: grid.y + TILE_CENTER_Y_OFFSET - lift,
       });
-      cx = anchor.x;
-      cy = anchor.y;
-      const bold = style === 'bold';
-      const r = 22 * zs * (bold ? 1.25 : 1);
+      const cx = anchor.x;
+      const cy = anchor.y;
+      const r = 22 * zs * 1.25;
       const hex = hexPoints(cx, cy, r);
-      if (bold) {
-        g.poly(hex).fill({ color: 0x08121a, alpha: 0.85 }).stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.9, join: 'round' });
-        strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs);
-        labelScale = zs * 1.2;
-      } else if (style === 'pie') {
-        g.poly(hex).fill({ color: 0x08121a, alpha: 0.7 });
-        const arc = hexPerimeterPath(cx, cy, r, progress);
-        if (arc.length >= 4) {
-          g.poly([cx, cy, ...arc]).fill({ color: CONSTRUCTION_DIAL_ELAPSED_COLOR, alpha: 0.55 });
-        }
-        g.poly(hex).stroke({ width: 3 * zs, color: 0xffffff, alpha: 0.95, join: 'round' });
-      } else {
-        g.poly(hex).fill({ color: 0x08121a, alpha: 0.7 }).stroke({ width: 3 * zs, color: 0xffffff, alpha: 0.95, join: 'round' });
-        strokePath(hexPerimeterPath(cx, cy, r, progress), 3 * zs);
+      const trackColor = done ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
+      const trackWidth = style === 'inset' ? 4 * zs : 6 * zs;
+      const trackAlpha = style === 'dimTrack' && !done ? 0.3 : 0.9;
+
+      if (style === 'pin') {
+        // Map-pin tail, drawn first so the hex covers its top.
+        const bottomY = cy + r;
+        g.poly([cx - 6 * zs, bottomY - 2 * zs, cx + 6 * zs, bottomY - 2 * zs, cx, bottomY + 9 * zs]).fill({
+          color: 0xffffff,
+          alpha: 0.9,
+        });
       }
-      const label = this.acquireLabel(LABEL_STYLES.dialTime, labelScale);
+      g.poly(hex)
+        .fill({ color: 0x08121a, alpha: 0.85 })
+        .stroke({ width: trackWidth, color: trackColor, alpha: trackAlpha, join: 'round' });
+      if (!done) {
+        if (style === 'inset') {
+          const innerR = r - 6 * zs;
+          strokePath(hexPerimeterPath(cx, cy, innerR, progress), 4 * zs);
+        } else {
+          strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs);
+        }
+      } else {
+        const pulse = 0.25 + (0.25 * (Math.sin(performance.now() / 300) + 1)) / 2;
+        g.poly(hexPoints(cx, cy, r + 4 * zs)).stroke({
+          width: 4 * zs,
+          color: CONSTRUCTION_DIAL_ELAPSED_COLOR,
+          alpha: pulse,
+          join: 'round',
+        });
+      }
+      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2);
       label.text = text;
+      label.tint = style === 'dimTrack' && remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
       label.anchor.set(0.5);
       label.position.set(cx, cy);
       label.visible = true;
@@ -4567,6 +4557,7 @@ export class HexMapRenderer {
     if (label.style !== style) label.style = style;
     label.scale.set(scale);
     label.alpha = 1;
+    label.tint = 0xffffff;
     this.labelsUsed++;
     return label;
   }

@@ -99,7 +99,10 @@ export function hexPerimeterPath(cx: number, cy: number, r: number, fraction: nu
   return polygonPerimeterPath(vertices, fraction);
 }
 
-export type ConstructionDialStyle = 'outline' | 'bold' | 'pie' | 'tile';
+export type ConstructionDialStyle = 'bold' | 'pin' | 'dimTrack' | 'inset';
 
-/** Live-tweakable dial look (exposed as `window.__dialTuning` in demo mode). */
-export const constructionDialTuning: { style: ConstructionDialStyle } = { style: 'outline' };
+/**
+ * Live-tweakable dial look (exposed as `window.__dialTuning` in demo mode).
+ * `lift` is the dial's height above the tile centre in TILE_H units.
+ */
+export const constructionDialTuning = { style: 'bold' as ConstructionDialStyle, lift: 0.9 };

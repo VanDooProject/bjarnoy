@@ -55,7 +55,7 @@ if (DEMO_MODE) {
   // twin of ZoomDebugPanel (see zoomTransition.ts), exposed on the same
   // terms as __waterTuning/__fogTuning above.
   (window as unknown as { __zoomTuning: typeof zoomTransitionTuning }).__zoomTuning = zoomTransitionTuning;
-  // Construction-progress dial's look ('outline' | 'bold' | 'pie' | 'tile'),
+  // Construction-progress dial's look (style: 'bold' | 'pin' | 'dimTrack' | 'inset'; lift),
   // switchable live from the console for screenshot comparisons — same terms
   // as __zoomTuning above.
   (window as unknown as { __dialTuning: typeof constructionDialTuning }).__dialTuning = constructionDialTuning;
