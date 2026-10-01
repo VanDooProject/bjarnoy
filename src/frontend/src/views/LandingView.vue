@@ -1178,15 +1178,6 @@ h1 {
    hero has to span full-width below the mobile header instead of a fixed
    left offset, and the footer has to shrink so it doesn't fight the
    checklist tray for the same strip of screen at the bottom. */
-/* Landscape rail (TopBar.vue): the account-creation nudge hangs off the
-   rail's "Name your jarl" bubble at the top-left, right where the
-   completion banner's title sits on a short screen. While the nudge is up,
-   the banner starts right of it (the nudge is 300px wide, from the rail's
-   8px margin). */
-.landing:has(.hud-bar--rail .nudge) > .banner.complete {
-  left: 324px;
-  width: calc(100vw - 340px);
-}
 @media (max-width: 768px), (max-height: 500px) {
   .hero {
     left: 20px;
@@ -1257,6 +1248,17 @@ h1 {
 @media (max-height: 500px) {
   .footer {
     display: none;
+  }
+  /* The account-creation nudge hangs from the top-right corner (TopBar's
+     rail puts the "Name your jarl" bubble there); on a screen this short the
+     completion banner below it stops short of it rather than running under. */
+  .landing:has(.hud-bar--rail .nudge) > .banner.complete {
+    width: calc(100vw - var(--hud-inset-left, 0px) - 16px - 340px);
+  }
+  /* The footer the phone rules reserve 44px for is hidden here, so the
+     checklist docks in the corner itself. */
+  .landing > .tray {
+    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
   /* Short landscape phones get the same minimal founding hero, kept to a
      narrow left column so it stays clear of the island on the right. */
