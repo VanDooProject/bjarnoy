@@ -640,37 +640,50 @@ export async function unloadAtlasCategory(category: string): Promise<void> {
 // needs to draw is in.
 // ---------------------------------------------------------------------------
 
-const CORE_PRELOAD_ORDER = ['terrain', 'buildings-level1', 'buildings-static', 'buildings-anim'];
+const CORE_PRELOAD_ORDER = ['terrain', 'buildings-level1', 'buildings-static'];
 
 function isShowcaseCategory(category: string): boolean {
   return category === 'showcase' || category.endsWith('-showcase');
 }
 
-/** terrain, buildings-level1, buildings-static, buildings-anim, then everything else (packs...), then showcase categories; alphabetical within a tier. */
-function categoryPriority(category: string): [number, string] {
+/**
+ * Manifest order: the map's own art (terrain, buildings-level1,
+ * buildings-static), then the showcase categories — small, and what the ring
+ * menu and building modal read their art from (`buildingArt.ts`) — then
+ * buildings-anim, then everything else (packs...).
+ */
+function manifestPriority(category: string): number {
   const core = CORE_PRELOAD_ORDER.indexOf(category);
-  if (core >= 0) return [core, category];
-  return [isShowcaseCategory(category) ? CORE_PRELOAD_ORDER.length + 1 : CORE_PRELOAD_ORDER.length, category];
+  if (core >= 0) return core;
+  if (isShowcaseCategory(category)) return CORE_PRELOAD_ORDER.length;
+  if (category === 'buildings-anim') return CORE_PRELOAD_ORDER.length + 1;
+  return CORE_PRELOAD_ORDER.length + 2;
 }
 
-function byPriority(categories: readonly string[]): string[] {
+/** Page-byte order: buildings-anim, then the packs, then the showcase pages (docs art, CSS-loaded on demand anyway). */
+function prefetchPriority(category: string): number {
+  if (category === 'buildings-anim') return 0;
+  return isShowcaseCategory(category) ? 2 : 1;
+}
+
+function byPriority(categories: readonly string[], priority: (category: string) => number): string[] {
   return [...categories].sort((a, b) => {
-    const [ta, na] = categoryPriority(a);
-    const [tb, nb] = categoryPriority(b);
-    return ta !== tb ? ta - tb : na < nb ? -1 : na > nb ? 1 : 0;
+    const pa = priority(a);
+    const pb = priority(b);
+    return pa !== pb ? pa - pb : a < b ? -1 : a > b ? 1 : 0;
   });
 }
 
 /**
  * Fetches the manifests of `categories` (default: every discovered one) one
- * category after the other, in priority order — each is awaited before the
+ * category after the other, in priority order (`manifestPriority`) — each is awaited before the
  * next starts so the bandwidth goes to the important ones first. A failing
  * category doesn't stop the rest; the first error is rethrown at the end.
  */
 export async function preloadAtlasManifests(categories?: string[]): Promise<void> {
   let firstError: unknown;
   let failed = false;
-  for (const category of byPriority(categories ?? discoveredCategories())) {
+  for (const category of byPriority(categories ?? discoveredCategories(), manifestPriority)) {
     try {
       await loadAtlasManifests(category);
     } catch (err) {
@@ -737,7 +750,7 @@ export function startBackgroundAtlasLoad(): Promise<void> {
     } catch (err) {
       console.warn('atlas.ts: background manifest preload failed', err);
     }
-    await prefetchAtlasPages(byPriority(discoveredCategories()));
+    await prefetchAtlasPages(byPriority(discoveredCategories(), prefetchPriority));
   })();
   return backgroundLoad;
 }

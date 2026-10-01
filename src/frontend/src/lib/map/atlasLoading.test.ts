@@ -193,7 +193,7 @@ describe('preloadAtlasManifests', () => {
     vi.unstubAllGlobals();
   });
 
-  it('fetches terrain, level1, static, anim, then packs, then showcase — one category at a time', async () => {
+  it('fetches terrain, level1, static, showcase, anim, then packs — one category at a time', async () => {
     const byUrl = new Map<string, AtlasManifest>();
     const categoryOfUrl = new Map<string, string>();
     for (const c of all) {
@@ -220,10 +220,10 @@ describe('preloadAtlasManifests', () => {
       'terrain',
       'buildings-level1',
       'buildings-static',
+      'showcase',
       'buildings-anim',
       'frozen-terrain',
       'wasted-terrain',
-      'showcase',
     ]);
   });
 
