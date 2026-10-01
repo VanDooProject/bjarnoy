@@ -1645,10 +1645,11 @@ function pickIndexed<T>(arr: (T | undefined)[] | undefined, index: number): T | 
  * already included.
  */
 export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture {
-  // A land wall hex keeps its own ground: the terrain's base (grass, forest floor without the trees, sand) as that hex would be drawn
+  // A land wall hex keeps its own ground: the terrain's base (grass, forest floor without the trees, sand, bog moss) as that hex would be drawn
   // plain, in the hex's own rotation so it blends with its neighbours; only the wall's top is drawn over it.
   if (riverArt && LAND_WALL_KEYS.has(riverArt.key)) {
-    return baseTextureFor(textures, { ...tile, buildingType: undefined, buildingLevel: undefined });
+    // `variant: 0`: the plain base, never a bog variant's own props.
+    return baseTextureFor(textures, { ...tile, buildingType: undefined, buildingLevel: undefined, variant: 0 });
   }
   const orientation = tileOrientationFor(tile, riverArt);
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {

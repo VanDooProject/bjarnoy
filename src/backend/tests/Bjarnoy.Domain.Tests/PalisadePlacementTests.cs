@@ -41,11 +41,12 @@ public sealed class PalisadePlacementTests
 
     private static BuildDecision Plan(
         Settlement settlement, BuildingType type, HexCoord at, Terrain terrain = Terrain.Grass, bool coastal = false,
-        RiverTileShape? river = null, IReadOnlyDictionary<HexCoord, Terrain>? terrainAround = null)
+        RiverTileShape? river = null, IReadOnlyDictionary<HexCoord, Terrain>? terrainAround = null,
+        BogTileKind? bogKind = null)
     {
         Terrain TerrainAt(HexCoord c) => terrainAround is not null && terrainAround.TryGetValue(c, out var t) ? t : Terrain.Grass;
         return settlement.PlanBuild(
-            type, at, terrain, T0, Guid.CreateVersion7(), maxWaitingOrders: 5, isCoastalWater: coastal, riverShapeAt: river,
+            type, at, terrain, T0, Guid.CreateVersion7(), maxWaitingOrders: 5, isCoastalWater: coastal, riverShapeAt: river, bogKindAt: bogKind,
             palisades: new PalisadeLayout(new HashSet<HexCoord>(), new HashSet<HexCoord>(), TerrainAt));
     }
 
@@ -98,9 +99,36 @@ public sealed class PalisadePlacementTests
     public void A_palisade_stands_on_grass_forest_or_sand(Terrain terrain) =>
         Assert.True(Plan(Walled(), BuildingType.Palisade, new HexCoord(1, 0), terrain).Accepted);
 
+    [Fact]
+    public void A_palisade_and_a_gate_stand_on_plain_bog_moss()
+    {
+        Assert.True(Plan(Walled(), BuildingType.Palisade, new HexCoord(1, 0), Terrain.Bog, bogKind: BogTileKind.Bog).Accepted);
+        // A gate between two walls on moss is a straight like any other.
+        var settlement = Walled(walls: [Wall(1, 0), Wall(3, 0)]);
+        Assert.True(Plan(settlement, BuildingType.PalisadeGate, new HexCoord(2, 0), Terrain.Bog, bogKind: BogTileKind.Bog).Accepted);
+    }
+
+    [Theory]
+    [InlineData(BogTileKind.Shore)]
+    [InlineData(BogTileKind.Half)]
+    [InlineData(BogTileKind.Creek)]
+    [InlineData(BogTileKind.Mouth)]
+    [InlineData(BogTileKind.Lake)]
+    public void A_palisade_is_refused_on_any_bog_that_is_not_plain_moss(BogTileKind kind) =>
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Plan(Walled(), BuildingType.Palisade, new HexCoord(1, 0), Terrain.Bog, bogKind: kind).Rejection);
+
+    [Fact]
+    public void A_palisade_on_bog_of_unknown_kind_is_refused() =>
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Plan(Walled(), BuildingType.Palisade, new HexCoord(1, 0), Terrain.Bog).Rejection);
+
+    [Fact]
+    public void A_palisade_on_a_river_over_bog_is_still_refused() =>
+        Assert.Equal(
+            BuildRejection.TerrainNotAllowed,
+            Plan(Walled(), BuildingType.Palisade, new HexCoord(1, 0), Terrain.Bog, river: RiverTileShape.Straight, bogKind: BogTileKind.Bog).Rejection);
+
     [Theory]
     [InlineData(Terrain.Mountain)]
-    [InlineData(Terrain.Bog)]
     [InlineData(Terrain.Lake)]
     public void A_palisade_is_refused_on_a_mountain_bog_or_lake(Terrain terrain) =>
         Assert.Equal(BuildRejection.TerrainNotAllowed, Plan(Walled(), BuildingType.Palisade, new HexCoord(1, 0), terrain).Rejection);

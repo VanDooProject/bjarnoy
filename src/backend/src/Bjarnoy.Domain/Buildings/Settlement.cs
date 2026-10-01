@@ -1141,7 +1141,7 @@ public sealed record Settlement
         // one land wall (Palisades.PalisadeRules). Raising a standing wall hex a level is never refused for this.
         if (type is BuildingType.Palisade or BuildingType.PalisadeGate && baseLevel == 0)
         {
-            var wallRefusal = PalisadeRefusalFor(type, coord, terrain, riverShapeAt is not null, palisades);
+            var wallRefusal = PalisadeRefusalFor(type, coord, terrain, riverShapeAt is not null, bogKindAt, palisades);
             if (wallRefusal is not null)
             {
                 return BuildDecision.Rejected(wallRefusal.Value);
@@ -1307,7 +1307,7 @@ public sealed record Settlement
     /// settlement's own standing, foundation and queued ones.
     /// </summary>
     private BuildRejection? PalisadeRefusalFor(
-        BuildingType type, HexCoord coord, Terrain terrain, bool onRiver, Palisades.PalisadeLayout? layout)
+        BuildingType type, HexCoord coord, Terrain terrain, bool onRiver, World.BogTileKind? bogKind, Palisades.PalisadeLayout? layout)
     {
         var walls = layout is null ? [] : new HashSet<HexCoord>(layout.Walls);
         var gates = layout is null ? [] : new HashSet<HexCoord>(layout.Gates);
@@ -1329,7 +1329,8 @@ public sealed record Settlement
         var known = layout?.TerrainAt;
         var context = new Palisades.PalisadePlacementContext(
             hex => hex == coord ? terrain : known?.Invoke(hex) ?? Terrain.Grass,
-            hex => onRiver && hex == coord);
+            hex => onRiver && hex == coord,
+            hex => hex == coord && bogKind == World.BogTileKind.Bog);
 
         return Palisades.PalisadeRules.CanPlace(coord, new Palisades.WallSet(walls, gates), context, type == BuildingType.PalisadeGate) switch
         {

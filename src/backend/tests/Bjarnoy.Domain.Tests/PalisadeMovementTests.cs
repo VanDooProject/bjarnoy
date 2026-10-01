@@ -127,6 +127,30 @@ public sealed class PalisadeMovementTests
     }
 
     [Fact]
+    public void A_half_open_end_on_bog_costs_3_in_place_of_the_bog_cost_and_a_wall_on_bog_blocks()
+    {
+        var terrain = Strip();
+        terrain.Remove(new HexCoord(3, 3));
+        terrain[new HexCoord(3, 2)] = Terrain.Bog;
+        var walls = Index(terrain, Column(-3, 2));
+        Assert.True(walls.IsHalfOpen(new HexCoord(3, 2)));
+        var path = Route(terrain, walls, Stranger);
+        Assert.NotNull(path);
+        Assert.Contains(new HexCoord(3, 2), path!);
+
+        // Bog without a wall stays passable at 2.
+        var plain = Index(terrain, []);
+        var hours = HexPathfinder.CumulativeHours([new HexCoord(2, 2), new HexCoord(3, 2)], h => terrain.GetValueOrDefault(h, Terrain.Sea), 1.0);
+        Assert.Equal(2.0, hours[1]);
+        Assert.Null(plain.ForOwner(Owner));
+
+        // A bog hex in the middle of a closed wall blocks.
+        terrain[new HexCoord(3, 0)] = Terrain.Bog;
+        terrain[new HexCoord(3, 3)] = Terrain.Mountain;
+        Assert.Null(Route(terrain, Index(terrain, Column(-3, 2)), Stranger));
+    }
+
+    [Fact]
     public void A_land_end_that_touches_a_mountain_is_sealed_and_blocks()
     {
         var terrain = Strip();

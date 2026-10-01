@@ -279,9 +279,17 @@ describe('buildingAllowedOnHex', () => {
 });
 
 describe('the wall in the ring menu', () => {
-  it.each(['palisade', 'palisadegate'])('%s stands on grass, forest and sand, never on mountain, bog, lake or open sea', (type) => {
+  it.each(['palisade', 'palisadegate'])('%s stands on plain bog moss and on no other bog hex', (type) => {
+    expect(buildingAllowedOnHex(type, { terrain: 'bog', bog: { kind: 'bog' } })).toBe(true);
+    for (const kind of ['shore', 'half', 'creek', 'mouth', 'inlet', 'creekspring'] as const) {
+      expect(buildingAllowedOnHex(type, { terrain: 'bog', bog: { kind } })).toBe(false);
+    }
+    expect(buildingAllowedOnHex(type, { terrain: 'bog' })).toBe(false);
+  });
+
+  it.each(['palisade', 'palisadegate'])('%s stands on grass, forest and sand, never on mountain, lake or open sea', (type) => {
     for (const terrain of ['grass', 'forest', 'sand']) expect(buildingAllowedOnHex(type, { terrain })).toBe(true);
-    for (const terrain of ['mountain', 'bog', 'lake', 'sea']) expect(buildingAllowedOnHex(type, { terrain })).toBe(false);
+    for (const terrain of ['mountain', 'lake', 'sea']) expect(buildingAllowedOnHex(type, { terrain })).toBe(false);
   });
 
   it('lets the palisade, not the gate, end on a coastal-water hex (the sea end)', () => {

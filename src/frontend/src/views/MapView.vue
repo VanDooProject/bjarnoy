@@ -674,16 +674,7 @@ const WATER_CATEGORY: BuildCategory = {
   id: 'water',
   buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'shrineofnjord' }],
 };
-// Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
-// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
-// Hammerschmiede (with the river hammer-mill art for now: TODO(art) bog-creek Hammerschmiede) and a lake's half shore the
-// Fishing Hut with its lake art. Shores, mouths and springs take nothing.
-const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
-  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }],
-  creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
-  half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
-};
-// The wall (docs/design/economy.md section 5): a palisade hex, or a gate on a hex that is a straight, on grass, forest or sand. A wall
+// The wall (docs/design/economy.md section 5): a palisade hex, or a gate on a hex that is a straight, on grass, forest, sand or plain bog moss. A wall
 // also ends on a coastal-water hex (BuildingDefinition.AlsoOnCoastalWater), the sea end, which is never a gate. Whether this particular hex
 // takes one is the wall rules' (WorldModel.palisadePlacement), shown as a lock on the bubble.
 const DEFENSE_CATEGORY: BuildCategory = {
@@ -691,6 +682,15 @@ const DEFENSE_CATEGORY: BuildCategory = {
   buildings: [{ type: 'palisade' }, { type: 'palisadegate' }],
 };
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
+// Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
+// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
+// Hammerschmiede (with the river hammer-mill art for now: TODO(art) bog-creek Hammerschmiede) and a lake's half shore the
+// Fishing Hut with its lake art. Shores, mouths and springs take nothing.
+const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
+  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }, DEFENSE_CATEGORY],
+  creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
+  half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
+};
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
     { id: 'housing', buildings: [{ type: 'hut' }] },

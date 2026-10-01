@@ -13,6 +13,7 @@ interface Fixture {
     name: string;
     terrain: Record<string, Terrain>;
     rivers: string[];
+    plainBog: string[];
     walls: string[];
     gates: string[];
     coord: string;
@@ -33,7 +34,7 @@ describe('palisade golden fixture (backend parity)', () => {
     const result = canPlacePalisade(
       parseKey(c.coord),
       { walls: new Set(c.walls), gates: new Set(c.gates) },
-      { terrainAt: (h: AxialCoord) => c.terrain[coordKey(h)] ?? 'grass', isRiver: (h: AxialCoord) => c.rivers.includes(coordKey(h)) },
+      { terrainAt: (h: AxialCoord) => c.terrain[coordKey(h)] ?? 'grass', isRiver: (h: AxialCoord) => c.rivers.includes(coordKey(h)), isPlainBog: (h: AxialCoord) => c.plainBog.includes(coordKey(h)) },
       { gate: c.gate },
     );
     expect(result.ok ? { ok: true } : { reason: result.reason }).toEqual(c.expected);

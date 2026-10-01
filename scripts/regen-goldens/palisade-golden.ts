@@ -35,6 +35,7 @@ interface PlacementInput {
   comment: string;
   terrain?: Record<string, Terrain>;
   rivers?: string[];
+  plainBog?: string[];
   walls?: string[];
   gates?: string[];
   coord: string;
@@ -46,6 +47,10 @@ const placementInputs: PlacementInput[] = [
   { name: 'sand_is_allowed', comment: 'Sand takes a wall.', terrain: { '0,0': 'sand' }, coord: '0,0' },
   { name: 'mountain_is_refused', comment: 'No wall on a mountain.', terrain: { '0,0': 'mountain' }, coord: '0,0' },
   { name: 'bog_is_refused', comment: 'No wall on a bog.', terrain: { '0,0': 'bog' }, coord: '0,0' },
+  { name: 'plain_bog_is_allowed', comment: 'Plain bog moss takes a wall.', terrain: { '0,0': 'bog' }, plainBog: ['0,0'], coord: '0,0' },
+  { name: 'bog_shore_is_refused', comment: 'A bog shore, mouth or lake-side hex (bog that is not plain moss) takes none.', terrain: { '0,0': 'bog' }, coord: '0,0' },
+  { name: 'bog_creek_is_refused', comment: 'A creek is bog too, but not plain moss.', terrain: { '0,0': 'bog' }, coord: '0,0' },
+  { name: 'wall_extends_over_plain_bog', comment: 'A wall runs on from grass onto plain moss.', terrain: { '1,0': 'bog' }, plainBog: ['1,0'], walls: ['0,0'], coord: '1,0' },
   { name: 'lake_is_refused', comment: 'No wall on a bog lake.', terrain: { '0,0': 'lake' }, coord: '0,0' },
   { name: 'river_hex_is_refused', comment: 'No wall on any river tile, wide or not.', rivers: ['0,0'], coord: '0,0' },
   { name: 'open_sea_without_a_wall_is_refused', comment: 'A sea hex only ever carries the sea end, hanging off exactly one land wall.', terrain: { '0,0': 'sea' }, coord: '0,0' },
@@ -75,16 +80,18 @@ const placementInputs: PlacementInput[] = [
 const placementCases = placementInputs.map((c) => {
   const terrain = c.terrain ?? {};
   const rivers = new Set(c.rivers ?? []);
+  const plainBog = new Set(c.plainBog ?? []);
   const result = canPlacePalisade(
     parseKey(c.coord),
     { walls: new Set(c.walls ?? []), gates: new Set(c.gates ?? []) },
     {
       terrainAt: (h: AxialCoord) => terrain[coordKey(h)] ?? 'grass',
       isRiver: (h: AxialCoord) => rivers.has(coordKey(h)),
+      isPlainBog: (h: AxialCoord) => plainBog.has(coordKey(h)),
     },
     { gate: c.gate ?? false },
   );
-  return { ...c, terrain, rivers: [...rivers], walls: c.walls ?? [], gates: c.gates ?? [], gate: c.gate ?? false, expected: result.ok ? { ok: true } : { reason: result.reason } };
+  return { ...c, terrain, rivers: [...rivers], plainBog: [...plainBog], walls: c.walls ?? [], gates: c.gates ?? [], gate: c.gate ?? false, expected: result.ok ? { ok: true } : { reason: result.reason } };
 });
 
 // 3. Land ends: sealed against a mountain or a wide river, otherwise half open (the sea included).

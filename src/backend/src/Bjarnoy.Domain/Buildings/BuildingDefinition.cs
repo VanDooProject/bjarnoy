@@ -85,6 +85,12 @@ public sealed record BuildingDefinition
     public bool AlsoOnCoastalWater { get; init; }
 
     /// <summary>
+    /// Alongside <see cref="AllowedTerrain"/>: bog tile kinds (<see cref="World.BogTileKind"/>) this building may also stand on. The
+    /// palisade's plain moss (<see cref="World.BogTileKind.Bog"/>; never a shore, mouth, creek or lake). <see langword="null"/> means no bog.
+    /// </summary>
+    public IReadOnlySet<World.BogTileKind>? AlsoOnBogKinds { get; init; }
+
+    /// <summary>
     /// This building's own hex must be a bog tile (<see cref="World.BogTile"/>) of one of these kinds — <see langword="null"/>
     /// (the default) means no such requirement. Bog-ore works and Clay Brickworks stand on plain moss
     /// (<see cref="World.BogTileKind.Bog"/>: not a shore, mouth, creek or lake), the Hammerschmiede on a creek
@@ -193,7 +199,9 @@ public sealed record BuildingDefinition
         }
         else
         {
-            terrainOk = AllowsTerrain(terrain) || (AlsoOnCoastalWater && isCoastalWater && terrain == Terrain.Sea);
+            terrainOk = AllowsTerrain(terrain)
+                || (AlsoOnCoastalWater && isCoastalWater && terrain == Terrain.Sea)
+                || (terrain == Terrain.Bog && bogKind is { } moss && AlsoOnBogKinds?.Contains(moss) == true);
         }
 
         if (terrainOk && RequiresBogKind is { } kinds)

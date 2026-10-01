@@ -231,8 +231,10 @@ behind a level-5 Tower, and has **3 levels**. Per hex it costs `C₁ = 40 wood /
 mirrors it in `palisadeTiles.ts`, and `src/shared/palisade-golden.json` keeps the
 two in step):
 
-- On a land hex inside the settlement's claim: grass, forest or sand. Not mountain,
-  bog, lake, any river tile (a stream or a wide river), or an occupied hex.
+- On a land hex inside the settlement's claim: grass, forest, sand or **plain bog moss**
+  (`BogTileKind.Bog`). Not mountain, a bog shore, mouth, creek or lake, any river tile
+  (a stream or a wide river), or an occupied hex. A wall hex keeps its own ground
+  (grass, forest floor without the trees, sand or bog moss) under the wall piece.
 - Or on a **coastal-water hex** inside the claim, as the wall's **sea end**: it must
   touch exactly one land wall hex, and it can never be a gate.
 - **Walls never branch**: no hex may end up with three or more wall neighbours,
@@ -264,7 +266,7 @@ gate), then the terrain cost.
 - A **gate** passes only its **owner's** armies (the same settlement owner), at the
   normal terrain cost. Anyone else is stopped like at any wall hex.
 - A **land end** (a plain palisade hex with exactly one wall neighbour) is **half open**:
-  every army crosses it at a flat cost of 3 in place of the terrain cost. If it touches
+  every army crosses it at a flat cost of 3 in place of the terrain cost (bog's 2 included). If it touches
   a mountain or a wide river it is a **sealed end** and blocks like any wall hex, so a
   wall run up to a river or a mountain still seals.
 - The **sea end** stays sea, impassable to land armies, so a wall that ends in one

@@ -786,7 +786,7 @@ public static class BuildingCatalogue
     /// <summary>
     /// One hex of the wall (<c>docs/design/economy.md</c> section 5), the same definition for the plain palisade and the gate:
     /// 40 wood and 10 stone at level 1, 2 minutes, then the standard growth (cost x1.30, time x1.33 per level), three levels. It stands
-    /// on grass, forest or sand, or as the wall's sea end on a coastal-water hex (<see cref="BuildingDefinition.AlsoOnCoastalWater"/>;
+    /// on grass, forest, sand or plain bog moss, or as the wall's sea end on a coastal-water hex (<see cref="BuildingDefinition.AlsoOnCoastalWater"/>;
     /// the gate is refused there by <see cref="Palisades.PalisadeRules"/>). Unlocks at LH 7 behind a level-5 Tower; no production,
     /// storage or claim of its own.
     /// </summary>
@@ -799,6 +799,7 @@ public static class BuildingCatalogue
         BuildDuration = Duration(2, level),
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
         AlsoOnCoastalWater = true,
+        AlsoOnBogKinds = PlainBogOnly,
     };
 
     /// <summary>

@@ -1919,7 +1919,7 @@ describe('WorldModel palisade and gate', () => {
     const [river, bog, lake] = line as [AxialCoord, AxialCoord, AxialCoord];
     model.setRiverTiles([riverTile(river, 'straight')]);
     model.setBogTiles([
-      { q: bog.q, r: bog.r, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] },
+      { q: bog.q, r: bog.r, kind: 'shore', inDirections: [], outDirection: null, waterEdges: ['E'] },
       { q: lake.q, r: lake.r, kind: 'lake', inDirections: [], outDirection: null, waterEdges: [] },
     ]);
     const mountain = hexesInRadius(at, 40).find((c) => model.getTile(c.q, c.r).terrain === 'mountain');
@@ -1932,6 +1932,23 @@ describe('WorldModel palisade and gate', () => {
     }
     expect(model.placeBuilding(settlement.id, bog, 'palisade')).toBe(false);
     expect(model.placeBuilding(settlement.id, { q: settlement.q + 40, r: settlement.r }, 'palisade')).toBe(false);
+  });
+
+  it('places a wall on plain bog moss and refuses a bog creek and shore', () => {
+    const { model, settlement, line } = walledSetting(3);
+    const [moss, creek, shore] = line as [AxialCoord, AxialCoord, AxialCoord];
+    model.setBogTiles([
+      { q: moss.q, r: moss.r, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] },
+      { q: creek.q, r: creek.r, kind: 'creek', inDirections: ['W'], outDirection: 'E', waterEdges: [] },
+      { q: shore.q, r: shore.r, kind: 'shore', inDirections: [], outDirection: null, waterEdges: ['E'] },
+    ]);
+
+    expect(model.palisadePlacement(moss, false)).toEqual({ ok: true });
+    expect(model.placeBuilding(settlement.id, moss, 'palisade')).toBe(true);
+    expect(model.getTile(moss.q, moss.r).buildingType).toBe('palisade');
+    expect(model.palisadePlacement(creek, false)).toEqual({ ok: false, reason: 'notAllowedOnTerrain' });
+    expect(model.palisadePlacement(shore, false)).toEqual({ ok: false, reason: 'notAllowedOnTerrain' });
+    expect(model.placeBuilding(settlement.id, creek, 'palisade')).toBe(false);
   });
 
   it('counts queued wall orders as wall hexes when a new hex is judged', () => {

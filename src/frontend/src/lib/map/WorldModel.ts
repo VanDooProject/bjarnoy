@@ -1654,7 +1654,7 @@ export class WorldModel {
     gates.delete(coordKey(at));
     const existing: WallSet = { walls, gates };
     const isRiver = (c: AxialCoord) => this.getRiverTile(c.q, c.r) !== undefined;
-    const result = canPlacePalisade(at, existing, { terrainAt: (c) => this.terrainOf(c.q, c.r), isRiver }, { gate });
+    const result = canPlacePalisade(at, existing, { terrainAt: (c) => this.terrainOf(c.q, c.r), isRiver, isPlainBog: (c) => this.bogByHex.get(coordKey(c))?.kind === 'bog' }, { gate });
     if (result.ok) return result;
     if (result.reason === 'notAllowedOnTerrain') {
       if (isRiver(at)) return { ok: false, reason: 'river' };

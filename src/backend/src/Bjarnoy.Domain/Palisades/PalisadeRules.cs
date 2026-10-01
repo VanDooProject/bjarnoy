@@ -56,7 +56,8 @@ public sealed record WallSet(IReadOnlySet<HexCoord> Walls, IReadOnlySet<HexCoord
 /// <summary>What a placement needs to know about the map.</summary>
 public sealed record PalisadePlacementContext(
     Func<HexCoord, Terrain> TerrainAt,
-    Func<HexCoord, bool> IsRiver);
+    Func<HexCoord, bool> IsRiver,
+    Func<HexCoord, bool>? IsPlainBog = null);
 
 /// <summary>
 /// Which palisade piece (and which of its six camera files) a wall hex renders with, and the placement rules that keep every wall
@@ -214,7 +215,9 @@ public static class PalisadeRules
         }
 
         var water = terrain == Terrain.Sea;
-        if (!water && terrain is not (Terrain.Grass or Terrain.Sand or Terrain.Forest))
+        // Plain bog moss takes a wall too; a bog shore, mouth, creek or lake does not.
+        var plainBog = terrain == Terrain.Bog && ctx.IsPlainBog?.Invoke(coord) == true;
+        if (!water && !plainBog && terrain is not (Terrain.Grass or Terrain.Sand or Terrain.Forest))
         {
             return PalisadeRefusal.NotAllowedOnTerrain;
         }

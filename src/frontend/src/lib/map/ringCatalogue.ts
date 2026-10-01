@@ -203,10 +203,12 @@ export function buildingAllowedOnHex(
   tile: { terrain: string; isCoastalWater?: boolean; bog?: { kind: BogTileKind } },
 ): boolean {
   if (tile.terrain === 'lake') return false;
-  // A wall stands on grass, forest or sand; the palisade (not the gate) also on coastal water, as the wall's sea end. Whether the
+  // A wall stands on grass, forest, sand or plain bog moss; the palisade (not the gate) also on coastal water, as the wall's sea end. Whether the
   // hex then takes one is the wall rules' (`WorldModel.palisadePlacement`).
   if (type === 'palisade' || type === 'palisadegate') {
     if (tile.terrain === 'sea') return type === 'palisade' && tile.isCoastalWater === true;
+    // Plain bog moss only (not a shore, mouth, creek or lake), like the bog buildings' kind check.
+    if (tile.terrain === 'bog') return tile.bog?.kind === 'bog';
     return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
   }
   const bogKinds = BOG_KINDS_BY_TYPE[type];

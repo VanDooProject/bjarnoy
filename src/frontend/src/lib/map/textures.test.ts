@@ -1858,15 +1858,21 @@ describe('palisade art', () => {
     ['grass', 'grass-base'],
     ['forest', 'forest-floor-base'],
     ['sand', 'sand-base'],
+    ['bog', 'bog-base'],
   ] as const)('a wall on %s keeps that ground underneath, in the hex\'s own rotation, and draws no tree variant', (terrain, ground) => {
     const textures = emptyTextures();
     for (const [key, name] of [['grass', 'grass-base'], ['forest', 'forest-floor-base'], ['sand', 'sand-base']] as const) {
       textures.base[key] = Object.fromEntries(ORIENTATIONS.map((o) => [o, `${name}-${o}`])) as never;
     }
+    // Bog bases are per variant (the plain one first); a wall hex takes the plain one, in the bog hex's own rotation.
+    textures.baseIndexed.bog = Object.fromEntries(ORIENTATIONS.map((o) => [o, [`bog-base-${o}`, `bog-variant1-${o}`]])) as never;
     textures.top.forest = orientationMap(['forest-trees'] as unknown as never);
     textures.top.palisadestraight = orientationMap(['wall-site', 'wall-1'] as unknown as never);
     const art = palisadeArtFor({ wallNeighbours: flagsOf([0, 3]), coastalWater: false, gate: false });
-    const tile: Tile = { q: 0, r: 0, terrain, orientation: 'NE', buildingType: 'palisade', buildingLevel: 1 };
+    const tile: Tile = {
+      q: 0, r: 0, terrain, orientation: 'NE', buildingType: 'palisade', buildingLevel: 1, variant: 1,
+      ...(terrain === 'bog' ? { bog: { q: 0, r: 0, kind: 'bog' as const, inDirections: [], outDirection: null, waterEdges: [] } } : {}),
+    };
 
     // The ground is the terrain's own base at the tile's rotation (not the wall's camera file), the top is the wall's.
     expect(baseTextureFor(textures, tile, art)).toBe(`${ground}-NE`);

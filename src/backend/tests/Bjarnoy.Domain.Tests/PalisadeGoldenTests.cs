@@ -57,6 +57,7 @@ public class PalisadeGoldenTests
         var c = Section("placementCases").EnumerateArray().Single(e => e.GetProperty("name").GetString() == name);
         var terrain = c.GetProperty("terrain").EnumerateObject().ToDictionary(p => ParseKey(p.Name), p => ParseTerrain(p.Value.GetString()!));
         var rivers = c.GetProperty("rivers").EnumerateArray().Select(e => ParseKey(e.GetString()!)).ToHashSet();
+        var plainBog = c.GetProperty("plainBog").EnumerateArray().Select(e => ParseKey(e.GetString()!)).ToHashSet();
         var walls = c.GetProperty("walls").EnumerateArray().Select(e => ParseKey(e.GetString()!)).ToHashSet();
         var gates = c.GetProperty("gates").EnumerateArray().Select(e => ParseKey(e.GetString()!)).ToHashSet();
         var expected = c.GetProperty("expected");
@@ -64,7 +65,7 @@ public class PalisadeGoldenTests
         var refusal = PalisadeRules.CanPlace(
             ParseKey(c.GetProperty("coord").GetString()!),
             new WallSet(walls, gates),
-            new PalisadePlacementContext(h => terrain.GetValueOrDefault(h, Terrain.Grass), rivers.Contains),
+            new PalisadePlacementContext(h => terrain.GetValueOrDefault(h, Terrain.Grass), rivers.Contains, plainBog.Contains),
             c.GetProperty("gate").GetBoolean());
 
         if (expected.TryGetProperty("ok", out _))
