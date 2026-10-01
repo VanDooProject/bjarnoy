@@ -34,8 +34,7 @@ public class PremiumSimulatorTests
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
+        var appHost = await TestAppHost.CreateAsync(cancellationToken);
 
         await using var app = await appHost.BuildAsync(cancellationToken);
         await app.StartAsync(cancellationToken);
