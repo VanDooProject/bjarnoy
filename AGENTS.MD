@@ -211,8 +211,16 @@
     `playwright.ps1 install` needed — `Microsoft.Playwright` 1.56 finds the
     pre-installed `/opt/pw-browsers/chromium-1194` via
     `PLAYWRIGHT_BROWSERS_PATH`. Run it from
-    `src/backend/tests/Bjarnoy.AppHost.Tests` with `dotnet test`; a single
-    class can be targeted with `dotnet test -- --filter-class "*ChatFlowTests"`.
+    `src/backend/tests/Bjarnoy.AppHost.Tests` with **`CI=true dotnet test`**;
+    a single class can be targeted with
+    `CI=true dotnet test -- --filter-class "*ChatFlowTests"`. The `CI=true`
+    matters: without it `AppHost.cs` treats the run as local dev and gives
+    Postgres a persistent volume + container (+ pgAdmin), so every test —
+    and every later run — shares one database, and tests that expect a
+    fresh one fail locally for reasons CI never sees (`Assert.Single` on
+    worlds finding 2, 409s, pgAdmin health-check noise). With `CI=true` each
+    test gets its own empty database exactly like the `aspire-e2e` job
+    (verified 2026-10-01: 12/12 pass, ~20 min).
   If a pull ever does come back `403 Forbidden`, that's an egress-policy
   change for that session (see `/root/.ccr/README.md`): don't route around
   it, say so, and rely on CI — but try the pull first rather than assuming.
