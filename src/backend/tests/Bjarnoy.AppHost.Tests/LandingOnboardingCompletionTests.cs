@@ -52,7 +52,10 @@ public class LandingOnboardingCompletionTests
 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
-        var page = await browser.NewPageAsync();
+        // Reduced motion, like OnboardingHappyPathTests: the "Name your jarl"
+        // nudge bobs (ProfileNudge.vue's nudge-bob), and Playwright never
+        // sees its "Later" button stable enough to click while it moves.
+        var page = await browser.NewPageAsync(new BrowserNewPageOptions { ReducedMotion = ReducedMotion.Reduce });
         var consoleErrors = page.CollectConsoleErrors();
 
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
