@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'src/frontend/**'
+      - 'src/shared/**'
       - '.github/workflows/frontend-ci.yml'
   pull_request:
     paths:
       - 'src/frontend/**'
+      - 'src/shared/**'
       - '.github/workflows/frontend-ci.yml'
 
 defaults:
