@@ -759,6 +759,67 @@ describe('startTextureLoad', () => {
     warn.mockRestore();
   });
 
+  it('merges and redraws each building partial as it arrives, then merges the final result', async () => {
+    const terrain = { id: 'terrain' } as unknown as TileTextures;
+    const p1 = { id: 'p1' } as unknown as TileTextures;
+    const p2 = { id: 'p2' } as unknown as TileTextures;
+    const final = { id: 'final' } as unknown as TileTextures;
+    let current: TileTextures = terrain;
+    const log: string[] = [];
+    const deps = fakeDeps({
+      mode: 'settlement',
+      loadTerrain: async () => terrain,
+      loadBuildings: async (_onProgress, onPartial) => {
+        onPartial(p1);
+        await Promise.resolve();
+        onPartial(p2);
+        return final;
+      },
+      merge: (base, next) => ({ ...base, merged: [...((base as { merged?: string[] }).merged ?? []), (next as { id: string }).id] }) as unknown as TileTextures,
+      getTextures: () => current,
+      setTextures: (t) => {
+        current = t;
+        log.push(`set:${((t as { merged?: string[] }).merged ?? []).join('+')}`);
+      },
+      rebuildAll: () => log.push('rebuild'),
+    });
+
+    const { done } = startTextureLoad(deps);
+    await done;
+    expect(log).toEqual([
+      'set:',
+      'set:p1',
+      'rebuild',
+      'set:p1+p2',
+      'rebuild',
+      'set:p1+p2+final',
+      'rebuild',
+    ]);
+  });
+
+  it('ignores building partials once the renderer is destroyed', async () => {
+    let destroyed = false;
+    const setTextures = vi.fn();
+    const rebuildAll = vi.fn();
+    const deps = fakeDeps({
+      mode: 'settlement',
+      loadBuildings: async (_onProgress, onPartial) => {
+        destroyed = true;
+        onPartial(FAKE_TEXTURES);
+        return FAKE_TEXTURES;
+      },
+      isDestroyed: () => destroyed,
+      setTextures,
+      rebuildAll,
+    });
+
+    const { done } = startTextureLoad(deps);
+    await done;
+    // Only the terrain assignment happened (it ran before the destroy).
+    expect(setTextures).toHaveBeenCalledTimes(1);
+    expect(rebuildAll).not.toHaveBeenCalled();
+  });
+
   it('propagates a terrain-load rejection through terrainReady, and never narrates buildings/ready', async () => {
     const states: MapLoadState[] = [];
     const deps = fakeDeps({

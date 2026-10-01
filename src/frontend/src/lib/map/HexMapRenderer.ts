@@ -1308,7 +1308,16 @@ export interface TextureLoadDeps {
    * full building stage still runs.
    */
   loadLevel1?: () => Promise<TileTextures>;
-  loadBuildings: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
+  /**
+   * `onPartial` is called with the art built from the pages loaded so far
+   * (pages arrive in priority order; each partial is a superset of the
+   * previous one) before the final result resolves — `startTextureLoad`
+   * merges and draws each, so buildings appear page by page.
+   */
+  loadBuildings: (
+    onProgress: (loaded: number, total: number) => void,
+    onPartial: (partial: TileTextures) => void,
+  ) => Promise<TileTextures>;
   merge: (base: TileTextures, buildings: TileTextures) => TileTextures;
   isDestroyed: () => boolean;
   getTextures: () => TileTextures | null;
@@ -1384,9 +1393,17 @@ export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
       }
     }
     try {
-      const buildings = await deps.loadBuildings((loaded, total) => {
-        if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total) });
-      });
+      const buildings = await deps.loadBuildings(
+        (loaded, total) => {
+          if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total) });
+        },
+        (partial) => {
+          const base = deps.getTextures();
+          if (deps.isDestroyed() || !base) return;
+          deps.setTextures(deps.merge(base, partial));
+          deps.rebuildAll();
+        },
+      );
       const base = deps.getTextures();
       if (deps.isDestroyed() || !base) return;
       deps.setTextures(deps.merge(base, buildings));
@@ -1970,7 +1987,7 @@ export class HexMapRenderer {
           return null;
         }),
       loadLevel1: () => loadLevel1Atlases(),
-      loadBuildings: (onProgress) => loadBuildingAtlases(onProgress),
+      loadBuildings: (onProgress, onPartial) => loadBuildingAtlases(onProgress, onPartial),
       merge: mergeTileTextures,
       isDestroyed: () => this.destroyed,
       getTextures: () => this.textures,
@@ -3042,7 +3059,13 @@ export class HexMapRenderer {
       const generation = this.animGeneration;
       if (!this.animCoreReady) {
         this.animCoreReady = true;
-        loadAnimAtlases()
+        loadAnimAtlases((partial) => {
+          // Clips arrive page by page; merge each batch as it lands (same
+          // guards as the final result below).
+          if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+          this.textures = mergeTileTextures(this.textures, partial);
+          this.rebuildAll();
+        })
           .then((anim) => {
             if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
             this.textures = mergeTileTextures(this.textures, anim);
@@ -3055,7 +3078,11 @@ export class HexMapRenderer {
       }
       if (!this.wastedAnimReady && this.options.worldModel.isWastedRevealed()) {
         this.wastedAnimReady = true;
-        loadPackAnimAtlases('wasted')
+        loadPackAnimAtlases('wasted', (partial) => {
+          if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+          this.textures = mergeTileTextures(this.textures, partial);
+          this.rebuildAll();
+        })
           .then((anim) => {
             if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
             this.textures = mergeTileTextures(this.textures, anim);
