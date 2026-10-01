@@ -66,7 +66,103 @@ follows a river through a lake, so its `inland mouths` count stays 0.
 acceptance statistics over several seeds: bogs and lakes per island, lake sizes, through-river bogs, sinks/spawns shares,
 pockets, and the violations per rule.
 
+## The pathing preview
+
+Checks the owner's decided movement and palisade rules on example renders **before** anything changes in the game. A sibling
+script (the layer needs a scenario, not just a seed) that reuses the preview renderer:
+
+```bash
+cd src/frontend
+npm run worldgen-pathing -- ../../scripts/worldgen-preview/scenarios/c-sea-end-seals.json --out c.png
+npm run worldgen-pathing -- --all --out-dir /tmp/pathing        # every scenario, pathing-<name>.png
+npx tsx ../../scripts/worldgen-preview/pathing-stats.ts --seeds 1-8 --radius 1000    # whole-world statistics
+```
+
+It draws, for a seed and a `--window`-style window of the real generator's world:
+
+- terrain, with **mountains hatched** (impassable), **wide rivers** thick and dark blue (impassable), **streams** thin and light
+  blue (crossable at +8), bog and lake from the bog generator, and a faint hex grid so adjacency can be counted;
+- every **palisade hex as the real centreline of its piece**, in the rotation `src/frontend/src/lib/map/palisadeTiles.ts`
+  picks (the art contract's: a straight edge to edge, `bend60` an arc of r 0.5 round the shared corner, `bend120` an arc of
+  r 1.5 round the far corner, an end running 0.46 past the centre to a lookout square, the sea end dashed). A wrong rotation
+  shows as a wall that does not meet its neighbour. Gates are the bright bar and two posts. `"labels": true` prints piece and
+  camera (`STRAIGHT NW`) on every hex;
+- every **route** as the A* polyline (friendly green, enemy red; `A` at the origin, `A'` at the destination) or a big red
+  **NO ROUTE** at the destination; magenta crosses mark **refused placements** with the reason;
+- optionally (`"flood"`) a faint yellow tint over everything reachable from a route's origin, so a sealed enclosure shows
+  as the untinted area.
+
+The footer prints, per scenario, the rules in force, the wall's piece counts, every refused placement and one line per route:
+`ROUTE A ENEMY 206,-653 > 207,-649: NO ROUTE   (OLD RULES 5 STEPS COST 5.3)` or `... 7 STEPS  COST 7.5 ...`. "Old rules" is
+the same pair under the backend's current rules (no new restriction, no wall), for comparison.
+
+### Scenario files
+
+`scenarios/<name>.json` (the file name is the scenario's `name`):
+
+```jsonc
+{
+  "name": "c-sea-end-seals",           // required; also the PNG's name
+  "title": "one line: what it shows",  // shown in the footer; only characters the bitmap font has (checked by the tests)
+  "seed": 11, "radius": 1000,          // the world (radius is part of the terrain)
+  "window": { "q": 205, "r": -650, "size": 22 },   // centre hex and hexes across, like --window
+  "px": 36,                            // pixels per hex circumradius (default 22)
+  "wallLines": [[[200,-651],[210,-651]]],   // polylines of corners; every hex on the hex lines between them is a wall hex
+  "walls": [[200,-651], [201,-651]],   // explicit wall hexes, placed one by one after the lines; a sea hex last is the sea end
+  "gates": [[205,-651]],               // wall hexes upgraded to gates once the wall stands
+  "attempts": [[7,8], [9,9,"gate"]],   // extra placements tried last: accepted ones join the wall, refused ones are marked
+  "routes": [{ "from": [206,-653], "to": [207,-649], "army": "enemy" /* or friendly */, "label": "A" }],
+  "rules": { "wideRivers": true, "mountains": true, "palisade": true },   // each on by default; turn one off to compare
+  "flood": 0,                          // tint what is reachable from route 0's origin (true = route 0)
+  "labels": true                       // print piece and camera on every wall hex
+}
+```
+
+Coordinates are axial `[q, r]`. Wall hexes are placed in order through `canPlacePalisade`, so a hex the rules refuse (a branch,
+a gate that is not on a straight, a river, mountain, lake or bog hex, a second sea end, ...) is not drawn as wall but marked and
+named in the footer. Friendly routes pass gate hexes, enemy routes do not; every route pays the backend's costs (grass 1.0,
+sand 1.1, forest 1.3, bog 2.0, +8 to enter a river hex) with the rules above switched on through `PathContext.restrictions`
+(`src/frontend/src/lib/map/hexPath.ts`: default off, so the game's own pathing is unchanged).
+
+A route whose origin or destination is itself impassable (a mountain, a wall, sea) reports `NO ROUTE (DESTINATION IS A MOUNTAIN)`
+rather than silently blaming the wall; pick endpoints on walkable land.
+
+The shipped scenarios, all on seed 11 at radius 1000:
+
+| file | shows |
+| --- | --- |
+| `a-wide-river-vs-stream` | route A across a wide river walks 33 steps upstream to where it starts as a stream (cost 45.6, was 15.7); route B across a stream goes straight over at +8, same as before |
+| `b-mountains-block` | mountains impassable: the route round a horseshoe ridge is 25 steps instead of 8 |
+| `c-sea-end-seals` | wall from a wide river to the sea, ending in `palisade_end_coast`, with a gate: the enemy has no route in, the friendly army walks through the gate |
+| `d-land-end-at-coast` | the same wall with a plain land end: **it seals just the same** (see below) |
+| `d2-land-end-one-short` | the same wall one hex short of the coast: the enemy walks round the open end |
+| `e-mountain-to-river-seals` | a five-hex wall from a mountain to a wide river seals 888 hexes |
+| `f-every-piece` | every piece and rotation (ends and straights on all axes, gate, `bend120` as a ring and a meander, `bend60` as two triangles, sea end) with a refused branch and a refused gate marked |
+
+### What the rules turned out to mean on the hex grid
+
+- **A land end touching the sea is already sealed** (scenario d). Sea is impassable and the end hex is blocked, and a hex
+  grid has no diagonal moves, so there is no way round a wall tip that touches open sea; the sea-end piece is a
+  *visual* closing of the shallows and changes nothing for land armies (the sea hex was impassable anyway). The only way to
+  walk round is to leave a land hex between the tip and the sea (d2). Rule 5 as worded ("only seals with the sea-end piece")
+  would need an explicit rule, not just `blocked` + impassable sea.
+- **`bend60` only exists in a triangle.** Its two edges are adjacent, so the two neighbours it joins are neighbours of each
+  other, and each of the three hexes then has exactly two wall neighbours. A bend60 can never be part of an open line (a
+  fourth hex would branch); in `f-every-piece` it is two three-hex triangles. Likewise two wall arms one hex apart branch.
+- **A `widen` or `riverstream` hex is crossable** under "wide = width `river`": it is a gap in an otherwise wide line (a stream
+  joining a river). `pathing-stats.ts` measures that variant too; it adds about 0.1 points of unreachable land.
+- **Mountains are 15.6 % of all land**, so making them impassable cuts islands apart far more than wide rivers do.
+
+### Whole-world statistics
+
+`pathing-stats.ts --seeds 1-8 --radius 1000 [--islands]` measures, per island (a landmass of at least 6 hexes), how much
+walkable land is outside the island's largest connected walkable region under five rule sets (old rules; the decided rules;
+the decided rules with `widen`/`riverstream` also impassable; mountains only; wide rivers only), plus how much land is itself
+impassable.
+
 ## Tests
 
 `npx vitest run ../../scripts/worldgen-preview` (also part of `npm run test:unit`): PNG
-encoder round-trip and CRC, legend/colour-table agreement, font coverage, CLI parsing.
+encoder round-trip and CRC, legend/colour-table agreement, font coverage, CLI parsing, and the pathing preview: centrelines
+square to their edges and meeting their neighbours for every piece, the shipped scenarios' verdicts (a few seconds each:
+they generate the real world), the statistics.
