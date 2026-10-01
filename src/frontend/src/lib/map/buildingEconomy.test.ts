@@ -4,6 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   additionalStorageHouseRequirement,
+  ravensRings,
+  wisdomBuildTimeFactor,
   buildingStatsFor,
   buildingUpgradeCost,
   isNearAnyOf,
@@ -202,5 +204,24 @@ describe('additionalStorageHouseRequirement (mirrors BuildingCatalogue.Additiona
     expect(additionalStorageHouseRequirement(3)).toEqual({ count: 3, level: 20 });
     expect(additionalStorageHouseRequirement(4)).toEqual({ count: 4, level: 25 });
     expect(additionalStorageHouseRequirement(9)).toEqual({ count: 4, level: 25 });
+  });
+});
+
+describe('Odin Statue favour (mirrors ShrineCatalogue.Favour(Odin))', () => {
+  it('takes 2% off build times and adds 2 vision rings per level, capped at level 5', () => {
+    expect(wisdomBuildTimeFactor(0)).toBe(1);
+    expect(wisdomBuildTimeFactor(1)).toBeCloseTo(0.98, 9);
+    expect(wisdomBuildTimeFactor(5)).toBeCloseTo(0.9, 9);
+    expect(wisdomBuildTimeFactor(9)).toBeCloseTo(0.9, 9);
+    expect(ravensRings(0)).toBe(0);
+    expect(ravensRings(1)).toBe(2);
+    expect(ravensRings(5)).toBe(10);
+    expect(ravensRings(9)).toBe(10);
+  });
+
+  it('describes both effects on the building card', () => {
+    expect(buildingStatsFor('odinstatue', 5).modifier).toEqual({ kind: 'odinFavour', buildTimePercent: 10, visionRings: 10 });
+    expect(buildingStatsFor('odinstatue', 2).modifier).toEqual({ kind: 'odinFavour', buildTimePercent: 4, visionRings: 4 });
+    expect(maxLevelFor('odinstatue')).toBe(5);
   });
 });

@@ -55,7 +55,8 @@ export type Slot = readonly [col: number, row: number];
  * source with a second target (Farm -> Meadery, Barracks -> Weaponsmith, Town
  * Square -> Druid Hut) drops it one row down, below its own row's chain, and
  * its trunk runs down the gutter beside it. The Weaponsmith (Smithy) has the
- * Shrine of Thor as its own capstone in the last column.
+ * Shrine of Thor as its own capstone in the last column, and the Druid Hut the
+ * Odin Statue.
  *
  * Farm and Pumpkin Farm are two building types (their soil rules differ) but
  * one card: only `farm` has a slot here, and `MERGED_CARDS` (nodes.ts) names
@@ -106,6 +107,8 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   townsquare: [1, 8],
   cartworkshop: [2, 8],
   druidhut: [2, 9],
+  // Row 9 — the Druid Hut (LH 12) -> Odin Statue (LH 25).
+  odinstatue: [3, 9],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;

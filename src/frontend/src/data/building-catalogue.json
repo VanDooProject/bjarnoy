@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-10-01T11:19:05.245Z"
+    "generatedAt": "2026-10-01T11:29:11.358Z"
   },
   "data": [
     {
@@ -15089,6 +15089,171 @@
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "odinstatue",
+      "level": 1,
+      "cost": {
+        "wood": 180,
+        "stone": 140,
+        "food": 60,
+        "iron": 0
+      },
+      "buildSeconds": 720,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 25,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [
+        {
+          "type": "druidhut",
+          "level": 10
+        }
+      ]
+    },
+    {
+      "type": "odinstatue",
+      "level": 2,
+      "cost": {
+        "wood": 234,
+        "stone": 182,
+        "food": 78,
+        "iron": 0
+      },
+      "buildSeconds": 958,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 25,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "odinstatue",
+      "level": 3,
+      "cost": {
+        "wood": 304.20000000000005,
+        "stone": 236.60000000000002,
+        "food": 101.4,
+        "iron": 0
+      },
+      "buildSeconds": 1274,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 25,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "odinstatue",
+      "level": 4,
+      "cost": {
+        "wood": 395.46000000000004,
+        "stone": 307.58,
+        "food": 131.82,
+        "iron": 0
+      },
+      "buildSeconds": 1694,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 25,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "odinstatue",
+      "level": 5,
+      "cost": {
+        "wood": 514.0980000000001,
+        "stone": 399.8540000000001,
+        "food": 171.36600000000004,
+        "iron": 0
+      },
+      "buildSeconds": 2253,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 25,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,

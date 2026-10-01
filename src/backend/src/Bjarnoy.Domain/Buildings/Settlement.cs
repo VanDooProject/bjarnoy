@@ -682,9 +682,7 @@ public sealed record Settlement
 
             resources = paid;
 
-            var duration = speedFactor == 1.0
-                ? candidate.BaseDuration
-                : TimeSpan.FromTicks((long)(candidate.BaseDuration.Ticks / speedFactor));
+            var duration = ScaledBuildDuration(candidate.BaseDuration, speedFactor);
             var started = candidate with { StartedAt = now, CompletesAt = now + duration };
             queue[queue.FindIndex(o => o.Id == candidate.Id)] = started;
 
@@ -1255,9 +1253,7 @@ public sealed record Settlement
 
         if (fitsNow)
         {
-            var duration = speedFactor == 1.0
-                ? definition.BuildDuration
-                : TimeSpan.FromTicks((long)(definition.BuildDuration.Ticks / speedFactor));
+            var duration = ScaledBuildDuration(definition.BuildDuration, speedFactor);
 
             return BuildDecision.Accept(new BuildOrder
             {
@@ -1904,6 +1900,35 @@ public sealed record Settlement
 
         return total.Capped(MaxEffectBonus, MaxEffectBonus, MaxEffectBonus);
     }
+
+    /// <summary>
+    /// A catalogue build duration as it actually runs here: divided by the
+    /// world's speed factor and multiplied by <see cref="BuildTimeFactor"/>.
+    /// </summary>
+    private TimeSpan ScaledBuildDuration(TimeSpan baseDuration, double speedFactor)
+    {
+        var wisdom = BuildTimeFactor;
+        return speedFactor == 1.0 && wisdom == 1.0
+            ? baseDuration
+            : TimeSpan.FromTicks((long)(baseDuration.Ticks * wisdom / speedFactor));
+    }
+
+    /// <summary>
+    /// The multiplier on every new build order's duration from Odin's Wisdom:
+    /// <c>1 − 0.02 · level</c> of the standing Odin Statue (0.90 at level 5),
+    /// 1.0 without one. Applied where an order starts — at planning for an
+    /// order that starts at once, at promotion for a waiting one — so the level
+    /// at that moment counts and an order already running is never rescaled.
+    /// </summary>
+    public double BuildTimeFactor => 1.0 - ActiveEffect(Buildings, []).BuildTimeReduction;
+
+    /// <summary>
+    /// Extra rings of fog vision from Odin's Ravens (<c>2 · level</c> of the
+    /// standing Odin Statue, 10 at level 5; 0 without one), added to the
+    /// settlement's own vision disc, to each tower's and to its travelling
+    /// armies' (<see cref="World.FogVisionRadii"/>).
+    /// </summary>
+    public int VisionBonusRings => ActiveEffect(Buildings, []).VisionBonusRings;
 
     /// <summary>
     /// This settlement's current attack bonus, as a percentage — the

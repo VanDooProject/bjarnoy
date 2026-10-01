@@ -20,6 +20,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   shrineofthor: 'torshrine',
   shrineoffreyja: 'freyjashrine',
   shrineofullr: 'ullrshrine',
+  odinstatue: 'odinstatue',
   shrineofnjord: 'njordshrine',
   // `farm_crop` is the legacy, non-scripted family (VanDooProject/3d_assets'
   // asset-inventory.md: "Legacy, non-scripted... its lowest level used to be

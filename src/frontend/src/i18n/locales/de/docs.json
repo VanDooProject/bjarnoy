@@ -53,6 +53,7 @@
     "druidhut": "Druidenhütte",
     "cartworkshop": "Wagnerei",
     "claybrickworks": "Ziegelei",
+    "odinstatue": "Odin-Statue",
     "reindeerherder": "Rentierhirte"
   },
   "techTree": {
@@ -88,6 +89,7 @@
       "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und wie viele Siedler im Dorf leben — jede Siedlung beginnt mit einem, stehend auf Gras.",
       "lumberjack": "Fällt Holz auf bewaldetem Grund — das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm — die Knochen jeder Festung.",
+      "odinstatue": "Odins Statue auf Gras, ab Langhaus 25 hinter einer Druidenhütte der Stufe 10. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (10 % auf Stufe 5). Raben: Ihr Gebiet, ihre Türme und ihre Heere sehen pro Stufe 2 Ringe weiter (10 auf Stufe 5). Zählt als der eine Schrein der Siedlung.",
       "reindeerherder": "Eine Hirtenhütte und ein Rentiergehege auf offenem Grasland — das erste Nahrungsgebäude der Siedlung, von Anfang an verfügbar.",
       "farm": "Zieht Nahrung auf offenem Grasland und hält den Tisch des Langhauses gefüllt. Auf jeder Insel baubar, unabhängig vom Boden, ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 (er und die Kürbisfarm teilen sich eine Karte im Technologiebaum).",
       "storagehouse": "Zusätzlicher Platz für die Ernte auf Gras, damit ein volles Lager die Produktion nie stoppt.",

@@ -192,6 +192,16 @@ public enum BuildingType
     /// integers do not shift.
     /// </summary>
     ReindeerHerder = 26,
+
+    /// <summary>
+    /// Raised to Odin (<see cref="Shrines.GodType.Odin"/>), on grass, at
+    /// Longhouse 25 behind a level-10 <see cref="DruidHut"/>. Counts as a shrine:
+    /// a settlement holds only one shrine in total. Its favour is not a
+    /// production or attack bonus but two effects on its own settlement —
+    /// Wisdom (shorter builds) and Ravens (wider vision). Appended at the end so
+    /// persisted integers do not shift.
+    /// </summary>
+    OdinStatue = 27,
 }
 
 public static class BuildingTypeExtensions
@@ -225,6 +235,7 @@ public static class BuildingTypeExtensions
         BuildingType.CartWorkshop => "cartworkshop",
         BuildingType.ClayBrickworks => "claybrickworks",
         BuildingType.ReindeerHerder => "reindeerherder",
+        BuildingType.OdinStatue => "odinstatue",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

@@ -50,7 +50,8 @@ public static class BuildingCatalogue
             or BuildingType.CropMill => 20,
         BuildingType.Tower or BuildingType.GreatStorehouse => 10,
         BuildingType.ShrineOfThor or BuildingType.ShrineOfFreyja
-            or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord => 5,
+            or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord
+            or BuildingType.OdinStatue => 5,
         _ => 0,
     };
 
@@ -125,6 +126,7 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfFreyja] = 25,
             [BuildingType.ShrineOfNjord] = 25,
             [BuildingType.ShrineOfThor] = 25,
+            [BuildingType.OdinStatue] = 25,
         };
 
     /// <summary>
@@ -220,6 +222,9 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
             [BuildingType.ShrineOfNjord] = [new(BuildingType.Dockyard, 10)],
             [BuildingType.ShrineOfThor] = [new(BuildingType.Smithy, 5)],
+            // A settlement holds only one shrine, so Odin cannot ask for
+            // another one as a feeder; the Druid Hut is the civic line's end.
+            [BuildingType.OdinStatue] = [new(BuildingType.DruidHut, 10)],
         };
 
     /// <summary>
@@ -273,6 +278,7 @@ public static class BuildingCatalogue
             BuildingType.ShrineOfFreyja => Shrine(type, level),
             BuildingType.ShrineOfUllr => Shrine(type, level),
             BuildingType.ShrineOfNjord => Shrine(type, level),
+            BuildingType.OdinStatue => Shrine(type, level),
             BuildingType.GreatStorehouse => GreatStorehouse(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
@@ -469,6 +475,7 @@ public static class BuildingCatalogue
         BuildingType.ShrineOfFreyja => GodType.Freyja,
         BuildingType.ShrineOfUllr => GodType.Ullr,
         BuildingType.ShrineOfNjord => GodType.Njord,
+        BuildingType.OdinStatue => GodType.Odin,
         _ => null,
     };
 

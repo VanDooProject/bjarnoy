@@ -273,6 +273,56 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.placeBuilding(settlement.id, spots[1], 'farm')).toBe(true);
   });
 
+  it("widens a settlement's vision discs by Odin's Ravens and shortens its builds with Wisdom", () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    settlement.level = 3;
+    const before = model.visionDiscsFor(settlement)[0].radius;
+    const exploredBefore = model.exploredRadius(settlement);
+    expect(model.ravensRingsFor(settlement.id)).toBe(0);
+    expect(model.wisdomFactor(settlement.id)).toBe(1);
+    const signatureBefore = model.fogSignature();
+
+    expect(model.placeBuilding(settlement.id, spots[0], 'odinstatue')).toBe(true);
+
+    expect(model.odinLevel(settlement.id)).toBe(1);
+    expect(model.ravensRingsFor(settlement.id)).toBe(2);
+    expect(model.visionDiscsFor(settlement)[0].radius).toBe(before + 2);
+    expect(model.exploredRadius(settlement)).toBe(exploredBefore + 2);
+    expect(model.wisdomFactor(settlement.id)).toBeCloseTo(0.98, 9);
+    expect(model.fogSignature()).not.toBe(signatureBefore);
+    // it is the settlement's one shrine
+    expect(model.placeBuilding(settlement.id, spots[1], 'shrineofthor')).toBe(false);
+
+    model.getTile(spots[0].q, spots[0].r).buildingLevel = 4;
+    expect(model.upgradeBuilding(settlement.id, spots[0])).toBe(true);
+    expect(model.odinLevel(settlement.id)).toBe(5);
+    expect(model.visionDiscsFor(settlement)[0].radius).toBe(before + 10);
+    expect(model.wisdomFactor(settlement.id)).toBeCloseTo(0.9, 9);
+  });
+
+  it('reads the Odin level from a live snapshot, so Ravens follow the backend', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 3 }]));
+    expect(model.ravensRingsFor(settlement.id)).toBe(6);
+
+    // a level-0 foundation stub grants nothing yet
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 0 }]));
+    expect(model.ravensRingsFor(settlement.id)).toBe(0);
+  });
+
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);

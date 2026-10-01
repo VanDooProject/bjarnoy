@@ -547,6 +547,13 @@ export interface ArmyOverlayData {
   draftWaypoints: AxialCoord[];
   /** Issue #93: attack/support target indicators. Optional — an empty list draws nothing. */
   targets?: ArmyOverlayTarget[];
+  /**
+   * Odin's Ravens: extra rings added to the live army-vision radius
+   * (`ARMY_VISION_RADIUS_HEXES`) — mirrors the backend's
+   * `FogVisionRadii.ArmyVisionRadius(bonusRings)`. These are all the selected
+   * settlement's own armies, so one number covers them.
+   */
+  visionBonusRings?: number;
 }
 
 /**
@@ -5094,7 +5101,7 @@ export class HexMapRenderer {
     // §1c: pushed every tick, independent of any mask fetch — see
     // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
-    const armyVisionRadiusWorld = ARMY_VISION_RADIUS_HEXES * TILE_W;
+    const armyVisionRadiusWorld = (ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0)) * TILE_W;
     this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
     this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
 

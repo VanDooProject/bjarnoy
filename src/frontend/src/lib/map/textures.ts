@@ -144,6 +144,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   shrineofthor: 'torshrine',
   shrineoffreyja: 'freyjashrine',
   shrineofullr: 'ullrshrine',
+  // The Odin Statue: a statue on grass, animated like the other shrines.
+  odinstatue: 'odinstatue',
   // A skerry standing in coastal water — a water-only building.
   shrineofnjord: 'njordshrine',
   // Newer, on-palette scripted art — see buildingArt.ts's matching docs-page

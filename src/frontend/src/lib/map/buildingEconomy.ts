@@ -21,6 +21,7 @@ export type BuildingModifier =
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
+  | { kind: 'odinFavour'; buildTimePercent: number; visionRings: number }
   | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' };
 
 /**
@@ -122,6 +123,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'shrineoffreyja':
     case 'shrineofullr':
     case 'shrineofnjord':
+    case 'odinstatue':
       return 5;
     default:
       return 0;
@@ -147,7 +149,25 @@ export const SHRINE_BUILDING_TYPES: ReadonlySet<string> = new Set([
   'shrineoffreyja',
   'shrineofullr',
   'shrineofnjord',
+  'odinstatue',
 ]);
+
+/**
+ * Mirrors `Settlement.BuildTimeFactor`: Odin's Wisdom takes 2% off every
+ * build's duration per Odin Statue level (levels past 5 keep level 5's 10%).
+ */
+export function wisdomBuildTimeFactor(odinLevel: number): number {
+  return 1 - 0.02 * Math.min(Math.max(odinLevel, 0), 5);
+}
+
+/**
+ * Mirrors `Settlement.VisionBonusRings`: Odin's Ravens add two rings of fog
+ * vision per Odin Statue level (10 at level 5) to the settlement's claim, its
+ * towers and its travelling armies.
+ */
+export function ravensRings(odinLevel: number): number {
+  return 2 * Math.min(Math.max(odinLevel, 0), 5);
+}
 
 /**
  * Mirrors `BuildingCatalogue.AdditionalStorageHouseRequirement`: with
@@ -312,6 +332,17 @@ export function buildingStatsFor(
               : 'shipAttack';
       return { modifier: { kind: 'shrineFavour', percent: favour, domain } };
     }
+    // Mirrors ShrineCatalogue.Favour(Odin): Wisdom takes 2% off every build per
+    // level, Ravens adds two rings of vision per level (levels past 5 keep the
+    // level-5 favour).
+    case 'odinstatue':
+      return {
+        modifier: {
+          kind: 'odinFavour',
+          buildTimePercent: Math.round((1 - wisdomBuildTimeFactor(level)) * 100),
+          visionRings: ravensRings(level),
+        },
+      };
     // No production or storage of its own yet — its mead is meant for a
     // future morale-boost mechanic, same "no output" shape as townsquare/
     // druidhut below (see BuildingCatalogue.cs's Meadery doc comment).
@@ -377,6 +408,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineofullr: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineofnjord: { wood: 180, stone: 140, food: 60, iron: 0 },
+  odinstatue: { wood: 180, stone: 140, food: 60, iron: 0 },
   storagehouse: { wood: 80, stone: 60, food: 0, iron: 0 },
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
   archeryrange: { wood: 140, stone: 100, food: 0, iron: 0 },

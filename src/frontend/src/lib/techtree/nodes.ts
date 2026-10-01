@@ -51,6 +51,8 @@ function formatModifier(modifier: BuildingModifier): string {
       if (modifier.domain === 'shipAttack') return `+${modifier.percent}% ship attack`;
       if (modifier.domain === 'landAttack') return `+${modifier.percent}% land unit attack`;
       return `+${modifier.percent}% ${modifier.domain === 'wood' ? 'Wood' : 'Food'} production`;
+    case 'odinFavour':
+      return `-${modifier.buildTimePercent}% build time, +${modifier.visionRings} rings of vision`;
     case 'radiusBoost':
       return `+${modifier.percent}% ${modifier.resource === 'wood' ? 'Wood' : 'Food'} within ${modifier.range} ${modifier.range === 1 ? 'ring' : 'rings'}`;
   }

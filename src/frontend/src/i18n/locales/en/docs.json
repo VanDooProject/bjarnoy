@@ -53,6 +53,7 @@
     "druidhut": "Druid's hut",
     "cartworkshop": "Cart workshop",
     "claybrickworks": "Clay brickworks",
+    "odinstatue": "Odin statue",
     "reindeerherder": "Reindeer herder"
   },
   "techTree": {
@@ -88,6 +89,7 @@
       "longhouse": "The heart of the settlement. Its level sets claim radius, build slots and how many settlers call the village home — every settlement starts with one, standing on grass.",
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
+      "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest on grass, so a full warehouse never stalls production.",

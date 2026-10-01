@@ -5,7 +5,13 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
-import { SHRINE_BUILDING_TYPES, additionalStorageHouseRequirement, maxTowers } from './buildingEconomy';
+import {
+  SHRINE_BUILDING_TYPES,
+  additionalStorageHouseRequirement,
+  maxTowers,
+  ravensRings,
+  wisdomBuildTimeFactor,
+} from './buildingEconomy';
 import { cropAllowedHere, isWaterOnlyBuilding, riverBuildingAllowedHere } from './ringCatalogue';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
@@ -320,6 +326,12 @@ export class WorldModel {
    * `applyServerSnapshot` (live mode) and `placeBuilding` (demo mode).
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
+  /**
+   * The level of each settlement's standing Odin Statue (absent: none) — what
+   * Ravens (`ravensRingsFor`, extra fog-vision rings) and Wisdom
+   * (`wisdomFactor`, shorter builds) read. Updated alongside `settlementTowers`.
+   */
+  private settlementOdinLevels = new Map<string, number>();
   /**
    * Every hex belonging to a giant's 7-hex footprint, mapped to that giant's
    * own anchor coord — this model's own `IGiantIndex` (see the backend's
@@ -864,6 +876,7 @@ export class WorldModel {
     for (const s of this.settlements.values()) {
       signature += `|${s.id}:${s.level}:${s.q},${s.r}`;
       for (const t of this.settlementTowers.get(s.id) ?? []) signature += `;${t.q},${t.r},${t.level}`;
+      signature += `;odin${this.settlementOdinLevels.get(s.id) ?? 0}`;
     }
     return signature;
   }
@@ -1185,14 +1198,32 @@ export class WorldModel {
    * guaranteed to move together" reason that backend class documents.
    */
   visionDiscsFor(settlement: Settlement): ClaimDisc[] {
+    // Odin's Ravens widen the claim's own disc and every tower's alike
+    // (`FogVisionRadii.ToVisionSource`/`ToTowerVisionSource`'s `bonusRings`).
+    const ravens = this.ravensRingsFor(settlement.id);
     return [
-      { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) },
+      { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) + ravens },
       ...(this.settlementTowers.get(settlement.id) ?? []).map((t) => ({
         q: t.q,
         r: t.r,
-        radius: Math.max(0, t.level),
+        radius: Math.max(0, t.level) + ravens,
       })),
     ];
+  }
+
+  /** This settlement's standing Odin Statue level, 0 without one. */
+  odinLevel(settlementId: string): number {
+    return this.settlementOdinLevels.get(settlementId) ?? 0;
+  }
+
+  /** Odin's Ravens: extra rings of vision for this settlement's claim, towers and armies (`ravensRings`). */
+  ravensRingsFor(settlementId: string): number {
+    return ravensRings(this.odinLevel(settlementId));
+  }
+
+  /** Odin's Wisdom: the multiplier on this settlement's build times (`wisdomBuildTimeFactor`). */
+  wisdomFactor(settlementId: string): number {
+    return wisdomBuildTimeFactor(this.odinLevel(settlementId));
   }
 
   /**
@@ -1366,13 +1397,18 @@ export class WorldModel {
       towers.some((t, i) => t.q !== previousTowers[i]?.q || t.r !== previousTowers[i]?.r || t.level !== previousTowers[i]?.level);
     this.settlementTowers.set(settlementId, towers);
 
+    const previousOdin = this.odinLevel(settlementId);
+    const odin = snapshot.buildings.reduce((best, b) => (b.type === 'odinstatue' && b.level > best ? b.level : best), 0);
+    this.settlementOdinLevels.set(settlementId, odin);
+    const ravensChanged = ravensRings(odin) !== ravensRings(previousOdin);
+
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
     // Re-claim whenever the centre disc grew (a longhouse level-up) or the
     // set of Tower satellite discs changed (a new/levelled-up tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    if (levelIncreased || towersChanged) {
+    if (levelIncreased || towersChanged || ravensChanged) {
       for (const c of this.claimedHexes(settlement)) {
         const tile = this.getTile(c.q, c.r);
         if (!tile.ownerId) tile.ownerId = settlementId;
@@ -1411,6 +1447,7 @@ export class WorldModel {
       'cartworkshop',
       'claybrickworks',
       'reindeerherder',
+      'odinstatue',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1551,6 +1588,12 @@ export class WorldModel {
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;
+    if (type === 'odinstatue') {
+      this.settlementOdinLevels.set(settlementId, 1);
+      for (const c of this.exploredHexesFor(settlement)) {
+        this.explored.add(coordKey(c));
+      }
+    }
     if (type === 'tower') {
       const towers = this.settlementTowers.get(settlementId) ?? [];
       towers.push({ q: at.q, r: at.r, level: 1 });
@@ -1582,6 +1625,7 @@ export class WorldModel {
         if (index !== -1) towers.splice(index, 1);
       }
     }
+    if (tile.buildingType === 'odinstatue') this.settlementOdinLevels.delete(settlementId);
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
     return true;
@@ -1853,6 +1897,8 @@ export class WorldModel {
       if (existing) existing.level = nextLevel;
       else towers.push({ q: at.q, r: at.r, level: nextLevel });
       this.settlementTowers.set(settlementId, towers);
+    } else if (tile.buildingType === 'odinstatue') {
+      this.settlementOdinLevels.set(settlementId, nextLevel);
     } else {
       // Every other building type levels up cosmetically only — it has no
       // claim-radius contribution to re-derive (see BuildingDefinition.ClaimRadius).

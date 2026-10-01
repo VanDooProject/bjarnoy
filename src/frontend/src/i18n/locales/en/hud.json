@@ -64,6 +64,7 @@
     "modifierShrineFavour": "+{percent}% {domain} production",
     "modifierShrineFavourLandAttack": "+{percent}% land unit attack",
     "modifierShrineFavourShipAttack": "+{percent}% ship attack",
+    "modifierOdinFavour": "-{percent}% build time, +{rings} rings of vision",
     "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
     "domainFood": "Food",
     "domainWood": "Wood"

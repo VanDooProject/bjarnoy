@@ -137,10 +137,13 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
 | 20 | Sawmill, Crop Mill | Lumberjack 10 / Farm 10 |
-| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue* | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / any other shrine 5 |
+| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
 practice they still arrive one at a time.
+The Odin Statue cannot ask for another shrine as its feeder, because a
+settlement holds only one shrine in total (§5, Shrines), so it hangs off the
+civic line's Druid Hut at level 10 instead.
 
 ### Why producers are capped by storage, not the Longhouse
 
@@ -212,7 +215,7 @@ merging them later.
 | Freyja | + food production |
 | Ullr | + wood production |
 | Njörd | + ship attack (coastal-water building) |
-| Odin | two weaker effects: **Ravens**, +vision range for everything tied to this settlement (its claim, its towers, its armies and ships) and early intel on incoming attacks; **Wisdom**, −X% build time in this settlement |
+| Odin | two effects on his own settlement, both linear in level (max level 5): **Wisdom**, −2% build time per level (−10% at level 5), applied to every build order of the settlement at the moment the order starts, multiplicatively with the world speed; **Ravens**, +2 rings of vision per level (+10 at level 5) for the settlement's claim, its towers and its travelling armies (live vision and the persisted explored area). Cost and build time as the other shrines; feeder: Druid Hut 10 |
 
 ### Palisade
 

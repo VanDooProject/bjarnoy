@@ -30,6 +30,7 @@ public class EconomyDesignTests
         (BuildingType.Sawmill, 20), (BuildingType.CropMill, 20),
         (BuildingType.ShrineOfUllr, 25), (BuildingType.ShrineOfFreyja, 25),
         (BuildingType.ShrineOfNjord, 25), (BuildingType.ShrineOfThor, 25),
+        (BuildingType.OdinStatue, 25),
     ];
 
     private static readonly BuildingType[] Producers =
@@ -421,6 +422,113 @@ public class EconomyDesignTests
 
         Assert.Equal(BuildRejection.RequiredBuildingTooLow, refused.Rejection);
         Assert.True(accepted.Accepted, $"expected accept, got {accepted.Rejection}");
+    }
+
+    [Fact]
+    public void The_odin_statue_is_a_five_level_shrine_behind_a_level_10_druid_hut_and_no_other_shrine()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.OdinStatue, 1);
+
+        Assert.Equal(5, BuildingCatalogue.MaxLevelFor(BuildingType.OdinStatue));
+        Assert.Equal(25, definition.RequiredLonghouseLevel);
+        Assert.Equal(new BuildingPrerequisite(BuildingType.DruidHut, 10), Assert.Single(definition.Prerequisites));
+        Assert.Equal(Bjarnoy.Domain.Shrines.GodType.Odin, BuildingCatalogue.GodOf(BuildingType.OdinStatue));
+        Assert.Equal("odinstatue", BuildingType.OdinStatue.ToWireName());
+        Assert.Equal(27, (int)BuildingType.OdinStatue); // persisted ints must not shift
+        // Costs and times follow the other shrines.
+        var thor = BuildingCatalogue.Get(BuildingType.ShrineOfThor, 1);
+        Assert.Equal(thor.Cost, definition.Cost);
+        Assert.Equal(thor.BuildDuration, definition.BuildDuration);
+    }
+
+    [Fact]
+    public void The_odin_statue_is_refused_until_a_level_10_druid_hut_stands()
+    {
+        var low = SettlementWith(25, (BuildingType.DruidHut, 9));
+        var ready = SettlementWith(25, (BuildingType.DruidHut, 10));
+
+        Assert.Equal(
+            BuildRejection.RequiredBuildingTooLow,
+            low.PlanBuild(BuildingType.OdinStatue, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Rejection);
+        Assert.True(
+            ready.PlanBuild(BuildingType.OdinStatue, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Accepted);
+    }
+
+    [Fact]
+    public void The_odin_statue_counts_as_the_settlements_one_shrine()
+    {
+        var withThor = SettlementWith(25, (BuildingType.DruidHut, 10), (BuildingType.ShrineOfThor, 1));
+        var withOdin = SettlementWith(25, (BuildingType.Smithy, 5), (BuildingType.OdinStatue, 1));
+
+        Assert.Equal(
+            BuildRejection.SettlementAlreadyHasShrine,
+            withThor.PlanBuild(BuildingType.OdinStatue, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Rejection);
+        Assert.Equal(
+            BuildRejection.SettlementAlreadyHasShrine,
+            withOdin.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7()).Rejection);
+    }
+
+    [Fact]
+    public void Wisdom_takes_two_percent_off_builds_per_odin_level()
+    {
+        Assert.Equal(1.0, SettlementWith(25).BuildTimeFactor, 9);
+        foreach (var level in new[] { 1, 2, 3, 4, 5 })
+        {
+            Assert.Equal(1.0 - (0.02 * level), SettlementWith(25, (BuildingType.OdinStatue, level)).BuildTimeFactor, 9);
+        }
+
+        // An unfinished statue (level-0 foundation stub) grants nothing yet.
+        Assert.Equal(1.0, SettlementWith(25, (BuildingType.OdinStatue, 0)).BuildTimeFactor, 9);
+    }
+
+    [Fact]
+    public void An_order_that_starts_at_once_runs_for_the_wisdom_scaled_duration()
+    {
+        var plain = SettlementWith(25);
+        var wise = SettlementWith(25, (BuildingType.OdinStatue, 5));
+        var at = new HexCoord(1, 0);
+
+        var plainOrder = plain.PlanBuild(BuildingType.Lumberjack, at, Terrain.Forest, T0, Guid.CreateVersion7(), speedFactor: 2.0).Order!;
+        var wiseOrder = wise.PlanBuild(BuildingType.Lumberjack, at, Terrain.Forest, T0, Guid.CreateVersion7(), speedFactor: 2.0).Order!;
+
+        var plainSeconds = (plainOrder.CompletesAt!.Value - plainOrder.StartedAt!.Value).TotalSeconds;
+        var wiseSeconds = (wiseOrder.CompletesAt!.Value - wiseOrder.StartedAt!.Value).TotalSeconds;
+        Assert.Equal(plainSeconds * 0.90, wiseSeconds, 3);
+        // The catalogue's own base duration is untouched, so a later change of Odin's level still scales from it.
+        Assert.Equal(plainOrder.BaseDuration, wiseOrder.BaseDuration);
+    }
+
+    [Fact]
+    public void A_waiting_order_is_timed_by_the_odin_level_standing_when_it_starts()
+    {
+        var plainStart = SettlementWith(25).PlanBuild(BuildingType.Lumberjack, new HexCoord(1, 0), Terrain.Forest, T0, Guid.CreateVersion7()).Order!;
+        var waiting = new BuildOrder
+        {
+            Id = Guid.CreateVersion7(),
+            Type = BuildingType.Lumberjack,
+            TargetLevel = 1,
+            Coord = new HexCoord(1, 0),
+            QueuedAt = T0,
+            BaseDuration = plainStart.BaseDuration,
+        };
+        var wise = SettlementWith(25, (BuildingType.OdinStatue, 3));
+        wise = wise with { Queue = [waiting] };
+
+        var (promoted, changed) = wise.PromoteWaitingOrders(T0.AddMinutes(1));
+
+        Assert.True(changed);
+        var started = Assert.Single(promoted.Queue);
+        Assert.False(started.IsWaiting);
+        Assert.Equal(plainStart.BaseDuration.TotalSeconds * 0.94, (started.CompletesAt!.Value - started.StartedAt!.Value).TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void The_ravens_are_two_rings_per_odin_level_and_zero_without_a_finished_statue()
+    {
+        Assert.Equal(0, SettlementWith(25).VisionBonusRings);
+        Assert.Equal(0, SettlementWith(25, (BuildingType.OdinStatue, 0)).VisionBonusRings);
+        Assert.Equal(2, SettlementWith(25, (BuildingType.OdinStatue, 1)).VisionBonusRings);
+        Assert.Equal(10, SettlementWith(25, (BuildingType.OdinStatue, 5)).VisionBonusRings);
     }
 
     [Fact]

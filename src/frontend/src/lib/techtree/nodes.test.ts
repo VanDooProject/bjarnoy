@@ -45,6 +45,16 @@ describe('buildTechTreeNodes', () => {
     expect(byName.get('reindeerherder')!.chips).toEqual([{ text: 'LH 1', kind: 'longhouse' }]);
   });
 
+  it('draws the Odin Statue behind the Druid Hut, with both favours on the card', () => {
+    const odin = byName.get('odinstatue')!;
+    expect(odin.chips).toEqual([
+      { text: 'LH 25', kind: 'longhouse' },
+      { text: 'Druid 10', kind: 'building' },
+    ]);
+    expect(odin.gives).toBe('-2% build time, +2 rings of vision'); // level 1; level 5 reads -10% / +10
+    expect(odin.category).toBe('religion');
+  });
+
   it('takes the longhouse chip from the real unlock level', () => {
     // The chip follows the catalogue's unlock ladder rather than repeat a
     // number from a mockup: Tower LH 3, Barracks LH 5, Weaponsmith LH 15.
