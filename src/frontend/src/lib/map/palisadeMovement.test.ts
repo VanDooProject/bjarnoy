@@ -22,7 +22,7 @@ function column(fromR: number, toR: number, gateAtR?: number): PalisadeWalls {
   return walls;
 }
 
-function ctx(terrain: Map<string, Terrain>, walls: PalisadeWalls, owner: string, isWideRiver: (c: AxialCoord) => boolean = () => false): PathContext {
+function ctx(terrain: Map<string, Terrain>, walls: PalisadeWalls, owner: string, isWideRiver: (c: AxialCoord) => boolean = () => false, friends?: ReadonlySet<string>): PathContext {
   const terrainAt = (c: AxialCoord): Terrain => terrain.get(coordKey(c)) ?? 'sea';
   return {
     terrainAt,
@@ -30,7 +30,7 @@ function ctx(terrain: Map<string, Terrain>, walls: PalisadeWalls, owner: string,
     isWideRiver,
     rules: { land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0, bog: 2.0 }, riverCrossingCost: 8 },
     hexesPerHour: 1,
-    restrictions: palisadeRestrictions(walls, terrainAt, isWideRiver, owner),
+    restrictions: palisadeRestrictions(walls, terrainAt, isWideRiver, owner, friends),
   };
 }
 
@@ -88,5 +88,16 @@ describe('palisadeRestrictions', () => {
     walls.set('3,0', { gate: true, owner: 'someone-else' });
     expect(findPath(west, east, ctx(terrain, walls, OWNER))).toBeNull();
     expect(findPath(west, east, ctx(terrain, walls, 'someone-else'))).not.toBeNull();
+  });
+
+  it("opens a friend's gate but not a friend's plain wall", () => {
+    const terrain = strip({ '3,4': 'mountain' });
+    const friends = new Set(['someone-else']);
+    const withGate = new Map(column(-3, 3));
+    withGate.set('3,0', { gate: true, owner: 'someone-else' });
+    expect(findPath(west, east, ctx(terrain, withGate, OWNER, () => false, friends))).not.toBeNull();
+
+    const plain = new Map([...column(-3, 3)].map(([k, w]) => [k, { ...w, owner: 'someone-else' }] as const));
+    expect(findPath(west, east, ctx(terrain, plain, OWNER, () => false, friends))).toBeNull();
   });
 });

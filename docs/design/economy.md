@@ -263,8 +263,11 @@ gate), then the terrain cost.
 
 - Every wall hex **blocks every army, the owner's included**. Only standing hexes
   count (level 1 or more): a foundation does not block.
-- A **gate** passes only its **owner's** armies (the same settlement owner), at the
-  normal terrain cost. Anyone else is stopped like at any wall hex.
+- A **gate** passes its **owner's** armies and their **friends'** at the normal terrain
+  cost: friends are the owner's guildmates and the members of guilds with an active peace
+  treaty with that guild (`WorldPalisades.IndexAsync` reads both). Anyone else is stopped
+  like at any wall hex. A friend's plain wall hex still blocks, and an anonymous
+  settlement has no friends.
 - A **land end** (a plain palisade hex with exactly one wall neighbour) is **half open**:
   every army crosses it at a flat cost of 3 in place of the terrain cost (bog's 2 included). If it touches
   a mountain or a wide river it is a **sealed end** and blocks like any wall hex, so a
@@ -278,7 +281,7 @@ gate), then the terrain cost.
 Routes are priced the same on both sides (`river-pathing-golden.json`: walls, a gate
 for friend and foe, a half-open end and a sealed end), the dispatch is refused when no
 land route is left, and the range tint applies the same rules for the selected
-settlement's owner.
+settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
 **Not built yet.** Siege and fire take a level off a wall hex at a time until it is
 gone; nothing does yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).

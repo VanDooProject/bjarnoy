@@ -99,7 +99,7 @@
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
       "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it at a flat cost of 3, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. Fire and siege will take levels off it later.",
-      "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies pass it at the normal terrain cost; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
+      "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies and their friends' (the same guild, or a guild at peace with it) pass it at the normal terrain cost; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest on grass, so a full warehouse never stalls production.",
@@ -587,7 +587,7 @@
       },
       "gate": {
         "name": "Gate",
-        "body": "A straight with a gate in the middle. It lets its owner's armies through and no one else's."
+        "body": "A straight with a gate in the middle. It lets its owner's armies and their friends' through, and no one else's."
       },
       "end": {
         "name": "Land end",
@@ -626,7 +626,7 @@
       "body": "Walls are about land armies. Fleets are not affected.",
       "rules": {
         "block": "A wall hex blocks every land army, your own included. Only standing hexes count: a construction site does not block.",
-        "gate": "A gate lets the owner's armies through, at the normal cost of the ground, and no one else's.",
+        "gate": "A gate lets the owner's armies through, and those of the owner's guild and of guilds at peace with it, at the normal cost of the ground. Everyone else is stopped.",
         "end": "A land end is half open: any army can cross it, at a cost of 3 instead of the cost of the ground. If it touches a mountain or a wide river it is a sealed end and blocks like any wall hex.",
         "sea": "A wall that ends in the sea end seals at the coast. A wall that merely stops on land next to open sea does not: its half-open end is the way through.",
         "natural": "Mountains and wide rivers cannot be crossed by land armies anyway, so a wall run up to one is sealed there.",
@@ -645,7 +645,7 @@
         "seaEndTitle": "Sea end",
         "seaEnd": "The line runs out into the water on a sea end: sealed at the coast.",
         "gateTitle": "Gate",
-        "gate": "A gate is a gap between two posts. It opens for its owner's armies only.",
+        "gate": "A gate is a gap between two posts. It opens for its owner and the owner's friends: the same guild, or guilds at peace.",
         "legend": {
           "wall": "Wall (a line along its hexes)",
           "gate": "Gate (a gap between two posts)",

@@ -31,6 +31,7 @@ import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
+import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
@@ -96,6 +97,7 @@ const hudInsetLeftPx = computed(() => (isHudRail.value ? hudRailWidthPx.value + 
 const hudInsetTopPx = computed(() => (hudBarAtBottom.value ? 0 : hudBarHeightPx.value));
 const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? hudBarHeightPx.value : 0));
 const unitCatalogue = useUnitCatalogueStore();
+const guild = useGuildStore();
 const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();
 const router = useRouter();
@@ -235,6 +237,7 @@ onMounted(async () => {
   void unitCatalogue.load();
   buildingCatalogue.load();
   void world.refreshWorldSettlements();
+  if (world.worldId) void guild.loadFriends(world.worldId);
 
   // Same test/debug-hook idea as main.ts's __demoWorld: lets an e2e test
   // convert a real hex coordinate to an exact click point via the
@@ -414,8 +417,10 @@ const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
     world.model,
     { land: world.movementRules.land, riverCrossingCost: world.movementRules.riverCrossingCost },
     speed * world.worldSpeedFactor,
-    // Walls stop every army but a gate lets its owner's through: the owner is the player who holds the selected settlement.
+    // Walls stop every army but a gate lets its owner's through, and the owner's friends': the owner is the player who holds the
+    // selected settlement, the friends their guild and the guilds at peace with it.
     home.ownerId,
+    guild.friendlyUserIds,
   );
   const origin = { q: home.q, r: home.r };
   const range = reachableRange(origin, origin, hoursOfFood, ctx);
