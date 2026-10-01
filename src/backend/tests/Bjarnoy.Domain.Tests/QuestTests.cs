@@ -43,7 +43,7 @@ public class QuestTests
     public void The_quests_come_in_the_tutorial_order_with_their_rewards()
     {
         Assert.Equal(
-            ["producers3", "longhouse2", "storagehouse1", "producers6", "longhouse3", "longhouse5"],
+            ["producers3", "longhouse2", "storagehouse1", "producers6", "longhouse3", "longhouse5", "hunt1"],
             Quests.All.Select(q => q.Id));
         Assert.Equal(new ResourceAmounts(150, 120, 80, 0), Quests.Find("producers3")!.Reward);
         Assert.Equal(new ResourceAmounts(250, 200, 150, 0), Quests.Find("longhouse2")!.Reward);
@@ -51,6 +51,8 @@ public class QuestTests
         Assert.Equal(new ResourceAmounts(200, 150, 100, 0), Quests.Find("producers6")!.Reward);
         Assert.Equal(new ResourceAmounts(400, 300, 200, 0), Quests.Find("longhouse3")!.Reward);
         Assert.Equal(new ResourceAmounts(800, 600, 400, 0), Quests.Find("longhouse5")!.Reward);
+        Assert.Equal(new ResourceAmounts(400, 300, 300, 0), Quests.Find("hunt1")!.Reward);
+        Assert.Equal(6, Quests.Find("hunt1")!.Bit);
         Assert.Equal(Quests.All.Count, Quests.All.Select(q => q.Bit).Distinct().Count());
     }
 
@@ -121,6 +123,15 @@ public class QuestTests
 
         Assert.False(q.IsCompleted(Found(others: [BuildingType.Farm])));
         Assert.True(q.IsCompleted(Found(others: [BuildingType.StorageHouse])));
+    }
+
+    [Fact]
+    public void The_hunt_quest_completes_only_once_a_hunt_was_started()
+    {
+        var q = Quests.Find("hunt1")!;
+
+        Assert.False(q.IsCompleted(Found()));
+        Assert.True(q.IsCompleted(Found() with { HuntStarted = true }));
     }
 
     [Fact]

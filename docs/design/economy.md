@@ -399,6 +399,7 @@ their renown.
   | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
   | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
   | 6 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
+  | 7 | Hunt a camp | an army sent to hunt a wildlife camp | 400 / 300 / 300 |
 
   Rules:
 

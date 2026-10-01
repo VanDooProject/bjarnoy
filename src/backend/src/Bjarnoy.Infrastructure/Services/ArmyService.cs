@@ -317,6 +317,11 @@ public sealed class ArmyService(
         }
 
         settlement.ApplyDomain(decision.Settlement!);
+        if (mission == ArmyMission.Hunt)
+        {
+            // Onboarding quest hunt1: starting a hunt counts, winning is not required.
+            settlement.HuntStarted = true;
+        }
 
         var armyEntity = new ArmyEntity { Id = armyId, SettlementId = settlementId };
         armyEntity.ApplyDomain(decision.Army!);

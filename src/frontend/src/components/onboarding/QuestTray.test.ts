@@ -10,7 +10,7 @@ import enQuests from '../../i18n/locales/en/quests.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
 import enApiErrors from '../../i18n/locales/en/apiErrors.json';
 
-const IDS = ['producers3', 'longhouse2', 'storagehouse1', 'producers6', 'longhouse3', 'longhouse5'];
+const IDS = ['producers3', 'longhouse2', 'storagehouse1', 'producers6', 'longhouse3', 'longhouse5', 'hunt1'];
 
 function quest(id: string, patch: Partial<QuestResponse> = {}): QuestResponse {
   return { id, completed: false, claimed: false, reward: { wood: 250, stone: 200, food: 150, iron: 0 }, ...patch };
@@ -47,7 +47,7 @@ describe('QuestTray', () => {
     expect(current.text()).toContain('250');
     expect(current.text()).toContain('200');
     expect(current.text()).toContain('150');
-    expect(wrapper.get('[data-testid="quest-progress"]').text()).toBe('1 of 6');
+    expect(wrapper.get('[data-testid="quest-progress"]').text()).toBe('1 of 7');
   });
 
   it('shows no Claim button while the current quest is not completed', () => {
@@ -92,7 +92,7 @@ describe('QuestTray', () => {
     const wrapper = mountTray();
 
     expect(wrapper.get('[data-testid="quest-current"]').attributes('data-quest-id')).toBe('storagehouse1');
-    expect(wrapper.get('[data-testid="quest-progress"]').text()).toBe('2 of 6');
+    expect(wrapper.get('[data-testid="quest-progress"]').text()).toBe('2 of 7');
   });
 
   it('hides once every quest is claimed', () => {

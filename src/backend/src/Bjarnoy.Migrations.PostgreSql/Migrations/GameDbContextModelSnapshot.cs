@@ -1155,6 +1155,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("FoundedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("HuntStarted")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("IslandId")
                         .HasColumnType("uuid");
 

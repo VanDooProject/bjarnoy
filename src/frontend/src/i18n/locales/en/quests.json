@@ -34,6 +34,10 @@
     "longhouse5": {
       "title": "Upgrade your Longhouse to level 5",
       "hint": "Keep upgrading the Longhouse. Each level takes a little longer."
+    },
+    "hunt1": {
+      "title": "Hunt a wildlife camp",
+      "hint": "Click a camp on your island, choose Hunt and send land troops. Weak camps (hares, deer, seals) are the easy first prey."
     }
   }
 }

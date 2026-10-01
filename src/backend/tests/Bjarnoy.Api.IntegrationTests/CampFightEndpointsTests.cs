@@ -195,6 +195,43 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Starting_a_hunt_completes_the_hunt_quest_and_it_can_be_claimed_once()
+    {
+        using var client = Client();
+        var (_, settlement, campHex, _) = await SetUpAsync(client);
+        Task<SettlementResponse?> Get() =>
+            client.GetFromJsonAsync<SettlementResponse>($"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+        var claimUrl = $"/api/v1/settlements/{settlement.Id}/quests/hunt1/claim";
+
+        Assert.False((await Get())!.Quests.Single(q => q.Id == "hunt1").Completed);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(claimUrl, null, Ct)).StatusCode);
+
+        // A plain move does not count as a hunt.
+        var moved = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/armies",
+            new DispatchArmyRequest(
+                [new UnitCountRequest("axeman", 2)], null, new HexPointRequest(campHex.Q, campHex.R), 20, "move"),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, moved.StatusCode);
+        Assert.False((await Get())!.Quests.Single(q => q.Id == "hunt1").Completed);
+
+        // Starting the hunt is enough: the army has not arrived, let alone won.
+        Assert.Equal(HttpStatusCode.Created, (await HuntAsync(client, settlement.Id, campHex)).StatusCode);
+        var before = (await Get())!;
+        Assert.True(before.Quests.Single(q => q.Id == "hunt1").Completed);
+
+        var claim = await client.PostAsync(claimUrl, null, Ct);
+        Assert.Equal(HttpStatusCode.OK, claim.StatusCode);
+        var after = (await claim.Content.ReadFromJsonAsync<SettlementResponse>(SqliteApiFixture.StrictJson, Ct))!;
+        Assert.True(after.Quests.Single(q => q.Id == "hunt1").Claimed);
+        Assert.Equal(
+            Math.Min(before.Resources.Stock.Wood + 400, after.Resources.Capacity.Wood), after.Resources.Stock.Wood, 1);
+        Assert.Equal(
+            Math.Min(before.Resources.Stock.Food + 300, after.Resources.Capacity.Food), after.Resources.Stock.Food, 1);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(claimUrl, null, Ct)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_hunt_needs_a_destination_and_land_units()
     {
         using var client = Client();

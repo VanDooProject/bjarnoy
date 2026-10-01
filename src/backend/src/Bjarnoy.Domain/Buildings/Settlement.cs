@@ -113,6 +113,14 @@ public sealed record Settlement
     public int ClaimedQuests { get; init; }
 
     /// <summary>
+    /// Whether this settlement has ever dispatched an army with
+    /// <see cref="ArmyMission.Hunt"/> (starting the attack counts; winning is not
+    /// required). An event rather than state derivable from the settlement, so it
+    /// is persisted; it completes the onboarding quest <c>hunt1</c>.
+    /// </summary>
+    public bool HuntStarted { get; init; }
+
+    /// <summary>
     /// How many completed resource producers stand here (queued orders do not
     /// count — <see cref="Buildings"/> only holds finished buildings).
     /// </summary>
