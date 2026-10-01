@@ -2,14 +2,20 @@
 // regions outside the largest one ("cut-off regions"), what impassable hexes enclose each, and how
 // many mountain hexes touch the sea, a wide river or a lake.
 //
+//   (--no-streams: streams on mountains stay blocked, the rule before streams ignored terrain)
 //   cd src/frontend && npx tsx ../../scripts/worldgen-preview/pathing-cutoff.ts --seeds 1-8 --radius 1000
 import { coordKey, neighbors, parseKey, type AxialCoord } from '../../src/frontend/src/lib/hex/coords';
 import { DEFAULT_GENERATION, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
 import { findLandmasses } from './landmasses';
-import { buildPathingWorld, type PathingWorld } from './pathing-world';
+import { buildPathingWorld, isStream, type PathingWorld } from './pathing-world';
 
 const LAND = new Set(['grass', 'sand', 'forest', 'bog']);
-export const isWalkable = (pw: PathingWorld, c: AxialCoord): boolean => LAND.has(pw.terrainAt(c)) && !pw.isWideRiver(c);
+/** Walkable under the decided rules; a stream is walkable over any land (even mountain) when `streams` is on. */
+export const isWalkable = (pw: PathingWorld, c: AxialCoord, streams = true): boolean => {
+  if (pw.isWideRiver(c)) return false;
+  const t = pw.terrainAt(c);
+  return LAND.has(t) || (streams && t === 'mountain' && isStream(pw, c));
+};
 
 export interface Region {
   island: number;
@@ -19,9 +25,9 @@ export interface Region {
 }
 
 /** The decided rules' cut-off regions of one island (every walkable region but the largest). */
-export function cutoffRegions(tiles: readonly AxialCoord[], pw: PathingWorld, island = 0): Region[] {
+export function cutoffRegions(tiles: readonly AxialCoord[], pw: PathingWorld, island = 0, streams = true): Region[] {
   const walkable = new Set<string>();
-  for (const t of tiles) if (isWalkable(pw, t)) walkable.add(coordKey(t));
+  for (const t of tiles) if (isWalkable(pw, t, streams)) walkable.add(coordKey(t));
   const seen = new Set<string>();
   const regions: string[][] = [];
   for (const k of walkable) {
@@ -93,7 +99,7 @@ function main(): void {
         if (ns.some((n) => pw.terrainAt(n) === 'lake')) mt.lake++;
         if (ns.some((n) => pw.terrainAt(n) === 'sand')) mt.sand++;
       }
-      for (const r of cutoffRegions(island.tileList!, pw, index)) {
+      for (const r of cutoffRegions(island.tileList!, pw, index, !args.includes('--no-streams'))) {
         const cls = r.enclosedBy.length ? r.enclosedBy.join(' + ') : '(nothing: island of its own)';
         const e = classes.get(cls) ?? { regions: 0, hexes: 0 };
         e.regions++;
@@ -121,6 +127,8 @@ function main(): void {
   console.log('\nsize: <10 / 10-99 / 100-999 / >=1000');
   console.log(`  regions ${sizes.join(' / ')}`);
   console.log(`  hexes   ${sizeHexes.join(' / ')}`);
+  const mo = examples.filter((e) => e.cls === 'mountain');
+  console.log(`mountain-only valleys: ${mo.length} regions; >=100 hexes ${mo.filter((e) => e.size >= 100).length}, 10-99 ${mo.filter((e) => e.size >= 10 && e.size < 100).length}, <10 ${mo.filter((e) => e.size < 10).length}`);
   examples.sort((a, b) => b.size - a.size);
   console.log('\nlargest regions');
   for (const e of examples.slice(0, 8)) console.log(`  seed ${e.seed} island ${e.island}: ${e.size} hexes, ${e.cls}, first hex ${e.at}`);

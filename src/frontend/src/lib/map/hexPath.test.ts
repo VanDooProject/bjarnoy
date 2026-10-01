@@ -314,3 +314,39 @@ describe('PathRestrictions.halfOpen (a palisade land end)', () => {
     expect(path.map(coordKey)).not.toContain('2,0');
   });
 });
+
+describe('PathRestrictions.streamsIgnoreTerrain', () => {
+  const corridor = (terrain: Terrain): Map<string, Terrain> => {
+    const t = new Map<string, Terrain>();
+    for (let q = 0; q <= 4; q++) t.set(coordKey({ q, r: 0 }), q === 2 ? terrain : 'grass');
+    return t;
+  };
+  const from = { q: 0, r: 0 };
+  const to = { q: 4, r: 0 };
+  const flat = 1 + RULES.riverCrossingCost;
+
+  it('a stream on a mountain hex is walkable at a flat 9, not blocked and not 2 + 8', () => {
+    const ctx = { ...contextFor(corridor('mountain'), new Set(['2,0'])), restrictions: { mountainsImpassable: true, streamsIgnoreTerrain: true } };
+    const path = findPath(from, to, ctx)!;
+    expect(path.map(coordKey)).toContain('2,0');
+    expect(pathCost(path, ctx)).toBe(1 + flat + 1 + 1);
+    // Forest under a stream costs the same flat 9 (not 1.3 + 8).
+    const forest = { ...contextFor(corridor('forest'), new Set(['2,0'])), restrictions: { streamsIgnoreTerrain: true } };
+    expect(pathCost([{ q: 1, r: 0 }, { q: 2, r: 0 }], forest)).toBe(flat);
+  });
+
+  it('a mountain hex without a stream stays blocked, and a wide river stays impassable', () => {
+    const restrictions = { mountainsImpassable: true, wideRiversImpassable: true, streamsIgnoreTerrain: true };
+    expect(findPath(from, to, { ...contextFor(corridor('mountain')), restrictions })).toBeNull();
+    const wide = { ...contextFor(corridor('mountain'), new Set(['2,0'])), isWideRiver: () => true, restrictions };
+    expect(findPath(from, to, wide)).toBeNull();
+  });
+
+  it('is off unless asked for, and the unrestricted path is unchanged (terrain cost + 8)', () => {
+    const rivers = new Set(['2,0']);
+    const mountainStream = contextFor(corridor('mountain'), rivers);
+    expect(pathCost([{ q: 1, r: 0 }, { q: 2, r: 0 }], mountainStream)).toBe(2 + 8);
+    const on = { ...mountainStream, restrictions: { mountainsImpassable: true } };
+    expect(findPath(from, to, on)).toBeNull();
+  });
+});

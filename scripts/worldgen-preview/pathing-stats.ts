@@ -17,7 +17,7 @@
 import { coordKey, neighbors } from '../../src/frontend/src/lib/hex/coords';
 import { DEFAULT_GENERATION, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
 import { findLandmasses } from './landmasses';
-import { buildPathingWorld, type PathingWorld } from './pathing-world';
+import { buildPathingWorld, isStream, type PathingWorld } from './pathing-world';
 
 export interface IslandStat {
   island: number;
@@ -43,12 +43,13 @@ export const RULE_SETS: readonly RuleSet[] = [
     walkable: (pw, c) => pw.terrainAt(c) !== 'lake' && LAND.has(pw.terrainAt(c)),
   },
   {
-    label: 'decided: wide rivers (river and riverstream Y tiles) + mountains impassable',
-    walkable: (pw, c) => LAND.has(pw.terrainAt(c)) && pw.terrainAt(c) !== 'mountain' && !pw.isWideRiver(c),
+    label: 'decided: wide rivers (river and riverstream Y tiles) + mountains impassable, streams walkable over any terrain',
+    walkable: (pw, c) => (LAND.has(pw.terrainAt(c)) && pw.terrainAt(c) !== 'mountain' && !pw.isWideRiver(c)) || (pw.terrainAt(c) === 'mountain' && isStream(pw, c)),
   },
   {
     label: 'decided + widen tiles also impassable',
     walkable: (pw, c) => {
+      if (pw.terrainAt(c) === 'mountain' && isStream(pw, c)) return true;
       if (!LAND.has(pw.terrainAt(c)) || pw.terrainAt(c) === 'mountain') return false;
       const t = pw.riverAt(c);
       return !(t && (t.width === undefined || t.width === 'river' || t.width === 'widen' || t.width === 'riverstream'));
@@ -57,6 +58,10 @@ export const RULE_SETS: readonly RuleSet[] = [
   {
     label: 'mountains only impassable',
     walkable: (pw, c) => LAND.has(pw.terrainAt(c)) && pw.terrainAt(c) !== 'mountain',
+  },
+  {
+    label: 'decided, but a stream on a mountain stays blocked (the rule before streams ignored terrain)',
+    walkable: (pw, c) => LAND.has(pw.terrainAt(c)) && pw.terrainAt(c) !== 'mountain' && !pw.isWideRiver(c),
   },
   {
     label: 'wide rivers only impassable',

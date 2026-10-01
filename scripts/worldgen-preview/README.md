@@ -172,7 +172,11 @@ Findings: mountains are generated only in an island's core (`terrainAt` in `worl
 0.4 and the ridge field above `mountainRockiness`; sand needs `island.t > beachThreshold` 0.9, the coast rim), so a band of
 grass or forest always separates them from the sea: 2 of 164,836 mountain hexes touch it. Mountains do touch rivers (10.7 %
 any river, since springs rise on them; 0.8 % a wide one) and never a lake. Cut-off land is mostly a valley closed in by mountains
-alone (see the table the diagnosis printed in the PR).
+alone. **Streams are walkable at a flat 9.0 (1.0 + 8) whatever terrain they run over** (`PathRestrictions.streamsIgnoreTerrain`,
+on in the decided rules, off by default; mountain impassability and the terrain cost do not apply to a crossable river tile, a
+wide river stays impassable): ~600 stream tiles per world run over mountains, and they open most valleys. Seeds 1-8: cut-off land
+drops from 21,794 hexes (2.46 % of walkable) to 8,190 (0.92 %), regions from 380 to 304, mountain-only valleys of 100+ hexes
+from 31 to 14 and of 10-99 from 131 to 92; no region over 1,000 hexes is left (`--no-streams` gives the old numbers).
 
 ### Whole-world statistics
 

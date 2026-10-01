@@ -29,6 +29,12 @@ export interface PathRestrictions {
   wideRiversImpassable?: boolean;
   /** Mountain hexes are impassable instead of costing `rules.land.mountain`. */
   mountainsImpassable?: boolean;
+  /**
+   * A crossable river tile (one `isWideRiver` does not hold for) costs a flat `1.0 + riverCrossingCost`
+   * whatever terrain it runs over: mountain impassability and the terrain's own cost do not apply to it.
+   * A wide river stays impassable when `wideRiversImpassable` is on.
+   */
+  streamsIgnoreTerrain?: boolean;
   /** Extra impassable hexes (a palisade). */
   blocked?(c: AxialCoord): boolean;
   /** A blocked hex this army may pass anyway (a gate, for a friendly army only; leave unset for an enemy). */
@@ -69,8 +75,11 @@ function stepCost(c: AxialCoord, ctx: PathContext): number | null {
   const r = ctx.restrictions;
   if (base === undefined) return null;
   if (r) {
+    const river = ctx.isRiver(c);
+    const wide = river && (ctx.isWideRiver?.(c) ?? r.wideRiversImpassable === true);
+    if (r.wideRiversImpassable && wide) return null;
+    if (r.streamsIgnoreTerrain && river && !wide) return 1.0 + ctx.rules.riverCrossingCost;
     if (r.mountainsImpassable && terrain === 'mountain') return null;
-    if (r.wideRiversImpassable && ctx.isRiver(c) && (ctx.isWideRiver?.(c) ?? true)) return null;
     if (r.halfOpen?.(c)) return r.halfOpenCost ?? HALF_OPEN_END_COST;
     if (r.blocked?.(c) && !r.friendlyGate?.(c)) return null;
   }

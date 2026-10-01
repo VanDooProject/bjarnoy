@@ -81,10 +81,13 @@ export function buildPathingWorld(world: WorldSeed, window?: Window): PathingWor
   };
 }
 
+/** A crossable river tile (not wide): walkable at a flat cost whatever lies under it. */
+export const isStream = (pw: PathingWorld, c: { q: number; r: number }): boolean => pw.isRiver(c) && !pw.isWideRiver(c);
+
 /** A PathContext over a pathing world. `restrictions` default to the owner's two terrain rules. */
 export function pathContext(
   pw: PathingWorld,
-  restrictions: PathContext['restrictions'] = { wideRiversImpassable: true, mountainsImpassable: true },
+  restrictions: PathContext['restrictions'] = { wideRiversImpassable: true, mountainsImpassable: true, streamsIgnoreTerrain: true },
 ): PathContext {
   return {
     terrainAt: pw.terrainAt,
