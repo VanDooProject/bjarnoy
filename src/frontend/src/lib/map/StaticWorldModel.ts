@@ -31,6 +31,12 @@ export class StaticWorldModel extends WorldModel {
   /** Replaces every tile this model knows about — `WastedIsland.vue` calls this on every rotation/blight-stage change, then `HexMapRenderer.forceRebuild()`s. */
   setTiles(tiles: Tile[]): void {
     this.staticTiles = new Map(tiles.map((t) => [coordKey(t), t]));
+    this.wallRevision++;
+  }
+
+  /** The fixed layout's tiles, so the wall index (which piece a palisade hex draws) sees this model's walls. */
+  protected override storedTiles(): Iterable<Tile> {
+    return this.staticTiles.values();
   }
 
   /**

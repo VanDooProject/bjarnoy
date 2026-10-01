@@ -1600,14 +1600,19 @@ export class WorldModel {
   }
 
   /** Bumped whenever a building appears, vanishes or levels, so the cached wall index below is rebuilt. */
-  private wallRevision = 0;
+  protected wallRevision = 0;
+
+  /** Every tile this model holds, for the indexes built over all of them. A model that keeps its tiles elsewhere (StaticWorldModel) overrides it. */
+  protected storedTiles(): Iterable<Tile> {
+    return this.tiles.values();
+  }
   private wallCache: { revision: number; walls: Map<string, { gate: boolean; level: number; tileOwner?: string }> } | null = null;
 
   /** Every palisade and gate hex known (a level-0 foundation included), keyed by hex, rebuilt lazily after a building changes. */
   private palisadeIndex(): Map<string, { gate: boolean; level: number; tileOwner?: string }> {
     if (this.wallCache?.revision === this.wallRevision) return this.wallCache.walls;
     const walls = new Map<string, { gate: boolean; level: number; tileOwner?: string }>();
-    for (const tile of this.tiles.values()) {
+    for (const tile of this.storedTiles()) {
       if (tile.buildingType !== 'palisade' && tile.buildingType !== 'palisadegate') continue;
       walls.set(coordKey(tile), { gate: tile.buildingType === 'palisadegate', level: tile.buildingLevel ?? 1, tileOwner: tile.ownerId });
     }

@@ -10,7 +10,8 @@ import {
   type PalisadeResult,
   type WallSet,
 } from '../map/palisadeTiles';
-import type { Terrain, TileOrientation } from '../map/types';
+import type { Terrain, Tile, TileOrientation } from '../map/types';
+import { DEFAULT_GENERATION, defaultOrientation, variantForTerrain, type WorldSeed } from '../map/worldGenerator';
 
 /** The six pieces in the order the page lists them: the straight first, the sea end last. */
 export const PALISADE_PIECES: readonly PalisadePiece[] = [
@@ -153,4 +154,33 @@ export function exampleGroundHexes(
   for (const h of hexes) neighbors(h.coord).forEach(add);
   exampleSeaHexes(hexes).forEach(add);
   return [...ground.values()];
+}
+
+/** The example's seed, only for each hex's art rotation and variant (the same hash a world uses). */
+const EXAMPLE_WORLD: WorldSeed = { seed: 7, generation: DEFAULT_GENERATION };
+
+/**
+ * The example as the map tiles the game's own `HexMapRenderer` draws (WallExample.vue, through a `StaticWorldModel`): grass and
+ * sea ground, and the wall hexes as finished level-3 palisades and a gate. The renderer picks each wall hex's piece and rotation
+ * from its neighbours itself, so what the page shows is what a world shows.
+ */
+export function exampleWallTiles(hexes: readonly ExampleWallHex[] = exampleWallHexes(), level = 3): Tile[] {
+  const tile = (c: AxialCoord, terrain: Terrain, extra: Partial<Tile> = {}): Tile => ({
+    q: c.q,
+    r: c.r,
+    terrain,
+    orientation: defaultOrientation(c.q, c.r, EXAMPLE_WORLD),
+    variant: variantForTerrain(c.q, c.r, EXAMPLE_WORLD, terrain),
+    ...(terrain === 'sea' ? { isCoastalWater: true } : {}),
+    ...extra,
+  });
+  const sea = new Set(exampleSeaHexes(hexes).map(coordKey));
+  const ground = exampleGroundHexes(hexes).map((g) => tile(g.coord, g.sea ? 'sea' : 'grass'));
+  const walls = hexes.map((h) =>
+    tile(h.coord, sea.has(coordKey(h.coord)) ? 'sea' : 'grass', {
+      buildingType: h.gate ? 'palisadegate' : 'palisade',
+      buildingLevel: level,
+    }),
+  );
+  return [...ground, ...walls];
 }

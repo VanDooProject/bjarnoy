@@ -114,4 +114,18 @@ describe('StaticWorldModel', () => {
     expect(world.getRiverTile(0, 0)).toBeUndefined();
     expect(world.buildingHexKeys()).toEqual([]);
   });
+
+  it('sees its own wall hexes, so a palisade draws the piece its wall neighbours decide', () => {
+    // Three walls in a row along q: the middle one has a wall on its E (+q) and W (-q) sides.
+    const world = new StaticWorldModel([
+      tile({ q: -1, r: 0, buildingType: 'palisade', buildingLevel: 1 }),
+      tile({ q: 0, r: 0, buildingType: 'palisade', buildingLevel: 1 }),
+      tile({ q: 1, r: 0, buildingType: 'palisade', buildingLevel: 1 }),
+    ]);
+    expect(world.wallNeighbourFlags({ q: 0, r: 0 }).filter(Boolean)).toHaveLength(2);
+
+    // Replacing the layout drops the old walls from the index.
+    world.setTiles([tile({ q: 0, r: 0, buildingType: 'palisade', buildingLevel: 1 })]);
+    expect(world.wallNeighbourFlags({ q: 0, r: 0 }).some(Boolean)).toBe(false);
+  });
 });

@@ -4,6 +4,7 @@ import {
   PALISADE_PIECES,
   exampleGroundHexes,
   exampleSeaHexes,
+  exampleWallTiles,
   exampleWallHexes,
   pieceFrameNames,
   resolveExampleWall,
@@ -93,5 +94,16 @@ describe('the example wall', () => {
     for (const g of ground) expect(wall.has(coordKey(g.coord))).toBe(false);
     expect(ground.some((g) => g.sea)).toBe(true);
     expect(ground.some((g) => !g.sea)).toBe(true);
+  });
+
+  it('hands the renderer one tile per hex: walls and a gate on grass, the sea end and its sea on water', () => {
+    const tiles = exampleWallTiles();
+    expect(new Set(tiles.map((t) => coordKey(t))).size).toBe(tiles.length);
+    const walls = tiles.filter((t) => t.buildingType === 'palisade' || t.buildingType === 'palisadegate');
+    expect(walls).toHaveLength(7);
+    expect(walls.filter((t) => t.buildingType === 'palisadegate')).toHaveLength(1);
+    const seaEnd = walls.find((t) => t.terrain === 'sea');
+    expect(seaEnd && coordKey(seaEnd)).toBe(coordKey(exampleWallHexes().at(-1)!.coord));
+    expect(tiles.filter((t) => t.terrain === 'sea').every((t) => t.isCoastalWater)).toBe(true);
   });
 });

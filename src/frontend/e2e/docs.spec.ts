@@ -285,9 +285,8 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await expect(straight.getByRole('button', { name: 'NW', exact: true })).toHaveClass(/active/);
     await expect(straight.locator('.animated-building')).toBeVisible();
 
-    // The example wall (seven wall hexes, each a ground and a wall layer) and the four grounds.
-    await expect(page.locator('.wall-example .sprite').first()).toBeVisible();
-    expect(await page.locator('.wall-example .sprite').count()).toBeGreaterThanOrEqual(14);
+    // The example wall, drawn by the game's own map renderer, and the four grounds.
+    await expect(page.locator('.wall-example canvas')).toBeVisible();
     await expect(page.locator('.walls figure.ground')).toHaveCount(4);
     await expect(page.getByTestId('wall-movement-diagram').locator('figure')).toHaveCount(4);
     await expect(page.getByTestId('wall-movement-legend').locator('li')).toHaveCount(6);
