@@ -89,7 +89,8 @@ export function buildAttackDispatchRequest(
  * Builds a `hunt`-mission `DispatchArmyRequest` against a wildlife camp: the camp's own hex is the
  * `destination` (the server walks to the nearest reachable neighbour when the hex itself is not
  * walkable) and `route` holds only intermediate waypoints. `null` without units or a camp target.
- * Land units only is enforced by the UI (`isHuntUnit`) and by the server (`HuntRequiresLandUnits`).
+ * Land units only (against land camps) is enforced by the UI (`isHuntUnit`) and by the server (`HuntRequiresLandUnits`;
+ * a water camp, the whale road, is hunted by fleets only: `HuntRequiresFleet`, client UI for that comes later).
  */
 export function buildHuntDispatchRequest(
   unitCounts: Record<string, number>,

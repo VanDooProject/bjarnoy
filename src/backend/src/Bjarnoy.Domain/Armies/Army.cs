@@ -65,7 +65,8 @@ public enum ArmyMission
 
     /// <summary>
     /// Travel to a wildlife camp's hex (<see cref="Army.TargetCampCoord"/>) and fight its garrison on arrival
-    /// (<c>docs/design/wildlife-camps.md</c>, "Hunting a camp"). Land units only. Like <see cref="Attack"/> there
+    /// (<c>docs/design/wildlife-camps.md</c>, "Hunting a camp"). Land units hunt land camps, fleets hunt water camps
+    /// (the whale road) and neither the other. Like <see cref="Attack"/> there
     /// is no standing at the destination: survivors (if any) and loot start the precomputed return leg at once,
     /// see <see cref="Army.SettleHuntArrival"/>.
     /// </summary>
@@ -282,7 +283,8 @@ public sealed record Army
         Func<HexCoord, bool>? isWideRiver = null,
         IGiantIndex? giants = null,
         WallRules? walls = null,
-        HexCoord? targetCampCoord = null)
+        HexCoord? targetCampCoord = null,
+        bool targetCampIsWater = false)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -331,16 +333,22 @@ public sealed record Army
 
         if (mission == ArmyMission.Hunt)
         {
-            // Beasts are fought on land; a fleet (or an empty request) cannot hunt. The camp itself is
-            // looked up by the caller, which passes its hex as targetCampCoord only when one exists.
-            if (isFleet)
+            // The camp itself is looked up by the caller, which passes its hex as targetCampCoord only when one
+            // exists (and says whether it stands on the sea). Land units hunt land camps and fleets hunt water
+            // camps (the whale road); neither can reach the other's.
+            if (targetCampCoord is null)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.NoCampAtDestination);
+            }
+
+            if (isFleet && !targetCampIsWater)
             {
                 return DispatchDecision.Rejected(DispatchRejection.HuntRequiresLandUnits);
             }
 
-            if (targetCampCoord is null)
+            if (!isFleet && targetCampIsWater && requestedClasses.Count > 0)
             {
-                return DispatchDecision.Rejected(DispatchRejection.NoCampAtDestination);
+                return DispatchDecision.Rejected(DispatchRejection.HuntRequiresFleet);
             }
         }
 
@@ -778,21 +786,25 @@ public sealed record Army
     }
 
     /// <summary>
-    /// The hex a <see cref="ArmyMission.Hunt"/> route ends on: the camp's own hex when a land army can stand on it,
-    /// otherwise its walkable neighbour nearest to <paramref name="from"/> (ties by neighbour order). Falls back to the
-    /// camp's hex when no neighbour is walkable either, so the dispatch is refused as an unwalkable destination.
+    /// The hex a <see cref="ArmyMission.Hunt"/> route ends on: the camp's own hex when the hunters can stand on it
+    /// (always for a fleet at a water camp: the whale road's own sea hex), otherwise its traversable neighbour nearest to
+    /// <paramref name="from"/> (ties by neighbour order). Falls back to the camp's hex when no neighbour is traversable
+    /// either, so the dispatch is refused as an unwalkable destination.
     /// </summary>
-    public static HexCoord HuntRouteDestination(HexCoord camp, HexCoord from, Func<HexCoord, Terrain> terrainAt)
+    /// <param name="isFleet">The hunters are ships (they traverse sea, not land).</param>
+    public static HexCoord HuntRouteDestination(
+        HexCoord camp, HexCoord from, Func<HexCoord, Terrain> terrainAt, bool isFleet = false)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        if (terrainAt(camp).IsTraversable(isLandUnit: true))
+        var isLandUnit = !isFleet;
+        if (terrainAt(camp).IsTraversable(isLandUnit))
         {
             return camp;
         }
 
         return camp.Neighbours()
-            .Where(n => terrainAt(n).IsTraversable(isLandUnit: true))
+            .Where(n => terrainAt(n).IsTraversable(isLandUnit))
             .OrderBy(n => n.DistanceTo(from))
             .Cast<HexCoord?>()
             .FirstOrDefault() ?? camp;
@@ -1783,8 +1795,11 @@ public enum DispatchRejection
     /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch's destination hex holds no wildlife camp.</summary>
     NoCampAtDestination,
 
-    /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch included ships; only land units hunt.</summary>
+    /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch of ships named a land camp; fleets only hunt water camps (the whale road).</summary>
     HuntRequiresLandUnits,
+
+    /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch of land units named a water camp (the whale road); only fleets reach one.</summary>
+    HuntRequiresFleet,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

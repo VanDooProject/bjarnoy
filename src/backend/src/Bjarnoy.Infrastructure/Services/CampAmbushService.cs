@@ -24,7 +24,9 @@ public enum CampAmbushOutcome
 /// Strong camps ambushing marching armies (<c>docs/design/wildlife-camps.md</c>, "Strong camps attack"). Lazy like the
 /// field battle: run from <c>ArmyService.SettleAndFoldAsync</c> when an army is settled, it asks
 /// <see cref="CampAmbush.FindEarliest"/> whether the route entered an aggressive strong camp's guard range since the
-/// army set out, and resolves that one fight at the instant of entry.
+/// army set out, and resolves that one fight at the instant of entry. Land armies are only ever checked against land
+/// camps and fleets only against water camps (the whale road, guard range 0: the fleet is attacked when its route
+/// enters the camp's own hex).
 /// </summary>
 public sealed class CampAmbushService(
     GameDbContext dbContext, CampService campService, ILogger<CampAmbushService> logger)
@@ -45,8 +47,7 @@ public sealed class CampAmbushService(
         ArgumentNullException.ThrowIfNull(armyEntity);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (domain.IsFleet
-            || domain.Location is not ArmyLocation.InTransit { Movement: var movement }
+        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement }
             || movement.RetreatImmune)
         {
             return CampAmbushOutcome.None;
@@ -57,7 +58,9 @@ public sealed class CampAmbushService(
         var worldId = settlement.WorldId;
 
         var camps = await _campService.LoadCampsAsync(worldId, now, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var near = camps.Where(c => c.Camp.Strong && IsNearRoute(c.Camp, movement)).ToList();
+        // Land armies are only met by land camps, fleets only by water camps (the whale road): a fleet is
+        // attacked when its route enters the camp's own hex (guard range 0).
+        var near = camps.Where(c => c.Camp.Strong && c.Camp.IsWater == domain.IsFleet && IsNearRoute(c.Camp, movement)).ToList();
         if (near.Count == 0)
         {
             return CampAmbushOutcome.None;

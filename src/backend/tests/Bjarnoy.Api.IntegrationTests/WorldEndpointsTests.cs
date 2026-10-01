@@ -191,7 +191,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         Assert.Equal(expected, actual);
         Assert.All(camps, c => Assert.Equal(
             c.Strong,
-            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire"));
+            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire" or "whaleroad"));
     }
 
     [Fact]
