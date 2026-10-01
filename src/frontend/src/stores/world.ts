@@ -81,8 +81,11 @@ const fogChunkCache = new FogChunkCache();
 let fogViewportTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Demo mode's seed — kept as its own constant since both the initial
-// `WorldModel` below and its island labels have to agree on it.
-const DEMO_SEED = 20260824;
+// `WorldModel` below and its island labels have to agree on it. The e2e suite
+// founds on this seed's landfall and needs sand in the level-1 realm and coastal
+// water within the level-8 one (SettlementPage.findHex); 20260824 lost both when
+// the island-density change moved its landfall inland.
+const DEMO_SEED = 20260830;
 
 /**
  * Discriminated result of `refreshPlotSuggestion`, replacing the bare

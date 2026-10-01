@@ -30,7 +30,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 }
 
 // Regression: findLandfall used to return the literal nearest land hex to
-// the click, which for some seeds (see the demo seed, 20260824 — the case
+// the click, which for some seeds (see the old demo seed, 20260824 — the case
 // that surfaced this after WorldGenerationOptions.IslandMinRadius/
 // IslandMaxRadius grew) can be a lone tile at an island's tip: almost every
 // hex in the settlement's own realm ends up sea. findLandfall now prefers a
@@ -38,7 +38,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 // enforces (Grass, >=1 Forest and >=2 Grass neighbours, no sea within two
 // hexes) over the merely-nearest land hex.
 describe('WorldModel.findLandfall', () => {
-  it.each([1, 7, 42, 20260824, 20260826])(
+  it.each([1, 7, 42, 20260824, 20260826, 20260830])(
     'prefers a start-quality hex over the merely-nearest land hex (seed %i)',
     (seed) => {
       const model = new WorldModel(seed);
@@ -895,7 +895,7 @@ describe('WorldModel.previewCropTiles', () => {
 });
 
 
-// Same demo seed the app itself boots into (stores/world.ts's DEMO_SEED).
+// The app's demo seed until the island-density change (stores/world.ts's DEMO_SEED is now 20260830).
 const DEMO_SEED = 20260824;
 
 function foundLandedSettlementAt(model: WorldModel, seedHex: AxialCoord) {
@@ -1202,7 +1202,7 @@ describe('WorldModel.setGiants (live mode)', () => {
 });
 
 describe('placeGiantsForIsland (demo giant placement v2)', () => {
-  // The default demo seed's nearest island to the origin: big enough (hundreds of tiles) to
+  // The old demo seed's nearest island to the origin: big enough (hundreds of tiles) to
   // get mountain giants. The anchors are read back off the model rather than pinned.
   const DEMO_SEED = 20260824;
 
@@ -1408,7 +1408,7 @@ describe('WorldModel wasted-island reveal', () => {
   });
 
   it('never wipes green-island state (buildings, ownership, giant tags) on reveal', () => {
-    // Seed 20260824 (the app's own demo seed): the landfall nearest the origin, and a
+    // Seed 20260824 (the app's demo seed until the island-density change): the landfall nearest the origin, and a
     // giant-placeable anchor near it whose footprint includes a Forest hex (found by
     // scanning canPlaceGiant), so this also covers tagGiantHex's Forest->Grass flattening
     // surviving a reveal.
