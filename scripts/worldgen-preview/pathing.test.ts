@@ -141,9 +141,14 @@ describe('scenario files', () => {
     expect(footerLines(run).join('\n')).toContain('NO ROUTE');
   });
 
-  it('d: without the sea-end piece the wall seals just the same; one hex short it does not', { timeout: 60_000 }, () => {
+  it('d: a land end at the coast is waded round through the water touching it; the sea end still seals', { timeout: 60_000 }, () => {
     const touching = runScenario(load('d-land-end-at-coast'));
-    expect(touching.routes[0]!.path).toBeNull();
+    expect(touching.wadeable.size).toBeGreaterThan(0);
+    const path = touching.routes[0]!.path!;
+    expect(path).not.toBeNull();
+    expect(path.some((c) => touching.wadeable.has(coordKey(c)))).toBe(true);
+    expect(path.every((c) => !touching.wall.walls.has(coordKey(c)))).toBe(true);
+    expect(runScenario(load('c-sea-end-seals')).wadeable.size).toBe(0);
     const short = runScenario(load('d2-land-end-one-short'));
     expect(short.routes[0]!.path).not.toBeNull();
     expect(short.routes[0]!.path!.length).toBeGreaterThan(short.routes[0]!.before!.length);

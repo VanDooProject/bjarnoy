@@ -282,3 +282,39 @@ describe('PathContext.restrictions (default off)', () => {
     expect([...hoursFrom(from, wall, 100).keys()].sort()).toEqual(['0,0', '1,0']);
   });
 });
+
+describe('PathRestrictions.wadeable (coastal water at a palisade land end)', () => {
+  // Land strip q 0..4 on r=0 and r=1 with the sea beyond; a wall on q=2 across r=0 and r=1 ends against the sea at r=-1.
+  const land = new Map<string, Terrain>();
+  for (let q = 0; q <= 4; q++) for (const r of [0, 1]) land.set(coordKey({ q, r }), 'grass');
+  const from = { q: 0, r: 0 };
+  const to = { q: 4, r: 0 };
+  const wall = new Set(['2,0', '2,1']);
+  const make = (restrictions: PathContext['restrictions']): PathContext => ({ ...contextFor(land), restrictions });
+  // The sea hexes touching the wall end (2,0).
+  const wade = new Set(['2,-1', '3,-1']);
+
+  it('wades round a land end through the water touching it, at 2.0 a step', () => {
+    const ctx = make({ blocked: (c) => wall.has(coordKey(c)), wadeable: (c) => wade.has(coordKey(c)) });
+    const path = findPath(from, to, ctx)!;
+    expect(path.map(coordKey)).toContain('2,-1');
+    expect(pathCost(path, ctx)).toBeGreaterThan(4);
+    expect(path.filter((c) => land.get(coordKey(c)) === undefined).length).toBeGreaterThan(0);
+  });
+
+  it('a sea end (blocked water) is not wadeable, and a coastal hex not next to a wall end stays impassable', () => {
+    const sea = make({ blocked: (c) => wall.has(coordKey(c)) || coordKey(c) === '2,-1', wadeable: (c) => wade.has(coordKey(c)) });
+    expect(findPath(from, to, sea)).toBeNull();
+    const nothing = make({ blocked: (c) => wall.has(coordKey(c)), wadeable: () => false });
+    expect(findPath(from, to, nothing)).toBeNull();
+    // Off by default: no wadeable predicate, no wading.
+    expect(findPath(from, to, make({ blocked: (c) => wall.has(coordKey(c)) }))).toBeNull();
+  });
+
+  it('only sea is wadeable, never land the predicate happens to name', () => {
+    const ctx = make({ wadeable: () => true, mountainsImpassable: true });
+    const mountain = new Map(land).set('2,0', 'mountain');
+    expect(pathCost([from, { q: 1, r: 0 }], { ...ctx, terrainAt: (c) => mountain.get(coordKey(c)) ?? 'sea' })).toBe(1);
+    expect(pathCost([{ q: 1, r: 0 }, { q: 2, r: 0 }], { ...ctx, terrainAt: (c) => mountain.get(coordKey(c)) ?? 'sea' })).toBe(Infinity);
+  });
+});

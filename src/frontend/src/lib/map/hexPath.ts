@@ -30,6 +30,14 @@ export interface PathRestrictions {
   blocked?(c: AxialCoord): boolean;
   /** A blocked hex this army may pass anyway (a gate, for a friendly army only; leave unset for an enemy). */
   friendlyGate?(c: AxialCoord): boolean;
+  /**
+   * Sea hexes land armies may wade through (the caller passes the coastal water touching a palisade's
+   * land end), priced at `wadeCost` (default 2.0, like bog). Nothing else about the sea changes: a hex
+   * `blocked` returns true for (the sea-end piece) stays impassable, and only hexes `terrainAt` calls
+   * sea are affected.
+   */
+  wadeable?(c: AxialCoord): boolean;
+  wadeCost?: number;
 }
 
 export interface PathContext {
@@ -56,8 +64,11 @@ export const MAX_TINT_HEXES = 4000;
 function stepCost(c: AxialCoord, ctx: PathContext): number | null {
   const terrain = ctx.terrainAt(c);
   const base = ctx.rules.land[terrain];
-  if (base === undefined) return null;
   const r = ctx.restrictions;
+  if (base === undefined) {
+    if (terrain === 'sea' && r?.wadeable?.(c) && !r.blocked?.(c)) return r.wadeCost ?? 2.0;
+    return null;
+  }
   if (r) {
     if (r.mountainsImpassable && terrain === 'mountain') return null;
     if (r.wideRiversImpassable && ctx.isRiver(c) && (ctx.isWideRiver?.(c) ?? true)) return null;

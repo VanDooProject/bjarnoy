@@ -1,6 +1,6 @@
 {
  "name": "d-land-end-at-coast",
- "title": "the same wall without the sea-end piece: a land end next to the sea still seals, because sea is impassable and the end hex is blocked (the sea-end piece changes nothing for land armies)",
+ "title": "the same wall without the sea-end piece: the coastal water touching the land end is wadeable (2.0 a step), so the enemy wades round the end",
  "seed": 11,
  "radius": 1000,
  "window": {

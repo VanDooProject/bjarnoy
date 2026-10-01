@@ -134,18 +134,21 @@ The shipped scenarios, all on seed 11 at radius 1000:
 | `a-wide-river-vs-stream` | route A across a wide river walks 33 steps upstream to where it starts as a stream (cost 45.6, was 15.7); route B across a stream goes straight over at +8, same as before |
 | `b-mountains-block` | mountains impassable: the route round a horseshoe ridge is 25 steps instead of 8 |
 | `c-sea-end-seals` | wall from a wide river to the sea, ending in `palisade_end_coast`, with a gate: the enemy has no route in, the friendly army walks through the gate |
-| `d-land-end-at-coast` | the same wall with a plain land end: **it seals just the same** (see below) |
+| `d-land-end-at-coast` | the same wall with a plain land end: the enemy **wades round** the end through the wadeable water (see below) |
 | `d2-land-end-one-short` | the same wall one hex short of the coast: the enemy walks round the open end |
 | `e-mountain-to-river-seals` | a five-hex wall from a mountain to a wide river seals 888 hexes |
 | `f-every-piece` | every piece and rotation (ends and straights on all axes, gate, `bend120` as a ring and a meander, `bend60` as two triangles, sea end) with a refused branch and a refused gate marked |
 
 ### What the rules turned out to mean on the hex grid
 
-- **A land end touching the sea is already sealed** (scenario d). Sea is impassable and the end hex is blocked, and a hex
-  grid has no diagonal moves, so there is no way round a wall tip that touches open sea; the sea-end piece is a
-  *visual* closing of the shallows and changes nothing for land armies (the sea hex was impassable anyway). The only way to
-  walk round is to leave a land hex between the tip and the sea (d2). Rule 5 as worded ("only seals with the sea-end piece")
-  would need an explicit rule, not just `blocked` + impassable sea.
+- **A land end touching the sea is not sealed, by rule** (scenario d). Sea is impassable and the end hex is blocked, so
+  on its own a wall tip touching open sea would seal exactly like a sea end (a hex grid has no diagonal moves) and the sea-end
+  piece would add nothing. The owner's rule therefore makes the coastal water touching a `palisade_end` (the *land* end piece)
+  **wadeable** for land armies, at 2.0 a step like bog (`PathRestrictions.wadeable`, off by default; the caller computes the
+  set from `palisadeTiles`). A `palisade_end_coast` hex is a blocked wall hex, so the sea end seals (scenario c); gates and the
+  other pieces make no wadeable hexes, and no other sea changes, so there is no general shallow-water route past rivers or
+  mountains. In the render the wadeable hexes are dotted teal; in d the enemy now wades round the end (9 steps, cost 11.4), and
+  d2 (one hex short, no water touching the end) is walked round on land as before.
 - **`bend60` only exists in a triangle.** Its two edges are adjacent, so the two neighbours it joins are neighbours of each
   other, and each of the three hexes then has exactly two wall neighbours. A bend60 can never be part of an open line (a
   fourth hex would branch); in `f-every-piece` it is two three-hex triangles. Likewise two wall arms one hex apart branch.
