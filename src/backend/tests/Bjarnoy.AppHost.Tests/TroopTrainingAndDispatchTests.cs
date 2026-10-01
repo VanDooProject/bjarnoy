@@ -243,42 +243,32 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         await Assertions.Expect(unitPickerRow).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await unitPickerRow.Locator("input.qty").FillAsync("1");
 
-        var instructions = page.Locator("p.instructions");
-        for (var hexNumber = 1; hexNumber <= 2; hexNumber++)
-        {
-            var plotted = false;
-            // Small, varied offsets from the canvas centre — the settlement's
-            // own claimed tiles surround the Longhouse there, so these should
-            // land on distinct, explored, clickable hexes regardless of the
-            // exact on-screen hex size (which this test has no direct way to
-            // read). Retried per offset the same way the founding click is,
-            // since a miss (e.g. landing back on the Longhouse tile itself,
-            // which re-opens the ring menu instead of plotting a waypoint)
-            // should not fail the whole test.
-            (float dx, float dy)[] offsets =
-            [
-                (40 * hexNumber, 0), (-40 * hexNumber, 0), (0, 40 * hexNumber),
-                (30 * hexNumber, 30 * hexNumber), (-30 * hexNumber, -30 * hexNumber),
-            ];
-            foreach (var (dx, dy) in offsets)
-            {
-                var box = await canvas.BoundingBoxAsync()
-                    ?? throw new InvalidOperationException("Settlement canvas never rendered a bounding box.");
-                await page.Mouse.ClickAsync(box.X + box.Width / 2 + dx, box.Y + box.Height / 2 + dy);
-                try
-                {
-                    await Assertions.Expect(instructions).ToContainTextAsync(
-                        $"{hexNumber} hex", new() { Timeout = 1_500 });
-                    plotted = true;
-                    break;
-                }
-                catch (PlaywrightException)
-                {
-                    // Try the next offset.
-                }
-            }
-            Assert.True(plotted, $"Never plotted waypoint #{hexNumber} on the dispatch route.");
-        }
+        // Click one exact, known-good hex instead of guessing pixel offsets:
+        // the world seed is random per run, so blind offsets can land on sea,
+        // a lake, a mountain or a wide river, which the server refuses
+        // (Army.PlanDispatch) and which leaves the draft open forever. The
+        // pick is adjacent to the centre (a one-step route that cannot cross
+        // anything) and on land that is neither a river hex nor a mountain.
+        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
+            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
+        var riverHexes = islands!.SelectMany(i => i.RiverTiles).Select(t => (t.Q, t.R)).ToHashSet();
+        var centreHex = layout.Hexes.Single(h => h.IsCentre);
+        var destinationHex = layout.Hexes.FirstOrDefault(h =>
+            !h.IsCentre
+            && Math.Max(Math.Abs(h.Q - centreHex.Q), Math.Max(Math.Abs(h.R - centreHex.R), Math.Abs(h.Q + h.R - centreHex.Q - centreHex.R))) == 1
+            && h.Terrain is "grass" or "sand" or "forest" or "bog"
+            && !riverHexes.Contains((h.Q, h.R)));
+        Assert.True(destinationHex is not null, "No plain land hex next to the Longhouse to dispatch to.");
+
+        var clickPoint = await page.EvaluateAsync<double[]?>(
+            "([q, r]) => { const p = window.__settlementRenderer?.()?.hexCenterScreen({ q, r }); return p ? [p.x, p.y] : null; }",
+            new[] { destinationHex!.Q, destinationHex.R });
+        Assert.True(clickPoint is not null, "The settlement renderer hook was not available to resolve the click point.");
+        var canvasBox = await canvas.BoundingBoxAsync()
+            ?? throw new InvalidOperationException("Settlement canvas never rendered a bounding box.");
+        await page.Mouse.ClickAsync(canvasBox.X + (float)clickPoint![0], canvasBox.Y + (float)clickPoint[1]);
+        await Assertions.Expect(page.Locator(".waypoint-row"))
+            .ToContainTextAsync($"({destinationHex.Q}, {destinationHex.R})", new() { Timeout = 5_000 });
 
         var confirmButton = page.GetByRole(AriaRole.Button, new() { Name = "Confirm dispatch" });
         await Assertions.Expect(confirmButton).ToBeEnabledAsync(new() { Timeout = 5_000 });
@@ -288,8 +278,18 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         // ArmyPanel back to its list view — "Dispatch army" reappearing is
         // itself proof the POST succeeded (a rejection leaves the form open
         // with draft.error set instead).
-        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Dispatch army" }))
-            .ToBeVisibleAsync(new() { Timeout = 15_000 });
+        try
+        {
+            await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Dispatch army" }))
+                .ToBeVisibleAsync(new() { Timeout = 15_000 });
+        }
+        catch (PlaywrightException)
+        {
+            // A refused dispatch leaves the form open with the server's reason
+            // in .error-note; surface it instead of a bare locator timeout.
+            var refusal = await page.Locator(".error-note").AllInnerTextsAsync();
+            Assert.Fail($"Dispatch was not accepted. Panel error: {string.Join(" | ", refusal)}");
+        }
 
         // --- Verify the dispatch, independently, via the API ---
         var armies = await apiClient.GetFromJsonAsync<ArmySummary[]>(

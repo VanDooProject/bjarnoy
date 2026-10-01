@@ -243,17 +243,18 @@ onMounted(async () => {
   // zoom/camera framing. Exposed regardless of which of the two routes
   // reached this view first — WorldMapView never exposed it, which meant an
   // e2e test could only resolve click points while already on /settlement.
-  if (DEMO_MODE) {
-    (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
-      canvasRef.value?.renderer;
-  }
+  // Installed in live mode too: it is a read-only camera-math accessor (see
+  // LandingView's identical hook), and the live Aspire dispatch test needs it
+  // to click a known hex instead of guessing pixel offsets.
+  (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
+    canvasRef.value?.renderer;
 });
 onUnmounted(() => {
   // Only fires once, when the player leaves the map entirely (e.g. to
   // /reports) — /world <-> /settlement no longer unmounts this view.
   world.stopHudSync();
   world.setWorldMapActive(false);
-  if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
+  delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
 
 // Reconciles the renderer and the store's territory-claiming scope
