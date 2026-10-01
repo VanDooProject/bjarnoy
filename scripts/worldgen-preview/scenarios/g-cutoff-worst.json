@@ -1,0 +1,9 @@
+{
+  "name": "g-cutoff-worst",
+  "title": "the worst island under the decided rules (seed 5, island 2): land cut off by mountains and wide rivers in magenta",
+  "seed": 5,
+  "radius": 1000,
+  "window": { "q": -520, "r": 165, "size": 130 },
+  "px": 10,
+  "cutoff": true
+}

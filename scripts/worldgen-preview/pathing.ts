@@ -30,6 +30,8 @@ import {
 import { DEFAULT_GENERATION, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
 import type { RiverTile, Terrain } from '../../src/frontend/src/lib/map/types';
 import { BOG_COLOUR, LAKE_COLOUR, riverColourAt, TERRAIN_COLOURS, type Layer, type LegendEntry, type OverlayCanvas, type Rgb } from './layers';
+import { findLandmasses } from './landmasses';
+import { cutoffRegions } from './pathing-cutoff';
 import { buildPathingWorld, pathContext, type PathingWorld } from './pathing-world';
 import { renderPreview } from './render';
 
@@ -67,6 +69,8 @@ export interface Scenario {
   rules?: { wideRivers?: boolean; mountains?: boolean; palisade?: boolean; /** a land end that abuts no wide river or mountain is half open (default on) */ halfOpenEnds?: boolean };
   /** Tint everything reachable from route N's origin (0-based) with route N's army's rules. */
   flood?: number | boolean;
+  /** Tint magenta the walkable land cut off from its island's largest walkable region by the impassable mountains and wide rivers (the wall is ignored). */
+  cutoff?: boolean;
   /** Print the piece and camera on every wall hex. */
   labels?: boolean;
 }
@@ -146,6 +150,8 @@ export interface ScenarioRun {
   flood: Set<string> | null;
   /** Land ends that are half open (passable at HALF_OPEN_END_COST); the other ends are sealed. */
   halfOpen: Set<string>;
+  /** Cut-off land (`scenario.cutoff`), else null. */
+  cutoff: Set<string> | null;
 }
 
 /** Places the scenario's wall hex by hex with `canPlacePalisade`; refusals are recorded, not thrown. */
@@ -203,6 +209,20 @@ function contextFor(scn: Scenario, pw: PathingWorld, wall: WallSet, army: 'frien
   });
 }
 
+/** Every cut-off walkable hex of the islands near the window. */
+function cutoffTiles(scn: Scenario, pw: PathingWorld): Set<string> {
+  const world: WorldSeed = { seed: scn.seed, generation: { ...DEFAULT_GENERATION, worldRadius: scn.radius } };
+  const out = new Set<string>();
+  const reach = scn.window.size;
+  for (const island of findLandmasses(world, false, true).landmasses) {
+    if (island.tiles < 6) continue;
+    const b = island.bounds;
+    if (b.maxQ < scn.window.q - reach || b.minQ > scn.window.q + reach || b.maxR < scn.window.r - reach || b.minR > scn.window.r + reach) continue;
+    for (const region of cutoffRegions(island.tileList!, pw)) for (const k of region.tiles) out.add(k);
+  }
+  return out;
+}
+
 export function runScenario(scn: Scenario, pw?: PathingWorld): ScenarioRun {
   const world: WorldSeed = { seed: scn.seed, generation: { ...DEFAULT_GENERATION, worldRadius: scn.radius } };
   const world2 = pw ?? buildPathingWorld(world, scn.window);
@@ -243,7 +263,7 @@ export function runScenario(scn: Scenario, pw?: PathingWorld): ScenarioRun {
     if (r) flood = reachableFrom(pair(r.from), contextFor(scn, world2, wall, r.army));
   }
   const halfOpen = (scn.rules?.halfOpenEnds ?? true) && (scn.rules?.palisade ?? true) ? halfOpenEnds(tiles, world2) : new Set<string>();
-  return { scenario: scn, pw: world2, wall, tiles, refused, routes, flood, halfOpen };
+  return { scenario: scn, pw: world2, wall, tiles, refused, routes, flood, halfOpen, cutoff: scn.cutoff ? cutoffTiles(scn, world2) : null };
 }
 
 // ---- the centrelines (the art contract's, drawn in the preview's flat-top geometry) ---------
@@ -321,6 +341,7 @@ const WIDE_COLOUR: Rgb = [22, 58, 175];
 const STREAM_COLOUR: Rgb = [130, 205, 245];
 const HALF_OPEN_COLOUR: Rgb = [255, 140, 20];
 const SEALED_END_COLOUR: Rgb = [235, 205, 140];
+const CUTOFF_COLOUR: Rgb = [255, 0, 220];
 const FLOOD_TINT: Rgb = [255, 236, 120];
 const FLOOD_AMOUNT = 0.3;
 
@@ -349,6 +370,7 @@ const LEGEND: readonly LegendEntry[] = [
   { label: 'mountain (impassable, hatched)', colour: TERRAIN_COLOURS.mountain },
   { label: 'wide river (impassable)', colour: WIDE_COLOUR },
   { label: 'stream (crossable, +8)', colour: STREAM_COLOUR },
+  { label: 'cut-off land (unreachable)', colour: CUTOFF_COLOUR },
   { label: 'half-open end (passable, 3.0)', colour: HALF_OPEN_COLOUR, shape: 'hollowDisc' },
   { label: 'sealed end (blocks)', colour: SEALED_END_COLOUR, shape: 'square' },
   { label: 'palisade (impassable)', colour: WALL_COLOUR },
@@ -389,6 +411,7 @@ export function footerLines(run: ScenarioRun): string[] {
   lines.push(
     `RULES  WIDE RIVERS ${(rules.wideRivers ?? true) ? 'IMPASSABLE' : 'CROSSABLE'}  MOUNTAINS ${(rules.mountains ?? true) ? 'IMPASSABLE' : 'COST 2.0'}  PALISADE ${(rules.palisade ?? true) ? 'BLOCKS (GATE: FRIENDLY ONLY)' : 'IGNORED'}`,
   );
+  if (run.cutoff) lines.push(`CUT-OFF LAND NEAR THE WINDOW ${run.cutoff.size} HEXES (WALKABLE BUT UNREACHABLE FROM THE ISLAND'S LARGEST REGION)`);
   if (run.wall.walls.size > 0) {
     const counts = new Map<string, number>();
     for (const t of run.tiles.values()) {
@@ -422,7 +445,7 @@ export function createPathingLayer(scn: Scenario): Layer {
       return footerLines(run);
     },
     colourAt(q, r, _world, dx = 0, dy = 0, fine = false) {
-      const { pw, flood } = must();
+      const { pw, flood, cutoff } = must();
       const c = { q, r };
       const terrain: Terrain = pw.terrainAt(c);
       let colour: Rgb = terrain === 'bog' ? BOG_COLOUR : terrain === 'lake' ? LAKE_COLOUR : TERRAIN_COLOURS[terrain];
@@ -432,6 +455,7 @@ export function createPathingLayer(scn: Scenario): Layer {
         // Off the flow the river hex keeps its land colour (the helper answers grass there).
         if (rc !== TERRAIN_COLOURS.grass) colour = rc;
       }
+      if (cutoff?.has(coordKey(c))) colour = mix(colour, CUTOFF_COLOUR, 0.55);
       if (!fine) {
         if (terrain === 'mountain') colour = mix(colour, MOUNTAIN_HATCH, 0.4);
         return flood?.has(coordKey(c)) && terrain !== 'sea' ? mix(colour, FLOOD_TINT, FLOOD_AMOUNT) : colour;

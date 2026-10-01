@@ -157,6 +157,19 @@ The shipped scenarios, all on seed 11 at radius 1000:
   joining a river). `pathing-stats.ts` measures that variant too; it adds about 0.1 points of unreachable land.
 - **Mountains are 15.6 % of all land**, so making them impassable cuts islands apart far more than wide rivers do.
 
+### Why land is cut off
+
+`pathing-cutoff.ts --seeds 1-8 --radius 1000` classifies every cut-off region (walkable land outside its island's largest
+walkable region) by the impassable hexes on its border (mountain, sea, wide river, lake), gives the region size distribution
+and counts how many mountain hexes touch the sea, sand, a wide river or a lake. A scenario with `"cutoff": true`
+(`g-cutoff-worst`, `g-cutoff-typical`) tints that land magenta.
+
+Findings: mountains are generated only in an island's core (`terrainAt` in `worldGenerator.ts`: `island.t < mountainThreshold`
+0.4 and the ridge field above `mountainRockiness`; sand needs `island.t > beachThreshold` 0.9, the coast rim), so a band of
+grass or forest always separates them from the sea: 2 of 164,836 mountain hexes touch it. Mountains do touch rivers (10.7 %
+any river, since springs rise on them; 0.8 % a wide one) and never a lake. Cut-off land is mostly a valley closed in by mountains
+alone (see the table the diagnosis printed in the PR).
+
 ### Whole-world statistics
 
 `pathing-stats.ts --seeds 1-8 --radius 1000 [--islands]` measures, per island (a landmass of at least 6 hexes), how much
