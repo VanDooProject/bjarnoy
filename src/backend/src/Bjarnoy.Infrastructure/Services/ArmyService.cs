@@ -235,6 +235,8 @@ public sealed class ArmyService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldPalisades.IndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
         var dispatchGiantIndex = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
 
@@ -284,7 +286,7 @@ public sealed class ArmyService(
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex);
+            dispatchGiantIndex, walls);
 
         if (!decision.Accepted)
         {
@@ -413,6 +415,8 @@ public sealed class ArmyService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldPalisades.IndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
         var domain = army.ToDomain();
@@ -441,7 +445,7 @@ public sealed class ArmyService(
             || (domain.Location is ArmyLocation.Supporting && currentHex is not null);
 
         var recalled = domain.Recall(
-            now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide);
+            now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
 
         if (recalled is null)
         {
@@ -488,11 +492,13 @@ public sealed class ArmyService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldPalisades.IndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
         var result = Army.RetargetFounding(
             army.ToDomain(), newTarget, now, home, sampler.TerrainAt, army.Settlement.World.SpeedFactor,
-            rivers.IsRiver, rivers.IsWide);
+            rivers.IsRiver, rivers.IsWide, walls);
         if (!result.Accepted)
         {
             if (outcome == ArmySettleOutcome.Updated)
@@ -578,11 +584,13 @@ public sealed class ArmyService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldPalisades.IndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
         var result = Army.PlanFieldOrder(
             domain, waypoints, destination, home, now, sampler.TerrainAt, isPremium,
-            army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide);
+            army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
 
         if (!result.Accepted)
         {
@@ -689,6 +697,8 @@ public sealed class ArmyService(
         {
             var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
             var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
+            var walls = (await WorldPalisades.IndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
             var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
             // An explicit provisions value is the admin's final word, so it is
@@ -697,7 +707,7 @@ public sealed class ArmyService(
             var teleported = domain.TeleportTo(
                 destination, home, now, sampler.TerrainAt,
                 provisions is { } given ? Math.Max(0, given) : null, army.Settlement.World.SpeedFactor,
-                rivers.IsRiver, rivers.IsWide);
+                rivers.IsRiver, rivers.IsWide, walls);
             if (teleported is null)
             {
                 return await RejectAsync(AdminArmyEditOutcome.UnreachableHex).ConfigureAwait(false);

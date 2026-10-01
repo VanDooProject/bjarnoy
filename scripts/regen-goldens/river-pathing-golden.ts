@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { coordKey, type AxialCoord } from '../../src/frontend/src/lib/hex/coords';
 import { findPath, hoursFrom, pathCost, reachableRange, type PathContext } from '../../src/frontend/src/lib/map/hexPath';
+import { palisadeRestrictions, type PalisadeWalls } from '../../src/frontend/src/lib/map/palisadeMovement';
 import { isWideRiverTile } from '../../src/frontend/src/lib/map/riverGenerator';
 import type { RiverTile, Terrain } from '../../src/frontend/src/lib/map/types';
 
@@ -31,6 +32,27 @@ for (const q of [50, 51, 52]) put(q, 0, 'grass');
 // 60..62: a river-stream Y (a stream joining a river) between the endpoints; its two feeders are the only other land.
 for (const [q, r] of [[60, 0], [61, 0], [62, 0], [61, -1], [60, 1]] as const) put(q, r, 'grass');
 
+// Palisades: four strips (q0 .. q0+6, r -3..3, everything else sea) with a wall down the column q0+3; the endpoints are (q0+1, 0) and (q0+5, 0).
+// 70: a wall closed at both ends by a mountain, with a gate in the middle (owner A's). 80: the same without the gate.
+// 90: a wall that stops one hex short of the sea at the bottom (half-open end, crossed at a flat 3), a mountain closing the top.
+// 100: the same wall, but a mountain at the bottom end seals it.
+const walls: { q: number; r: number; gate?: boolean }[] = [];
+const wallStrip = (q0: number, fromR: number, toR: number, mountainTop: boolean, bottom: 'mountainBelow' | 'mountainAtTip' | 'sea', gateAtR?: number) => {
+  for (let q = q0; q <= q0 + 6; q++) for (let r = -3; r <= 3; r++) put(q, r, 'grass');
+  if (mountainTop) put(q0 + 3, -4, 'mountain');
+  if (bottom === 'mountainBelow') put(q0 + 3, 4, 'mountain');
+  if (bottom === 'mountainAtTip') put(q0 + 3, 3, 'mountain');
+  if (bottom === 'sea') delete terrain[`${q0 + 3},3`];
+  for (let r = fromR; r <= toR; r++) walls.push(r === gateAtR ? { q: q0 + 3, r, gate: true } : { q: q0 + 3, r });
+};
+wallStrip(70, -3, 3, true, 'mountainBelow', 0);
+wallStrip(80, -3, 3, true, 'mountainBelow');
+wallStrip(90, -3, 2, true, 'sea');
+wallStrip(100, -3, 2, true, 'mountainAtTip');
+// Walls belong to this owner; an "enemy" army is any other.
+const OWNER = 'owner-a';
+const wallMap: PalisadeWalls = new Map(walls.map((w) => [coordKey(w), { gate: w.gate ?? false, owner: OWNER }]));
+
 const tile = (q: number, r: number, shape: RiverTile['shape'], width: RiverTile['width'], inDirections: RiverTile['inDirections'], outDirection: RiverTile['outDirection']): RiverTile => ({
   q, r, shape, width, inDirections, outDirection,
 });
@@ -47,22 +69,28 @@ const riverTiles: RiverTile[] = [
 
 const riverByKey = new Map(riverTiles.map((t) => [coordKey(t), t]));
 const riverAt = (c: AxialCoord) => riverByKey.get(coordKey(c));
-const ctx: PathContext = {
-  terrainAt: (c) => terrain[coordKey(c)] ?? 'sea',
+const terrainAt = (c: AxialCoord): Terrain => terrain[coordKey(c)] ?? 'sea';
+const isWideRiver = (c: AxialCoord) => {
+  const t = riverAt(c);
+  return t !== undefined && isWideRiverTile(t, riverAt);
+};
+/** The context for an army: `friendly` is the wall owner's, anything else an enemy's. */
+const contextFor = (army: 'friendly' | 'enemy'): PathContext => ({
+  terrainAt,
   isRiver: (c) => riverByKey.has(coordKey(c)),
-  isWideRiver: (c) => {
-    const t = riverAt(c);
-    return t !== undefined && isWideRiverTile(t, riverAt);
-  },
+  isWideRiver,
   rules: { land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0 }, riverCrossingCost: 8.0 },
   hexesPerHour: 1,
-};
+  restrictions: palisadeRestrictions(wallMap, terrainAt, isWideRiver, army === 'friendly' ? OWNER : 'someone-else'),
+});
 
 interface CaseInput {
   name: string;
   comment: string;
   from: AxialCoord;
   to: AxialCoord;
+  /** Whose army walks: the wall owner's (default) or an enemy's. Only matters where a wall stands. */
+  army?: 'friendly' | 'enemy';
 }
 const caseInputs: CaseInput[] = [
   {
@@ -107,18 +135,62 @@ const caseInputs: CaseInput[] = [
     from: { q: 60, r: 0 },
     to: { q: 62, r: 0 },
   },
+  {
+    name: 'wall_with_a_gate_stops_an_enemy',
+    comment: 'A wall closed by a mountain at both ends with a gate in the middle (every wall hex, the gate included, blocks an army that is not its owner\'s): no route.',
+    from: { q: 71, r: 0 },
+    to: { q: 75, r: 0 },
+    army: 'enemy',
+  },
+  {
+    name: 'wall_with_a_gate_lets_the_owner_through',
+    comment: 'The same wall: the owner\'s army walks through its own gate at the normal terrain cost (four grass steps, 4.0).',
+    from: { q: 71, r: 0 },
+    to: { q: 75, r: 0 },
+    army: 'friendly',
+  },
+  {
+    name: 'wall_without_a_gate_stops_the_owner_too',
+    comment: 'A wall with no gate, closed by a mountain at both ends: every wall hex blocks every army, the owner\'s included.',
+    from: { q: 81, r: 0 },
+    to: { q: 85, r: 0 },
+    army: 'friendly',
+  },
+  {
+    name: 'half_open_end_is_crossed_by_an_enemy_at_3',
+    comment: 'A wall that stops one hex short of the sea: its land end touches no mountain or wide river, so it is half open and an enemy crosses it at a flat 3.0 (instead of 1.0).',
+    from: { q: 91, r: 0 },
+    to: { q: 95, r: 0 },
+    army: 'enemy',
+  },
+  {
+    name: 'half_open_end_is_crossed_by_the_owner_at_3',
+    comment: 'The same half-open end: the owner pays the same flat 3.0.',
+    from: { q: 91, r: 0 },
+    to: { q: 95, r: 0 },
+    army: 'friendly',
+  },
+  {
+    name: 'sealed_end_beside_a_mountain_blocks',
+    comment: 'The same wall with a mountain beside its tip: a sealed end blocks like any wall hex, so there is no route.',
+    from: { q: 101, r: 0 },
+    to: { q: 105, r: 0 },
+    army: 'enemy',
+  },
 ];
 
-const findPathCases = caseInputs.map((c) => {
+const findPathCases = caseInputs.map((raw) => {
+  const { army = 'friendly', ...c } = raw;
+  const ctx = contextFor(army);
   const path = findPath(c.from, c.to, ctx);
   const hours = hoursFrom(c.from, ctx, Number.POSITIVE_INFINITY);
   if (path === null) {
     if (hours.has(coordKey(c.to))) throw new Error(`${c.name}: findPath found no route but hoursFrom reaches the target`);
-    return { ...c, isLandUnit: true, expectedPath: null, expectedCumulativeHours: null };
+    return { ...c, army, isLandUnit: true, expectedPath: null, expectedCumulativeHours: null };
   }
   const cumulative = path.map((_, i) => pathCost(path.slice(0, i + 1), ctx));
   if (Math.abs(cumulative.at(-1)! - (hours.get(coordKey(c.to)) ?? NaN)) > 1e-9) throw new Error(`${c.name}: findPath and hoursFrom disagree`);
-  return { ...c, isLandUnit: true, expectedPath: path.map(({ q, r }) => ({ q, r })), expectedCumulativeHours: cumulative };
+  return { ...c, army, isLandUnit: true, expectedPath: path.map(({ q, r }) => ({ q, r })), expectedCumulativeHours: cumulative };
 });
 
 const rangeInputs = [
@@ -127,7 +199,7 @@ const rangeInputs = [
   { name: 'stream_on_a_mountain_range', comment: 'A stream over a mountain is walkable at 9.0 each way: from (40,0) with 30h of food the stream hex costs 18 round trip and the hex beyond it 20.', origin: { q: 40, r: 0 }, hoursOfFood: 30 },
 ];
 const reachableRangeCases = rangeInputs.map((c) => {
-  const range = reachableRange(c.origin, c.origin, c.hoursOfFood, ctx);
+  const range = reachableRange(c.origin, c.origin, c.hoursOfFood, contextFor('friendly'));
   const expectedReachable = [...range.entries()]
     .map(([key, hours]) => {
       const [q, r] = key.split(',').map(Number) as [number, number];
@@ -139,9 +211,10 @@ const reachableRangeCases = rangeInputs.map((c) => {
 
 const doc = {
   _comment:
-    "Issue #159 part B's anti-drift guard, updated for the movement rules (wide rivers and mountains impassable to land armies, a stream - any river tile that is not wide - walkable at a flat 1.0 + RiverCrossingCost = 9.0 whatever terrain it runs over). HexPathfinderGoldenTests.cs (backend) and hexPath.golden.test.ts (frontend) both compute against this fixture using each side's OWN production cost tables and wide-river rule (RiverArms.cs / riverArms.ts, from the full river tiles below), then assert the frozen results. Either side's cost model drifting from the other turns its own suite red, instead of the client's range tint quietly disagreeing with what the server actually paths over. Generated by scripts/regen-goldens/river-pathing-golden.ts from the frontend pathfinder; never hand-edit. terrain omits sea - any (q, r) not listed is sea (impassable to a land unit). A case with expectedPath null has no route. hexesPerHour/speedFactor are always 1.0 in these cases so every hour figure below is a plain sum of step costs.",
+    "Issue #159 part B's anti-drift guard, updated for the movement rules (wide rivers and mountains impassable to land armies, a stream - any river tile that is not wide - walkable at a flat 1.0 + RiverCrossingCost = 9.0 whatever terrain it runs over). HexPathfinderGoldenTests.cs (backend) and hexPath.golden.test.ts (frontend) both compute against this fixture using each side's OWN production cost tables and wide-river rule (RiverArms.cs / riverArms.ts, from the full river tiles below), then assert the frozen results. Either side's cost model drifting from the other turns its own suite red, instead of the client's range tint quietly disagreeing with what the server actually paths over. Generated by scripts/regen-goldens/river-pathing-golden.ts from the frontend pathfinder; never hand-edit. walls are the standing palisade hexes (an army with case.army 'friendly' belongs to the wall owner, 'enemy' to anyone else; the default is friendly): every wall hex blocks, a gate passes only its owner's armies, a land end with one wall neighbour that touches no mountain or wide river is half open at a flat 3.0 (HexPathfinder.HalfOpenEndCost / HALF_OPEN_END_COST). terrain omits sea - any (q, r) not listed is sea (impassable to a land unit). A case with expectedPath null has no route. hexesPerHour/speedFactor are always 1.0 in these cases so every hour figure below is a plain sum of step costs.",
   terrain,
   riverTiles,
+  walls: walls.map((w) => ({ q: w.q, r: w.r, gate: w.gate ?? false, owner: OWNER })),
   findPathCases,
   reachableRangeCases,
 };

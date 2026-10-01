@@ -99,15 +99,24 @@ public static class HexPathfinder
     public const double RiverCrossingCost = 8.0;
 
     /// <summary>
+    /// What a land army pays to enter a palisade hex that is half open (a land end of a wall that touches no mountain or wide river), in
+    /// place of its terrain cost: passable for every army at this flat cost (<c>docs/design/economy.md</c> section 5). Above every
+    /// terrain cost but the stream's, so an open way round is preferred over wading through the gap.
+    /// </summary>
+    public const double HalfOpenEndCost = 3.0;
+
+    /// <summary>
     /// What a land army pays to enter a hex, or <see langword="null"/> if it cannot: the single
-    /// rule both <see cref="FindPath"/> and <see cref="CumulativeHours"/> price a step with.
-    /// A wide river and a plain mountain are impassable; a stream is a flat
-    /// <c>1.0 + <see cref="RiverCrossingCost"/></c> over any land terrain (mountain included);
-    /// sea and lakes are not in the cost table; <paramref name="blocked"/> hexes are impassable.
+    /// rule both <see cref="FindPath"/> and <see cref="CumulativeHours"/> price a step with, in the same precedence as the frontend's
+    /// <c>stepCost</c> (hexPath.ts): sea and lakes are not in the cost table; a wide river is impassable; a stream is a flat
+    /// <c>1.0 + <see cref="RiverCrossingCost"/></c> over any land terrain (mountain included); a plain mountain is impassable; a
+    /// <paramref name="halfOpen"/> palisade end costs <see cref="HalfOpenEndCost"/>; a <paramref name="blocked"/> hex (a palisade) is
+    /// impassable unless <paramref name="friendlyGate"/> holds for it; anything else costs its terrain.
     /// </summary>
     private static double? LandStepCost(
         HexCoord hex, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool>? isRiver,
-        Func<HexCoord, bool>? isWideRiver, Func<HexCoord, bool>? blocked)
+        Func<HexCoord, bool>? isWideRiver, Func<HexCoord, bool>? blocked,
+        Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null)
     {
         var terrain = terrainAt(hex);
         if (!LandTerrainCost.TryGetValue(terrain, out var cost))
@@ -115,17 +124,33 @@ public static class HexPathfinder
             return null;
         }
 
-        if (blocked is not null && blocked(hex))
+        var river = isRiver is not null && isRiver(hex);
+        if (river)
+        {
+            if (isWideRiver is not null && isWideRiver(hex))
+            {
+                return null;
+            }
+
+            return 1.0 + RiverCrossingCost;
+        }
+
+        if (terrain == Terrain.Mountain)
         {
             return null;
         }
 
-        if (isRiver is not null && isRiver(hex))
+        if (halfOpen is not null && halfOpen(hex))
         {
-            return isWideRiver is not null && isWideRiver(hex) ? null : 1.0 + RiverCrossingCost;
+            return HalfOpenEndCost;
         }
 
-        return terrain == Terrain.Mountain ? null : cost;
+        if (blocked is not null && blocked(hex) && !(friendlyGate is not null && friendlyGate(hex)))
+        {
+            return null;
+        }
+
+        return cost;
     }
 
     /// <summary>
@@ -183,9 +208,16 @@ public static class HexPathfinder
     /// (the default) treats every river hex as a crossable stream.
     /// </param>
     /// <param name="blocked">
-    /// Optional extra impassable hexes for a land army (the hook a palisade will use; nothing
-    /// passes one yet). <see langword="null"/> (the default) blocks nothing. Never applied to the
-    /// start hex or to a fleet.
+    /// Optional extra impassable hexes for a land army (every palisade hex, see <see cref="PalisadeIndex"/>).
+    /// <see langword="null"/> (the default) blocks nothing. Never applied to the start hex or to a fleet.
+    /// </param>
+    /// <param name="friendlyGate">
+    /// Optional: a <paramref name="blocked"/> hex this army may pass anyway at its normal terrain cost (a gate of the army's own owner).
+    /// <see langword="null"/> (the default) lets nothing through.
+    /// </param>
+    /// <param name="halfOpen">
+    /// Optional: hexes any army may enter at <see cref="HalfOpenEndCost"/> instead of their terrain cost (a palisade's half-open land
+    /// end); <paramref name="blocked"/> is not consulted for them. <see langword="null"/> (the default) means none.
     /// </param>
     /// <returns>
     /// The route, or <see langword="null"/> when there is none — which, for a land army, now
@@ -194,7 +226,8 @@ public static class HexPathfinder
     public static IReadOnlyList<HexCoord>? FindPath(
         HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
         Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
-        Func<HexCoord, bool>? blocked = null)
+        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
+        Func<HexCoord, bool>? halfOpen = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -265,7 +298,7 @@ public static class HexPathfinder
                 double stepCost;
                 if (isLandUnit)
                 {
-                    if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked) is not { } landCost)
+                    if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen) is not { } landCost)
                     {
                         continue;
                     }
@@ -353,9 +386,13 @@ public static class HexPathfinder
     /// or a mountain with no stream, which only a path stored before the movement rules can
     /// contain) is charged <see cref="double.PositiveInfinity"/>, like any other impassable hex.
     /// </param>
+    /// <param name="blocked">Same palisade lookups <see cref="FindPath"/> takes (<paramref name="blocked"/>, <paramref name="friendlyGate"/>, <paramref name="halfOpen"/>): a half-open end is charged <see cref="HalfOpenEndCost"/>, so the hours match the route that was chosen.</param>
+    /// <param name="friendlyGate">See <paramref name="blocked"/>.</param>
+    /// <param name="halfOpen">See <paramref name="blocked"/>.</param>
     public static IReadOnlyList<double> CumulativeHours(
         IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true,
-        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
+        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -388,7 +425,7 @@ public static class HexPathfinder
             double stepCost;
             if (isLandUnit)
             {
-                stepCost = LandStepCost(path[i], terrainAt, isRiver, isWideRiver, blocked: null) ?? double.PositiveInfinity;
+                stepCost = LandStepCost(path[i], terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen) ?? double.PositiveInfinity;
             }
             else
             {

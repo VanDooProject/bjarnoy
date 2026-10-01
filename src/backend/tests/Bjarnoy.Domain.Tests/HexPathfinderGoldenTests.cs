@@ -16,6 +16,9 @@ namespace Bjarnoy.Domain.Tests;
 /// </summary>
 public class HexPathfinderGoldenTests
 {
+    private static readonly Guid Owner = Guid.Parse("00000000-0000-0000-0000-00000000000a");
+    private static readonly Guid Stranger = Guid.Parse("00000000-0000-0000-0000-00000000000b");
+
     private static readonly GoldenFixture Fixture = LoadFixture();
 
     public static IEnumerable<object[]> FindPathCases() => Fixture.FindPathCases.Select(c => new object[] { c });
@@ -29,7 +32,12 @@ public class HexPathfinderGoldenTests
         var from = new HexCoord(testCase.From.Q, testCase.From.R);
         var to = new HexCoord(testCase.To.Q, testCase.To.R);
 
-        var path = HexPathfinder.FindPath(from, to, TerrainAt, testCase.IsLandUnit, Fixture.Rivers.IsRiver, Fixture.Rivers.IsWide);
+        // The wall owner's army ("friendly", the default) or any other owner's ("enemy").
+        var rules = Fixture.Walls.ForOwner(testCase.Army == "enemy" ? Stranger : Owner);
+
+        var path = HexPathfinder.FindPath(
+            from, to, TerrainAt, testCase.IsLandUnit, Fixture.Rivers.IsRiver, Fixture.Rivers.IsWide,
+            rules?.Blocked, rules?.FriendlyGate, rules?.HalfOpen);
 
         if (testCase.ExpectedPath is null)
         {
@@ -42,7 +50,8 @@ public class HexPathfinderGoldenTests
         Assert.Equal(expectedPath, path);
 
         var hours = HexPathfinder.CumulativeHours(
-            path!, TerrainAt, hexesPerHour: 1.0, testCase.IsLandUnit, isRiver: Fixture.Rivers.IsRiver, isWideRiver: Fixture.Rivers.IsWide);
+            path!, TerrainAt, hexesPerHour: 1.0, testCase.IsLandUnit, isRiver: Fixture.Rivers.IsRiver, isWideRiver: Fixture.Rivers.IsWide,
+            blocked: rules?.Blocked, friendlyGate: rules?.FriendlyGate, halfOpen: rules?.HalfOpen);
         var expectedHours = testCase.ExpectedCumulativeHours!;
         Assert.Equal(expectedHours.Count, hours.Count);
         for (var i = 0; i < hours.Count; i++)
@@ -62,6 +71,18 @@ public class HexPathfinderGoldenTests
         Assert.Equal([0.0, 9.0, 10.0], byName["stream_on_a_mountain_costs_a_flat_9"].ExpectedCumulativeHours);
     }
 
+    [Fact]
+    public void The_fixture_covers_walls_a_gate_for_friend_and_foe_a_half_open_end_and_a_sealed_end()
+    {
+        var byName = Fixture.FindPathCases.ToDictionary(c => c.Name);
+        Assert.Null(byName["wall_with_a_gate_stops_an_enemy"].ExpectedPath);
+        Assert.Equal(4.0, byName["wall_with_a_gate_lets_the_owner_through"].ExpectedCumulativeHours![^1]);
+        Assert.Null(byName["wall_without_a_gate_stops_the_owner_too"].ExpectedPath);
+        Assert.Equal([3.0, 6.0], byName["half_open_end_is_crossed_by_an_enemy_at_3"].ExpectedCumulativeHours!.Skip(3).Take(2));
+        Assert.Equal(HexPathfinder.HalfOpenEndCost, 3.0);
+        Assert.Null(byName["sealed_end_beside_a_mountain_blocks"].ExpectedPath);
+    }
+
     private static string Key(HexCoord c) => $"{c.Q},{c.R}";
 
     private static GoldenFixture LoadFixture()
@@ -73,7 +94,12 @@ public class HexPathfinderGoldenTests
 
         var terrain = raw.Terrain.ToDictionary(kv => kv.Key, kv => ParseTerrain(kv.Value));
         var rivers = new RiverIndex(raw.RiverTiles.Select(ToRiverTile));
-        return new GoldenFixture(terrain, rivers, raw.FindPathCases);
+        // The wall owner is the one owner key the fixture's walls carry; "enemy" armies walk for someone else.
+        var walls = new PalisadeIndex(
+            raw.Walls.Select(w => new StandingWall(new HexCoord(w.Q, w.R), w.Gate, Owner)),
+            c => terrain.GetValueOrDefault(Key(c), Terrain.Sea),
+            rivers.IsWide);
+        return new GoldenFixture(terrain, rivers, walls, raw.FindPathCases);
     }
 
     private static TileOrientation ParseOrientation(string name) =>
@@ -122,6 +148,7 @@ public class HexPathfinderGoldenTests
     private sealed record GoldenFixture(
         IReadOnlyDictionary<string, Terrain> Terrain,
         RiverIndex Rivers,
+        PalisadeIndex Walls,
         IReadOnlyList<FindPathCase> FindPathCases);
 
     private sealed class RawFixture
@@ -129,6 +156,8 @@ public class HexPathfinderGoldenTests
         public Dictionary<string, string> Terrain { get; set; } = [];
 
         public List<RiverTileDto> RiverTiles { get; set; } = [];
+
+        public List<WallDto> Walls { get; set; } = [];
 
         public List<FindPathCase> FindPathCases { get; set; } = [];
     }
@@ -143,12 +172,24 @@ public class HexPathfinderGoldenTests
 
         public bool IsLandUnit { get; set; }
 
+        /// <summary>"friendly" (the wall owner's army, the default) or "enemy".</summary>
+        public string Army { get; set; } = "friendly";
+
         /// <summary>Null: no land route exists.</summary>
         public List<HexCoordDto>? ExpectedPath { get; set; }
 
         public List<double>? ExpectedCumulativeHours { get; set; }
 
         public override string ToString() => Name;
+    }
+
+    public sealed class WallDto
+    {
+        public int Q { get; set; }
+
+        public int R { get; set; }
+
+        public bool Gate { get; set; }
     }
 
     public sealed class HexCoordDto
