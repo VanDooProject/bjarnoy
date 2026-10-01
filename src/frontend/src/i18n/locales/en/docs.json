@@ -630,24 +630,34 @@
         "end": "A land end is half open: any army can cross it, at a cost of 3 instead of the cost of the ground. If it touches a mountain or a wide river it is a sealed end and blocks like any wall hex.",
         "sea": "A wall that ends in the sea end seals at the coast. A wall that merely stops on land next to open sea does not: its half-open end is the way through.",
         "natural": "Mountains and wide rivers cannot be crossed by land armies anyway, so a wall run up to one is sealed there.",
+        "rivers": "Rivers: a wide river is no way through for a land army, so a wall that ends at one is sealed there. A stream can be crossed and does not seal a wall's end. Walls cannot stand on either.",
         "fleets": "Fleets are not affected by walls."
       },
       "diagram": {
         "sealedTitle": "Sealed",
         "sealed": "A wall run up to mountains on both ends: no way through.",
+        "riverEndTitle": "Sealed by a river",
+        "riverEnd": "A wall run up to a wide river is sealed there, just like at a mountain.",
         "halfOpenTitle": "Half open",
-        "halfOpen": "A wall that stops on land, even right beside the sea: any army crosses its end at a cost of 3.",
+        "halfOpen": "A wall that simply stops on land: any army crosses its last hex at a cost of 3. Grass or sand makes no difference.",
+        "streamTitle": "Stream",
+        "stream": "A stream does not seal a wall's end: it can be crossed anyway, so the end stays half open.",
         "seaEndTitle": "Sea end",
-        "seaEnd": "The wall runs out into the water on a sea end: sealed at the coast.",
+        "seaEnd": "The line runs out into the water on a sea end: sealed at the coast.",
         "gateTitle": "Gate",
-        "gate": "A gate opens for its owner's armies only.",
+        "gate": "A gate is a gap between two posts. It opens for its owner's armies only.",
         "legend": {
-          "wall": "Wall",
-          "gate": "Gate",
-          "seaEnd": "Sea end (wall in the water)",
+          "wall": "Wall (a line along its hexes)",
+          "gate": "Gate (a gap between two posts)",
+          "grass": "Grass",
+          "sand": "Sand",
           "water": "Sea",
           "mountain": "Mountain",
-          "ground": "Open ground"
+          "river": "Wide river",
+          "stream": "Stream",
+          "army": "Army",
+          "pass": "Gets through (number: cost)",
+          "blocked": "Stopped"
         }
       }
     },

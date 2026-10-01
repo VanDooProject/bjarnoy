@@ -289,8 +289,8 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     // The example wall, drawn by the game's own map renderer, and the four grounds.
     await expect(page.locator('.wall-example canvas')).toBeVisible();
     await expect(page.locator('.walls figure.ground')).toHaveCount(4);
-    await expect(page.getByTestId('wall-movement-diagram').locator('figure')).toHaveCount(4);
-    await expect(page.getByTestId('wall-movement-legend').locator('li')).toHaveCount(6);
+    await expect(page.getByTestId('wall-movement-diagram').locator('figure')).toHaveCount(6);
+    await expect(page.getByTestId('wall-movement-legend').locator('li')).toHaveCount(11);
 
     await page.locator('.docs-page .breadcrumb').click();
     await expect(page).toHaveURL(/\/docs$/);

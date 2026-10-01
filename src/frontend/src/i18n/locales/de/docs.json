@@ -630,24 +630,34 @@
         "end": "Ein Landende ist halb offen: Jedes Heer kann es überqueren, zu Kosten von 3 statt den Kosten des Bodens. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes Mauerfeld.",
         "sea": "Eine Mauer, die in einem Seeende endet, schließt an der Küste ab. Eine Mauer, die an Land neben offenem Meer einfach aufhört, tut das nicht: Ihr halb offenes Ende ist der Weg hindurch.",
         "natural": "Berge und breite Flüsse können Landheere ohnehin nicht überqueren, eine Mauer, die bis an einen von ihnen reicht, ist dort also verschlossen.",
+        "rivers": "Flüsse: Ein breiter Fluss ist für Landheere kein Weg, eine Mauer, die an einem endet, ist dort also verschlossen. Ein Bach lässt sich überqueren und verschließt das Ende einer Mauer nicht. Auf keinem von beiden kann eine Mauer stehen.",
         "fleets": "Flotten werden von Mauern nicht betroffen."
       },
       "diagram": {
         "sealedTitle": "Verschlossen",
         "sealed": "Eine Mauer, die an beiden Enden bis an Berge reicht: kein Durchkommen.",
+        "riverEndTitle": "Vom Fluss verschlossen",
+        "riverEnd": "Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, genau wie an einem Berg.",
         "halfOpenTitle": "Halb offen",
-        "halfOpen": "Eine Mauer, die an Land aufhört, selbst direkt am Meer: Jedes Heer überquert ihr Ende zu Kosten von 3.",
+        "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jedes Heer überquert ihr letztes Feld zu Kosten von 3. Gras oder Sand macht keinen Unterschied.",
+        "streamTitle": "Bach",
+        "stream": "Ein Bach verschließt das Ende einer Mauer nicht: Er lässt sich ohnehin überqueren, das Ende bleibt halb offen.",
         "seaEndTitle": "Seeende",
-        "seaEnd": "Die Mauer läuft auf einem Seeende ins Wasser aus: an der Küste verschlossen.",
+        "seaEnd": "Die Linie läuft auf einem Seeende ins Wasser aus: an der Küste verschlossen.",
         "gateTitle": "Tor",
-        "gate": "Ein Tor öffnet sich nur für die Heere seines Besitzers.",
+        "gate": "Ein Tor ist eine Lücke zwischen zwei Pfosten. Es öffnet sich nur für die Heere seines Besitzers.",
         "legend": {
-          "wall": "Mauer",
-          "gate": "Tor",
-          "seaEnd": "Seeende (Mauer im Wasser)",
+          "wall": "Mauer (eine Linie entlang ihrer Felder)",
+          "gate": "Tor (Lücke zwischen zwei Pfosten)",
+          "grass": "Gras",
+          "sand": "Sand",
           "water": "Meer",
           "mountain": "Berg",
-          "ground": "Offenes Land"
+          "river": "Breiter Fluss",
+          "stream": "Bach",
+          "army": "Heer",
+          "pass": "Kommt durch (Zahl: Kosten)",
+          "blocked": "Aufgehalten"
         }
       }
     },

@@ -126,6 +126,7 @@ const tocLinks = [
         <li>{{ $t('docs.walls.movement.rules.end') }}</li>
         <li>{{ $t('docs.walls.movement.rules.sea') }}</li>
         <li>{{ $t('docs.walls.movement.rules.natural') }}</li>
+        <li>{{ $t('docs.walls.movement.rules.rivers') }}</li>
         <li>{{ $t('docs.walls.movement.rules.fleets') }}</li>
       </ul>
       <WallMovementDiagram />
