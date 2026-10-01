@@ -66,9 +66,10 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 3],
 
   // Row 0 — Lumberjack (LH 1) -> Sawmill (LH 20) -> Shrine of Ullr (LH 25).
+  // Every shrine sits in the Capstone column, so the gods line up.
   lumberjack: [1, 0],
   sawmill: [2, 0],
-  shrineofullr: [3, 0],
+  shrineofullr: [4, 0],
 
   // Row 1 — Reindeer Herder (LH 1) -> Farm / Pumpkin Farm (LH 4) -> Crop Mill
   // (LH 20) -> Shrine of Freyja (LH 25).
@@ -91,7 +92,7 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   // Row 5 — Fishing Hut (LH 2) -> Dockyard (LH 8) -> Shrine of Njörd (LH 25).
   fishinghut: [1, 5],
   dockyard: [2, 5],
-  shrineofnjord: [3, 5],
+  shrineofnjord: [4, 5],
 
   // Row 6 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9).
   tower: [1, 6],
@@ -108,7 +109,7 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   cartworkshop: [2, 8],
   druidhut: [2, 9],
   // Row 9 — the Druid Hut (LH 12) -> Odin Statue (LH 25).
-  odinstatue: [3, 9],
+  odinstatue: [4, 9],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;

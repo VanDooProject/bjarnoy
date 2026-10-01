@@ -51,8 +51,7 @@ For a building with level-1 values `C₁` (cost, per resource), `P₁`
 ```
 cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (Longhouse 1.34)
 production(L) = P₁ · g_p^(L−1)           g_p = 1.20
-buildTime(L)  = t₁ · g_t^(L−1) · s(LH)   g_t = 1.33
-s(LH)         = 0.97^(LH−1)              Longhouse build-speed bonus (Travian's Main Building)
+buildTime(L)  = t₁ · g_t^(L−1)           g_t = 1.33
 ```
 
 Costs and output are both geometric (Travian's shape), so the payback
@@ -89,7 +88,7 @@ has 3–8 stages per building, and each level maps onto a stage
 
 | Group | Max level |
 |---|---|
-| Longhouse | 30 (also drives build slots, claim radius and the build-speed bonus) |
+| Longhouse | 30 (also drives build slots and claim radius) |
 | Resource producers, Storage House | 25 |
 | Military and civic buildings (Barracks, Archery Range, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
 | Mills (Sawmill, Crop Mill) | 20 |
