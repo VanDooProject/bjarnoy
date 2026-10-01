@@ -12,6 +12,7 @@
 import { chromium } from '../../src/frontend/node_modules/playwright-core/index.mjs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { gotoMapReady } from './util.mjs';
 
 const outDir = process.argv[2] || '.';
 const baseUrl = process.argv[3] || 'http://localhost:5183';
@@ -50,7 +51,7 @@ page.on('console', (m) => {
 });
 
 // Landing page is itself a settlement-mode preview; clicking the island founds.
-await page.goto(`${baseUrl}/?debug=1`, { waitUntil: 'networkidle' });
+await gotoMapReady(page, `${baseUrl}/?debug=1`);
 await page.waitForTimeout(1200);
 await page.mouse.click(900, 300);
 await page.waitForTimeout(900);
