@@ -106,10 +106,16 @@ const isTouch = useMediaQuery(TOUCH_QUERY);
    bar occupies and how tall it is, so the banners clear it whether it's
    docked at the top or the bottom. */
 @media (max-width: 768px), (max-height: 500px) {
+  /* `--hud-inset-left` (the landscape rail's width, 0 everywhere else) keeps
+     the banner out from under the rail: left-anchored and narrowed by it,
+     which is the same centred 100vw - 32px box as before when it is 0. */
   .banner {
+    left: calc(var(--hud-inset-left, 0px) + 16px);
+    transform: none;
+    max-width: none;
     border-radius: 16px;
     flex-wrap: wrap;
-    width: calc(100vw - 24px);
+    width: calc(100vw - 32px - var(--hud-inset-left, 0px));
     padding: 10px 14px;
     gap: 6px 10px;
   }

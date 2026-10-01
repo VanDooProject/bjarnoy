@@ -49,8 +49,8 @@ import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useMediaQuery } from '../composables/useMediaQuery';
-import { hudBarHeightPx } from '../composables/hudBarHeight';
-import { isHudBarAtBottom } from '../composables/hudSettlementBubbleState';
+import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
+import { isHudBarAtBottom, isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY, TOUCH_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
@@ -431,6 +431,11 @@ const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && isHudB
 // that ref alone without re-introducing a stale 64px gap under nothing.
 const hudInsetTopPxLanding = computed(() =>
   hideBarForTutorial.value || hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value,
+);
+// Landscape rail mode (TopBar.vue): no top band (hudBarHeightPx is 0 there),
+// the rail's width goes into `--hud-inset-left` instead.
+const hudInsetLeftPxLanding = computed(() =>
+  hideBarForTutorial.value || !isHudRail.value ? 0 : hudRailWidthPx.value + 8,
 );
 const hudInsetBottomPxLanding = computed(() =>
   !hideBarForTutorial.value && hudBarAtBottomLanding.value ? hudBarHeightPx.value : 0,
@@ -893,6 +898,7 @@ watch(
     :style="{
       '--hud-inset-top': hudInsetTopPxLanding + 'px',
       '--hud-inset-bottom': hudInsetBottomPxLanding + 'px',
+      '--hud-inset-left': hudInsetLeftPxLanding + 'px',
     }"
   >
     <!-- Deliberately outside the SettlementCanvas v-if below: it has to show
@@ -1013,7 +1019,7 @@ watch(
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
       :target-radius="pointerTarget.targetRadius"
-      clear-below-selector=".hero--founding"
+      clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
@@ -1161,6 +1167,15 @@ h1 {
    hero has to span full-width below the mobile header instead of a fixed
    left offset, and the footer has to shrink so it doesn't fight the
    checklist tray for the same strip of screen at the bottom. */
+/* Landscape rail (TopBar.vue): the account-creation nudge hangs off the
+   rail's "Name your jarl" bubble at the top-left, right where the
+   completion banner's title sits on a short screen. While the nudge is up,
+   the banner starts right of it (the nudge is 300px wide, from the rail's
+   8px margin). */
+.landing:has(.hud-bar--rail .nudge) > .banner.complete {
+  left: 324px;
+  width: calc(100vw - 340px);
+}
 @media (max-width: 768px), (max-height: 500px) {
   .hero {
     left: 20px;

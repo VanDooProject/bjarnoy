@@ -39,6 +39,7 @@ import { computed, onUnmounted, ref, watchEffect } from 'vue';
 import type { AxialCoord } from '../../lib/hex/coords';
 import { useMapAnchor, type MapAnchorRenderer } from '../../composables/useMapAnchor';
 import { useMediaQuery } from '../../composables/useMediaQuery';
+import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import { arrowTipOffset, HEX_TARGET_RADIUS_PX } from '../../lib/map/guidanceArrowGeometry';
 import { placeChip, type ChipSide } from '../../lib/map/guidanceChipPlacement';
 import {
@@ -66,8 +67,9 @@ const props = withDefaults(
     /** Which side of the arrow the label chip sits on. */
     chipSide?: 'left' | 'right';
     /**
-     * CSS selector of a block (the landing hero) the chip must stay below on phones, where that
-     * block spans the width: the chip's `above` slot is otherwise only kept clear of the HUD.
+     * CSS selector of the blocks (the landing hero, the landfall banner) the chip must stay below
+     * on phones, where they span the width: the chip's `above` slot is otherwise only kept clear
+     * of the HUD. Every visible match counts.
      */
     clearBelowSelector?: string;
   }>(),
@@ -107,6 +109,11 @@ const shiftEl = ref<HTMLElement | null>(null);
 // `chipSide` is desktop-only; below 768px "above" reads better regardless of
 // the prop, matching the old media query's intent (see the CSS comment).
 const isMobile = useMediaQuery('(max-width: 768px)');
+// A short landscape phone (844x390) is wider than 768px but its founding hero
+// is still a block the chip has to clear (LandingView's `(max-height: 500px)`
+// left column sits right where the plot's chip lands), so the clearance below
+// follows the whole phone HUD breakpoint, not just the narrow-width one.
+const isCompactHud = useMediaQuery(HUD_COMPACT_QUERY);
 
 function insetPx(styles: CSSStyleDeclaration, name: string): number {
   const value = parseFloat(styles.getPropertyValue(name));
@@ -137,12 +144,17 @@ function tick() {
   // keep the chip clear of it too.
   const overlayRows = isMobile.value && isSettlementBubbleShown.value ? SETTLEMENT_BUBBLE_ROW_PX : 0;
   let clearBelow = 0;
-  if (isMobile.value && props.clearBelowSelector) {
-    const block = document.querySelector(props.clearBelowSelector);
-    if (block) clearBelow = block.getBoundingClientRect().bottom + 6;
+  if (isCompactHud.value && props.clearBelowSelector) {
+    // Every match counts (the founding hero, then the landfall banner that
+    // replaces it at the top once a plot is claimed), not just the first.
+    for (const block of document.querySelectorAll(props.clearBelowSelector)) {
+      const rect = block.getBoundingClientRect();
+      if (rect.height > 0) clearBelow = Math.max(clearBelow, rect.bottom + 6);
+    }
   }
   const safe = {
-    left: 8,
+    // The landscape rail's width (0 elsewhere) — the chip stays right of it.
+    left: insetPx(anchorStyles, '--hud-inset-left') + 8,
     top: Math.max(insetPx(anchorStyles, '--hud-inset-top') + 8 + overlayRows, clearBelow),
     right: window.innerWidth - 8,
     bottom: window.innerHeight - insetPx(anchorStyles, '--hud-inset-bottom') - 8,

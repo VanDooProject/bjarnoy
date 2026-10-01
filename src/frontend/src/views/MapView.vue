@@ -36,7 +36,8 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
 import { useMediaQuery } from '../composables/useMediaQuery';
-import { hudBarHeightPx } from '../composables/hudBarHeight';
+import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
+import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
@@ -82,7 +83,11 @@ const hudPrefs = useHudPrefsStore();
 // isExpanded), so this reads the real, currently-measured height
 // (TopBar.vue's own ResizeObserver) rather than assuming a fixed number.
 const isCompactHud = useMediaQuery(HUD_COMPACT_QUERY);
-const hudBarAtBottom = computed(() => isCompactHud.value && hudPrefs.barPosition === 'bottom');
+// Landscape rail mode ignores the docking preference (the rail has no edge to
+// dock to) and writes a 0 top band: `--hud-inset-left` carries the rail's
+// width instead, for the overlays that must not sit under it.
+const hudBarAtBottom = computed(() => isCompactHud.value && !isHudRail.value && hudPrefs.barPosition === 'bottom');
+const hudInsetLeftPx = computed(() => (isHudRail.value ? hudRailWidthPx.value + 8 : 0));
 const hudInsetTopPx = computed(() => (hudBarAtBottom.value ? 0 : hudBarHeightPx.value));
 const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? hudBarHeightPx.value : 0));
 const unitCatalogue = useUnitCatalogueStore();
@@ -1247,7 +1252,11 @@ async function upgrade() {
   <div
     ref="stageRef"
     class="map-view"
-    :style="{ '--hud-inset-top': hudInsetTopPx + 'px', '--hud-inset-bottom': hudInsetBottomPx + 'px' }"
+    :style="{
+      '--hud-inset-top': hudInsetTopPx + 'px',
+      '--hud-inset-bottom': hudInsetBottomPx + 'px',
+      '--hud-inset-left': hudInsetLeftPx + 'px',
+    }"
   >
     <!-- Outside the canvas v-if: shows while the settlement is still loading. -->
     <MapStatusOverlay :step="overlayStep" :error="overlayError" @retry="retryLoad" />

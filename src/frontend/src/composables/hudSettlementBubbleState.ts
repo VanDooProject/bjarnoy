@@ -39,3 +39,11 @@ export const isHudBarAtBottom = ref(false);
 // from "a bar, currently the default height" and fall back to the bare top
 // edge instead.
 export const isHudBarMounted = ref(false);
+
+// Landscape "rail" HUD (lib/breakpoints.ts's HUD_RAIL_QUERY): on a short
+// landscape phone TopBar.vue becomes a floating column at the top-left instead
+// of a full-width bar. TopBar writes whether that is the case right now,
+// ResourceBar.vue reads it to stack its pills and to skip the drawer's
+// "expanded" layout, and the other HUD overlays read the rail's size from
+// hudBarHeight.ts's hudRailWidthPx/hudRailHeightPx.
+export const isHudRail = ref(false);

@@ -244,12 +244,9 @@ test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
     await openRingOnGuidedHex(settlement);
     const chip = settlement.guidancePointer.locator('.chip');
     await expectInsideViewport(page, chip);
-    const chipBox = (await chip.boundingBox())!;
+    // Short landscape has no top bar: `.hud-bar` is the left rail (☰ + pills).
     const hudBar = page.locator('.hud-bar');
-    if (await hudBar.isVisible()) {
-      const hudBarBox = (await hudBar.boundingBox())!;
-      expect(chipBox.y).toBeGreaterThanOrEqual(hudBarBox.y + hudBarBox.height - 1);
-    }
+    if (await hudBar.isVisible()) await expectNoOverlap(chip, hudBar, 'chip covered by the HUD bar');
     // The settlement bubble and demo badge stack in rows under the bar here;
     // the chip must not end up behind them either.
     for (const [selector, what] of [
