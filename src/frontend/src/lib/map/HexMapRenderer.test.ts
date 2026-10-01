@@ -775,7 +775,7 @@ describe('startTextureLoad', () => {
         onPartial(p2);
         return final;
       },
-      merge: (base, next) => ({ ...base, merged: [...((base as { merged?: string[] }).merged ?? []), (next as { id: string }).id] }) as unknown as TileTextures,
+      merge: (base, next) => ({ ...base, merged: [...((base as { merged?: string[] }).merged ?? []), (next as unknown as { id: string }).id] }) as unknown as TileTextures,
       getTextures: () => current,
       setTextures: (t) => {
         current = t;
