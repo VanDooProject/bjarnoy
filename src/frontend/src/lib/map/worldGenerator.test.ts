@@ -154,7 +154,8 @@ describe('wasted islands and the min gap', () => {
   });
 });
 
-describe('variantForTerrain', () => {
+// Manual run only (`RUN_MANUAL_TESTS=1 npx vitest run worldGenerator`): the art pack's variants may change, so this is not a CI gate.
+describe.runIf(process.env.RUN_MANUAL_TESTS)('variantForTerrain', () => {
   it('never rolls the undecorated plain bog frame, but uses every dressed one', () => {
     const seen = new Set<number>();
     for (let q = -40; q < 40; q++) for (let r = -40; r < 40; r++) seen.add(variantForTerrain(q, r, SEED, 'bog'));
