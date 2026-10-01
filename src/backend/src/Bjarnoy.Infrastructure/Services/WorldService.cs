@@ -1,4 +1,6 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -6,6 +8,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Bjarnoy.Infrastructure.Services;
+
+/// <summary>
+/// A world's spawn spots (island start positions): how many exist, and how
+/// many new players could still found on them right now — see
+/// <see cref="WorldService.GetSpawnCapacityAsync"/>.
+/// </summary>
+public readonly record struct SpawnCapacity(int Free, int Total);
 
 /// <summary>Raised when a world cannot be created as asked.</summary>
 public sealed class WorldCreationException(string message) : Exception(message);
@@ -505,6 +514,175 @@ public sealed class WorldService(
         _dbContext.Worlds
             .AsNoTracking()
             .FirstOrDefaultAsync(w => w.Id == id, cancellationToken);
+
+    /// <summary>
+    /// Spawn spots (island start positions) per world, and how many new
+    /// players could still found a settlement on them right now.
+    /// </summary>
+    /// <remarks>
+    /// "Free" is not "total minus blocked": start positions sit closer
+    /// together than the founding spacing, so one new player takes several
+    /// of them out at once. Instead joins are simulated one after another,
+    /// each island's start positions in their stored order (the order the
+    /// plot suggestion walks them): a position counts when it clears the same
+    /// spacing rule a real founding is checked against
+    /// (<see cref="Founding.CheckSpacing"/>) — against every settlement
+    /// already on the island, a player's first one and their expansions
+    /// alike, and against the fresh settlements the simulation already
+    /// placed. Transient landing-page plot reservations are not counted, and
+    /// neither is <see cref="WorldEntity.MaxPlayers"/>: this is what the map
+    /// has room for. Wasted islands carry no start positions.
+    /// </remarks>
+    /// <param name="worldId">One world only, or <see langword="null"/> for every world.</param>
+    public async Task<Dictionary<Guid, SpawnCapacity>> GetSpawnCapacityAsync(
+        Guid? worldId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => !i.IsWasted && (worldId == null || i.WorldId == worldId))
+            .Select(i => new { i.Id, i.WorldId, i.StartPositions })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var settlements = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => worldId == null || s.WorldId == worldId)
+            .Select(s => new
+            {
+                s.IslandId,
+                s.CentreQ,
+                s.CentreR,
+                Buildings = s.Buildings.Select(b => new { b.Q, b.R, b.Type, b.Level }).ToList(),
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var neighboursByIsland = settlements
+            .GroupBy(s => s.IslandId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(s => new Founding.NeighbourSnapshot(
+                    new HexCoord(s.CentreQ, s.CentreR),
+                    s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()))
+                    .ToList());
+
+        return islands
+            .GroupBy(i => i.WorldId)
+            .ToDictionary(
+                g => g.Key,
+                g => new SpawnCapacity(
+                    Free: g.Sum(island => CountFreeSpawns(
+                        island.StartPositions, neighboursByIsland.GetValueOrDefault(island.Id, []))),
+                    Total: g.Sum(island => island.StartPositions.Count)));
+    }
+
+    /// <summary>
+    /// How many of <paramref name="startPositions"/> could be founded on one
+    /// after another — see <see cref="GetSpawnCapacityAsync"/>. Each pick is
+    /// added as a fresh settlement (a level-1 longhouse on its centre, exactly
+    /// what founding builds) before the next position is checked.
+    /// </summary>
+    /// <remarks>
+    /// A radius-4000 island can carry thousands of start positions and pick
+    /// hundreds of them, so checking every candidate against every pick took
+    /// seconds per world. Settlements are bucketed in a coarse grid instead,
+    /// and <see cref="Founding.CheckSpacing"/> only sees the ones whose reach
+    /// (see <see cref="SpacingReach"/>) could cover the candidate — the rest
+    /// can never reject it, so the verdict is the same.
+    /// </remarks>
+    public static int CountFreeSpawns(
+        IEnumerable<HexPoint> startPositions,
+        IEnumerable<Founding.NeighbourSnapshot> existing)
+    {
+        const int cellSize = 32;
+        var grid = new Dictionary<(int, int), List<(Founding.NeighbourSnapshot Snapshot, int Reach)>>();
+        var maxReach = 0;
+
+        static (int, int) CellOf(HexCoord c) =>
+            ((int)Math.Floor(c.Q / (double)cellSize), (int)Math.Floor(c.R / (double)cellSize));
+
+        void Add(Founding.NeighbourSnapshot snapshot)
+        {
+            var reach = SpacingReach(snapshot);
+            maxReach = Math.Max(maxReach, reach);
+            var cell = CellOf(snapshot.Centre);
+            if (!grid.TryGetValue(cell, out var bucket))
+            {
+                grid[cell] = bucket = [];
+            }
+
+            bucket.Add((snapshot, reach));
+        }
+
+        foreach (var snapshot in existing)
+        {
+            Add(snapshot);
+        }
+
+        var nearby = new List<Founding.NeighbourSnapshot>();
+        var free = 0;
+        foreach (var position in startPositions)
+        {
+            var candidate = new HexCoord(position.Q, position.R);
+
+            // Hex distance is at least max(|dq|, |dr|), so every settlement
+            // within maxReach sits in a cell overlapping this q/r window.
+            nearby.Clear();
+            var (minQ, minR) = CellOf(new HexCoord(candidate.Q - maxReach, candidate.R - maxReach));
+            var (maxQ, maxR) = CellOf(new HexCoord(candidate.Q + maxReach, candidate.R + maxReach));
+            for (var cq = minQ; cq <= maxQ; cq++)
+            {
+                for (var cr = minR; cr <= maxR; cr++)
+                {
+                    if (!grid.TryGetValue((cq, cr), out var bucket))
+                    {
+                        continue;
+                    }
+
+                    foreach (var (snapshot, reach) in bucket)
+                    {
+                        if (candidate.DistanceTo(snapshot.Centre) <= reach)
+                        {
+                            nearby.Add(snapshot);
+                        }
+                    }
+                }
+            }
+
+            if (Founding.CheckSpacing(
+                    candidate,
+                    nearby,
+                    SettlementService.MinimumSpacing,
+                    SettlementService.FoundingSafetyMargin) != Founding.SpacingVerdict.Ok)
+            {
+                continue;
+            }
+
+            Add(new Founding.NeighbourSnapshot(
+                candidate, [new PlacedBuilding(candidate, BuildingType.Longhouse, 1)]));
+            free++;
+        }
+
+        return free;
+    }
+
+    /// <summary>
+    /// The farthest hex distance from <paramref name="snapshot"/>'s centre at
+    /// which <see cref="Founding.CheckSpacing"/> can still reject a candidate
+    /// because of it: closer than the minimum spacing, or inside one of its
+    /// claim discs plus the safety margin.
+    /// </summary>
+    private static int SpacingReach(Founding.NeighbourSnapshot snapshot)
+    {
+        var reach = SettlementService.MinimumSpacing - 1;
+        foreach (var (centre, radius) in Settlement.ClaimDiscsFor(snapshot.Centre, snapshot.Buildings))
+        {
+            reach = Math.Max(reach, snapshot.Centre.DistanceTo(centre) + radius + SettlementService.FoundingSafetyMargin);
+        }
+
+        return reach;
+    }
 
     /// <summary>Island count per world, for listing worlds without loading their islands.</summary>
     public async Task<Dictionary<Guid, int>> GetIslandCountsAsync(CancellationToken cancellationToken = default) =>
