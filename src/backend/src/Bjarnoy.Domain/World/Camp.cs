@@ -3,7 +3,7 @@ namespace Bjarnoy.Domain.World;
 /// <summary>Whether a wildlife camp will block towers once camp gameplay lands — see <c>docs/design/wildlife-camps.md</c>.</summary>
 public enum CampStrength
 {
-    /// <summary>Guards only its nearest hexes; will not block towers. Seals, eagles, and the bog camps.</summary>
+    /// <summary>Guards only its nearest hexes; will not block towers. The seal haul-out, hare warren, deer glade, otter slide, and the beaver and crane bog camps.</summary>
     Weak,
 
     /// <summary>Guards a wide stretch of land; will block towers. Wolves, boars, bears, Fenrir.</summary>
@@ -24,7 +24,7 @@ public enum CampGround
     /// <summary>Grass on a wasted island (the wasteland art family).</summary>
     Wasteland,
 
-    /// <summary>Plain bog ground. Bog terrain lands in a later PR: no camp is placed on it yet.</summary>
+    /// <summary>Plain bog moss (not a lake, shore, mouth or creek); the family is picked by hash among moosemire, beaverlodge and cranedance.</summary>
     Bog,
 }
 
@@ -53,10 +53,14 @@ public static class CampFamilies
     public const string Bearrapids = "bearrapids";
     public const string Fenrirbrood = "fenrirbrood";
     public const string Sealhaulout = "sealhaulout";
+    public const string Walrushaulout = "walrushaulout";
     public const string Eagleeyrie = "eagleeyrie";
     public const string Moosemire = "moosemire";
     public const string Beaverlodge = "beaverlodge";
     public const string Cranedance = "cranedance";
+    public const string Deerglade = "deerglade";
+    public const string Harewarren = "harewarren";
+    public const string Otterslide = "otterslide";
 
     public static IReadOnlyList<CampFamilyInfo> All { get; } =
     [
@@ -65,10 +69,16 @@ public static class CampFamilies
         new(Bearrapids, CampGround.RiverStraight, CampStrength.Strong, CampLevelSkew.Cubic),
         new(Fenrirbrood, CampGround.Wasteland, CampStrength.Strong, CampLevelSkew.Cubic),
         new(Sealhaulout, CampGround.Sand, CampStrength.Weak, CampLevelSkew.Quadratic),
-        new(Eagleeyrie, CampGround.Mountain, CampStrength.Weak, CampLevelSkew.Quadratic),
-        new(Moosemire, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
+        new(Walrushaulout, CampGround.Sand, CampStrength.Strong, CampLevelSkew.Cubic),
+        new(Eagleeyrie, CampGround.Mountain, CampStrength.Strong, CampLevelSkew.Cubic),
+        new(Moosemire, CampGround.Bog, CampStrength.Strong, CampLevelSkew.Cubic),
         new(Beaverlodge, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
         new(Cranedance, CampGround.Bog, CampStrength.Weak, CampLevelSkew.Quadratic),
+        // The weak camps of grass, forest and river (3D_assets hextile130-132), after the strong ones
+        // so each ground's first family keeps its candidate hash (CampGenerator.PlaceCore).
+        new(Harewarren, CampGround.Grass, CampStrength.Weak, CampLevelSkew.Quadratic),
+        new(Deerglade, CampGround.Forest, CampStrength.Weak, CampLevelSkew.Quadratic),
+        new(Otterslide, CampGround.RiverStraight, CampStrength.Weak, CampLevelSkew.Quadratic),
     ];
 
     public static CampFamilyInfo? Find(string family) => All.FirstOrDefault(f => f.Family == family);

@@ -269,9 +269,10 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
+        var bog = await worlds.GetBogOverlayAsync(worldId, cancellationToken);
         IReadOnlyList<TileResponse> tiles =
         [
-            .. WorldService.GetTiles(world, qMin, qMax, rMin, rMax).Select(TileResponse.From),
+            .. WorldService.GetTiles(world, qMin, qMax, rMin, rMax, bog).Select(TileResponse.From),
         ];
 
         return TypedResults.Ok(new TileChunkResponse(worldId, qMin, qMax, rMin, rMax, tiles));

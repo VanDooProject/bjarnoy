@@ -315,7 +315,7 @@
   "wildlifeCamps": {
     "title": "Wildlife camps",
     "intro": "Unclaimed islands are not empty. Wolves, bears, seals and worse hold them, each pack in a camp of its own. You may land and settle, but no tower goes up near a guarded camp, so on a big island you clear the camps in your way and build where the land is free.",
-    "status": "Camps now appear on the map, guarded, on the ground each one belongs to. Clearing them, their loot and the tower rule below are still to come; the bog camps arrive with the bog lands.",
+    "status": "Camps now appear on the map, guarded, on the ground each one belongs to. Clearing them, their loot and the tower rule below are still to come; the bog camps (moose mire, beaver lodge, crane dance) stand on plain bog moss.",
     "rules": {
       "heading": "How a camp works",
       "towers": "A guarded camp holds the land around it: no tower can be built within its range (the wolves eat the builders). Beyond that range the island is open to build on.",
@@ -328,24 +328,47 @@
     },
     "camps": {
       "heading": "The camps",
-      "body": "One camp for each kind of ground the map has. Switch a camp between guarded and cleared, and turn it through the six directions a tile can face.",
+      "body": "Each kind of ground has its own camps, a strong one and sometimes a weak one. Filter them by strength or ground, switch a camp between guarded and cleared, and turn it through the six directions a tile can face.",
       "rotations": "A guarded camp only has art for the directions that show its animals best; the other directions are greyed out, and on the map the camp is turned to one of those. A cleared camp can face any direction."
     },
     "state": {
+      "all": "All camps",
       "label": "State",
       "guarded": "Guarded",
       "cleared": "Cleared"
+    },
+    "strength": {
+      "label": "Strength",
+      "strong": "Strong",
+      "weak": "Weak",
+      "help": "Strong camps roll high levels and hold a wide stretch of land; no new player lands near one. Weak camps roll low and hold only their nearest hexes: a new player's first, safe fights."
+    },
+    "filters": {
+      "all": "All",
+      "ground": "Ground",
+      "none": "No camp matches these filters."
+    },
+    "range": "Guards {min} to {max} hexes around it, by its level (1 to {levels}).",
+    "loot": {
+      "label": "Loot",
+      "food": "Food",
+      "stone": "Stone",
+      "wood": "Wood",
+      "iron": "Iron",
+      "more": "{kind} ++",
+      "moreHint": "A larger share of this than other camps pay",
+      "note": "Clearing a camp pays loot. Every camp gives food from the hunt and a strong camp adds iron, the gear of earlier settlers its pack has eaten; some camps add what their ground holds, and ++ marks a camp's biggest share. How much grows with the camp's level; the amounts are still to be set."
     },
     "camera": "Facing",
     "notKept": "Guarded art only exists for the directions that show the animals best",
     "grounds": {
       "grass": "Grass",
-      "river": "River",
       "sand": "Sand",
       "forest": "Forest",
       "mountain": "Mountain",
       "wasteland": "Wasteland",
-      "bog": "Bog"
+      "bog": "Bog",
+      "riverStraight": "River"
     },
     "list": {
       "wolfden": {
@@ -359,6 +382,10 @@
       "sealhaulout": {
         "name": "Seal haul-out",
         "guards": "Five seals basking on the slabs and the sand, two heaving themselves along, and three white pups."
+      },
+      "walrushaulout": {
+        "name": "Walrus haul-out",
+        "guards": "Walrus bulls with long tusks on the shore, one rearing up to fight, among the bones of their kills. Drawn with the seal art until its own is ready."
       },
       "boarwallow": {
         "name": "Boar wallow",
@@ -383,13 +410,25 @@
       "cranedance": {
         "name": "Crane dance",
         "guards": "A pair of cranes dancing, three standing, one walking, and a juvenile."
+      },
+      "deerglade": {
+        "name": "Deer glade",
+        "guards": "A stag by the salt lick, two hinds grazing and a spotted fawn."
+      },
+      "harewarren": {
+        "name": "Hare warren",
+        "guards": "Two hares sitting up on the warren mound, three bounding round it and one grazing."
+      },
+      "otterslide": {
+        "name": "Otter slide",
+        "guards": "One otter swimming, one on the drift log with a fish, one running the bank and one waiting at the holt."
       }
     }
   },
   "bogLands": {
     "title": "Bog lands",
     "intro": "Wet moss ground (Old Norse mýrr), cut by slow creeks and dark lakes. Rust-coloured seeps mark the bog iron that is dug here, and clay is cut from the lake shores. Bogs are part of the living lands and meet grass at a hex edge.",
-    "status": "Coming soon: the art for the bog set is finished; bogs are not generated in worlds yet.",
+    "status": "Bogs now appear in worlds: a lake with a river running through it on most big islands, and a lake with a bog ring where an island encloses a pocket of sea. The bog buildings (the bog-ore works, the Clay Brickworks on bog and the lake Fisher Hut) are still to come.",
     "looks": "Look",
     "camera": "Facing",
     "stage": "Stage",
@@ -471,7 +510,9 @@
       "creeks": "Creeks run straight or bend 120°, and end in a spring or a lake mouth.",
       "mouth": "A creek meets a lake only at a mouth.",
       "weir": "The fish weir only appears near a lake Fisher Hut.",
-      "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it."
+      "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
+      "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
+      "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
     }
   }
 }

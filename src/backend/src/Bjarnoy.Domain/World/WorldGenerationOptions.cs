@@ -197,6 +197,49 @@ public sealed record WorldGenerationOptions
     /// </summary>
     public double SharpBendPenalty { get; init; } = 0.5;
 
+    /// <summary>
+    /// Land tiles an island needs per bog site (a lake with a river through it): <c>floor(land / BogTilesPerSite)</c>
+    /// sites, at least 1 and at most <see cref="BogMaxSites"/>. See <c>docs/design/bog.md</c>.
+    /// </summary>
+    public int BogTilesPerSite { get; init; } = 6000;
+
+    /// <summary>Most bog sites (lakes with a through river) one island gets. Enclosed sea pockets come on top.</summary>
+    public int BogMaxSites { get; init; } = 3;
+
+    /// <summary>Radius of a site's disc: only grass and forest, none of it near the coast. Islands of <see cref="BogLargeIslandTiles"/> or more get 2 more.</summary>
+    public int BogSiteRadius { get; init; } = 7;
+
+    /// <summary>Land tiles from which an island counts as large for bog sites (wider disc, bigger lakes).</summary>
+    public int BogLargeIslandTiles { get; init; } = 15000;
+
+    /// <summary>A lake is grown to <c>3 + floor(hash * (BogLakeMax - 3))</c> tiles before the notch fill; a lake that ends above this + 6 is rejected. Large islands use <see cref="BogLakeMaxLarge"/>.</summary>
+    public int BogLakeMax { get; init; } = 12;
+
+    public int BogLakeMaxLarge { get; init; } = 18;
+
+    /// <summary>A river's tile must be at least this many tiles from its spring, and at least <see cref="BogMinFromMouth"/> from its mouth, to anchor a site.</summary>
+    public int BogMinFromSpring { get; init; } = 4;
+
+    public int BogMinFromMouth { get; init; } = 6;
+
+    /// <summary>Chance (per site) that a second river is sunk into the lake, on top of the through river. The owner wants sinks and spawns together under 20%.</summary>
+    public double BogSinkChance { get; init; } = 0.15;
+
+    /// <summary>Chance (per site) that the bog spawns a river (a creek spring inside the bog whose creek leaves it as a normal river).</summary>
+    public double BogSpawnChance { get; init; } = 0.05;
+
+    /// <summary>An enclosed sea pocket (sea not connected to the open sea) of at least this many tiles becomes a bog lake.</summary>
+    public int BogPocketMinTiles { get; init; } = 3;
+
+    /// <summary>A pocket of more than this many tiles is left as sea.</summary>
+    public int BogPocketMaxTiles { get; init; } = 400;
+
+    /// <summary>Bog ring around a pocket lake, in hexes (sand, grass and forest all turn to bog there).</summary>
+    public int BogPocketRadius { get; init; } = 4;
+
+    /// <summary>A river passing within this many hexes of a pocket lake is sunk into it (the nearest one at least).</summary>
+    public int BogMaxSinkReroute { get; init; } = 12;
+
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
     /// <summary>
@@ -253,6 +296,23 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(MergeReach);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverStreamBonus);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogTilesPerSite, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogMaxSites, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogSiteRadius, 5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSiteRadius, 20);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogLargeIslandTiles, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogLakeMax, 4);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogLakeMaxLarge, BogLakeMax);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogMinFromSpring);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogMinFromMouth);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogSinkChance);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSinkChance, 1.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogSpawnChance);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSpawnChance, 1.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketMinTiles, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketMaxTiles, BogPocketMinTiles);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogPocketRadius, 2);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogMaxSinkReroute);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinWidth, 2.0);
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxWidth, IslandMinWidth);

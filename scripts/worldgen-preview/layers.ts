@@ -5,7 +5,7 @@
 // new entry in LAYERS is all the CLI needs.
 import { hexDistance } from '../../src/frontend/src/lib/hex/coords';
 import { terrainAt, wastedTerrainAt, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
-import { TILE_ORIENTATIONS, type RiverTile, type Terrain } from '../../src/frontend/src/lib/map/types';
+import { TILE_ORIENTATIONS, type BogTile, type RiverTile, type Terrain } from '../../src/frontend/src/lib/map/types';
 import { coordKey } from '../../src/frontend/src/lib/hex/coords';
 import { computeRivers, riverStatsLines, type RiverField, type Window } from './rivers';
 import { campsLayer } from './camps';
@@ -13,7 +13,7 @@ import { campsLayer } from './camps';
 export type Rgb = readonly [number, number, number];
 
 /** How a legend swatch / map marker is drawn; a plain colour hex when absent. */
-export type MarkerShape = 'disc' | 'square' | 'diamond' | 'triangle' | 'triangleDown' | 'cross' | 'x' | 'hollowSquare' | 'hollowDisc' | 'ring';
+export type MarkerShape = 'disc' | 'square' | 'diamond' | 'triangle' | 'triangleDown' | 'cross' | 'x' | 'hollowSquare' | 'hollowDisc' | 'hollowDiamond' | 'ring';
 
 export interface LegendEntry {
   label: string;
@@ -68,11 +68,14 @@ export const TERRAIN_COLOURS: Record<Terrain, Rgb> = {
   grass: [92, 148, 74],
   forest: [40, 96, 50],
   mountain: [128, 120, 108],
+  bog: [98, 104, 56],
+  lake: [22, 44, 92],
 };
 
 /** Wasted land (hidden as sea in the game until the endboss): a single dark red-brown. */
 export const WASTED_COLOUR: Rgb = [122, 42, 36];
 
+// (bog and lake come from the `bog` layer, not from the seed: the terrain layer never shows them.)
 const TERRAIN_ORDER: Terrain[] = ['sea', 'sand', 'grass', 'forest', 'mountain'];
 
 const terrainLayer: Layer = {
@@ -186,10 +189,113 @@ const riversLayer: Layer = {
   },
 };
 
+
+export const BOG_COLOUR: Rgb = [104, 112, 58];
+export const LAKE_COLOUR: Rgb = [24, 46, 100];
+/** Shores tinted by how many lake edges they touch: one (inlet), two (shore), three (half). */
+export const INLET_COLOUR: Rgb = [70, 104, 118];
+export const SHORE_COLOUR: Rgb = [52, 84, 116];
+export const HALF_COLOUR: Rgb = [38, 66, 108];
+export const CREEK_COLOUR: Rgb = [90, 150, 225];
+export const BOG_MOUTH_COLOUR: Rgb = [255, 170, 40];
+export const CREEK_SPRING_COLOUR: Rgb = [255, 255, 255];
+
+const CREEK_HALF_WIDTH = 0.3;
+
+function shoreColourOf(kind: BogTile['kind']): Rgb {
+  return kind === 'inlet' ? INLET_COLOUR : kind === 'shore' ? SHORE_COLOUR : kind === 'half' ? HALF_COLOUR : BOG_COLOUR;
+}
+
+/** One bog hex's colour at a pixel inside it (`fine`: hexes big enough on screen to draw the creek's flow, not just tint the hex). */
+function bogColourAt(tile: BogTile, dx: number, dy: number, fine: boolean): Rgb {
+  if (tile.kind === 'lake') return LAKE_COLOUR;
+  if (tile.kind === 'bog') return BOG_COLOUR;
+  if (tile.kind === 'inlet' || tile.kind === 'shore' || tile.kind === 'half') {
+    if (!fine) return shoreColourOf(tile.kind);
+    // The lake side of a shore: pixels toward a water edge are lake, the rest is tinted moss.
+    for (const d of tile.waterEdges) {
+      const v = DIRECTION_VECTORS[TILE_ORIENTATIONS.indexOf(d)]!;
+      const along = (dx * v[0] + dy * v[1]) / Math.hypot(v[0], v[1]) ** 2;
+      if (along > 0.5) return LAKE_COLOUR;
+    }
+    return shoreColourOf(tile.kind);
+  }
+
+  const markerColour = tile.kind === 'creekspring' ? CREEK_SPRING_COLOUR : tile.kind === 'mouth' ? BOG_MOUTH_COLOUR : null;
+  if (!fine) return markerColour ?? CREEK_COLOUR;
+  const dist = Math.hypot(dx, dy);
+  if (tile.kind === 'creekspring' && dist < 0.4) return CREEK_SPRING_COLOUR;
+  if (tile.kind === 'mouth' && dist > 0.42 && dist < 0.68) return BOG_MOUTH_COLOUR;
+  const arms = [...tile.inDirections, ...(tile.outDirection ? [tile.outDirection] : [])];
+  for (const d of arms) {
+    const v = DIRECTION_VECTORS[TILE_ORIENTATIONS.indexOf(d)]!;
+    if (distanceToHalfEdge(dx, dy, v[0], v[1]) <= CREEK_HALF_WIDTH) return CREEK_COLOUR;
+  }
+  return dist <= CREEK_HALF_WIDTH ? CREEK_COLOUR : BOG_COLOUR;
+}
+
+/** The rule-violation counts the `bog` layer's footer prints, one label per rule. */
+const RULE_LABELS: [keyof RiverField['bogViolations'], string][] = [
+  ['R1', 'R1 <=3 CONTIGUOUS LAKE NEIGHBOURS'],
+  ['R2', 'R2 LAKES APART'],
+  ['R3', 'R3 CREEKS STRAIGHT/BEND'],
+  ['R4', 'R4 CREEK MEETS LAKE AT A MOUTH'],
+  ['R5', 'R5 FISH WEIR NOT GENERATED'],
+  ['R6', 'R6 NO WALKWAYS'],
+  ['R7', 'R7 INLAND'],
+  ['R8', 'R8 ONE RIVER THROUGH EACH LAKE'],
+  ['R9', 'R9 SPRING/SINK RULES'],
+  ['R10', 'R10 POCKETS RINGED'],
+  ['R11', 'R11 CREEKS AT RIVER WIDTH'],
+];
+
+export function bogStatsLines(f: RiverField): string[] {
+  const sizes = f.bogIslands.flatMap((i) => i.lakes).sort((a, b) => a - b);
+  const sum = (pick: (i: RiverField['bogIslands'][number]) => number) => f.bogIslands.reduce((a, i) => a + pick(i), 0);
+  const sites = sum((i) => i.sites);
+  const sinks = sum((i) => i.sinks);
+  const spawns = sum((i) => i.spawns);
+  const median = sizes.length > 0 ? sizes[Math.floor(sizes.length / 2)]! : 0;
+  const pct = (n: number) => (sites > 0 ? `${((100 * n) / sites).toFixed(0)}%` : '-');
+  const violations = RULE_LABELS.map(([k, label]) => `${label} ${f.bogViolations[k]}`);
+  const total = Object.values(f.bogViolations).reduce((a, b) => a + b, 0);
+  return [
+    `BOG ON ${f.bogIslands.length}/${f.islands} ISLANDS  ${f.bogs.size} TILES  LAKES ${sizes.length} (TILES ${sizes[0] ?? 0}/${median}/${sizes[sizes.length - 1] ?? 0} MIN/MEDIAN/MAX)  THROUGH-RIVER BOGS ${sites}  SINKS ${sinks} (${pct(sinks)})  SPAWNS ${spawns} (${pct(spawns)})`,
+    `POCKETS FOUND ${sum((i) => i.pocketsFound)}  FILLED ${sum((i) => i.pocketsFilled)}  RIVERS SUNK INTO POCKETS ${sum((i) => i.pocketSinks)}`,
+    `RULE VIOLATIONS (MUST BE 0): ${violations.join('  ')}  TOTAL ${total}`,
+  ];
+}
+
+const bogLayer: Layer = {
+  id: 'bog',
+  description: 'bogland: bog moss, lakes, shores (tinted by lake edges), creeks, mouths and creek springs of the green islands',
+  legend: [
+    { label: 'bog moss', colour: BOG_COLOUR },
+    { label: 'bog lake', colour: LAKE_COLOUR },
+    { label: 'inlet (1 lake edge)', colour: INLET_COLOUR },
+    { label: 'shore (2)', colour: SHORE_COLOUR },
+    { label: 'half shore (3)', colour: HALF_COLOUR },
+    { label: 'creek', colour: CREEK_COLOUR },
+    { label: 'lake mouth', colour: BOG_MOUTH_COLOUR },
+    { label: 'creek spring', colour: CREEK_SPRING_COLOUR },
+  ],
+  subhex: true,
+  prepare(world, window) {
+    riverField = computeRivers(world, window);
+    return bogStatsLines(riverField);
+  },
+  colourAt(q, r, _world, dx = 0, dy = 0, fine = false) {
+    const tile = riverField?.bogs.get(coordKey({ q, r }));
+    if (!tile) return null;
+    return bogColourAt(tile, dx, dy, fine);
+  },
+};
+
 export const LAYERS: Record<string, Layer> = {
   [terrainLayer.id]: terrainLayer,
   [wastedLayer.id]: wastedLayer,
   [riversLayer.id]: riversLayer,
+  [bogLayer.id]: bogLayer,
   [campsLayer.id]: campsLayer,
 };
 

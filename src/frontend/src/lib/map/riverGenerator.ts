@@ -15,7 +15,8 @@
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import { hash2, valueNoise } from './worldGenerator';
 import { confluenceKind, TILE_ORIENTATIONS } from './types';
-import type { RiverTile, RiverTileShape, RiverWidth, Terrain } from './types';
+import type { BogTile, RiverTile, RiverTileShape, RiverWidth, Terrain } from './types';
+import { BogGenerator, BogPaths, emptyBogStats, HexSet, type BogStats } from './bogGenerator';
 
 /**
  * A traced river shorter than this (in tiles, spring to mouth inclusive) is
@@ -70,7 +71,7 @@ export const MERGE_REACH = 20.0;
 export const RIVER_STREAM_BONUS = 3.0;
 
 /** Counters a caller can pass to `generateRivers` to see what the tracer did (the preview tool, tests). */
-export interface RiverStats {
+export interface RiverStats extends BogStats {
   springs: number;
   outlets: number;
   rivers: number;
@@ -82,7 +83,17 @@ export interface RiverStats {
 }
 
 export function emptyRiverStats(): RiverStats {
-  return { springs: 0, outlets: 0, rivers: 0, merges: 0, widenings: 0, riverStreamJoins: 0, truncatedBranches: 0, droppedRivers: 0 };
+  return {
+    springs: 0,
+    outlets: 0,
+    rivers: 0,
+    merges: 0,
+    widenings: 0,
+    riverStreamJoins: 0,
+    truncatedBranches: 0,
+    droppedRivers: 0,
+    ...emptyBogStats(),
+  };
 }
 
 function sortedByQR(tiles: AxialCoord[]): AxialCoord[] {
@@ -342,6 +353,8 @@ interface Node {
   width: RiverWidth;
   outRiver: boolean;
   removed: boolean;
+  /** The (single) inflow comes out of a bog creek, not out of another river tile. */
+  bogIn: boolean;
 }
 
 /** The shape of a tile with these inflow directions and this outflow (-1 = none) — mirrors `RiverGenerator.ShapeOf`. */
@@ -357,7 +370,11 @@ function shapeOf(ins: number[], out: number): RiverTileShape {
 }
 
 /** Mirrors `RiverGenerator.BuildRiverTiles`. */
-function buildNodes(paths: AxialCoord[][]): Node[] {
+function buildNodes(
+  paths: AxialCoord[][],
+  forcedOut: Map<string, number> | null = null,
+  bogIn: Map<string, number> | null = null,
+): Node[] {
   const inDirections = new Map<string, number[]>();
   const outDirection = new Map<string, number>();
   const allTiles = new Map<string, AxialCoord>();
@@ -379,12 +396,32 @@ function buildNodes(paths: AxialCoord[][]): Node[] {
     }
   }
 
+  // A river handing its water to a bog creek flows out toward it; one coming out of a creek flows in from it.
+  if (forcedOut) for (const [key, dir] of forcedOut) if (allTiles.has(key)) outDirection.set(key, dir);
+  if (bogIn) {
+    for (const [key, dir] of bogIn) {
+      if (!allTiles.has(key)) continue;
+      const list = inDirections.get(key);
+      if (list) list.push(dir);
+      else inDirections.set(key, [dir]);
+    }
+  }
+
   const result: Node[] = [];
   for (const tile of sortedByQR([...allTiles.values()])) {
     const key = coordKey(tile);
     const ins = inDirections.get(key) ?? [];
     const out = outDirection.get(key) ?? -1;
-    result.push({ coord: tile, shape: shapeOf(ins, out), ins, out, width: 'river', outRiver: false, removed: false });
+    result.push({
+      coord: tile,
+      shape: shapeOf(ins, out),
+      ins,
+      out,
+      width: 'river',
+      outRiver: false,
+      removed: false,
+      bogIn: bogIn !== null && bogIn.has(key),
+    });
   }
   return result;
 }
@@ -417,10 +454,13 @@ function assignWidths(
   isLand: (c: AxialCoord) => boolean,
   seed: number,
   stats: RiverStats | undefined,
+  requireRiver: Set<string> | null = null,
 ): RiverTile[] {
   const byCoord = new Map(nodes.map((n) => [coordKey(n.coord), n]));
-  const pending = new Map(nodes.map((n) => [coordKey(n.coord), n.ins.length]));
-  const queue: Node[] = nodes.filter((n) => n.ins.length === 0);
+
+  // A tile fed by a bog creek starts a river-width run: the creek is river width.
+  const pending = new Map(nodes.map((n) => [coordKey(n.coord), n.ins.length - (n.bogIn ? 1 : 0)]));
+  const queue: Node[] = nodes.filter((n) => n.ins.length - (n.bogIn ? 1 : 0) === 0);
 
   const upstream = (n: Node, dir: number): Node => byCoord.get(coordKey(step(n.coord, dir)))!;
 
@@ -430,7 +470,7 @@ function assignWidths(
     let cur = last;
     for (;;) {
       chain.push(cur);
-      if (cur.ins.length === 0) break;
+      if (cur.ins.length === 0 || cur.bogIn) break;
       cur = upstream(cur, cur.ins[0]!);
     }
     return chain.reverse();
@@ -461,7 +501,10 @@ function assignWidths(
 
   for (let head = 0; head < queue.length; head++) {
     const v = queue[head]!;
-    switch (v.shape) {
+    if (v.bogIn) {
+      v.width = 'river';
+      v.outRiver = true;
+    } else switch (v.shape) {
       case 'spring':
         v.width = 'stream';
         v.outRiver = false;
@@ -530,12 +573,20 @@ function assignWidths(
         const up = upstream(v, v.ins[0]!);
         v.width = up.outRiver ? 'river' : 'stream';
         v.outRiver = up.outRiver;
+
+        // A river handing its water to a bog creek must be river width there: widen upstream, or drop the branch.
+        if (!v.outRiver && requireRiver !== null && requireRiver.has(coordKey(v.coord))) {
+          const chain = chainTo(v);
+          if (!tryWiden(chain, v.coord)) remove(chain);
+        }
         break;
       }
     }
 
-    if (v.out >= 0 && !v.removed) {
-      const next = byCoord.get(coordKey(step(v.coord, v.out)))!;
+    // A tile that hands its water to a bog creek has no next river tile.
+    const nextNode = v.out >= 0 && !v.removed ? byCoord.get(coordKey(step(v.coord, v.out))) : undefined;
+    if (nextNode) {
+      const next = nextNode;
       const key = coordKey(next.coord);
       const left = pending.get(key)! - 1;
       pending.set(key, left);
@@ -641,6 +692,7 @@ class Drainage {
     terrainOf: (c: AxialCoord) => Terrain,
     isLand: (c: AxialCoord) => boolean,
     seed: number,
+    blocked: HexSet | null = null,
   ) {
     this.tiles = sortedByQR(islandTiles);
     const n = this.tiles.length;
@@ -652,14 +704,21 @@ class Drainage {
     this.step = new Array<number>(n).fill(0);
     this.dist = new Array<number>(n * 6).fill(Infinity);
     const coastal = new Array<boolean>(n).fill(false);
+    const isBlocked = new Array<boolean>(n).fill(false);
+    if (blocked) for (let i = 0; i < n; i++) isBlocked[i] = blocked.has(this.tiles[i]!);
     for (let i = 0; i < n; i++) {
       const tile = this.tiles[i]!;
       const ns = neighbors(tile);
-      for (let d = 0; d < 6; d++) this.neighbour[i * 6 + d] = this.index.get(coordKey(ns[d]!)) ?? -1;
+      for (let d = 0; d < 6; d++) {
+        // Water never flows into a blocked tile (a bog): it is as good as not being there.
+        const idx = this.index.get(coordKey(ns[d]!));
+        this.neighbour[i * 6 + d] = idx !== undefined && !isBlocked[idx]! ? idx : -1;
+      }
       // Neighbours that are island tiles are land without asking the (costly) sampler.
       coastal[i] = false;
-      for (let d = 0; d < 6 && !coastal[i]; d++) coastal[i] = this.neighbour[i * 6 + d]! < 0 && !isLand(ns[d]!);
-      this.interior[i] = !coastal[i];
+      for (let d = 0; d < 6 && !coastal[i]; d++) coastal[i] = !this.index.has(coordKey(ns[d]!)) && !isLand(ns[d]!);
+      if (isBlocked[i]) coastal[i] = false;
+      this.interior[i] = !coastal[i] && !isBlocked[i];
       this.step[i] =
         1.0 +
         DRAINAGE_NOISE * hash2(tile.q, tile.r, seed + 53) +
@@ -787,6 +846,7 @@ function traceDrainage(
   claims: (Claim | null)[],
   onPath: boolean[],
   anyClaims: boolean,
+  startIn = -1,
 ): { path: AxialCoord[]; merged: boolean } | null {
   const path: AxialCoord[] = [spring];
   const tiles: number[] = [];
@@ -794,7 +854,7 @@ function traceDrainage(
   tiles.push(current);
   onPath[current] = true;
   try {
-    let inDir = -1;
+    let inDir = startIn;
     let guard = drainage.tiles.length * 2;
     const taken = (i: number): boolean => claims[i] !== null || onPath[i]!;
     const step = (to: number, dir: number): void => {
@@ -1074,6 +1134,30 @@ export function generateRivers(
   allowConfluence = true,
   stats?: RiverStats,
 ): RiverTile[] {
+  return generateRiversWithBogs(islandTiles, terrainOf, depthAt, globalIsLand, worldSeed, islandIndex, wasted, allowConfluence, stats).rivers;
+}
+
+/** A green island's rivers together with the bogland placed among them — mirrors `RiverGenerator.Result`. */
+export interface RiversAndBogs {
+  rivers: RiverTile[];
+  bogs: BogTile[];
+}
+
+/**
+ * Like `generateRivers`, and also returns the island's bogland (`BogGenerator`): lakes with a river re-routed through them,
+ * creeks, moss, sinks, spawns and enclosed sea pockets turned into lakes. Bogs exist only on green islands.
+ */
+export function generateRiversWithBogs(
+  islandTiles: AxialCoord[],
+  terrainOf: (c: AxialCoord) => Terrain,
+  depthAt: (c: AxialCoord) => number | null,
+  globalIsLand: (c: AxialCoord) => boolean,
+  worldSeed: number,
+  islandIndex: number,
+  wasted = false,
+  allowConfluence = true,
+  stats?: RiverStats,
+): RiversAndBogs {
   const islandLand = new Set(islandTiles.map((c) => coordKey(c)));
 
   // Large prime spacing so two islands never draw from overlapping noise — the same trick
@@ -1096,13 +1180,20 @@ export function generateRivers(
     }
 
     const survivors = resolveCollisions(paths, allowConfluence);
-    return buildNodes(survivors).map((n) => nodeToTile(n, 'river', wasted));
+    return { rivers: buildNodes(survivors).map((n) => nodeToTile(n, 'river', wasted)), bogs: [] };
   }
 
-  const candidates = springCandidates(islandTiles, terrainOf, islandLand);
-  if (candidates.length === 0) return [];
+  // Enclosed sea pockets become bog lakes with a bog ring before any river is traced: the drainage
+  // network treats the lake as land it cannot enter and the ring as blocked.
+  const bogs = new BogGenerator(islandTiles, terrainOf, isLand, seed, stats);
+  bogs.findPockets();
+  const pocketWater = bogs.pocketWater;
+  const riverLand = pocketWater.size === 0 ? isLand : (c: AxialCoord) => isLand(c) || pocketWater.has(c);
 
-  const drainage = new Drainage(islandTiles, terrainOf, isLand, seed);
+  const candidates = springCandidates(islandTiles, terrainOf, islandLand);
+  if (candidates.length === 0) return { rivers: [], bogs: bogs.classify() };
+
+  const drainage = new Drainage(islandTiles, terrainOf, riverLand, seed, bogs.pocketRing);
   if (stats) stats.outlets += drainage.outletCount;
 
   const springs = pickSprings(candidates, islandTiles.length, depthAt, drainage, seed);
@@ -1114,6 +1205,7 @@ export function generateRivers(
   const claims: (Claim | null)[] = new Array<Claim | null>(drainage.tiles.length).fill(null);
   const onPath = new Array<boolean>(drainage.tiles.length).fill(false);
   const paths: AxialCoord[][] = [];
+  const mergedFlags: boolean[] = [];
   for (const spring of order) {
     if (claims[drainage.index.get(coordKey(spring))!] !== null) continue;
 
@@ -1126,6 +1218,7 @@ export function generateRivers(
 
     commit(drainage, traced.path, traced.merged, claims);
     paths.push(traced.path);
+    mergedFlags.push(traced.merged);
     if (stats) {
       stats.rivers++;
       if (traced.merged) stats.merges++;
@@ -1133,5 +1226,22 @@ export function generateRivers(
   }
   if (stats) stats.springs += springs.length;
 
-  return assignWidths(buildNodes(paths), isLand, seed, stats);
+  // Bog sites: through-river lakes (the river is re-routed through them), sinks and spawns.
+  const bp = new BogPaths(paths, mergedFlags);
+  bogs.placeSites(
+    bp,
+    (trial) => assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), riverLand, seed, undefined, trial.requireRiver),
+    (exit, startIn, current, blocked) => {
+      const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked);
+      const claims2: (Claim | null)[] = new Array<Claim | null>(d2.tiles.length).fill(null);
+      for (let k = 0; k < current.paths.length; k++) commit(d2, current.paths[k]!, current.merged[k]!, claims2);
+
+      const onPath2 = new Array<boolean>(d2.tiles.length).fill(false);
+      const traced = traceDrainage(d2, exit, claims2, onPath2, current.paths.length > 0, startIn);
+      return traced ? traced.path : null;
+    },
+  );
+
+  const nodes = buildNodes(bp.paths, bp.forcedOut, bp.bogIn);
+  return { rivers: assignWidths(nodes, riverLand, seed, stats, bp.requireRiver), bogs: bogs.classify() };
 }

@@ -36,6 +36,9 @@ public static class HexPathfinder
         [Terrain.Sand] = 1.1,
         [Terrain.Forest] = 1.3,
         [Terrain.Mountain] = 2.0,
+
+        // Bogland: twice grass. A Lake is deliberately absent (impassable to armies and ships).
+        [Terrain.Bog] = 2.0,
     };
 
     /// <summary>

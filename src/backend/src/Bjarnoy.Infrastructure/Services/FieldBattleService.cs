@@ -134,7 +134,8 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         }
 
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
-        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants);
+        var bog = await WorldTerrain.OverlayAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog);
         return true;
     }
 
@@ -211,7 +212,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
     private void Resolve(
         ArmyEntity armyA, Army domainA, Movement movementA,
         ArmyEntity armyB, Army domainB, Movement movementB,
-        HexCoord hex, DateTimeOffset at, IGiantIndex giants)
+        HexCoord hex, DateTimeOffset at, IGiantIndex giants, IReadOnlyDictionary<HexCoord, Terrain> bog)
     {
         var claimA = FieldBattleResolver.ClaimAt(
             hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), ToPlacedBuildings(armyA.Settlement.Buildings), giants);
@@ -230,18 +231,18 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         {
             case FieldBattleWinner.SideA:
                 updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner);
-                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, plan.LootTakenByWinner);
+                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, plan.LootTakenByWinner, bog);
                 break;
 
             case FieldBattleWinner.SideB:
-                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, plan.LootTakenByWinner);
+                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, plan.LootTakenByWinner, bog);
                 updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner);
                 break;
 
             default:
                 // A tie: no loot changes hands (issue #206 §3), both retreat.
-                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, ResourceAmounts.Zero);
-                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, ResourceAmounts.Zero);
+                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, ResourceAmounts.Zero, bog);
+                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, ResourceAmounts.Zero, bog);
                 break;
         }
 
@@ -271,9 +272,10 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
     private static Army ApplyLoss(
         SettlementEntity? loserSettlement,
         Army domain, HexCoord hex, DateTimeOffset at,
-        IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTakenFromThisSide)
+        IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTakenFromThisSide,
+        IReadOnlyDictionary<HexCoord, Terrain> bog)
     {
-        var loserSampler = new TerrainSampler(loserSettlement!.World!.ToGenerationOptions());
+        var loserSampler = new TerrainSampler(loserSettlement!.World!.ToGenerationOptions()).WithBogOverlay(bog);
         var home = new HexCoord(loserSettlement.CentreQ, loserSettlement.CentreR);
 
         var afterLosses = domain with

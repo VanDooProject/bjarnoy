@@ -20,7 +20,7 @@ about 8 s; a radius-4000 world (the default) takes about a minute, mostly the la
 | `--radius N` | world radius in hexes (default 4000). It is part of the terrain: an island that could cross it is not generated |
 | `--window Q,R,SIZE` | draw only `SIZE` hexes across, centred on axial hex `(Q,R)` (default: the whole world) |
 | `--px N` | pixels per hex circumradius; default fits the map to ~1800 px wide (below 1 px a hex is sampled at its centre) |
-| `--layers a,b` | layers, drawn in order: `terrain` (default), `wasted`, `rivers`, `camps` |
+| `--layers a,b` | layers, drawn in order: `terrain` (default), `wasted`, `rivers`, `bog`, `camps` |
 | `--set k=v,...` | override generation constants, e.g. `islandChance=0.5,islandCellSize=200` |
 | `--no-legend`, `--no-stats` | drop the legend strip / skip the landmass scan |
 
@@ -48,9 +48,23 @@ mouths and parallel runs. `--islands` also dumps the per-island numbers as JSON.
 A layer is an entry in `LAYERS` in `layers.ts`: an id, a description, its legend entries and a
 `colourAt(q, r, world)` that returns a colour (or `null` to keep what the layers below drew).
 The legend strip is generated from the layers' own colour tables, so the picture and its
-legend cannot drift. Planned: `bog` (added with the feature that generates it). A layer may also declare `prepare(world, window)` (a whole-world pass; returns extra stats lines) and `subhex` (colours per pixel inside a hex, for lines and marks), draw markers over the finished map (`overlay`, used by `camps`: a marker per family, a ring at the guard range, magenta strong / cyan weak) and add footer lines (`stats`).
+legend cannot drift. A layer may also declare `prepare(world, window)` (a whole-world pass; returns extra stats lines) and `subhex` (colours per pixel inside a hex, for lines and marks), draw markers over the finished map (`overlay`, used by `camps`: a marker per family, a ring at the guard range, magenta strong / cyan weak) and add footer lines (`stats`).
 
 The `camps` layer runs the client ports of the backend pipeline (rivers, giants, camps) island by island in the backend's own island order, so it shows what a server world holds; with `--window` only the islands in view are generated. Its footer gives camps per island (min/median/max), per family and strong/weak.
+
+## The `bog` layer
+
+`--layers terrain,rivers,bog` shows the bogland the real generator places (`bogGenerator.ts`, called inside the river
+pipeline): bog moss (olive), lakes (dark slate blue), shores tinted by how many lake edges they touch (inlet, shore, half:
+one, two, three), creeks (light blue lines), lake mouths (orange rings) and creek springs (white dots). Under 3 px a hex is
+one colour. The footer prints the bog islands, lake sizes (min/median/max), through-river bogs, sinks and spawns (with
+their share of the bogs: together under 20%), the enclosed sea pockets found and filled, and one **rule-violation count
+per map rule R1-R11 (must all be 0)**, checked by `bogRules.ts` (the twin of the backend's `BogRules`). The rivers layer
+follows a river through a lake, so its `inland mouths` count stays 0.
+
+`npx tsx ../../scripts/worldgen-preview/bog-stats.ts --seeds 1-8 --radius 1000` (from `src/frontend`) prints the bog
+acceptance statistics over several seeds: bogs and lakes per island, lake sizes, through-river bogs, sinks/spawns shares,
+pockets, and the violations per rule.
 
 ## Tests
 

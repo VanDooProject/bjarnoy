@@ -249,7 +249,8 @@ public sealed record IslandResponse(
     IReadOnlyList<RiverTileResponse> RiverTiles,
     IReadOnlyList<GiantResponse> Giants,
     bool Wasted,
-    IReadOnlyList<CampResponse> Camps)
+    IReadOnlyList<CampResponse> Camps,
+    IReadOnlyList<BogTileResponse> BogTiles)
 {
     public static IslandResponse From(IslandEntity island)
     {
@@ -266,8 +267,48 @@ public sealed record IslandResponse(
             [.. island.RiverTiles.Select(RiverTileResponse.From)],
             [.. island.Giants.Select(GiantResponse.From)],
             island.IsWasted,
-            [.. island.Camps.Select(CampResponse.From)]);
+            [.. island.Camps.Select(CampResponse.From)],
+            [.. island.BogTiles.Select(BogTileResponse.From)]);
     }
+}
+
+/// <summary>
+/// One hex of an island's bogland — see <see cref="Bjarnoy.Domain.World.BogTile"/> and <c>docs/design/bog.md</c>. A
+/// <c>lake</c> hex reads as terrain <c>lake</c>, every other kind as terrain <c>bog</c>.
+/// </summary>
+/// <param name="Kind">
+/// <c>bog</c>, <c>lake</c>, <c>inlet</c>, <c>shore</c>, <c>half</c> (a shore with one, two or three water edges),
+/// <c>mouth</c> (an inlet with a creek on the opposite edge), <c>creek</c> or <c>creekspring</c>.
+/// </param>
+/// <param name="InDirections">The direction a creek, mouth or spring's water comes from; empty otherwise.</param>
+/// <param name="OutDirection">The direction it flows out toward, or <see langword="null"/>.</param>
+/// <param name="WaterEdges">The directions of the lake neighbours of a shore or mouth, in ascending cyclic order.</param>
+public sealed record BogTileResponse(
+    int Q,
+    int R,
+    string Kind,
+    IReadOnlyList<string> InDirections,
+    string? OutDirection,
+    IReadOnlyList<string> WaterEdges)
+{
+    // Indexed by BogTileKind's own int values.
+    private static readonly string[] KindNames = ["bog", "lake", "inlet", "shore", "half", "mouth", "creek", "creekspring"];
+
+    public static BogTileResponse FromDomain(BogTile tile) => new(
+        tile.Coord.Q,
+        tile.Coord.R,
+        KindNames[(int)tile.Kind],
+        [.. tile.InDirections.Select(d => d.ToWireName())],
+        tile.OutDirection?.ToWireName(),
+        [.. tile.WaterEdges.Select(d => d.ToWireName())]);
+
+    public static BogTileResponse From(BogTileRecord tile) => new(
+        tile.Q,
+        tile.R,
+        KindNames[tile.Kind],
+        [.. tile.InDirections.Select(d => ((TileOrientation)d).ToWireName())],
+        tile.OutDirection is { } outDirection ? ((TileOrientation)outDirection).ToWireName() : null,
+        [.. tile.WaterEdges.Select(d => ((TileOrientation)d).ToWireName())]);
 }
 
 /// <summary>
@@ -400,7 +441,7 @@ public sealed record RiverTileResponse(
 }
 
 /// <param name="Terrain">
-/// One of <c>sea</c>, <c>sand</c>, <c>grass</c>, <c>forest</c>, <c>mountain</c> —
+/// One of <c>sea</c>, <c>sand</c>, <c>grass</c>, <c>forest</c>, <c>mountain</c>, <c>bog</c>, <c>lake</c> —
 /// the frontend's terrain names.
 /// </param>
 /// <param name="IsCoastalWater">Sea that borders land — the ring a coastal-water sprite belongs on.</param>

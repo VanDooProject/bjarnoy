@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { Texture } from 'pixi.js';
 import {
   baseTextureFor,
+  BOG_TEXTURE_KEYS,
+  bogOrientationFor,
+  bogTextureKey,
   campArtFor,
   classifyFamilyClips,
   classifyFamilyFrames,
@@ -12,6 +15,7 @@ import {
   riverBuildingArtFor,
   riverTexturesFor,
   mergeTileTextures,
+  normalizeBogFrames,
   textureKeyFor,
   topAnimFor,
   topAnimTextures,
@@ -22,7 +26,7 @@ import {
   type TileTextures,
 } from './textures';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
-import type { RiverTile, Tile } from './types';
+import type { BogTile, RiverTile, Tile } from './types';
 import type { AtlasClip } from './atlas';
 
 /** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
@@ -1407,6 +1411,11 @@ describe('wildlife camps', () => {
     expect(topTextureFor(textures, { q: 0, r: 0, terrain: 'grass', orientation: 'SE' })).toBeUndefined();
   });
 
+  it('the walrus haul-out is drawn with the seal haul-out art until its own exists', () => {
+    expect(KEY_FAMILY.walrushaulout).toBe('sealhaulout');
+    expect(KEY_FAMILY.otterslide).toBe('otterslide');
+  });
+
   describe('bearrapids on a river', () => {
     const straight = (inDirection: Tile['orientation'], outDirection: Tile['orientation']): RiverTile => ({
       q: 0,
@@ -1414,6 +1423,15 @@ describe('wildlife camps', () => {
       shape: 'straight',
       inDirections: [inDirection!],
       outDirection: outDirection!,
+    });
+
+    it('the otter slide is a river camp like the bear rapids: it keeps its channel and brings its own river base', () => {
+      const textures = emptyTileTextures();
+      withCamp(textures, 'otterslide', ['E', 'NE', 'SE']);
+      const art = campArtFor(textures, campTile('otterslide', 'E', 'grass'), straight('W', 'E'));
+      expect(art?.orientation).toBe('SE');
+      expect(art?.riverArt).toEqual({ key: 'otterslide', orientation: 'SE' });
+      expect(campArtFor(textures, campTile('otterslide', 'E'), undefined)).toBeUndefined();
     });
 
     it('keeps its channel: the kept rotation with the river\'s own index mod 3 (a straight channel is symmetric)', () => {
@@ -1457,5 +1475,104 @@ describe('wildlife camps', () => {
       expect(baseTextureFor(textures, drawn, art.riverArt)).toBe('base-SE-1');
       expect(topTextureFor(textures, drawn, art.riverArt)).toBe('bearrapids-SE-guarded');
     });
+  });
+});
+
+// The bog set (3D_assets docs/bog-tiles.md): nine families, each a plain frame plus `variantNNN` frames numbered from 001
+// (no variant000), the plain lake's `variant004` fish weir and the two boat clips' static frames among them.
+describe('bog art', () => {
+  it('lines every bog family up variant by variant, plain first, dropping what the game does not roll', () => {
+    const frames: FamilyFrame<string>[] = [];
+    for (const suffix of ['', '_variant001', '_variant002', '_variant003', '_variant004', '_variant005']) {
+      frames.push(frame(`boglake_E${suffix}`, 'top'));
+      frames.push(frame(`boglake_E${suffix}_base`, 'base'));
+    }
+    const normalised = normalizeBogFrames(frames, 3);
+    // 4 looks x (top + base): the fish weir (004) and the ore boat (005) are gone.
+    expect(normalised.map((f) => f.name).sort()).toEqual(
+      [
+        'boglake_E',
+        'boglake_E_base',
+        'boglake_E_variant000',
+        'boglake_E_variant000_base',
+        'boglake_E_variant001',
+        'boglake_E_variant001_base',
+        'boglake_E_variant002',
+        'boglake_E_variant002_base',
+      ].sort(),
+    );
+    // ...and the classifier now sees the contiguous 0..3 numbering it needs (it throws on a gap).
+    const classified = classifyFamilyFrames(normalised);
+    // (The classified values are the original frames, in order: plain, variant001, 002, 003.)
+    expect(classified.top!.E).toEqual(['boglake_E', 'boglake_E_variant001', 'boglake_E_variant002', 'boglake_E_variant003']);
+    expect(classified.baseIndexed!.E).toEqual([
+      'boglake_E_base',
+      'boglake_E_variant001_base',
+      'boglake_E_variant002_base',
+      'boglake_E_variant003_base',
+    ]);
+  });
+
+  it('keeps the moss family as one base under eight decorated tops', () => {
+    const frames: FamilyFrame<string>[] = [frame('bog_W_base', 'base'), frame('bog_W', 'top')];
+    for (let v = 1; v <= 8; v++) frames.push(frame(`bog_W_variant00${v}`, 'top'));
+    const classified = classifyFamilyFrames(normalizeBogFrames(frames));
+    expect(classified.base!.W).toBe('bog_W_base');
+    expect(classified.top!.W).toHaveLength(9);
+    expect(classified.top!.W[8]).toBe('bog_W_variant008');
+  });
+
+  it('gives every bog family its own key and family, all of them terrain keys', () => {
+    for (const key of BOG_TEXTURE_KEYS) expect(KEY_FAMILY[key], key).toBeDefined();
+    expect(KEY_FAMILY.bog).toBe('bog');
+    expect(KEY_FAMILY.lake).toBe('boglake');
+    expect(KEY_FAMILY.lakemouth).toBe('boglake_mouth');
+    expect(KEY_FAMILY.bogcreekbend).toBe('bogcreek_bend');
+    expect(new Set([...BOG_TEXTURE_KEYS].map((k) => KEY_FAMILY[k])).size).toBe(BOG_TEXTURE_KEYS.size);
+  });
+
+  const bogTile = (kind: BogTile['kind'], inDirections: BogTile['inDirections'] = [], outDirection: BogTile['outDirection'] = null, waterEdges: BogTile['waterEdges'] = []): BogTile => ({
+    q: 0,
+    r: 0,
+    kind,
+    inDirections,
+    outDirection,
+    waterEdges,
+  });
+
+  it('picks the texture key from the kind: shores by water edges, creeks straight or bend by their directions', () => {
+    expect(bogTextureKey(bogTile('bog'))).toBe('bog');
+    expect(bogTextureKey(bogTile('lake'))).toBe('lake');
+    expect(bogTextureKey(bogTile('inlet', [], null, ['E']))).toBe('lakeinlet');
+    expect(bogTextureKey(bogTile('shore', [], null, ['E', 'NE']))).toBe('lakeshore');
+    expect(bogTextureKey(bogTile('half', [], null, ['E', 'NE', 'NW']))).toBe('lakehalf');
+    expect(bogTextureKey(bogTile('mouth', ['W'], 'E', ['E']))).toBe('lakemouth');
+    expect(bogTextureKey(bogTile('creekspring', [], 'E'))).toBe('bogcreekspring');
+    // Opposite in/out is the straight crossing; 60 degrees off straight (two indices apart) is the bend.
+    expect(bogTextureKey(bogTile('creek', ['W'], 'E'))).toBe('bogcreek');
+    expect(bogTextureKey(bogTile('creek', ['E'], 'SW'))).toBe('bogcreekbend');
+  });
+
+  it('rotates each family the way its art was measured (see types.test.ts for the measurements)', () => {
+    // Water to the SE, shore with SE, E: the run starts at SE and continues to E (5, 0): file (5 - 5) = E.
+    expect(bogOrientationFor(bogTile('shore', [], null, ['SE', 'E']), 'NW')).toBe('E');
+    // A mouth to the lake in the SE uses the inlet's file for that water direction.
+    expect(bogOrientationFor(bogTile('mouth', ['NW'], 'SE', ['SE']), 'W')).toBe('E');
+    // The creeks reuse the river conventions.
+    expect(bogOrientationFor(bogTile('creek', ['W'], 'E'), 'W')).toBe('SE');
+    expect(bogOrientationFor(bogTile('creek', ['E'], 'W'), 'W')).toBe('NW');
+    expect(bogOrientationFor(bogTile('creek', ['E'], 'NW'), 'W')).toBe('NW');
+    expect(bogOrientationFor(bogTile('creekspring', [], 'E'), 'W')).toBe('NW');
+    // Moss and open water have no direction: they keep the tile's own cosmetic rotation.
+    expect(bogOrientationFor(bogTile('bog'), 'SW')).toBe('SW');
+    expect(bogOrientationFor(bogTile('lake'), 'NE')).toBe('NE');
+  });
+
+  it('draws a bog tile with the family of its kind, and a building on it with the building family', () => {
+    const shore: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'SW', variant: 0, bog: bogTile('inlet', [], null, ['E']) };
+    expect(textureKeyFor(shore)).toBe('lakeinlet');
+    expect(textureKeyFor({ ...shore, buildingType: 'hut' })).toBe('hut');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'lake' })).toBe('lake');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'bog' })).toBe('bog');
   });
 });
