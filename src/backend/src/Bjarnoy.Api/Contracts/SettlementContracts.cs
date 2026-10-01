@@ -289,7 +289,7 @@ public sealed record SettlementResponse(
                 o.CompletesAt,
                 (clock.FreezesTime || o.IsWaiting) ? null : o.RemainingAt(gameNow).TotalSeconds,
                 o.IsWaiting
-                    ? o.BaseDuration.TotalSeconds / speedFactor
+                    ? o.BaseDuration.TotalSeconds * domain.BuildTimeFactor / speedFactor
                     : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
             [.. domain.TrainingQueue.Select(o => new TrainingOrderResponse(

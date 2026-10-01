@@ -63,7 +63,7 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   // correct building". It now opens the same kind of RingMenu the full
   // settlement view uses, simplified to one flat ring (no build-category
   // drill-down): only the guided type matching the *clicked tile's own
-  // terrain* is enabled (Farm needs grass, Lumberjack needs forest) —
+  // terrain* is enabled (Reindeer Herder needs grass, Lumberjack needs forest) —
   // enabling both regardless of terrain would just reintroduce the same
   // silent-failure bug for whichever one doesn't fit.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
@@ -79,7 +79,7 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
 
   // A guessed pixel offset only happens to land on a real hex at one
   // particular zoom/camera framing — ask the model for a real empty *grass*
-  // hex inside the just-founded realm (deterministically exercising Farm's
+  // hex inside the just-founded realm (deterministically exercising the Reindeer Herder's
   // own terrain requirement), then the renderer's own camera math
   // (__settlementRenderer's hexCenterScreen) for that hex's exact screen
   // position. Same technique settlement-interactions.spec.ts uses for the
@@ -92,7 +92,7 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   // such banner — the ring/note/pointer take over telling the story).
   await expect(settlement.banner).toHaveCount(0);
 
-  const farm = settlement.ring.action('Farm');
+  const farm = settlement.ring.action('Reindeer Herder');
   const lumberjack = settlement.ring.action('Lumberjack');
   const quarry = settlement.ring.action('Quarry');
   await expect(farm).toBeVisible();
@@ -135,7 +135,7 @@ test('onboarding completion shows the completion banner and profile nudge, and h
     const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
     const settlementModel = world.model.getSettlement(world.selectedSettlementId);
     const dirs: Array<[number, number]> = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
-    const guidedTypes = ['farm', 'lumberjack'];
+    const guidedTypes = ['reindeerherder', 'lumberjack'];
     let placed = 0;
     for (let radius = 1; radius <= 2 && placed < guidedTypes.length; radius++) {
       for (const [dq, dr] of dirs) {

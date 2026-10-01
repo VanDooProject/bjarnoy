@@ -22,6 +22,7 @@ import {
   type BuildingKind,
   type BuildingOutput,
   type BuildingModifier,
+  SHRINE_BUILDING_TYPES,
 } from '../../lib/map/buildingEconomy';
 
 const world = useWorldStore();
@@ -52,8 +53,7 @@ function shrineSlotsFor(level: number): number {
   return 1;
 }
 
-const SHRINE_TYPES = new Set(['shrineofthor', 'shrineoffreyja', 'shrineofullr', 'shrineofnjord']);
-const isShrine = computed(() => SHRINE_TYPES.has(props.tile.buildingType ?? ''));
+const isShrine = computed(() => SHRINE_BUILDING_TYPES.has(props.tile.buildingType ?? ''));
 // Level 0 is the foundation stub while the shrine is still under
 // construction (Enqueue) — it grants no favour and has no slots yet, mirrored
 // by Settlement.SlotRune/ActiveEffect rejecting it backend-side.
@@ -259,6 +259,11 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierShrineFavour', {
         percent: modifier.percent,
         domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
+      });
+    case 'odinFavour':
+      return t('hud.hoverTooltip.modifierOdinFavour', {
+        percent: modifier.buildTimePercent,
+        rings: modifier.visionRings,
       });
     case 'radiusBoost':
       return t('hud.hoverTooltip.modifierRadiusBoost', {

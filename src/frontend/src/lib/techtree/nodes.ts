@@ -53,10 +53,23 @@ function formatModifier(modifier: BuildingModifier): string {
       if (modifier.domain === 'shipAttack') return `+${modifier.percent}% ship attack`;
       if (modifier.domain === 'landAttack') return `+${modifier.percent}% land unit attack`;
       return `+${modifier.percent}% ${modifier.domain === 'wood' ? 'Wood' : 'Food'} production`;
+    case 'odinFavour':
+      return `-${modifier.buildTimePercent}% build time, +${modifier.visionRings} rings of vision`;
     case 'radiusBoost':
       return `+${modifier.percent}% ${modifier.resource === 'wood' ? 'Wood' : modifier.resource === 'iron' ? 'Iron' : 'Food'} within ${modifier.range} ${modifier.range === 1 ? 'ring' : 'rings'}`;
   }
 }
+
+/**
+ * Card-per-type exceptions: one card standing for several building types. Farm
+ * and Pumpkin Farm are separate types only because their soil rule differs
+ * (Pumpkin Farm needs a Pumpkin-soil island), so the tree shows one card with
+ * one unlock level and one prerequisite, and the other type has no slot of its
+ * own in `TECH_TREE_LAYOUT`.
+ */
+export const MERGED_CARDS: Readonly<Record<string, { label: string; absorbs: readonly string[] }>> = {
+  farm: { label: 'Farm / Pumpkin Farm (by soil)', absorbs: ['pumpkinfarm'] },
+};
 
 export interface TechTreeChip {
   text: string;
@@ -126,7 +139,7 @@ export function buildTechTreeNodes(
 
     nodes.push({
       type,
-      label: typeLabel(type),
+      label: MERGED_CARDS[type]?.label ?? typeLabel(type),
       gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : '',
       category: graphCategoryOf(type),
       x: columnX(col),

@@ -3,9 +3,8 @@ namespace Bjarnoy.Domain.Shrines;
 /// <summary>
 /// A god a settlement can raise a shrine to. See issue #53: this is the v1
 /// slice, since extended with the wood and water lines' own capstones (Ullr,
-/// Njörd). Tyr (a garrison stat does not exist yet) and Odin (an "accepts any
-/// rune" domain rule) stay deferred until the systems their boosts would
-/// apply to exist.
+/// Njörd) and Odin (Wisdom and Ravens). Tyr stays deferred until a garrison stat
+/// exists for his boost to apply to.
 /// </summary>
 public enum GodType
 {
@@ -20,4 +19,10 @@ public enum GodType
 
     /// <summary>Sea and sea-wealth. Boosts storage capacity rather than any resource's production.</summary>
     Njord = 3,
+
+    /// <summary>
+    /// Wisdom and wanderers. Not a production or attack bonus: shortens every
+    /// build in his own settlement (Wisdom) and widens what it can see (Ravens).
+    /// </summary>
+    Odin = 4,
 }

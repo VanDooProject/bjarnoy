@@ -774,7 +774,7 @@ public class ArmyAttackTests
     public void A_raid_dropping_the_stock_below_reservations_prunes_the_waiting_queue()
     {
         var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
-        var farmCost = BuildingCatalogue.Get(BuildingType.Farm, 1).Cost;
+        var farmCost = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1).Cost;
 
         // Enough stock to cover two active builds (already spent, filling
         // both construction slots) plus two more orders' reservations, with
@@ -796,20 +796,20 @@ public class ArmyAttackTests
         // Fill both construction slots first, so the next two orders have
         // nowhere to go but the waiting queue.
         var active1 = defender.PlanBuild(
-            BuildingType.Farm, neighbours[0], Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, neighbours[0], Terrain.Grass, T0, Guid.CreateVersion7());
         var withActive1 = defender.Enqueue(active1.Order!, T0);
         var active2 = withActive1.PlanBuild(
-            BuildingType.Farm, neighbours[1], Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, neighbours[1], Terrain.Grass, T0, Guid.CreateVersion7());
         var withActive2 = withActive1.Enqueue(active2.Order!, T0);
         Assert.Equal(0, withActive2.FreeSlots);
 
         var waitingA = withActive2.PlanBuild(
-            BuildingType.Farm, neighbours[2], Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+            BuildingType.ReindeerHerder, neighbours[2], Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
         Assert.True(waitingA.Accepted, $"expected accept, got {waitingA.Rejection}");
         Assert.True(waitingA.Order!.IsWaiting);
         var withA = withActive2.Enqueue(waitingA.Order!, T0);
         var waitingB = withA.PlanBuild(
-            BuildingType.Farm, neighbours[3], Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+            BuildingType.ReindeerHerder, neighbours[3], Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
         Assert.True(waitingB.Accepted, $"expected accept, got {waitingB.Rejection}");
         Assert.True(waitingB.Order!.IsWaiting);
         var withBoth = withA.Enqueue(waitingB.Order!, T0);

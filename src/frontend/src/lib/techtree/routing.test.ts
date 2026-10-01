@@ -245,14 +245,14 @@ describe('routeEdges', () => {
 
 describe('crossesCard', () => {
   it('sees a run passing over a card in its own row', () => {
-    const [col, row] = TECH_TREE_LAYOUT.pumpkinfarm!;
+    const [col, row] = TECH_TREE_LAYOUT.tower!;
     const y = rowY(row) + CARD_H / 2;
 
     expect(crossesCard(TECH_TREE_LAYOUT, y, columnX(col) - 40, columnX(col) + CARD_W + 40)).toBe(true);
   });
 
   it('lets a run pass between rows, and through an empty cell', () => {
-    const [, row] = TECH_TREE_LAYOUT.pumpkinfarm!;
+    const [, row] = TECH_TREE_LAYOUT.tower!;
 
     // The gap below the row's cards.
     expect(crossesCard(TECH_TREE_LAYOUT, rowY(row) + CARD_H + 4, 0, 2000)).toBe(false);

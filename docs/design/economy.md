@@ -51,8 +51,7 @@ For a building with level-1 values `C₁` (cost, per resource), `P₁`
 ```
 cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (Longhouse 1.34)
 production(L) = P₁ · g_p^(L−1)           g_p = 1.20
-buildTime(L)  = t₁ · g_t^(L−1) · s(LH)   g_t = 1.33
-s(LH)         = 0.97^(LH−1)              Longhouse build-speed bonus (Travian's Main Building)
+buildTime(L)  = t₁ · g_t^(L−1)           g_t = 1.33
 ```
 
 Costs and output are both geometric (Travian's shape), so the payback
@@ -89,7 +88,7 @@ has 3–8 stages per building, and each level maps onto a stage
 
 | Group | Max level |
 |---|---|
-| Longhouse | 30 (also drives build slots, claim radius and the build-speed bonus) |
+| Longhouse | 30 (also drives build slots and claim radius) |
 | Resource producers (incl. the bog-ore works), Storage House | 25 |
 | Military and civic buildings (Barracks, Archery Range, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
 | Mills (Sawmill, Crop Mill, Hammerschmiede) | 20 |
@@ -103,12 +102,15 @@ Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 **What caps a building's level.** Most buildings can never be a higher level
 than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
 keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
-Farm, Pumpkin Farm, Fishing Hut, bog-ore works) are capped by **storage**
+Reindeer Herder, Farm, Pumpkin Farm, Fishing Hut, bog-ore works) are capped by **storage**
 instead: they only need their unlock LH at every level, and a level whose cost
 exceeds what the settlement can store can never be afforded, so the next level
-has to fit in storage. An **additional Storage House** can only be placed once
-one already stands at **level 10** (the first is never held back, and
-upgrading is always allowed). See §5 for why.
+has to fit in storage. Each **additional Storage House** raises the bar: with `n` held (standing plus
+queued), the next needs `min(n, 4)` Storage Houses at level
+`min(10 + 5·(n − 1), 25)`, so the second needs one at L10, the third two at L15,
+the fourth three at L20, the fifth four at L25, and once four are maxed any
+number more is allowed (the first is never held back, and upgrading is always
+allowed). See §5 for why.
 
 ## 5. Unlock ladder
 
@@ -120,7 +122,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 
 | LH | Unlocks | Also needs |
 |---|---|---|
-| 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder*, Storage House | — |
+| 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder, Storage House | — |
 | 2 | Fishing Hut | — |
 | 3 | Tower | — |
 | 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |
@@ -134,10 +136,13 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
 | 20 | Sawmill, Crop Mill, Hammerschmiede | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
-| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue* | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / any other shrine 5 |
+| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
 practice they still arrive one at a time.
+The Odin Statue cannot ask for another shrine as its feeder, because a
+settlement holds only one shrine in total (§5, Shrines), so it hangs off the
+civic line's Druid Hut at level 10 instead.
 
 ### Why producers are capped by storage, not the Longhouse
 
@@ -160,8 +165,9 @@ stalls at the cap; without it the active player's lead keeps growing.
 
 Storage stays a real brake because a higher producer level costs more than
 base capacity plus the Longhouse can hold, so storage has to grow with it.
-Storage Houses themselves keep the Longhouse cap, and an additional one needs
-one at level 10, so storage cannot be stacked cheaply in place of upgrading.
+Storage Houses themselves keep the Longhouse cap, and each additional one needs
+more houses at a higher level (1 at L10, 2 at L15, 3 at L20, 4 at L25), so
+storage cannot be stacked cheaply in place of upgrading.
 
 **Design principle.** When an active player's first settlement slows down (the
 Longhouse and storage become the limit), the answer is a second settlement,
@@ -198,8 +204,11 @@ play.
 
 ### Shrines
 
-One shrine per god per settlement. The only way to stack a god's favour is
-to hold several settlements on one island and merge them later.
+A settlement holds **one shrine in total**, of any god (the Odin Statue counts
+too), and each god has at most one shrine per island
+(`BuildRejection.SettlementAlreadyHasShrine`). Which god a settlement serves is
+therefore a real choice; stacking favours means holding several settlements and
+merging them later.
 
 | Shrine | Favour |
 |---|---|
@@ -207,7 +216,7 @@ to hold several settlements on one island and merge them later.
 | Freyja | + food production |
 | Ullr | + wood production |
 | Njörd | + ship attack (coastal-water building) |
-| Odin | two weaker effects: **Ravens**, +vision range for everything tied to this settlement (its claim, its towers, its armies and ships) and early intel on incoming attacks; **Wisdom**, −X% build time in this settlement |
+| Odin | two effects on his own settlement, both linear in level (max level 5): **Wisdom**, −2% build time per level (−10% at level 5), applied to every build order of the settlement at the moment the order starts, multiplicatively with the world speed; **Ravens**, +2 rings of vision per level (+10 at level 5) for the settlement's claim, its towers and its travelling armies (live vision and the persisted explored area). Cost and build time as the other shrines; feeder: Druid Hut 10 |
 
 ### Palisade
 
@@ -590,8 +599,10 @@ Open work, in rough order. Each is its own PR.
    Fisher Hut is gone from the catalogue; a stored Fisher Hut (and a queued
    order for one) becomes a Fishing Hut at the same hex and level when its
    settlement loads. The enum value 15 stays so persisted rows still read.
-5. **New buildings:** the Reindeer Herder (the default food building; Farm and
-   Pumpkin Farm move to LH 4 as one card by soil), the Odin Statue (Ravens and
+5. **New buildings:** ~~the Reindeer Herder~~ (done: the default food building,
+   LH 1, grass, the standard producer numbers and no terrain boost; Farm and
+   Pumpkin Farm moved to LH 4 behind a level-3 Herder, shown as one card by
+   soil), the Odin Statue (Ravens and
    Wisdom, §5) and the Palisade (§5).
 6. ~~**Bogs and iron** (§8, `bog.md`): bog ground, creeks and lakes in world
    generation, the bog-ore works, Clay Brickworks on bog ground, the lake

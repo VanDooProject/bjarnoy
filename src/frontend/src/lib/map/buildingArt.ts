@@ -21,6 +21,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   shrineofthor: 'torshrine',
   shrineoffreyja: 'freyjashrine',
   shrineofullr: 'ullrshrine',
+  odinstatue: 'odinstatue',
   shrineofnjord: 'njordshrine',
   // `farm_crop` is the legacy, non-scripted family (VanDooProject/3d_assets'
   // asset-inventory.md: "Legacy, non-scripted... its lowest level used to be
@@ -29,6 +30,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // levels up) — doesn't replace Pumpkin Farm's own `farm_pumpkin` family,
   // which stays legacy for now.
   farm: 'farm',
+  reindeerherder: 'reindeerherder',
   tower: 'towerbuilding',
   // The docs preview always shows the corrie landform, one of the two the
   // pack carves a quarry into — see the docs page's own variant picker for

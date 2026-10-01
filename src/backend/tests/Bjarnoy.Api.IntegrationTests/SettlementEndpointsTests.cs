@@ -468,13 +468,13 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Single(duringBuild!.Queue);
         // Issue #97: a brand-new building already stakes its level-0
         // foundation the instant it's queued, not just once it completes.
-        Assert.Contains(duringBuild.Buildings, b => b.Type == "farm" && b.Level == 0);
+        Assert.Contains(duringBuild.Buildings, b => b.Type == "reindeerherder" && b.Level == 0);
 
         _factory.Time.Advance(TimeSpan.FromHours(2));
         var afterBuild = await GetAsync(client, settlement.Id);
 
         Assert.Empty(afterBuild!.Queue);
-        Assert.Contains(afterBuild.Buildings, b => b.Type == "farm" && b.Level == 1);
+        Assert.Contains(afterBuild.Buildings, b => b.Type == "reindeerherder" && b.Level == 1);
         Assert.True(afterBuild.Resources.RatePerHour.Food > settlement.Resources.RatePerHour.Food);
     }
 
@@ -502,7 +502,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var after = await GetAsync(client, settlement.Id);
         Assert.Contains(
-            after!.Buildings, b => b.Q == order!.Q && b.R == order.R && b.Type == "farm" && b.Level == 0);
+            after!.Buildings, b => b.Q == order!.Q && b.R == order.R && b.Type == "reindeerherder" && b.Level == 0);
     }
 
     [Fact]
@@ -543,7 +543,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
     private Task<HttpResponseMessage> QueueFarmAtAsync(HttpClient client, Guid settlementId, int q, int r) =>
         client.PostJsonAsync(
-            $"/api/v1/settlements/{settlementId}/builds", new QueueBuildRequest("farm", q, r), Ct);
+            $"/api/v1/settlements/{settlementId}/builds", new QueueBuildRequest("reindeerherder", q, r), Ct);
 
     /// <summary>
     /// Level-1-buildable building types spanning grass, forest and mountain —
@@ -553,7 +553,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     /// all grass). Tower is deliberately excluded — it needs longhouse level
     /// 2, which these level-1 fixtures never have.
     /// </summary>
-    private static readonly string[] AnyLevel1Building = ["farm", "lumberjack", "quarry", "storagehouse"];
+    private static readonly string[] AnyLevel1Building = ["reindeerherder", "lumberjack", "quarry", "storagehouse"];
 
     /// <summary>
     /// Queues one legal building on <paramref name="count"/> distinct
@@ -1009,7 +1009,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            new QueueBuildRequest("reindeerherder", settlement.Q + 1, settlement.R),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
@@ -1091,7 +1091,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var afterResume = await GetAsync(client, settlement.Id);
         Assert.Empty(afterResume!.Queue);
-        Assert.Contains(afterResume.Buildings, b => b.Type == "farm");
+        Assert.Contains(afterResume.Buildings, b => b.Type == "reindeerherder");
     }
 
     [Fact]
@@ -1127,7 +1127,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var settled = await GetAsync(client, settlement.Id);
 
         // Time kept running, so the farm finished.
-        Assert.Contains(settled!.Buildings, b => b.Type == "farm");
+        Assert.Contains(settled!.Buildings, b => b.Type == "reindeerherder");
         Assert.True(settled.World.Running);
         Assert.False(settled.World.AcceptsCommands);
 
@@ -1218,7 +1218,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            new QueueBuildRequest("reindeerherder", settlement.Q + 1, settlement.R),
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1234,7 +1234,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            new QueueBuildRequest("reindeerherder", settlement.Q + 1, settlement.R),
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1301,7 +1301,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            new QueueBuildRequest("reindeerherder", settlement.Q + 1, settlement.R),
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1369,7 +1369,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         {
             var response = await client.PostJsonAsync(
                 $"/api/v1/settlements/{settlement.Id}/builds",
-                new QueueBuildRequest("farm", settlement.Q + dq, settlement.R + dr),
+                new QueueBuildRequest("reindeerherder", settlement.Q + dq, settlement.R + dr),
                 Ct);
 
             if (response.StatusCode == HttpStatusCode.Accepted)
