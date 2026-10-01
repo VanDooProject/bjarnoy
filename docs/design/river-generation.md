@@ -295,7 +295,7 @@ After tracing, the tiles form a forest flowing to the mouths. In topological ord
 
 The variant roll (`TerrainSampler.RiverVariantAt`) applies to stream tiles too (meander and loop families;
 a stream has no gravel-bar island, so an `island` roll draws plain), and never to `Widen` tiles. The river
-buildings (Sawmill, Crop Mill, and the planned Hammerschmiede) need **River**-width tiles: their art is river
+buildings (Sawmill, Crop Mill, and the planned Hammer Forge) need **River**-width tiles: their art is river
 width. `BuildingCatalogue` shape gating is unchanged, but `SettlementService.RiverShapeAtAsync` reports a
 shape only for `River` tiles, and the frontend (`riverBuildingAllowedHere`, `riverBuildingArtFor`) does the same.
 
