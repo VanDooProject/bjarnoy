@@ -40,7 +40,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 // enforces (Grass, >=1 Forest and >=2 Grass neighbours, no sea within two
 // hexes) over the merely-nearest land hex.
 describe('WorldModel.findLandfall', () => {
-  it.each([1, 7, 42, 20260824, 20260826, 20260830])(
+  it.each([1, 7, 42, 20260824, 20260826, 20260830, 20260831])(
     'prefers a start-quality hex over the merely-nearest land hex (seed %i)',
     (seed) => {
       const model = new WorldModel(seed);
@@ -988,7 +988,7 @@ describe('WorldModel.previewCropTiles', () => {
 });
 
 
-// The app's demo seed until the island-density change (stores/world.ts's DEMO_SEED is now 20260830).
+// The app's demo seed until the island-density change (stores/world.ts's DEMO_SEED is now 20260831).
 const DEMO_SEED = 20260824;
 
 function foundLandedSettlementAt(model: WorldModel, seedHex: AxialCoord) {
