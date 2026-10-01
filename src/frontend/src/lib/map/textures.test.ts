@@ -1823,16 +1823,21 @@ describe('palisade art', () => {
     expect(palisadeArtFor({ wallNeighbours: flagsOf([0, 2, 4]), coastalWater: false, gate: false }).key).toBe('palisadeend');
   });
 
-  it('draws game levels 1-3 from art level000-002, and a level-0 foundation from level000', () => {
+  it('draws a foundation from level000 and game levels 1-3 from level001-003, clamping to the richest rung the atlas has', () => {
     const textures = emptyTextures();
-    textures.top.palisadestraight = orientationMap(['straight-level000', 'straight-level001', 'straight-level002'] as unknown as never);
     const art = palisadeArtFor({ wallNeighbours: flagsOf([0, 3]), coastalWater: false, gate: false });
     const tile = (level: number): Tile => ({ q: 0, r: 0, terrain: 'grass', orientation: 'SE', buildingType: 'palisade', buildingLevel: level });
 
-    expect(topTextureFor(textures, tile(0), art)).toBe('straight-level000');
-    expect(topTextureFor(textures, tile(1), art)).toBe('straight-level000');
-    expect(topTextureFor(textures, tile(2), art)).toBe('straight-level001');
-    expect(topTextureFor(textures, tile(3), art)).toBe('straight-level002');
+    // Today's atlas: level000-002 only, so level 3 falls back to level002.
+    textures.top.palisadestraight = orientationMap(['site', 'level1', 'level2'] as unknown as never);
+    expect(topTextureFor(textures, tile(0), art)).toBe('site');
+    expect(topTextureFor(textures, tile(1), art)).toBe('level1');
+    expect(topTextureFor(textures, tile(2), art)).toBe('level2');
+    expect(topTextureFor(textures, tile(3), art)).toBe('level2');
+
+    // Re-rendered art with a fourth stage needs no code change.
+    textures.top.palisadestraight = orientationMap(['site', 'level1', 'level2', 'level3'] as unknown as never);
+    expect(topTextureFor(textures, tile(3), art)).toBe('level3');
   });
 
   it('draws the sea end\'s own base per art level, on the water hex', () => {
@@ -1844,7 +1849,8 @@ describe('palisade art', () => {
       q: 0, r: 0, terrain: 'sea', isCoastalWater: true, orientation: 'SE', buildingType: 'palisade', buildingLevel: level,
     });
 
-    expect(baseTextureFor(textures, tile(1), art)).toBe('coast-base-0');
+    expect(baseTextureFor(textures, tile(0), art)).toBe('coast-base-0');
+    expect(baseTextureFor(textures, tile(1), art)).toBe('coast-base-1');
     expect(baseTextureFor(textures, tile(3), art)).toBe('coast-base-2');
   });
 

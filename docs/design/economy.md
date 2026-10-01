@@ -249,8 +249,10 @@ two in step):
 triangle, since a fourth hex would branch), a 120-degree bend
 (`palisade_bend120`), a land end with one neighbour (`palisade_end`) and the sea end
 (`palisade_end_coast`). Each is drawn from the camera file that turns it onto its
-neighbours, and a hex re-resolves when a neighbour is added or removed. Game levels
-1-3 draw art `level000`-`level002`.
+neighbours, and a hex re-resolves when a neighbour is added or removed. A foundation (level 0)
+draws art `level000`, the construction site; game levels 1-3 draw `level001`-`level003`,
+and a level the atlas does not have yet shows the richest rung it has (level 3 shows
+`level002` until the fourth stage is rendered).
 
 **Movement** (land armies; fleets are unaffected). The rules apply in this order in
 `HexPathfinder` and in the frontend's `hexPath.ts`: wide river and mountain

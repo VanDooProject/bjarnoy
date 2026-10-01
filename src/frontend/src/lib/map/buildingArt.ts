@@ -71,13 +71,6 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   palisadegate: 'palisade_gate180',
 };
 
-/**
- * The art level of a building's game level: the same number, except for the wall pieces, whose three art levels `level000`-`level002`
- * are game levels 1-3 (see `textures.ts`'s `artIndexOf`).
- */
-function artLevelOf(type: string, level: number): number {
-  return type === 'palisade' || type === 'palisadegate' ? Math.max(0, level - 1) : level;
-}
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
@@ -173,7 +166,7 @@ function showcaseBuildingFrame(family: string, level: number): AtlasFrameRect | 
 export function buildingArt(type: string, level = 1): ArtRef | undefined {
   const family = BUILDING_ART_FAMILIES[type];
   if (!family) return undefined;
-  return buildingArtByFamily(family, artLevelOf(type, level));
+  return buildingArtByFamily(family, level);
 }
 
 /**
@@ -233,7 +226,7 @@ export interface BuildingLayers {
 /** Same wire-type-to-family resolution `buildingArt` does, for a caller that wants the layered form instead of a flattened picture. Undefined for an unmapped type — it has no `buildings-static` base/top split to animate. */
 export function buildingLayersForType(type: string, level: number): BuildingLayers | undefined {
   const family = BUILDING_ART_FAMILIES[type];
-  return family ? buildingLayers(family, artLevelOf(type, level)) : undefined;
+  return family ? buildingLayers(family, level) : undefined;
 }
 
 export function buildingLayers(family: string, level: number): BuildingLayers {
