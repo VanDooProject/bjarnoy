@@ -432,12 +432,12 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
     await settlement.ring.action('Build').first().tap();
     await settlement.ring.category('Resource').first().tap();
 
-    // Farm: unlocked at longhouse 1 and buildable on grass.
-    const farm = settlement.ring.child('Farm').first();
+    // Reindeer Herder: unlocked at longhouse 1 and buildable on grass.
+    const farm = settlement.ring.child('Reindeer Herder').first();
     await expect(farm).toBeVisible();
 
     await farm.tap();
-    await expect(settlement.ring.card).toContainText('Farm');
+    await expect(settlement.ring.card).toContainText('Reindeer Herder');
     await page.waitForTimeout(300);
     expect(await countBuildings(), 'the first tap must only preview, not build').toBe(before);
 

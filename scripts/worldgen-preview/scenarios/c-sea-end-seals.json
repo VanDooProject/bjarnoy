@@ -1,0 +1,91 @@
+{
+ "name": "c-sea-end-seals",
+ "title": "wall from a wide river to the sea, ending in the sea-end piece, seals the corner: the enemy cannot enter, the friendly army walks through the gate",
+ "seed": 11,
+ "radius": 1000,
+ "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
+ "window": {
+  "q": 205,
+  "r": -650,
+  "size": 22
+ },
+ "px": 36,
+ "walls": [
+  [
+   200,
+   -651
+  ],
+  [
+   201,
+   -651
+  ],
+  [
+   202,
+   -651
+  ],
+  [
+   203,
+   -651
+  ],
+  [
+   204,
+   -651
+  ],
+  [
+   205,
+   -651
+  ],
+  [
+   206,
+   -651
+  ],
+  [
+   207,
+   -651
+  ],
+  [
+   208,
+   -651
+  ],
+  [
+   209,
+   -651
+  ],
+  [
+   210,
+   -651
+  ]
+ ],
+ "gates": [
+  [
+   205,
+   -651
+  ]
+ ],
+ "routes": [
+  {
+   "from": [
+    206,
+    -653
+   ],
+   "to": [
+    207,
+    -649
+   ],
+   "army": "enemy"
+  },
+  {
+   "from": [
+    207,
+    -653
+   ],
+   "to": [
+    206,
+    -649
+   ],
+   "army": "friendly"
+  }
+ ],
+ "flood": 0,
+ "labels": true
+}

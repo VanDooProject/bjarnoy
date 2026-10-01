@@ -221,7 +221,7 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
 
         // Guarded: building on the hex is still refused while the beasts live.
         var blocked = await client.PostJsonAsync(
-            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("farm", campHex.Q, campHex.R), Ct);
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("reindeerherder", campHex.Q, campHex.R), Ct);
         Assert.Equal("HexOccupiedByCamp", await blocked.RejectionAsync(Ct));
 
         await ResolveHuntAsync(client, army.Id);
@@ -257,7 +257,7 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
 
         // The cleared hex is buildable now.
         var built = await client.PostJsonAsync(
-            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("farm", campHex.Q, campHex.R), Ct);
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("reindeerherder", campHex.Q, campHex.R), Ct);
         Assert.True(built.IsSuccessStatusCode, await built.Content.ReadAsStringAsync(Ct));
     }
 

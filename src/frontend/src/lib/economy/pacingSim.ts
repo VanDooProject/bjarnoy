@@ -1,5 +1,6 @@
 import { FEAST_HOURS, RENOWN_BASE_THRESHOLD, feastCost, feastRenown } from './feasts';
 import type { BuildingDefinitionResponse, BuildingPrerequisiteResponse, ResourceLine } from '../../api/types';
+import { additionalStorageHouseRequirement } from '../map/buildingEconomy';
 
 // Deterministic minute-step pacing model of ONE settlement, generic over
 // whatever building catalogue it is handed (live or bundled snapshot). It is
@@ -22,7 +23,7 @@ export const BASE_STORAGE_CAPACITY = 500;
 export const FOUNDING_STOCK: ResourceLine = { wood: 700, stone: 700, food: 700, iron: 0 };
 /** Fallback for 3 x SettlerCrew.trainingCost when the unit catalogue has no settlercrew row. */
 export const FALLBACK_SETTLER_COST: ResourceLine = { wood: 600, stone: 450, food: 300, iron: 300 };
-export const DEFAULT_PRODUCER_COUNTS: Record<string, number> = { lumberjack: 3, quarry: 3, farm: 3 };
+export const DEFAULT_PRODUCER_COUNTS: Record<string, number> = { lumberjack: 3, quarry: 3, reindeerherder: 3 };
 
 const check = (start: string): Session => ({ start, minutes: 10 });
 /** Daily schedules (design §9). `always24` is a reference line, not a realistic player. */
@@ -45,8 +46,6 @@ const TOWN_SQUARE = 'townsquare';
 const TOWN_SQUARE_MAX_LEVEL = 10;
 const STORAGE = 'storagehouse';
 const STORAGE_FULL_FRACTION = 0.85;
-/** BuildingCatalogue.AdditionalStorageHouseLevel: another storage house needs one at this level. */
-const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
 
 export interface PacingParams {
   startStock: ResourceLine;
@@ -436,8 +435,10 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     // level costs more than can be stored, raise the lowest storage house —
     // placing a new one (level 0 -> 1) before upgrading one already standing.
     // An additional house (level 0) may only be started once another stands
-    // at level 10 (BuildingCatalogue.AdditionalStorageHouseLevel).
-    const additionalAllowed = Math.max(0, ...storageLevels) >= ADDITIONAL_STORAGE_HOUSE_LEVEL;
+    // at the level BuildingCatalogue.AdditionalStorageHouseRequirement asks for.
+    const heldHouses = storageLevels.filter((l) => l > 0).length;
+    const need = additionalStorageHouseRequirement(heldHouses);
+    const additionalAllowed = heldHouses < 1 || storageLevels.filter((l) => l >= need.level).length >= need.count;
     let target = -1;
     for (let i = 0; i < storageLevels.length; i++) {
       if (storageLevels[i] >= storageMax) continue;

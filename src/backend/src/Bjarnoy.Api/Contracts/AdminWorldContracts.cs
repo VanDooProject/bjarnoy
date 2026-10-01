@@ -81,7 +81,9 @@ public sealed record WorldGenerationSettingsResponse(
     double MountainThreshold,
     double MountainRockiness,
     double ForestRockiness,
-    int MinimumIslandTiles)
+    int MinimumIslandTiles,
+    double IslandMaxReach,
+    double IslandMinGap)
 {
     public static WorldGenerationSettingsResponse From(WorldGenerationOptions options)
     {
@@ -108,7 +110,9 @@ public sealed record WorldGenerationSettingsResponse(
             options.MountainThreshold,
             options.MountainRockiness,
             options.ForestRockiness,
-            options.MinimumIslandTiles);
+            options.MinimumIslandTiles,
+            options.IslandMaxReach,
+            options.IslandMinGap);
     }
 }
 
@@ -139,7 +143,9 @@ public sealed record WorldGenerationSettingsOverrides(
     double? MountainThreshold = null,
     double? MountainRockiness = null,
     double? ForestRockiness = null,
-    int? MinimumIslandTiles = null);
+    int? MinimumIslandTiles = null,
+    double? IslandMaxReach = null,
+    double? IslandMinGap = null);
 
 /// <remarks>
 /// Init-only properties rather than the positional parameters this used to

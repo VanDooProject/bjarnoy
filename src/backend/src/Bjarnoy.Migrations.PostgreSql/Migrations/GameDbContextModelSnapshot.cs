@@ -1662,6 +1662,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("IslandMaxElongation")
                         .HasColumnType("double precision");
 
+                    b.Property<double>("IslandMaxReach")
+                        .HasColumnType("double precision");
+
                     b.Property<int>("IslandMaxSegments")
                         .HasColumnType("integer");
 
@@ -1672,6 +1675,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("double precision");
 
                     b.Property<double>("IslandMinElongation")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandMinGap")
                         .HasColumnType("double precision");
 
                     b.Property<int>("IslandMinSegments")

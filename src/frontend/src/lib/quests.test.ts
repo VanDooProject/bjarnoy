@@ -17,7 +17,7 @@ describe('demo quests', () => {
     const counts = { longhouse: 1, lumberjack: 1, farm: 1, storagehouse: 2, tower: 3 };
     expect(done(evaluateDemoQuests({ level: 1, counts }, 0))).toEqual(['storagehouse1']);
     expect(done(evaluateDemoQuests({ level: 1, counts: { ...counts, quarry: 1 } }, 0))).toContain('producers3');
-    expect(done(evaluateDemoQuests({ level: 1, counts: { farm: 3, fishinghut: 3 } }, 0))).toContain('producers6');
+    expect(done(evaluateDemoQuests({ level: 1, counts: { reindeerherder: 3, fishinghut: 3 } }, 0))).toContain('producers6');
   });
 
   it('follows the longhouse level and reads the claimed mask bit by bit', () => {

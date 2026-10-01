@@ -32,8 +32,8 @@ public class CampBuildRuleTests
         };
     }
 
-    private static BuildRejection FarmOnCampHex(ICampIndex camps) =>
-        Found().PlanBuild(BuildingType.Farm, CampHex, Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps).Rejection;
+    private static BuildRejection HerderOnCampHex(ICampIndex camps) =>
+        Found().PlanBuild(BuildingType.ReindeerHerder, CampHex, Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps).Rejection;
 
     [Fact]
     public void A_pristine_camp_blocks_building_on_its_hex()
@@ -41,7 +41,7 @@ public class CampBuildRuleTests
         var camp = CampOf(CampFamilies.Wolfden);
         var blocking = CampIndex.Blocking([(camp, CampState.Pristine(camp, T0))], T0, _ => true);
 
-        Assert.Equal(BuildRejection.HexOccupiedByCamp, FarmOnCampHex(blocking));
+        Assert.Equal(BuildRejection.HexOccupiedByCamp, HerderOnCampHex(blocking));
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class CampBuildRuleTests
         var blocking = CampIndex.Blocking([(camp, Cleared(camp, T0))], T0.AddDays(30), _ => true);
 
         Assert.False(blocking.TryGetCamp(CampHex, out _));
-        Assert.Equal(BuildRejection.None, FarmOnCampHex(blocking));
+        Assert.Equal(BuildRejection.None, HerderOnCampHex(blocking));
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class CampBuildRuleTests
         var camp = CampOf(CampFamilies.Fenrirbrood);
         var blocking = CampIndex.Blocking([(camp, Cleared(camp, T0))], T0, _ => true);
 
-        Assert.Equal(BuildRejection.HexOccupiedByCamp, FarmOnCampHex(blocking));
+        Assert.Equal(BuildRejection.HexOccupiedByCamp, HerderOnCampHex(blocking));
     }
 
     [Fact]

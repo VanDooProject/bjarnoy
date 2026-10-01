@@ -7,7 +7,7 @@ namespace Bjarnoy.Domain.World;
 /// <c>docs/design/river-generation.md</c> for the full rationale — this is a
 /// direct implementation of that doc, not an independent design.
 /// </summary>
-internal static class RiverGenerator
+internal static partial class RiverGenerator
 {
     /// <summary>Counters a caller can pass to <see cref="Generate"/> to see what the tracer did (tests, the preview tool).</summary>
     internal sealed class RiverStats
@@ -20,6 +20,26 @@ internal static class RiverGenerator
         public int RiverStreamJoins;
         public int TruncatedBranches;
         public int DroppedRivers;
+
+        /// <summary>Mountain-enclosed valleys of at least <see cref="ValleyMinHexes"/> hexes cut off from the island's main walkable region.</summary>
+        public int ValleyCandidates;
+
+        /// <summary>Valley streams carved.</summary>
+        public int ValleyStreams;
+
+        /// <summary>Of those, streams that run over the mountains straight into a river (the rest start on plain land and run on to one).</summary>
+        public int ValleyStreamsIntoRivers;
+
+        /// <summary>Candidates an earlier valley stream had already connected.</summary>
+        public int ValleysJoined;
+
+        public int ValleySkippedNoPath;
+        public int ValleySkippedTrace;
+        public int ValleySkippedLayout;
+        public int ValleySkippedWidths;
+        public int ValleySkippedRules;
+        public int ValleySkippedCutsOff;
+        public int ValleySkippedChanged;
         public int BogSites;
         public int BogSinks;
         public int BogSpawns;
@@ -73,6 +93,17 @@ internal static class RiverGenerator
             RiverStreamJoins += other.RiverStreamJoins;
             TruncatedBranches += other.TruncatedBranches;
             DroppedRivers += other.DroppedRivers;
+            ValleyCandidates += other.ValleyCandidates;
+            ValleyStreams += other.ValleyStreams;
+            ValleyStreamsIntoRivers += other.ValleyStreamsIntoRivers;
+            ValleysJoined += other.ValleysJoined;
+            ValleySkippedNoPath += other.ValleySkippedNoPath;
+            ValleySkippedTrace += other.ValleySkippedTrace;
+            ValleySkippedLayout += other.ValleySkippedLayout;
+            ValleySkippedWidths += other.ValleySkippedWidths;
+            ValleySkippedRules += other.ValleySkippedRules;
+            ValleySkippedCutsOff += other.ValleySkippedCutsOff;
+            ValleySkippedChanged += other.ValleySkippedChanged;
         }
     }
 
@@ -181,7 +212,7 @@ internal static class RiverGenerator
     /// when the natural meeting is not drawable. Then a width pass (stream -> widening -> river).
     /// See <c>docs/design/river-generation.md</c>.
     /// </summary>
-    private static Result GenerateGreen(
+    internal static Result GenerateGreen(
         IReadOnlyList<HexCoord> islandTiles,
         Dictionary<HexCoord, Terrain> land,
         HashSet<HexCoord> islandLand,
@@ -276,7 +307,8 @@ internal static class RiverGenerator
             AssignWidths(BuildRiverTiles(trial), riverLand, seed, null, trial.RequireRiver);
         Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver = (exit, startIn, current, blocked) =>
         {
-            var d2 = new Drainage(islandTiles, land, riverLand, options, seed, blocked);
+            // A spawned river must reach the sea from wherever the bog is: every basin gets an outlet.
+            var d2 = new Drainage(islandTiles, land, riverLand, options, seed, blocked, outletPerBasin: true);
             var claims2 = new Claim?[d2.Tiles.Length];
             for (var k = 0; k < current.Paths.Count; k++)
             {
@@ -295,9 +327,23 @@ internal static class RiverGenerator
             bogs.PlaceSites(bp, widthTrial, traceRiver);
         }
 
+        // A stream out of every mountain-enclosed valley that the rivers and bogs left cut off.
+        var bogTiles = bogs.Classify();
+        var settled = AssignWidths(BuildRiverTiles(bp), riverLand, seed, null, bp.RequireRiver);
+        CarveValleyStreams(
+            islandTiles,
+            land,
+            islandLand,
+            riverLand,
+            options,
+            seed,
+            bogTiles,
+            bp,
+            settled,
+            stats);
         var nodes = BuildRiverTiles(bp);
         var rivers = AssignWidths(nodes, riverLand, seed, stats, bp.RequireRiver);
-        return new Result(rivers, bogs.Classify());
+        return new Result(rivers, bogTiles);
     }
 
     /// <summary>What a legacy walk ended on.</summary>
@@ -372,7 +418,8 @@ internal static class RiverGenerator
             Func<HexCoord, bool> isLand,
             WorldGenerationOptions options,
             int seed,
-            HashSet<HexCoord>? blocked = null)
+            HashSet<HexCoord>? blocked = null,
+            bool outletPerBasin = false)
         {
             BendCost = options.BendCost;
             SharpBendCost = options.SharpBendCost;
@@ -427,7 +474,7 @@ internal static class RiverGenerator
                     + (land[Tiles[i]] == Terrain.Mountain ? options.MountainCost : 0.0);
             }
 
-            var outlets = PickOutlets(coastal, options, seed);
+            var outlets = PickOutlets(coastal, options, seed, outletPerBasin);
             OutletCount = outlets.Count;
             var heap = new Heap();
             foreach (var o in outlets)
@@ -537,7 +584,7 @@ internal static class RiverGenerator
         /// is within three hexes (bays score high, spits low) plus a small hash; picked
         /// farthest-first, the first being the best score.
         /// </summary>
-        private List<int> PickOutlets(bool[] coastal, WorldGenerationOptions options, int seed)
+        private List<int> PickOutlets(bool[] coastal, WorldGenerationOptions options, int seed, bool outletPerBasin)
         {
             var candidates = new List<int>();
             var score = new List<double>();
@@ -625,7 +672,103 @@ internal static class RiverGenerator
                 }
             }
 
+            if (outletPerBasin)
+            {
+                AddBasinOutlets(outlets, candidates, score);
+            }
+
             return outlets;
+        }
+
+        /// <summary>
+        /// One more outlet for every basin (connected group of interior tiles) that no outlet drains: the best-scored candidate that
+        /// receives from it. The outlets above are spread by count, so a basin cut off by a neck of coastal tiles (a peninsula, two
+        /// landmasses joined by a strip of beach) can be left without one, and nothing in it can reach the sea.
+        /// </summary>
+        private void AddBasinOutlets(List<int> outlets, List<int> candidates, List<double> score)
+        {
+            var n = Tiles.Length;
+            var basin = new int[n];
+            Array.Fill(basin, -1);
+            var basins = 0;
+            var stack = new Stack<int>();
+            for (var i = 0; i < n; i++)
+            {
+                if (!Interior[i] || basin[i] != -1)
+                {
+                    continue;
+                }
+
+                basin[i] = basins;
+                stack.Push(i);
+                while (stack.Count > 0)
+                {
+                    var t = stack.Pop();
+                    for (var d = 0; d < 6; d++)
+                    {
+                        var m = Neighbour[(t * 6) + d];
+                        if (m >= 0 && Interior[m] && basin[m] == -1)
+                        {
+                            basin[m] = basins;
+                            stack.Push(m);
+                        }
+                    }
+                }
+
+                basins++;
+            }
+
+            var drained = new bool[basins];
+            void MarkDrained(int o)
+            {
+                for (var d = 0; d < 6; d++)
+                {
+                    var m = Neighbour[(o * 6) + d];
+                    if (m >= 0 && Interior[m])
+                    {
+                        drained[basin[m]] = true;
+                    }
+                }
+            }
+
+            foreach (var o in outlets)
+            {
+                MarkDrained(o);
+            }
+
+            // The best candidate per basin it receives from (first in tile order on a tie).
+            var best = new int[basins];
+            Array.Fill(best, -1);
+            for (var c = 0; c < candidates.Count; c++)
+            {
+                var o = candidates[c];
+                for (var d = 0; d < 6; d++)
+                {
+                    var m = Neighbour[(o * 6) + d];
+                    if (m < 0 || !Interior[m])
+                    {
+                        continue;
+                    }
+
+                    var b = basin[m];
+                    if (best[b] == -1 || score[c] > score[best[b]])
+                    {
+                        best[b] = c;
+                    }
+                }
+            }
+
+            for (var b = 0; b < basins; b++)
+            {
+                if (drained[b] || best[b] == -1)
+                {
+                    continue;
+                }
+
+                var o = candidates[best[b]];
+                outlets.Add(o);
+                MarkDrained(o);
+            }
         }
     }
 

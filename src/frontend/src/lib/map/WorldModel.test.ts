@@ -32,7 +32,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 }
 
 // Regression: findLandfall used to return the literal nearest land hex to
-// the click, which for some seeds (see the demo seed, 20260824 — the case
+// the click, which for some seeds (see the old demo seed, 20260824 — the case
 // that surfaced this after WorldGenerationOptions.IslandMinRadius/
 // IslandMaxRadius grew) can be a lone tile at an island's tip: almost every
 // hex in the settlement's own realm ends up sea. findLandfall now prefers a
@@ -40,7 +40,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 // enforces (Grass, >=1 Forest and >=2 Grass neighbours, no sea within two
 // hexes) over the merely-nearest land hex.
 describe('WorldModel.findLandfall', () => {
-  it.each([1, 7, 42, 20260824, 20260826])(
+  it.each([1, 7, 42, 20260824, 20260826, 20260830, 20260831])(
     'prefers a start-quality hex over the merely-nearest land hex (seed %i)',
     (seed) => {
       const model = new WorldModel(seed);
@@ -216,22 +216,113 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.placeBuilding(settlement.id, spots[2], 'farm')).toBe(true);
   });
 
-  it('refuses an additional storage house until one stands at level 10 (ADDITIONAL_STORAGE_HOUSE_LEVEL)', () => {
+  it('raises the bar for each further storage house (additionalStorageHouseRequirement)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
       (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
     );
-    expect(spots.length).toBeGreaterThan(2);
+    expect(spots.length).toBeGreaterThan(5);
 
     settlement.level = 3; // widen the claim so the spots are reachable
     expect(model.storageHouses(settlement.id)).toEqual([]);
-    // The first is never refused; the second is, while the first is below 10.
+    const setLevel = (i: number, level: number) => {
+      model.getTile(spots[i].q, spots[i].r).buildingLevel = level;
+    };
+    // 1st: never refused. 2nd: needs 1 at L10.
     expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
     expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(false);
-
-    model.getTile(spots[0].q, spots[0].r).buildingLevel = 10;
+    setLevel(0, 10);
     expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(true);
+    // 3rd: needs 2 at L15.
+    setLevel(1, 14);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
+    setLevel(0, 15);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
+    setLevel(1, 15);
+    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(true);
+    // 4th: needs 3 at L20.
+    setLevel(0, 20);
+    setLevel(1, 20);
+    setLevel(2, 19);
+    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(false);
+    setLevel(2, 20);
+    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(true);
+    // 5th: needs 4 at L25, and from then on there is no limit.
+    for (const i of [0, 1, 2]) setLevel(i, 25);
+    setLevel(3, 24);
+    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(false);
+    setLevel(3, 25);
+    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(true);
+    expect(model.placeBuilding(settlement.id, spots[5], 'storagehouse')).toBe(true);
+  });
+
+  it('lets a settlement hold only one shrine in total, of any god', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    settlement.level = 3;
+
+    expect(model.shrineCoords(settlement.id)).toEqual([]);
+    expect(model.placeBuilding(settlement.id, spots[0], 'shrineofthor')).toBe(true);
+    expect(model.shrineCoords(settlement.id)).toEqual([{ q: spots[0].q, r: spots[0].r }]);
+    // neither another god's shrine nor a second one of the same god
+    expect(model.placeBuilding(settlement.id, spots[1], 'shrineoffreyja')).toBe(false);
+    expect(model.placeBuilding(settlement.id, spots[2], 'shrineofthor')).toBe(false);
+    // other buildings are unaffected
+    expect(model.placeBuilding(settlement.id, spots[1], 'farm')).toBe(true);
+  });
+
+  it("widens a settlement's vision discs by Odin's Ravens and shortens its builds with Wisdom", () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const spots = hexesInRadius(at, 3).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    settlement.level = 3;
+    const before = model.visionDiscsFor(settlement)[0].radius;
+    const exploredBefore = model.exploredRadius(settlement);
+    expect(model.ravensRingsFor(settlement.id)).toBe(0);
+    expect(model.wisdomFactor(settlement.id)).toBe(1);
+    const signatureBefore = model.fogSignature();
+
+    expect(model.placeBuilding(settlement.id, spots[0], 'odinstatue')).toBe(true);
+
+    expect(model.odinLevel(settlement.id)).toBe(1);
+    expect(model.ravensRingsFor(settlement.id)).toBe(2);
+    expect(model.visionDiscsFor(settlement)[0].radius).toBe(before + 2);
+    expect(model.exploredRadius(settlement)).toBe(exploredBefore + 2);
+    expect(model.wisdomFactor(settlement.id)).toBeCloseTo(0.98, 9);
+    expect(model.fogSignature()).not.toBe(signatureBefore);
+    // it is the settlement's one shrine
+    expect(model.placeBuilding(settlement.id, spots[1], 'shrineofthor')).toBe(false);
+
+    model.getTile(spots[0].q, spots[0].r).buildingLevel = 4;
+    expect(model.upgradeBuilding(settlement.id, spots[0])).toBe(true);
+    expect(model.odinLevel(settlement.id)).toBe(5);
+    expect(model.visionDiscsFor(settlement)[0].radius).toBe(before + 10);
+    expect(model.wisdomFactor(settlement.id)).toBeCloseTo(0.9, 9);
+  });
+
+  it('reads the Odin level from a live snapshot, so Ravens follow the backend', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 3 }]));
+    expect(model.ravensRingsFor(settlement.id)).toBe(6);
+
+    // a level-0 foundation stub grants nothing yet
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 0 }]));
+    expect(model.ravensRingsFor(settlement.id)).toBe(0);
   });
 
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
@@ -423,7 +514,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
 
     expect(model.placeBuilding(settlement.id, grass, 'fishinghut')).toBe(false);
     expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
@@ -435,7 +526,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     settlement.level = 6;
     model.claimTerritory(settlement.id);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
     const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
 
     expect(model.placeBuilding(settlement.id, grass, 'shrineofnjord')).toBe(false);
@@ -448,7 +539,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
     model.setRiverTiles([riverTile(grass, 'bend')]);
 
     expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(true);
@@ -459,7 +550,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
 
     expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(false);
     expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
@@ -471,7 +562,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
       const model = new WorldModel(20260825);
       const { settlement } = foundLandedSettlement(model);
       const radius = model.borderRadius(settlement);
-      const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+      const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
       model.setRiverTiles([riverTile(grass, shape)]);
 
       expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(false);
@@ -897,7 +988,7 @@ describe('WorldModel.previewCropTiles', () => {
 });
 
 
-// Same demo seed the app itself boots into (stores/world.ts's DEMO_SEED).
+// The app's demo seed until the island-density change (stores/world.ts's DEMO_SEED is now 20260831).
 const DEMO_SEED = 20260824;
 
 function foundLandedSettlementAt(model: WorldModel, seedHex: AxialCoord) {
@@ -1204,7 +1295,7 @@ describe('WorldModel.setGiants (live mode)', () => {
 });
 
 describe('placeGiantsForIsland (demo giant placement v2)', () => {
-  // The default demo seed's nearest island to the origin: big enough (hundreds of tiles) to
+  // The old demo seed's nearest island to the origin: big enough (hundreds of tiles) to
   // get mountain giants. The anchors are read back off the model rather than pinned.
   const DEMO_SEED = 20260824;
 
@@ -1420,13 +1511,13 @@ describe('WorldModel wildlife camps', () => {
 });
 
 describe('WorldModel wasted-island reveal', () => {
-  // Seed 40 has a small wasted island around (-105, 460) — the first window of
-  // src/shared/wasted-terrain-golden.json. (-142, 471) is a wasted-forest hex whose 6
-  // neighbours are also wasted land (fully interior); (-143, 470) is plain open sea that
+  // Seed 40 has a small wasted island nearest the origin around cell (-1, 1) (found by
+  // scanning the wasted island cells after the island-density change). (-81, 256) is a wasted-forest hex whose 6
+  // neighbours are also wasted land (fully interior); (-83, 256) is plain open sea that
   // borders wasted land.
   const WASTED_SEED = 40;
-  const wastedForest = { q: -142, r: 471 };
-  const seaBorderingWasted = { q: -143, r: 470 };
+  const wastedForest = { q: -81, r: 256 };
+  const seaBorderingWasted = { q: -83, r: 256 };
 
   it('hides a wasted hex as sea before the reveal', () => {
     const model = new WorldModel(WASTED_SEED);
@@ -1483,7 +1574,7 @@ describe('WorldModel wasted-island reveal', () => {
   });
 
   it('never wipes green-island state (buildings, ownership, giant tags) on reveal', () => {
-    // Seed 20260824 (the app's own demo seed): the landfall nearest the origin, and a
+    // Seed 20260824 (the app's demo seed until the island-density change): the landfall nearest the origin, and a
     // giant-placeable anchor near it whose footprint includes a Forest hex (found by
     // scanning canPlaceGiant), so this also covers tagGiantHex's Forest->Grass flattening
     // surviving a reveal.

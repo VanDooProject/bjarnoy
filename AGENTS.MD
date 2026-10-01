@@ -44,6 +44,24 @@
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
 
+# driving red CI to green
+- reproduce each failing CI test locally and iterate on it there until it
+  passes: run just that test (`dotnet test --filter-method`/`--filter-class`,
+  `npx vitest run <file>`, `npx playwright test <spec> -g "<name>"`), not the
+  full suite and not another CI round. Push only once the failing tests pass
+  locally, and run the full suite once before that push (the fast checks
+  plus the suites the fix touches), so a CI run is a confirmation, not the
+  debugger
+- read the CI log for the exact test names and errors first; don't push
+  speculative fixes to see what CI says
+- when a red run has several failures that are not related to each other
+  (different causes, different areas), hand them to separate subagents in
+  parallel, one per cause, each reproducing and fixing its own failure
+  locally; failures that share a cause (e.g. one moved demo seed breaking
+  several e2e specs) stay with one agent. Give each agent its own worktree
+  or its own files so they don't edit the same code, and merge their
+  fixes into one validated push
+
 # unrelated/pre-existing CI failures found while driving a PR to green
 - if a PR you're driving to green has a CI failure unrelated to that PR's
   own diff (confirmed pre-existing, e.g. it also fails on `main` at the
@@ -144,7 +162,8 @@
   `dotnet test` against `src/backend/Bjarnoy.slnx` should run for real, not
   be skipped with a "no SDK in this sandbox, please let CI confirm" note.
   (The PostgreSQL half of the integration suite and `Bjarnoy.AppHost.Tests`
-  need a working Docker daemon.)
+  need a working Docker daemon — which this sandbox has, see the Docker
+  bullet below.)
 - Blender is installable the same way (`sudo apt-get install -y blender`)
   for anything touching 3D/tile-art asset work.
 - `src/frontend/vendor/bg_assets_hextile` is a gitignored submodule
@@ -187,15 +206,42 @@
   sudo dockerd > /tmp/dockerd.log 2>&1 &
   sleep 5 && docker info   # confirm it came up
   ```
-  This gets you a running daemon, but it's still not useful for
-  `Bjarnoy.AppHost.Tests`/Postgres-backed integration tests here: pulling
-  any image (`docker run hello-world`, `postgres`, etc.) fails with a `403
-  Forbidden` from Docker Hub's CDN — the sandbox's egress proxy doesn't
-  allow that host for this session. Per the proxy's own guidance
-  (`/root/.ccr/README.md`), a 403 is an org policy denial, not a bug — don't
-  retry or try to route around it. So those Docker-dependent test suites
-  still can't be run/reproduced locally in this sandbox; say so rather than
-  claiming to have verified them, and rely on CI for that coverage.
+  The daemon does not survive a session restart/resume, so start it again
+  after one (every Docker-backed test then fails fast at container start).
+  If `dockerd` then exits with `failed to start containerd: timeout waiting
+  for containerd to start` / "containerd is still running", it's a stale pid
+  file from the previous container lifetime — remove it and start again:
+  `sudo rm -f /var/run/docker/containerd/containerd.pid /var/run/docker.pid`.
+  **Image pulls from Docker Hub work** (verified 2026-10-01: `hello-world`,
+  `postgres:18-alpine`, `testcontainers/ryuk` all pull and run), so the
+  Docker-dependent suites run for real here — "no Docker in the sandbox" is
+  not a valid reason to skip them or defer them to CI:
+  - `dotnet test --project tests/Bjarnoy.Api.IntegrationTests` (from
+    `src/backend`) — Testcontainers starts a real PostgreSQL container.
+    `PostgreSqlFixture` silently **skips** its tests instead of failing when
+    the container can't start, so check the summary says `skipped: 0`
+    before claiming the Postgres half was covered.
+  - `Bjarnoy.AppHost.Tests` (full Aspire orchestration: Postgres container +
+    API + Vite dev server + .NET Playwright Chromium) also passes, but needs
+    the same prep as CI's `aspire-e2e.yml`, otherwise it just hangs until
+    timeout waiting for the `frontend` resource: `npm ci` in `src/frontend`
+    and the vendored `bg_assets_hextile` art (see above). No
+    `playwright.ps1 install` needed — `Microsoft.Playwright` 1.56 finds the
+    pre-installed `/opt/pw-browsers/chromium-1194` via
+    `PLAYWRIGHT_BROWSERS_PATH`. Run it from
+    `src/backend/tests/Bjarnoy.AppHost.Tests` with **`CI=true dotnet test`**;
+    a single class can be targeted with
+    `CI=true dotnet test -- --filter-class "*ChatFlowTests"`. The `CI=true`
+    matters: without it `AppHost.cs` treats the run as local dev and gives
+    Postgres a persistent volume + container (+ pgAdmin), so every test —
+    and every later run — shares one database, and tests that expect a
+    fresh one fail locally for reasons CI never sees (`Assert.Single` on
+    worlds finding 2, 409s, pgAdmin health-check noise). With `CI=true` each
+    test gets its own empty database exactly like the `aspire-e2e` job
+    (verified 2026-10-01: 12/12 pass, ~20 min).
+  If a pull ever does come back `403 Forbidden`, that's an egress-policy
+  change for that session (see `/root/.ccr/README.md`): don't route around
+  it, say so, and rely on CI — but try the pull first rather than assuming.
 - `npx playwright test` (the real `e2e/*.spec.ts` suite, not just a
   throwaway screenshot script) **does work in this sandbox**, including
   actually launching a browser — don't conclude otherwise just because

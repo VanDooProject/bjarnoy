@@ -12,11 +12,12 @@
 // Order matters here, not just membership: `RiverTile.inDirections`/
 // `outDirection` depend on the exact path a river traced, and the golden
 // fixture compares the frozen tile list directly.
-import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { hash2, valueNoise } from './worldGenerator';
 import { confluenceKind, TILE_ORIENTATIONS } from './types';
 import type { BogTile, RiverTile, RiverTileShape, RiverWidth, Terrain } from './types';
 import { BogGenerator, BogPaths, emptyBogStats, HexSet, type BogStats } from './bogGenerator';
+import { checkBogRules, totalViolations } from './bogRules';
 
 /**
  * A traced river shorter than this (in tiles, spring to mouth inclusive) is
@@ -80,6 +81,21 @@ export interface RiverStats extends BogStats {
   riverStreamJoins: number;
   truncatedBranches: number;
   droppedRivers: number;
+  /** Mountain-enclosed valleys of at least `VALLEY_MIN_HEXES` hexes cut off from the island's main walkable region. */
+  valleyCandidates: number;
+  /** Valley streams carved. */
+  valleyStreams: number;
+  /** Of those, streams that run over the mountains straight into a river (the rest start on plain land and run on to one). */
+  valleyStreamsIntoRivers: number;
+  /** Candidates an earlier valley stream had already connected. */
+  valleysJoined: number;
+  valleySkippedNoPath: number;
+  valleySkippedTrace: number;
+  valleySkippedLayout: number;
+  valleySkippedWidths: number;
+  valleySkippedRules: number;
+  valleySkippedCutsOff: number;
+  valleySkippedChanged: number;
 }
 
 export function emptyRiverStats(): RiverStats {
@@ -92,6 +108,17 @@ export function emptyRiverStats(): RiverStats {
     riverStreamJoins: 0,
     truncatedBranches: 0,
     droppedRivers: 0,
+    valleyCandidates: 0,
+    valleyStreams: 0,
+    valleyStreamsIntoRivers: 0,
+    valleysJoined: 0,
+    valleySkippedNoPath: 0,
+    valleySkippedTrace: 0,
+    valleySkippedLayout: 0,
+    valleySkippedWidths: 0,
+    valleySkippedRules: 0,
+    valleySkippedCutsOff: 0,
+    valleySkippedChanged: 0,
     ...emptyBogStats(),
   };
 }
@@ -693,6 +720,7 @@ class Drainage {
     isLand: (c: AxialCoord) => boolean,
     seed: number,
     blocked: HexSet | null = null,
+    outletPerBasin = false,
   ) {
     this.tiles = sortedByQR(islandTiles);
     const n = this.tiles.length;
@@ -726,7 +754,7 @@ class Drainage {
         (terrainOf(tile) === 'mountain' ? MOUNTAIN_COST : 0.0);
     }
 
-    const outlets = this.pickOutlets(coastal, seed);
+    const outlets = this.pickOutlets(coastal, seed, outletPerBasin);
     this.outletCount = outlets.length;
     const heap = new Heap();
     for (const o of outlets) {
@@ -784,7 +812,7 @@ class Drainage {
     return { out: best, cost: bestCost };
   }
 
-  private pickOutlets(coastal: boolean[], seed: number): number[] {
+  private pickOutlets(coastal: boolean[], seed: number, outletPerBasin: boolean): number[] {
     const candidates: number[] = [];
     const score: number[] = [];
     for (let i = 0; i < this.tiles.length; i++) {
@@ -832,7 +860,63 @@ class Drainage {
         minDistance[i] = Math.min(minDistance[i]!, hexDistance(this.tiles[candidates[i]!]!, this.tiles[candidates[best]!]!));
       }
     }
+    if (outletPerBasin) this.addBasinOutlets(outlets, candidates, score);
     return outlets;
+  }
+
+  /**
+   * One more outlet for every basin (connected group of interior tiles) that no outlet drains: the best-scored candidate that
+   * receives from it. The outlets above are spread by count, so a basin cut off by a neck of coastal tiles (a peninsula, two
+   * landmasses joined by a strip of beach) can be left without one, and nothing in it can reach the sea — mirrors `AddBasinOutlets`.
+   */
+  private addBasinOutlets(outlets: number[], candidates: number[], score: number[]): void {
+    const n = this.tiles.length;
+    const basin = new Int32Array(n).fill(-1);
+    let basins = 0;
+    for (let i = 0; i < n; i++) {
+      if (!this.interior[i] || basin[i] !== -1) continue;
+      basin[i] = basins;
+      const stack = [i];
+      while (stack.length > 0) {
+        const t = stack.pop()!;
+        for (let d = 0; d < 6; d++) {
+          const m = this.neighbour[t * 6 + d]!;
+          if (m >= 0 && this.interior[m] && basin[m] === -1) {
+            basin[m] = basins;
+            stack.push(m);
+          }
+        }
+      }
+      basins++;
+    }
+
+    const drained = new Array<boolean>(basins).fill(false);
+    const markDrained = (o: number): void => {
+      for (let d = 0; d < 6; d++) {
+        const m = this.neighbour[o * 6 + d]!;
+        if (m >= 0 && this.interior[m]) drained[basin[m]!] = true;
+      }
+    };
+    for (const o of outlets) markDrained(o);
+
+    // The best candidate per basin it receives from (first in tile order on a tie).
+    const best = new Int32Array(basins).fill(-1);
+    for (let c = 0; c < candidates.length; c++) {
+      const o = candidates[c]!;
+      for (let d = 0; d < 6; d++) {
+        const m = this.neighbour[o * 6 + d]!;
+        if (m < 0 || !this.interior[m]) continue;
+        const b = basin[m]!;
+        if (best[b] === -1 || score[c]! > score[best[b]!]!) best[b] = c;
+      }
+    }
+
+    for (let b = 0; b < basins; b++) {
+      if (drained[b] || best[b] === -1) continue;
+      const o = candidates[best[b]!]!;
+      outlets.push(o);
+      markDrained(o);
+    }
   }
 }
 
@@ -1237,7 +1321,8 @@ export function generateRiversWithBogs(
   const widthTrial = (trial: BogPaths) =>
     assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), riverLand, seed, undefined, trial.requireRiver);
   const traceRiver = (exit: AxialCoord, startIn: number, current: BogPaths, blocked: HexSet): AxialCoord[] | null => {
-    const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked);
+    // A spawned river must reach the sea from wherever the bog is: every basin gets an outlet.
+    const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked, true);
     const claims2: (Claim | null)[] = new Array<Claim | null>(d2.tiles.length).fill(null);
     for (let k = 0; k < current.paths.length; k++) commit(d2, current.paths[k]!, current.merged[k]!, claims2);
 
@@ -1248,6 +1333,468 @@ export function generateRiversWithBogs(
   if (guaranteeOnly) bogs.placeGuaranteeOnly(bp, widthTrial, traceRiver);
   else bogs.placeSites(bp, widthTrial, traceRiver);
 
+  // A stream out of every mountain-enclosed valley that the rivers and bogs left cut off.
+  const bogTiles = bogs.classify();
+  const settled = assignWidths(buildNodes(bp.paths, bp.forcedOut, bp.bogIn), riverLand, seed, undefined, bp.requireRiver);
+  carveValleyStreams(
+    islandTiles,
+    islandLand,
+    terrainOf,
+    riverLand,
+    seed,
+    bogTiles,
+    bp,
+    settled,
+    (blocked) => new Drainage(islandTiles, terrainOf, riverLand, seed, blocked),
+    stats,
+  );
   const nodes = buildNodes(bp.paths, bp.forcedOut, bp.bogIn);
-  return { rivers: assignWidths(nodes, riverLand, seed, stats, bp.requireRiver), bogs: bogs.classify() };
+  return { rivers: assignWidths(nodes, riverLand, seed, stats, bp.requireRiver), bogs: bogTiles };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Valley streams: a stream out of every mountain-enclosed valley of at least VALLEY_MIN_HEXES.
+// ---------------------------------------------------------------------------------------------
+
+/** A walkable region cut off from the island's main one by mountains alone is given a stream out once it has this many hexes. */
+export const VALLEY_MIN_HEXES = 100;
+
+const flowsOutAsRiver = (t: RiverTile): boolean =>
+  t.width === undefined || t.width === 'river' || t.width === 'widen' || t.width === 'riverstream';
+
+/**
+ * Whether a river tile is a wide river (impassable to a land army): at least two of its arms are river
+ * width — mirrors `RiverGenerator.IsWideRiver` (and the preview's `isWideRiverTile`). An in-arm is river
+ * width when the upstream tile flows out as river (a lake or creek upstream feeds a river tile at river
+ * width), the out-arm (a mouth's sea side included) when the tile itself does.
+ */
+export function isWideRiverTile(tile: RiverTile, riverAt: (c: AxialCoord) => RiverTile | undefined): boolean {
+  const out = flowsOutAsRiver(tile);
+  let arms = 0;
+  const ns = neighbors(tile);
+  for (const d of tile.inDirections) {
+    const up = riverAt(ns[TILE_ORIENTATIONS.indexOf(d)]!);
+    if (up ? flowsOutAsRiver(up) : tile.width === undefined || tile.width === 'river') arms++;
+  }
+  if ((tile.outDirection || tile.shape === 'mouth') && out) arms++;
+  return arms >= 2;
+}
+
+/** One island's walkable regions under the movement rules, for the valley pass. */
+interface Walk {
+  riverAt: Map<string, RiverTile>;
+  regions: AxialCoord[][];
+  regionOf: Map<string, number>;
+  main: number;
+  wide: Set<string>;
+}
+
+/** A mountain-enclosed valley the movement rules cut off: its size and its lowest (q, r) hex. */
+export interface ValleyCandidate {
+  size: number;
+  first: AxialCoord;
+}
+
+/** The island's terrain as the movement rules see it (bogland laid over the seed's terrain), and the questions the valley pass asks of it. */
+function valleyGround(
+  islandTiles: AxialCoord[],
+  islandLand: Set<string>,
+  terrainOf: (c: AxialCoord) => Terrain,
+  bogTiles: BogTile[],
+) {
+  const tilesSorted = sortedByQR(islandTiles);
+  const bogByKey = new Map<string, BogTile>();
+  const blocked = new Set<string>();
+  for (const t of bogTiles) {
+    bogByKey.set(coordKey(t), t);
+    blocked.add(coordKey(t));
+    if (t.kind !== 'bog') for (const n of neighbors(t)) blocked.add(coordKey(n));
+  }
+  const terrainHere = (c: AxialCoord): Terrain => {
+    const k = coordKey(c);
+    const bog = bogByKey.get(k);
+    if (bog) return bog.kind === 'lake' ? 'lake' : 'bog';
+    return islandLand.has(k) ? terrainOf(c) : 'sea';
+  };
+  const baseTerrain = (c: AxialCoord): Terrain => (islandLand.has(coordKey(c)) ? terrainOf(c) : 'sea');
+
+  const analyse = (rivers: RiverTile[]): Walk => {
+    const riverAt = new Map<string, RiverTile>();
+    for (const t of rivers) riverAt.set(coordKey(t), t);
+    const wide = new Set<string>();
+    for (const t of rivers) if (isWideRiverTile(t, (c) => riverAt.get(coordKey(c)))) wide.add(coordKey(t));
+    const walkable = (c: AxialCoord): boolean => {
+      const k = coordKey(c);
+      if (riverAt.has(k)) return !wide.has(k);
+      const t = terrainHere(c);
+      return t !== 'sea' && t !== 'lake' && t !== 'mountain';
+    };
+    const regions: AxialCoord[][] = [];
+    const regionOf = new Map<string, number>();
+    for (const tile of tilesSorted) {
+      const k = coordKey(tile);
+      if (regionOf.has(k) || !walkable(tile)) continue;
+      const id = regions.length;
+      const region = [tile];
+      regionOf.set(k, id);
+      for (let i = 0; i < region.length; i++) {
+        for (const n of neighbors(region[i]!)) {
+          const nk = coordKey(n);
+          if (islandLand.has(nk) && !regionOf.has(nk) && walkable(n)) {
+            regionOf.set(nk, id);
+            region.push(n);
+          }
+        }
+      }
+      regions.push(region);
+    }
+    let main = 0;
+    for (let i = 1; i < regions.length; i++) if (regions[i]!.length > regions[main]!.length) main = i;
+    return { riverAt, regions, regionOf, main, wide };
+  };
+
+  /** Closed in by mountains alone: every non-walkable hex on the region's border is a mountain without a wide river. */
+  const mountainEnclosed = (region: AxialCoord[], w: Walk, id: number): boolean => {
+    for (const c of region) {
+      for (const n of neighbors(c)) {
+        const nk = coordKey(n);
+        if (w.regionOf.get(nk) === id) continue;
+        if (!islandLand.has(nk) || w.wide.has(nk) || terrainHere(n) !== 'mountain') return false;
+      }
+    }
+    return true;
+  };
+
+  /** The cut-off valleys: regions but the largest that mountains alone close in and that have at least `VALLEY_MIN_HEXES` hexes; largest first, then by lowest (q, r). */
+  const candidates = (w: Walk): ValleyCandidate[] => {
+    const found: ValleyCandidate[] = [];
+    w.regions.forEach((region, id) => {
+      if (id !== w.main && region.length >= VALLEY_MIN_HEXES && mountainEnclosed(region, w, id)) {
+        found.push({ size: region.length, first: region[0]! });
+      }
+    });
+    return found.sort((x, y) => y.size - x.size || x.first.q - y.first.q || x.first.r - y.first.r);
+  };
+
+  return { blocked, terrainHere, baseTerrain, analyse, mountainEnclosed, candidates };
+}
+
+/**
+ * The mountain-enclosed valleys of at least `VALLEY_MIN_HEXES` hexes that the given rivers and bogland leave cut off from an
+ * island's main walkable region, in the order the valley pass carves them — mirrors `RiverGenerator.ValleyCandidates`.
+ */
+export function valleyCandidates(
+  islandTiles: AxialCoord[],
+  terrainOf: (c: AxialCoord) => Terrain,
+  rivers: RiverTile[],
+  bogTiles: BogTile[],
+): ValleyCandidate[] {
+  const ground = valleyGround(islandTiles, new Set(islandTiles.map((c) => coordKey(c))), terrainOf, bogTiles);
+  return ground.candidates(ground.analyse(rivers));
+}
+
+/**
+ * Valley streams for one green island — mirrors `RiverGenerator.CarveValleyStreams`. The island's
+ * walkable land (land that is not mountain, plus every non-wide river tile) is flood-filled; every
+ * region but the largest that is closed in by mountains alone (no sea, lake or wide river on its
+ * border) and has at least VALLEY_MIN_HEXES hexes gets one stream, largest first then by lowest (q, r):
+ * from a hex of the valley across the fewest mountain hexes to the nearest reachable hex (ties: the
+ * target's (q, r), then the start's), joining the river there or, on plain land, running on to a river,
+ * a lake or the sea like any spring's stream. A carve that breaks a map rule, cannot be drawn or cuts
+ * other land off is skipped. Edits `bp` and returns the island's rivers.
+ */
+function carveValleyStreams(
+  islandTiles: AxialCoord[],
+  islandLand: Set<string>,
+  terrainOf: (c: AxialCoord) => Terrain,
+  riverLand: (c: AxialCoord) => boolean,
+  seed: number,
+  bogTiles: BogTile[],
+  bp: BogPaths,
+  startRivers: RiverTile[],
+  makeDrainage: (blocked: HexSet) => Drainage,
+  stats: RiverStats | undefined,
+): RiverTile[] {
+  const { blocked, terrainHere, baseTerrain, analyse, mountainEnclosed, candidates: findCandidates } = valleyGround(
+    islandTiles,
+    islandLand,
+    terrainOf,
+    bogTiles,
+  );
+
+  let walk = analyse(startRivers);
+  let tiles = startRivers;
+  const candidates = findCandidates(walk);
+  if (candidates.length === 0) return tiles;
+  candidates.sort((a, b) => b.size - a.size || a.first.q - b.first.q || a.first.r - b.first.r);
+  if (stats) stats.valleyCandidates += candidates.length;
+
+  const skip = (reason: 'valleySkippedNoPath' | 'valleySkippedTrace' | 'valleySkippedLayout' | 'valleySkippedWidths' | 'valleySkippedRules' | 'valleySkippedCutsOff' | 'valleySkippedChanged'): void => {
+    if (stats) stats[reason]++;
+  };
+
+  let ruleBase = -1;
+  for (const cand of candidates) {
+    const id = walk.regionOf.get(coordKey(cand.first));
+    if (id === undefined) {
+      skip('valleySkippedChanged');
+      continue;
+    }
+    if (id === walk.main) {
+      if (stats) stats.valleysJoined++;
+      continue;
+    }
+    const region = walk.regions[id]!;
+    if (region.length < VALLEY_MIN_HEXES || !mountainEnclosed(region, walk, id)) {
+      skip('valleySkippedChanged');
+      continue;
+    }
+
+    const { riverAt, regionOf } = walk;
+    const mainSet = (k: string): boolean => regionOf.get(k) === walk.main;
+    const pathIns = new Map<string, number>();
+    for (const path of bp.paths) for (let i = 1; i < path.length; i++) pathIns.set(coordKey(path[i]!), (pathIns.get(coordKey(path[i]!)) ?? 0) + 1);
+
+    // A river tile a new stream can join from `from`: reachable, a plain one-inflow tile, and the Y is drawable.
+    const riverTarget = (t: RiverTile, from: AxialCoord): boolean => {
+      const k = coordKey(t);
+      if (!mainSet(k) || walk.wide.has(k)) return false;
+      if (t.shape !== 'straight' && t.shape !== 'bend' && t.shape !== 'bend60') return false;
+      if (t.inDirections.length !== 1 || !t.outDirection) return false;
+      if (bp.forcedOut.has(k) || bp.bogIn.has(k) || pathIns.get(k) !== 1) return false;
+      const ins = TILE_ORIENTATIONS.indexOf(t.inDirections[0]!);
+      const out = TILE_ORIENTATIONS.indexOf(t.outDirection);
+      const ns = neighbors(t);
+      if (!riverAt.has(coordKey(ns[ins]!)) || !riverAt.has(coordKey(ns[out]!))) return false;
+      return confluenceKind(ins, directionIndex(t, from), out) !== null;
+    };
+    // Plain land a new stream can start running on from: reachable, no river, off the bogland, not on the coast.
+    const plainTarget = (c: AxialCoord): boolean => {
+      const k = coordKey(c);
+      return mainSet(k) && !riverAt.has(k) && !blocked.has(k) && neighbors(c).every((n) => islandLand.has(coordKey(n)));
+    };
+    const riverNeighbours = (c: AxialCoord): RiverTile[] => {
+      const out: RiverTile[] = [];
+      for (const n of neighbors(c)) {
+        const t = riverAt.get(coordKey(n));
+        if (t) out.push(t);
+      }
+      return out;
+    };
+
+    // Mountain hexes a stream may run over: open (no river beside) or terminal (one joinable river beside, where it ends).
+    const usable = new Map<string, { terminal: RiverTile | null } | null>();
+    const usableAt = (h: AxialCoord): { terminal: RiverTile | null } | null => {
+      const k = coordKey(h);
+      const known = usable.get(k);
+      if (known !== undefined) return known;
+      let result: { terminal: RiverTile | null } | null = null;
+      if (islandLand.has(k) && terrainHere(h) === 'mountain' && !riverAt.has(k) && !blocked.has(k)) {
+        const rivers = riverNeighbours(h);
+        if (rivers.length === 0) result = { terminal: null };
+        else if (rivers.length === 1 && riverTarget(rivers[0]!, h)) result = { terminal: rivers[0]! };
+      }
+      usable.set(k, result);
+      return result;
+    };
+
+    // Starts: valley hexes off the water and the bogland with no river beside.
+    const starts = region.filter((c) => {
+      const k = coordKey(c);
+      return !riverAt.has(k) && !blocked.has(k) && terrainHere(c) !== 'mountain' && riverNeighbours(c).length === 0;
+    });
+    starts.sort((a, b) => a.q - b.q || a.r - b.r);
+
+    // Forward: how many mountain hexes from the nearest start, layer by layer; the first layer with a target wins.
+    const dist = new Map<string, number>();
+    let layer: AxialCoord[] = [];
+    for (const s of starts) {
+      for (const n of neighbors(s)) {
+        const nk = coordKey(n);
+        if (!dist.has(nk) && usableAt(n)) {
+          dist.set(nk, 1);
+          layer.push(n);
+        }
+      }
+    }
+    let bestK = 0;
+    let bestTarget: AxialCoord | null = null;
+    for (let k = 1; layer.length > 0; k++) {
+      for (const h of layer) {
+        const u = usableAt(h)!;
+        const targets: AxialCoord[] = u.terminal ? [{ q: u.terminal.q, r: u.terminal.r }] : neighbors(h).filter((n) => plainTarget(n));
+        for (const t of targets) {
+          if (bestTarget === null || t.q < bestTarget.q || (t.q === bestTarget.q && t.r < bestTarget.r)) {
+            bestK = k;
+            bestTarget = t;
+          }
+        }
+      }
+      if (bestTarget !== null) break;
+      const next: AxialCoord[] = [];
+      for (const h of layer) {
+        if (usableAt(h)!.terminal) continue;
+        for (const n of neighbors(h)) {
+          const nk = coordKey(n);
+          if (!dist.has(nk) && usableAt(n)) {
+            dist.set(nk, k + 1);
+            next.push(n);
+          }
+        }
+      }
+      layer = next;
+    }
+    if (bestTarget === null) {
+      skip('valleySkippedNoPath');
+      continue;
+    }
+
+    // Backward from the target: the hexes of every shortest way in, then the lowest start and the lowest direction first.
+    const target: AxialCoord = bestTarget;
+    const targetRiver = riverAt.get(coordKey(target));
+    const back = new Map<string, number>();
+    let frontier: AxialCoord[] = [];
+    for (const n of neighbors(target)) {
+      const u = usableAt(n);
+      if (u && (u.terminal === null ? targetRiver === undefined : u.terminal === targetRiver)) {
+        back.set(coordKey(n), 1);
+        frontier.push(n);
+      }
+    }
+    for (let k = 1; k < bestK; k++) {
+      const next: AxialCoord[] = [];
+      for (const h of frontier) {
+        for (const n of neighbors(h)) {
+          const nk = coordKey(n);
+          const u = usableAt(n);
+          if (!back.has(nk) && u && u.terminal === null) {
+            back.set(nk, k + 1);
+            next.push(n);
+          }
+        }
+      }
+      frontier = next;
+    }
+    let start: AxialCoord | null = null;
+    for (const s of starts) {
+      if (neighbors(s).some((n) => back.get(coordKey(n)) === bestK)) {
+        start = s;
+        break;
+      }
+    }
+    if (start === null) {
+      skip('valleySkippedNoPath');
+      continue;
+    }
+    const carve: AxialCoord[] = [start];
+    for (let want = bestK; want >= 1; want--) {
+      const here = carve[carve.length - 1]!;
+      carve.push(neighbors(here).find((n) => back.get(coordKey(n)) === want)!);
+    }
+
+    // The stream: joining the river it ends on, or running on from plain land like a spring's stream.
+    let path: AxialCoord[];
+    let merged: boolean;
+    if (targetRiver) {
+      path = [...carve, target];
+      merged = true;
+    } else {
+      const block = new HexSet();
+      for (const k of blocked) block.add(parseKey(k));
+      for (const c of carve) {
+        block.add(c);
+        for (const n of neighbors(c)) block.add(n);
+      }
+      block.delete(target);
+      const d2 = makeDrainage(block);
+      const claims2: (Claim | null)[] = new Array<Claim | null>(d2.tiles.length).fill(null);
+      for (let j = 0; j < bp.paths.length; j++) commit(d2, bp.paths[j]!, bp.merged[j]!, claims2);
+      const onPath2 = new Array<boolean>(d2.tiles.length).fill(false);
+      const traced = traceDrainage(d2, target, claims2, onPath2, bp.paths.length > 0, directionIndex(target, carve[carve.length - 1]!));
+      if (!traced) {
+        skip('valleySkippedTrace');
+        continue;
+      }
+      path = [...carve, ...traced.path];
+      merged = traced.merged;
+    }
+
+    // Layout: no hex twice, nothing on the bogland, no run beside itself, and none beside a river it does not drain into.
+    const rootOf = (t: RiverTile): string => {
+      let cur = t;
+      for (let guard = 0; cur.outDirection && guard < 100000; guard++) {
+        const next = riverAt.get(coordKey(neighbors(cur)[TILE_ORIENTATIONS.indexOf(cur.outDirection)]!));
+        if (!next) break;
+        cur = next;
+      }
+      return coordKey(cur);
+    };
+    // A junction on a tile the width pass later dropped is no junction.
+    const joinTile = merged ? riverAt.get(coordKey(path[path.length - 1]!)) : undefined;
+    const joinedRoot = joinTile ? rootOf(joinTile) : null;
+    const at = new Map<string, number>();
+    path.forEach((c, i) => at.set(coordKey(c), i));
+    const lastNew = merged ? path.length - 2 : path.length - 1;
+    let layoutOk = at.size === path.length && (!merged || joinTile !== undefined);
+    for (let i = 0; layoutOk && i <= lastNew; i++) {
+      const c = path[i]!;
+      const ck = coordKey(c);
+      if (riverAt.has(ck) || blocked.has(ck) || !islandLand.has(ck)) layoutOk = false;
+      for (const n of neighbors(c)) {
+        const nk = coordKey(n);
+        const j = at.get(nk);
+        const beside = riverAt.get(nk);
+        if (j !== undefined ? Math.abs(i - j) !== 1 : beside !== undefined && (joinedRoot === null || rootOf(beside) !== joinedRoot)) layoutOk = false;
+      }
+    }
+    if (!layoutOk) {
+      skip('valleySkippedLayout');
+      continue;
+    }
+
+    // The width pass must keep every river and the whole stream.
+    const trial = bp.clone();
+    trial.paths.push(path);
+    trial.merged.push(merged);
+    const trialTiles = assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), riverLand, seed, undefined, trial.requireRiver);
+    const expected = new Set<string>(tiles.map((t) => coordKey(t)));
+    for (let i = 0; i <= lastNew; i++) expected.add(coordKey(path[i]!));
+    if (trialTiles.length !== expected.size || trialTiles.some((t) => !expected.has(coordKey(t)))) {
+      skip('valleySkippedWidths');
+      continue;
+    }
+
+    // Map rules (R1-R12) may not get worse.
+    if (ruleBase < 0) ruleBase = totalViolations(checkBogRules(bogTiles, tiles, baseTerrain));
+    const ruleTrial = totalViolations(checkBogRules(bogTiles, trialTiles, baseTerrain));
+    if (ruleTrial > ruleBase) {
+      skip('valleySkippedRules');
+      continue;
+    }
+
+    // Nothing may be cut off, and the valley must be reachable now.
+    const after = analyse(trialTiles);
+    const reachable = (k: string): boolean => after.regionOf.get(k) === after.main;
+    if (!region.every((c) => reachable(coordKey(c)))) {
+      skip('valleySkippedCutsOff');
+      continue;
+    }
+    let cut = false;
+    for (const [k, rid] of regionOf) if (rid === walk.main && after.regionOf.has(k) && !reachable(k)) cut = true;
+    if (cut) {
+      skip('valleySkippedCutsOff');
+      continue;
+    }
+
+    bp.paths.push(path);
+    bp.merged.push(merged);
+    tiles = trialTiles;
+    walk = after;
+    ruleBase = ruleTrial;
+    if (stats) {
+      stats.valleyStreams++;
+      if (targetRiver) stats.valleyStreamsIntoRivers++;
+    }
+  }
+  return tiles;
 }

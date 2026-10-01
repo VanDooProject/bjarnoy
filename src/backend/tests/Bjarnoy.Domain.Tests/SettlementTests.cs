@@ -251,17 +251,45 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(BuildingType.Lumberjack)]
-    [InlineData(BuildingType.Farm)]
+    [InlineData(BuildingType.ReindeerHerder)]
     [InlineData(BuildingType.Quarry)]
     [InlineData(BuildingType.FishingHut)]
     [InlineData(BuildingType.Tower)]
     [InlineData(BuildingType.StorageHouse)]
     [InlineData(BuildingType.ClayBrickworks)]
-    [InlineData(BuildingType.PumpkinFarm)]
     [InlineData(BuildingType.TownSquare)]
     public void The_tech_trees_roots_have_no_building_prerequisite(BuildingType type)
     {
         Assert.Empty(BuildingCatalogue.Get(type, 1).Prerequisites);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Farm)]
+    [InlineData(BuildingType.PumpkinFarm)]
+    public void Farm_and_pumpkin_farm_need_a_level_3_reindeer_herder_at_longhouse_4(BuildingType type)
+    {
+        var definition = BuildingCatalogue.Get(type, 1);
+
+        Assert.Equal(4, definition.RequiredLonghouseLevel);
+        var prerequisite = Assert.Single(definition.Prerequisites);
+        Assert.Equal(new BuildingPrerequisite(BuildingType.ReindeerHerder, 3), prerequisite);
+    }
+
+    [Fact]
+    public void The_reindeer_herder_is_a_grass_food_producer_with_the_standard_producer_numbers()
+    {
+        var herder = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1);
+
+        Assert.Equal(1, herder.RequiredLonghouseLevel);
+        Assert.Equal(40, herder.ProductionPerHour.Food);
+        Assert.Equal(0, herder.ProductionPerHour.Wood);
+        Assert.Equal(new HashSet<Terrain> { Terrain.Grass }, herder.AllowedTerrain.ToHashSet());
+        Assert.Equal(25, BuildingCatalogue.MaxLevelFor(BuildingType.ReindeerHerder));
+        Assert.Contains(BuildingType.ReindeerHerder, BuildingCatalogue.StorageCappedProducers);
+        Assert.Equal("reindeerherder", BuildingType.ReindeerHerder.ToWireName());
+        Assert.Equal(28, (int)BuildingType.ReindeerHerder); // persisted ints must not shift
+        Assert.Equal(TimeSpan.FromMinutes(3), herder.BuildDuration);
+        Assert.True(Bjarnoy.Domain.Settlers.Quests.IsProducer(BuildingType.ReindeerHerder));
     }
 
     [Fact]
@@ -829,7 +857,7 @@ public class SettlementTests
         var settlement = Found();
 
         var decision = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(20, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(20, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.HexNotInSettlement, decision.Rejection);
     }
@@ -848,7 +876,7 @@ public class SettlementTests
         Assert.True(settlement.Claims(giantAnchor), "sanity: the plain claim already reaches the giant hex");
 
         var decision = settlement.PlanBuild(
-            BuildingType.Farm, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
+            BuildingType.ReindeerHerder, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
             giants: giants);
 
         Assert.Equal(BuildRejection.HexOccupiedByGiant, decision.Rejection);
@@ -872,7 +900,7 @@ public class SettlementTests
         Assert.False(settlement.Claims(giantAnchor, giants));
 
         var decision = settlement.PlanBuild(
-            BuildingType.Farm, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
+            BuildingType.ReindeerHerder, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
             giants: giants);
 
         // PlanBuild refuses a giant hex unconditionally (HexOccupiedByGiant,
@@ -914,7 +942,7 @@ public class SettlementTests
         Assert.True(settlement.Claims(giantAnchor, giants), "the union of discs should fully cover the giant");
 
         var decision = settlement.PlanBuild(
-            BuildingType.Farm, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
+            BuildingType.ReindeerHerder, giantAnchor, Terrain.Grass, T0, Guid.CreateVersion7(),
             giants: giants);
 
         Assert.Equal(BuildRejection.HexOccupiedByGiant, decision.Rejection);
@@ -930,17 +958,17 @@ public class SettlementTests
         Assert.True(settlement.Claims(campHex), "sanity: the claim reaches the camp hex");
 
         var refused = settlement.PlanBuild(
-            BuildingType.Farm, campHex, Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps);
+            BuildingType.ReindeerHerder, campHex, Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps);
         Assert.Equal(BuildRejection.HexOccupiedByCamp, refused.Rejection);
 
         // A weak camp in the index counts too (the index lists blocking camps), and only its own hex is refused.
         var elsewhere = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps);
+            BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7(), camps: camps);
         Assert.NotEqual(BuildRejection.HexOccupiedByCamp, elsewhere.Rejection);
 
         // No camp index on hand: the same hex is not refused for a camp.
         var noIndex = settlement.PlanBuild(
-            BuildingType.Farm, campHex, Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, campHex, Terrain.Grass, T0, Guid.CreateVersion7());
         Assert.NotEqual(BuildRejection.HexOccupiedByCamp, noIndex.Rejection);
     }
 
@@ -999,7 +1027,7 @@ public class SettlementTests
         var poor = Found(stock: 0);
 
         var decision = poor.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.NotEnoughResources, decision.Rejection);
     }
@@ -1019,7 +1047,7 @@ public class SettlementTests
         // The farm needs stone as well as wood. The legacy affordability check
         // would have let this through.
         var decision = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.NotEnoughResources, decision.Rejection);
     }
@@ -1029,11 +1057,11 @@ public class SettlementTests
     {
         var settlement = Found();
         var before = settlement.Resources.At(T0);
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
 
         var queued = settlement.Enqueue(order, T0);
 
-        var cost = BuildingCatalogue.Get(BuildingType.Farm, 1).Cost;
+        var cost = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1).Cost;
         Assert.Equal(before.Wood - cost.Wood, queued.Resources.At(T0).Wood, 6);
         Assert.Single(queued.Queue);
     }
@@ -1043,12 +1071,12 @@ public class SettlementTests
     {
         var settlement = Found();
         var coord = new HexCoord(1, 0);
-        var order = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, coord, Terrain.Grass, T0);
 
         var queued = settlement.Enqueue(order, T0);
 
         var stub = Assert.Single(queued.Buildings, b => b.Coord == coord);
-        Assert.Equal(BuildingType.Farm, stub.Type);
+        Assert.Equal(BuildingType.ReindeerHerder, stub.Type);
         Assert.Equal(0, stub.Level);
     }
 
@@ -1071,7 +1099,7 @@ public class SettlementTests
     public void A_queued_build_does_not_produce_until_it_completes()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
         var justBefore = queued.SettleTo(order.CompletesAt!.Value.AddSeconds(-1));
@@ -1085,14 +1113,14 @@ public class SettlementTests
     public void A_build_completes_by_clock_with_nothing_having_ticked()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
         var result = queued.SettleTo(order.CompletesAt!.Value);
 
         Assert.True(result.Changed);
         Assert.Empty(result.Settlement.Queue);
-        Assert.Contains(result.Settlement.Buildings, b => b.Type == BuildingType.Farm && b.Level == 1);
+        Assert.Contains(result.Settlement.Buildings, b => b.Type == BuildingType.ReindeerHerder && b.Level == 1);
         Assert.Equal(order.Id, Assert.Single(result.Completed).Id);
     }
 
@@ -1100,7 +1128,7 @@ public class SettlementTests
     public void Settling_before_anything_is_due_reports_no_change_so_nothing_is_written()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
         var result = queued.SettleTo(T0.AddMinutes(1));
@@ -1116,7 +1144,7 @@ public class SettlementTests
     public void A_completed_building_produces_from_its_completion_time_not_from_the_read()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
         var readLate = order.CompletesAt!.Value.AddHours(5);
@@ -1179,7 +1207,7 @@ public class SettlementTests
     public void Several_orders_complete_in_time_order_in_one_settle()
     {
         var settlement = Found();
-        var first = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var first = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var withFirst = settlement.Enqueue(first, T0);
         var second = Plan(withFirst, BuildingType.Lumberjack, new HexCoord(0, 1), Terrain.Forest, T0);
         var queued = withFirst.Enqueue(second, T0);
@@ -1203,7 +1231,7 @@ public class SettlementTests
 
         foreach (var coord in coords)
         {
-            var order = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
+            var order = Plan(settlement, BuildingType.ReindeerHerder, coord, Terrain.Grass, T0);
             settlement = settlement.Enqueue(order, T0);
         }
 
@@ -1211,7 +1239,7 @@ public class SettlementTests
         Assert.Equal(0, settlement.FreeSlots);
 
         var overflow = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.NoFreeSlot, overflow.Rejection);
     }
@@ -1221,11 +1249,11 @@ public class SettlementTests
     {
         var settlement = Found();
         var coord = new HexCoord(1, 0);
-        var order = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, coord, Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
         var again = queued.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.AlreadyQueuedOnHex, again.Rejection);
     }
@@ -1235,7 +1263,7 @@ public class SettlementTests
     {
         var settlement = Found();
         var coord = new HexCoord(1, 0);
-        var order = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, coord, Terrain.Grass, T0);
         var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
         var decision = built.PlanBuild(
@@ -1250,11 +1278,11 @@ public class SettlementTests
         // Longhouse level 2: the level-2 upgrade needs a level-2 Longhouse.
         var settlement = FoundAtLonghouseLevel(2);
         var coord = new HexCoord(1, 0);
-        var first = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
+        var first = Plan(settlement, BuildingType.ReindeerHerder, coord, Terrain.Grass, T0);
         var built = settlement.Enqueue(first, T0).SettleTo(first.CompletesAt!.Value).Settlement;
 
         var upgrade = built.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, first.CompletesAt!.Value, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, coord, Terrain.Grass, first.CompletesAt!.Value, Guid.CreateVersion7());
 
         Assert.True(upgrade.Accepted);
         Assert.Equal(2, upgrade.Order!.TargetLevel);
@@ -1552,8 +1580,8 @@ public class SettlementTests
     [Fact]
     public void A_shrine_to_a_different_god_is_still_buildable_while_another_gods_shrine_stands_on_the_island()
     {
-        // A settlement (or island) can still raise all four gods' shrines —
-        // it's the same god twice that's refused, not shrines in general.
+        // The island limit is per god: a different god's shrine elsewhere on
+        // the island does not block this settlement's first shrine.
         var settlement = FoundAtLonghouseLevel(25, (BuildingType.CropMill, 5));
 
         var decision = settlement.PlanBuild(
@@ -1561,6 +1589,31 @@ public class SettlementTests
             shrineGodsElsewhereOnIsland: new HashSet<GodType> { GodType.Thor });
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Theory]
+    [InlineData(BuildingType.ShrineOfFreyja)]
+    [InlineData(BuildingType.ShrineOfThor)]
+    public void A_settlement_that_already_holds_a_shrine_refuses_a_second_one_on_another_hex(BuildingType second)
+    {
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.Smithy, 5), (BuildingType.ShrineOfThor, 1));
+
+        var decision = settlement.PlanBuild(second, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.SettlementAlreadyHasShrine, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_queued_new_shrine_already_blocks_a_second_one()
+    {
+        var settlement = FoundAtLonghouseLevel(25, (BuildingType.CropMill, 5));
+        var first = settlement.PlanBuild(BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        Assert.True(first.Accepted, $"expected accept, got {first.Rejection}");
+        var queued = settlement.Enqueue(first.Order!, T0);
+
+        var second = queued.PlanBuild(BuildingType.ShrineOfFreyja, new HexCoord(1, 1), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.SettlementAlreadyHasShrine, second.Rejection);
     }
 
     [Fact]
@@ -1582,7 +1635,7 @@ public class SettlementTests
     [Fact]
     public void A_new_pumpkinfarm_is_refused_on_a_wheat_soil_island()
     {
-        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.ReindeerHerder, 5));
 
         var decision = settlement.PlanBuild(
             BuildingType.PumpkinFarm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1594,7 +1647,7 @@ public class SettlementTests
     [Fact]
     public void A_new_pumpkinfarm_is_accepted_on_a_pumpkin_soil_island()
     {
-        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.ReindeerHerder, 5));
 
         var decision = settlement.PlanBuild(
             BuildingType.PumpkinFarm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
@@ -1608,7 +1661,7 @@ public class SettlementTests
     {
         // Farm is the always-available staple crop — soil only ever gates
         // PumpkinFarm, the bonus a "more fertile" island unlocks.
-        var settlement = FoundAtLonghouseLevel(1);
+        var settlement = FoundAtLonghouseLevel(4, (BuildingType.ReindeerHerder, 3));
 
         var onWheat = settlement.PlanBuild(
             BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
@@ -1640,7 +1693,7 @@ public class SettlementTests
     {
         // A caller with no island to resolve (islandSoil: null, the
         // default) never refuses PumpkinFarm over soil.
-        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.ReindeerHerder, 5));
 
         var pumpkin = settlement.PlanBuild(BuildingType.PumpkinFarm, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
@@ -1863,7 +1916,7 @@ public class SettlementTests
     public void Enqueueing_an_unaffordable_order_throws_rather_than_going_into_debt()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var broke = settlement with
         {
             Resources = ResourcePool.Create(
@@ -1878,7 +1931,7 @@ public class SettlementTests
     {
         var settlement = Found();
         var coord = new HexCoord(1, 0);
-        var order = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, coord, Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
         var result = queued.CancelBuild(order.Id, T0);
@@ -1919,7 +1972,7 @@ public class SettlementTests
     public void Cancelling_an_already_completed_order_is_refused()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
         var result = built.CancelBuild(order.Id, order.CompletesAt!.Value);
@@ -1931,13 +1984,13 @@ public class SettlementTests
     public void Admin_setting_a_buildings_level_recomputes_rates_like_a_normal_completion()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
         var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 3, order.CompletesAt!.Value);
 
         Assert.True(result.Accepted);
-        var farm = result.Settlement!.Buildings.Single(b => b.Type == BuildingType.Farm);
+        var farm = result.Settlement!.Buildings.Single(b => b.Type == BuildingType.ReindeerHerder);
         Assert.Equal(3, farm.Level);
 
         var (expectedProduction, expectedCapacity) = BuildingCatalogue.Totals(
@@ -1950,7 +2003,7 @@ public class SettlementTests
     public void Admin_setting_a_buildings_level_settles_first_so_no_production_is_lost()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
         // Two hours of accrued production at the level-1 rate must survive the
@@ -1993,9 +2046,9 @@ public class SettlementTests
         var settlement = Found();
 
         var normal = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
         var doubled = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), speedFactor: 2.0);
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), speedFactor: 2.0);
 
         var baseDuration = normal.Order!.CompletesAt!.Value - T0;
         var doubledDuration = doubled.Order!.CompletesAt!.Value - T0;
@@ -2007,7 +2060,7 @@ public class SettlementTests
     public void A_speed_factor_of_two_doubles_the_production_rate_a_completed_building_adds()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
         var normal = queued.SettleTo(order.CompletesAt!.Value).Settlement;
@@ -2047,7 +2100,7 @@ public class SettlementTests
             Buildings =
             [
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 5),
-                new PlacedBuilding(new HexCoord(1, 0), BuildingType.Farm, 2),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.ReindeerHerder, 2),
                 new PlacedBuilding(new HexCoord(0, 1), BuildingType.Lumberjack, 10),
             ],
         };
@@ -2060,7 +2113,7 @@ public class SettlementTests
     public void A_speed_change_never_rescales_output_already_accrued()
     {
         var settlement = Found();
-        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
         // Two hours pass at 1x, the farm produces normally, then the admin

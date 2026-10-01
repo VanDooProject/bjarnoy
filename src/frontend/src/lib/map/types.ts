@@ -356,6 +356,8 @@ export interface Tile {
     | 'druidhut'
     | 'cartworkshop'
     | 'claybrickworks'
+    | 'reindeerherder'
+    | 'odinstatue'
     | 'bogoreworks'
     | 'hammerschmiede';
   buildingLevel?: number;
