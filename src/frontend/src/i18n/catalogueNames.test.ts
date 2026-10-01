@@ -98,3 +98,15 @@ describe('catalogueNames', () => {
     expect(unitName('not-a-real-unit')).toBe('not-a-real-unit');
   });
 });
+
+describe('beastName', () => {
+  it('names all three tiers of every camp family', async () => {
+    const { CAMP_FAMILIES } = await import('../lib/map/campPlacement');
+    const { beastName } = await import('./catalogueNames');
+    for (const f of CAMP_FAMILIES) {
+      for (const tier of ['young', 'adult', 'alpha']) {
+        expect(beastName(f.family, tier), `${f.family}.${tier}`).not.toBe(tier);
+      }
+    }
+  });
+});

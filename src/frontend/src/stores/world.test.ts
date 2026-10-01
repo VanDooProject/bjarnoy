@@ -30,6 +30,7 @@ const getWorld = vi.fn();
 const getIslands = vi.fn();
 const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
+const getWorldCamps = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -81,6 +82,7 @@ async function loadStoreModule(demoMode: boolean) {
       getIslands: (...args: unknown[]) => getIslands(...args),
       listWorlds: (...args: unknown[]) => listWorlds(...args),
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
+      getWorldCamps: (...args: unknown[]) => getWorldCamps(...args),
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -280,6 +282,26 @@ describe('useWorldStore startDispatchAt', () => {
 
     expect(store.dispatchDraft?.mission).toBe('support');
     expect(store.dispatchDraft?.targetSettlementId).toBe('own-other-1');
+  });
+
+  it('starts a Hunt draft aimed at the camp hex, with no route waypoint', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 7, r: -3 }, { mission: 'hunt' });
+
+    expect(store.dispatchDraft?.mission).toBe('hunt');
+    expect(store.dispatchDraft?.targetCamp).toEqual({ q: 7, r: -3 });
+    expect(store.dispatchDraft?.route).toEqual([]);
+    expect(store.dispatchDraft?.targetSettlementId).toBeNull();
+  });
+
+  it('switching the mission drops a hunt target', async () => {
+    const store = await loadStoreModule(true);
+    store.startDispatchAt({ q: 7, r: -3 }, { mission: 'hunt' });
+
+    store.setDispatchMission('move');
+
+    expect(store.dispatchDraft?.targetCamp).toBeNull();
   });
 
   it('cancels an in-progress field order draft, mutually exclusive with dispatch', async () => {
@@ -1831,5 +1853,55 @@ describe('useWorldStore claimQuest (onboarding quests)', () => {
     await store.claimQuest('longhouse2');
 
     expect(store.hud.resources).toMatchObject({ wood: 500, stone: 500, food: 500 });
+  });
+});
+
+describe('useWorldStore refreshCampStates', () => {
+  const campState = {
+    q: 2,
+    r: 1,
+    family: 'wolfden',
+    level: 2,
+    effectiveLevel: 2,
+    strong: true,
+    guardRange: 4,
+    garrison: { young: 0, adult: 0, alpha: 0 },
+    fullGarrison: { young: 4, adult: 9, alpha: 1 },
+    empty: true,
+    calmUntil: null,
+    aggressive: false,
+    clears: 1,
+    removed: false,
+    leftover: { wood: 0, stone: 0, food: 5, iron: 0 },
+  };
+
+  it('merges the live camp state onto the model and bumps the version once per real change', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([campState]);
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.model.setCamps([{ family: 'wolfden', coord: { q: 2, r: 1 }, level: 2, orientation: 'SE' }]);
+
+    await store.refreshCampStates();
+
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1');
+    expect(store.model.campAt({ q: 2, r: 1 })?.empty).toBe(true);
+    expect(store.campStatesVersion).toBe(1);
+
+    await store.refreshCampStates();
+    expect(store.campStatesVersion).toBe(1);
+  });
+
+  it('survives a failed fetch and never calls the endpoint in demo mode', async () => {
+    getWorldCamps.mockReset().mockRejectedValue(new Error('down'));
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    await expect(store.refreshCampStates()).resolves.toBeUndefined();
+    expect(store.campStatesVersion).toBe(0);
+
+    getWorldCamps.mockReset();
+    const demo = await loadStoreModule(true);
+    demo.worldId = 'world-1';
+    await demo.refreshCampStates();
+    expect(getWorldCamps).not.toHaveBeenCalled();
   });
 });

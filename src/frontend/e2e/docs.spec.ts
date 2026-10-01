@@ -234,12 +234,17 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await expect(lastSection).toBeInViewport();
     expect(await view.noHorizontalOverflow()).toBe(true);
 
-    // Ground + water + four buildings.
-    await expect(page.locator('.bog-lands .art-box .atlas-sprite')).toHaveCount(6);
-    await expect(page.locator('#building-hammerschmiede .atlas-sprite')).toBeVisible();
-    const oreWorks = page.locator('#building-bogoreworks');
-    await expect(oreWorks.locator('.pill', { hasText: /^\d+$/ })).toHaveCount(7);
+    // Ground + eight water shapes + four buildings, each its own entry with a thumbnail.
+    await expect(page.locator('.bog-lands .tile .thumb .atlas-sprite')).toHaveCount(13);
+    await expect(page.locator('#hammerschmiede .atlas-sprite')).toBeVisible();
+    const oreWorks = page.locator('#bogoreworks');
+    await expect(oreWorks.locator('.variant-button', { hasText: /^\d+$/ })).toHaveCount(7);
     await oreWorks.getByRole('button', { name: '1', exact: true }).click();
     await expect(oreWorks.locator('.atlas-sprite')).toBeVisible();
+
+    // The example island is drawn, and the page links back to the docs hub.
+    await expect(page.locator('#example-map canvas')).toBeVisible();
+    await page.getByRole('link', { name: '← Docs' }).click();
+    await expect(page).toHaveURL(/\/docs$/);
   });
 });

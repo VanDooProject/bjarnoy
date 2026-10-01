@@ -119,6 +119,26 @@ describe('RingMenu', () => {
     expect(wrapper.emitted('select')).toBeUndefined();
   });
 
+  it('shows a non-blocking warning on the card and still lets the building be placed', async () => {
+    const categories: RingCategory[] = [
+      {
+        id: 'defense',
+        label: 'Defense',
+        color: 'var(--iron)',
+        buildings: [{ id: 'tower', label: 'Watchtower', cost: { wood: 1 }, warning: 'Wild beasts will burn this tower unless an army stands guard on it.' }],
+      },
+    ];
+    const wrapper = ring({ categories });
+    await bubble(wrapper, 'Build').trigger('mouseenter');
+    await bubble(wrapper, 'Defense').trigger('mouseenter');
+    await bubble(wrapper, 'Watchtower').trigger('mouseenter');
+
+    expect(wrapper.get('[data-testid="ring-card-warning"]').text()).toContain('burn this tower');
+    expect(wrapper.get('.ring-card').text()).toContain('BUILDABLE HERE');
+    await bubble(wrapper, 'Watchtower').trigger('click');
+    expect(wrapper.emitted('select')).toBeDefined();
+  });
+
   it('commits a building on click', async () => {
     const wrapper = ring();
     await bubble(wrapper, 'Build').trigger('mouseenter');

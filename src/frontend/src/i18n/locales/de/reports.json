@@ -15,7 +15,8 @@
     "all": "Alle",
     "battle": "Kampf",
     "field": "Feldschlacht",
-    "trade": "Handel"
+    "trade": "Handel",
+    "camp": "Lager"
   },
   "noReports": "Noch keine Berichte.",
   "simulatorHint": "Willst du einen Kampf testen, ohne echte Truppen zu riskieren?",

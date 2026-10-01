@@ -86,6 +86,39 @@ export function buildAttackDispatchRequest(
 }
 
 /**
+ * Builds a `hunt`-mission `DispatchArmyRequest` against a wildlife camp: the camp's own hex is the
+ * `destination` (the server walks to the nearest reachable neighbour when the hex itself is not
+ * walkable) and `route` holds only intermediate waypoints. `null` without units or a camp target.
+ * Land units only is enforced by the UI (`isHuntUnit`) and by the server (`HuntRequiresLandUnits`).
+ */
+export function buildHuntDispatchRequest(
+  unitCounts: Record<string, number>,
+  route: AxialCoord[],
+  provisions: number,
+  targetCamp: AxialCoord | null,
+): DispatchArmyRequest | null {
+  const units = Object.entries(unitCounts)
+    .filter(([, count]) => count > 0)
+    .map(([unit, count]) => ({ unit, count }));
+  if (units.length === 0 || !targetCamp) return null;
+
+  const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
+  return {
+    units,
+    waypoints: waypoints.length > 0 ? waypoints : undefined,
+    destination: { q: targetCamp.q, r: targetCamp.r },
+    provisions,
+    mission: 'hunt',
+  };
+}
+
+/** Whether a unit type may join a hunt — land units only, ships cannot hunt. */
+export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
+  const definition = byType[type];
+  return !!definition && definition.class !== 'ship';
+}
+
+/**
  * Builds a `FieldOrderRequest` from a clicked route (issue #156 phase 1) —
  * same split as `routeToWaypointsAndDestination` (last click is the
  * destination, everything before it a waypoint), but for an army already out
@@ -322,6 +355,7 @@ export function armyStatusLabel(
     atHome: boolean;
     supporting: boolean;
     movement: { isReturning: boolean } | null;
+    mission?: string;
   },
   targetSettlementName?: string | null,
 ): string {
@@ -332,5 +366,6 @@ export function armyStatusLabel(
       : i18n.global.t('hud.armyStatus.supporting');
   }
   if (army.movement?.isReturning) return i18n.global.t('hud.armyStatus.returning');
+  if (army.mission === 'hunt') return i18n.global.t('hud.armyStatus.hunting');
   return i18n.global.t('hud.armyStatus.inTransit');
 }
