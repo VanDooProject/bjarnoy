@@ -188,7 +188,8 @@ const buildingsByTile = computed(() => {
 
       <section v-for="tile in TILES" :key="tile.id" :id="tile.id" class="tile">
         <div class="tile-header">
-          <div class="thumb">
+          <div class="thumb floating-art">
+            <span class="floating-art-shadow" aria-hidden="true" />
             <AtlasSprite v-if="thumbFrame(tile)" :frame="thumbFrame(tile)!" />
             <img v-else-if="thumbUrl(tile)" class="thumb-img" :src="thumbUrl(tile)!" alt="" />
           </div>
@@ -336,10 +337,6 @@ const buildingsByTile = computed(() => {
   flex: none;
   width: 96px;
   height: 144px;
-  overflow: hidden;
-  border-radius: 8px;
-  background: var(--panel, #1c1710);
-  border: 1px solid var(--panel-border);
 }
 .thumb-img {
   max-width: 100%;
