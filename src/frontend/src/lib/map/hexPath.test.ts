@@ -184,7 +184,6 @@ describe('reachableRange', () => {
 });
 
 describe('findPath', () => {
-  const key = (cs: AxialCoord[]) => cs.map(coordKey).join(' ');
   // A 5x3 meadow: q 0..4, r -1..1 (fits a parallelogram, everything else is sea).
   const meadow = (): Map<string, Terrain> => {
     const t = new Map<string, Terrain>();
