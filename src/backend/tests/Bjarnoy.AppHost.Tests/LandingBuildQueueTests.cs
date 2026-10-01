@@ -40,21 +40,16 @@ namespace Bjarnoy.AppHost.Tests;
 /// own enabled/disabled terrain gating is covered by the demo-mode e2e suite
 /// instead (<c>landing.spec.ts</c>), where that camera math *is* available.
 /// </remarks>
-public class LandingBuildQueueTests
+public class LandingBuildQueueTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task QueuingAGuidedBuildingShowsItsConstructionCountdownOnTheLandingPage()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await TestAppHost.CreateAsync(cancellationToken);
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");

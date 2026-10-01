@@ -57,7 +57,7 @@ namespace Bjarnoy.AppHost.Tests;
 /// invented for this test.
 /// </para>
 /// </remarks>
-public class TroopTrainingAndDispatchTests
+public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task QueuingTrainingAndDispatchingAnArmyThroughTheRealFrontendWorksEndToEnd()
@@ -67,14 +67,9 @@ public class TroopTrainingAndDispatchTests
         // factor is bumped (see class remarks), not the real 10 minutes.
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await TestAppHost.CreateAsync(cancellationToken);
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");

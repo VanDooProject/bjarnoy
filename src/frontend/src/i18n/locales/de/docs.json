@@ -326,17 +326,23 @@
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",
-    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber in der Nähe eines bewachten Lagers wird kein Turm gebaut. Auf einer großen Insel räumst du die Lager, die im Weg sind, und baust dort, wo das Land frei ist.",
-    "status": "Lager erscheinen jetzt auf der Karte, bewacht, auf dem Untergrund, zu dem sie gehören. Räumen, Beute und die Turmregel unten kommen noch; die Moorlager (Elchmoor, Biberburg, Kranichtanz) stehen auf freiem Moosboden.",
+    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber ein starkes Lager brennt jeden Turm in seiner Nähe nieder, den keine Armee bewacht. Auf einer großen Insel räumst du die Lager, die im Weg sind, und baust dort, wo das Land frei ist.",
+    "status": "Die Lager leben: Du kannst sie jagen, sie wachsen nach, und starke Lager wehren sich. Die Regeln unten sind die, nach denen das Spiel läuft; die Moorlager (Elchmoor, Biberburg, Kranichtanz) stehen auf freiem Moosboden.",
     "rules": {
       "heading": "Wie ein Lager funktioniert",
-      "towers": "Ein bewachtes Lager hält das Land um sich herum: In seiner Reichweite kann kein Turm gebaut werden (die Wölfe fressen die Bauleute). Außerhalb dieser Reichweite kann auf der Insel gebaut werden.",
+      "towers": "Ein bewachtes Lager hält das Land um sich herum. Starke Lager greifen an: Ein Turm in der Reichweite eines aggressiven starken Lagers wird niedergebrannt, wenn keine deiner Armeen ihn bewacht. Das Spiel warnt dich, wenn du einen setzt. Außerhalb der Reichweite kann auf der Insel gebaut werden.",
       "range": "Wie weit ein Lager reicht, hängt von seiner Stufe ab, die beim Erscheinen des Lagers zufällig ausgewürfelt wird. Ein starkes Lager kann einen weiten Landstrich halten, ein schwaches nur die nächsten Felder.",
       "bigIslands": "Eine kleine Insel kann ganz von einem Lager gehalten werden. Auf einer großen Insel kannst du nur die Lager räumen, die im Weg sind, und dort Türme bauen, wo das Land dann frei ist.",
-      "states": "Ein Lager hat zwei Zustände: bewacht, mit seinen Tieren, und geräumt. Ein halb geräumtes oder neu besetztes Lager gilt weiter als bewacht.",
-      "building": "Ein geräumtes Lager bringt Beute. Danach kannst du auf seinem Feld bauen, und das Gebäude ersetzt das Lager, solange es steht.",
-      "respawn": "Die Tiere kehren erst zurück, wenn auf dem Feld kein Gebäude steht und es außerhalb jedes Reichs liegt. Ein geräumtes Lager innerhalb eines Reichs bleibt geräumt.",
-      "neverBuilt": "Der Adlerhorst auf seiner Brandungssäule und Fenrirs Brut in den Ödlanden werden nie bebaut: Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück."
+      "states": "Ein Lager hat zwei Zustände: bewacht, mit seinen Tieren, und geräumt (leer). Ein angeschlagenes Lager wächst nach und gilt weiter als bewacht.",
+      "building": "Sobald ein Lager geräumt ist, kannst du auf seinem Feld bauen (nicht bei Fenrirs Brut), und das Gebäude entfernt das Lager, solange es steht.",
+      "respawn": "Ein geräumtes Lager füllt sich nur auf, solange sein Feld außerhalb jedes Reichs liegt. Ein leeres Lager innerhalb eines Reichs bleibt leer; ist das Gebäude darauf weg und das Feld außerhalb jedes Reichs, kommt das Lager zurück.",
+      "neverBuilt": "Der Adlerhorst auf seiner Brandungssäule und Fenrirs Brut in den Ödlanden werden nie bebaut: Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück.",
+      "hunting": "Jagd: Schicke Landeinheiten mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere gekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
+      "regrowth": "Nachwuchs: Ein angeschlagenes Lager bekommt seine Tiere gleichmäßig über 4 Stunden (schwache Lager) oder 8 Stunden (starke Lager) zurück.",
+      "calm": "Ruhe: Nach jedem Kampf ist ein Lager 24 Stunden lang ruhig. Es wächst nach, greift aber nicht an.",
+      "leveling": "Aufstieg: Jede 10. Räumung eines Lagers, durch einen beliebigen Spieler, hebt seine Stufe um 1, bis höchstens 100. Sie sinkt nie wieder. Die Reichweite bleibt wie ausgewürfelt, ein abgefarmtes Lager wird also stärker, beansprucht aber nicht mehr Land.",
+      "ambush": "Hinterhalt: Ein starkes Lager, das nicht ruhig ist und noch Alttiere oder Alphas hat, überfällt Armeen, die in seine Reichweite kommen. Geschlagene Armeen ziehen sich nach Hause zurück; in jedem Fall ist das Lager danach 24 Stunden ruhig.",
+      "leftover": "Restbeute: Was deine Armee nicht tragen kann, bleibt für den nächsten Jäger im Lager. Eine Jagd auf ein kaum nachgewachsenes Lager bringt wenig, und eine Jagd auf ein leeres Lager sammelt nur die Restbeute ein."
     },
     "camps": {
       "heading": "Die Lager",
@@ -369,7 +375,8 @@
       "iron": "Eisen",
       "more": "{kind} ++",
       "moreHint": "Davon gibt es hier mehr als bei anderen Lagern",
-      "note": "Ein geräumtes Lager bringt Beute. Jedes Lager gibt Nahrung von der Jagd, ein starkes Lager zusätzlich Eisen aus der Ausrüstung früherer Siedler, die sein Rudel gefressen hat; manche Lager geben dazu, was ihr Boden hergibt, und ++ markiert den größten Anteil eines Lagers. Wie viel, hängt von der Stufe des Lagers ab; die Mengen stehen noch nicht fest."
+      "note": "Ein geräumtes Lager bringt Beute. Jedes Lager gibt Nahrung von der Jagd, ein starkes Lager zusätzlich Eisen aus der Ausrüstung früherer Siedler, die sein Rudel gefressen hat; manche Lager geben dazu, was ihr Boden hergibt, und ++ markiert den größten Anteil eines Lagers (doppeltes Gewicht). Der Vorrat wächst mit der Stufe des Lagers, langsamer als seine Besatzung, eine frühe Räumung lohnt sich also weit mehr, als sie kostet.",
+      "atLevel": "Auf Stufe {level}"
     },
     "camera": "Richtung",
     "notKept": "Bewachte Grafik gibt es nur für die Richtungen, aus denen die Tiere am besten zu sehen sind",
@@ -435,6 +442,10 @@
         "name": "Otterrutsche",
         "guards": "Ein Otter schwimmt, einer liegt mit einem Fisch auf dem Treibholz, einer läuft am Ufer und einer wartet am Bau."
       }
+    },
+    "beasts": {
+      "label": "Tiere",
+      "tiers": "{young} · {adult} · {alpha}"
     }
   },
   "bogLands": {
@@ -444,6 +455,12 @@
     "looks": "Aussehen",
     "camera": "Richtung",
     "stage": "Stufe",
+    "example": {
+      "heading": "Beispielkarte",
+      "body": "Eine kleine Insel, die das Spiel selbst erzeugt hat: Moor, Bach und See sind genau so gezeichnet wie in einer Welt. Zeig auf ein Hexfeld, um zu sehen, was es ist.",
+      "hoverHint": "Zeig auf ein Hexfeld, um zu sehen, was es ist.",
+      "river": "Fluss"
+    },
     "ground": {
       "heading": "Moorboden",
       "body": "Schlichtes Moos, dazu geschmückte Varianten, die sich über eine Moorgegend mischen wie im Ödland. Die Erzquelle und die Quellkette zeigen, wo Raseneisenerz an die Oberfläche tritt.",

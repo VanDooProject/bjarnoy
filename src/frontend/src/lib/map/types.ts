@@ -402,6 +402,22 @@ export interface Tile {
     orientation: TileOrientation;
     strong: boolean;
     guardRange: number;
+    /**
+     * Live state from `GET /worlds/{id}/camps` (`WorldModel.setCampStates`); absent until it
+     * arrives and always in demo mode, where every camp is guarded. A camp without it is
+     * treated as pristine: full garrison at its rolled level, aggressive.
+     */
+    effectiveLevel?: number;
+    garrison?: { young: number; adult: number; alpha: number };
+    fullGarrison?: { young: number; adult: number; alpha: number };
+    /** Cleared: nothing guards it, so it draws its cleared art and is buildable (not Fenrir's brood). */
+    empty?: boolean;
+    calmUntil?: string | null;
+    aggressive?: boolean;
+    clears?: number;
+    /** A building stands on the hex: the camp is off the map for as long as it stands. */
+    removed?: boolean;
+    leftover?: { wood: number; stone: number; food: number; iron: number };
   };
 }
 

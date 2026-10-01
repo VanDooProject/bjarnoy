@@ -81,7 +81,9 @@ public sealed record WorldGenerationSettingsResponse(
     double MountainThreshold,
     double MountainRockiness,
     double ForestRockiness,
-    int MinimumIslandTiles)
+    int MinimumIslandTiles,
+    double IslandMaxReach,
+    double IslandMinGap)
 {
     public static WorldGenerationSettingsResponse From(WorldGenerationOptions options)
     {
@@ -108,7 +110,9 @@ public sealed record WorldGenerationSettingsResponse(
             options.MountainThreshold,
             options.MountainRockiness,
             options.ForestRockiness,
-            options.MinimumIslandTiles);
+            options.MinimumIslandTiles,
+            options.IslandMaxReach,
+            options.IslandMinGap);
     }
 }
 
@@ -139,7 +143,9 @@ public sealed record WorldGenerationSettingsOverrides(
     double? MountainThreshold = null,
     double? MountainRockiness = null,
     double? ForestRockiness = null,
-    int? MinimumIslandTiles = null);
+    int? MinimumIslandTiles = null,
+    double? IslandMaxReach = null,
+    double? IslandMinGap = null);
 
 /// <remarks>
 /// Init-only properties rather than the positional parameters this used to
@@ -208,7 +214,9 @@ public sealed record PreviewWorldSeedRequest(
 /// this different from the <see cref="IslandResponse"/> the live map reads.
 /// <see cref="Generation"/> is the full set of constants (world radius included)
 /// the candidate was generated with, so the client renders exactly that terrain
-/// instead of the defaults.
+/// instead of the defaults. <see cref="Review"/> is the candidate's world review
+/// (cut-off land, missing bogs, islands without landing spots, broken generator
+/// guarantees), so the admin can tell a seed worth switching away from.
 /// </summary>
 public sealed record WorldSeedPreviewResponse(
     Guid WorldId,
@@ -217,7 +225,8 @@ public sealed record WorldSeedPreviewResponse(
     int IslandCount,
     int LandTileCount,
     IReadOnlyList<PreviewIslandResponse> Islands,
-    WorldGenerationResponse Generation);
+    WorldGenerationResponse Generation,
+    WorldReviewResponse Review);
 
 /// <inheritdoc cref="WorldSeedPreviewResponse"/>
 public sealed record PreviewIslandResponse(

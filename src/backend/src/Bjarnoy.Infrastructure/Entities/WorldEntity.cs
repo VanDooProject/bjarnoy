@@ -47,6 +47,15 @@ public class WorldEntity
 
     public double IslandChance { get; set; }
 
+    /// <summary>
+    /// <see cref="WorldGenerationOptions.IslandMaxReach"/> and <see cref="WorldGenerationOptions.IslandMinGap"/>
+    /// (the island-density change). Worlds created before them were migrated to 0, the legacy
+    /// rule (one-ring reach budget, no min gap), so their terrain does not change.
+    /// </summary>
+    public double IslandMaxReach { get; set; }
+
+    public double IslandMinGap { get; set; }
+
     public double IslandMinWidth { get; set; }
 
     public double IslandMaxWidth { get; set; }
@@ -197,6 +206,8 @@ public class WorldEntity
         Radius = Radius,
         IslandCellSize = IslandCellSize,
         IslandChance = IslandChance,
+        IslandMaxReach = IslandMaxReach,
+        IslandMinGap = IslandMinGap,
         IslandMinWidth = IslandMinWidth,
         IslandMaxWidth = IslandMaxWidth,
         BeachThreshold = BeachThreshold,
@@ -226,6 +237,8 @@ public class WorldEntity
         Radius = options.Radius;
         IslandCellSize = options.IslandCellSize;
         IslandChance = options.IslandChance;
+        IslandMaxReach = options.IslandMaxReach;
+        IslandMinGap = options.IslandMinGap;
         IslandMinWidth = options.IslandMinWidth;
         IslandMaxWidth = options.IslandMaxWidth;
         BeachThreshold = options.BeachThreshold;

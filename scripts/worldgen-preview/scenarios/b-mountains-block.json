@@ -3,6 +3,7 @@
   "title": "mountains are impassable: the army walks round the ridge instead of over it (cost 2.0 a hex before)",
   "seed": 11,
   "radius": 1000,
+  "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
   "window": { "q": -747, "r": 196, "size": 28 },
   "px": 30,
   "routes": [{ "from": [-743, 196], "to": [-751, 196], "army": "enemy" }]

@@ -189,6 +189,10 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         builder.UseSetting($"{DatabaseOptions.SectionName}:ConnectionString", _connectionString);
         builder.UseSetting($"{DatabaseOptions.SectionName}:MigrateOnStartup", "false");
 
+        // Camp aggression is driven by hand in the tests that cover it (CampAggressionService.ProcessWorldAsync);
+        // the hosted scan would only race them on the test clock.
+        builder.UseSetting("CampAggression:Enabled", "false");
+
         // A fixed key so tokens minted by one test are still valid tokens (not
         // that any test relies on that) and so the app has something to sign
         // with — Program.cs requires Jwt:SigningKey to be set, same as it

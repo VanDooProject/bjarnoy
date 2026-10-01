@@ -51,6 +51,9 @@ const WORLD = {
     mountainRockiness: 0.72,
     forestRockiness: 0.52,
     minimumIslandTiles: 6,
+    // A world created before the island-density change: legacy reach budget, no min gap.
+    islandMaxReach: 0,
+    islandMinGap: 0,
   },
 };
 
@@ -96,6 +99,40 @@ const PREVIEW = {
     },
   ],
   generation: { ...WORLD.generation, worldRadius: 4000 },
+  review: {
+    summary: {
+      seed: 4242,
+      radius: 4000,
+      greenIslands: 2,
+      wastedIslands: 0,
+      landTiles: 9600,
+      landingSpots: 2,
+      islandsWithLandingCandidate: 2,
+      islandsWithoutLandingSpots: 0,
+      islandsMissingBog: 0,
+      cutOffRegions: 1,
+      cutOffTiles: 64,
+      cutOffShare: 0.0067,
+      worstIslandCutOffShare: 0.012,
+      bogRuleViolations: 0,
+      inlandRiverMouths: 0,
+      wastedNearGreen: 0,
+      errors: 0,
+      warnings: 1,
+      infos: 0,
+    },
+    findings: [
+      {
+        kind: 'cutOffLand',
+        severity: 'warn',
+        island: 1,
+        q: 315,
+        r: -308,
+        size: 64,
+        message: '64 walkable hexes cut off by mountains and wide rivers (1.5% of the island\'s walkable land)',
+      },
+    ],
+  },
 };
 
 test.describe('admin world reseed', { tag: '@g2' }, () => {
@@ -147,6 +184,12 @@ test.describe('admin world reseed', { tag: '@g2' }, () => {
     // The real renderer mounted and drew a frame — same signal every other
     // map-bearing spec waits on.
     await waitForMapReady(page);
+
+    // The candidate's world review sits beside the map; a finding centres the map on its hex.
+    await expect(page.getByTestId('world-review')).toContainText('1 warnings');
+    await page.getByTestId('review-finding').first().click();
+    await expect(page.getByTestId('review-finding').first()).toHaveClass(/selected/);
+
     const canvas = page.locator('.map-panel canvas');
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();

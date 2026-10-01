@@ -82,6 +82,9 @@
     "NoTownSquare": "Hier steht kein Dorfplatz, um ein Fest auszurichten.",
     "AlreadyClaimed": "Diese Belohnung wurde bereits abgeholt.",
     "NotCompleted": "Diese Aufgabe ist noch nicht erledigt.",
-    "UnknownQuest": "Diese Aufgabe gibt es nicht."
+    "UnknownQuest": "Diese Aufgabe gibt es nicht.",
+    "NoCampAtDestination": "Auf diesem Feld steht kein Wildtierlager.",
+    "HuntRequiresLandUnits": "Nur Landeinheiten können ein Wildtierlager jagen.",
+    "HexOccupiedByCamp": "Wilde Tiere halten dieses Feld noch."
   }
 }

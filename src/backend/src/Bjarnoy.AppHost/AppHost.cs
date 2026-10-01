@@ -64,17 +64,15 @@ var defaultWorldRadius = builder.Configuration["World:DefaultRadius"];
 
 var postgres = builder.AddPostgres("postgres", password: postgresPassword);
 
-// Bjarnoy.AppHost.Tests builds and starts this whole AppHost fresh for every
-// [Fact] — several independent instances in the same CI job, one after
-// another. WithDataVolume()'s volume name comes from this resource alone,
-// with nothing distinguishing one test's instance from the next, so a
-// persistent volume here would carry Postgres state (including whichever
-// test's admin account got seeded first, and *its* password) from one test
-// straight into the next's supposedly-fresh database — exactly the bug that
+// Bjarnoy.AppHost.Tests runs on CI, where a persistent volume would carry
+// Postgres state (including whichever run's admin account got seeded first,
+// and *its* password) into a supposedly fresh database — exactly the bug that
 // made AdminBootstrapLoginTests intermittently 401 with "wrong password"
 // despite generating a correct one every time. Session-lifetime, volume-less
-// Postgres (the default) gives every test run its own genuinely empty
-// database instead; only interactive local dev gets the persistent one.
+// Postgres (the default) gives every CI run its own genuinely empty database
+// instead; only interactive local dev gets the persistent one. (The tests
+// share one stack and restore gamedb from a snapshot before each test, see
+// AppHostFixture; locally they need CI=true to match.)
 if (!isCI)
 {
     postgres = postgres

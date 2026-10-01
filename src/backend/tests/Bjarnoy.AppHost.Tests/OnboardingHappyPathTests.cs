@@ -34,21 +34,16 @@ namespace Bjarnoy.AppHost.Tests;
 /// founding browser's own — proving the JWT, not the header, is what found
 /// it).
 /// </remarks>
-public class OnboardingHappyPathTests
+public class OnboardingHappyPathTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task TheFullOnboardingHappyPathEndsWithTheSameRealmAfterALogoutLoginRoundTrip()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(8)).Token;
 
-        var appHost = await TestAppHost.CreateAsync(cancellationToken);
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");
@@ -152,15 +147,13 @@ public class OnboardingHappyPathTests
         Assert.Contains(settlementAfterCompletion!.Buildings, b => b.Type == "reindeerherder");
         Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack");
 
-        var completionBanner = page.GetByTestId("onboarding-banner");
-        await Assertions.Expect(completionBanner).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await page.GetByTestId("onboarding-continue").ClickAsync();
-        await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
-
         // --- Profile nudge -> a real /register form -----------------------------
+        // Onboarding complete: the "Name your jarl" nudge is the one call to
+        // action on the landing page — the completion banner waits until it
+        // is answered — so registration starts straight from here.
         var profileNudgeCta = page.GetByTestId("profile-nudge-cta");
         await Assertions.Expect(profileNudgeCta).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await Assertions.Expect(page.GetByTestId("onboarding-banner")).ToHaveCountAsync(0);
         await profileNudgeCta.ClickAsync();
         await Assertions.Expect(page).ToHaveURLAsync(
             new Regex(@"/register$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });

@@ -47,6 +47,8 @@ export interface WorldGenerationResponse {
   worldRadius: number;
   islandCellSize: number;
   islandChance: number;
+  islandMaxReach: number;
+  islandMinGap: number;
   islandMinWidth: number;
   islandMaxWidth: number;
   islandMinSegments: number;
@@ -131,6 +133,64 @@ export interface CampResponse {
   orientation: string;
   strong: boolean;
   guardRange: number;
+}
+
+/** Mirrors `CampStateResponse` — a wildlife camp's live state (`GET /worlds/{id}/camps`). */
+export interface CampStateResponse {
+  q: number;
+  r: number;
+  family: string;
+  level: number;
+  effectiveLevel: number;
+  strong: boolean;
+  guardRange: number;
+  garrison: BeastCounts;
+  fullGarrison: BeastCounts;
+  empty: boolean;
+  calmUntil: string | null;
+  aggressive: boolean;
+  clears: number;
+  removed: boolean;
+  leftover: ResourceLine;
+}
+
+export interface BeastCounts {
+  young: number;
+  adult: number;
+  alpha: number;
+}
+
+export type BeastTier = 'young' | 'adult' | 'alpha';
+
+export interface CampReportUnitLine {
+  type: string;
+  sent: number;
+  lost: number;
+}
+
+export interface CampReportBeastLine {
+  tier: BeastTier;
+  before: number;
+  lost: number;
+}
+
+/** Mirrors `CampReportResponse` — a wildlife camp fight (hunt, ambush or tower attack). */
+export interface CampReportResponse {
+  id: string;
+  kind: 'hunt' | 'ambush' | 'tower';
+  occurredAt: string;
+  camp: { q: number; r: number; family: string; effectiveLevel: number };
+  settlementId: string;
+  armyId: string | null;
+  winner: 'army' | 'camp';
+  armyPower: number;
+  campPower: number;
+  units: CampReportUnitLine[];
+  beasts: CampReportBeastLine[];
+  loot: ResourceLine;
+  campCleared: boolean;
+  tower: { q: number; r: number } | null;
+  towerBurned: boolean;
 }
 
 export interface IslandResponse {
@@ -588,6 +648,8 @@ export interface WorldGenerationSettings {
   mountainRockiness: number;
   forestRockiness: number;
   minimumIslandTiles: number;
+  islandMaxReach: number;
+  islandMinGap: number;
 }
 
 /**
@@ -617,6 +679,8 @@ export interface WorldGenerationSettingsOverrides {
   mountainRockiness?: number;
   forestRockiness?: number;
   minimumIslandTiles?: number;
+  islandMaxReach?: number;
+  islandMinGap?: number;
 }
 
 /**
@@ -673,6 +737,81 @@ export interface WorldSeedPreviewResponse {
   landTileCount: number;
   islands: PreviewIslandResponse[];
   /** The full generation constants (world radius included) the candidate was generated with. */
+  generation: WorldGenerationResponse;
+  /** The candidate's world review: cut-off land, missing bogs, islands without landing spots, broken generator guarantees. */
+  review: WorldReviewResponse;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminWorldReviewContracts.cs.
+
+export type WorldReviewFindingKind =
+  | 'cutOffLand'
+  | 'missingBog'
+  | 'noLandingSpots'
+  | 'bogRuleViolation'
+  | 'inlandRiverMouth'
+  | 'wastedNearGreen';
+
+export type WorldReviewSeverity = 'error' | 'warn' | 'info';
+
+/** The counts of a world review. `cutOffShare`/`worstIslandCutOffShare` are fractions (0.02 = 2%). */
+export interface WorldReviewSummary {
+  seed: number;
+  radius: number;
+  greenIslands: number;
+  wastedIslands: number;
+  landTiles: number;
+  landingSpots: number;
+  islandsWithLandingCandidate: number;
+  islandsWithoutLandingSpots: number;
+  islandsMissingBog: number;
+  /** Reported cut-off regions (at least the backend's minimum region size). */
+  cutOffRegions: number;
+  /** Every cut-off walkable hex, small regions included. */
+  cutOffTiles: number;
+  cutOffShare: number;
+  worstIslandCutOffShare: number;
+  bogRuleViolations: number;
+  inlandRiverMouths: number;
+  wastedNearGreen: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+
+export interface WorldReviewFinding {
+  kind: WorldReviewFindingKind;
+  severity: WorldReviewSeverity;
+  /** The island's index in the preview (`PreviewIslandResponse.index`). */
+  island: number;
+  /** A representative hex the preview map can centre on. */
+  q: number;
+  r: number;
+  /** Hexes involved (a cut-off region's size, a violation count, a distance), or 0. */
+  size: number;
+  /** A short English description from the backend. */
+  message: string;
+}
+
+export interface WorldReviewResponse {
+  summary: WorldReviewSummary;
+  /** Worst first. */
+  findings: WorldReviewFinding[];
+}
+
+/** Reviews `count` (at most 8) consecutive seeds from `seedFrom`; radius/generation as in `PreviewWorldSeedRequest`. */
+export interface ReviewWorldSeedsRequest {
+  seedFrom: number;
+  count?: number;
+  radius?: number;
+  generation?: WorldGenerationSettingsOverrides;
+}
+
+export interface WorldSeedReviewResponse {
+  worldId: string;
+  radius: number;
+  /** Best first: fewest errors, then warnings, then cut-off land, then most landing spots. */
+  seeds: WorldReviewSummary[];
   generation: WorldGenerationResponse;
 }
 

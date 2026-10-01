@@ -71,6 +71,7 @@ import {
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
   campArtFor,
+  drawnCampOf,
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
@@ -601,7 +602,22 @@ export type HoverSubject =
   | { kind: 'giant'; family: string }
   // A wildlife camp (campPlacement.ts): named for the camp with its level; HexTooltip.vue
   // shows the localised family name, level and whether it is a strong camp.
-  | { kind: 'camp'; family: string; level: number; strong: boolean };
+  | {
+      kind: 'camp';
+      family: string;
+      /** The camp's effective level (rolled level plus clears / 10) once live state is known. */
+      level: number;
+      strong: boolean;
+      /** Live state (`WorldModel.setCampStates`); absent in demo mode, where every camp is guarded. */
+      live?: {
+        garrison: { young: number; adult: number; alpha: number };
+        fullGarrison: { young: number; adult: number; alpha: number };
+        empty: boolean;
+        calmUntil: string | null;
+        aggressive: boolean;
+        clears: number;
+      };
+    };
 
 export interface HoverInfo {
   screenX: number;
@@ -650,7 +666,26 @@ export function terrainTitleFor(
  */
 export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
   if (tile.giant) return { kind: 'giant', family: tile.giant.family };
-  if (tile.camp) return { kind: 'camp', family: tile.camp.family, level: tile.camp.level, strong: tile.camp.strong };
+  if (tile.camp && !tile.camp.removed) {
+    const camp = tile.camp;
+    return {
+      kind: 'camp',
+      family: camp.family,
+      level: camp.effectiveLevel ?? camp.level,
+      strong: camp.strong,
+      live:
+        camp.garrison && camp.fullGarrison
+          ? {
+              garrison: camp.garrison,
+              fullGarrison: camp.fullGarrison,
+              empty: !!camp.empty,
+              calmUntil: camp.calmUntil ?? null,
+              aggressive: !!camp.aggressive,
+              clears: camp.clears ?? 0,
+            }
+          : undefined,
+    };
+  }
   if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
   const { terrain, isRiver, wasted } = terrainTitleFor(tile, river);
   return { kind: 'terrain', terrain, isRiver, wasted };
@@ -3552,7 +3587,7 @@ export class HexMapRenderer {
       // (bears, otters) stands on its river tile and brings its own river base with it. A camp
       // whose art cannot be resolved (a river camp off a straight river) falls through
       // and draws as plain ground.
-      if (tile.camp) {
+      if (drawnCampOf(tile)) {
         const campArt = campArtFor(textures, tile, river);
         if (campArt) {
           const campTile = { ...tile, orientation: campArt.orientation };

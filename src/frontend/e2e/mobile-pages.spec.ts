@@ -236,12 +236,21 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
       }
     }
 
-    // The settlement bubble sits at the top, right of the rail.
+    // The menu button and the settlement name are one capsule at the top-left:
+    // the button sits inside the bubble's left end.
     const bubble = page.locator('.settlement-bubble');
     await expect(bubble).toBeVisible();
     const bubbleBox = await box(bubble, 'settlement bubble');
-    const railBox = await box(page.locator('.hud-bar'), 'rail');
-    expect(bubbleBox.x).toBeGreaterThanOrEqual(railBox.x + railBox.width);
+    expect(gripBox.x).toBeGreaterThanOrEqual(bubbleBox.x - 1);
+    expect(gripBox.x + gripBox.width).toBeLessThanOrEqual(bubbleBox.x + bubbleBox.width);
+    expect(Math.abs(gripBox.y + gripBox.height / 2 - (bubbleBox.y + bubbleBox.height / 2))).toBeLessThanOrEqual(2);
+
+    // The quest card is a round quest button on a phone until tapped.
+    await expect(page.getByTestId('quest-tray')).toHaveCount(0);
+    const questToggle = page.getByTestId('quest-toggle');
+    await expect(questToggle).toBeVisible();
+    const questBox = await box(questToggle, 'quest button');
+    expect(questBox.width).toBeLessThanOrEqual(48);
 
     // Tapping the toggle opens the drawer as a left side sheet with the nav in it.
     await grip.tap();
@@ -274,10 +283,10 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
     await expect(grip).toHaveAttribute('aria-expanded', 'false');
   });
 
-  // Right after founding the rail carries the "Name your jarl" bubble, whose
-  // account-creation nudge hung leftwards off it — past the screen edge —
-  // and, once turned rightwards, over the completion banner's title.
-  test('the account nudge stays on screen and clear of the completion banner', async ({ page }) => {
+  // Right after founding the "Name your jarl" bubble floats in the top-right
+  // corner (it used to sit in the rail, its nudge hanging past the left
+  // screen edge and over the completion banner).
+  test('the account nudge stays on screen and the completion banner waits for it', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
@@ -285,12 +294,30 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
     const nudge = settlement.profileNudge;
     await expect(nudge).toBeVisible();
     await expectFullyInViewport(page, nudge, 'profile nudge');
-    const banner = settlement.banner.filter({ has: settlement.continueButton });
-    await expect(banner).toBeVisible();
-    const a = await box(nudge, 'nudge');
-    const b = await box(banner, 'completion banner');
-    const overlaps = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-    expect(overlaps, 'nudge covers the completion banner').toBe(false);
+    const trigger = await box(page.getByTestId('returning-player-trigger'), 'jarl trigger');
+    expect(trigger.x + trigger.width, 'jarl trigger in the top-right corner').toBeGreaterThan(page.viewportSize()!.width - 24);
+    expect(trigger.y).toBeLessThan(24);
+    // The nudge is the one call to action while it is up; the completion
+    // banner and its "Enter your settlement" follow once it is answered.
+    await expect(settlement.continueButton).toHaveCount(0);
+    await nudge.getByTestId('profile-nudge-later').click();
+    await expect(settlement.continueButton).toBeVisible();
+    await expectFullyInViewport(page, settlement.continueButton, 'enter-settlement button');
+  });
+
+  // The landfall banner was a full-width card and the slim checklist floated
+  // 44px above the bottom edge (room for a footer that is hidden here).
+  test('the landfall banner is a compact pill and the checklist sits in the corner', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    const viewport = page.viewportSize()!;
+    const banner = await box(settlement.banner.first(), 'landfall banner');
+    expect(banner.height, 'one line').toBeLessThanOrEqual(48);
+    expect(banner.width).toBeLessThan(viewport.width * 0.7);
+    const tray = await box(settlement.checklist, 'checklist');
+    expect(viewport.height - (tray.y + tray.height), 'checklist bottom gap').toBeLessThanOrEqual(16);
+    expect(viewport.width - (tray.x + tray.width), 'checklist right gap').toBeLessThanOrEqual(16);
   });
 
   test.describe('at 667x375', () => {

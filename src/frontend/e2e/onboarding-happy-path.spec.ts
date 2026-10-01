@@ -2,7 +2,7 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { waitForMapReady } from './helpers';
+import { enterSettlementAfterOnboarding, waitForMapReady } from './helpers';
 
 /**
  * The full onboarding happy path, driven through the real UI end to end:
@@ -35,8 +35,10 @@ import { waitForMapReady } from './helpers';
 /**
  * Shared setup for every happy path in this file: mocks the auth endpoints
  * (demo mode has no backend), makes landfall, places both guided buildings
- * through the real ring menu and continues into /settlement — leaving the
- * "Name your jarl" nudge on screen, which is where the paths diverge.
+ * through the real ring menu and moves on into /settlement — leaving the
+ * "Name your jarl" nudge unanswered, which is where the paths diverge. While
+ * the nudge is up it is the only call to action on the landing page (no
+ * completion banner), so the move goes through the HUD's Settlement link.
  */
 async function foundAndFinishGuidedBuilds(page: Page) {
   const username = `e2ejarl${Date.now()}`;
@@ -98,9 +100,10 @@ async function foundAndFinishGuidedBuilds(page: Page) {
     .toBeGreaterThan(buildingsBeforeLumberjack);
 
   // --- Completion hand-off -------------------------------------------------
-  await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('All three placed.');
-  await settlement.continueButton.click();
+  await expect(settlement.checklist).toHaveCount(0);
+  await expect(settlement.profileNudge).toBeVisible();
+  await expect(settlement.banner).toHaveCount(0);
+  await enterSettlementAfterOnboarding(page);
   await page.waitForURL('**/settlement');
   await waitForMapReady(page);
 

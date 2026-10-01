@@ -18,10 +18,12 @@ import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
-import { missionName, unitName } from '../../i18n/catalogueNames';
+import HuntTargetSummary from './HuntTargetSummary.vue';
+import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
   hasCatapultSelected,
+  isHuntUnit,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
@@ -54,10 +56,14 @@ const garrisonRows = computed(() =>
 );
 const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCounts ?? {}, catalogue.byType));
 function isRowSelectable(unit: string): boolean {
+  // A hunt takes land units only, so ships are locked out from the start.
+  if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType)) return false;
   return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
 }
 const hasLockedOutUnits = computed(() =>
-  selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
+  draft.value?.mission === 'hunt'
+    ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
+    : selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
     : false,
 );
@@ -100,13 +106,15 @@ const hasUnitsSelected = computed(() =>
 const hasDestination = computed(() =>
   draft.value?.mission === 'attack' || draft.value?.mission === 'support'
     ? !!draft.value.targetSettlementId
-    : routeLength.value > 0,
+    : draft.value?.mission === 'hunt'
+      ? !!draft.value.targetCamp
+      : routeLength.value > 0,
 );
 const canConfirm = computed(
   () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
 );
 
-function setMission(mission: 'move' | 'attack' | 'support') {
+function setMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
   world.setDispatchMission(mission);
 }
 
@@ -191,6 +199,10 @@ const summaryText = computed(() => {
     return t('hud.dispatchSheet.stopsSummary', { count: n, stopWord: t('hud.dispatchSheet.stopWord', n) });
   }
   if (!draft.value) return '';
+  if (draft.value.mission === 'hunt') {
+    const camp = draft.value.targetCamp ? world.model.campAt(draft.value.targetCamp) : undefined;
+    if (camp) return t('hud.dispatchSheet.toTarget', { name: campName(camp.family) });
+  }
   if (draft.value.mission !== 'move' && selectedTarget.value) {
     return t('hud.dispatchSheet.toTarget', { name: selectedTarget.value.name });
   }
@@ -255,9 +267,13 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           <button type="button" class="mission-tab support" :class="{ active: draft.mission === 'support' }" @click="setMission('support')">
             {{ missionName('support') }}
           </button>
+          <button v-if="draft.mission === 'hunt'" type="button" class="mission-tab attack active">
+            {{ missionName('hunt') }}
+          </button>
         </div>
 
-        <template v-if="draft.mission !== 'move'">
+        <HuntTargetSummary v-if="draft.mission === 'hunt'" :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
+        <template v-else-if="draft.mission !== 'move'">
           <div v-if="selectedTarget" class="target-selected">
             <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>
             <button type="button" class="secondary change-target" @click="clearTarget">{{ t('hud.armyPanel.change') }}</button>
@@ -462,10 +478,12 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 }
 .mission-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .mission-tab {
-  flex: 1;
+  /* Four tabs (move, attack, support, hunt) do not fit one row of the panel: wrap rather than clip. */
+  flex: 1 1 auto;
   padding: 6px 10px;
   background: transparent;
   border: 1px solid var(--panel-border);

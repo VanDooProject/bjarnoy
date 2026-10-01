@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.World;
 
 namespace Bjarnoy.Api.Contracts;
@@ -171,6 +172,8 @@ public sealed record WorldGenerationResponse(
     int WorldRadius,
     int IslandCellSize,
     double IslandChance,
+    double IslandMaxReach,
+    double IslandMinGap,
     double IslandMinWidth,
     double IslandMaxWidth,
     int IslandMinSegments,
@@ -198,6 +201,8 @@ public sealed record WorldGenerationResponse(
             options.Radius,
             options.IslandCellSize,
             options.IslandChance,
+            options.IslandMaxReach,
+            options.IslandMinGap,
             options.IslandMinWidth,
             options.IslandMaxWidth,
             options.IslandMinSegments,
@@ -514,3 +519,70 @@ public sealed record TileChunkResponse(
     int RMin,
     int RMax,
     IReadOnlyList<TileResponse> Tiles);
+
+/// <summary>How many beasts of each tier stand in a camp.</summary>
+public sealed record CampGarrisonResponse(int Young, int Adult, int Alpha)
+{
+    public static CampGarrisonResponse From(CampGarrison garrison) => new(garrison.Young, garrison.Adult, garrison.Alpha);
+}
+
+/// <summary>
+/// A wildlife camp's live state at the world's game time (<c>GET /worlds/{id}/camps</c>) — see
+/// <c>docs/design/wildlife-camps.md</c>, "State and API". Settled lazily from the stored snapshot; reading never writes.
+/// </summary>
+/// <param name="Level">The rolled level (sets <paramref name="GuardRange"/>).</param>
+/// <param name="EffectiveLevel">Rolled level plus one per 10 clears, at most 100; what the garrison and loot scale with.</param>
+/// <param name="Garrison">Beasts alive now (regrown from the snapshot).</param>
+/// <param name="FullGarrison">The garrison at full strength for <paramref name="EffectiveLevel"/>.</param>
+/// <param name="Empty">No beast alive now.</param>
+/// <param name="CalmUntil">When the camp stops being calm; null when it is not calm now.</param>
+/// <param name="Aggressive">A strong camp that is not calm and has an adult or alpha alive.</param>
+/// <param name="Clears">How many times it has been cleared.</param>
+/// <param name="Removed">A building stands on the hex, so the camp is off the map for as long as it stands.</param>
+/// <param name="Leftover">Loot left at the camp by a carry-capped hunt.</param>
+public sealed record CampStateResponse(
+    int Q,
+    int R,
+    string Family,
+    int Level,
+    int EffectiveLevel,
+    bool Strong,
+    int GuardRange,
+    CampGarrisonResponse Garrison,
+    CampGarrisonResponse FullGarrison,
+    bool Empty,
+    DateTimeOffset? CalmUntil,
+    bool Aggressive,
+    int Clears,
+    bool Removed,
+    ResourceAmountsResponse Leftover)
+{
+    public static CampStateResponse From(WorldCamp worldCamp, DateTimeOffset now, RealmIndex realm)
+    {
+        ArgumentNullException.ThrowIfNull(worldCamp);
+        ArgumentNullException.ThrowIfNull(realm);
+
+        var camp = worldCamp.Camp;
+        var state = worldCamp.State;
+        var inside = realm.InsideRealm(camp.Coord);
+        var effectiveLevel = state.EffectiveLevel(camp);
+        var garrison = state.GarrisonAt(camp, now, inside);
+
+        return new CampStateResponse(
+            camp.Coord.Q,
+            camp.Coord.R,
+            camp.Family,
+            camp.Level,
+            effectiveLevel,
+            camp.Strong,
+            camp.GuardRange,
+            CampGarrisonResponse.From(garrison),
+            CampGarrisonResponse.From(CampGarrison.Full(camp.Strong ? CampStrength.Strong : CampStrength.Weak, effectiveLevel)),
+            garrison.IsEmpty,
+            state.IsCalmAt(now) ? state.CalmUntil : null,
+            state.IsAggressiveAt(camp, now, inside),
+            state.Clears,
+            realm.HasBuilding(camp.Coord),
+            ResourceAmountsResponse.From(state.Leftover));
+    }
+}

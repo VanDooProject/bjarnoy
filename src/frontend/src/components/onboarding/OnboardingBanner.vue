@@ -138,4 +138,27 @@ const isTouch = useMediaQuery(TOUCH_QUERY);
     align-items: center;
   }
 }
+/* Short landscape: the landfall banner is a compact pill across the top
+   instead of a full-width card — title and line side by side, as wide as
+   its text. */
+@media (max-height: 500px) {
+  .banner.landfall {
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    max-width: calc(100vw - 32px - var(--hud-inset-left, 0px));
+    flex-wrap: nowrap;
+    padding: 6px 16px 6px 8px;
+    border-radius: 999px;
+  }
+  .banner.landfall .body {
+    flex: 0 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .banner.landfall .title {
+    white-space: nowrap;
+  }
+}
 </style>

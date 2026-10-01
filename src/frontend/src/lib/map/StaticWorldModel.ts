@@ -21,6 +21,7 @@ import type { RiverTile, Terrain, Tile } from './types';
 
 export class StaticWorldModel extends WorldModel {
   private staticTiles = new Map<string, Tile>();
+  private staticRivers = new Map<string, RiverTile>();
 
   constructor(tiles: Tile[] = []) {
     super();
@@ -96,9 +97,14 @@ export class StaticWorldModel extends WorldModel {
     return this.staticTiles.get(coordKey(coord))?.giant?.anchor ?? null;
   }
 
-  /** No rivers on the docs island (a path depends on generating a whole procedural island — see `WorldModel.getRiverTile`'s own doc comment) — every lookup is a plain miss. */
-  override getRiverTile(_q: number, _r: number): RiverTile | undefined {
-    return undefined;
+  /** The river tiles of the fixed layout, if it has any (the Bog Lands docs island does; the wasted one has none) — drawn by the renderer through `getRiverTile` like a generated island's. */
+  setRivers(rivers: RiverTile[]): void {
+    this.staticRivers = new Map(rivers.map((r) => [coordKey(r), r]));
+  }
+
+  /** Only the rivers handed to `setRivers` — a path otherwise depends on generating a whole procedural island (see `WorldModel.getRiverTile`'s own doc comment), so every other lookup is a plain miss. */
+  override getRiverTile(q: number, r: number): RiverTile | undefined {
+    return this.staticRivers.get(coordKey({ q, r }));
   }
 
   /** No buildings on the docs island — used only by the water-mask bake (`WaterLayer`), itself moot since the docs preview always suppresses the water shader (`HexMapRenderer.rebuildAll`'s `waterSuppressed`). */

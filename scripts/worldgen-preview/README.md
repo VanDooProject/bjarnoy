@@ -105,6 +105,8 @@ the same pair under the backend's current rules (no new restriction, no wall), f
   "name": "c-sea-end-seals",           // required; also the PNG's name
   "title": "one line: what it shows",  // shown in the footer; only characters the bitmap font has (checked by the tests)
   "seed": 11, "radius": 1000,          // the world (radius is part of the terrain)
+  "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
+                                       // optional overrides of the generation constants (here: the legacy island density)
   "window": { "q": 205, "r": -650, "size": 22 },   // centre hex and hexes across, like --window
   "px": 36,                            // pixels per hex circumradius (default 22)
   "wallLines": [[[200,-651],[210,-651]]],   // polylines of corners; every hex on the hex lines between them is a wall hex
@@ -127,7 +129,9 @@ sand 1.1, forest 1.3, bog 2.0, +8 to enter a river hex) with the rules above swi
 A route whose origin or destination is itself impassable (a mountain, a wall, sea) reports `NO ROUTE (DESTINATION IS A MOUNTAIN)`
 rather than silently blaming the wall; pick endpoints on walkable land.
 
-The shipped scenarios, all on seed 11 at radius 1000:
+The shipped scenarios are pinned to the legacy island density (the `generation` line above: the island-density change
+keeps legacy settings byte-identical), so their walls and routes stay on the terrain they were laid out on. The shipped
+scenarios, all on seed 11 at radius 1000 (g on seeds 1 and 5):
 
 | file | shows |
 | --- | --- |
