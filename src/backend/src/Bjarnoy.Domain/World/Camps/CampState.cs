@@ -36,7 +36,9 @@ public sealed record CampState(
     /// </summary>
     public CampGarrison GarrisonAt(Camp camp, DateTimeOffset t, bool insideRealm)
     {
-        if (Snapshot.IsEmpty && ClearedAt is not null && insideRealm && camp.Family != CampFamilies.Fenrirbrood)
+        // Fenrir's brood and every water camp always regrow: a sea hex is never held by a realm, so a
+        // cleared whale road refills even if some settlement's claim disc happens to reach it.
+        if (Snapshot.IsEmpty && ClearedAt is not null && insideRealm && camp.Family != CampFamilies.Fenrirbrood && !camp.IsWater)
         {
             return CampGarrison.Empty;
         }

@@ -391,7 +391,8 @@
       "mountain": "Mountain",
       "wasteland": "Wasteland",
       "bog": "Bog",
-      "riverStraight": "River"
+      "riverStraight": "River",
+      "sea": "Open sea"
     },
     "list": {
       "wolfden": {
@@ -445,6 +446,10 @@
       "otterslide": {
         "name": "Otter slide",
         "guards": "One otter swimming, one on the drift log with a fish, one running the bank and one waiting at the holt."
+      },
+      "whaleroad": {
+        "name": "Whale road",
+        "guards": "A humpback cow and her calf surfacing on open sea, with gulls overhead. It lies far off the coast, is met by fleets only, and pays food."
       }
     },
     "beasts": {

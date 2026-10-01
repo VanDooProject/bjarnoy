@@ -75,8 +75,10 @@ const LOOT_EXTRAS: Record<string, LootShare[]> = {
 };
 const LOOT_ORDER: LootKind[] = ['food', 'stone', 'wood', 'iron'];
 
-/** The loot kinds a family pays: food always, iron for a strong camp, plus its extras. */
+/** The loot kinds a family pays: food always, iron for a strong camp, plus its extras (the whale road: food only). */
 export function lootKindsOf(family: string): LootShare[] {
+  // The whale road is strong but pays food only (the sea holds no gear to scavenge) — mirrors `CampRules.LootKinds`.
+  if (family === 'whaleroad') return [{ kind: 'food' }];
   const shares = new Map<LootKind, LootShare>([['food', { kind: 'food' }]]);
   if (isStrongCampFamily(family)) shares.set('iron', { kind: 'iron' });
   for (const extra of LOOT_EXTRAS[family] ?? []) {
@@ -141,7 +143,8 @@ export function towerThreatAt<C extends { q: number; r: number; guardRange: numb
   coord: { q: number; r: number },
 ): C | undefined {
   for (const camp of camps) {
-    if (campThreatensTowers(camp) && hexDistance(coord, camp) <= camp.guardRange) return camp;
+    // A water camp (guard range 0) holds no land and locks no towers.
+    if (campThreatensTowers(camp) && camp.guardRange > 0 && hexDistance(coord, camp) <= camp.guardRange) return camp;
   }
   return undefined;
 }

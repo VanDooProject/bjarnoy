@@ -63,7 +63,8 @@
     "cranedance": "Kranichtanz",
     "harewarren": "Hasenbau",
     "deerglade": "Hirschlichtung",
-    "otterslide": "Otterrutsche"
+    "otterslide": "Otterrutsche",
+    "whaleroad": "Walweg"
   },
   "terrain": {
     "sea": "Offenes Wasser",
@@ -203,7 +204,12 @@
     "otterslide": {
       "young": "Otterjunges",
       "adult": "Otter",
-      "alpha": "Alter Otter"
+      "alpha": "Alter Bulle"
+    },
+    "whaleroad": {
+      "young": "Walkalb",
+      "adult": "Buckelwal",
+      "alpha": "Alter Bulle"
     }
   }
 }

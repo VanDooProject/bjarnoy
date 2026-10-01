@@ -391,7 +391,8 @@
       "mountain": "Berg",
       "wasteland": "Ödland",
       "bog": "Moor",
-      "riverStraight": "Fluss"
+      "riverStraight": "Fluss",
+      "sea": "Offenes Meer"
     },
     "list": {
       "wolfden": {
@@ -445,6 +446,10 @@
       "otterslide": {
         "name": "Otterrutsche",
         "guards": "Ein Otter schwimmt, einer liegt mit einem Fisch auf dem Treibholz, einer läuft am Ufer und einer wartet am Bau."
+      },
+      "whaleroad": {
+        "name": "Walweg",
+        "guards": "Eine Buckelwalkuh und ihr Kalb tauchen auf offener See auf, Möwen kreisen darüber. Er liegt weit vor der Küste, nur Flotten begegnen ihm, und er liefert Nahrung."
       }
     },
     "beasts": {

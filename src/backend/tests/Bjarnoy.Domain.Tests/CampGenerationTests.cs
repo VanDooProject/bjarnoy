@@ -29,12 +29,12 @@ public class CampGenerationTests
         island.IsWasted ? sampler.WastedTerrainAt(coord) : sampler.TerrainAt(coord);
 
     [Fact]
-    public void The_family_table_has_the_thirteen_families_with_the_owner_decided_strengths()
+    public void The_family_table_has_the_fourteen_families_with_the_owner_decided_strengths()
     {
         var strong = CampFamilies.All.Where(f => f.Strength == CampStrength.Strong).Select(f => f.Family).Order();
         var weak = CampFamilies.All.Where(f => f.Strength == CampStrength.Weak).Select(f => f.Family).Order();
 
-        Assert.Equal(["bearrapids", "boarwallow", "eagleeyrie", "fenrirbrood", "moosemire", "walrushaulout", "wolfden"], strong);
+        Assert.Equal(["bearrapids", "boarwallow", "eagleeyrie", "fenrirbrood", "moosemire", "walrushaulout", "whaleroad", "wolfden"], strong);
         Assert.Equal(["beaverlodge", "cranedance", "deerglade", "harewarren", "otterslide", "sealhaulout"], weak);
         Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Strong), f => Assert.Equal(CampLevelSkew.Cubic, f.LevelSkew));
         Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Weak), f => Assert.Equal(CampLevelSkew.Quadratic, f.LevelSkew));
@@ -90,7 +90,7 @@ public class CampGenerationTests
     {
         foreach (var (seed, _, island) in Islands())
         {
-            var eyries = island.Camps.Count(c => c.Family == "eagleeyrie");
+            var eyries = island.LandCamps().Count(c => c.Family == "eagleeyrie");
             Assert.True(eyries <= CampGenerator.MaxEyrieCampsFor(island.TileCount), $"seed {seed} island {island.Index}: {eyries} eyries");
         }
     }
@@ -100,7 +100,7 @@ public class CampGenerationTests
     {
         foreach (var (seed, _, island) in Islands())
         {
-            var seals = island.Camps.Count(c => c.Family == "sealhaulout");
+            var seals = island.LandCamps().Count(c => c.Family == "sealhaulout");
             Assert.True(seals <= CampGenerator.MaxSealCampsFor(island.TileCount), $"seed {seed} island {island.Index}: {seals} seal colonies");
         }
     }
@@ -111,15 +111,15 @@ public class CampGenerationTests
         var checkedIslands = 0;
         foreach (var (seed, _, island) in Islands())
         {
-            Assert.True(island.Camps.Count <= CampGenerator.CampCountFor(island.TileCount), $"seed {seed} island {island.Index}");
-            Assert.True(island.Camps.Count(c => c.Strong) <= Math.Max(1, CampGenerator.StrongCountFor(island.TileCount)), $"seed {seed} island {island.Index}: strong budget");
-            Assert.True(island.Camps.Count(c => !c.Strong) <= Math.Max(1, CampGenerator.WeakCountFor(island.TileCount)), $"seed {seed} island {island.Index}: weak budget");
-            for (var i = 0; i < island.Camps.Count; i++)
+            Assert.True(island.LandCamps().Count <= CampGenerator.CampCountFor(island.TileCount), $"seed {seed} island {island.Index}");
+            Assert.True(island.LandCamps().Count(c => c.Strong) <= Math.Max(1, CampGenerator.StrongCountFor(island.TileCount)), $"seed {seed} island {island.Index}: strong budget");
+            Assert.True(island.LandCamps().Count(c => !c.Strong) <= Math.Max(1, CampGenerator.WeakCountFor(island.TileCount)), $"seed {seed} island {island.Index}: weak budget");
+            for (var i = 0; i < island.LandCamps().Count; i++)
             {
-                for (var j = i + 1; j < island.Camps.Count; j++)
+                for (var j = i + 1; j < island.LandCamps().Count; j++)
                 {
                     Assert.True(
-                        island.Camps[i].Coord.DistanceTo(island.Camps[j].Coord) >= CampGenerator.MinCampSpacing,
+                        island.LandCamps()[i].Coord.DistanceTo(island.LandCamps()[j].Coord) >= CampGenerator.MinCampSpacing,
                         $"seed {seed} island {island.Index}: camps {i} and {j} are closer than {CampGenerator.MinCampSpacing}");
                 }
             }
@@ -139,7 +139,7 @@ public class CampGenerationTests
             var rivers = island.RiverTiles.ToDictionary(t => t.Coord);
             var giantHexes = island.Giants.SelectMany(g => Giant.Footprint(g.Anchor)).ToHashSet();
             var tiles = island.Tiles.ToHashSet();
-            foreach (var camp in island.Camps)
+            foreach (var camp in island.LandCamps())
             {
                 var where = $"seed {seed} island {island.Index} camp {camp.Family} at {camp.Coord}";
                 families.Add(camp.Family);
@@ -194,7 +194,7 @@ public class CampGenerationTests
         Assert.Equal(CampStrength.Weak, CampFamilies.Find(CampFamilies.Beaverlodge)!.Strength);
         Assert.Equal(CampStrength.Weak, CampFamilies.Find(CampFamilies.Cranedance)!.Strength);
 
-        var placed = Islands(wasted: false).SelectMany(i => i.Island.Camps.Select(c => (i.Island, Camp: c))).Where(x => bog.Contains(x.Camp.Family)).ToList();
+        var placed = Islands(wasted: false).SelectMany(i => i.Island.LandCamps().Select(c => (i.Island, Camp: c))).Where(x => bog.Contains(x.Camp.Family)).ToList();
         Assert.True(placed.Count >= 5, $"only {placed.Count} bog camps across eight worlds");
         Assert.All(placed, x => Assert.Contains(x.Island.BogTiles, t => t.Coord == x.Camp.Coord && t.Kind == BogTileKind.Bog));
         Assert.Equal(bog.Length, placed.Select(x => x.Camp.Family).Distinct().Count());
@@ -206,7 +206,7 @@ public class CampGenerationTests
         foreach (var (seed, sampler, island) in Islands(wasted: false))
         {
             var rivers = island.RiverTiles.ToDictionary(t => t.Coord);
-            foreach (var camp in island.Camps)
+            foreach (var camp in island.LandCamps())
             {
                 if (camp.Family is CampFamilies.Bearrapids or CampFamilies.Otterslide)
                 {
@@ -231,7 +231,7 @@ public class CampGenerationTests
         {
             foreach (var spot in island.StartPositions)
             {
-                foreach (var camp in island.Camps)
+                foreach (var camp in island.LandCamps())
                 {
                     if (camp.Strong)
                     {
@@ -258,7 +258,7 @@ public class CampGenerationTests
     {
         var wasted = Islands(wasted: true).ToList();
         Assert.NotEmpty(wasted);
-        var camps = wasted.SelectMany(w => w.Island.Camps.Select(c => (w.Sampler, w.Island, Camp: c))).ToList();
+        var camps = wasted.SelectMany(w => w.Island.LandCamps().Select(c => (w.Sampler, w.Island, Camp: c))).ToList();
         Assert.NotEmpty(camps);
         Assert.All(camps, c =>
         {
@@ -282,7 +282,7 @@ public class CampGenerationTests
     [Fact]
     public void Levels_skew_low_for_every_family_and_strong_camps_sit_on_levels_one_to_three()
     {
-        var camps = Islands(wasted: false).SelectMany(i => i.Island.Camps).ToList();
+        var camps = Islands(wasted: false).SelectMany(i => i.Island.LandCamps()).ToList();
         var strong = camps.Where(c => c.Strong).Select(c => c.Level).ToList();
         var weak = camps.Where(c => !c.Strong).Select(c => c.Level).ToList();
 

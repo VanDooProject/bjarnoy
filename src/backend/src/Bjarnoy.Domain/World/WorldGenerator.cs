@@ -124,6 +124,9 @@ public sealed class WorldGenerator
                     camps = CampGenerator.Generate(
                         tiles, terrainLand, _sampler, _options, index, riverTiles, giants,
                         plainBog: BogTerrain.PlainBog(bogTiles));
+                    // The water camps (the whale road) come after the land ones, from their own pass: they sit on
+                    // open sea 6-10 hexes off the coast, hold no land and so never cost a start position.
+                    camps = [.. camps, .. CampGenerator.GenerateWhaleRoads(tiles, _sampler, _options, index)];
                     startPositions = FindStartPositions(tiles, terrainLand, giants, camps, BogTerrain.PlainBog(bogTiles), _options.BogReach);
                 }
 
@@ -463,7 +466,7 @@ public sealed class WorldGenerator
             var tooCloseToCamp = false;
             foreach (var camp in camps)
             {
-                if (camp.Strong && tile.DistanceTo(camp.Coord) <= camp.GuardRange + CampGenerator.StartPositionMargin)
+                if (camp.Strong && !camp.IsWater && tile.DistanceTo(camp.Coord) <= camp.GuardRange + CampGenerator.StartPositionMargin)
                 {
                     tooCloseToCamp = true;
                     break;

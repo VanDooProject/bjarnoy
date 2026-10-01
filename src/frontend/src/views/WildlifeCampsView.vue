@@ -268,7 +268,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
               {{ lootPoolByKind(camp.id, level)[share.kind] }} {{ t(`docs.wildlifeCamps.loot.${share.kind}`) }}
             </span>
           </p>
-          <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
+          <p v-if="camp.ground !== 'sea'" class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
           <div class="pills">
             <span class="pills-label">{{ $t('docs.wildlifeCamps.state.label') }}</span>
             <button
