@@ -94,7 +94,8 @@ foreach (var seed in seeds)
 
     var s = review.Summary;
     Console.WriteLine(Invariant(
-        $"seed {seed} radius {radius}: generated in {generated.TotalSeconds:F1} s, reviewed in {reviewed.TotalSeconds:F1} s"));
+        $"seed {seed} radius {radius}: generated in {generated.TotalSeconds:F1} s, reviewed in {reviewed.TotalSeconds:F1} s, ") +
+        Invariant($"peak memory {Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024)} MB"));
     Console.WriteLine(Invariant(
         $"  {s.GreenIslands} green + {s.WastedIslands} wasted islands, {s.LandTiles} land, {s.LandingSpots} landing spots, ") +
         Invariant($"{s.IslandsWithLandingCandidate} islands with a landing candidate"));
