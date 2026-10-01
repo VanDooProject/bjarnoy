@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
@@ -12,7 +12,7 @@ import WallPiece from '../components/docs/WallPiece.vue';
 import { findAtlasFrame } from '../lib/map/atlas';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
-import { PALISADE_PIECES, WALL_GROUNDS, stagesOf } from '../lib/docs/palisadeDocs';
+import { PALISADE_PIECES, WALL_GROUNDS, usePieceStages } from '../lib/docs/palisadeDocs';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -29,26 +29,17 @@ const NAME_KEY: Record<PalisadePiece, string> = {
   end_coast: 'seaEnd',
 };
 
-const hasFrame = (name: string) => !!findAtlasFrame('buildings-static', name);
+const { stages, stageOf, pick } = usePieceStages((name) => !!findAtlasFrame('buildings-static', name));
 
-const PIECES = PALISADE_PIECES.map((piece) => ({
-  piece,
-  id: `piece-${piece}`,
-  key: NAME_KEY[piece],
-  stages: stagesOf(piece, hasFrame),
-}));
+const PIECES = PALISADE_PIECES.map((piece) => ({ piece, id: `piece-${piece}`, key: NAME_KEY[piece] }));
 
-const view = reactive(
-  Object.fromEntries(
-    PIECES.map((p) => [p.piece, { stage: p.stages.at(-1) ?? 0, dir: 'SE' as TileOrientation }]),
-  ) as Record<PalisadePiece, { stage: number; dir: TileOrientation }>,
-);
+const dirs = reactive(Object.fromEntries(PIECES.map((p) => [p.piece, 'SE'])) as Record<PalisadePiece, TileOrientation>);
 
 function stageLabel(stage: number): string {
   return stage === 0 ? t('docs.walls.stages.construction') : t('docs.walls.stages.level', { n: stage });
 }
 
-const STRAIGHT_STAGE = PIECES[0]!.stages.at(-1) ?? 0;
+const straightStage = computed(() => stageOf('straight180'));
 
 const tocLinks = [
   ...PIECES.map((p) => ({ href: `#${p.id}`, label: t(`docs.walls.pieces.${p.key}.name`) })),
@@ -74,18 +65,19 @@ const tocLinks = [
       :level="3"
     >
       <template #thumb>
-        <WallPiece :piece="p.piece" :dir="view[p.piece].dir" :stage="view[p.piece].stage" />
+        <WallPiece :piece="p.piece" :dir="dirs[p.piece]" :stage="stageOf(p.piece)" />
       </template>
       <p>{{ $t(`docs.walls.pieces.${p.key}.body`) }}</p>
       <template #pickers>
         <DocsPicker
-          v-if="p.stages.length > 1"
-          v-model="view[p.piece].stage"
+          v-if="stages[p.piece].length > 1"
+          :model-value="stageOf(p.piece)"
           :label="$t('docs.walls.stage')"
-          :options="p.stages.map((stage) => ({ value: stage, label: stageLabel(stage) }))"
+          :options="stages[p.piece].map((stage) => ({ value: stage, label: stageLabel(stage) }))"
+          @update:model-value="pick(p.piece, $event)"
         />
         <DocsPicker
-          v-model="view[p.piece].dir"
+          v-model="dirs[p.piece]"
           :label="$t('docs.walls.camera')"
           :options="TILE_ORIENTATIONS.map((dir) => ({ value: dir, label: dir }))"
         />
@@ -110,7 +102,7 @@ const tocLinks = [
       <div class="grounds">
         <figure v-for="ground in WALL_GROUNDS" :key="ground.id" class="ground" :data-ground="ground.id">
           <div class="ground-art">
-            <WallPiece piece="straight180" dir="SE" :stage="STRAIGHT_STAGE" :ground="ground.id" />
+            <WallPiece piece="straight180" dir="SE" :stage="straightStage" :ground="ground.id" />
           </div>
           <figcaption>{{ $t(`docs.walls.where.grounds.${ground.id}`) }}</figcaption>
         </figure>
