@@ -768,10 +768,10 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
                 new PreviewWorldSeedRequest(Seed: 2024, Radius: 600, Generation: overrides),
                 Ct)).ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
 
-        // The created world is a compact one (see TestWorlds): widths 8-14 on 90-hex cells.
+        // The created world is a compact one (see TestWorlds): widths 8-14 on 66-hex cells.
         var defaultSized = await PreviewAsync(overrides: null);
         var bigIslands = await PreviewAsync(new WorldGenerationSettingsOverrides(
-            IslandMinWidth: 20.0, IslandMaxWidth: 28.0, IslandCellSize: 200));
+            IslandMinWidth: 20.0, IslandMaxWidth: 28.0, IslandCellSize: 200, IslandMaxReach: 240.0));
 
         // Same seed, only the island-size knobs changed: far fewer, much
         // bigger islands than the default-sized preview of the same seed.

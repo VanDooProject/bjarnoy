@@ -62,6 +62,8 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         Radius = 500,
         IslandCellSize = 100,
         IslandChance = 1.0,
+        IslandMaxReach = 0.0, // overlapping discs on purpose: legacy reach budget,
+        IslandMinGap = 0.0, // and no min-gap rule to drop the overlapping ones
         IslandMinWidth = 100.0,
         IslandMaxWidth = 100.0,
         IslandMinSegments = 1,

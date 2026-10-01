@@ -1475,6 +1475,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("IslandMaxElongation")
                         .HasColumnType("REAL");
 
+                    b.Property<double>("IslandMaxReach")
+                        .HasColumnType("REAL");
+
                     b.Property<int>("IslandMaxSegments")
                         .HasColumnType("INTEGER");
 
@@ -1485,6 +1488,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("REAL");
 
                     b.Property<double>("IslandMinElongation")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("IslandMinGap")
                         .HasColumnType("REAL");
 
                     b.Property<int>("IslandMinSegments")

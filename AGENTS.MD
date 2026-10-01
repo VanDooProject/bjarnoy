@@ -44,6 +44,24 @@
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
 
+# driving red CI to green
+- reproduce each failing CI test locally and iterate on it there until it
+  passes: run just that test (`dotnet test --filter-method`/`--filter-class`,
+  `npx vitest run <file>`, `npx playwright test <spec> -g "<name>"`), not the
+  full suite and not another CI round. Push only once the failing tests pass
+  locally, and run the full suite once before that push (the fast checks
+  plus the suites the fix touches), so a CI run is a confirmation, not the
+  debugger
+- read the CI log for the exact test names and errors first; don't push
+  speculative fixes to see what CI says
+- when a red run has several failures that are not related to each other
+  (different causes, different areas), hand them to separate subagents in
+  parallel, one per cause, each reproducing and fixing its own failure
+  locally; failures that share a cause (e.g. one moved demo seed breaking
+  several e2e specs) stay with one agent. Give each agent its own worktree
+  or its own files so they don't edit the same code, and merge their
+  fixes into one validated push
+
 # unrelated/pre-existing CI failures found while driving a PR to green
 - if a PR you're driving to green has a CI failure unrelated to that PR's
   own diff (confirmed pre-existing, e.g. it also fails on `main` at the

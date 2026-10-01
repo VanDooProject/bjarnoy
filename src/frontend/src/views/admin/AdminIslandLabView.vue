@@ -40,6 +40,8 @@ const GENERATION_FIELDS: {
 }[] = [
   { key: 'islandCellSize', labelKey: 'islandCellSizeLabel', min: 16, max: 4096, step: 1 },
   { key: 'islandChance', labelKey: 'islandChanceLabel', min: 0.01, max: 1, step: 0.01 },
+  { key: 'islandMaxReach', labelKey: 'islandMaxReachLabel', min: 0, max: 2000, step: 1 },
+  { key: 'islandMinGap', labelKey: 'islandMinGapLabel', min: 0, max: 400, step: 1 },
   { key: 'islandMinWidth', labelKey: 'islandMinWidthLabel', min: 2, max: 200, step: 0.5 },
   { key: 'islandMaxWidth', labelKey: 'islandMaxWidthLabel', min: 2, max: 200, step: 0.5 },
   { key: 'islandMinSegments', labelKey: 'islandMinSegmentsLabel', min: 1, max: 24, step: 1 },
@@ -154,7 +156,7 @@ function draw(variant: Variant) {
   const seedValue = Number(variant.seedInput);
   // variants is reactive(), so variant.generation is a Vue Proxy. terrainAt
   // -> closestIsland -> islandCellDepth reads ~20 gen.* properties per island
-  // cell, for 9 cells, per dot — each of those a proxy `get` trap plus
+  // cell, for the 25 cells of a 5x5 scan (9 on legacy worlds), per dot — each of those a proxy `get` trap plus
   // dependency tracking. Measured at 7.5x the cost of sampling the same grid
   // against a plain object, so unwrap once here rather than letting a future
   // refactor pass the proxy back into the sampler. draw() only reads this

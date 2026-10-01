@@ -50,6 +50,7 @@ import {
   buildingUpgradeCost,
   type BuildingModifier,
   type BuildingOutput,
+  SHRINE_BUILDING_TYPES,
 } from '../lib/map/buildingEconomy';
 import {
   cropAllowedHere,
@@ -57,6 +58,7 @@ import {
   formatMissingResources,
   longhouseLock,
   riverBuildingAllowedHere,
+  shrineLimitLock,
   storageHouseLock,
   towerLimitLock,
 } from '../lib/map/ringCatalogue';
@@ -337,7 +339,9 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
       : selected.movement.path
     : [];
   const draftWaypoints = world.dispatchDraft?.route ?? world.fieldOrderDraft?.route ?? [];
-  return { armies, route, draftWaypoints, targets: overlayTargets(selected) };
+  // Odin's Ravens widen the live vision of this settlement's travelling armies.
+  const visionBonusRings = world.selectedSettlementId ? world.model.ravensRingsFor(world.selectedSettlementId) : 0;
+  return { armies, route, draftWaypoints, targets: overlayTargets(selected), visionBonusRings };
 });
 
 // Issue #93 "attack/raid target indicator": the settlement an attack/support
@@ -602,6 +606,7 @@ function onRingOutsidePointerDown(e: PointerEvent) {
 
 type BuildableType =
   | 'hut'
+  | 'reindeerherder'
   | 'farm'
   | 'tower'
   | 'fishinghut'
@@ -610,6 +615,7 @@ type BuildableType =
   | 'shrineoffreyja'
   | 'shrineofullr'
   | 'shrineofnjord'
+  | 'odinstatue'
   | 'lumberjack'
   | 'quarry'
   | 'storagehouse'
@@ -650,6 +656,7 @@ const SHRINE_CATEGORY: BuildCategory = {
     { type: 'shrineofthor' },
     { type: 'shrineoffreyja' },
     { type: 'shrineofullr' },
+    { type: 'odinstatue' },
   ],
 };
 // The Shrine of Njörd (a shrine on a skerry) is built
@@ -675,6 +682,7 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
     {
       id: 'resource',
       buildings: [
+        { type: 'reindeerherder' },
         { type: 'farm' },
         { type: 'pumpkinfarm' },
         // Sawmill and Crop Mill are only actually buildable on a Grass hex
@@ -937,6 +945,11 @@ function formatModifier(modifier: BuildingModifier): string {
         percent: modifier.percent,
         domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
       });
+    case 'odinFavour':
+      return t('hud.hoverTooltip.modifierOdinFavour', {
+        percent: modifier.buildTimePercent,
+        rings: modifier.visionRings,
+      });
     case 'radiusBoost':
       return t('hud.hoverTooltip.modifierRadiusBoost', {
         percent: modifier.percent,
@@ -993,6 +1006,18 @@ function towersHeld(): number {
   return hexes.size;
 }
 
+// Shrines held by the selected settlement (standing plus queued new-shrine
+// orders, by distinct hex): a settlement raises one shrine in total.
+function shrinesHeld(): number {
+  const id = world.selectedSettlementId;
+  if (!id) return 0;
+  const hexes = new Set(world.model.shrineCoords(id).map((c) => `${c.q},${c.r}`));
+  for (const order of world.hud.queue) {
+    if (SHRINE_BUILDING_TYPES.has(order.building)) hexes.add(`${order.q},${order.r}`);
+  }
+  return hexes.size;
+}
+
 // Storage houses held (standing plus queued, distinct hexes like
 // Settlement.PlanBuild counts them) and the best standing level, for the
 // additional-storage-house lock.
@@ -1004,7 +1029,13 @@ function storageHouseLockFor(): string | undefined {
   for (const order of world.hud.queue) {
     if (order.building === 'storagehouse') hexes.add(`${order.q},${order.r}`);
   }
-  return storageHouseLock(hexes.size, Math.max(0, ...standing.map((h) => h.level)));
+  return storageHouseLock(hexes.size, standing.map((h) => h.level));
+}
+
+// Odin's Wisdom for the selected settlement: the multiplier on build times shown on the ring cards.
+function wisdomFactor(): number {
+  const id = world.selectedSettlementId;
+  return id ? world.model.wisdomFactor(id) : 1;
 }
 
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
@@ -1014,11 +1045,13 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
     id: type,
     label: buildingName(type),
     cost: definition?.cost ?? buildingUpgradeCost(type, 1),
-    time: definition ? formatBuildTime(definition.buildSeconds) : undefined,
+    // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
+    time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
     gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
     lock:
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
       ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
+      ?? (SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined)
       ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined),
     art: buildingArt(type, 1),
   };

@@ -85,7 +85,7 @@ public class LandingBuildQueueTests
         // A grass neighbour of the settlement's own centre — guaranteed to
         // exist (WorldGenerator only picks a start position with at least
         // one adjacent forest and two more adjacent grass hexes) and within
-        // ClaimRadius 2 at level 1, so the backend accepts a Farm there.
+        // ClaimRadius 2 at level 1, so the backend accepts a Reindeer Herder there.
         var centre = new HexCoord(settlement.Q, settlement.R);
         var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
             $"/api/v1/worlds/{world.Id}/tiles?qMin={centre.Q - 1}&qMax={centre.Q + 1}"
@@ -94,7 +94,7 @@ public class LandingBuildQueueTests
         var grassTile = chunk!.Tiles.First(t =>
             t.Terrain == "grass" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
 
-        // --- Admin: speed the world way up so a real Farm's 4-minute build
+        // --- Admin: speed the world way up so a real Reindeer Herder's 3-minute build
         // timer (BuildingCatalogue.Producer, level 1) resolves in seconds —
         // otherwise there'd be no practical way to observe the onboarding
         // tray actually flip to "Placed" once construction finishes. Same
@@ -141,7 +141,7 @@ public class LandingBuildQueueTests
         apiClient.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
         var queued = await apiClient.PostAsJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", grassTile.Q, grassTile.R),
+            new QueueBuildRequest("reindeerherder", grassTile.Q, grassTile.R),
             cancellationToken);
         queued.EnsureSuccessStatusCode();
 
@@ -156,7 +156,7 @@ public class LandingBuildQueueTests
         var settlementAfterQueue = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
         var order = Assert.Single(settlementAfterQueue!.Queue);
-        Assert.Equal("farm", order.Building);
+        Assert.Equal("reindeerherder", order.Building);
 
         // Issue #95's own test plan: showing the countdown isn't the whole
         // story — the onboarding tray's "Building 2" step must actually
@@ -172,7 +172,7 @@ public class LandingBuildQueueTests
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
         Assert.Empty(settlementAfterCompletion!.Queue);
-        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "farm");
+        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "reindeerherder");
 
         Assert.Empty(consoleErrors);
     }

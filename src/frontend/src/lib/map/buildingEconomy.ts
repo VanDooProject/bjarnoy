@@ -21,6 +21,7 @@ export type BuildingModifier =
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain' | 'bog' | 'lake'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
+  | { kind: 'odinFavour'; buildTimePercent: number; visionRings: number }
   | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' | 'iron' };
 
 /**
@@ -102,6 +103,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'lumberjack':
     case 'quarry':
     case 'claybrickworks':
+    case 'reindeerherder':
     case 'farm':
     case 'pumpkinfarm':
     case 'fishinghut':
@@ -128,6 +130,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'shrineoffreyja':
     case 'shrineofullr':
     case 'shrineofnjord':
+    case 'odinstatue':
       return 5;
     default:
       return 0;
@@ -144,10 +147,46 @@ export function maxTowers(longhouseLevel: number): number {
 }
 
 /**
- * Mirrors `BuildingCatalogue.AdditionalStorageHouseLevel`: an additional
- * storage house may only be placed once one already stands at this level.
+ * Every shrine building type — `BuildingCatalogue.GodOf(type) is not null`. A
+ * settlement raises at most one of them in total
+ * (`BuildRejection.SettlementAlreadyHasShrine`).
  */
-export const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
+export const SHRINE_BUILDING_TYPES: ReadonlySet<string> = new Set([
+  'shrineofthor',
+  'shrineoffreyja',
+  'shrineofullr',
+  'shrineofnjord',
+  'odinstatue',
+]);
+
+/**
+ * Mirrors `Settlement.BuildTimeFactor`: Odin's Wisdom takes 2% off every
+ * build's duration per Odin Statue level (levels past 5 keep level 5's 10%).
+ */
+export function wisdomBuildTimeFactor(odinLevel: number): number {
+  return 1 - 0.02 * Math.min(Math.max(odinLevel, 0), 5);
+}
+
+/**
+ * Mirrors `Settlement.VisionBonusRings`: Odin's Ravens add two rings of fog
+ * vision per Odin Statue level (10 at level 5) to the settlement's claim, its
+ * towers and its travelling armies.
+ */
+export function ravensRings(odinLevel: number): number {
+  return 2 * Math.min(Math.max(odinLevel, 0), 5);
+}
+
+/**
+ * Mirrors `BuildingCatalogue.AdditionalStorageHouseRequirement`: with
+ * `existing` storage houses held (standing plus queued), one more needs
+ * `min(existing, 4)` of them at level `min(10 + 5·(existing − 1), 25)` — 1 at
+ * L10, 2 at L15, 3 at L20, then 4 at L25 (the max), after which any number
+ * more is allowed. `{ count: 0, level: 0 }` for the first house.
+ */
+export function additionalStorageHouseRequirement(existing: number): { count: number; level: number } {
+  if (existing < 1) return { count: 0, level: 0 };
+  return { count: Math.min(existing, 4), level: Math.min(10 + 5 * (existing - 1), 25) };
+}
 
 /** Mirrors `BuildingCatalogue.BogOreWorksIronAtLevelOne`: iron per hour of a level-1 bog-ore works. */
 export const BOG_ORE_WORKS_IRON_AT_LEVEL_ONE = 20;
@@ -207,12 +246,14 @@ export function buildingStatsFor(
   onLake = false,
 ): BuildingLevelStats {
   switch (type) {
-    // Farm and PumpkinFarm are deliberately excluded from BuildingCatalogue.cs's
-    // Boosts table (they work a fixed field, not a resource that concentrates
-    // nearby) — no terrain or water adjacency changes their output. Farm is
-    // always buildable; PumpkinFarm is gated to Pumpkin-soil islands (see
-    // ringCatalogue.ts's cropAllowedHere) and yields more, the "more fertile"
-    // island's bonus crop.
+    // ReindeerHerder, Farm and PumpkinFarm are deliberately excluded from
+    // BuildingCatalogue.cs's Boosts table (they work a herd or a fixed field,
+    // not a resource that concentrates nearby) — no terrain or water adjacency
+    // changes their output. The herder is the starting food building; Farm is
+    // buildable everywhere from LH 4; PumpkinFarm is gated to Pumpkin-soil
+    // islands (see ringCatalogue.ts's cropAllowedHere) and yields more, the
+    // "more fertile" island's bonus crop.
+    case 'reindeerherder':
     case 'farm': {
       const workersCap = level * 4;
       return {
@@ -344,6 +385,17 @@ export function buildingStatsFor(
               : 'shipAttack';
       return { modifier: { kind: 'shrineFavour', percent: favour, domain } };
     }
+    // Mirrors ShrineCatalogue.Favour(Odin): Wisdom takes 2% off every build per
+    // level, Ravens adds two rings of vision per level (levels past 5 keep the
+    // level-5 favour).
+    case 'odinstatue':
+      return {
+        modifier: {
+          kind: 'odinFavour',
+          buildTimePercent: Math.round((1 - wisdomBuildTimeFactor(level)) * 100),
+          visionRings: ravensRings(level),
+        },
+      };
     // No production or storage of its own yet — its mead is meant for a
     // future morale-boost mechanic, same "no output" shape as townsquare/
     // druidhut below (see BuildingCatalogue.cs's Meadery doc comment).
@@ -396,6 +448,7 @@ const PRODUCER_COST: ResourceLine = { wood: 50, stone: 40, food: 15, iron: 0 };
 const SMALL_BUILDING_COST: ResourceLine = { wood: 100, stone: 80, food: 0, iron: 0 };
 const BASE_COST: Record<BuildingKind, ResourceLine> = {
   hut: PRODUCER_COST,
+  reindeerherder: PRODUCER_COST,
   farm: PRODUCER_COST,
   pumpkinfarm: PRODUCER_COST,
   fishinghut: PRODUCER_COST,
@@ -410,6 +463,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineofullr: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineofnjord: { wood: 180, stone: 140, food: 60, iron: 0 },
+  odinstatue: { wood: 180, stone: 140, food: 60, iron: 0 },
   storagehouse: { wood: 80, stone: 60, food: 0, iron: 0 },
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
   archeryrange: { wood: 140, stone: 100, food: 0, iron: 0 },

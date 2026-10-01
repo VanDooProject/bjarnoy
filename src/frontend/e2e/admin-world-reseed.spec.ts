@@ -51,6 +51,9 @@ const WORLD = {
     mountainRockiness: 0.72,
     forestRockiness: 0.52,
     minimumIslandTiles: 6,
+    // A world created before the island-density change: legacy reach budget, no min gap.
+    islandMaxReach: 0,
+    islandMinGap: 0,
   },
 };
 

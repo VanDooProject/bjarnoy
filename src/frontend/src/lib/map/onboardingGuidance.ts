@@ -7,8 +7,8 @@ import { hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
 import type { Terrain, Tile } from './types';
 
 /** The two buildings the onboarding ring guides the player toward — see LandingView.vue's own GUIDED_BUILD_TERRAIN. */
-export type GuidedBuildType = 'farm' | 'lumberjack';
-export const GUIDED_BUILD_TYPES: readonly GuidedBuildType[] = ['farm', 'lumberjack'];
+export type GuidedBuildType = 'reindeerherder' | 'lumberjack';
+export const GUIDED_BUILD_TYPES: readonly GuidedBuildType[] = ['reindeerherder', 'lumberjack'];
 
 export type ChecklistRowKey = 'longhouse' | GuidedBuildType;
 export type ChecklistRowState = 'done' | 'current' | 'upcoming';
@@ -35,7 +35,7 @@ const TOTAL_STEPS = 1 + GUIDED_BUILD_TYPES.length;
  * (`WorldModel.listPlacedBuildings`, surfaced as `hud.placedBuildingTypes`)
  * rather than a separately tracked step counter that could drift from the
  * real build order. The ring only requires the clicked tile's terrain to
- * match a guided type (grass -> farm, forest -> lumberjack), so the player
+ * match a guided type (grass -> reindeerherder, forest -> lumberjack), so the player
  * can place either one first — a row is "done" the moment its type appears
  * anywhere in `placedTypes`, regardless of order.
  */
@@ -86,7 +86,7 @@ export function nextGuidedType(placedTypes: readonly Tile['buildingType'][]): Gu
  * domain fact both the ring and the map pointer need to agree on.
  */
 export const GUIDED_BUILD_TERRAIN: Record<GuidedBuildType, Terrain> = {
-  farm: 'grass',
+  reindeerherder: 'grass',
   lumberjack: 'forest',
 };
 
@@ -128,7 +128,7 @@ export type RingNoteReason =
   | { kind: 'neitherFits' };
 
 /**
- * The onboarding ring only ever guides toward farm (grass) or lumberjack
+ * The onboarding ring only ever guides toward the reindeer herder (grass) or lumberjack
  * (forest) — different terrain each — so a given hex fits at most one of
  * them. This is the decision `LandingView.vue`'s ring note explains; kept
  * pure (no i18n) so the actual "which one is dim" logic is testable apart

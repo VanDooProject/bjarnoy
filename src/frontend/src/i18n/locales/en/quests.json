@@ -11,7 +11,7 @@
   "items": {
     "producers3": {
       "title": "Build 3 resource producers",
-      "hint": "Place Lumberjacks, Quarries or Farms on free hexes and let them finish building."
+      "hint": "Place Lumberjacks, Quarries or Reindeer Herders on free hexes and let them finish building."
     },
     "longhouse2": {
       "title": "Upgrade your Longhouse to level 2",
@@ -23,7 +23,7 @@
     },
     "producers6": {
       "title": "Build 6 resource producers",
-      "hint": "Keep adding Lumberjacks, Quarries and Farms until six of them stand."
+      "hint": "Keep adding Lumberjacks, Quarries and Reindeer Herders until six of them stand."
     },
     "longhouse3": {
       "title": "Upgrade your Longhouse to level 3",

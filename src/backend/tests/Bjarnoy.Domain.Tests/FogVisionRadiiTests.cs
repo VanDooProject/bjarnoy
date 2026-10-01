@@ -59,4 +59,20 @@ public class FogVisionRadiiTests
         Assert.Equal(FogVisionRadii.ExploredRadius(3), source.ExploredRadius);
         Assert.Equal(FogVisionRadii.VisibleRadius(3), source.VisibleRadius);
     }
+
+    [Fact]
+    public void Odins_ravens_add_rings_to_the_settlements_and_a_towers_explored_and_visible_radii()
+    {
+        var plain = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel: 3);
+        var ravens = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel: 3, bonusRings: 10);
+        var plainTower = FogVisionRadii.ToTowerVisionSource(new HexCoord(2, 0), towerLevel: 2);
+        var ravensTower = FogVisionRadii.ToTowerVisionSource(new HexCoord(2, 0), towerLevel: 2, bonusRings: 10);
+
+        Assert.Equal(plain.ExploredRadius + 10, ravens.ExploredRadius);
+        Assert.Equal(plain.VisibleRadius + 10, ravens.VisibleRadius);
+        Assert.Equal(plainTower.ExploredRadius + 10, ravensTower.ExploredRadius);
+        Assert.Equal(plainTower.VisibleRadius + 10, ravensTower.VisibleRadius);
+        Assert.Equal(FogVisionRadii.ArmyVisionRadiusHexes + 10, FogVisionRadii.ArmyVisionRadius(10));
+        Assert.Equal(FogVisionRadii.ArmyVisionRadiusHexes, FogVisionRadii.ArmyVisionRadius());
+    }
 }

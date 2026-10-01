@@ -23,6 +23,43 @@ public class ShrineCatalogueTests
         Assert.Equal(0, favour.StorageBonus, 6);
     }
 
+    [Theory]
+    [InlineData(1, 0.02, 2)]
+    [InlineData(3, 0.06, 6)]
+    [InlineData(5, 0.10, 10)]
+    [InlineData(9, 0.10, 10)] // Levels past MaxEffectLevel keep the level-5 favour.
+    public void Odin_grants_wisdom_and_ravens_per_level_and_nothing_else(int level, double wisdom, int ravens)
+    {
+        var favour = ShrineCatalogue.Favour(GodType.Odin, level);
+
+        Assert.Equal(wisdom, favour.BuildTimeReduction, 6);
+        Assert.Equal(ravens, favour.VisionBonusRings);
+        Assert.True(favour.ProductionBonus == ResourceAmounts.Zero);
+        Assert.Equal(0, favour.StorageBonus, 6);
+        Assert.Equal(0, favour.LandAttackBonus, 6);
+        Assert.Equal(0, favour.ShipAttackBonus, 6);
+    }
+
+    [Fact]
+    public void Only_odin_grants_wisdom_or_ravens()
+    {
+        foreach (var god in new[] { GodType.Thor, GodType.Freyja, GodType.Ullr, GodType.Njord })
+        {
+            var favour = ShrineCatalogue.Favour(god, 5);
+            Assert.Equal(0, favour.BuildTimeReduction, 6);
+            Assert.Equal(0, favour.VisionBonusRings);
+        }
+    }
+
+    [Fact]
+    public void The_stacking_cap_leaves_wisdom_and_ravens_alone()
+    {
+        var capped = ShrineCatalogue.Favour(GodType.Odin, 5).Capped(0.5, 0.5, 0.5);
+
+        Assert.Equal(0.10, capped.BuildTimeReduction, 6);
+        Assert.Equal(10, capped.VisionBonusRings);
+    }
+
     [Fact]
     public void Thor_boosts_land_attack_only()
     {

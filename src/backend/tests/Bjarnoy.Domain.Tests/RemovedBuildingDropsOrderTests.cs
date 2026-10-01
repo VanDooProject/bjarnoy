@@ -42,7 +42,7 @@ public sealed class RemovedBuildingDropsOrderTests
         // the admin's edit on the next settle.
         var settlement = Found();
         var coord = new HexCoord(1, 0);
-        var decision = settlement.PlanBuild(BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var decision = settlement.PlanBuild(BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7());
         Assert.True(decision.Accepted);
         var queued = settlement.Enqueue(decision.Order!, T0);
         Assert.Single(queued.Queue);
@@ -64,7 +64,7 @@ public sealed class RemovedBuildingDropsOrderTests
     {
         var settlement = Found();
         var coord = new HexCoord(1, 0);
-        var decision = settlement.PlanBuild(BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var decision = settlement.PlanBuild(BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7());
         var queued = settlement.Enqueue(decision.Order!, T0);
 
         var result = queued.RazeBuilding(coord, T0);
@@ -80,7 +80,7 @@ public sealed class RemovedBuildingDropsOrderTests
     {
         var settlement = Found();
         var coord = new HexCoord(1, 0);
-        var decision = settlement.PlanBuild(BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var decision = settlement.PlanBuild(BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7());
         var queued = settlement.Enqueue(decision.Order!, T0);
 
         var result = queued.PlaceBuilding(coord, BuildingType.Quarry, 1, Terrain.Mountain, isCoastalWater: false, T0);
@@ -104,10 +104,10 @@ public sealed class RemovedBuildingDropsOrderTests
         // Longhouse level 2: the level-2 upgrade needs a level-2 Longhouse.
         var settlement = Found(longhouseLevel: 2);
         var coord = new HexCoord(1, 0);
-        var first = settlement.PlanBuild(BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var first = settlement.PlanBuild(BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7());
         var built = settlement.Enqueue(first.Order!, T0).SettleTo(first.Order!.CompletesAt!.Value).Settlement;
 
-        var upgrade = built.PlanBuild(BuildingType.Farm, coord, Terrain.Grass, first.Order!.CompletesAt!.Value, Guid.CreateVersion7());
+        var upgrade = built.PlanBuild(BuildingType.ReindeerHerder, coord, Terrain.Grass, first.Order!.CompletesAt!.Value, Guid.CreateVersion7());
         Assert.True(upgrade.Accepted);
         var withUpgrade = built.Enqueue(upgrade.Order!, first.Order!.CompletesAt!.Value);
         Assert.Single(withUpgrade.Queue);
@@ -139,7 +139,7 @@ public sealed class RemovedBuildingDropsOrderTests
         // siege; built directly rather than by stepping through several real
         // completions, since only the "does the order survive" behaviour is
         // under test here, not the levelling path itself.
-        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 9), (BuildingType.Farm, 8)]);
+        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 9), (BuildingType.ReindeerHerder, 8)]);
         var coord = new HexCoord(1, 0);
         var settlement = new Settlement
         {
@@ -149,7 +149,7 @@ public sealed class RemovedBuildingDropsOrderTests
             Buildings =
             [
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 9),
-                new PlacedBuilding(coord, BuildingType.Farm, 8),
+                new PlacedBuilding(coord, BuildingType.ReindeerHerder, 8),
             ],
             // A fixed, generous capacity rather than the catalogue's own
             // (which would clamp a level-9 Farm's cost out of reach) — this
@@ -158,7 +158,7 @@ public sealed class RemovedBuildingDropsOrderTests
                 ResourceAmounts.Uniform(1_000_000), production, ResourceAmounts.Uniform(1_000_000), T0),
         };
 
-        var upgrade = settlement.PlanBuild(BuildingType.Farm, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var upgrade = settlement.PlanBuild(BuildingType.ReindeerHerder, coord, Terrain.Grass, T0, Guid.CreateVersion7());
         Assert.True(upgrade.Accepted, $"expected accept, got {upgrade.Rejection}");
         var withUpgrade = settlement.Enqueue(upgrade.Order!, T0);
         Assert.Single(withUpgrade.Queue);

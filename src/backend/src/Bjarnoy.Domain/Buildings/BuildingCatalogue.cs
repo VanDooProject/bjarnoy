@@ -43,14 +43,15 @@ public static class BuildingCatalogue
         BuildingType.Longhouse => 30,
         BuildingType.Lumberjack or BuildingType.Quarry or BuildingType.ClayBrickworks
             or BuildingType.Farm or BuildingType.PumpkinFarm or BuildingType.FishingHut
-            or BuildingType.BogOreWorks or BuildingType.StorageHouse => 25,
+            or BuildingType.ReindeerHerder or BuildingType.BogOreWorks or BuildingType.StorageHouse => 25,
         BuildingType.Barracks or BuildingType.ArcheryRange or BuildingType.Dockyard
             or BuildingType.TownSquare or BuildingType.CartWorkshop or BuildingType.DruidHut
             or BuildingType.Smithy or BuildingType.Meadery or BuildingType.Sawmill
             or BuildingType.CropMill or BuildingType.Hammerschmiede => 20,
         BuildingType.Tower or BuildingType.GreatStorehouse => 10,
         BuildingType.ShrineOfThor or BuildingType.ShrineOfFreyja
-            or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord => 5,
+            or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord
+            or BuildingType.OdinStatue => 5,
         _ => 0,
     };
 
@@ -93,10 +94,9 @@ public static class BuildingCatalogue
     /// building each; the late game comes in tiers (LH 15, 20, 25).
     /// </para>
     /// <para>
-    /// Farm stays at LH 1 for now: the Reindeer Herder that replaces it as the
-    /// starting food building arrives in a later change, which moves Farm to
-    /// LH 4. Pumpkin Farm is at LH 4 already and stays soil-gated (see
-    /// <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
+    /// The Reindeer Herder is the starting food building (LH 1). Farm and Pumpkin
+    /// Farm both unlock at LH 4 behind a level-3 Herder; Pumpkin Farm stays
+    /// soil-gated (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
     /// </para>
     /// </remarks>
     private static readonly IReadOnlyDictionary<BuildingType, int> UnlockLevels =
@@ -106,9 +106,10 @@ public static class BuildingCatalogue
             [BuildingType.Quarry] = 1,
             [BuildingType.ClayBrickworks] = 1,
             [BuildingType.StorageHouse] = 1,
-            [BuildingType.Farm] = 1,
+            [BuildingType.ReindeerHerder] = 1,
             [BuildingType.FishingHut] = 2,
             [BuildingType.Tower] = 3,
+            [BuildingType.Farm] = 4,
             [BuildingType.PumpkinFarm] = 4,
             [BuildingType.Barracks] = 5,
             [BuildingType.BogOreWorks] = 6,
@@ -127,6 +128,7 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfFreyja] = 25,
             [BuildingType.ShrineOfNjord] = 25,
             [BuildingType.ShrineOfThor] = 25,
+            [BuildingType.OdinStatue] = 25,
         };
 
     /// <summary>
@@ -149,6 +151,7 @@ public static class BuildingCatalogue
         BuildingType.Lumberjack,
         BuildingType.Quarry,
         BuildingType.ClayBrickworks,
+        BuildingType.ReindeerHerder,
         BuildingType.Farm,
         BuildingType.PumpkinFarm,
         BuildingType.FishingHut,
@@ -156,10 +159,15 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// A settlement may only place an additional storage house once one
-    /// already stands at this level.
+    /// What a settlement must already hold before it may place one more storage
+    /// house, given it has <paramref name="existing"/> (standing plus queued) of
+    /// them: <c>min(existing, 4)</c> storage houses at level
+    /// <c>min(10 + 5·(existing − 1), 25)</c>. So 1 house at L10 unlocks the
+    /// second, 2 at L15 the third, 3 at L20 the fourth, and four maxed (L25)
+    /// houses unlock any number more. Returns <c>(0, 0)</c> for the first house.
     /// </summary>
-    public const int AdditionalStorageHouseLevel = 10;
+    public static (int Count, int Level) AdditionalStorageHouseRequirement(int existing) =>
+        existing < 1 ? (0, 0) : (Math.Min(existing, 4), Math.Min(10 + 5 * (existing - 1), 25));
 
     /// <summary>
     /// The Longhouse level needed to build <paramref name="type"/> at
@@ -185,15 +193,14 @@ public static class BuildingCatalogue
     /// Every entry must be met, not any one of them. The lines are: Tower →
     /// Barracks → Archery Range → Weaponsmith (Smithy) → Shrine of Thor for
     /// the military; Fishing Hut → Dockyard → Shrine of Njörd for the water;
-    /// Lumberjack → Sawmill → Shrine of Ullr and Farm → Meadery / Crop Mill →
+    /// Lumberjack → Sawmill → Shrine of Ullr and Reindeer Herder → Farm → Meadery / Crop Mill →
     /// Shrine of Freyja for the land; Town Square → Cart Workshop / Druid Hut
     /// for the civic line; Storage House → Great Storehouse for storage. See
     /// <c>docs/design/economy.md</c> §5.
     /// </para>
     /// <para>
-    /// Storage House, Quarry, Clay Brickworks, Lumberjack, Tower, Town Square
-    /// and Pumpkin Farm gate nothing on their own way in (Pumpkin Farm stays
-    /// soil-gated only): Quarry needs a Mountain hex, and
+    /// Storage House, Quarry, Clay Brickworks, Lumberjack, Reindeer Herder,
+    /// Tower and Town Square gate nothing on their own way in: Quarry needs a Mountain hex, and
     /// <see cref="World.WorldGenerator"/> does not guarantee one within reach
     /// of a starting position — anything behind a Quarry would be unreachable
     /// for an unlucky map roll rather than merely expensive.
@@ -202,6 +209,8 @@ public static class BuildingCatalogue
     private static readonly IReadOnlyDictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>> PrerequisiteTable =
         new Dictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>>
         {
+            [BuildingType.Farm] = [new(BuildingType.ReindeerHerder, 3)],
+            [BuildingType.PumpkinFarm] = [new(BuildingType.ReindeerHerder, 3)],
             [BuildingType.Barracks] = [new(BuildingType.Tower, 3)],
             [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 5)],
             [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 5)],
@@ -217,6 +226,9 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
             [BuildingType.ShrineOfNjord] = [new(BuildingType.Dockyard, 10)],
             [BuildingType.ShrineOfThor] = [new(BuildingType.Smithy, 5)],
+            // A settlement holds only one shrine, so Odin cannot ask for
+            // another one as a feeder; the Druid Hut is the civic line's end.
+            [BuildingType.OdinStatue] = [new(BuildingType.DruidHut, 10)],
         };
 
     /// <summary>
@@ -248,10 +260,12 @@ public static class BuildingCatalogue
             BuildingType.Longhouse => Longhouse(level),
             BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 40, 0, 0, 0)),
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 40, 0, 0)),
-            // Farm is the settlement's always-available staple, buildable on
-            // any island regardless of soil. It stays at LH 1 until the
-            // Reindeer Herder replaces it as the starting food building (a
-            // later change moves Farm to LH 4).
+            // The starting food building: any grass, any island, LH 1. No
+            // terrain boost, like Farm (a herd is not a concentrating resource).
+            BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 40, 0)),
+            // Buildable on any island regardless of soil, from LH 4 behind a
+            // level-3 Reindeer Herder (it and PumpkinFarm are one tech-tree
+            // card, split into two types only by their soil rule).
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 40, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
@@ -268,6 +282,7 @@ public static class BuildingCatalogue
             BuildingType.ShrineOfFreyja => Shrine(type, level),
             BuildingType.ShrineOfUllr => Shrine(type, level),
             BuildingType.ShrineOfNjord => Shrine(type, level),
+            BuildingType.OdinStatue => Shrine(type, level),
             BuildingType.GreatStorehouse => GreatStorehouse(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
@@ -478,6 +493,7 @@ public static class BuildingCatalogue
         BuildingType.ShrineOfFreyja => GodType.Freyja,
         BuildingType.ShrineOfUllr => GodType.Ullr,
         BuildingType.ShrineOfNjord => GodType.Njord,
+        BuildingType.OdinStatue => GodType.Odin,
         _ => null,
     };
 

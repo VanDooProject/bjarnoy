@@ -408,6 +408,8 @@ public static class AdminWorldEndpoints
         MountainRockiness = generation?.MountainRockiness ?? current.MountainRockiness,
         ForestRockiness = generation?.ForestRockiness ?? current.ForestRockiness,
         MinimumIslandTiles = generation?.MinimumIslandTiles ?? current.MinimumIslandTiles,
+        IslandMaxReach = generation?.IslandMaxReach ?? current.IslandMaxReach,
+        IslandMinGap = generation?.IslandMinGap ?? current.IslandMinGap,
     };
 
     /// <summary>

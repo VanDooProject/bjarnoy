@@ -197,6 +197,24 @@ public enum BuildingType
     /// <see cref="Sawmill"/> raises Lumberjacks. Unlocks at Longhouse level 20 behind a level-10 bog-ore works.
     /// </summary>
     Hammerschmiede = 27,
+
+    /// <summary>
+    /// Food, on grass — the starting food building, unlocked at Longhouse 1.
+    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/> now come later (LH 4,
+    /// behind a level-3 Reindeer Herder). Appended at the end so persisted
+    /// integers do not shift.
+    /// </summary>
+    ReindeerHerder = 28,
+
+    /// <summary>
+    /// Raised to Odin (<see cref="Shrines.GodType.Odin"/>), on grass, at
+    /// Longhouse 25 behind a level-10 <see cref="DruidHut"/>. Counts as a shrine:
+    /// a settlement holds only one shrine in total. Its favour is not a
+    /// production or attack bonus but two effects on its own settlement —
+    /// Wisdom (shorter builds) and Ravens (wider vision). Appended at the end so
+    /// persisted integers do not shift.
+    /// </summary>
+    OdinStatue = 29,
 }
 
 public static class BuildingTypeExtensions
@@ -231,6 +249,8 @@ public static class BuildingTypeExtensions
         BuildingType.ClayBrickworks => "claybrickworks",
         BuildingType.BogOreWorks => "bogoreworks",
         BuildingType.Hammerschmiede => "hammerschmiede",
+        BuildingType.ReindeerHerder => "reindeerherder",
+        BuildingType.OdinStatue => "odinstatue",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

@@ -114,6 +114,11 @@ function formatModifier(modifier: BuildingModifier): string {
         percent: modifier.percent,
         domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
       });
+    case 'odinFavour':
+      return t('hud.hoverTooltip.modifierOdinFavour', {
+        percent: modifier.buildTimePercent,
+        rings: modifier.visionRings,
+      });
     case 'radiusBoost':
       return t('hud.hoverTooltip.modifierRadiusBoost', {
         percent: modifier.percent,
