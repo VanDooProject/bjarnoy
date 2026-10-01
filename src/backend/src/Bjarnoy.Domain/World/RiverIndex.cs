@@ -26,7 +26,7 @@ public sealed class RiverIndex
     /// <summary>True when a river tile stands on <paramref name="hex"/>.</summary>
     public bool IsRiver(HexCoord hex) => _tiles.ContainsKey(hex);
 
-    /// <summary>True when the river tile on <paramref name="hex"/> is wide (impassable to a land army); see <see cref="RiverArms"/>.</summary>
+    /// <summary>True when the river tile on <paramref name="hex"/> is wide (impassable to a land army); the rule is <c>RiverGenerator.IsWideRiver</c> (at least two river-width arms), the one valley streams are generated against.</summary>
     public bool IsWide(HexCoord hex)
     {
         if (!_tiles.TryGetValue(hex, out var tile))
@@ -36,7 +36,7 @@ public sealed class RiverIndex
 
         if (!_wide.TryGetValue(hex, out var wide))
         {
-            wide = RiverArms.IsWide(tile, TileAt);
+            wide = RiverGenerator.IsWideRiver(tile, _tiles);
             _wide[hex] = wide;
         }
 

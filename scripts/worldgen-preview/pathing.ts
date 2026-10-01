@@ -203,6 +203,7 @@ function contextFor(scn: Scenario, pw: PathingWorld, wall: WallSet, army: 'frien
   return pathContext(pw, {
     wideRiversImpassable: rules.wideRivers ?? true,
     mountainsImpassable: rules.mountains ?? true,
+    streamsIgnoreTerrain: true,
     blocked: palisade ? (c) => walls.has(coordKey(c)) : undefined,
     friendlyGate: army === 'friendly' ? (c) => gates.has(coordKey(c)) : undefined,
     halfOpen: open ? (c) => open.has(coordKey(c)) : undefined,

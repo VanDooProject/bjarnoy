@@ -80,7 +80,7 @@ public static class HexPathfinder
 
     /// <summary>
     /// Flat cost of crossing a stream, on top of the base 1.0 step: a land army entering a
-    /// crossable river hex (one that is not a wide river — see <see cref="RiverArms"/>) pays
+    /// crossable river hex (one that is not a wide river — see <c>RiverGenerator.IsWideRiver</c>) pays
     /// <c>1.0 + RiverCrossingCost</c> whatever terrain lies under it, instead of the terrain
     /// cost plus this penalty (issue #159 part A set the penalty; the movement rules made wide
     /// rivers and mountains impassable and the stream cost flat). Twice the median generated
@@ -178,7 +178,7 @@ public static class HexPathfinder
     /// regardless of this predicate.
     /// </param>
     /// <param name="isWideRiver">
-    /// Which river hexes are wide (<see cref="RiverArms.IsWide"/>) and so impassable to a land
+    /// Which river hexes are wide (<c>RiverIndex.IsWide</c>) and so impassable to a land
     /// army. Only consulted for hexes <paramref name="isRiver"/> accepts. <see langword="null"/>
     /// (the default) treats every river hex as a crossable stream.
     /// </param>

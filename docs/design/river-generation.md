@@ -345,6 +345,54 @@ knows which arm is the stream. Pixel-measured against `isoTopPoints`: file D car
 
 The spring art (`mountaintile_corrie_spring`, `_saddleback_spring`) hands over at stream width already.
 
+### Valley streams (green islands)
+
+Land armies cannot cross mountains or wide rivers, and a stream is walkable at a flat cost whatever lies under it
+(the movement rules previewed in `scripts/worldgen-preview/`, "The pathing preview"). A valley closed in by mountains
+alone is then cut off, and no ship or bridge can reach it. Decided: **every mountain-enclosed valley of at least
+`ValleyMinHexes` (100) hexes gets a stream that starts inside it and runs out through the mountains**; smaller
+valleys stay lost. `RiverGenerator.Valleys.cs` (`CarveValleyStreams`) and `carveValleyStreams` in `riverGenerator.ts`
+are byte-identical ports; the pass runs per island in the generator's own island order, after the island's rivers and
+bogs are final (including the width pass) and before giants, camps and start positions.
+
+1. **Walkable regions.** Flood-fill the island's walkable land: land that is not mountain (bog moss included), plus every
+   river tile that is not wide. A tile is **wide** when at least two of its arms are river width (`IsWideRiver`, the
+   twin of the preview's `isWideRiverTile`: an in-arm is river width when the upstream tile flows out as river, a lake or
+   creek upstream feeds a river tile at river width; the out-arm, and a mouth's sea side, when the tile itself does). Sea
+   and lakes are not walkable. Regions are found in (q, r) order; the largest is the main region.
+2. **Candidates.** A non-main region of at least 100 hexes whose every non-walkable border hex is a mountain: no sea,
+   lake or wide river on its border. Carved largest first, then by lowest (q, r) of the region. Each candidate is looked
+   up again when its turn comes: one an earlier stream already connected is counted (`ValleysJoined`) and left alone.
+3. **The path.** Over mountain hexes only, from a valley hex to the nearest reachable hex (the main region, which by then
+   includes every valley connected before): shortest first, then the lowest target (q, r), then the lowest start (q, r);
+   the path itself follows the lowest direction index at every step, so no hash-set order is involved (a forward layer
+   search finds the length and the target, a backward one from the target the way in). The target is plain land (off the
+   bogland, not on the coast) or a plain one-inflow river tile (never a spring, mouth, confluence, wide tile or a tile a
+   bog creek feeds or takes) at which `RiverConfluence` can draw the Y. A mountain hex on the path has no river beside it,
+   except the last, which has exactly one - its target - and a start hex has none.
+4. **The stream.** Into a river: the path becomes a tributary (`merged`, like any trace that ends on a trunk). Onto plain
+   land: the drainage tracer carries on from the target (`TraceDrainage` with the arrival direction, on a drainage that
+   blocks the bogland, the new hexes and their neighbours) to a river, a lake or the sea. The spring is the valley hex and
+   flows towards the mountains.
+5. **Skipped (and counted) when it does not fit:** the trace fails (`ValleySkippedTrace`); the layout is wrong
+   (`ValleySkippedLayout`: a hex twice, on the bogland, a run beside itself or beside a river it does not drain into -
+   adjacent tiles must reach the same mouth, the preview's "parallel runs" measure); the width pass drops or changes
+   what it should keep (`ValleySkippedWidths`: every old river tile and the whole stream must survive, so no truncated
+   branch); it breaks a map rule (`ValleySkippedRules`: `BogRules` R1-R12 may not get worse); or it cuts land off
+   (`ValleySkippedCutsOff`: the valley must be reachable and no still-walkable hex that was reachable may stop being so, which
+   a stream widening to river at a new confluence can do to the land beside it). With no path at all
+   there is `ValleySkippedNoPath`. A skipped valley is left as it was; nothing is retried.
+
+Measured on seeds 1-8 at radius 1000 (`pathing-cutoff.ts`): 14 mountain-only valleys of 100+ hexes (and none other
+qualifies, wide-river valleys are excluded by the decision), 12 carved, 2 skipped (one trace without a drawable
+junction, one that would have widened the trunk it joins and cut a bank off); cut-off land 8,190 hexes (0.92 % of
+walkable) before, 6,300 (0.71 %) after. Every carve there ran from the valley over 1-3 mountain hexes to plain land and on
+by the drainage tracer. `RiverStats.ValleyCandidates`, `ValleyStreams`, `ValleyStreamsIntoRivers`, `ValleysJoined` and the
+`ValleySkipped*` counters report it (the preview prints them). Tests: `ValleyStreamTests` / `valleyStreams.test.ts` on a
+hand-built island (a ring of mountains round a 127 hex valley gets exactly one stream out that ends in the sea; one
+meeting a river on the far side joins it; a 99 hex valley is left alone; a wide river on the border makes it no candidate;
+determinism) and the `green_island_valley_stream` scenario of the shared golden fixture.
+
 ### Mountain ranges and forest patches (terrain)
 
 At island scale, single-hex rockiness noise gave salt-and-pepper mountains. `TerrainAt`/`terrainAt` now make a

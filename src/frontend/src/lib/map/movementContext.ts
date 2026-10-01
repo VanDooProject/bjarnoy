@@ -1,9 +1,9 @@
 // The PathContext the game prices land routes with: the world's own terrain and river tiles, the backend's
-// movement rules (WorldResponse.movement) and the wide-river rule (riverArms.ts). Built once per range-tint
+// movement rules (WorldResponse.movement) and the wide-river rule (isWideRiverTile, riverGenerator.ts). Built once per range-tint
 // recompute / route query, so wideness is memoised per hex.
 import { coordKey, type AxialCoord } from '../hex/coords';
 import type { MovementRules, PathContext } from './hexPath';
-import { isWideRiverTile } from './riverArms';
+import { isWideRiverTile } from './riverGenerator';
 import type { RiverTile, Terrain } from './types';
 
 export interface MovementWorldView {

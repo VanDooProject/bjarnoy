@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/river-pathing-golden.json';
 import { coordKey } from '../hex/coords';
 import { findPath, hoursFrom, pathCost, reachableRange, type PathContext } from './hexPath';
-import { isWideRiverTile } from './riverArms';
+import { isWideRiverTile } from './riverGenerator';
 import type { RiverTile, Terrain } from './types';
 
 interface HexCoordDto {

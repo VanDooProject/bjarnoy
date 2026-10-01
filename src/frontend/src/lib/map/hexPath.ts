@@ -52,7 +52,7 @@ export interface PathRestrictions {
 export interface PathContext {
   terrainAt(c: AxialCoord): Terrain;
   isRiver(c: AxialCoord): boolean;
-  /** Which river hexes are wide (`isWideRiverTile`, riverArms.ts): impassable to a land army; every other river hex is a crossable stream. */
+  /** Which river hexes are wide (`isWideRiverTile`, riverGenerator.ts): impassable to a land army; every other river hex is a crossable stream. */
   isWideRiver(c: AxialCoord): boolean;
   rules: MovementRules;
   /** Army speed (hexes/hour) already scaled by the world's speedFactor. */

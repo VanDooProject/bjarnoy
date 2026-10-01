@@ -1,4 +1,4 @@
-// Regenerates src/shared/river-pathing-golden.json from the frontend pathfinder (hexPath.ts) and wide-river rule (riverArms.ts).
+// Regenerates src/shared/river-pathing-golden.json from the frontend pathfinder (hexPath.ts) and wide-river rule (isWideRiverTile, riverGenerator.ts).
 //   cd src/frontend && npx tsx ../../scripts/regen-goldens/river-pathing-golden.ts
 // The terrain patches, river tiles and cases below are the INPUTS; every expected path and hour figure is computed here by the
 // frontend implementation and then asserted independently by HexPathfinderGoldenTests.cs (backend) and hexPath.golden.test.ts.
@@ -7,7 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { coordKey, type AxialCoord } from '../../src/frontend/src/lib/hex/coords';
 import { findPath, hoursFrom, pathCost, reachableRange, type PathContext } from '../../src/frontend/src/lib/map/hexPath';
-import { isWideRiverTile } from '../../src/frontend/src/lib/map/riverArms';
+import { isWideRiverTile } from '../../src/frontend/src/lib/map/riverGenerator';
 import type { RiverTile, Terrain } from '../../src/frontend/src/lib/map/types';
 
 const out = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/shared/river-pathing-golden.json');
