@@ -175,6 +175,7 @@ const wallFrame = computed(() => {
       </template>
     </TopBar>
     <main class="body docs-scale">
+      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.wastedLands.title') }}</h1>
       <p class="intro">{{ $t('docs.wastedLands.intro') }}</p>
 
@@ -670,5 +671,16 @@ h2 {
   color: #20160a;
   background: var(--gold);
   border-color: var(--gold);
+}
+.breadcrumb {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.breadcrumb:hover {
+  color: var(--gold);
+  text-decoration: underline;
 }
 </style>

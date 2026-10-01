@@ -138,6 +138,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
       </template>
     </TopBar>
     <main class="body docs-scale">
+      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.wildlifeCamps.title') }}</h1>
       <p class="intro">{{ $t('docs.wildlifeCamps.intro') }}</p>
       <p class="status">{{ $t('docs.wildlifeCamps.status') }}</p>
@@ -495,5 +496,16 @@ h2 {
   margin-top: 16px;
   font-size: 12px;
   font-style: italic;
+}
+.breadcrumb {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.breadcrumb:hover {
+  color: var(--gold);
+  text-decoration: underline;
 }
 </style>

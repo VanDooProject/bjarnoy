@@ -122,6 +122,7 @@ function buildingFrame(id: BuildingId): AtlasFrameRect | undefined {
       </template>
     </TopBar>
     <main class="body docs-scale">
+      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.bogLands.title') }}</h1>
       <p class="intro">{{ $t('docs.bogLands.intro') }}</p>
       <p class="status">{{ $t('docs.bogLands.status') }}</p>
@@ -381,5 +382,16 @@ h2 {
   color: #20160a;
   background: var(--gold);
   border-color: var(--gold);
+}
+.breadcrumb {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.breadcrumb:hover {
+  color: var(--gold);
+  text-decoration: underline;
 }
 </style>
