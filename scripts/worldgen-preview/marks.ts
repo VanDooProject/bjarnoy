@@ -21,6 +21,8 @@ function inside(shape: MarkerShape, dx: number, dy: number, r: number): boolean 
       return ax <= r * 0.85 && ay <= r * 0.85 && (ax >= r * 0.45 || ay >= r * 0.45);
     case 'diamond':
       return ax + ay <= r * 1.1;
+    case 'hollowDiamond':
+      return ax + ay <= r * 1.1 && ax + ay >= r * 0.6;
     case 'triangle':
       // Apex up: width grows towards the bottom.
       return dy >= -r && dy <= r * 0.8 && ax <= (dy + r) * 0.55;

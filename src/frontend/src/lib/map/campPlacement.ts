@@ -25,10 +25,14 @@ export type CampFamily =
   | 'bearrapids'
   | 'fenrirbrood'
   | 'sealhaulout'
+  | 'walrushaulout'
   | 'eagleeyrie'
   | 'moosemire'
   | 'beaverlodge'
-  | 'cranedance';
+  | 'cranedance'
+  | 'harewarren'
+  | 'deerglade'
+  | 'otterslide';
 
 export interface CampFamilyInfo {
   family: CampFamily;
@@ -45,10 +49,16 @@ export const CAMP_FAMILIES: readonly CampFamilyInfo[] = [
   { family: 'bearrapids', ground: 'riverStraight', strength: 'strong', levelSkew: 'cubic' },
   { family: 'fenrirbrood', ground: 'wasteland', strength: 'strong', levelSkew: 'cubic' },
   { family: 'sealhaulout', ground: 'sand', strength: 'weak', levelSkew: 'quadratic' },
-  { family: 'eagleeyrie', ground: 'mountain', strength: 'weak', levelSkew: 'quadratic' },
-  { family: 'moosemire', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'walrushaulout', ground: 'sand', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'eagleeyrie', ground: 'mountain', strength: 'strong', levelSkew: 'cubic' },
+  { family: 'moosemire', ground: 'bog', strength: 'strong', levelSkew: 'cubic' },
   { family: 'beaverlodge', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
   { family: 'cranedance', ground: 'bog', strength: 'weak', levelSkew: 'quadratic' },
+  // The weak camps of grass, forest and river (3D_assets hextile130-132), after the strong ones so
+  // each ground's first family keeps its candidate hash (placeCamps).
+  { family: 'harewarren', ground: 'grass', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'deerglade', ground: 'forest', strength: 'weak', levelSkew: 'quadratic' },
+  { family: 'otterslide', ground: 'riverStraight', strength: 'weak', levelSkew: 'quadratic' },
 ];
 
 export function campFamilyInfo(family: string): CampFamilyInfo | undefined {
@@ -94,15 +104,15 @@ export function guardRange(level: number, strength: CampStrength): number {
   return strength === 'strong' ? 2 + level : 1 + Math.floor(level / 2);
 }
 
-/** Land tiles per seal colony — mirrors `CampGenerator.SandTilesPerSealCamp` (the sand rim would otherwise win most farthest-point picks). */
+/** Land tiles per sand camp (seal or walrus) — mirrors `CampGenerator.SandTilesPerSealCamp` (the sand rim would otherwise win most farthest-point picks). */
 export const SandTilesPerSealCamp = 2000;
 
-/** At most this many seal colonies per island — mirrors `CampGenerator.MaxSealCampsFor`. */
+/** At most this many sand camps (seal and walrus together) per island — mirrors `CampGenerator.MaxSealCampsFor`. */
 export function maxSealCampsFor(landTileCount: number): number {
   return Math.max(1, Math.floor((2 * landTileCount + SandTilesPerSealCamp) / (2 * SandTilesPerSealCamp)));
 }
 
-/** Land tiles per eagle eyrie — mirrors `CampGenerator.MountainTilesPerEyrieCamp` (mountains would otherwise take a large share of the weak budget). */
+/** Land tiles per eagle eyrie — mirrors `CampGenerator.MountainTilesPerEyrieCamp` (mountains would otherwise take a large share of the strong budget). */
 export const MountainTilesPerEyrieCamp = 2000;
 
 /** At most this many eagle eyries per island — mirrors `CampGenerator.MaxEyrieCampsFor`. */
@@ -154,15 +164,12 @@ interface Candidate {
   hash: number;
 }
 
-function familyFor(ground: CampGround): CampFamilyInfo {
-  return CAMP_FAMILIES.find((f) => f.ground === ground)!;
-}
+/** Hash salt between a ground's families — mirrors `CampGenerator.FamilyHashSalt`. */
+const FamilyHashSalt = 7919;
 
-/** One of the three bog camp families, by a hash of the hex (they share the bog ground) — mirrors `CampGenerator.BogFamilyFor`. */
-function bogFamilyFor(coord: AxialCoord, seed: number): CampFamilyInfo {
-  const bogFamilies = CAMP_FAMILIES.filter((f) => f.ground === 'bog');
-  const index = Math.floor(hash2(coord.q, coord.r, seed + 137) * bogFamilies.length);
-  return bogFamilies[Math.min(index, bogFamilies.length - 1)]!;
+/** The families placed on a ground, in table order — mirrors `CampGenerator.FamiliesFor`. */
+function familiesFor(ground: CampGround): CampFamilyInfo[] {
+  return CAMP_FAMILIES.filter((f) => f.ground === ground);
 }
 
 /** The ground a plain land tile offers a camp, or `null` when it offers none. */
@@ -253,31 +260,36 @@ export function placeCamps(
   for (const coord of sorted) {
     if (blocked.has(coordKey(coord))) continue;
 
-    let info: CampFamilyInfo | null;
+    let families: CampFamilyInfo[];
     let orientation: TileOrientation | null = null;
     const river = riverByHex.get(coordKey(coord));
     if (river) {
       // Only a plain straight river-width tile may hold bearrapids (a stream or a widening tile
       // has no bearrapids art); every other river tile (and every wasted lava tile) is out.
       if (wasted || river.shape !== 'straight' || (river.width ?? 'river') !== 'river') continue;
-      info = familyFor('riverStraight');
+      families = familiesFor('riverStraight');
       const direction = river.inDirections.length > 0 ? river.inDirections[0]! : river.outDirection;
       if (!direction) continue;
       orientation = straightOrientationOf(direction);
     } else {
       const terrain = terrainOf(coord);
       if (terrain === 'bog') {
-        // Only plain bog moss (not a lake, shore, mouth or creek) holds a camp: moosemire, beaverlodge or
-        // cranedance, by hash.
-        info = plainBog !== null && plainBog.has(coordKey(coord)) ? bogFamilyFor(coord, seed) : null;
+        // Only plain bog moss (not a lake, shore, mouth or creek) holds a camp: the moose mire (strong) or
+        // the beaver lodge / crane dance (weak), one candidate each (below).
+        families = plainBog !== null && plainBog.has(coordKey(coord)) ? familiesFor('bog') : [];
       } else {
         const ground = groundOf(terrain, wasted);
-        info = ground ? familyFor(ground) : null;
+        families = ground ? familiesFor(ground) : [];
       }
     }
-    if (!info) continue;
 
-    candidates.push({ coord, info, orientation, hash: hash2(coord.q, coord.r, seed + 131) });
+    // One candidate per family the ground holds (sand: the walrus, strong, and the seals, weak), so
+    // the two budgets decide which one a tile gets. The first family keeps the plain hash; each
+    // further one draws its own. Once a tile is picked, its other candidates sit at distance 0 and
+    // can never be picked (MinCampSpacing). Mirrors `CampGenerator.PlaceCore`.
+    families.forEach((info, k) => {
+      candidates.push({ coord, info, orientation, hash: hash2(coord.q, coord.r, seed + 131 + k * FamilyHashSalt) });
+    });
   }
 
   // Two budgets, one shared farthest-point sampling. An island whose budgets both round to zero

@@ -198,10 +198,15 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   bearrapids: 'bearrapids',
   fenrirbrood: 'fenrirbrood',
   sealhaulout: 'sealhaulout',
+  // No walrus art yet: the strong sand camp borrows the seal haul-out's until its own is rendered.
+  walrushaulout: 'sealhaulout',
   eagleeyrie: 'eagleeyrie',
   moosemire: 'moosemire',
   beaverlodge: 'beaverlodge',
   cranedance: 'cranedance',
+  harewarren: 'harewarren',
+  deerglade: 'deerglade',
+  otterslide: 'otterslide',
   // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
   // own doc comment for why this key exists at all despite `WorldModel`
   // itself never producing a wasted open-sea tile today.
@@ -1641,16 +1646,19 @@ function topKeyAndIndex(tile: Tile, riverArt?: RiverArt): { key: TextureKey; ind
   return { key, index: tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0) };
 }
 
+/** Camps that stand on a straight river tile and bring their own river base per level: the bears and the otters. */
+const RIVER_CAMPS: ReadonlySet<CampFamily> = new Set<CampFamily>(['bearrapids', 'otterslide']);
+
 /**
- * Which art rotation a camp renders with, and (bearrapids only) its river art override.
+ * Which art rotation a camp renders with, and (river camps only) its river art override.
  *
  * The guarded art ships only the one to three rotations that show its animals best (3D_assets
  * `docs/wildlife-camps.md`, "Kept orientations"), which are read off the loaded frames rather
  * than typed out: the tile's own orientation is mapped onto them by modulo, in
- * `TILE_ORIENTATIONS` order. A bearrapids camp stands on its river, so it keeps its channel: a
+ * `TILE_ORIENTATIONS` order. A river camp (`RIVER_CAMPS`) stands on its river, so it keeps its channel: a
  * straight channel is the same picture 180 degrees round (orientation index mod 3), and the
  * kept rotation with the river's own index mod 3 is used. Returns `undefined` when the tile has
- * no camp, or a bearrapids camp is not on a straight river tile (drawn as plain river then).
+ * no camp, or a river camp is not on a straight river tile (drawn as plain river then).
  */
 export function campArtFor(
   textures: TileTextures,
@@ -1662,12 +1670,12 @@ export function campArtFor(
   const family = camp.family as CampFamily;
   const kept = TILE_ORIENTATIONS.filter((o) => textures.top[family]?.[o]?.[CAMP_GUARDED_LEVEL] !== undefined);
 
-  if (family === 'bearrapids') {
+  if (RIVER_CAMPS.has(family)) {
     if (!river || river.shape !== 'straight' || river.wasted) return undefined;
     const channel = riverArtFor(river, null).orientation;
     const channelClass = TILE_ORIENTATIONS.indexOf(channel) % 3;
     const orientation = kept.find((o) => TILE_ORIENTATIONS.indexOf(o) % 3 === channelClass) ?? channel;
-    return { orientation, riverArt: { key: 'bearrapids', orientation } };
+    return { orientation, riverArt: { key: family, orientation } };
   }
 
   if (kept.length === 0) return { orientation: camp.orientation };

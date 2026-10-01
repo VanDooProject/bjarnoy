@@ -188,7 +188,9 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
             .ToList();
         var actual = islands.SelectMany(i => i.Camps.Select(c => (i.Index, Response: c))).ToList();
         Assert.Equal(expected, actual);
-        Assert.All(camps, c => Assert.Equal(c.Strong, c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood"));
+        Assert.All(camps, c => Assert.Equal(
+            c.Strong,
+            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire"));
     }
 
     [Fact]

@@ -332,24 +332,47 @@
     },
     "camps": {
       "heading": "The camps",
-      "body": "One camp for each kind of ground the map has. Switch a camp between guarded and cleared, and turn it through the six directions a tile can face.",
+      "body": "Each kind of ground has its own camps, a strong one and sometimes a weak one. Filter them by strength or ground, switch a camp between guarded and cleared, and turn it through the six directions a tile can face.",
       "rotations": "A guarded camp only has art for the directions that show its animals best; the other directions are greyed out, and on the map the camp is turned to one of those. A cleared camp can face any direction."
     },
     "state": {
+      "all": "All camps",
       "label": "State",
       "guarded": "Guarded",
       "cleared": "Cleared"
+    },
+    "strength": {
+      "label": "Strength",
+      "strong": "Strong",
+      "weak": "Weak",
+      "help": "Strong camps roll high levels and hold a wide stretch of land; no new player lands near one. Weak camps roll low and hold only their nearest hexes: a new player's first, safe fights."
+    },
+    "filters": {
+      "all": "All",
+      "ground": "Ground",
+      "none": "No camp matches these filters."
+    },
+    "range": "Guards {min} to {max} hexes around it, by its level (1 to {levels}).",
+    "loot": {
+      "label": "Loot",
+      "food": "Food",
+      "stone": "Stone",
+      "wood": "Wood",
+      "iron": "Iron",
+      "more": "{kind} ++",
+      "moreHint": "A larger share of this than other camps pay",
+      "note": "Clearing a camp pays loot. Every camp gives food from the hunt and a strong camp adds iron, the gear of earlier settlers its pack has eaten; some camps add what their ground holds, and ++ marks a camp's biggest share. How much grows with the camp's level; the amounts are still to be set."
     },
     "camera": "Facing",
     "notKept": "Guarded art only exists for the directions that show the animals best",
     "grounds": {
       "grass": "Grass",
-      "river": "River",
       "sand": "Sand",
       "forest": "Forest",
       "mountain": "Mountain",
       "wasteland": "Wasteland",
-      "bog": "Bog"
+      "bog": "Bog",
+      "riverStraight": "River"
     },
     "list": {
       "wolfden": {
@@ -363,6 +386,10 @@
       "sealhaulout": {
         "name": "Seal haul-out",
         "guards": "Five seals basking on the slabs and the sand, two heaving themselves along, and three white pups."
+      },
+      "walrushaulout": {
+        "name": "Walrus haul-out",
+        "guards": "Walrus bulls with long tusks on the shore, one rearing up to fight, among the bones of their kills. Drawn with the seal art until its own is ready."
       },
       "boarwallow": {
         "name": "Boar wallow",
@@ -387,6 +414,18 @@
       "cranedance": {
         "name": "Crane dance",
         "guards": "A pair of cranes dancing, three standing, one walking, and a juvenile."
+      },
+      "deerglade": {
+        "name": "Deer glade",
+        "guards": "A stag by the salt lick, two hinds grazing and a spotted fawn."
+      },
+      "harewarren": {
+        "name": "Hare warren",
+        "guards": "Two hares sitting up on the warren mound, three bounding round it and one grazing."
+      },
+      "otterslide": {
+        "name": "Otter slide",
+        "guards": "One otter swimming, one on the drift log with a fish, one running the bank and one waiting at the holt."
       }
     }
   },

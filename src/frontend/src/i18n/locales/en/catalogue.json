@@ -50,12 +50,16 @@
     "wolfden": "Wolf den",
     "bearrapids": "Bear rapids",
     "sealhaulout": "Seal haul-out",
+    "walrushaulout": "Walrus haul-out",
     "boarwallow": "Boar wallow",
     "eagleeyrie": "Eagle eyrie",
     "fenrirbrood": "Fenrir's brood",
     "moosemire": "Moose mire",
     "beaverlodge": "Beaver lodge",
-    "cranedance": "Crane dance"
+    "cranedance": "Crane dance",
+    "harewarren": "Hare warren",
+    "deerglade": "Deer glade",
+    "otterslide": "Otter slide"
   },
   "terrain": {
     "sea": "Open water",
