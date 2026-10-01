@@ -133,18 +133,23 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         var now = _timeProvider.GetUtcNow();
         var sources = new List<FogVisionSource>();
         var discs = new List<ExploredDisc>();
+        var ravensBySettlement = new Dictionary<Guid, int>();
         foreach (var settlement in settlements)
         {
-            var level = settlement.ToDomain().LonghouseLevel;
+            var domain = settlement.ToDomain();
+            var level = domain.LonghouseLevel;
+            // Odin's Ravens: extra rings on the claim's own disc and on every tower's.
+            var ravens = domain.VisionBonusRings;
+            ravensBySettlement[settlement.Id] = ravens;
             var centre = new HexCoord(settlement.CentreQ, settlement.CentreR);
-            sources.Add(FogVisionRadii.ToVisionSource(centre, level));
-            discs.Add(new ExploredDisc(centre, FogVisionRadii.ExploredRadius(level)));
+            sources.Add(FogVisionRadii.ToVisionSource(centre, level, ravens));
+            discs.Add(new ExploredDisc(centre, FogVisionRadii.ExploredRadius(level) + ravens));
 
             foreach (var tower in settlement.Buildings.Where(b => b.Type == BuildingType.Tower))
             {
                 var towerCoord = new HexCoord(tower.Q, tower.R);
-                sources.Add(FogVisionRadii.ToTowerVisionSource(towerCoord, tower.Level));
-                discs.Add(new ExploredDisc(towerCoord, FogVisionRadii.TowerExploredRadius(tower.Level)));
+                sources.Add(FogVisionRadii.ToTowerVisionSource(towerCoord, tower.Level, ravens));
+                discs.Add(new ExploredDisc(towerCoord, FogVisionRadii.TowerExploredRadius(tower.Level) + ravens));
             }
         }
 
@@ -152,7 +157,9 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         {
             var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
             var position = armyEntity.ToDomain().PositionAt(home, now);
-            discs.Add(new ExploredDisc(position, FogVisionRadii.ArmyVisionRadiusHexes));
+            // The army's origin settlement's Ravens widen its walked-ground reveal too.
+            var armyRavens = ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId);
+            discs.Add(new ExploredDisc(position, FogVisionRadii.ArmyVisionRadius(armyRavens)));
         }
 
         var merged = persist

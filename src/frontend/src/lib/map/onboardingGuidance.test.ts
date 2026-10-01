@@ -18,7 +18,7 @@ describe('deriveOnboardingGuidance', () => {
     expect(g.complete).toBe(false);
     expect(g.rows).toEqual([
       { key: 'longhouse', state: 'current' },
-      { key: 'farm', state: 'upcoming' },
+      { key: 'reindeerherder', state: 'upcoming' },
       { key: 'lumberjack', state: 'upcoming' },
     ]);
   });
@@ -29,23 +29,23 @@ describe('deriveOnboardingGuidance', () => {
     expect(g.progress).toBeCloseTo(1 / 3);
     expect(g.rows).toEqual([
       { key: 'longhouse', state: 'done' },
-      { key: 'farm', state: 'current' },
+      { key: 'reindeerherder', state: 'current' },
       { key: 'lumberjack', state: 'upcoming' },
     ]);
   });
 
-  it('lumberjack placed before farm: farm still reads current, not stuck on a fixed order', () => {
+  it('lumberjack placed before reindeer herder: reindeer herder still reads current, not stuck on a fixed order', () => {
     const g = deriveOnboardingGuidance(true, ['longhouse', 'lumberjack']);
     expect(g.step).toBe(3);
     expect(g.rows).toEqual([
       { key: 'longhouse', state: 'done' },
-      { key: 'farm', state: 'current' },
+      { key: 'reindeerherder', state: 'current' },
       { key: 'lumberjack', state: 'done' },
     ]);
   });
 
   it('both guided buildings placed: complete, no current row, full progress', () => {
-    const g = deriveOnboardingGuidance(true, ['longhouse', 'farm', 'lumberjack']);
+    const g = deriveOnboardingGuidance(true, ['longhouse', 'reindeerherder', 'lumberjack']);
     expect(g.step).toBe(3);
     expect(g.progress).toBe(1);
     expect(g.complete).toBe(true);
@@ -53,27 +53,27 @@ describe('deriveOnboardingGuidance', () => {
   });
 
   it('reloading mid-onboarding (arrived past a step already) reflects the real state, not a stale counter', () => {
-    const g = deriveOnboardingGuidance(true, ['longhouse', 'farm']);
+    const g = deriveOnboardingGuidance(true, ['longhouse', 'reindeerherder']);
     expect(g.rows).toEqual([
       { key: 'longhouse', state: 'done' },
-      { key: 'farm', state: 'done' },
+      { key: 'reindeerherder', state: 'done' },
       { key: 'lumberjack', state: 'current' },
     ]);
   });
 });
 
 describe('nextGuidedType', () => {
-  it('is farm when nothing is placed yet', () => {
-    expect(nextGuidedType([])).toBe('farm');
+  it('is reindeer herder when nothing is placed yet', () => {
+    expect(nextGuidedType([])).toBe('reindeerherder');
   });
 
   it('skips whichever guided type is already standing, in either order', () => {
-    expect(nextGuidedType(['longhouse', 'farm'])).toBe('lumberjack');
-    expect(nextGuidedType(['longhouse', 'lumberjack'])).toBe('farm');
+    expect(nextGuidedType(['longhouse', 'reindeerherder'])).toBe('lumberjack');
+    expect(nextGuidedType(['longhouse', 'lumberjack'])).toBe('reindeerherder');
   });
 
   it('is null once both guided buildings are placed', () => {
-    expect(nextGuidedType(['longhouse', 'farm', 'lumberjack'])).toBeNull();
+    expect(nextGuidedType(['longhouse', 'reindeerherder', 'lumberjack'])).toBeNull();
   });
 });
 
@@ -92,7 +92,7 @@ describe('findGuidedTarget', () => {
   });
 
   it('picks the closest of several matching hexes to center', () => {
-    const target = findGuidedTarget(center, 3, 'farm', terrainAt, isBuildable);
+    const target = findGuidedTarget(center, 3, 'reindeerherder', terrainAt, isBuildable);
     // Every owned non-origin hex except (2,0) is grass — the closest of
     // those (distance 1) should win over farther ones.
     expect(target).not.toBeNull();
@@ -109,12 +109,12 @@ describe('findGuidedTarget', () => {
 });
 
 describe('ringNoteReason', () => {
-  it('grass fits farm; lumberjack is the dim one', () => {
-    expect(ringNoteReason('grass')).toEqual({ kind: 'oneFits', fit: 'farm', dim: 'lumberjack' });
+  it('grass fits reindeer herder; lumberjack is the dim one', () => {
+    expect(ringNoteReason('grass')).toEqual({ kind: 'oneFits', fit: 'reindeerherder', dim: 'lumberjack' });
   });
 
-  it('forest fits lumberjack; farm is the dim one', () => {
-    expect(ringNoteReason('forest')).toEqual({ kind: 'oneFits', fit: 'lumberjack', dim: 'farm' });
+  it('forest fits lumberjack; reindeer herder is the dim one', () => {
+    expect(ringNoteReason('forest')).toEqual({ kind: 'oneFits', fit: 'lumberjack', dim: 'reindeerherder' });
   });
 
   it('neither guided building fits sand or mountain', () => {

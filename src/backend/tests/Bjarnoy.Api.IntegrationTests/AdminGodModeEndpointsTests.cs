@@ -301,7 +301,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Equal(settlement.Q, centre.Q);
         Assert.Equal("longhouse", centre.Building);
         Assert.Equal(settlement.LonghouseLevel, centre.Level);
-        Assert.Contains("farm", layout.BuildingTypes);
+        Assert.Contains("reindeerherder", layout.BuildingTypes);
     }
 
     [Fact]

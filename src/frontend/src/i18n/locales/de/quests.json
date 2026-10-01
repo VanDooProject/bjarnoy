@@ -11,7 +11,7 @@
   "items": {
     "producers3": {
       "title": "Baue 3 Rohstoffproduzenten",
-      "hint": "Setze Holzfäller, Steinbrüche oder Farmen auf freie Felder und warte, bis sie fertig sind."
+      "hint": "Setze Holzfäller, Steinbrüche oder Rentierhirten auf freie Felder und warte, bis sie fertig sind."
     },
     "longhouse2": {
       "title": "Baue dein Langhaus auf Stufe 2 aus",
@@ -23,7 +23,7 @@
     },
     "producers6": {
       "title": "Baue 6 Rohstoffproduzenten",
-      "hint": "Baue weitere Holzfäller, Steinbrüche und Farmen, bis sechs stehen."
+      "hint": "Baue weitere Holzfäller, Steinbrüche und Rentierhirten, bis sechs stehen."
     },
     "longhouse3": {
       "title": "Baue dein Langhaus auf Stufe 3 aus",

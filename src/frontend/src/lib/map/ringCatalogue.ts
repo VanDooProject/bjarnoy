@@ -5,7 +5,8 @@
 // renders one.
 import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
-import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
+import { i18n } from '../../i18n';
+import { additionalStorageHouseRequirement, maxTowers } from './buildingEconomy';
 import type { BogTileKind } from './types';
 import type { RiverVariant } from './worldGenerator';
 
@@ -52,14 +53,28 @@ export function towerLimitLock(towersHeld: number, longhouseLevel: number): stri
 }
 
 /**
- * The reason an *additional* storage house can't be placed: the settlement
- * already holds one (standing or queued) and its best is below level 10 —
- * mirrors `Settlement.PlanBuild`'s `BuildRejection.StorageHouseTooLow`. The
- * first storage house is never locked by this.
+ * The reason a *new* shrine can't be placed: the settlement already holds one
+ * (standing or queued) — mirrors `Settlement.PlanBuild`'s
+ * `BuildRejection.SettlementAlreadyHasShrine`. A settlement raises one shrine
+ * in total, of any god.
  */
-export function storageHouseLock(storageHousesHeld: number, bestStorageLevel: number): string | undefined {
-  if (storageHousesHeld < 1 || bestStorageLevel >= ADDITIONAL_STORAGE_HOUSE_LEVEL) return undefined;
-  return `Raise a storage house to level ${ADDITIONAL_STORAGE_HOUSE_LEVEL} before building another`;
+export function shrineLimitLock(shrinesHeld: number): string | undefined {
+  if (shrinesHeld < 1) return undefined;
+  return i18n.global.t('hud.ringMenu.shrineLimitLock') as string;
+}
+
+/**
+ * The reason an *additional* storage house can't be placed: with `n` held
+ * (standing or queued) it needs `min(n, 4)` of them at level
+ * `min(10 + 5·(n − 1), 25)` — mirrors `Settlement.PlanBuild`'s
+ * `BuildRejection.StorageHouseTooLow`. `standingLevels` are the levels of the
+ * standing houses. The first storage house is never locked by this.
+ */
+export function storageHouseLock(storageHousesHeld: number, standingLevels: readonly number[]): string | undefined {
+  if (storageHousesHeld < 1) return undefined;
+  const { count, level } = additionalStorageHouseRequirement(storageHousesHeld);
+  if (standingLevels.filter((l) => l >= level).length >= count) return undefined;
+  return i18n.global.t('hud.ringMenu.storageHouseLock', { count, level }, count) as string;
 }
 
 /**

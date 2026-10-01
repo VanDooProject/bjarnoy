@@ -42,11 +42,11 @@ export type Slot = readonly [col: number, row: number];
  * Column is dependency depth; row is the unlock ladder (docs/design/economy.md
  * section 5), read top to bottom: rows are ordered by the Longhouse level their
  * first card unlocks at, so scrolling down the page walks the game's own
- * progression — Lumberjack, Farm, Quarry, Clay Brickworks and Storage House
- * (LH 1), Fishing Hut (LH 2), Tower (LH 3), Pumpkin Farm (LH 4), Bog-ore works
- * and Town Square (LH 6). Each row is one chain: a source sits level with what it feeds, so
+ * progression — Lumberjack, Reindeer Herder, Quarry, Clay Brickworks and
+ * Storage House (LH 1), Fishing Hut (LH 2), Tower (LH 3), Bog-ore works and
+ * Town Square (LH 6). Each row is one chain: a source sits level with what it feeds, so
  * most links are a single horizontal run — Lumberjack -> Sawmill -> Shrine of
- * Ullr, Farm -> Crop Mill -> Shrine of Freyja, Storage House -> Great
+ * Ullr, Reindeer Herder -> Farm -> Crop Mill -> Shrine of Freyja, Storage House -> Great
  * Storehouse, Fishing Hut -> Dockyard -> Shrine of Njörd, Tower -> Barracks ->
  * Archery Range.
  *
@@ -55,24 +55,32 @@ export type Slot = readonly [col: number, row: number];
  * source with a second target (Farm -> Meadery, Barracks -> Weaponsmith, Town
  * Square -> Druid Hut) drops it one row down, below its own row's chain, and
  * its trunk runs down the gutter beside it. The Weaponsmith (Smithy) has the
- * Shrine of Thor as its own capstone in the last column.
+ * Shrine of Thor as its own capstone in the last column, and the Druid Hut the
+ * Odin Statue.
+ *
+ * Farm and Pumpkin Farm are two building types (their soil rules differ) but
+ * one card: only `farm` has a slot here, and `MERGED_CARDS` (nodes.ts) names
+ * the card "Farm / Pumpkin Farm (by soil)".
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 3],
 
   // Row 0 — Lumberjack (LH 1) -> Sawmill (LH 20) -> Shrine of Ullr (LH 25).
+  // Every shrine sits in the Capstone column, so the gods line up.
   lumberjack: [1, 0],
   sawmill: [2, 0],
-  shrineofullr: [3, 0],
+  shrineofullr: [4, 0],
 
-  // Row 1 — Farm (LH 1) -> Crop Mill (LH 20) -> Shrine of Freyja (LH 25).
-  farm: [1, 1],
-  cropmill: [2, 1],
-  shrineoffreyja: [3, 1],
+  // Row 1 — Reindeer Herder (LH 1) -> Farm / Pumpkin Farm (LH 4) -> Crop Mill
+  // (LH 20) -> Shrine of Freyja (LH 25).
+  reindeerherder: [1, 1],
+  farm: [2, 1],
+  cropmill: [3, 1],
+  shrineoffreyja: [4, 1],
   // Row 2 — Quarry (LH 1), and Farm's second target, the Meadery (LH 11),
   // one row below the Farm chain.
   quarry: [1, 2],
-  meadery: [2, 2],
+  meadery: [3, 2],
 
   // Row 3 — Clay Brickworks (LH 1), a plain root with nothing behind it.
   claybrickworks: [1, 3],
@@ -84,15 +92,14 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   // Row 5 — Fishing Hut (LH 2) -> Dockyard (LH 8) -> Shrine of Njörd (LH 25).
   fishinghut: [1, 5],
   dockyard: [2, 5],
-  shrineofnjord: [3, 5],
+  shrineofnjord: [4, 5],
 
   // Row 6 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9).
   tower: [1, 6],
   barracks: [2, 6],
   archeryrange: [3, 6],
-  // Row 7 — Pumpkin Farm (LH 4), a plain root; and Barracks' second target,
-  // the Weaponsmith (Smithy, LH 15), with the Shrine of Thor (LH 25) behind it.
-  pumpkinfarm: [1, 7],
+  // Row 7 — Barracks' second target, the Weaponsmith (Smithy, LH 15), with
+  // the Shrine of Thor (LH 25) behind it.
   smithy: [3, 7],
   shrineofthor: [4, 7],
 
@@ -105,6 +112,8 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   townsquare: [1, 9],
   cartworkshop: [2, 9],
   druidhut: [2, 10],
+  // Row 10 — the Druid Hut (LH 12) -> Odin Statue (LH 25), in the Capstone column.
+  odinstatue: [4, 10],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;

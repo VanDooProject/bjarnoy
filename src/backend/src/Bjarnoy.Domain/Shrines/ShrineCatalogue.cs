@@ -19,6 +19,12 @@ public static class ShrineCatalogue
     /// <summary>Levels above this keep the same favour and slot count.</summary>
     public const int MaxEffectLevel = 5;
 
+    /// <summary>Odin's Wisdom: build time taken off per Odin Statue level.</summary>
+    public const double WisdomPerLevel = 0.02;
+
+    /// <summary>Odin's Ravens: extra rings of vision per Odin Statue level.</summary>
+    public const int RavensRingsPerLevel = 2;
+
     /// <summary>The god's own favour at <paramref name="level"/> (1-based, uncapped).</summary>
     public static ShrineEffect Favour(GodType god, int level)
     {
@@ -40,6 +46,15 @@ public static class ShrineCatalogue
             // A sea-raiding god's favour, so Njörd boosts ship attack rather
             // than storage capacity or any resource's production.
             GodType.Njord => new ShrineEffect(ResourceAmounts.Zero, StorageBonus: 0, ShipAttackBonus: perLevel),
+            // Odin's two effects scale linearly with level and are the only
+            // ones that do not read as a percentage of something: Wisdom takes
+            // 2% off every build per level (10% at level 5), Ravens adds two
+            // rings of vision per level (10 at level 5).
+            GodType.Odin => new ShrineEffect(
+                ResourceAmounts.Zero,
+                StorageBonus: 0,
+                BuildTimeReduction: WisdomPerLevel * scaledLevel,
+                VisionBonusRings: RavensRingsPerLevel * scaledLevel),
             _ => throw new ArgumentOutOfRangeException(nameof(god), god, "Unknown god"),
         };
     }
