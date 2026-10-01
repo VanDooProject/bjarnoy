@@ -262,11 +262,13 @@ async function togglePremium(user: AdminUserResponse) {
 }
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
 }
 .filters input[type='text'] {
-  flex: 1;
+  flex: 1 1 200px;
+  min-width: 0;
   max-width: 320px;
 }
 .table {

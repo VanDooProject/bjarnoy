@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bubbleLabelFontPx,
   BUB1,
   BUB2,
   CARD_H,
@@ -273,4 +274,35 @@ describe('ring layout note (flat onboarding ring)', () => {
       expect(gap).toBeGreaterThanOrEqual(0);
     });
   }
+});
+
+describe('bubbleLabelFontPx', () => {
+  it('keeps the base size for a label whose words already fit', () => {
+    expect(bubbleLabelFontPx('Farm', BUB2, 9.4)).toBe(9.4);
+    expect(bubbleLabelFontPx('Send army here', BUB1, 8.2)).toBe(8.2);
+  });
+
+  it('shrinks a long single word until it fits the bubble instead of splitting it', () => {
+    const size = bubbleLabelFontPx('Watchtower', BUB2, 8.4);
+    expect(size).toBeLessThan(8.4);
+    expect(size).toBeGreaterThan(6.5);
+  });
+
+  it('accounts for uppercase and letter spacing (the hub label)', () => {
+    const upper = bubbleLabelFontPx('Longhouse', HUB, 10.5, { uppercase: true, letterSpacingEm: 0.06 });
+    const lower = bubbleLabelFontPx('Longhouse', HUB, 10.5);
+    expect(upper).toBeLessThan(10.5);
+    expect(upper).toBeLessThan(lower);
+  });
+
+  it('sizes by the measured width when one is given, not the estimate', () => {
+    const wide = bubbleLabelFontPx('Grassland', HUB, 10.5, { wordEm: (w) => w.length * 0.9 });
+    const narrow = bubbleLabelFontPx('Grassland', HUB, 10.5, { wordEm: (w) => w.length * 0.5 });
+    expect(wide).toBeLessThan(narrow);
+    expect(9 * (0.9 + 0.02) * wide).toBeLessThanOrEqual(HUB - 6);
+  });
+
+  it('never goes below the readable floor', () => {
+    expect(bubbleLabelFontPx('Holzfällerhüttenerweiterung', BUB2, 9)).toBe(6.5);
+  });
 });
