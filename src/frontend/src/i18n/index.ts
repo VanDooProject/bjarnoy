@@ -39,6 +39,7 @@ import enDocs from './locales/en/docs.json';
 import deDocs from './locales/de/docs.json';
 import enShowcase from './locales/en/showcase.json';
 import deShowcase from './locales/de/showcase.json';
+import deAdminWorldReview from './locales/de/adminWorldReview.json';
 import enAdminActivityChart from './locales/en/adminActivityChart.json';
 import enAdminActivity from './locales/en/adminActivity.json';
 import enAdminEconomy from './locales/en/adminEconomy.json';
@@ -49,6 +50,7 @@ import enAdminSettlements from './locales/en/adminSettlements.json';
 import enAdminUsers from './locales/en/adminUsers.json';
 import enAdminWorldReseed from './locales/en/adminWorldReseed.json';
 import enAdminWorlds from './locales/en/adminWorlds.json';
+import enAdminWorldReview from './locales/en/adminWorldReview.json';
 import enArmyEditor from './locales/en/armyEditor.json';
 import enGarrisonForm from './locales/en/garrisonForm.json';
 import enGrantResourcesForm from './locales/en/grantResourcesForm.json';
@@ -125,6 +127,8 @@ export const i18n = createI18n({
       adminUsers: enAdminUsers,
       adminWorldReseed: enAdminWorldReseed,
       adminWorlds: enAdminWorlds,
+      // The world review panel (admin, but translated: en + de).
+      adminWorldReview: enAdminWorldReview,
       armyEditor: enArmyEditor,
       garrisonForm: enGarrisonForm,
       grantResourcesForm: enGrantResourcesForm,
@@ -151,6 +155,7 @@ export const i18n = createI18n({
       simulator: deSimulator,
       docs: deDocs,
       showcase: deShowcase,
+      adminWorldReview: deAdminWorldReview,
     },
   },
   datetimeFormats,
