@@ -1,4 +1,6 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -6,6 +8,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Bjarnoy.Infrastructure.Services;
+
+/// <summary>
+/// A world's spawn spots (island start positions): how many exist and how
+/// many are used up — see <see cref="WorldService.GetSpawnUsageAsync"/>.
+/// </summary>
+public readonly record struct SpawnUsage(int Used, int Total);
 
 /// <summary>Raised when a world cannot be created as asked.</summary>
 public sealed class WorldCreationException(string message) : Exception(message);
@@ -497,6 +505,68 @@ public sealed class WorldService(
         _dbContext.Worlds
             .AsNoTracking()
             .FirstOrDefaultAsync(w => w.Id == id, cancellationToken);
+
+    /// <summary>
+    /// Spawn spots (island start positions) per world, and how many of them
+    /// are used up: no longer foundable because a settlement — a player's
+    /// first one or one they expanded into with settlers — sits on or near
+    /// them. Same spacing rule a founding is checked against
+    /// (<see cref="Founding.CheckSpacing"/>), so "used" means a new player
+    /// could not start there any more. Transient landing-page plot
+    /// reservations are not counted. Wasted islands carry no start positions.
+    /// </summary>
+    /// <param name="worldId">One world only, or <see langword="null"/> for every world.</param>
+    public async Task<Dictionary<Guid, SpawnUsage>> GetSpawnUsageAsync(
+        Guid? worldId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => !i.IsWasted && (worldId == null || i.WorldId == worldId))
+            .Select(i => new { i.Id, i.WorldId, i.StartPositions })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var settlements = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => worldId == null || s.WorldId == worldId)
+            .Select(s => new
+            {
+                s.IslandId,
+                s.CentreQ,
+                s.CentreR,
+                Buildings = s.Buildings.Select(b => new { b.Q, b.R, b.Type, b.Level }).ToList(),
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var neighboursByIsland = settlements
+            .GroupBy(s => s.IslandId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(s => new Founding.NeighbourSnapshot(
+                    new HexCoord(s.CentreQ, s.CentreR),
+                    s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()))
+                    .ToList());
+
+        return islands
+            .GroupBy(i => i.WorldId)
+            .ToDictionary(
+                g => g.Key,
+                g => new SpawnUsage(
+                    Used: g.Sum(island =>
+                    {
+                        var neighbours = neighboursByIsland.GetValueOrDefault(island.Id);
+                        return neighbours is null
+                            ? 0
+                            : island.StartPositions.Count(p => Founding.CheckSpacing(
+                                new HexCoord(p.Q, p.R),
+                                neighbours,
+                                SettlementService.MinimumSpacing,
+                                SettlementService.FoundingSafetyMargin) != Founding.SpacingVerdict.Ok);
+                    }),
+                    Total: g.Sum(island => island.StartPositions.Count)));
+    }
 
     /// <summary>Island count per world, for listing worlds without loading their islands.</summary>
     public async Task<Dictionary<Guid, int>> GetIslandCountsAsync(CancellationToken cancellationToken = default) =>

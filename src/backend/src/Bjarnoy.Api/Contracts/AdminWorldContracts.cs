@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Bjarnoy.Api.Json;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -11,6 +12,8 @@ public sealed record AdminWorldResponse(
     string Status,
     int MaxPlayers,
     int PlayerCount,
+    int UsedSpawnCount,
+    int SpawnCount,
     double SpeedFactor,
     DateTimeOffset? StartsAt,
     bool JoinsClosed,
@@ -23,7 +26,7 @@ public sealed record AdminWorldResponse(
     int Seed,
     WorldGenerationSettingsResponse Generation)
 {
-    public static AdminWorldResponse From(WorldEntity world, int playerCount)
+    public static AdminWorldResponse From(WorldEntity world, int playerCount, SpawnUsage spawns)
     {
         ArgumentNullException.ThrowIfNull(world);
 
@@ -33,6 +36,8 @@ public sealed record AdminWorldResponse(
             world.Status.ToString().ToLowerInvariant(),
             world.MaxPlayers,
             playerCount,
+            spawns.Used,
+            spawns.Total,
             world.SpeedFactor,
             world.StartsAt,
             world.JoinsClosed,

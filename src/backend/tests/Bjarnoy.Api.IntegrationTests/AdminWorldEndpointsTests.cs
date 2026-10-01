@@ -125,6 +125,62 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task Admin_world_list_counts_spawn_spots_used_up_by_first_and_expansion_settlements()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var islands = (await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct))!
+            .Where(i => i.StartPositions.Count > 0)
+            .ToList();
+        Assert.True(islands.Count >= 2, "the test seed needs two islands with start positions");
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var empty = await ListedAsync();
+        Assert.Equal(islands.Sum(i => i.StartPositions.Count), empty.SpawnCount);
+        Assert.Equal(0, empty.UsedSpawnCount);
+
+        var first = await FoundSettlementAsync(client, world);
+        var afterFirst = await ListedAsync();
+        Assert.InRange(afterFirst.UsedSpawnCount, 1, afterFirst.SpawnCount);
+
+        // An expansion: a second settlement on another island, owned by the
+        // same player. It is not a new player, but it still eats spawn spots.
+        var island = islands.First(i => i.Id != first.IslandId);
+        var plot = island.StartPositions[0];
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var firstRow = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == first.Id, Ct);
+            db.Settlements.Add(new SettlementEntity
+            {
+                WorldId = world.Id,
+                IslandId = island.Id,
+                UserId = firstRow.UserId,
+                Name = "Grimhold",
+                OwnerName = firstRow.OwnerName,
+                OwnerId = firstRow.OwnerId,
+                CentreQ = plot.Q,
+                CentreR = plot.R,
+                FoundedAt = firstRow.FoundedAt,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var afterExpansion = await ListedAsync();
+        Assert.True(afterExpansion.UsedSpawnCount > afterFirst.UsedSpawnCount);
+        Assert.Equal(empty.SpawnCount, afterExpansion.SpawnCount);
+
+        async Task<AdminWorldResponse> ListedAsync()
+        {
+            var listResponse = await client.GetAsync("/api/v1/admin/worlds", Ct);
+            Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+            var worlds = await listResponse.ReadStrictAsync<IReadOnlyList<AdminWorldResponse>>(Ct);
+            return Assert.Single(worlds, w => w.Id == world.Id);
+        }
+    }
+
+    [Fact]
     public async Task Admin_can_update_speed_factor_start_date_stop_join_and_endboss()
     {
         using var client = _fixture.CreateClient();
