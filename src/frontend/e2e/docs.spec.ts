@@ -260,4 +260,38 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
       await expect(page.locator('.docs-page .breadcrumb')).toHaveCount(0);
     });
   }
+
+  test('walls page shows the six pieces with stage and facing pickers, the example wall and the hub links to it', async ({
+    page,
+  }) => {
+    await page.goto('/docs');
+    await page.getByRole('button', { name: /^Walls/ }).click();
+    await expect(page).toHaveURL(/\/docs\/walls$/);
+
+    const cards = page.locator('.walls .tile');
+    await expect(cards).toHaveCount(6);
+    await expect(page.locator('.walls .tile .thumb .animated-building')).toHaveCount(6);
+    for (const id of ['straight180', 'bend60', 'bend120', 'gate180', 'end', 'end_coast']) {
+      await expect(page.locator(`#piece-${id}`)).toBeVisible();
+    }
+
+    // Stages are read off the atlas: the construction site and at least two finished stages.
+    const straight = page.locator('#piece-straight180');
+    await expect(straight.getByRole('button', { name: 'Under construction' })).toBeVisible();
+    await expect(straight.getByRole('button', { name: 'Level 1', exact: true })).toBeVisible();
+    await straight.getByRole('button', { name: 'Under construction' }).click();
+    await expect(straight.getByRole('button', { name: 'Under construction' })).toHaveClass(/active/);
+    await straight.getByRole('button', { name: 'NW', exact: true }).click();
+    await expect(straight.getByRole('button', { name: 'NW', exact: true })).toHaveClass(/active/);
+    await expect(straight.locator('.animated-building')).toBeVisible();
+
+    // The example wall (seven wall hexes, each a ground and a wall layer) and the four grounds.
+    await expect(page.locator('.wall-example .sprite').first()).toBeVisible();
+    expect(await page.locator('.wall-example .sprite').count()).toBeGreaterThanOrEqual(14);
+    await expect(page.locator('.walls figure.ground')).toHaveCount(4);
+    await expect(page.getByTestId('wall-movement-diagram').locator('figure')).toHaveCount(3);
+
+    await page.locator('.docs-page .breadcrumb').click();
+    await expect(page).toHaveURL(/\/docs$/);
+  });
 });

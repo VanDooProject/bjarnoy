@@ -29,6 +29,7 @@ const PAGES: DocPage[] = [
     descriptionKey: 'docs.hub.pages.wildlifeCamps.description',
   },
   { to: '/docs/bog-lands', titleKey: 'docs.hub.pages.bogLands.title', descriptionKey: 'docs.hub.pages.bogLands.description' },
+  { to: '/docs/walls', titleKey: 'docs.hub.pages.walls.title', descriptionKey: 'docs.hub.pages.walls.description' },
   { to: '/showcase', titleKey: 'docs.hub.pages.showcase.title', descriptionKey: 'docs.hub.pages.showcase.description' },
 ];
 </script>

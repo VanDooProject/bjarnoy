@@ -25,6 +25,10 @@
         "title": "Moorland",
         "description": "Moosboden, Bäche und Moorseen, wo Raseneisenerz gegraben und Lehm gestochen wird."
       },
+      "walls": {
+        "title": "Mauern",
+        "description": "Die Palisade: ihre sechs Teile, wie sie gewählt werden, wo Mauern stehen können und wer hindurchgehen darf."
+      },
       "showcase": {
         "title": "Showcase",
         "description": "Ein spielerfokussiertes Pitch für das Spiel, plus ein Blick unter die Haube für alle, die wissen wollen, wie es gebaut ist."
@@ -551,6 +555,91 @@
       "reducedMotion": "Animationen sind angehalten, weil dein Gerät reduzierte Bewegung wünscht.",
       "saveData": "Animationen sind angehalten, weil dein Browser Daten spart.",
       "off": "Animationen sind auf diesem Gerät ausgeschaltet."
+    }
+  },
+  "walls": {
+    "title": "Mauern",
+    "intro": "Die Palisade ist die Erd-und-Holz-Mauer der Wikingerzeit, und vor allem eine Bewegungssperre: Sie hält Landheere auf, keine Boote. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 40 Holz und 10 Stein.",
+    "stage": "Stufe",
+    "camera": "Blickrichtung",
+    "stages": {
+      "construction": "Im Bau",
+      "level": "Stufe {n}"
+    },
+    "pieces": {
+      "heading": "Die sechs Teile",
+      "body": "Eine Mauer wird Feld für Feld gebaut, und jedes Feld zeichnet eines von sechs Teilen. Jedes Teil gibt es in sechs Drehungen und in jeder Stufe, die die Grafik hat, von der Baustelle bis zur fertigen Mauer. Hier ist jedes so gezeichnet, wie es die Karte zeichnet: der Boden, darauf das Teil.",
+      "straight": {
+        "name": "Gerade",
+        "body": "Der Lauf der Mauer: Sie verbindet zwei gegenüberliegende Nachbarn."
+      },
+      "bend60": {
+        "name": "60°-Knick",
+        "body": "Die enge Kurve zwischen zwei benachbarten Nachbarn. Sie kommt nur in einem Dreieck aus drei Mauerfeldern vor, denn ein viertes Feld würde die Mauer verzweigen."
+      },
+      "bend120": {
+        "name": "120°-Knick",
+        "body": "Die weite Kurve, bei der ein Nachbar übersprungen wird: Die Mauer ändert ihre Richtung um 60°."
+      },
+      "gate": {
+        "name": "Tor",
+        "body": "Eine Gerade mit einem Tor in der Mitte. Es lässt die Heere seines Besitzers durch und sonst niemanden."
+      },
+      "end": {
+        "name": "Landende",
+        "body": "Das letzte Feld einer Mauer an Land, mit nur einem Mauernachbarn. Es ist halb offen: Jedes Heer kann es gegen einen Aufschlag überqueren."
+      },
+      "seaEnd": {
+        "name": "Seeende",
+        "body": "Dort, wo eine Mauer ins Wasser ausläuft: Es steht auf Küstenwasser, berührt genau ein Mauerfeld an Land und hat einen eigenen Wasserboden."
+      }
+    },
+    "choosing": {
+      "heading": "Wie die Teile gewählt werden",
+      "body": "Du entscheidest nur, wo ein Mauerfeld steht. Das Spiel wählt Teil und Drehung nach den Mauerfeldern ringsum und wählt neu, wenn ein Nachbar dazukommt oder wegfällt: Ein Ende wird zur Geraden, sobald die Mauer darüber hinauswächst.",
+      "rules": {
+        "fork": "Mauern verzweigen sich nie: Kein Feld darf drei oder mehr Mauernachbarn haben.",
+        "gate": "Ein Tor passt nur auf eine Gerade, mit einem Mauerfeld auf zwei gegenüberliegenden Seiten, und das muss auch nach jedem späteren Bauen so bleiben.",
+        "sea": "Ein Seeende berührt genau ein Mauerfeld an Land und kann nie ein Tor sein."
+      },
+      "example": "Ein Beispiel: eine Mauer, die endet, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und wieder endet. Das Spiel hat jedes Teil und seine Drehung allein aus den Feldern ermittelt."
+    },
+    "example": {
+      "alt": "Eine Beispielmauer aus {count} Feldern auf Gras."
+    },
+    "where": {
+      "heading": "Wo Mauern stehen können",
+      "body": "Auf Gras, Wald, Sand und einfachem Moorboden, innerhalb deines Gebiets. Die Mauer behält den Boden, auf dem sie steht: Im Wald werden die Bäume gerodet, und der Waldboden bleibt. Auf Flüssen, Bächen, Bergen, Moorwasser und Seen kann man keine Mauer bauen. Das Seeende ist die Ausnahme: Es steht auf Küstenwasser.",
+      "grounds": {
+        "grass": "Gras",
+        "forest": "Waldboden",
+        "sand": "Sand",
+        "bog": "Moorboden"
+      }
+    },
+    "movement": {
+      "heading": "Bewegung",
+      "body": "Mauern betreffen Landheere. Flotten sind nicht betroffen.",
+      "rules": {
+        "block": "Ein Mauerfeld sperrt jedes Landheer, auch dein eigenes. Nur fertige Felder zählen: Eine Baustelle sperrt nicht.",
+        "gate": "Ein Tor lässt die Heere seines Besitzers zu den normalen Kosten des Bodens durch, die anderer nicht.",
+        "end": "Ein Landende ist halb offen: Jedes Heer kann es überqueren, zu Kosten von 3 statt den Kosten des Bodens. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes Mauerfeld.",
+        "sea": "Eine Mauer, die in einem Seeende endet, schließt an der Küste ab. Eine Mauer, die an Land neben offenem Meer einfach aufhört, tut das nicht: Ihr halb offenes Ende ist der Weg hindurch.",
+        "natural": "Berge und breite Flüsse können Landheere ohnehin nicht überqueren, eine Mauer, die bis an einen von ihnen reicht, ist dort also verschlossen.",
+        "fleets": "Flotten werden von Mauern nicht betroffen."
+      },
+      "diagram": {
+        "sealedTitle": "Verschlossen",
+        "sealed": "Eine Mauer, die an beiden Enden bis an Berge reicht: kein Durchkommen.",
+        "halfOpenTitle": "Halb offen",
+        "halfOpen": "Ein Landende: Jedes Heer überquert es zu Kosten von 3.",
+        "gateTitle": "Tor",
+        "gate": "Ein Tor öffnet sich nur für die Heere seines Besitzers."
+      }
+    },
+    "notBuilt": {
+      "heading": "Noch nicht gebaut",
+      "body": "Belagerung und Feuer, die einer Mauer eine Stufe nehmen: Eine Mauer verliert ihre Stufen nacheinander, bis sie weg ist. Noch tut das nichts."
     }
   }
 }

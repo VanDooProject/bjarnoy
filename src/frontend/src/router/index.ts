@@ -173,6 +173,11 @@ export const router = createRouter({
       component: () => import('../views/BogLandsView.vue'),
     },
     {
+      path: '/docs/walls',
+      name: 'walls-docs',
+      component: () => import('../views/WallsView.vue'),
+    },
+    {
       path: '/admin',
       component: () => import('../views/admin/AdminLayout.vue'),
       meta: { requiresAdmin: true },
