@@ -12,12 +12,12 @@ import { DEFAULT_GENERATION } from '../worldGenerator';
 import { nearestLand } from '../testing/islandFinders';
 
 describe('isLandFor (water-mask bake worker)', () => {
-  // Seed 40 — matches src/shared/wasted-terrain-golden.json and
-  // WorldModel.test.ts's own wasted-island reveal suite. (-142, 471) is a
-  // wasted-forest hex; (-143, 470) is plain open sea bordering wasted land.
+  // Seed 40 — the same seed and hexes as
+  // WorldModel.test.ts's own wasted-island reveal suite. (-81, 256) is a
+  // wasted-forest hex; (-83, 256) is plain open sea bordering wasted land.
   const WASTED_SEED = 40;
-  const wastedLand = { q: -142, r: 471 };
-  const plainSea = { q: -143, r: 470 };
+  const wastedLand = { q: -81, r: 256 };
+  const plainSea = { q: -83, r: 256 };
 
   it('treats a wasted hex as sea while not revealed', () => {
     const isLand = isLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
@@ -53,8 +53,8 @@ describe('isLandFor (water-mask bake worker)', () => {
 describe('isWastedLandFor (water-mask taint field)', () => {
   // Same seed and hexes as isLandFor's suite above — see its own comment.
   const WASTED_SEED = 40;
-  const wastedLand = { q: -142, r: 471 };
-  const plainSea = { q: -143, r: 470 };
+  const wastedLand = { q: -81, r: 256 };
+  const plainSea = { q: -83, r: 256 };
 
   it('answers false for a wasted hex while not revealed', () => {
     const isWastedLand = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, false);

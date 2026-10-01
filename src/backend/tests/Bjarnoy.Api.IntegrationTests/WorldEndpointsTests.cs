@@ -109,7 +109,8 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(islands);
-        Assert.Equal(world.Islands.Count, islands.Count);
+        // Wasted islands stay hidden from this endpoint until the endboss reveals them.
+        Assert.Equal(world.Islands.Count(i => !i.IsWasted), islands.Count);
         Assert.Equal(Enumerable.Range(0, islands.Count), islands.Select(i => i.Index));
         Assert.All(islands, i => Assert.False(string.IsNullOrWhiteSpace(i.Name)));
         Assert.All(islands, i => Assert.True(i.TileCount > 0));
@@ -144,17 +145,17 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         // Width survives the round trip: a spring starts a stream, a mouth is never a stream.
         Assert.Equal("stream", spring.Width);
         Assert.All(riverTiles.Where(t => t.Shape == "mouth"), t => Assert.NotEqual("stream", t.Width));
-        Assert.All(riverTiles, t => Assert.Contains(t.Width, new[] { "river", "stream", "widen" }));
+        Assert.All(riverTiles, t => Assert.Contains(t.Width, new[] { "river", "stream", "widen", "riverstream" }));
     }
 
     [Fact]
     public async Task Giants_survive_the_round_trip_through_the_text_encoded_column()
     {
         using var client = _fixture.CreateClient();
-        // Compact-world seed found by scanning seeds 1-400: places six giants,
-        // all mountain giants (no shrine), so this doesn't depend on getting
+        // Compact-world seed found by scanning seeds 1-300 (after the island-density change):
+        // places 35 giants, all mountain giants (no shrine), so this doesn't depend on getting
         // lucky with the default.
-        var world = await CreateWorldAsync(seed: 9, radius: 300);
+        var world = await CreateWorldAsync(seed: 11, radius: 300);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);

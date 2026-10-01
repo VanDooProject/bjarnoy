@@ -257,6 +257,8 @@ public class AllLandTestOptionsTests
             Radius = 500,
             IslandCellSize = 100,
             IslandChance = 1.0,
+            IslandMaxReach = 0.0, // overlapping discs on purpose: legacy reach budget,
+            IslandMinGap = 0.0, // and no min-gap rule to drop the overlapping ones
             IslandMinWidth = 100.0,
             IslandMaxWidth = 100.0,
             IslandMinSegments = 1,
@@ -364,9 +366,25 @@ public class WorldGenerationOptionsTests
     [Fact]
     public void Validate_rejects_a_cell_too_small_for_the_coast_warp()
     {
-        var options = WorldGenerationOptions.ForSeed(1) with { IslandCellSize = 16, IslandCoastWarp = 30.0, IslandCoastWarpScale = 400.0 };
+        // Legacy reach budget (one ring of cells): a 16-hex cell has no room left after a 30-hex warp.
+        var options = WorldGenerationOptions.ForSeed(1) with
+        {
+            IslandCellSize = 16, IslandMaxReach = 0.0, IslandCoastWarp = 30.0, IslandCoastWarpScale = 400.0,
+        };
 
         Assert.Throws<ArgumentException>(options.Validate);
+    }
+
+    [Fact]
+    public void Validate_rejects_a_cell_too_small_for_the_max_reach()
+    {
+        // 305 hexes of reach on 40-hex cells would need a hex to scan 8 rings of cells.
+        var options = WorldGenerationOptions.ForSeed(1) with { IslandCellSize = 40 };
+        Assert.Throws<ArgumentException>(options.Validate);
+
+        // The same reach on the default cells is a 5x5 scan, and the legacy rule always a 3x3 one.
+        Assert.Equal(2, IslandShapeConstants.ScanSpan(WorldGenerationOptions.ForSeed(1)));
+        Assert.Equal(1, IslandShapeConstants.ScanSpan(WorldGenerationOptions.ForSeed(1) with { IslandCellSize = 40, IslandMaxReach = 0.0 }));
     }
 
     [Fact]

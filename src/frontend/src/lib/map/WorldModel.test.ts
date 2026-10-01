@@ -421,7 +421,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
 
     expect(model.placeBuilding(settlement.id, grass, 'fishinghut')).toBe(false);
     expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
@@ -433,7 +433,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     settlement.level = 6;
     model.claimTerritory(settlement.id);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
     const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
 
     expect(model.placeBuilding(settlement.id, grass, 'shrineofnjord')).toBe(false);
@@ -446,7 +446,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
     model.setRiverTiles([riverTile(grass, 'bend')]);
 
     expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(true);
@@ -457,7 +457,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
-    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
 
     expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(false);
     expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
@@ -469,7 +469,7 @@ describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
       const model = new WorldModel(20260825);
       const { settlement } = foundLandedSettlement(model);
       const radius = model.borderRadius(settlement);
-      const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+      const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
       model.setRiverTiles([riverTile(grass, shape)]);
 
       expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(false);
@@ -1345,13 +1345,13 @@ describe('WorldModel wildlife camps', () => {
 });
 
 describe('WorldModel wasted-island reveal', () => {
-  // Seed 40 has a small wasted island around (-105, 460) — the first window of
-  // src/shared/wasted-terrain-golden.json. (-142, 471) is a wasted-forest hex whose 6
-  // neighbours are also wasted land (fully interior); (-143, 470) is plain open sea that
+  // Seed 40 has a small wasted island nearest the origin around cell (-1, 1) (found by
+  // scanning the wasted island cells after the island-density change). (-81, 256) is a wasted-forest hex whose 6
+  // neighbours are also wasted land (fully interior); (-83, 256) is plain open sea that
   // borders wasted land.
   const WASTED_SEED = 40;
-  const wastedForest = { q: -142, r: 471 };
-  const seaBorderingWasted = { q: -143, r: 470 };
+  const wastedForest = { q: -81, r: 256 };
+  const seaBorderingWasted = { q: -83, r: 256 };
 
   it('hides a wasted hex as sea before the reveal', () => {
     const model = new WorldModel(WASTED_SEED);

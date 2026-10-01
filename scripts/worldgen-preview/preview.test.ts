@@ -94,7 +94,7 @@ describe('rivers layer', () => {
 });
 
 describe('bog layer', () => {
-  const options = { seed: 11, radius: 1000, window: { q: -728, r: 204, size: 60 }, hexPixels: 6, layers: ['terrain', 'rivers', 'bog'], legend: true, stats: false };
+  const options = { seed: 11, radius: 1000, window: { q: -17, r: 115, size: 60 }, hexPixels: 6, layers: ['terrain', 'rivers', 'bog'], legend: true, stats: false };
 
   it('draws the lake, lists every bog kind in the legend and reports zero violations of every rule', () => {
     const plain = renderPreview({ ...options, layers: ['terrain', 'rivers'] });

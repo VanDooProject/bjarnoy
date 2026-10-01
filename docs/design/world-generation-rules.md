@@ -14,6 +14,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Rivers and streams; coherent mountain ranges | Implemented (streams PR, bog entry in the bog PR) |
 | Bog and lakes | Implemented (bog PR); see [`bog.md`](./bog.md) |
 | Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps in the bog PR) |
+| Island density: about twice the islands, same island sizes, no fused islands | Implemented (island-density PR) |
 
 ## World and islands
 
@@ -23,19 +24,75 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 - Islands are much bigger and irregular: curved and crescent (C) spines, rough fjord-like coasts, bays and
   satellite islets. *Implemented (island shape v3).*
 - A mix of sizes: mostly **B** (~150 hexes across, 5k-15k tiles), some **A** (~80 across, 1.5k-7k tiles) and
-  a few **C** (~250 across, 15k-40k tiles). *Implemented: size classes with 30% A, 12% C (of cells), the
-  rest B; large islands clear their neighbouring cells.*
+  a few **C** (~250 across, 15k-40k tiles). *Implemented: size classes with 30% A, 7% C (of cells; 12% on the
+  260-hex cells before the density change), the rest B; large islands clear their neighbouring cells.*
+- "Nice islands but not many - could be twice as much": about **twice the islands** at the same island sizes,
+  without fusing them into blobs. *Implemented (island-density PR), see [Island density](#island-density).*
 - O-shaped islands are fine. An enclosed inner water pocket, not connected to the open sea, is filled with
   bog and a lake, and rivers sink into it. *Implemented (bog PR): a pocket too thin or touching open sea stays sea.*
 - Islands are never cut off at cell ("chunk") borders or at the world edge: an island that could cross the
-  world radius is not generated. *Implemented: the reach clamp keeps every island inside the 3x3 cell block a
-  hex scans, and an island whose centre distance plus 1.42x its reach exceeds the radius is dropped, which is
-  why the world radius is now part of the generation constants sent to the client.*
+  world radius is not generated. *Implemented: the reach clamp keeps every island inside the block of cells a
+  hex scans (`ScanSpan` rings: 5x5 at the default 150-hex cells, 3x3 on legacy worlds), and an island whose
+  centre distance plus 1.42x its reach exceeds the radius is dropped, which is why the world radius is now part
+  of the generation constants sent to the client.*
 - The C# and TypeScript generators stay byte-identical, held by shared golden fixtures
   (`src/shared/island-shape-golden.json`, `terrain-checksum-golden.json`, `river-generation-golden.json`,
   `wasted-terrain-golden.json`). *Implemented.*
 - Fog: a chunked explored store where a fully explored chunk is stored compressed (one flag), and chunked
   mask delivery. *Planned.*
+
+## Island density
+
+*Implemented (island-density PR).* The radius-4000 world had 270 islands on 5.5% land with a median sea lane of
+113 hexes: plenty of sea, not many islands. The rule now:
+
+- **Cells of 150 hexes** (`IslandCellSize`, from 260), still `IslandChance` 0.8 per cell, so about three times
+  the island cells.
+- **Island size no longer depends on the cell size**: the reach clamp is `IslandMaxReach` = 305 hexes (what
+  260-hex cells allowed), and a hex scans as many rings of cells as that needs (`IslandShapeConstants.ScanSpan`:
+  2 rings, a 5x5 block, at 150-hex cells). Shrinking the cells alone would have shrunk the big islands with them.
+- **Min sea gap** (`IslandMinGap` = 24 hexes): an island whose nominal coast (spine capsules at their
+  half-widths, islets at their radii, before the shoreline noise) comes closer than that to a neighbour that
+  outranks it - a larger class, or the same class and a higher `+307` roll - is not generated. Neighbours are
+  compared before the world edge and the rule itself (candidates), so it needs no recursion, does not depend
+  on evaluation order or on the world radius, and checks every ring two islands could meet in
+  (`IslandShapeConstants.GapSpan`, 4 at the defaults). No two kept islands are ever closer than the gap.
+- **`IslandLargeShare` 0.07** (from 0.12): on smaller cells the "large clears its 8 neighbours" rule clears
+  less sea, so C would otherwise grow to ~23% of the islands; 0.07 keeps the class mix where it was.
+- **Legacy worlds keep their map**: both new knobs are persisted per world; the migration gives existing worlds
+  `IslandMaxReach` = 0 (the old one-ring budget, a 3x3 scan) and `IslandMinGap` = 0 (rule off), and they keep
+  their own cell size and large share, so their terrain is byte-identical. `WorldGenerationOptions.Compact`
+  scales the same way (66-hex cells from 90, reach 103, gap 8: 2.1x the islands).
+
+Measured with the real generator over seeds 1-6 at radius 4000 (the default world; scratch script over
+`worldGenerator.ts`; landmasses found the way `WorldGenerator` does; per island = the largest landmass its cell
+owns; sea lane = coast-to-coast distance from each landmass of 1000+ tiles to the nearest other one):
+
+| per seed (mean of 6) | before (260 cells) | after | ratio |
+|---|---|---|---|
+| island cells kept (A / B / C) | 270 (74 / 157 / 39) | 526 (133 / 314 / 79) | **1.95x** |
+| landmasses >= 1000 tiles / >= 100 / >= 6 | 282 / 461 / 693 | 554 / 891 / 1341 | 1.96x / 1.93x / 1.94x |
+| land share of the world disc | 5.5% | 10.5% | 1.9x |
+| class mix A / B / C | 27 / 58 / 14% | 25 / 60 / 15% | same |
+| landmasses fused from 2+ island cells | 3.3 | 0 | - |
+
+| island size, tiles (median, p25-p75) | before | after |
+|---|---|---|
+| A | 2600 (1760-3370) | 2190 (1660-3020) |
+| B | 8730 (6200-11660) | 7960 (5850-10780) |
+| C | 23900 (15700-31000) | 23200 (16000-30300) |
+
+| sea lane to the nearest island, hexes (islands of 1000+ tiles) | before | after |
+|---|---|---|
+| p10 / p25 / median / p75 | 40 / 71 / 113 / 168 | 30 / 43 / 64 / 91 |
+| lanes under 10 hexes / under 20 | 1.9% / 3.8% | 0.3% / 1.7% |
+
+The island sizes are the same distribution (the clamp is unchanged; the slightly lower A/B medians are the gap
+rule thinning the bigger, more crowding candidates, and the old numbers include fused blobs). The sea lanes are
+about what doubling the islands must cost (1/sqrt(2) of the spacing), but the near-touching ones the old rule
+let through are almost gone. Exactly 2x is reachable (gap 20 with large share 0.08: 1.99x) at more lanes under
+20 hexes; a gap of 32 would keep the old p10 lane (39) at 1.74x. 24 is the middle: about twice the islands with
+fewer close calls than before.
 
 ## Rivers and streams
 

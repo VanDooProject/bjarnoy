@@ -42,6 +42,8 @@ public class IslandShapeGoldenTests
             Radius = I("worldRadius"),
             IslandCellSize = I("islandCellSize"),
             IslandChance = D("islandChance"),
+            IslandMaxReach = D("islandMaxReach"),
+            IslandMinGap = D("islandMinGap"),
             IslandMinWidth = D("islandMinWidth"),
             IslandMaxWidth = D("islandMaxWidth"),
             IslandMinSegments = I("islandMinSegments"),
