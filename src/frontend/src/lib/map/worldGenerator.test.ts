@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { hexDistance } from '../hex/coords';
 import {
   DEFAULT_GENERATION,
+  variantForTerrain,
   enumerateIslands,
   enumerateIslandShapes,
   generateTile,
@@ -150,5 +151,26 @@ describe('wasted islands and the min gap', () => {
     const world: WorldSeed = { seed: 1, generation };
     const green = enumerateIslandShapes(world, false);
     expect(enumerateIslandShapes(world, true).some((w) => green.some((g) => islandsTooClose(w, g, 24)))).toBe(true);
+  });
+});
+
+describe('variantForTerrain', () => {
+  it('never rolls the undecorated plain bog frame, but uses every dressed one', () => {
+    const seen = new Set<number>();
+    for (let q = -40; q < 40; q++) for (let r = -40; r < 40; r++) seen.add(variantForTerrain(q, r, SEED, 'bog'));
+    expect(seen.has(0)).toBe(false);
+    expect([...seen].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  it('still rolls the lake\'s plain frame (dressed by lake_life) and grass\'s plain frame', () => {
+    const lake = new Set<number>();
+    const grass = new Set<number>();
+    for (let q = -40; q < 40; q++)
+      for (let r = -40; r < 40; r++) {
+        lake.add(variantForTerrain(q, r, SEED, 'lake'));
+        grass.add(variantForTerrain(q, r, SEED, 'grass'));
+      }
+    expect(lake.has(0)).toBe(true);
+    expect(grass.has(0)).toBe(true);
   });
 });

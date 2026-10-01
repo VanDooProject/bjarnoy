@@ -1023,6 +1023,13 @@ public sealed class TerrainSampler
     };
 
     /// <summary>
+    /// Terrains whose plain (index 0) frame carries no decoration of its own, so it would sit bare among dressed
+    /// neighbours: they roll from <c>[1, N)</c> instead of <c>[0, N)</c>. The lake's plain frame is dressed by the
+    /// always-on <c>lake_life</c> collection, so it stays in the roll.
+    /// </summary>
+    private static readonly IReadOnlySet<Terrain> UndecoratedFirst = new HashSet<Terrain> { Terrain.Bog };
+
+    /// <summary>
     /// Which of the four mountain shapes (<see cref="MountainShape"/>) a hex
     /// renders with — <see cref="VariantAt"/>'s own index for
     /// <see cref="Terrain.Mountain"/>, just typed. Meaningless for a hex that
@@ -1078,8 +1085,9 @@ public sealed class TerrainSampler
             return 0;
         }
 
+        var skip = UndecoratedFirst.Contains(terrain) ? 1 : 0;
         var hash = ValueNoise.Hash2(coord.Q, coord.R, _options.Seed + 31);
-        var index = (int)(hash * count);
+        var index = skip + (int)(hash * (count - skip));
         return index >= count ? count - 1 : index;
     }
 
