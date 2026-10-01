@@ -6,6 +6,7 @@ import { i18n, initLocale } from './i18n';
 import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './lib/map/water/waterDebug';
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
 import { zoomTransitionTuning } from './lib/map/zoomTransition';
+import { constructionDialTuning } from './lib/map/constructionDial';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
 import './style.css';
@@ -54,4 +55,8 @@ if (DEMO_MODE) {
   // twin of ZoomDebugPanel (see zoomTransition.ts), exposed on the same
   // terms as __waterTuning/__fogTuning above.
   (window as unknown as { __zoomTuning: typeof zoomTransitionTuning }).__zoomTuning = zoomTransitionTuning;
+  // Construction-progress dial's look ('outline' | 'bold' | 'pie' | 'tile'),
+  // switchable live from the console for screenshot comparisons — same terms
+  // as __zoomTuning above.
+  (window as unknown as { __dialTuning: typeof constructionDialTuning }).__dialTuning = constructionDialTuning;
 }

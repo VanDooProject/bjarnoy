@@ -37,7 +37,15 @@ import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
-import { dialProgress, hexPerimeterPath, type ConstructionDial } from './constructionDial';
+import { formatCountdownShort } from '../hud/countdown';
+import {
+  constructionDialTuning,
+  dialProgress,
+  dialRemainingSeconds,
+  hexPerimeterPath,
+  polygonPerimeterPath,
+  type ConstructionDial,
+} from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { RiverTile, Settlement, Terrain, Tile } from './types';
@@ -195,6 +203,13 @@ export const LABEL_STYLES = {
   }),
   cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
   badgeName: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: 13 }),
+  dialTime: new TextStyle({
+    fill: 0xffffff,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: 'bold',
+    fontSize: 12,
+    dropShadow: { color: 0x000000, alpha: 0.9, blur: 2, distance: 1, angle: Math.PI / 2 },
+  }),
   badgeSuffix: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: '400', fontSize: 12 }),
 } as const;
 
@@ -769,10 +784,11 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
   return points;
 }
 
-// Construction progress dial (see `constructionDial.ts`): a hex outline that
-// floats over a building under construction — white track, yellow elapsed arc.
+// Construction progress dial (see `constructionDial.ts`): drawn in screen space
+// by `drawConstructionDials` (constant on-screen size, like the settlement
+// badge) over a building under construction — white track, yellow elapsed arc,
+// remaining time inside.
 const CONSTRUCTION_DIAL_LIFT = TILE_H * 0.9;
-const CONSTRUCTION_DIAL_RADIUS = TILE_H * 0.32;
 const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
@@ -2247,25 +2263,6 @@ export class HexMapRenderer {
           this.highlightLayer
             .ellipse(cx, cy, (TILE_W / 2) * ring.scale, (TILE_H / 2) * ring.scale)
             .stroke({ width: 3, color: GOLD, alpha: ring.alpha });
-        }
-      }
-    }
-    if (this.options.mode === 'settlement' && this.constructionDials) {
-      const nowMs = Date.now();
-      for (const dial of this.constructionDials) {
-        const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
-        const cx = grid.x + TILE_W / 2;
-        const cy = grid.y + TILE_CENTER_Y_OFFSET - CONSTRUCTION_DIAL_LIFT;
-        const r = CONSTRUCTION_DIAL_RADIUS;
-        this.highlightLayer
-          .poly(hexPoints(cx, cy, r))
-          .fill({ color: 0x000000, alpha: 0.35 })
-          .stroke({ width: 4, color: 0xffffff, alpha: 0.95, join: 'round' });
-        const path = hexPerimeterPath(cx, cy, r, dialProgress(dial, nowMs));
-        if (path.length >= 4) {
-          this.highlightLayer.moveTo(path[0], path[1]);
-          for (let i = 2; i < path.length; i += 2) this.highlightLayer.lineTo(path[i], path[i + 1]);
-          this.highlightLayer.stroke({ width: 4, color: CONSTRUCTION_DIAL_ELAPSED_COLOR, cap: 'round', join: 'round' });
         }
       }
     }
@@ -4184,7 +4181,10 @@ export class HexMapRenderer {
     // hides the rest, same bookkeeping labels already do (labelsUsed).
     this.iconsUsed = 0;
     if (this.options.mode === 'settlement') {
+      this.labelsUsed = 0;
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
+      this.drawConstructionDials();
+      for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
       this.drawArmyOverlay();
       this.hideUnusedIcons();
       return;
@@ -4320,7 +4320,6 @@ export class HexMapRenderer {
   // glued to the hex while the camera pans.
   private rebuildSettlementLabels() {
     const { worldModel, playerId } = this.options;
-    this.labelsUsed = 0;
 
     for (const settlement of worldModel.listSettlements()) {
       // Don't reveal a rival's name over ground you haven't scouted.
@@ -4409,7 +4408,88 @@ export class HexMapRenderer {
       nameLabel.visible = true;
       suffixLabel.visible = true;
     }
-    for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
+  }
+
+  /**
+   * Construction progress dials, in screen space (markerLayer): a constant
+   * on-screen size at/below the settlement's default zoom that grows past it,
+   * like the settlement badge. Must run before the unused-label hide loop in
+   * `rebuildMarkers` since it acquires pooled labels. Look is picked by
+   * `constructionDialTuning.style`.
+   */
+  private drawConstructionDials() {
+    if (!this.constructionDials) return;
+    const style = constructionDialTuning.style;
+    const nowMs = Date.now();
+    const zs = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
+    const g = this.markerLayer;
+    const strokePath = (path: number[], width: number) => {
+      if (path.length < 4) return;
+      g.moveTo(path[0], path[1]);
+      for (let i = 2; i < path.length; i += 2) g.lineTo(path[i], path[i + 1]);
+      g.stroke({ width, color: CONSTRUCTION_DIAL_ELAPSED_COLOR, cap: 'round', join: 'round' });
+    };
+    for (const dial of this.constructionDials) {
+      const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
+      const progress = dialProgress(dial, nowMs);
+      const remaining = dialRemainingSeconds(dial, nowMs);
+      const text = remaining === null ? '…' : formatCountdownShort(remaining);
+      let labelScale = zs;
+      let cx: number;
+      let cy: number;
+
+      if (style === 'tile') {
+        const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+        const mid = { x: (top[1].x + top[2].x) / 2, y: (top[1].y + top[2].y) / 2 };
+        const ring = [mid, top[2], top[3], top[4], top[5], top[0], top[1]].map((p) => this.toScreen(p));
+        g.poly(ring.flatMap((p) => [p.x, p.y]), true).stroke({ width: 3, color: 0xffffff, alpha: 0.95, join: 'round' });
+        strokePath(polygonPerimeterPath(ring, progress), 3);
+        const c = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
+        cx = c.x;
+        cy = c.y;
+        const label = this.acquireLabel(LABEL_STYLES.dialTime, zs);
+        label.text = text;
+        label.anchor.set(0.5);
+        label.position.set(cx, cy);
+        label.visible = true;
+        const pw = label.width + 12 * zs;
+        const ph = 18 * zs;
+        // Pill drawn after the label was positioned; the label child renders
+        // above the Graphics regardless of draw order.
+        g.roundRect(cx - pw / 2, cy - ph / 2, pw, ph, ph / 2).fill({ color: 0x08121a, alpha: 0.8 });
+        continue;
+      }
+
+      const anchor = this.toScreen({
+        x: grid.x + TILE_W / 2,
+        y: grid.y + TILE_CENTER_Y_OFFSET - CONSTRUCTION_DIAL_LIFT,
+      });
+      cx = anchor.x;
+      cy = anchor.y;
+      const bold = style === 'bold';
+      const r = 22 * zs * (bold ? 1.25 : 1);
+      const hex = hexPoints(cx, cy, r);
+      if (bold) {
+        g.poly(hex).fill({ color: 0x08121a, alpha: 0.85 }).stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.9, join: 'round' });
+        strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs);
+        labelScale = zs * 1.2;
+      } else if (style === 'pie') {
+        g.poly(hex).fill({ color: 0x08121a, alpha: 0.7 });
+        const arc = hexPerimeterPath(cx, cy, r, progress);
+        if (arc.length >= 4) {
+          g.poly([cx, cy, ...arc]).fill({ color: CONSTRUCTION_DIAL_ELAPSED_COLOR, alpha: 0.55 });
+        }
+        g.poly(hex).stroke({ width: 3 * zs, color: 0xffffff, alpha: 0.95, join: 'round' });
+      } else {
+        g.poly(hex).fill({ color: 0x08121a, alpha: 0.7 }).stroke({ width: 3 * zs, color: 0xffffff, alpha: 0.95, join: 'round' });
+        strokePath(hexPerimeterPath(cx, cy, r, progress), 3 * zs);
+      }
+      const label = this.acquireLabel(LABEL_STYLES.dialTime, labelScale);
+      label.text = text;
+      label.anchor.set(0.5);
+      label.position.set(cx, cy);
+      label.visible = true;
+    }
   }
 
   private hideUnusedIcons() {

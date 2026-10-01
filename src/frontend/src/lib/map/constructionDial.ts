@@ -43,27 +43,63 @@ export function dialProgress(d: ConstructionDial, nowMs: number): number {
   return Math.min(1, Math.max(0, (nowMs - d.startMs) / (d.endMs - d.startMs)));
 }
 
+/** Seconds left at `nowMs`; null when timing is unknown (waiting order). */
+export function dialRemainingSeconds(d: ConstructionDial, nowMs: number): number | null {
+  if (d.startMs === null || d.endMs === null) return null;
+  return Math.max(0, (d.endMs - nowMs) / 1000);
+}
+
+/**
+ * Flat [x, y, ...] polyline along a closed polygon's perimeter, from
+ * `vertices[0]` in array order, covering `fraction` (clamped 0..1) of the
+ * total perimeter LENGTH (edges may differ in length).
+ */
+export function polygonPerimeterPath(vertices: { x: number; y: number }[], fraction: number): number[] {
+  const f = Math.min(1, Math.max(0, fraction));
+  const n = vertices.length;
+  if (f <= 0 || n < 2) return [];
+  const lens: number[] = [];
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const a = vertices[i];
+    const b = vertices[(i + 1) % n];
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    lens.push(l);
+    total += l;
+  }
+  if (total <= 0) return [];
+  let remaining = f * total;
+  const out: number[] = [vertices[0].x, vertices[0].y];
+  for (let i = 0; i < n; i++) {
+    const a = vertices[i];
+    const b = vertices[(i + 1) % n];
+    if (remaining >= lens[i] - 1e-9) {
+      out.push(b.x, b.y);
+      remaining -= lens[i];
+      if (remaining <= 1e-9) break;
+    } else {
+      const t = remaining / lens[i];
+      out.push(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+      break;
+    }
+  }
+  return out;
+}
+
 /**
  * Flat [x, y, ...] polyline along a pointy-top hexagon's perimeter (vertex i
  * at -90 + 60i degrees, matching `hexPoints`), from the top vertex clockwise
  * for `fraction` (clamped 0..1) of the perimeter.
  */
 export function hexPerimeterPath(cx: number, cy: number, r: number, fraction: number): number[] {
-  const f = Math.min(1, Math.max(0, fraction));
-  if (f <= 0) return [];
-  const vertex = (i: number): [number, number] => {
+  const vertices = Array.from({ length: 6 }, (_, i) => {
     const a = (Math.PI / 180) * (-90 + 60 * i);
-    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
-  };
-  const edges = f * 6;
-  const full = Math.min(6, Math.floor(edges));
-  const out: number[] = [];
-  for (let i = 0; i <= full; i++) out.push(...vertex(i % 6));
-  const partial = edges - full;
-  if (full < 6 && partial > 1e-9) {
-    const [x0, y0] = vertex(full);
-    const [x1, y1] = vertex((full + 1) % 6);
-    out.push(x0 + (x1 - x0) * partial, y0 + (y1 - y0) * partial);
-  }
-  return out;
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  });
+  return polygonPerimeterPath(vertices, fraction);
 }
+
+export type ConstructionDialStyle = 'outline' | 'bold' | 'pie' | 'tile';
+
+/** Live-tweakable dial look (exposed as `window.__dialTuning` in demo mode). */
+export const constructionDialTuning: { style: ConstructionDialStyle } = { style: 'outline' };

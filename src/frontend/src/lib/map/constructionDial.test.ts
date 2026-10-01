@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BuildOrderResponse } from '../../api/types';
-import { constructionDialsFromQueue, dialProgress, hexPerimeterPath } from './constructionDial';
+import { constructionDialsFromQueue, dialProgress, dialRemainingSeconds, hexPerimeterPath, polygonPerimeterPath } from './constructionDial';
 
 function order(p: Partial<BuildOrderResponse>): BuildOrderResponse {
   return {
@@ -73,4 +73,39 @@ describe('hexPerimeterPath', () => {
     near(p.slice(12), [0, -10]);
   });
   it('clamps above 1', () => expect(hexPerimeterPath(0, 0, 10, 3)).toHaveLength(14));
+});
+
+describe('dialRemainingSeconds', () => {
+  const d = { coord: { q: 0, r: 0 }, startMs: 1000, endMs: 3000 };
+  it('counts down and clamps at 0', () => {
+    expect(dialRemainingSeconds(d, 1000)).toBe(2);
+    expect(dialRemainingSeconds(d, 2500)).toBe(0.5);
+    expect(dialRemainingSeconds(d, 9000)).toBe(0);
+  });
+  it('is null without timing', () => {
+    expect(dialRemainingSeconds({ coord: { q: 0, r: 0 }, startMs: null, endMs: null }, 5)).toBeNull();
+  });
+});
+
+describe('polygonPerimeterPath', () => {
+  // 10 x 30 rectangle: perimeter 80, edges of unequal length.
+  const rect = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 30 },
+    { x: 0, y: 30 },
+  ];
+  it('is empty at 0', () => expect(polygonPerimeterPath(rect, 0)).toEqual([]));
+  it('stops mid first edge by length, not by edge count', () => {
+    expect(polygonPerimeterPath(rect, 5 / 80)).toEqual([0, 0, 5, 0]);
+  });
+  it('lands on a vertex exactly at the edge boundary', () => {
+    expect(polygonPerimeterPath(rect, 10 / 80)).toEqual([0, 0, 10, 0]);
+  });
+  it('ends part-way along the long second edge', () => {
+    expect(polygonPerimeterPath(rect, 25 / 80)).toEqual([0, 0, 10, 0, 10, 15]);
+  });
+  it('closes at vertex 0 at 1', () => {
+    expect(polygonPerimeterPath(rect, 1)).toEqual([0, 0, 10, 0, 10, 30, 0, 30, 0, 0]);
+  });
 });
