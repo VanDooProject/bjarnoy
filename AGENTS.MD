@@ -231,14 +231,15 @@
     `PLAYWRIGHT_BROWSERS_PATH`. Run it from
     `src/backend/tests/Bjarnoy.AppHost.Tests` with **`CI=true dotnet test`**;
     a single class can be targeted with
-    `CI=true dotnet test -- --filter-class "*ChatFlowTests"`. The `CI=true`
-    matters: without it `AppHost.cs` treats the run as local dev and gives
-    Postgres a persistent volume + container (+ pgAdmin), so every test —
-    and every later run — shares one database, and tests that expect a
-    fresh one fail locally for reasons CI never sees (`Assert.Single` on
-    worlds finding 2, 409s, pgAdmin health-check noise). With `CI=true` each
-    test gets its own empty database exactly like the `aspire-e2e` job
-    (verified 2026-10-01: 12/12 pass, ~20 min).
+    `CI=true dotnet test -- --filter-class "*ChatFlowTests"`. The suite
+    shares one Aspire stack (`AppHostFixture`): it seeds `gamedb` once,
+    snapshots it, and restores the snapshot + restarts the API before every
+    test, so each test still starts from a fresh database. `CI=true` keeps
+    the run identical to the `aspire-e2e` job: without it `AppHost.cs`
+    treats the run as local dev and adds a persistent Postgres volume and
+    container plus pgAdmin, which the fixture's own setup works around but
+    CI never exercises (verified 2026-10-01 with `CI=true`: 12/12 pass,
+    ~10 min).
   If a pull ever does come back `403 Forbidden`, that's an egress-policy
   change for that session (see `/root/.ccr/README.md`): don't route around
   it, say so, and rely on CI — but try the pull first rather than assuming.

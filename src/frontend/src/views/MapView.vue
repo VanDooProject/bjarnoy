@@ -707,7 +707,7 @@ const DEFENSE_CATEGORY: BuildCategory = {
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
 // ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
-// Hammerschmiede (with the river hammer-mill art for now: TODO(art) bog-creek Hammerschmiede) and a lake's half shore the
+// Hammer Forge (with the river hammer-mill art for now: TODO(art) bog-creek Hammer Forge) and a lake's half shore the
 // Fishing Hut with its lake art. Shores, mouths and springs take nothing.
 const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
   bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }, DEFENSE_CATEGORY],
