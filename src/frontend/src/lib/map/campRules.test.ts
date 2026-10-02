@@ -50,6 +50,18 @@ describe('campRules', () => {
     expect(boar.iron).toBe(600);
   });
 
+  it('the whale road is strong but pays food only (no automatic iron)', () => {
+    expect(lootKindsOf('whaleroad')).toEqual([{ kind: 'food' }]);
+    expect(lootPoolByKind('whaleroad', 1)).toEqual({ wood: 0, stone: 0, food: 1800, iron: 0 });
+    expect(lootPoolByKind('whaleroad', 5).food).toBe(Math.floor(lootPool(5, 'strong')));
+    expect(lootKindsOf('walrushaulout').map((s) => s.kind)).toContain('iron');
+  });
+
+  it('a water camp (guard range 0) never threatens a tower, even on its own hex', () => {
+    const whale = { q: 0, r: 0, guardRange: 0, strong: true };
+    expect(towerThreatAt([whale], { q: 0, r: 0 })).toBeUndefined();
+  });
+
   it('estimated loot scales the pool by the garrison fraction and adds leftover', () => {
     const full = fullGarrison(1, 'weak');
     const half = { young: 0, adult: 0, alpha: 0 };

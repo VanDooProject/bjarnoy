@@ -1336,6 +1336,25 @@ describe('placeGiantsForIsland (demo giant placement v2)', () => {
     for (const anchor of anchors) expect(hexDistance(at!, anchor)).toBeGreaterThanOrEqual(5);
   });
 
+  it('places the island’s whale roads on open sea 6 to 10 hexes off its coast, with no guard range', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+    const roads = hexesInRadius(near, 80).flatMap((c) => {
+      const camp = model.campAt(c);
+      return camp?.family === 'whaleroad' ? [{ coord: c, camp }] : [];
+    });
+    expect(roads.length).toBeGreaterThan(0);
+    const land = hexesInRadius(near, 120).filter((c) => model.isLand(c.q, c.r));
+    for (const { coord, camp } of roads) {
+      expect(camp.guardRange).toBe(0);
+      expect(model.terrainOf(coord.q, coord.r)).toBe('sea');
+      const shore = Math.min(...land.map((l) => hexDistance(l, coord)));
+      expect(shore).toBeGreaterThanOrEqual(6);
+      expect(shore).toBeLessThanOrEqual(10);
+    }
+  });
+
   it('places an island’s giants once, however many times it is visited', () => {
     const model = new WorldModel(DEMO_SEED);
     const near = model.findLandfall({ q: 0, r: 0 })!;
@@ -1364,6 +1383,12 @@ describe('WorldModel wildlife camps', () => {
     // A second call for a hex that already has a camp leaves it alone.
     model.setCamps([{ family: 'boarwallow', coord, level: 1, orientation: 'W' }]);
     expect(model.getTile(3, 4).camp?.family).toBe('wolfden');
+  });
+
+  it('setCamps gives a whale road (a water camp) no guard range and no start-position exclusion', () => {
+    const model = new WorldModel(1);
+    model.setCamps([{ family: 'whaleroad', coord: { q: 3, r: 4 }, level: 5, orientation: 'SE' }]);
+    expect(model.getTile(3, 4).camp).toEqual({ family: 'whaleroad', level: 5, orientation: 'SE', strong: true, guardRange: 0 });
   });
 
   it('a camp hex is not buildable', () => {

@@ -123,7 +123,8 @@
       "bogNothingHere": "Nothing can be built on this bog hex",
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
-      "noLandUnitsAtHome": "No land units at home"
+      "noLandUnitsAtHome": "No land units at home",
+      "noShipsAtHome": "No ships at home"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",

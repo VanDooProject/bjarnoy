@@ -84,7 +84,8 @@
     "NotCompleted": "That quest isn't completed yet.",
     "UnknownQuest": "There is no such quest.",
     "NoCampAtDestination": "There is no wildlife camp at that hex.",
-    "HuntRequiresLandUnits": "Only land units can hunt a wildlife camp.",
+    "HuntRequiresLandUnits": "Ships cannot hunt a camp on land; send land units.",
+    "HuntRequiresFleet": "Only ships can hunt a camp at sea; land units cannot reach it.",
     "HexOccupiedByCamp": "Wild beasts still hold that hex."
   }
 }

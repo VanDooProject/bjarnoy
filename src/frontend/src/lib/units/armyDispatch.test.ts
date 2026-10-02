@@ -5,6 +5,7 @@ import {
   buildAttackDispatchRequest,
   buildFieldOrderRequest,
   buildHuntDispatchRequest,
+  garrisonCanHunt,
   isHuntUnit,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
@@ -421,5 +422,22 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('spearman', byType)).toBe(true);
     expect(isHuntUnit('longship', byType)).toBe(false);
     expect(isHuntUnit('unknown', byType)).toBe(false);
+  });
+
+  it('a camp at sea (the whale road) is hunted by ships only, never by land units', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    expect(isHuntUnit('longship', byType, true)).toBe(true);
+    expect(isHuntUnit('spearman', byType, true)).toBe(false);
+    expect(isHuntUnit('unknown', byType, true)).toBe(false);
+  });
+
+  it('the hunt ring action needs land units at home for a land camp and ships for a camp at sea', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    const landOnly = [{ unit: 'spearman', count: 4 }, { unit: 'longship', count: 0 }];
+    const shipsOnly = [{ unit: 'spearman', count: 0 }, { unit: 'longship', count: 2 }];
+    expect(garrisonCanHunt(landOnly, byType, false)).toBe(true);
+    expect(garrisonCanHunt(landOnly, byType, true)).toBe(false);
+    expect(garrisonCanHunt(shipsOnly, byType, false)).toBe(false);
+    expect(garrisonCanHunt(shipsOnly, byType, true)).toBe(true);
   });
 });

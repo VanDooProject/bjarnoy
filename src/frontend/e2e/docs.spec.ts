@@ -181,11 +181,15 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     // manifests have arrived (they load lazily, after the cards render).
     const animated = page.locator('.wildlife-camps .card .animated-camp[data-animated="true"]');
     await expect.poll(() => animated.count()).toBeGreaterThan(0);
-    await expect(page.locator('.wildlife-camps .card [data-testid="guard-range"]')).toHaveCount(total);
+    // Every land camp states its guard range; the whale road (open sea) has none.
+    await expect(page.locator('.wildlife-camps .card [data-testid="guard-range"]')).toHaveCount(total - 1);
+    await expect(page.locator('#camp-whaleroad [data-testid="guard-range"]')).toHaveCount(0);
     // Every camp gives food and every strong camp iron; the camps' own extras and larger shares come on top.
     await expect(page.locator('.wildlife-camps .card [data-loot="food"]')).toHaveCount(total);
     const strongCards = page.locator('.card:has([data-strength="strong"])');
-    await expect(strongCards.locator('[data-loot="iron"]')).toHaveCount(await strongCards.count());
+    // (the whale road is strong but pays food only)
+    await expect(strongCards.locator('[data-loot="iron"]')).toHaveCount((await strongCards.count()) - 1);
+    await expect(page.locator('#camp-whaleroad [data-loot="iron"]')).toHaveCount(0);
     await expect(page.locator('#camp-beaverlodge [data-loot="wood"]')).toHaveCount(1);
     await expect(page.locator('#camp-boarwallow [data-loot="food"][data-more="true"]')).toHaveCount(1);
 

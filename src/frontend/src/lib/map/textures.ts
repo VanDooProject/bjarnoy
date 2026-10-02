@@ -219,6 +219,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   harewarren: 'harewarren',
   deerglade: 'deerglade',
   otterslide: 'otterslide',
+  // The first water camp (3D_assets hextile134): drawn on its open-sea hex, so its base is the plain sea base; level000 gulls (all six rotations), level001 whales (kept SE and NE).
+  whaleroad: 'whaleroad',
   // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
   // own doc comment for why this key exists at all despite `WorldModel`
   // itself never producing a wasted open-sea tile today.

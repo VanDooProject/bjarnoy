@@ -123,7 +123,8 @@
       "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden",
       "hunt": "Jagen",
       "campOccupied": "Von wilden Tieren belegt",
-      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause"
+      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
+      "noShipsAtHome": "Keine Schiffe zu Hause"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",

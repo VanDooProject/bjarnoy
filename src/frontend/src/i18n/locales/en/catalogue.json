@@ -63,7 +63,8 @@
     "cranedance": "Crane dance",
     "harewarren": "Hare warren",
     "deerglade": "Deer glade",
-    "otterslide": "Otter slide"
+    "otterslide": "Otter slide",
+    "whaleroad": "Whale road"
   },
   "terrain": {
     "sea": "Open water",
@@ -204,6 +205,11 @@
       "young": "Pup",
       "adult": "Otter",
       "alpha": "Old otter"
+    },
+    "whaleroad": {
+      "young": "Whale calf",
+      "adult": "Humpback",
+      "alpha": "Old bull"
     }
   }
 }

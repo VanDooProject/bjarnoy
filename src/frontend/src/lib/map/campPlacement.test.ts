@@ -17,6 +17,13 @@ import {
   guardRange,
   isStrongCampFamily,
   placeCamps,
+  placeWhaleRoads,
+  whaleCountFor,
+  campGuardRange,
+  isWaterCampFamily,
+  MinWhaleSpacing,
+  WhaleMinShoreDistance,
+  WhaleMaxShoreDistance,
 } from './campPlacement';
 import type { RiverTile, Terrain } from './types';
 
@@ -36,7 +43,7 @@ describe('camp family table', () => {
   it('has the owner-decided strengths', () => {
     const strong = CAMP_FAMILIES.filter((f) => f.strength === 'strong').map((f) => f.family).sort();
     const weak = CAMP_FAMILIES.filter((f) => f.strength === 'weak').map((f) => f.family).sort();
-    expect(strong).toEqual(['bearrapids', 'boarwallow', 'eagleeyrie', 'fenrirbrood', 'moosemire', 'walrushaulout', 'wolfden']);
+    expect(strong).toEqual(['bearrapids', 'boarwallow', 'eagleeyrie', 'fenrirbrood', 'moosemire', 'walrushaulout', 'whaleroad', 'wolfden']);
     expect(weak).toEqual(['beaverlodge', 'cranedance', 'deerglade', 'harewarren', 'otterslide', 'sealhaulout']);
     expect(isStrongCampFamily('wolfden')).toBe(true);
     expect(isStrongCampFamily('sealhaulout')).toBe(false);
@@ -193,5 +200,109 @@ describe('placeCamps', () => {
     }
     const onlyForest = block(10, () => 'forest');
     expect(placeCamps(onlyForest.tiles, onlyForest.terrainOf, [], [], 9, 1, true)).toEqual([]);
+  });
+});
+
+describe('whale road (the first water camp)', () => {
+  const blob = (cq: number, cr: number, radius: number): AxialCoord[] => {
+    const out: AxialCoord[] = [];
+    for (let dq = -radius; dq <= radius; dq++) {
+      for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) out.push({ q: cq + dq, r: cr + dr });
+    }
+    return out;
+  };
+  const landOf = (...islands: AxialCoord[][]) => {
+    const keys = new Set(islands.flat().map((c) => `${c.q},${c.r}`));
+    return (c: AxialCoord) => keys.has(`${c.q},${c.r}`);
+  };
+  const nearest = (tiles: AxialCoord[], c: AxialCoord) => Math.min(...tiles.map((t) => hexDistance(t, c)));
+
+  it('is the last family: strong, cubic, on the sea, with no guard range', () => {
+    const last = CAMP_FAMILIES[CAMP_FAMILIES.length - 1]!;
+    expect(last).toEqual({ family: 'whaleroad', ground: 'sea', strength: 'strong', levelSkew: 'cubic' });
+    expect(isWaterCampFamily('whaleroad')).toBe(true);
+    expect(isWaterCampFamily('wolfden')).toBe(false);
+    for (let level = 1; level <= MaxCampLevel; level++) {
+      expect(campGuardRange('whaleroad', level)).toBe(0);
+      expect(campGuardRange('wolfden', level)).toBe(guardRange(level, 'strong'));
+      expect(campGuardRange('harewarren', level)).toBe(guardRange(level, 'weak'));
+    }
+  });
+
+  it('never places a whale road on land', () => {
+    const { tiles, terrainOf } = block(70, () => 'grass');
+    for (const seed of [1, 2, 3]) {
+      expect(placeCamps(tiles, terrainOf, [], [], seed, 1).map((p) => p.family)).not.toContain('whaleroad');
+    }
+  });
+
+  it.each([
+    [60, 1],
+    [1_499, 1],
+    [4_499, 1],
+    [4_500, 2],
+    [7_499, 2],
+    [7_500, 3],
+    [100_000, 3],
+  ])('an island of %i tiles gets a budget of %i', (land, expected) => {
+    expect(whaleCountFor(land)).toBe(expected);
+  });
+
+  it('gives an island under the camp minimum none', () => {
+    const sixtyOne = blob(0, 0, 4);
+    expect(sixtyOne).toHaveLength(61);
+    const small = sixtyOne.slice(0, MinCampIslandTiles - 1);
+    expect(placeWhaleRoads(small, landOf(small), 1, 1)).toEqual([]);
+    expect(placeWhaleRoads(sixtyOne, landOf(sixtyOne), 1, 1)).not.toEqual([]);
+  });
+
+  it('keeps 6 to 10 hexes off the coast, and is deterministic', () => {
+    const island = blob(0, 0, 10);
+    const isLand = landOf(island);
+    for (let seed = 1; seed <= 20; seed++) {
+      const roads = placeWhaleRoads(island, isLand, seed, 3);
+      expect(roads).toEqual(placeWhaleRoads([...island].reverse(), isLand, seed, 3));
+      for (const road of roads) {
+        const shore = nearest(island, road.coord);
+        expect(shore).toBeGreaterThanOrEqual(WhaleMinShoreDistance);
+        expect(shore).toBeLessThanOrEqual(WhaleMaxShoreDistance);
+        expect(road.family).toBe('whaleroad');
+        expect(road.orientation).toBeNull();
+      }
+    }
+  });
+
+  it('keeps clear of another island: no land within 5 and the own coast strictly nearest', () => {
+    const island = blob(0, 0, 10);
+    const maxQ = Math.max(...island.map((c) => c.q));
+    const neighbour = blob(maxQ + 9, 0, 6);
+    const isLand = landOf(island, neighbour);
+    for (let seed = 1; seed <= 20; seed++) {
+      for (const road of placeWhaleRoads(island, isLand, seed, 3)) {
+        const other = nearest(neighbour, road.coord);
+        expect(other).toBeGreaterThan(5);
+        expect(other).toBeGreaterThan(nearest(island, road.coord));
+      }
+    }
+  });
+
+  it('skips a hex that is as near another island as its own', () => {
+    const a = blob(0, 0, 5);
+    const b = blob(20, 0, 5);
+    const isLand = landOf(a, b);
+    for (let seed = 1; seed <= 20; seed++) {
+      for (const road of placeWhaleRoads(a, isLand, seed, 1)) expect(nearest(b, road.coord)).toBeGreaterThan(nearest(a, road.coord));
+      for (const road of placeWhaleRoads(b, isLand, seed, 2)) expect(nearest(a, road.coord)).toBeGreaterThan(nearest(b, road.coord));
+    }
+  });
+
+  it('spaces the roads of a big island at least 12 apart, up to the budget', () => {
+    const island = blob(0, 0, 50); // 7651 tiles: three roads
+    expect(whaleCountFor(island.length)).toBe(3);
+    const roads = placeWhaleRoads(island, landOf(island), 4, 4);
+    expect(roads).toHaveLength(3);
+    for (let i = 0; i < roads.length; i++) {
+      for (let j = i + 1; j < roads.length; j++) expect(hexDistance(roads[i]!.coord, roads[j]!.coord)).toBeGreaterThanOrEqual(MinWhaleSpacing);
+    }
   });
 });

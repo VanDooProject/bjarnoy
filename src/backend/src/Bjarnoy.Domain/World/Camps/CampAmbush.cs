@@ -22,8 +22,8 @@ public static class CampAmbush
     /// <para>
     /// A camp is entered at the first hex of a stretch inside its guard range (distance at most
     /// <see cref="Camp.GuardRange"/>); the very first hex of the route counts as an entry at the span
-    /// start (<see cref="Movement.DepartedAt"/>). Leaving and re-entering the range is a new entry. An entry
-    /// ambushes when it lies in the window and the camp is aggressive at that instant; the earliest such
+    /// start (<see cref="Movement.DepartedAt"/>). A water camp's guard range is 0, so a fleet enters it on the camp's
+    /// own hex. Leaving and re-entering the range is a new entry. An entry ambushes when it lies in the window and the camp is aggressive at that instant; the earliest such
     /// entry across all camps wins, ties going to the lowest q then r. The camp at
     /// <paramref name="exemptCamp"/> (the hunt's own target) is skipped.
     /// </para>

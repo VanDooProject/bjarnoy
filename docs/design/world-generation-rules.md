@@ -192,7 +192,7 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
 ## Wildlife camps
 
 *Implemented (bog camps too, on plain bog tiles): see [`wildlife-camps.md`](./wildlife-camps.md).* Spawn and render only for now (no gameplay yet). Every island of 60 or more land tiles gets camps (islets below that get none); a small island whose
-only start positions sit inside a strong camp's guard range is simply not a start island. Camps are placed before start positions; start positions keep away from strong camps,
+only start positions sit inside a strong camp's guard range is simply not a start island. Green islands of 60 or more tiles also get one to three whale roads on open sea (water camps with no guard range, see `wildlife-camps.md`, "Water camps"). Camps are placed before start positions; start positions keep away from strong camps,
 weak camps are fine nearby.
 
 - Strong (will block towers later): wolves, bears, boars, Fenrir.

@@ -84,7 +84,8 @@
     "NotCompleted": "Diese Aufgabe ist noch nicht erledigt.",
     "UnknownQuest": "Diese Aufgabe gibt es nicht.",
     "NoCampAtDestination": "Auf diesem Feld steht kein Wildtierlager.",
-    "HuntRequiresLandUnits": "Nur Landeinheiten können ein Wildtierlager jagen.",
+    "HuntRequiresLandUnits": "Schiffe können kein Lager an Land jagen; schicke Landeinheiten.",
+    "HuntRequiresFleet": "Nur Schiffe können ein Lager auf See jagen; Landeinheiten erreichen es nicht.",
     "HexOccupiedByCamp": "Wilde Tiere halten dieses Feld noch."
   }
 }

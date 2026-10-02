@@ -89,10 +89,16 @@ public static class CampRules
     /// <summary>
     /// The loot kinds of a camp family: food always, iron for a strong camp, plus the family's extras;
     /// a <c>++</c> kind weighs 2, every other 1. Order is food, stone, wood, iron. Mirrors
-    /// <c>WildlifeCampsView.vue</c>'s <c>lootOf</c>.
+    /// <c>WildlifeCampsView.vue</c>'s <c>lootOf</c>. The whale road is the exception: strong, but food only
+    /// (the sea holds no gear to scavenge).
     /// </summary>
     public static IReadOnlyList<CampLootKind> LootKinds(string family)
     {
+        if (family == CampFamilies.Whaleroad)
+        {
+            return [new CampLootKind("food", 1)];
+        }
+
         var weights = new Dictionary<string, int> { ["food"] = 1 };
         if (CampFamilies.IsStrong(family))
         {

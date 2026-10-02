@@ -602,7 +602,8 @@ public static class ArmyEndpoints
                 DispatchRejection.TargetHexNotFoundable =>
                     "The target hex is too close to an already-claimed settlement's border.",
                 DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
-                DispatchRejection.HuntRequiresLandUnits => "Only land units can hunt a wildlife camp; ships cannot.",
+                DispatchRejection.HuntRequiresLandUnits => "Ships cannot hunt a camp on land; only land units can.",
+                DispatchRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,
