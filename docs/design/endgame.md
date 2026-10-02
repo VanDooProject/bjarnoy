@@ -167,4 +167,4 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 
 ## Open questions
 
-- Should player palisades also lose at most 1 level per 24 h to sieges, like Utgard walls?
+None open. (Player palisades take the full `LevelsDestroyed` per siege; only Utgard walls are capped at 1 level per 24 h.)
