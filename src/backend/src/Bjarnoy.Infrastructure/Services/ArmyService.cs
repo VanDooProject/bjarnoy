@@ -317,6 +317,13 @@ public sealed class ArmyService(
         }
 
         settlement.ApplyDomain(decision.Settlement!);
+        if (mission == ArmyMission.Hunt && settled.TroopsTrained)
+        {
+            // Onboarding quest hunt1 (locked until the troops were trained; claims never
+            // gate it): starting a hunt counts, winning is not required. `settled` is the
+            // pre-dispatch settlement, so units leaving on this very hunt still count.
+            settlement.HuntStarted = true;
+        }
 
         var armyEntity = new ArmyEntity { Id = armyId, SettlementId = settlementId };
         armyEntity.ApplyDomain(decision.Army!);
@@ -1303,7 +1310,7 @@ public sealed class ArmyService(
             }
         }
 
-        return settlement with { Garrison = garrison };
+        return (settlement with { Garrison = garrison }).WithQuestLatches();
     }
 
     private Task<SettlementEntity?> LoadSettlementAsync(Guid settlementId, CancellationToken cancellationToken) =>

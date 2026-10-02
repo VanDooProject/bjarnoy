@@ -296,3 +296,55 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     await expect(page).toHaveURL(/\/docs$/);
   });
 });
+
+/**
+ * Hover must land on the hex under the cursor even where the docs column is
+ * scaled with CSS `zoom` (`.docs-scale`, style.css: 1.2x from 1600px wide).
+ * Under that zoom the pointer and `getBoundingClientRect()` are in zoomed
+ * pixels while the renderer's viewport is in layout pixels, so hit-tests used
+ * to land `zoom` times too far from the canvas origin (the hover highlight sat
+ * beside the cursor). 1280 is the unscaled control, 1920 the zoomed case.
+ *
+ * Probe points are fractions of the map host: the locked preview camera fits
+ * the island to the canvas, so the same fraction is the same hex at any size.
+ */
+test.describe('docs island maps hover under the docs zoom', { tag: '@g2' }, () => {
+  const islands = [
+    {
+      path: '/docs/wasted-lands',
+      island: '.wasted-island',
+      caption: 'island-caption',
+      probes: [
+        { fx: 0.2, fy: 0.4, name: 'Fire-mountain' },
+        { fx: 0.5, fy: 0.2, name: 'Wasteland' },
+      ],
+    },
+    {
+      path: '/docs/bog-lands',
+      island: '.bog-island',
+      caption: 'bog-island-caption',
+      probes: [
+        { fx: 0.2, fy: 0.4, name: 'River' },
+        { fx: 0.75, fy: 0.5, name: 'Grass' },
+      ],
+    },
+  ];
+
+  for (const width of [1280, 1920]) {
+    for (const { path, island, caption, probes } of islands) {
+      test(`${path} names the hovered hex at ${width}px wide`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1080 });
+        await page.goto(path);
+        const mapHost = page.locator(`${island} .map-host[data-map-ready="true"]`);
+        await mapHost.waitFor();
+        await mapHost.scrollIntoViewIfNeeded();
+
+        const box = (await mapHost.boundingBox())!;
+        for (const { fx, fy, name } of probes) {
+          await page.mouse.move(box.x + box.width * fx, box.y + box.height * fy);
+          await expect(page.getByTestId(caption)).toHaveText(name);
+        }
+      });
+    }
+  }
+});

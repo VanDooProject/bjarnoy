@@ -1150,6 +1150,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("FoundedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("HuntStarted")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid>("IslandId")
                         .HasColumnType("TEXT");
 
@@ -1197,6 +1200,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<double>("StockWood")
                         .HasColumnType("REAL");
+
+                    b.Property<bool>("TroopsTrained")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");

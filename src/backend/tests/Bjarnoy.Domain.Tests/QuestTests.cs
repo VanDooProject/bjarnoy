@@ -1,6 +1,7 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -43,7 +44,7 @@ public class QuestTests
     public void The_quests_come_in_the_tutorial_order_with_their_rewards()
     {
         Assert.Equal(
-            ["producers3", "longhouse2", "storagehouse1", "producers6", "longhouse3", "longhouse5"],
+            ["producers3", "longhouse2", "storagehouse1", "producers6", "longhouse3", "longhouse5", "spearmen5", "hunt1"],
             Quests.All.Select(q => q.Id));
         Assert.Equal(new ResourceAmounts(150, 120, 80, 0), Quests.Find("producers3")!.Reward);
         Assert.Equal(new ResourceAmounts(250, 200, 150, 0), Quests.Find("longhouse2")!.Reward);
@@ -51,6 +52,10 @@ public class QuestTests
         Assert.Equal(new ResourceAmounts(200, 150, 100, 0), Quests.Find("producers6")!.Reward);
         Assert.Equal(new ResourceAmounts(400, 300, 200, 0), Quests.Find("longhouse3")!.Reward);
         Assert.Equal(new ResourceAmounts(800, 600, 400, 0), Quests.Find("longhouse5")!.Reward);
+        Assert.Equal(new ResourceAmounts(500, 400, 300, 0), Quests.Find("spearmen5")!.Reward);
+        Assert.Equal(6, Quests.Find("spearmen5")!.Bit);
+        Assert.Equal(new ResourceAmounts(400, 300, 300, 0), Quests.Find("hunt1")!.Reward);
+        Assert.Equal(7, Quests.Find("hunt1")!.Bit);
         Assert.Equal(Quests.All.Count, Quests.All.Select(q => q.Bit).Distinct().Count());
     }
 
@@ -121,6 +126,62 @@ public class QuestTests
 
         Assert.False(q.IsCompleted(Found(others: [BuildingType.Farm])));
         Assert.True(q.IsCompleted(Found(others: [BuildingType.StorageHouse])));
+    }
+
+    [Fact]
+    public void The_spearmen_quest_counts_fighting_land_units_only()
+    {
+        var q = Quests.Find("spearmen5")!;
+        var home = Found();
+
+        Assert.False(q.IsCompleted(home));
+        Assert.False(q.IsCompleted(home with { Garrison = [new UnitStack(UnitType.Spearman, 4)] }));
+        Assert.True(q.IsCompleted(home with { Garrison = [new UnitStack(UnitType.Spearman, 5)] }));
+        Assert.True(q.IsCompleted(home with
+        {
+            Garrison = [new UnitStack(UnitType.Axeman, 2), new UnitStack(UnitType.Spearman, 3)],
+        }));
+        Assert.False(q.IsCompleted(home with
+        {
+            Garrison = [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Thrall, 10), new UnitStack(UnitType.Karve, 3)],
+        }));
+    }
+
+    [Fact]
+    public void The_spearmen_quest_stays_completed_once_the_troops_were_trained()
+    {
+        var q = Quests.Find("spearmen5")!;
+        var trained = Found() with { Garrison = [new UnitStack(UnitType.Axeman, 5)] };
+        var latched = trained.SettleTo(T0).Settlement;
+
+        Assert.True(latched.TroopsTrained);
+        Assert.False(Found().SettleTo(T0).Settlement.TroopsTrained);
+
+        var gone = latched with { Garrison = [new UnitStack(UnitType.Axeman, 1)] };
+        Assert.True(q.IsCompleted(gone));
+        Assert.True(gone.SettleTo(T0).Settlement.TroopsTrained);
+        Assert.False(q.IsCompleted(Found() with { Garrison = [new UnitStack(UnitType.Axeman, 4)] }));
+    }
+
+    [Fact]
+    public void Settling_reports_a_change_when_only_the_troops_latch_flips()
+    {
+        var result = (Found() with { Garrison = [new UnitStack(UnitType.Spearman, 6)] }).SettleTo(T0);
+
+        Assert.True(result.Changed);
+        Assert.True(result.Settlement.TroopsTrained);
+        Assert.False(result.Settlement.SettleTo(T0).Changed);
+    }
+
+    [Fact]
+    public void The_hunt_quest_needs_trained_troops_and_a_started_hunt_but_no_claim()
+    {
+        var q = Quests.Find("hunt1")!;
+
+        Assert.False(q.IsCompleted(Found()));
+        Assert.False(q.IsCompleted(Found() with { HuntStarted = true }));
+        Assert.False(q.IsCompleted(Found() with { TroopsTrained = true }));
+        Assert.True(q.IsCompleted(Found() with { TroopsTrained = true, HuntStarted = true }));
     }
 
     [Fact]

@@ -876,6 +876,23 @@ const PREVIEW_FIT_VERTICAL_OVERHANG = TILE_TOPFACE_Y_OFFSET + TILE_H / 2;
 const PREVIEW_FIT_MARGIN = 24;
 
 /**
+ * Client (viewport) point -> canvas layout pixels. `rect` is the canvas's
+ * `getBoundingClientRect()`, `layout` its `offsetWidth/Height`: they differ
+ * only under a CSS `zoom` on an ancestor, where the rect is in zoomed pixels
+ * and the layout size is not — the ratio is that zoom. Pure so it's testable
+ * without a canvas.
+ */
+export function clientToCanvasPoint(
+  client: { x: number; y: number },
+  rect: { left: number; top: number; width: number; height: number },
+  layout: { width: number; height: number },
+): { x: number; y: number } {
+  const sx = layout.width > 0 ? rect.width / layout.width : 1;
+  const sy = layout.height > 0 ? rect.height / layout.height : 1;
+  return { x: (client.x - rect.left) / sx, y: (client.y - rect.top) / sy };
+}
+
+/**
  * World-space bounding box (tile centres, via `isoGridPosition`) of a
  * preview island's actually-drawn tiles — the same tile list
  * `WorldModel.previewCropTiles` hands `rebuildTerrain`'s preview cull, so
@@ -2420,10 +2437,27 @@ export class HexMapRenderer {
 
   /** Pointer position relative to the canvas — the space `hexCenterScreen`/`toScreen` report in. */
   private pointerScreen(e: PointerEvent): { x: number; y: number } | null {
+    return this.clientToCanvas(e.clientX, e.clientY);
+  }
+
+  /**
+   * Viewport (client) coordinates -> canvas layout pixels, the space
+   * `this.viewport` and the camera maths live in. A plain
+   * `client - rect.left` is only right when the canvas is laid out 1:1; under
+   * a CSS `zoom` on an ancestor (the docs pages' `.docs-scale` on big
+   * monitors) `getBoundingClientRect()` and the pointer both report zoomed
+   * pixels while `offsetWidth` stays unzoomed, so every hit-test landed
+   * `zoom` times too far from the canvas origin. Dividing by that ratio
+   * undoes it (and is exactly 1 everywhere else).
+   */
+  private clientToCanvas(clientX: number, clientY: number): { x: number; y: number } | null {
     const canvas = this.app?.canvas;
     if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return clientToCanvasPoint(
+      { x: clientX, y: clientY },
+      canvas.getBoundingClientRect(),
+      { width: canvas.offsetWidth, height: canvas.offsetHeight },
+    );
   }
 
   /**
@@ -2542,11 +2576,7 @@ export class HexMapRenderer {
         x: this.camera.x - step.pan.x / this.camera.zoom,
         y: this.camera.y - step.pan.y / this.camera.zoom,
       };
-      const canvas = this.app?.canvas;
-      const rect = canvas?.getBoundingClientRect();
-      const screen = rect
-        ? { x: step.midpoint.x - rect.left, y: step.midpoint.y - rect.top }
-        : step.midpoint;
+      const screen = this.clientToCanvas(step.midpoint.x, step.midpoint.y) ?? step.midpoint;
       this.zoomBy(screen, step.factor);
       return;
     }
@@ -2683,8 +2713,8 @@ export class HexMapRenderer {
       this.setHoveredCoord(null);
       return;
     }
-    const rect = canvas.getBoundingClientRect();
-    const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const screen = this.clientToCanvas(e.clientX, e.clientY);
+    if (!screen) return;
     const world = screenToWorld(this.camera, screen, this.viewport);
     this.setHoveredCoord(isoPixelToAxial(world, TILE_W, TILE_H));
   }
@@ -2810,10 +2840,8 @@ export class HexMapRenderer {
     if (this.options.allowPageScroll) return;
     e.preventDefault();
     if (this.interactionLocked) return;
-    const canvas = this.app?.canvas;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const screen = this.clientToCanvas(e.clientX, e.clientY);
+    if (!screen) return;
     const factor = Math.exp(-e.deltaY * 0.001);
     this.zoomBy(screen, factor);
   };
@@ -2905,10 +2933,8 @@ export class HexMapRenderer {
   }
 
   private handleClick(e: PointerEvent) {
-    const canvas = this.app?.canvas;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const screen = this.clientToCanvas(e.clientX, e.clientY);
+    if (!screen) return;
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
