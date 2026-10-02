@@ -189,6 +189,8 @@ export const router = createRouter({
       path: '/docs/walls',
       name: 'walls-docs',
       component: () => import('../views/WallsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => startAtlasManifestLoad(),
     },
     {
       path: '/admin',
