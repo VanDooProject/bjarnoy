@@ -21,7 +21,9 @@
     "clickMapForDestination": "Click the map to set a destination first.",
     "chooseSettlementFor": "Choose a settlement to {mission} first.",
     "fieldOrderPremiumRequired": "Premium required to plot more than one stop — clear the extra stop, or upgrade.",
-    "chooseCampToHunt": "Choose a wildlife camp to hunt first."
+    "chooseCampToHunt": "Choose a wildlife camp to hunt first.",
+    "chooseWallToSiege": "Choose an enemy wall to besiege first.",
+    "siegeNeedsSiegeUnit": "A siege needs at least one catapult or battering ram."
   },
   "localeSwitcher": {
     "label": "Language",

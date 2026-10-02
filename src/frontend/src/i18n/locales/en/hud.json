@@ -123,7 +123,9 @@
       "bogNothingHere": "Nothing can be built on this bog hex",
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
-      "noLandUnitsAtHome": "No land units at home"
+      "noLandUnitsAtHome": "No land units at home",
+      "siege": "Siege",
+      "noSiegeUnitsAtHome": "Needs a catapult or battering ram at home"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -300,16 +302,20 @@
       "tower": "Watchtower",
       "fishinghut": "Fishing hut",
       "reindeerherder": "Reindeer herder",
-      "pumpkinfarm": "Pumpkin farm"
+      "pumpkinfarm": "Pumpkin farm",
+      "palisade": "Palisade",
+      "palisadegate": "Palisade gate"
     },
     "missionAttack": "Attack",
     "missionRaid": "Raid",
+    "missionSiege": "Siege",
     "victory": "Victory",
     "defeat": "Defeat",
     "summaryLost": "{n} lost",
     "summarySurvived": "{n} survived",
     "summaryLooted": "{n} looted",
     "siegeDestroyedRazed": "{label} destroyed — settlement razed",
+    "siegeBreached": "{label} breached",
     "siegeDestroyed": "{label} destroyed",
     "siegeDamaged": "{label} damaged: level {before} → {after}",
     "attackPower": "Attack power",
@@ -350,7 +356,8 @@
     "supporting": "Supporting",
     "returning": "Returning",
     "inTransit": "In transit",
-    "hunting": "Hunting"
+    "hunting": "Hunting",
+    "besieging": "Besieging"
   },
   "armyPanel": {
     "title": "Armies",
@@ -441,6 +448,13 @@
     "retry": "Retry",
     "pollErrorTitle": "Connection problem — retrying",
     "dismiss": "Dismiss"
+  },
+  "siegeTarget": {
+    "instructions": "Pick land units with at least one catapult or battering ram to besiege this wall. Optional stops: {count} {waypointWord}.",
+    "wall": "Wall",
+    "wallHex": "Hex ({q}, {r})",
+    "note": "The army fights the wall owner's armies standing on or beside the wall first; if it wins, its surviving siege engines knock levels off the wall.",
+    "needsSiegeUnit": "Add at least one catapult or battering ram: without one the army cannot breach the wall."
   },
   "huntTarget": {
     "instructions": "Pick land units to hunt this camp. Optional stops: {count} {waypointWord}.",

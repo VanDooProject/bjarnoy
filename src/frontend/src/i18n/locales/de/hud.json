@@ -123,7 +123,9 @@
       "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden",
       "hunt": "Jagen",
       "campOccupied": "Von wilden Tieren belegt",
-      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause"
+      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
+      "siege": "Belagern",
+      "noSiegeUnitsAtHome": "Braucht ein Katapult oder einen Rammbock zu Hause"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -300,16 +302,20 @@
       "tower": "Wachturm",
       "fishinghut": "Fischerhütte",
       "reindeerherder": "Rentierhirte",
-      "pumpkinfarm": "Kürbisfarm"
+      "pumpkinfarm": "Kürbisfarm",
+      "palisade": "Palisade",
+      "palisadegate": "Palisadentor"
     },
     "missionAttack": "Angriff",
     "missionRaid": "Überfall",
+    "missionSiege": "Belagerung",
     "victory": "Sieg",
     "defeat": "Niederlage",
     "summaryLost": "{n} verloren",
     "summarySurvived": "{n} überlebt",
     "summaryLooted": "{n} erbeutet",
     "siegeDestroyedRazed": "{label} zerstört — Siedlung dem Erdboden gleichgemacht",
+    "siegeBreached": "{label} durchbrochen",
     "siegeDestroyed": "{label} zerstört",
     "siegeDamaged": "{label} beschädigt: Stufe {before} → {after}",
     "attackPower": "Angriffskraft",
@@ -350,7 +356,8 @@
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
     "inTransit": "Unterwegs",
-    "hunting": "Auf der Jagd"
+    "hunting": "Auf der Jagd",
+    "besieging": "Belagert"
   },
   "armyPanel": {
     "title": "Armeen",
@@ -441,6 +448,13 @@
     "retry": "Erneut versuchen",
     "pollErrorTitle": "Verbindungsproblem — neuer Versuch läuft",
     "dismiss": "Schließen"
+  },
+  "siegeTarget": {
+    "instructions": "Wähle Landeinheiten mit mindestens einem Katapult oder Rammbock, um diese Mauer zu belagern. Optionale Zwischenstopps: {count} {waypointWord}.",
+    "wall": "Mauer",
+    "wallHex": "Feld ({q}, {r})",
+    "note": "Die Armee kämpft zuerst gegen die Armeen des Mauerbesitzers, die auf oder neben der Mauer stehen; gewinnt sie, nehmen ihre überlebenden Belagerungswaffen der Mauer Stufen.",
+    "needsSiegeUnit": "Füge mindestens ein Katapult oder einen Rammbock hinzu: ohne kann die Armee die Mauer nicht brechen."
   },
   "huntTarget": {
     "instructions": "Wähle Landeinheiten für die Jagd auf dieses Lager. Optionale Zwischenstopps: {count} {waypointWord}.",

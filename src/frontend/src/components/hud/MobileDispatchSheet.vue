@@ -19,11 +19,14 @@ import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import HuntTargetSummary from './HuntTargetSummary.vue';
+import SiegeTargetSummary from './SiegeTargetSummary.vue';
 import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
   hasCatapultSelected,
+  hasSiegeUnitSelected,
   isHuntUnit,
+  isSiegeMissionUnit,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
@@ -58,10 +61,12 @@ const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCoun
 function isRowSelectable(unit: string): boolean {
   // A hunt takes land units only, so ships are locked out from the start.
   if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType)) return false;
+  // A siege takes land units only too.
+  if (draft.value?.mission === 'siege' && !isSiegeMissionUnit(unit, catalogue.byType)) return false;
   return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
 }
 const hasLockedOutUnits = computed(() =>
-  draft.value?.mission === 'hunt'
+  draft.value?.mission === 'hunt' || draft.value?.mission === 'siege'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
     : selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
@@ -108,13 +113,19 @@ const hasDestination = computed(() =>
     ? !!draft.value.targetSettlementId
     : draft.value?.mission === 'hunt'
       ? !!draft.value.targetCamp
-      : routeLength.value > 0,
+      : draft.value?.mission === 'siege'
+        ? !!draft.value.targetWall
+        : routeLength.value > 0,
+);
+// A siege strikes the wall with its siege engines, so it needs at least one catapult or ram in the selection.
+const siegeReady = computed(
+  () => draft.value?.mission !== 'siege' || hasSiegeUnitSelected(draft.value.unitCounts, catalogue.byType),
 );
 const canConfirm = computed(
-  () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
+  () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && siegeReady.value && !draft.value?.submitting,
 );
 
-function setMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
+function setMission(mission: 'move' | 'attack' | 'support' | 'hunt' | 'siege') {
   world.setDispatchMission(mission);
 }
 
@@ -203,6 +214,9 @@ const summaryText = computed(() => {
     const camp = draft.value.targetCamp ? world.model.campAt(draft.value.targetCamp) : undefined;
     if (camp) return t('hud.dispatchSheet.toTarget', { name: campName(camp.family) });
   }
+  if (draft.value.mission === 'siege' && draft.value.targetWall) {
+    return t('hud.dispatchSheet.toTarget', { name: t('hud.siegeTarget.wallHex', draft.value.targetWall) });
+  }
   if (draft.value.mission !== 'move' && selectedTarget.value) {
     return t('hud.dispatchSheet.toTarget', { name: selectedTarget.value.name });
   }
@@ -270,9 +284,13 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           <button v-if="draft.mission === 'hunt'" type="button" class="mission-tab attack active">
             {{ missionName('hunt') }}
           </button>
+          <button v-if="draft.mission === 'siege'" type="button" class="mission-tab attack active">
+            {{ missionName('siege') }}
+          </button>
         </div>
 
         <HuntTargetSummary v-if="draft.mission === 'hunt'" :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
+        <SiegeTargetSummary v-else-if="draft.mission === 'siege'" :target="draft.targetWall" :unit-counts="draft.unitCounts" />
         <template v-else-if="draft.mission !== 'move'">
           <div v-if="selectedTarget" class="target-selected">
             <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>

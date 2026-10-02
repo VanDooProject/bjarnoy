@@ -332,6 +332,26 @@ describe('useWorldStore startDispatchAt', () => {
     expect(store.dispatchDraft?.targetCamp).toBeNull();
   });
 
+  it('starts a Siege draft aimed at the wall hex, with no route waypoint', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 2, r: 5 }, { mission: 'siege' });
+
+    expect(store.dispatchDraft?.mission).toBe('siege');
+    expect(store.dispatchDraft?.targetWall).toEqual({ q: 2, r: 5 });
+    expect(store.dispatchDraft?.route).toEqual([]);
+    expect(store.dispatchDraft?.targetSettlementId).toBeNull();
+  });
+
+  it('switching the mission drops a siege target', async () => {
+    const store = await loadStoreModule(true);
+    store.startDispatchAt({ q: 2, r: 5 }, { mission: 'siege' });
+
+    store.setDispatchMission('move');
+
+    expect(store.dispatchDraft?.targetWall).toBeNull();
+  });
+
   it('cancels an in-progress field order draft, mutually exclusive with dispatch', async () => {
     const store = await loadStoreModule(true);
     store.startFieldOrder('army-1');

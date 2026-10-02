@@ -11,11 +11,12 @@ export function buildingLabel(type: string): string {
 }
 
 /**
- * `"Attack"` or `"Raid"` — this phase's dispatch UI only ever sends
+ * `"Attack"`, `"Raid"` or `"Siege"` (a wall siege) — this phase's dispatch UI only ever sends
  * `mission: 'attack'`, but a report can still come back as a Raid (backend
  * phase 7, another player's dispatch), so it's labelled rather than assumed.
  */
 export function missionLabel(mission: string): string {
+  if (mission === 'siege') return i18n.global.t('hud.battleReport.missionSiege');
   return mission === 'raid' ? i18n.global.t('hud.battleReport.missionRaid') : i18n.global.t('hud.battleReport.missionAttack');
 }
 
@@ -100,6 +101,10 @@ export function unreadCount(reports: Array<{ occurredAt: string }>, lastSeenIso:
 export function siegeSummaryLine(siege: Pick<BattleReportSiege, 'targetType' | 'levelBefore' | 'levelAfter' | 'settlementRazed'>): string {
   const label = buildingLabel(siege.targetType);
   if (siege.levelAfter <= 0) {
+    // A wall hex at level 0 is breached: the palisade or gate is gone and its hex is free again.
+    if (siege.targetType === 'palisade' || siege.targetType === 'palisadegate') {
+      return i18n.global.t('hud.battleReport.siegeBreached', { label });
+    }
     return siege.settlementRazed
       ? i18n.global.t('hud.battleReport.siegeDestroyedRazed', { label })
       : i18n.global.t('hud.battleReport.siegeDestroyed', { label });

@@ -25,6 +25,12 @@ const baseReport = {
   lootTaken: { wood: 50, stone: 0, food: 20, iron: 0 },
 };
 
+describe('missionLabel for a wall siege', () => {
+  it('labels it Siege', () => {
+    expect(missionLabel('siege')).toBe('Siege');
+  });
+});
+
 describe('missionLabel', () => {
   it('labels attack', () => {
     expect(missionLabel('attack')).toBe('Attack');
@@ -104,6 +110,15 @@ describe('siegeSummaryLine', () => {
     expect(
       siegeSummaryLine({ targetType: 'quarry', levelBefore: 1, levelAfter: 0, settlementRazed: false }),
     ).toBe('Quarry destroyed');
+  });
+
+  it('reads a wall hex taken to level 0 as breached, and one left standing as damaged', () => {
+    expect(
+      siegeSummaryLine({ targetType: 'palisade', levelBefore: 2, levelAfter: 0, settlementRazed: false }),
+    ).toBe('Palisade breached');
+    expect(
+      siegeSummaryLine({ targetType: 'palisadegate', levelBefore: 3, levelAfter: 1, settlementRazed: false }),
+    ).toBe('Palisade gate damaged: level 3 → 1');
   });
 
   it('calls out a razed settlement when the longhouse is destroyed', () => {
