@@ -1074,6 +1074,10 @@ public sealed record Settlement
     /// build instant, plus Fenrir's brood always, so a cleared camp's hex is buildable under its
     /// ground's normal rules.
     /// </param>
+    /// <param name="endgameSites">
+    /// The world's endgame sites (Utgard wall hexes, Jötun watchtowers), or <see langword="null"/> for a caller with none on hand. A hex
+    /// holding one is refused (<see cref="BuildRejection.HexOccupiedByEndgameSite"/>), checked right after the camp rule.
+    /// </param>
     /// <param name="bogKindAt">
     /// What kind of bog tile stands on <paramref name="coord"/> (plain moss, shore, creek, ...), or <see langword="null"/>
     /// when it is not bog. Only the buildings with a <see cref="BuildingDefinition.RequiresBogKind"/> (bog-ore works, Clay
@@ -1102,7 +1106,8 @@ public sealed record Settlement
         World.IGiantIndex? giants = null,
         World.ICampIndex? camps = null,
         World.BogTileKind? bogKindAt = null,
-        Palisades.PalisadeLayout? palisades = null)
+        Palisades.PalisadeLayout? palisades = null,
+        World.IEndgameSiteIndex? endgameSites = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -1114,6 +1119,11 @@ public sealed record Settlement
         if ((camps ?? World.CampIndex.Empty).TryGetCamp(coord, out _))
         {
             return BuildDecision.Rejected(BuildRejection.HexOccupiedByCamp);
+        }
+
+        if ((endgameSites ?? World.EndgameSiteIndex.Empty).IsSite(coord))
+        {
+            return BuildDecision.Rejected(BuildRejection.HexOccupiedByEndgameSite);
         }
 
         if (!Claims(coord, giantIndex))

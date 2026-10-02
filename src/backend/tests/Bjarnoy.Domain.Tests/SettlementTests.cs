@@ -949,6 +949,32 @@ public class SettlementTests
     }
 
     [Fact]
+    public void Building_on_an_endgame_site_hex_is_refused_even_when_claimed()
+    {
+        var wallHex = new HexCoord(1, 0);
+        var towerHex = new HexCoord(0, 1);
+        var sites = new EndgameSiteIndex([wallHex, towerHex]);
+        var settlement = Found();
+
+        Assert.True(settlement.Claims(wallHex) && settlement.Claims(towerHex), "sanity: the claim reaches both site hexes");
+
+        foreach (var hex in new[] { wallHex, towerHex })
+        {
+            var refused = settlement.PlanBuild(
+                BuildingType.ReindeerHerder, hex, Terrain.Grass, T0, Guid.CreateVersion7(), endgameSites: sites);
+            Assert.Equal(BuildRejection.HexOccupiedByEndgameSite, refused.Rejection);
+        }
+
+        var elsewhere = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), endgameSites: sites);
+        Assert.NotEqual(BuildRejection.HexOccupiedByEndgameSite, elsewhere.Rejection);
+
+        var noIndex = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, wallHex, Terrain.Grass, T0, Guid.CreateVersion7());
+        Assert.NotEqual(BuildRejection.HexOccupiedByEndgameSite, noIndex.Rejection);
+    }
+
+    [Fact]
     public void Building_on_a_camp_hex_is_refused_even_when_claimed()
     {
         var campHex = new HexCoord(1, 0);

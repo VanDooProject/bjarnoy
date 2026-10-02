@@ -1113,6 +1113,7 @@ public sealed class SettlementService(
             islandSoil: islandSoil,
             giants: buildGiants,
             camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false),
+            endgameSites: await LoadEndgameSiteIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false),
             bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false),
             palisades: type is BuildingType.Palisade or BuildingType.PalisadeGate
                 ? await WorldPalisades.NearAsync(_dbContext, settlement.WorldId, coord, sampler.TerrainAt, cancellationToken).ConfigureAwait(false)
@@ -1601,6 +1602,19 @@ public sealed class SettlementService(
     /// </summary>
     public Task<ICampIndex> LoadCampIndexAsync(Guid worldId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
         _campService.LoadBlockingIndexAsync(worldId, now, cancellationToken);
+
+    /// <summary>The world's Utgard wall hexes (rubble included) and Jötun watchtowers as one lookup for the build rule.</summary>
+    public async Task<IEndgameSiteIndex> LoadEndgameSiteIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId && i.IsWasted)
+            .Select(i => new { i.UtgardWalls, i.JotunTowers })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return new EndgameSiteIndex(islands.SelectMany(i =>
+            i.UtgardWalls.Select(w => new HexCoord(w.Q, w.R)).Concat(i.JotunTowers.Select(t => new HexCoord(t.Q, t.R)))));
+    }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements
