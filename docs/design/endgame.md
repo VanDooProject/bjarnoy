@@ -176,3 +176,11 @@ The in-game docs page (`/docs/wasted-lands`, section "How the endgame plays"):
 ![Endgame rules on the Wasted Lands docs page](img/endgame/docs_rules_en.png)
 ![Jötnar and garrison tables, German](img/endgame/docs_tables_de.png)
 ![Garrison tables on a phone, scrolling sideways](img/endgame/docs_tables_mobile.png)
+
+Siege against a player's palisade (step 2b), live mode:
+
+![A rival's palisade on the map](img/endgame/siege_rival_walls.png)
+![The Siege action on the palisade's ring menu](img/endgame/siege_ring.png)
+![The siege dispatch panel with rams](img/endgame/siege_dispatch.png)
+![The army besieging](img/endgame/siege_besieging.png)
+![The battle report: palisade breached](img/endgame/siege_report.png)
