@@ -17,6 +17,7 @@ import {
   worldLayerOrder,
   type MapLoadState,
   type TextureLoadDeps,
+  clientToCanvasPoint,
 } from './HexMapRenderer';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
@@ -857,5 +858,25 @@ describe('startTextureLoad', () => {
     await expect(terrainReady).rejects.toThrow('terrain atlas boom');
     await done; // never itself throws — the failure is only ever observed via terrainReady.
     expect(states).toEqual([{ phase: 'terrain' }]);
+  });
+});
+
+describe('clientToCanvasPoint', () => {
+  it('is a plain offset when the canvas is laid out 1:1', () => {
+    const rect = { left: 100, top: 50, width: 800, height: 500 };
+    expect(clientToCanvasPoint({ x: 300, y: 250 }, rect, { width: 800, height: 500 })).toEqual({ x: 200, y: 200 });
+  });
+
+  it('undoes a CSS zoom on an ancestor (docs pages on big monitors)', () => {
+    // 800x500 layout px under `zoom: 1.2` -> rect and pointer in zoomed pixels.
+    const rect = { left: 120, top: 60, width: 960, height: 600 };
+    const p = clientToCanvasPoint({ x: 120 + 480, y: 60 + 300 }, rect, { width: 800, height: 500 });
+    expect(p.x).toBeCloseTo(400);
+    expect(p.y).toBeCloseTo(250);
+  });
+
+  it('falls back to 1:1 for a canvas with no layout size', () => {
+    const rect = { left: 10, top: 10, width: 0, height: 0 };
+    expect(clientToCanvasPoint({ x: 30, y: 40 }, rect, { width: 0, height: 0 })).toEqual({ x: 20, y: 30 });
   });
 });
