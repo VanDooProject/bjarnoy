@@ -586,3 +586,12 @@ public sealed record CampStateResponse(
             ResourceAmountsResponse.From(state.Leftover));
     }
 }
+
+/// <summary>
+/// One standing wall hex of another player's settlement (<c>GET /worlds/{id}/walls</c>): enough for the client to draw the
+/// palisade piece, hit-test it for the siege action and tell friendly walls from hostile ones.
+/// </summary>
+/// <param name="Type">"palisade" or "palisadegate".</param>
+/// <param name="SettlementId">The settlement the wall belongs to.</param>
+/// <param name="OwnerUserId">The owning account; null for an anonymous settlement (owned by the shared abandoned user).</param>
+public sealed record WallResponse(int Q, int R, string Type, int Level, Guid SettlementId, Guid? OwnerUserId);
