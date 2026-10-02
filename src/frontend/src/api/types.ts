@@ -407,6 +407,19 @@ export interface SettlementSummary {
 }
 
 /**
+ * Mirrors `WallResponse` (`GET /worlds/{id}/walls`): one standing wall hex of another player's settlement, fog-gated like
+ * the settlement list. `ownerUserId` is null for an anonymous settlement.
+ */
+export interface WorldWall {
+  q: number;
+  r: number;
+  type: 'palisade' | 'palisadegate';
+  level: number;
+  settlementId: string;
+  ownerUserId: string | null;
+}
+
+/**
  * Mirrors `SettlementViewResponse` — the fog-gated read of any settlement
  * whose ground the caller has explored (`GET /settlements/{id}/view`):
  * identity, position and buildings only, no stock/rates/queue/garrison/runes.

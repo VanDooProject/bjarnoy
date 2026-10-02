@@ -13,13 +13,16 @@ export interface WallTileFacts {
 /** True when `tile` is a standing palisade or gate whose owner is another, non-friendly player. */
 export function isHostileWallTile(
   tile: WallTileFacts,
-  /** The player (account) that owns the tile's settlement, when known. */
-  ownerPlayerId: string | undefined,
+  /**
+   * The account that owns the wall: a user id; `null` for a rival's anonymous settlement (nobody's friend, so hostile); `undefined`
+   * when the hex is not a known rival wall (the player's own, or not loaded).
+   */
+  ownerPlayerId: string | null | undefined,
   playerId: string,
   friendlyUserIds: ReadonlySet<string>,
 ): boolean {
   if (tile.buildingType !== 'palisade' && tile.buildingType !== 'palisadegate') return false;
   if (!tile.ownerId || !tile.buildingLevel || tile.buildingLevel < 1) return false;
-  if (!ownerPlayerId || ownerPlayerId === playerId) return false;
-  return !friendlyUserIds.has(ownerPlayerId);
+  if (ownerPlayerId === undefined || ownerPlayerId === playerId) return false;
+  return ownerPlayerId === null || !friendlyUserIds.has(ownerPlayerId);
 }

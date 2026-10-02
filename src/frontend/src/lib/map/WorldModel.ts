@@ -1599,6 +1599,56 @@ export class WorldModel {
     return levels;
   }
 
+  /** The rival walls `applyRivalWalls` last placed, by hex: who owns each (a user id, null for an anonymous settlement) and its settlement. */
+  private rivalWalls = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+
+  /**
+   * Replaces the set of other players' walls this model knows (live mode: `GET /worlds/{id}/walls`, which is fog-gated and leaves the
+   * player's own walls out). Each wall is put on its tile the way an own wall is (type, level, owning settlement), so the piece it
+   * draws, the hit-test and the route rules need nothing special. A wall of the previous call that is missing now is cleared; a hex
+   * one of the player's own settlements renders is never touched.
+   */
+  applyRivalWalls(
+    walls: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null }[],
+  ) {
+    const ownRendered = new Set<string>();
+    for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
+
+    const next = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+    for (const wall of walls) {
+      if (wall.type !== 'palisade' && wall.type !== 'palisadegate') continue;
+      const key = coordKey({ q: wall.q, r: wall.r });
+      if (ownRendered.has(key)) continue;
+      const tile = this.getTile(wall.q, wall.r);
+      tile.ownerId = wall.settlementId;
+      tile.buildingType = wall.type;
+      tile.buildingLevel = wall.level;
+      next.set(key, { settlementId: wall.settlementId, ownerUserId: wall.ownerUserId });
+    }
+
+    for (const [key, previous] of this.rivalWalls) {
+      if (next.has(key) || ownRendered.has(key)) continue;
+      const { q, r } = parseKey(key);
+      const tile = this.getTile(q, r);
+      if (tile.ownerId !== previous.settlementId) continue;
+      if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
+        tile.buildingType = undefined;
+        tile.buildingLevel = undefined;
+      }
+    }
+
+    this.rivalWalls = next;
+    this.wallRevision++;
+  }
+
+  /**
+   * Who owns the rival wall on a hex: its account's user id, `null` for an anonymous settlement, `undefined` when the hex is not
+   * a rival wall `applyRivalWalls` placed (the player's own walls, or none). What the siege action's own/friendly check reads.
+   */
+  rivalWallOwner(q: number, r: number): string | null | undefined {
+    return this.rivalWalls.get(coordKey({ q, r }))?.ownerUserId;
+  }
+
   /** Bumped whenever a building appears, vanishes or levels, so the cached wall index below is rebuilt. */
   protected wallRevision = 0;
 
@@ -1635,7 +1685,13 @@ export class WorldModel {
     const standing = new Map<string, { gate: boolean; owner: string }>();
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
-      const owner = wall.tileOwner ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner) : '';
+      // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
+      const rival = this.rivalWalls.get(key);
+      const owner = rival
+        ? (rival.ownerUserId ?? rival.settlementId)
+        : wall.tileOwner
+          ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner)
+          : '';
       standing.set(key, { gate: wall.gate, owner });
     }
     return standing;

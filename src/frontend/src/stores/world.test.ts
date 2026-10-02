@@ -13,6 +13,7 @@ const getArmy = vi.fn();
 const getSettlementGuests = vi.fn();
 const recallArmy = vi.fn();
 const listSettlements = vi.fn();
+const listWalls = vi.fn();
 const foundSettlement = vi.fn();
 const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
@@ -69,6 +70,8 @@ async function loadStoreModule(demoMode: boolean) {
       getSettlementGuests: (...args: unknown[]) => getSettlementGuests(...args),
       recallArmy: (...args: unknown[]) => recallArmy(...args),
       listSettlements: (...args: unknown[]) => listSettlements(...args),
+      // Unconfigured, the rival walls read is an empty world.
+      listWalls: async (...args: unknown[]) => (await listWalls(...args)) ?? [],
       foundSettlement: (...args: unknown[]) => foundSettlement(...args),
       getTradeBoard: (...args: unknown[]) => getTradeBoard(...args),
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
@@ -779,6 +782,44 @@ describe('useWorldStore refreshWorldSettlements (island-scoped painting)', () =>
 
     expect(store.model.countBuildings('rival-near')).toBe(1);
     expect(store.model.countBuildings('rival-far')).toBe(1);
+  });
+});
+
+describe('useWorldStore refreshWorldSettlements (rival walls)', () => {
+  const wall = (q: number, r: number, ownerUserId: string | null = 'user-rival') => ({
+    q, r, type: 'palisade' as const, level: 2, settlementId: 'rival-near', ownerUserId,
+  });
+
+  it('hands the fetched rival walls to the model on every refresh, replacing the previous set', async () => {
+    listSettlements.mockReset().mockResolvedValue([]);
+    listWalls.mockReset().mockResolvedValueOnce([wall(3, 1), wall(4, 1)]).mockResolvedValueOnce([wall(4, 1)]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+
+    await store.refreshWorldSettlements();
+    expect(store.model.getTile(3, 1).buildingType).toBe('palisade');
+    expect(store.model.rivalWallOwner(4, 1)).toBe('user-rival');
+    expect(listWalls).toHaveBeenCalledWith('world-1', undefined);
+
+    await store.refreshWorldSettlements();
+    expect(store.model.getTile(3, 1).buildingType).toBeUndefined();
+    expect(store.model.getTile(4, 1).buildingType).toBe('palisade');
+  });
+
+  it('keeps the settlements refresh and the last wall set when the walls read fails', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-near' },
+    ]);
+    listWalls.mockReset().mockResolvedValueOnce([wall(3, 1)]).mockRejectedValueOnce(new Error('boom'));
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    await store.refreshWorldSettlements();
+    await store.refreshWorldSettlements();
+
+    expect(store.model.getSettlement('rival-near')).toBeDefined();
+    expect(store.model.getTile(3, 1).buildingType).toBe('palisade');
   });
 });
 

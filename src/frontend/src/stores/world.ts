@@ -1219,8 +1219,14 @@ export const useWorldStore = defineStore('world', {
     },
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
-      const summaries = await api.listSettlements(this.worldId, this.ownerId ?? undefined);
+      // Rival walls ride the same cadence: the settlement list is data-only, so this is the only way the client learns where another
+      // player's palisades stand (to draw them, offer Siege on them and route around them). A failed walls read keeps the last set.
+      const [summaries, walls] = await Promise.all([
+        api.listSettlements(this.worldId, this.ownerId ?? undefined),
+        api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
+      ]);
       this.registerSettlementSummaries(summaries);
+      if (walls) this.model.applyRivalWalls(walls);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
