@@ -79,6 +79,11 @@ friend's) or an **Utgard wall**.
 - Needs at least one catapult or ram; the army marches to a passable hex next to the wall and strikes on arrival.
 - Levels destroyed = `LevelsDestroyed(total siege power of surviving siege units)`; a wall hex at level 0 is
   **breached** (a palisade hex is removed; an Utgard wall becomes rubble).
+- **Utgard walls lose at most 1 level per `WallBreachInterval` = 24 h** per wall hex, matching the repair pace:
+  a siege strike takes 1 level whatever its siege power, and a strike on a hex that already lost a level in
+  the last 24 h fights its battle but takes no level (the report says when the next strike can land). So the
+  inner ring (level 2) needs two strikes a day apart, with an army kept next to it in between so it does not
+  repair.
 - Before the siege strike a full battle is fought against the wall's defenders: for a palisade, the owner's
   armies standing on or next to it; for an Utgard wall, nothing: walls and gates hold **no garrison**, they are
   pure siege targets (but towers and Utgard ambush armies that come into their range, see below).
