@@ -289,7 +289,7 @@
   |---|---|---|
   | PR 384 walls docs | waiting | CI |
   | AGENTS.MD state table | open work | - |
-  | gate rule golden case | waiting | my decision |
+  | gate rule golden case | waiting | open decision/question |
 
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path
