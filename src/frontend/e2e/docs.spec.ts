@@ -187,7 +187,9 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     // Every camp gives food and every strong camp iron; the camps' own extras and larger shares come on top.
     await expect(page.locator('.wildlife-camps .card [data-loot="food"]')).toHaveCount(total);
     const strongCards = page.locator('.card:has([data-strength="strong"])');
-    await expect(strongCards.locator('[data-loot="iron"]')).toHaveCount(await strongCards.count());
+    // (the whale road is strong but pays food only)
+    await expect(strongCards.locator('[data-loot="iron"]')).toHaveCount((await strongCards.count()) - 1);
+    await expect(page.locator('#camp-whaleroad [data-loot="iron"]')).toHaveCount(0);
     await expect(page.locator('#camp-beaverlodge [data-loot="wood"]')).toHaveCount(1);
     await expect(page.locator('#camp-boarwallow [data-loot="food"][data-more="true"]')).toHaveCount(1);
 
