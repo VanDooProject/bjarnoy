@@ -276,7 +276,7 @@ describe('bog buildings', () => {
     });
   });
 
-  it('the Hammerschmiede has no output of its own and raises iron like the mills (5% to 100%, 1 to 5 rings)', () => {
+  it('the Hammer Forge has no output of its own and raises iron like the mills (5% to 100%, 1 to 5 rings)', () => {
     expect(buildingStatsFor('hammerschmiede', 1)).toEqual({
       modifier: { kind: 'radiusBoost', percent: 5, range: 1, resource: 'iron' },
     });
@@ -284,7 +284,7 @@ describe('bog buildings', () => {
     expect(buildingStatsFor('hammerschmiede', 1).output).toBeUndefined();
   });
 
-  it('max levels and costs: bog-ore works 25 like the producers, Hammerschmiede 20 like the mills', () => {
+  it('max levels and costs: bog-ore works 25 like the producers, Hammer Forge 20 like the mills', () => {
     expect(maxLevelFor('bogoreworks')).toBe(25);
     expect(maxLevelFor('hammerschmiede')).toBe(20);
     expect(buildingUpgradeCost('bogoreworks', 1)).toEqual({ wood: 50, stone: 40, food: 15, iron: 0 });
@@ -314,7 +314,7 @@ describe('bog buildings against the catalogue snapshot', () => {
     }
   });
 
-  it('gates the bog-ore works at longhouse 6 with no feeder and the Hammerschmiede at 20 behind bog-ore works 10', () => {
+  it('gates the bog-ore works at longhouse 6 with no feeder and the Hammer Forge at 20 behind bog-ore works 10', () => {
     expect(of('bogoreworks')[0]!.requiredLonghouseLevel).toBe(6);
     expect(of('bogoreworks')[0]!.prerequisites).toEqual([]);
     expect(of('hammerschmiede')[0]!.requiredLonghouseLevel).toBe(20);

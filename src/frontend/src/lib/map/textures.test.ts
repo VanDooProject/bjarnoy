@@ -1725,7 +1725,7 @@ describe('bog buildings and lake decorations', () => {
     expect(topTextureFor(textures, half)).toBe(`fisherhutlake-top-${shoreOrientation}`);
   });
 
-  it('draws a Hammerschmiede on a creek as the straight or bend river mill, turned like the creek', () => {
+  it('draws a Hammer Forge on a creek as the straight or bend river mill, turned like the creek', () => {
     const straight: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'SW', buildingType: 'hammerschmiede', buildingLevel: 1, bog: bog('creek', ['W'], 'E') };
     const bend: Tile = { ...straight, bog: bog('creek', ['E'], 'SW') };
     expect(textureKeyFor(straight)).toBe('hammerschmiede');

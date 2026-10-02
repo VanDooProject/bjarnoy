@@ -1833,7 +1833,7 @@ describe('WorldModel bog buildings', () => {
     }
   });
 
-  it('places the Hammerschmiede on a creek only', () => {
+  it('places the Hammer Forge on a creek only', () => {
     const { model, settlement, hex } = bogSettlement();
     for (const i of [0, 2, 3, 4, 5, 6, 7]) {
       expect(model.placeBuilding(settlement.id, hex(i), 'hammerschmiede'), `hex ${i}`).toBe(false);
