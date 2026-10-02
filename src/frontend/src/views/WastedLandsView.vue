@@ -1,20 +1,22 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
-import { useI18n } from 'vue-i18n';
-import type { MessageSchema } from '../i18n/schema';
-import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
-import AtlasSprite from '../components/AtlasSprite.vue';
-import WastedIsland from '../components/docs/WastedIsland.vue';
-import AnimatedGiant from '../components/docs/AnimatedGiant.vue';
-import AnimationPausedNote from '../components/docs/AnimationPausedNote.vue';
-import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
-import { giantFamilyHasClip } from '../lib/docs/wastedIsland';
-import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
+import { computed, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import type { MessageSchema } from "../i18n/schema";
+import DocsPageLayout from "../components/docs/DocsPageLayout.vue";
+import AtlasSprite from "../components/AtlasSprite.vue";
+import WastedIsland from "../components/docs/WastedIsland.vue";
+import AnimatedGiant from "../components/docs/AnimatedGiant.vue";
+import AnimationPausedNote from "../components/docs/AnimationPausedNote.vue";
+import { findAtlasFrame, type AtlasFrameRect } from "../lib/map/atlas";
+import { giantFamilyHasClip } from "../lib/docs/wastedIsland";
+import { TILE_ORIENTATIONS, type TileOrientation } from "../lib/map/types";
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({
+  useScope: "global",
+});
 
 function showcase(name: string): AtlasFrameRect | undefined {
-  return findAtlasFrame('showcase', name);
+  return findAtlasFrame("showcase", name);
 }
 
 // AtlasSprite fills its box's width and keeps its aspect ratio only until
@@ -25,18 +27,27 @@ function showcase(name: string): AtlasFrameRect | undefined {
 const GIANT_BOX_H = 318;
 const DEFENCE_BOX_H = 238;
 const THUMB_BOX_H = 148;
-function fit(frame: AtlasFrameRect | undefined, boxHeight: number): { width: string } | undefined {
+function fit(
+  frame: AtlasFrameRect | undefined,
+  boxHeight: number,
+): { width: string } | undefined {
   if (!frame) return undefined;
-  return { width: `min(100%, ${(boxHeight * frame.frame.w) / frame.frame.h}px)` };
+  return {
+    width: `min(100%, ${(boxHeight * frame.frame.w) / frame.frame.h}px)`,
+  };
 }
 
 // --- Giants -------------------------------------------------------------
 
-const utgardCamera = ref<TileOrientation>('SE');
-const volcanoCamera = ref<TileOrientation>('SE');
+const utgardCamera = ref<TileOrientation>("SE");
+const volcanoCamera = ref<TileOrientation>("SE");
 
-const utgardFrame = computed(() => showcase(`giantutgard_${utgardCamera.value}_level000`));
-const volcanoFrame = computed(() => showcase(`giantvolcano_wasted_${volcanoCamera.value}_level000`));
+const utgardFrame = computed(() =>
+  showcase(`giantutgard_${utgardCamera.value}_level000`),
+);
+const volcanoFrame = computed(() =>
+  showcase(`giantvolcano_wasted_${volcanoCamera.value}_level000`),
+);
 
 // A card's animated composite only replaces the static showcase frame when
 // its wasted top-part family actually has `buildings-anim` clips for the
@@ -45,12 +56,22 @@ const volcanoFrame = computed(() => showcase(`giantvolcano_wasted_${volcanoCamer
 // frame. Derived from the atlas itself rather than hardcoded per card, so a
 // future art drop picks this up automatically. Loops continuously, the way
 // the same clips play on the in-game map.
-const utgardHasAnim = computed(() => giantFamilyHasClip('giantutgard', utgardCamera.value));
-const volcanoHasAnim = computed(() => giantFamilyHasClip('giantvolcano_wasted', volcanoCamera.value));
+const utgardHasAnim = computed(() =>
+  giantFamilyHasClip("giantutgard", utgardCamera.value),
+);
+const volcanoHasAnim = computed(() =>
+  giantFamilyHasClip("giantvolcano_wasted", volcanoCamera.value),
+);
 
 // --- Living/wasted pairs -------------------------------------------------
 
-type SimplePairKind = 'grass' | 'forest' | 'sand' | 'mountain' | 'coast' | 'sea';
+type SimplePairKind =
+  | "grass"
+  | "forest"
+  | "sand"
+  | "mountain"
+  | "coast"
+  | "sea";
 
 interface PairEntry {
   kind: SimplePairKind;
@@ -66,44 +87,51 @@ interface PairEntry {
 
 const PAIRS: PairEntry[] = [
   {
-    kind: 'grass',
-    livingFamily: 'grasstile',
-    livingSuffixes: ['', '_variant000', '_variant001', '_variant002'],
-    wastedFamily: 'wasteland',
-    wastedSuffixes: ['', '_variant001', '_variant002', '_variant003', '_variant004', '_variant005'],
+    kind: "grass",
+    livingFamily: "grasstile",
+    livingSuffixes: ["", "_variant000", "_variant001", "_variant002"],
+    wastedFamily: "wasteland",
+    wastedSuffixes: [
+      "",
+      "_variant001",
+      "_variant002",
+      "_variant003",
+      "_variant004",
+      "_variant005",
+    ],
   },
   {
-    kind: 'forest',
-    livingFamily: 'foresttile',
-    livingSuffixes: ['', '_variant000', '_variant001'],
-    wastedFamily: 'deadforest',
-    wastedSuffixes: ['', '_variant001'],
+    kind: "forest",
+    livingFamily: "foresttile",
+    livingSuffixes: ["", "_variant000", "_variant001"],
+    wastedFamily: "deadforest",
+    wastedSuffixes: ["", "_variant001"],
   },
   {
-    kind: 'sand',
-    livingFamily: 'sandtile',
-    wastedFamily: 'blacksand',
-    wastedSuffixes: ['', '_variant001'],
+    kind: "sand",
+    livingFamily: "sandtile",
+    wastedFamily: "blacksand",
+    wastedSuffixes: ["", "_variant001"],
   },
   {
-    kind: 'mountain',
-    livingFamily: 'mountaintile',
-    wastedFamily: 'mountaintile_jagged',
-    wastedSuffixes: [''],
+    kind: "mountain",
+    livingFamily: "mountaintile",
+    wastedFamily: "mountaintile_jagged",
+    wastedSuffixes: [""],
     level000: true,
   },
   {
-    kind: 'coast',
-    livingFamily: 'coastalwatertile',
-    livingSuffixes: ['', '_variant000', '_variant001'],
-    wastedFamily: 'blacksandcoast',
-    wastedSuffixes: ['', '_variant000', '_variant001', '_variant002'],
+    kind: "coast",
+    livingFamily: "coastalwatertile",
+    livingSuffixes: ["", "_variant000", "_variant001"],
+    wastedFamily: "blacksandcoast",
+    wastedSuffixes: ["", "_variant000", "_variant001", "_variant002"],
   },
   {
-    kind: 'sea',
-    livingFamily: 'watertile',
-    wastedFamily: 'taintedwater',
-    wastedSuffixes: [''],
+    kind: "sea",
+    livingFamily: "watertile",
+    wastedFamily: "taintedwater",
+    wastedSuffixes: [""],
   },
 ];
 
@@ -117,13 +145,17 @@ const variantIndex = reactive<Record<SimplePairKind, number>>({
 });
 
 function pairLivingFrame(pair: PairEntry): AtlasFrameRect | undefined {
-  const looks = pair.livingSuffixes ?? [''];
-  const suffix = looks[variantIndex[pair.kind] % looks.length] ?? '';
-  return showcase(`${pair.livingFamily}_SE${pair.level000 ? '_level000' : ''}${suffix}`);
+  const looks = pair.livingSuffixes ?? [""];
+  const suffix = looks[variantIndex[pair.kind] % looks.length] ?? "";
+  return showcase(
+    `${pair.livingFamily}_SE${pair.level000 ? "_level000" : ""}${suffix}`,
+  );
 }
 function pairWastedFrame(pair: PairEntry): AtlasFrameRect | undefined {
-  const suffix = pair.wastedSuffixes[variantIndex[pair.kind]] ?? '';
-  return showcase(`${pair.wastedFamily}_SE${pair.level000 ? '_level000' : ''}${suffix}`);
+  const suffix = pair.wastedSuffixes[variantIndex[pair.kind]] ?? "";
+  return showcase(
+    `${pair.wastedFamily}_SE${pair.level000 ? "_level000" : ""}${suffix}`,
+  );
 }
 
 // The river/lava-stream row switches shape rather than variant, and both
@@ -132,36 +164,83 @@ function pairWastedFrame(pair: PairEntry): AtlasFrameRect | undefined {
 // river rises from a mountain spring — the same corrie cut the map draws for
 // a spring (textures.ts's RIVER_FAMILY), not the flat `rivertile_spring`
 // placeholder.
-type RiverShape = 'straight' | 'bend' | 'bend60' | 'spring';
-const RIVER_SHAPE_FRAMES: Record<RiverShape, { living: string; wasted: string }> = {
-  straight: { living: 'rivertile_SE', wasted: 'lavastream_SE' },
-  bend: { living: 'rivertile_bend_SE', wasted: 'lavastream_bend_SE' },
-  bend60: { living: 'rivertile_bend60_SE', wasted: 'lavastream_bend60_SE' },
-  spring: { living: 'mountaintile_corrie_spring_SE', wasted: 'mountaintile_volcano_lavaspring_flows_SE_level000' },
+type RiverShape = "straight" | "bend" | "bend60" | "spring";
+const RIVER_SHAPE_FRAMES: Record<
+  RiverShape,
+  { living: string; wasted: string }
+> = {
+  straight: { living: "rivertile_SE", wasted: "lavastream_SE" },
+  bend: { living: "rivertile_bend_SE", wasted: "lavastream_bend_SE" },
+  bend60: { living: "rivertile_bend60_SE", wasted: "lavastream_bend60_SE" },
+  spring: {
+    living: "mountaintile_corrie_spring_SE",
+    wasted: "mountaintile_volcano_lavaspring_flows_SE_level000",
+  },
 };
-const riverShape = ref<RiverShape>('straight');
-const riverLivingFrame = computed(() => showcase(RIVER_SHAPE_FRAMES[riverShape.value].living));
-const riverWastedFrame = computed(() => showcase(RIVER_SHAPE_FRAMES[riverShape.value].wasted));
+const riverShape = ref<RiverShape>("straight");
+const riverLivingFrame = computed(() =>
+  showcase(RIVER_SHAPE_FRAMES[riverShape.value].living),
+);
+const riverWastedFrame = computed(() =>
+  showcase(RIVER_SHAPE_FRAMES[riverShape.value].wasted),
+);
 
 // --- Defences ------------------------------------------------------------
 
 const DEFENCE_LEVELS = [0, 1, 2] as const;
 const WALL_PIECES = [
-  { id: 'straight', family: 'utgardwall_straight180' },
-  { id: 'gate', family: 'utgardwall_gate180' },
-  { id: 'bend120', family: 'utgardwall_bend120' },
-  { id: 'bend60', family: 'utgardwall_bend60' },
-  { id: 'end', family: 'utgardwall_end' },
-  { id: 'endCoast', family: 'utgardwall_end_coast' },
+  { id: "straight", family: "utgardwall_straight180" },
+  { id: "gate", family: "utgardwall_gate180" },
+  { id: "bend120", family: "utgardwall_bend120" },
+  { id: "bend60", family: "utgardwall_bend60" },
+  { id: "end", family: "utgardwall_end" },
+  { id: "endCoast", family: "utgardwall_end_coast" },
 ] as const;
 const towerLevel = ref(2);
 const wallLevel = ref(2);
-const wallPiece = ref<(typeof WALL_PIECES)[number]['id']>('straight');
-const towerFrame = computed(() => showcase(`jotunwatchtower_SE_level00${towerLevel.value}`));
+const wallPiece = ref<(typeof WALL_PIECES)[number]["id"]>("straight");
+const towerFrame = computed(() =>
+  showcase(`jotunwatchtower_SE_level00${towerLevel.value}`),
+);
 const wallFrame = computed(() => {
   const family = WALL_PIECES.find((p) => p.id === wallPiece.value)!.family;
   return showcase(`${family}_SE_level00${wallLevel.value}`);
 });
+
+// --- Endgame (docs/design/endgame.md) -------------------------------------
+
+const ENDGAME_RULES = [
+  "fullBattles",
+  "towers",
+  "assault",
+  "grace",
+  "holding",
+  "loot",
+  "aggression",
+  "walls",
+  "breaching",
+  "wallPace",
+  "ram",
+  "gateRule",
+  "winning",
+  "ageEnd",
+] as const;
+const JOTUNN_TIERS = [
+  { id: "thrall", attack: 20, defense: 40 },
+  { id: "warrior", attack: 120, defense: 150 },
+  { id: "chieftain", attack: 300, defense: 400 },
+] as const;
+/** Garrison counts in `JOTUNN_TIERS` order. */
+const JOTUNN_SITES = [
+  { id: "watchtower", garrison: [40, 15, 2], guardRange: 5, regrowthHours: 24 },
+  { id: "utgard", garrison: [300, 120, 20], guardRange: 8, regrowthHours: 48 },
+] as const;
+function defensePower(garrison: readonly number[]): number {
+  return garrison.reduce(
+    (sum, count, i) => sum + count * JOTUNN_TIERS[i]!.defense,
+    0,
+  );
+}
 </script>
 
 <template>
@@ -172,19 +251,19 @@ const wallFrame = computed(() => {
     :intro="$t('docs.wastedLands.intro')"
   >
     <section id="lore" class="lore-section">
-      <h2>{{ $t('docs.wastedLands.lore.heading') }}</h2>
-      <p class="saga">{{ $t('docs.wastedLands.lore.p1') }}</p>
-      <p class="saga">{{ $t('docs.wastedLands.lore.p2') }}</p>
-      <p class="saga">{{ $t('docs.wastedLands.lore.p3') }}</p>
-      <p class="saga">{{ $t('docs.wastedLands.lore.p4') }}</p>
-      <p class="caption-note">{{ $t('docs.wastedLands.lore.caption') }}</p>
+      <h2>{{ $t("docs.wastedLands.lore.heading") }}</h2>
+      <p class="saga">{{ $t("docs.wastedLands.lore.p1") }}</p>
+      <p class="saga">{{ $t("docs.wastedLands.lore.p2") }}</p>
+      <p class="saga">{{ $t("docs.wastedLands.lore.p3") }}</p>
+      <p class="saga">{{ $t("docs.wastedLands.lore.p4") }}</p>
+      <p class="caption-note">{{ $t("docs.wastedLands.lore.caption") }}</p>
     </section>
 
     <AnimationPausedNote />
     <section id="giants" class="giants-section">
       <div class="giant-card">
-        <h2>{{ $t('docs.wastedLands.utgard.heading') }}</h2>
-        <p>{{ $t('docs.wastedLands.utgard.body') }}</p>
+        <h2>{{ $t("docs.wastedLands.utgard.heading") }}</h2>
+        <p>{{ $t("docs.wastedLands.utgard.body") }}</p>
         <div class="giant-box">
           <AnimatedGiant
             v-if="utgardHasAnim"
@@ -193,10 +272,16 @@ const wallFrame = computed(() => {
             plate-family="wasteland"
             :orientation="utgardCamera"
           />
-          <AtlasSprite v-else-if="utgardFrame" :frame="utgardFrame" :style="fit(utgardFrame, GIANT_BOX_H)" />
+          <AtlasSprite
+            v-else-if="utgardFrame"
+            :frame="utgardFrame"
+            :style="fit(utgardFrame, GIANT_BOX_H)"
+          />
         </div>
         <div class="camera-pills">
-          <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
+          <span class="variants-label">{{
+            $t("docs.wastedLands.utgard.camera")
+          }}</span>
           <button
             v-for="cam in TILE_ORIENTATIONS"
             :key="cam"
@@ -211,8 +296,8 @@ const wallFrame = computed(() => {
       </div>
 
       <div class="giant-card">
-        <h2>{{ $t('docs.wastedLands.volcano.heading') }}</h2>
-        <p>{{ $t('docs.wastedLands.volcano.body') }}</p>
+        <h2>{{ $t("docs.wastedLands.volcano.heading") }}</h2>
+        <p>{{ $t("docs.wastedLands.volcano.body") }}</p>
         <div class="giant-box">
           <AnimatedGiant
             v-if="volcanoHasAnim"
@@ -221,10 +306,16 @@ const wallFrame = computed(() => {
             plate-family="wasteland"
             :orientation="volcanoCamera"
           />
-          <AtlasSprite v-else-if="volcanoFrame" :frame="volcanoFrame" :style="fit(volcanoFrame, GIANT_BOX_H)" />
+          <AtlasSprite
+            v-else-if="volcanoFrame"
+            :frame="volcanoFrame"
+            :style="fit(volcanoFrame, GIANT_BOX_H)"
+          />
         </div>
         <div class="camera-pills">
-          <span class="variants-label">{{ $t('docs.wastedLands.utgard.camera') }}</span>
+          <span class="variants-label">{{
+            $t("docs.wastedLands.utgard.camera")
+          }}</span>
           <button
             v-for="cam in TILE_ORIENTATIONS"
             :key="cam"
@@ -240,17 +331,23 @@ const wallFrame = computed(() => {
     </section>
 
     <section id="defences" class="defences-section">
-      <h2>{{ $t('docs.wastedLands.defences.heading') }}</h2>
-      <p>{{ $t('docs.wastedLands.defences.body') }}</p>
+      <h2>{{ $t("docs.wastedLands.defences.heading") }}</h2>
+      <p>{{ $t("docs.wastedLands.defences.body") }}</p>
       <div class="giants-section">
         <div class="giant-card">
-          <h3>{{ $t('docs.wastedLands.defences.watchtower.heading') }}</h3>
-          <p>{{ $t('docs.wastedLands.defences.watchtower.body') }}</p>
+          <h3>{{ $t("docs.wastedLands.defences.watchtower.heading") }}</h3>
+          <p>{{ $t("docs.wastedLands.defences.watchtower.body") }}</p>
           <div class="giant-box defence-box">
-            <AtlasSprite v-if="towerFrame" :frame="towerFrame" :style="fit(towerFrame, DEFENCE_BOX_H)" />
+            <AtlasSprite
+              v-if="towerFrame"
+              :frame="towerFrame"
+              :style="fit(towerFrame, DEFENCE_BOX_H)"
+            />
           </div>
           <div class="camera-pills">
-            <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
+            <span class="variants-label">{{
+              $t("docs.wastedLands.defences.level")
+            }}</span>
             <button
               v-for="level in DEFENCE_LEVELS"
               :key="level"
@@ -265,13 +362,19 @@ const wallFrame = computed(() => {
         </div>
 
         <div class="giant-card">
-          <h3>{{ $t('docs.wastedLands.defences.walls.heading') }}</h3>
-          <p>{{ $t('docs.wastedLands.defences.walls.body') }}</p>
+          <h3>{{ $t("docs.wastedLands.defences.walls.heading") }}</h3>
+          <p>{{ $t("docs.wastedLands.defences.walls.body") }}</p>
           <div class="giant-box defence-box">
-            <AtlasSprite v-if="wallFrame" :frame="wallFrame" :style="fit(wallFrame, DEFENCE_BOX_H)" />
+            <AtlasSprite
+              v-if="wallFrame"
+              :frame="wallFrame"
+              :style="fit(wallFrame, DEFENCE_BOX_H)"
+            />
           </div>
           <div class="camera-pills">
-            <span class="variants-label">{{ $t('docs.wastedLands.defences.walls.piece') }}</span>
+            <span class="variants-label">{{
+              $t("docs.wastedLands.defences.walls.piece")
+            }}</span>
             <button
               v-for="piece in WALL_PIECES"
               :key="piece.id"
@@ -284,7 +387,9 @@ const wallFrame = computed(() => {
             </button>
           </div>
           <div class="camera-pills level-pills">
-            <span class="variants-label">{{ $t('docs.wastedLands.defences.level') }}</span>
+            <span class="variants-label">{{
+              $t("docs.wastedLands.defences.level")
+            }}</span>
             <button
               v-for="level in DEFENCE_LEVELS"
               :key="level"
@@ -300,20 +405,86 @@ const wallFrame = computed(() => {
       </div>
     </section>
 
+    <section id="endgame" class="endgame-section">
+      <h2>{{ $t("docs.wastedLands.endgame.heading") }}</h2>
+      <p class="caption-note">{{ $t("docs.wastedLands.endgame.status") }}</p>
+      <p>{{ $t("docs.wastedLands.endgame.body") }}</p>
+      <ul class="endgame-rules">
+        <li v-for="rule in ENDGAME_RULES" :key="rule">
+          {{ $t(`docs.wastedLands.endgame.rules.${rule}`) }}
+        </li>
+      </ul>
+
+      <h3>{{ $t("docs.wastedLands.endgame.tiers.heading") }}</h3>
+      <table class="endgame-table">
+        <thead>
+          <tr>
+            <th>{{ $t("docs.wastedLands.endgame.tiers.tier") }}</th>
+            <th>{{ $t("docs.wastedLands.endgame.tiers.attack") }}</th>
+            <th>{{ $t("docs.wastedLands.endgame.tiers.defense") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="tier in JOTUNN_TIERS" :key="tier.id">
+            <td>{{ $t(`docs.wastedLands.endgame.tiers.${tier.id}`) }}</td>
+            <td>{{ tier.attack }}</td>
+            <td>{{ tier.defense }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>{{ $t("docs.wastedLands.endgame.sites.heading") }}</h3>
+      <table class="endgame-table">
+        <thead>
+          <tr>
+            <th>{{ $t("docs.wastedLands.endgame.sites.site") }}</th>
+            <th v-for="tier in JOTUNN_TIERS" :key="tier.id">
+              {{ $t(`docs.wastedLands.endgame.tiers.${tier.id}`) }}
+            </th>
+            <th>{{ $t("docs.wastedLands.endgame.sites.defensePower") }}</th>
+            <th>{{ $t("docs.wastedLands.endgame.sites.guardRange") }}</th>
+            <th>{{ $t("docs.wastedLands.endgame.sites.regrowth") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="site in JOTUNN_SITES" :key="site.id">
+            <td>{{ $t(`docs.wastedLands.endgame.sites.${site.id}`) }}</td>
+            <td v-for="(count, i) in site.garrison" :key="i">{{ count }}</td>
+            <td>{{ defensePower(site.garrison).toLocaleString(locale) }}</td>
+            <td>{{ site.guardRange }}</td>
+            <td>
+              {{
+                $t("docs.wastedLands.endgame.sites.hours", {
+                  n: site.regrowthHours,
+                })
+              }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <section id="island" class="island-section">
-      <h2>{{ $t('docs.wastedLands.island.heading') }}</h2>
-      <p>{{ $t('docs.wastedLands.island.body') }}</p>
+      <h2>{{ $t("docs.wastedLands.island.heading") }}</h2>
+      <p>{{ $t("docs.wastedLands.island.body") }}</p>
       <WastedIsland />
     </section>
 
     <section id="pairs" class="pairs-section">
-      <h2>{{ $t('docs.wastedLands.pairs.heading') }}</h2>
-      <p>{{ $t('docs.wastedLands.pairs.body') }}</p>
+      <h2>{{ $t("docs.wastedLands.pairs.heading") }}</h2>
+      <p>{{ $t("docs.wastedLands.pairs.body") }}</p>
 
-      <div v-for="pair in PAIRS.slice(0, 3)" :key="pair.kind" :id="`pair-${pair.kind}`" class="pair-row">
+      <div
+        v-for="pair in PAIRS.slice(0, 3)"
+        :key="pair.kind"
+        :id="`pair-${pair.kind}`"
+        class="pair-row"
+      >
         <div class="pair-thumbs">
           <div class="thumb-col">
-            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
+            <span class="thumb-caption">{{
+              $t("docs.wastedLands.pairs.living")
+            }}</span>
             <div class="thumb floating-art">
               <span class="floating-art-shadow" aria-hidden="true" />
               <AtlasSprite
@@ -322,11 +493,15 @@ const wallFrame = computed(() => {
                 :style="fit(pairLivingFrame(pair), THUMB_BOX_H)"
               />
             </div>
-            <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
+            <span class="thumb-name">{{
+              t(`docs.wastedLands.tiles.${pair.kind}.living`)
+            }}</span>
           </div>
           <span class="pair-arrow">→</span>
           <div class="thumb-col">
-            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
+            <span class="thumb-caption">{{
+              $t("docs.wastedLands.pairs.wasted")
+            }}</span>
             <div class="thumb floating-art">
               <span class="floating-art-shadow" aria-hidden="true" />
               <AtlasSprite
@@ -335,14 +510,18 @@ const wallFrame = computed(() => {
                 :style="fit(pairWastedFrame(pair), THUMB_BOX_H)"
               />
             </div>
-            <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
+            <span class="thumb-name">{{
+              t(`docs.wastedLands.tiles.${pair.kind}.wasted`)
+            }}</span>
           </div>
         </div>
         <p class="pair-lore">
           {{ t(`docs.wastedLands.tiles.${pair.kind}.lore`) }}
         </p>
         <div v-if="pair.wastedSuffixes.length > 1" class="variants">
-          <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
+          <span class="variants-label">{{
+            $t("docs.wastedLands.pairs.looks")
+          }}</span>
           <button
             v-for="(suffix, i) in pair.wastedSuffixes"
             :key="suffix"
@@ -359,7 +538,9 @@ const wallFrame = computed(() => {
       <div id="pair-mountain" class="pair-row">
         <div class="pair-thumbs">
           <div class="thumb-col">
-            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
+            <span class="thumb-caption">{{
+              $t("docs.wastedLands.pairs.living")
+            }}</span>
             <div class="thumb floating-art">
               <span class="floating-art-shadow" aria-hidden="true" />
               <AtlasSprite
@@ -368,11 +549,15 @@ const wallFrame = computed(() => {
                 :style="fit(pairLivingFrame(PAIRS[3]!), THUMB_BOX_H)"
               />
             </div>
-            <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.living') }}</span>
+            <span class="thumb-name">{{
+              t("docs.wastedLands.tiles.mountain.living")
+            }}</span>
           </div>
           <span class="pair-arrow">→</span>
           <div class="thumb-col">
-            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
+            <span class="thumb-caption">{{
+              $t("docs.wastedLands.pairs.wasted")
+            }}</span>
             <div class="thumb floating-art">
               <span class="floating-art-shadow" aria-hidden="true" />
               <AtlasSprite
@@ -381,18 +566,22 @@ const wallFrame = computed(() => {
                 :style="fit(pairWastedFrame(PAIRS[3]!), THUMB_BOX_H)"
               />
             </div>
-            <span class="thumb-name">{{ t('docs.wastedLands.tiles.mountain.wasted') }}</span>
+            <span class="thumb-name">{{
+              t("docs.wastedLands.tiles.mountain.wasted")
+            }}</span>
           </div>
         </div>
         <p class="pair-lore">
-          {{ t('docs.wastedLands.tiles.mountain.lore') }}
+          {{ t("docs.wastedLands.tiles.mountain.lore") }}
         </p>
       </div>
 
       <div id="pair-river" class="pair-row">
         <div class="pair-thumbs">
           <div class="thumb-col">
-            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
+            <span class="thumb-caption">{{
+              $t("docs.wastedLands.pairs.living")
+            }}</span>
             <div class="thumb floating-art">
               <span class="floating-art-shadow" aria-hidden="true" />
               <AtlasSprite
@@ -401,11 +590,15 @@ const wallFrame = computed(() => {
                 :style="fit(riverLivingFrame, THUMB_BOX_H)"
               />
             </div>
-            <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.living') }}</span>
+            <span class="thumb-name">{{
+              t("docs.wastedLands.tiles.river.living")
+            }}</span>
           </div>
           <span class="pair-arrow">→</span>
           <div class="thumb-col">
-            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
+            <span class="thumb-caption">{{
+              $t("docs.wastedLands.pairs.wasted")
+            }}</span>
             <div class="thumb floating-art">
               <span class="floating-art-shadow" aria-hidden="true" />
               <AtlasSprite
@@ -414,12 +607,16 @@ const wallFrame = computed(() => {
                 :style="fit(riverWastedFrame, THUMB_BOX_H)"
               />
             </div>
-            <span class="thumb-name">{{ t('docs.wastedLands.tiles.river.wasted') }}</span>
+            <span class="thumb-name">{{
+              t("docs.wastedLands.tiles.river.wasted")
+            }}</span>
           </div>
         </div>
-        <p class="pair-lore">{{ t('docs.wastedLands.tiles.river.lore') }}</p>
+        <p class="pair-lore">{{ t("docs.wastedLands.tiles.river.lore") }}</p>
         <div class="variants">
-          <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
+          <span class="variants-label">{{
+            $t("docs.wastedLands.pairs.looks")
+          }}</span>
           <button
             v-for="shape in ['straight', 'bend', 'bend60', 'spring'] as const"
             :key="shape"
@@ -433,10 +630,17 @@ const wallFrame = computed(() => {
         </div>
       </div>
 
-      <div v-for="pair in PAIRS.slice(4)" :key="pair.kind" :id="`pair-${pair.kind}`" class="pair-row">
+      <div
+        v-for="pair in PAIRS.slice(4)"
+        :key="pair.kind"
+        :id="`pair-${pair.kind}`"
+        class="pair-row"
+      >
         <div class="pair-thumbs">
           <div class="thumb-col">
-            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.living') }}</span>
+            <span class="thumb-caption">{{
+              $t("docs.wastedLands.pairs.living")
+            }}</span>
             <div class="thumb floating-art">
               <span class="floating-art-shadow" aria-hidden="true" />
               <AtlasSprite
@@ -445,11 +649,15 @@ const wallFrame = computed(() => {
                 :style="fit(pairLivingFrame(pair), THUMB_BOX_H)"
               />
             </div>
-            <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.living`) }}</span>
+            <span class="thumb-name">{{
+              t(`docs.wastedLands.tiles.${pair.kind}.living`)
+            }}</span>
           </div>
           <span class="pair-arrow">→</span>
           <div class="thumb-col">
-            <span class="thumb-caption">{{ $t('docs.wastedLands.pairs.wasted') }}</span>
+            <span class="thumb-caption">{{
+              $t("docs.wastedLands.pairs.wasted")
+            }}</span>
             <div class="thumb floating-art">
               <span class="floating-art-shadow" aria-hidden="true" />
               <AtlasSprite
@@ -458,14 +666,18 @@ const wallFrame = computed(() => {
                 :style="fit(pairWastedFrame(pair), THUMB_BOX_H)"
               />
             </div>
-            <span class="thumb-name">{{ t(`docs.wastedLands.tiles.${pair.kind}.wasted`) }}</span>
+            <span class="thumb-name">{{
+              t(`docs.wastedLands.tiles.${pair.kind}.wasted`)
+            }}</span>
           </div>
         </div>
         <p class="pair-lore">
           {{ t(`docs.wastedLands.tiles.${pair.kind}.lore`) }}
         </p>
         <div v-if="pair.wastedSuffixes.length > 1" class="variants">
-          <span class="variants-label">{{ $t('docs.wastedLands.pairs.looks') }}</span>
+          <span class="variants-label">{{
+            $t("docs.wastedLands.pairs.looks")
+          }}</span>
           <button
             v-for="(suffix, i) in pair.wastedSuffixes"
             :key="suffix"
@@ -535,6 +747,28 @@ h2 {
   overflow: hidden;
   margin-bottom: 10px;
   position: relative;
+}
+.endgame-rules li {
+  margin-bottom: 0.4rem;
+}
+.endgame-table {
+  border-collapse: collapse;
+  margin: 0.5rem 0 1.25rem;
+  font-variant-numeric: tabular-nums;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.endgame-table th,
+.endgame-table td {
+  padding: 0.3rem 0.75rem;
+  text-align: right;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+  white-space: nowrap;
+}
+.endgame-table th:first-child,
+.endgame-table td:first-child {
+  text-align: left;
 }
 .defences-section {
   margin-top: 32px;
