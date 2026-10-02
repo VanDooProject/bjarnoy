@@ -257,6 +257,46 @@
         "endCoast": "Ende am Ufer"
       }
     },
+    "endgame": {
+      "heading": "So läuft das Endspiel",
+      "status": "Geplant: Diese Regeln werden Schritt für Schritt gebaut und sind noch nicht alle im Spiel.",
+      "body": "Wenn der Endboss erwacht, erscheinen die verwüsteten Inseln. Gilden zermürben die Jötnar gemeinsam, halten ihre Türme mit Armeen, brechen Utgards Mauern mit Belagerungsgerät und stürmen die Festung. Die Armee, die Utgard leert, beendet das Zeitalter.",
+      "rules": {
+        "fullBattles": "Jeder Kampf im Endspiel ist eine volle Schlacht: Der Verlierer verliert alles, der Sieger einen Anteil, der umso größer ist, je knapper der Kampf war. Eine Raubzug-Grenze gibt es hier nicht.",
+        "towers": "Jede verwüstete Insel mit Utgard trägt drei bis sechs über die Insel verteilte Jötun-Wachtürme und Utgard selbst, jeweils mit einer Jötunn-Besatzung.",
+        "assault": "Schick eine Armee zum Sturm auf einen Wachturm oder auf Utgard. Getötete Jötnar bleiben tot; die Besatzung wächst nur langsam nach, so kann eine Gilde sie über mehrere Angriffe zermürben.",
+        "grace": "Ein Wachturm ohne Jötnar ist eingenommen: Er wird still und bleibt 1 Stunde leer, dann wächst die Besatzung wieder nach.",
+        "holding": "Eine Armee, die auf einem Ort steht, hält ihn. Jede Stunde kommen die nachgewachsenen Jötnar heraus und kämpfen in einer vollen Schlacht gegen sie. Solange die Armee gewinnt, bleibt der Ort unten.",
+        "loot": "Eine haltende Armee nimmt jede Stunde Beute (300 an einem Wachturm, 1.000 an Utgard: 40 % Eisen, 30 % Nahrung, 30 % Stein), bis ihre Tragkraft voll ist. Was sie nicht tragen kann, geht verloren.",
+        "aggression": "Orte mit Jötnar überfallen Armeen, die in ihre Wachreichweite kommen, und brennen Spielertürme darin nieder, wenn keine Armee sie verteidigt. Nach einem Kampf ist ein Ort 1 Stunde ruhig.",
+        "walls": "Utgard steht in einem oder zwei Mauerringen, wenn die Insel Platz hat: der innere Ring auf Stufe 2, der äußere auf Stufe 1. Sie halten Landarmeen auf, und ihre Tore öffnen sich nie für Spieler.",
+        "breaching": "Mauern bricht man mit der Belagerung: Bring Katapulte oder Rammböcke mit, zieh neben ein Mauerfeld und schlag zu. Auf Stufe 0 ist die Mauer durchbrochen und Armeen kommen durch.",
+        "wallPace": "Eine Utgardmauer verliert höchstens eine Stufe am Tag und repariert eine Stufe am Tag, solange keine Armee auf ihr oder neben ihr steht. Der innere Ring braucht zwei Schläge im Abstand eines Tages, mit einer Armee daneben dazwischen.",
+        "ram": "Der Rammbock ist ein zweites Belagerungsgerät: dieselbe Belagerungskraft wie das Katapult, viel zäher, aber langsamer.",
+        "gateRule": "Utgard kann nur gestürmt werden, solange jeder Wachturm seiner Insel eingenommen ist. Halte Armeen auf den Türmen, sonst wachsen sie nach und Utgards Tor bleibt zu.",
+        "winning": "Die Armee, die Utgard ohne Jötnar zurücklässt, gewinnt das Zeitalter. Der Spieler, der es niederwarf, wird als Eroberer verzeichnet, und jedes Mitglied seiner Gilde erhält den Gildensieg.",
+        "ageEnd": "Je nach Welt endet dann das Zeitalter und die Welt wird schreibgeschützt, oder das Spiel geht weiter und der Sieger wird verkündet."
+      },
+      "tiers": {
+        "heading": "Jötnar",
+        "tier": "Rang",
+        "attack": "Angriff",
+        "defense": "Verteidigung",
+        "thrall": "Reifknecht",
+        "warrior": "Jötunn",
+        "chieftain": "Jötunnfürst"
+      },
+      "sites": {
+        "heading": "Besatzungen",
+        "site": "Ort",
+        "watchtower": "Wachturm",
+        "utgard": "Utgard",
+        "defensePower": "Verteidigungskraft",
+        "guardRange": "Wachreichweite",
+        "regrowth": "Volles Nachwachsen",
+        "hours": "{n} h"
+      }
+    },
     "island": {
       "heading": "Lebendig und öde, nebeneinander",
       "body": "Öde Inseln sind von Anfang an öde: Sie steigen so aus dem Meer, wie sie sind, und keine lebendige Insel kippt je. Diese erfundene Insel ist nur ein Spielzeug, um die beiden Feldsätze zu vergleichen. Zieh den Regler, um ihre lebendigen Felder Ring um Ring von der Mitte aus gegen ihre öden Gegenstücke zu tauschen.",

@@ -257,6 +257,46 @@
         "endCoast": "End at the shore"
       }
     },
+    "endgame": {
+      "heading": "How the endgame plays",
+      "status": "Planned: these rules are being built step by step and are not all in the game yet.",
+      "body": "When the endboss rises, the wasted islands appear. Guilds wear down the jötnar together, hold their towers with armies, break Utgard's walls with siege engines and storm the fortress. The army that clears Utgard ends the age.",
+      "rules": {
+        "fullBattles": "Every endgame fight is a full battle: the loser loses everything, the winner loses a share that grows the closer the fight was. There is no raid cap here.",
+        "towers": "Each wasted island with Utgard has three to six jötun watchtowers spread over it, and Utgard itself, each with a jötunn garrison.",
+        "assault": "Send an army to assault a watchtower or Utgard. The jötnar you kill stay dead; the garrison only regrows slowly, so a guild can wear it down over several attacks.",
+        "grace": "A watchtower with no jötnar left is taken: it goes quiet and stays empty for 1 hour, then the garrison starts to regrow.",
+        "holding": "An army standing on a site holds it. Every hour the jötnar that regrew come out and fight it in a full battle. While the army wins, the site stays down.",
+        "loot": "A holding army takes loot every hour (300 at a watchtower, 1,000 at Utgard: 40% iron, 30% food, 30% stone) until its carry capacity is full. What it cannot carry is lost.",
+        "aggression": "Sites with jötnar ambush armies that come into their guard range and burn player towers inside it unless an army defends them. After a fight a site is calm for 1 hour.",
+        "walls": "Utgard stands inside one or two rings of walls, if the island has room: the inner ring at level 2, the outer one at level 1. They block land armies, and their gates never open for players.",
+        "breaching": "Walls are broken with the siege mission: bring catapults or rams, march next to a wall hex and strike. At level 0 the wall is breached and armies can pass.",
+        "wallPace": "An Utgard wall loses at most one level a day, and repairs one level a day while no army stands on or next to it. The inner ring needs two strikes a day apart, with an army kept beside it in between.",
+        "ram": "The ram is a second siege engine: the same siege power as the catapult, much tougher, but slower.",
+        "gateRule": "Utgard can only be assaulted while every watchtower on its island is taken. Keep armies on the towers, or they regrow and Utgard's gate stays shut.",
+        "winning": "The army that leaves Utgard with no jötnar wins the age. The player who threw it down is recorded as the conqueror, and every member of their guild gets the guild win.",
+        "ageEnd": "Depending on the world, the age then ends and the world turns read-only, or play goes on with the winner announced."
+      },
+      "tiers": {
+        "heading": "Jötnar",
+        "tier": "Tier",
+        "attack": "Attack",
+        "defense": "Defense",
+        "thrall": "Rime thrall",
+        "warrior": "Jötunn",
+        "chieftain": "Jötunn chieftain"
+      },
+      "sites": {
+        "heading": "Garrisons",
+        "site": "Site",
+        "watchtower": "Watchtower",
+        "utgard": "Utgard",
+        "defensePower": "Defense power",
+        "guardRange": "Guard range",
+        "regrowth": "Full regrowth",
+        "hours": "{n} h"
+      }
+    },
     "island": {
       "heading": "Living and wasted, side by side",
       "body": "Wasted islands are born wasted: they rise from the sea as they are, and no living island ever turns. This made-up island is only a toy for comparing the two tile sets. Drag the slider to swap its living tiles for their wasted counterparts, ring by ring from the centre out.",
