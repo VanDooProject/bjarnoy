@@ -132,6 +132,9 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 - **Winning**: the army whose assault leaves Utgard with no jötnar **wins the age**: its player and the player's
   guild (if any) are recorded on the world (`AgeEndedAt`, `WinnerUserId`, `WinnerGuildId`,
   `WinnerSettlementId`).
+- **Hall of fame**: both are credited. The winning player gets the age win as the one whose army threw down
+  Utgard; every member of the winning guild at the moment of the win gets a guild age win (stored per user,
+  `AgeWins` with a `Kind` of `Conqueror` or `Guild`, so the leaderboard can show both).
 - **Age-end mode** (new world setting, admin world settings next to "endboss at"):
   - **`ReadOnly`** (default): the world goes to `WorldRunState.Locked` (time runs, no new commands), every
     page shows a banner "The age has ended. <guild/player> threw down Utgard's gate.", leaderboards are
@@ -164,4 +167,4 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 
 ## Open questions
 
-- Should winning credit the whole guild's members on the leaderboard (hall of fame), or the winner only?
+- Should player palisades also lose at most 1 level per 24 h to sieges, like Utgard walls?
