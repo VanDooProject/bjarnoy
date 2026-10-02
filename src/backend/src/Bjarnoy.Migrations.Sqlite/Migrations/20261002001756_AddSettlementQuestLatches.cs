@@ -2,10 +2,10 @@
 
 #nullable disable
 
-namespace Bjarnoy.Migrations.PostgreSql.Migrations
+namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     /// <inheritdoc />
-    public partial class AddSettlementHuntStarted : Migration
+    public partial class AddSettlementQuestLatches : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -13,7 +13,14 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             migrationBuilder.AddColumn<bool>(
                 name: "HuntStarted",
                 table: "settlements",
-                type: "boolean",
+                type: "INTEGER",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "TroopsTrained",
+                table: "settlements",
+                type: "INTEGER",
                 nullable: false,
                 defaultValue: false);
         }
@@ -23,6 +30,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "HuntStarted",
+                table: "settlements");
+
+            migrationBuilder.DropColumn(
+                name: "TroopsTrained",
                 table: "settlements");
         }
     }

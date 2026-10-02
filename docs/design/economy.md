@@ -399,15 +399,17 @@ their renown.
   | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
   | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
   | 6 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
-  | 7 | Train 5 spearmen | 5 fighting land units at home (any type) | 500 / 400 / 300 |
-  | 8 | Hunt a camp | an army sent to hunt a wildlife camp; only after Train 5 spearmen is claimed | 400 / 300 / 300 |
+  | 7 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
+  | 8 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
 
   Rules:
 
   - **Manual claim.** A completed quest pays nothing until the player presses
     Claim in the quest tray (`POST /settlements/{id}/quests/{questId}/claim`).
     The tray shows the first unclaimed quest, plus any other completed one so
-    it can be claimed; quests can be claimed in any order.
+    it can be claimed; quests can be claimed in any order. Claims are optional
+    and never gate anything (not even "Hunt a camp"), so a player may hold
+    rewards back: unclaimed quest loot works as a hidden storage buffer.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
     claimed-quests mask, set in the same save that pays the reward, so a
     double click or a retry gets a 409 (`AlreadyClaimed`), never a second

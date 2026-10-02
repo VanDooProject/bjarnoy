@@ -148,15 +148,40 @@ public class QuestTests
     }
 
     [Fact]
-    public void The_hunt_quest_is_locked_until_the_spearmen_quest_is_claimed()
+    public void The_spearmen_quest_stays_completed_once_the_troops_were_trained()
+    {
+        var q = Quests.Find("spearmen5")!;
+        var trained = Found() with { Garrison = [new UnitStack(UnitType.Axeman, 5)] };
+        var latched = trained.SettleTo(T0).Settlement;
+
+        Assert.True(latched.TroopsTrained);
+        Assert.False(Found().SettleTo(T0).Settlement.TroopsTrained);
+
+        var gone = latched with { Garrison = [new UnitStack(UnitType.Axeman, 1)] };
+        Assert.True(q.IsCompleted(gone));
+        Assert.True(gone.SettleTo(T0).Settlement.TroopsTrained);
+        Assert.False(q.IsCompleted(Found() with { Garrison = [new UnitStack(UnitType.Axeman, 4)] }));
+    }
+
+    [Fact]
+    public void Settling_reports_a_change_when_only_the_troops_latch_flips()
+    {
+        var result = (Found() with { Garrison = [new UnitStack(UnitType.Spearman, 6)] }).SettleTo(T0);
+
+        Assert.True(result.Changed);
+        Assert.True(result.Settlement.TroopsTrained);
+        Assert.False(result.Settlement.SettleTo(T0).Changed);
+    }
+
+    [Fact]
+    public void The_hunt_quest_needs_trained_troops_and_a_started_hunt_but_no_claim()
     {
         var q = Quests.Find("hunt1")!;
-        var spearmen = Quests.Find("spearmen5")!;
 
         Assert.False(q.IsCompleted(Found()));
         Assert.False(q.IsCompleted(Found() with { HuntStarted = true }));
-        Assert.False(q.IsCompleted(Found(claimed: spearmen.Mask)));
-        Assert.True(q.IsCompleted(Found(claimed: spearmen.Mask) with { HuntStarted = true }));
+        Assert.False(q.IsCompleted(Found() with { TroopsTrained = true }));
+        Assert.True(q.IsCompleted(Found() with { TroopsTrained = true, HuntStarted = true }));
     }
 
     [Fact]

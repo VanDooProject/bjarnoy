@@ -187,8 +187,10 @@ L1 1 800, L5 5 550, L10 9 020, L25 17 130, L100 45 210; weak L1 450, L5 1 390, L
   walk home on the precomputed return leg. Camp wins: the army is gone, the camp keeps its survivors.
 - An empty camp (already cleared): no fight; the army picks up leftover loot (see Loot) and turns home.
 - The onboarding quest `hunt1` (economy.md section 7) rewards the first hunt: it completes when an army with
-  mission `hunt` is dispatched (`Settlement.HuntStarted`), win or lose. It is locked until the quest "Train 5
-  spearmen" is claimed: a hunt dispatched earlier is not recorded.
+  mission `hunt` is dispatched (`Settlement.HuntStarted`), win or lose. It only counts once troops were
+  trained (`Settlement.TroopsTrained`, latched the first time the home garrison holds 5 fighting land units, also when
+  all of them leave on this very hunt); claiming "Train 5 spearmen" is not required, and a hunt dispatched earlier is
+  not recorded.
 
 ### Regrowth, calm and respawn
 

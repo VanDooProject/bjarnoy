@@ -33,10 +33,10 @@ public static class Quests
         new("producers6", 3, new ResourceAmounts(200, 150, 100, 0), s => s.ProducerCount >= 6),
         new("longhouse3", 4, new ResourceAmounts(400, 300, 200, 0), s => s.LonghouseLevel >= 3),
         new("longhouse5", 5, new ResourceAmounts(800, 600, 400, 0), s => s.LonghouseLevel >= 5),
-        new("spearmen5", SpearmenBit, new ResourceAmounts(500, 400, 300, 0), s => s.FightingLandUnitCount >= 5),
-        // Locked behind spearmen5: a hunt started earlier never shows completed before that claim.
+        new("spearmen5", SpearmenBit, new ResourceAmounts(500, 400, 300, 0), s => s.TroopsTrained || s.FightingLandUnitCount >= 5),
+        // Unlocked once the troops were trained (the stored latch); claims never gate it.
         new("hunt1", 7, new ResourceAmounts(400, 300, 300, 0),
-            s => (s.ClaimedQuests & (1 << SpearmenBit)) != 0 && s.HuntStarted),
+            s => s.TroopsTrained && s.HuntStarted),
     ];
 
     /// <summary>The quest with <paramref name="id"/>, or <see langword="null"/>.</summary>

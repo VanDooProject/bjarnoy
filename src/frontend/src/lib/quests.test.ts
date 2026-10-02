@@ -35,10 +35,17 @@ describe('demo quests', () => {
     expect(questBit('spearmen5')).toBe(6);
   });
 
-  it('completes the hunt quest only once a hunt was started', () => {
+  it('keeps the spearmen quest completed once the troops were trained', () => {
+    const list = evaluateDemoQuests({ level: 1, counts: {}, troopsTrained: true, fightingLandUnits: 0 }, 0);
+    expect(done(list)).toEqual(['spearmen5']);
+  });
+
+  it('completes the hunt quest only with trained troops and a started hunt', () => {
     expect(done(evaluateDemoQuests({ level: 1, counts: {} }, 0))).not.toContain('hunt1');
-    const list = evaluateDemoQuests({ level: 1, counts: {}, huntStarted: true }, 0);
-    expect(done(list)).toEqual(['hunt1']);
+    expect(done(evaluateDemoQuests({ level: 1, counts: {}, huntStarted: true }, 0))).not.toContain('hunt1');
+    expect(done(evaluateDemoQuests({ level: 1, counts: {}, troopsTrained: true }, 0))).not.toContain('hunt1');
+    const list = evaluateDemoQuests({ level: 1, counts: {}, troopsTrained: true, huntStarted: true }, 0);
+    expect(done(list)).toContain('hunt1');
     expect(list.find((q) => q.id === 'hunt1')?.reward).toEqual({ wood: 400, stone: 300, food: 300, iron: 0 });
     expect(questBit('hunt1')).toBe(7);
   });

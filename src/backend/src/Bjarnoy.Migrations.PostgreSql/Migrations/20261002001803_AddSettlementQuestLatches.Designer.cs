@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Bjarnoy.Migrations.PostgreSql.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20261001232007_AddSettlementHuntStarted")]
-    partial class AddSettlementHuntStarted
+    [Migration("20261002001803_AddSettlementQuestLatches")]
+    partial class AddSettlementQuestLatches
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1208,6 +1208,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<double>("StockWood")
                         .HasColumnType("double precision");
+
+                    b.Property<bool>("TroopsTrained")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");

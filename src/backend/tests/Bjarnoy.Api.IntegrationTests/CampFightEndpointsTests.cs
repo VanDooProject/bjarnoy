@@ -195,7 +195,7 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_hunt_quest_unlocks_after_the_spearmen_quest_is_claimed_and_pays_once()
+    public async Task The_hunt_quest_unlocks_once_troops_were_trained_without_any_claim_and_pays_once()
     {
         using var client = Client();
         var (_, settlement, campHex, _) = await SetUpAsync(client, axemen: 4);
@@ -208,13 +208,13 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
         Assert.False(Done((await Get())!, "spearmen5"));
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(spearmenUrl, null, Ct)).StatusCode);
 
-        // A hunt sent while spearmen5 is unclaimed does not count, and two units left at home are too few.
+        // Four units were never enough to train the troops, so a hunt sent now does not count.
         Assert.Equal(HttpStatusCode.Created, (await HuntAsync(client, settlement.Id, campHex, count: 2)).StatusCode);
         var early = (await Get())!;
         Assert.False(Done(early, "hunt1"));
         Assert.False(Done(early, "spearmen5"));
 
-        // Five fighting units at home complete spearmen5; it pays, but the earlier hunt still does not count.
+        // Eight fighting units at home complete spearmen5 without claiming it.
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
@@ -223,18 +223,20 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
-        var before = (await Get())!;
-        Assert.True(Done(before, "spearmen5"));
-        var claimSpearmen = await client.PostAsync(spearmenUrl, null, Ct);
-        Assert.Equal(HttpStatusCode.OK, claimSpearmen.StatusCode);
-        Assert.False(Done((await Get())!, "hunt1"));
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(huntUrl, null, Ct)).StatusCode);
+        var trained = (await Get())!;
+        Assert.True(Done(trained, "spearmen5"));
+        Assert.False(trained.Quests.Single(q => q.Id == "spearmen5").Claimed);
+        Assert.False(Done(trained, "hunt1"));
 
-        // A hunt started after the claim completes hunt1.
-        Assert.Equal(HttpStatusCode.Created, (await HuntAsync(client, settlement.Id, campHex, count: 2)).StatusCode);
+        // Every unit leaves on a hunt: the garrison drops to zero, but the latch counts the
+        // units that were home when the hunt was dispatched, and spearmen5 stays completed.
+        Assert.Equal(HttpStatusCode.Created, (await HuntAsync(client, settlement.Id, campHex, count: 8)).StatusCode);
         var unlocked = (await Get())!;
+        Assert.True(Done(unlocked, "spearmen5"));
         Assert.True(Done(unlocked, "hunt1"));
+        Assert.False(unlocked.Quests.Single(q => q.Id == "spearmen5").Claimed);
 
+        // Claims are optional and independent: hunt1 pays once, before spearmen5 is claimed.
         var claim = await client.PostAsync(huntUrl, null, Ct);
         Assert.Equal(HttpStatusCode.OK, claim.StatusCode);
         var after = (await claim.Content.ReadFromJsonAsync<SettlementResponse>(SqliteApiFixture.StrictJson, Ct))!;
@@ -244,6 +246,8 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
         Assert.Equal(
             Math.Min(unlocked.Resources.Stock.Food + 300, after.Resources.Capacity.Food), after.Resources.Stock.Food, 1);
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(huntUrl, null, Ct)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync(spearmenUrl, null, Ct)).StatusCode);
     }
 
     [Fact]

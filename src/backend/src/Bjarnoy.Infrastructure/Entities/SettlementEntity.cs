@@ -135,6 +135,9 @@ public class SettlementEntity
     /// <summary>Whether a hunt was ever dispatched from here (<see cref="Settlement.HuntStarted"/>).</summary>
     public bool HuntStarted { get; set; }
 
+    /// <summary>Whether the garrison ever held the quest troops (<see cref="Settlement.TroopsTrained"/>).</summary>
+    public bool TroopsTrained { get; set; }
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
@@ -215,6 +218,7 @@ public class SettlementEntity
         PendingFeastRenown = PendingFeastRenown,
         ClaimedQuests = ClaimedQuests,
         HuntStarted = HuntStarted,
+        TroopsTrained = TroopsTrained,
         Runes =
         [
             .. Runes.OrderBy(r => r.Id).Select(r => new RuneInstance
@@ -262,6 +266,7 @@ public class SettlementEntity
         PendingFeastRenown = settlement.PendingFeastRenown;
         ClaimedQuests = settlement.ClaimedQuests;
         HuntStarted = settlement.HuntStarted;
+        TroopsTrained = settlement.TroopsTrained;
 
         SyncBuildings(settlement);
         SyncQueue(settlement);

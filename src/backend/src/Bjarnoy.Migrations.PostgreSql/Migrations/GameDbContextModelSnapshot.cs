@@ -1206,6 +1206,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("StockWood")
                         .HasColumnType("double precision");
 
+                    b.Property<bool>("TroopsTrained")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 

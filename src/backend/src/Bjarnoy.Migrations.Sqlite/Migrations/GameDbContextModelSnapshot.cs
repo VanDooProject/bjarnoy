@@ -1201,6 +1201,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("StockWood")
                         .HasColumnType("REAL");
 
+                    b.Property<bool>("TroopsTrained")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");
 

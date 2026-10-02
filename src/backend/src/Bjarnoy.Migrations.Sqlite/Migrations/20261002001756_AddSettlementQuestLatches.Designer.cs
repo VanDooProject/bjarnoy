@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20261001231957_AddSettlementHuntStarted")]
-    partial class AddSettlementHuntStarted
+    [Migration("20261002001756_AddSettlementQuestLatches")]
+    partial class AddSettlementQuestLatches
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1203,6 +1203,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<double>("StockWood")
                         .HasColumnType("REAL");
+
+                    b.Property<bool>("TroopsTrained")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");

@@ -22,6 +22,8 @@ export interface DemoQuestState {
   counts: Readonly<Record<string, number>>;
   /** Whether a hunt was ever sent. Demo mode has no armies, so this stays false there. */
   huntStarted?: boolean;
+  /** Whether the garrison ever held 5 fighting land units (latched server-side). Demo mode has no garrison, so this stays false there. */
+  troopsTrained?: boolean;
   /** Fighting land units at home. Demo mode has no garrison, so this stays 0 there. */
   fightingLandUnits?: number;
 }
@@ -54,9 +56,9 @@ export const QUESTS: readonly QuestDef[] = [
   { id: 'producers6', reward: { wood: 200, stone: 150, food: 100, iron: 0 }, done: (s) => producers(s) >= 6 },
   { id: 'longhouse3', reward: { wood: 400, stone: 300, food: 200, iron: 0 }, done: (s) => s.level >= 3 },
   { id: 'longhouse5', reward: { wood: 800, stone: 600, food: 400, iron: 0 }, done: (s) => s.level >= 5 },
-  { id: 'spearmen5', reward: { wood: 500, stone: 400, food: 300, iron: 0 }, done: (s) => (s.fightingLandUnits ?? 0) >= 5 },
-  // The server only records a hunt once spearmen5 is claimed; demo mode never sets huntStarted.
-  { id: 'hunt1', reward: { wood: 400, stone: 300, food: 300, iron: 0 }, done: (s) => s.huntStarted === true },
+  { id: 'spearmen5', reward: { wood: 500, stone: 400, food: 300, iron: 0 }, done: (s) => s.troopsTrained === true || (s.fightingLandUnits ?? 0) >= 5 },
+  // Needs the trained-troops latch and a started hunt; no claim involved. Demo mode never sets either.
+  { id: 'hunt1', reward: { wood: 400, stone: 300, food: 300, iron: 0 }, done: (s) => s.troopsTrained === true && s.huntStarted === true },
 ];
 
 /** Demo mode: the quest list as the server would report it. */
