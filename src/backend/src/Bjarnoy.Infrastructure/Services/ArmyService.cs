@@ -317,9 +317,10 @@ public sealed class ArmyService(
         }
 
         settlement.ApplyDomain(decision.Settlement!);
-        if (mission == ArmyMission.Hunt)
+        if (mission == ArmyMission.Hunt && (settlement.ClaimedQuests & Quests.Find("spearmen5")!.Mask) != 0)
         {
-            // Onboarding quest hunt1: starting a hunt counts, winning is not required.
+            // Onboarding quest hunt1 (locked until spearmen5 is claimed): starting a hunt
+            // counts, winning is not required.
             settlement.HuntStarted = true;
         }
 

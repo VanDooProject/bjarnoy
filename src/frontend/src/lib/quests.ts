@@ -3,7 +3,7 @@
 // In live mode the backend is the source of truth: `SettlementResponse.quests`
 // says what is completed/claimed and `POST /settlements/{id}/quests/{id}/claim`
 // pays. Demo mode has no backend but does keep a local stock on `WorldModel`,
-// so it evaluates the same seven quests here and pays them locally. Keep this
+// so it evaluates the same eight quests here and pays them locally. Keep this
 // list in step with `Bjarnoy.Domain.Settlers.Quests`.
 import type { QuestResponse, ResourceLine } from '../api/types';
 import type { Resources } from './map/types';
@@ -22,6 +22,8 @@ export interface DemoQuestState {
   counts: Readonly<Record<string, number>>;
   /** Whether a hunt was ever sent. Demo mode has no armies, so this stays false there. */
   huntStarted?: boolean;
+  /** Fighting land units at home. Demo mode has no garrison, so this stays 0 there. */
+  fightingLandUnits?: number;
 }
 
 /** Resource producers for the "n producers built" quests (wire names). */
@@ -52,6 +54,8 @@ export const QUESTS: readonly QuestDef[] = [
   { id: 'producers6', reward: { wood: 200, stone: 150, food: 100, iron: 0 }, done: (s) => producers(s) >= 6 },
   { id: 'longhouse3', reward: { wood: 400, stone: 300, food: 200, iron: 0 }, done: (s) => s.level >= 3 },
   { id: 'longhouse5', reward: { wood: 800, stone: 600, food: 400, iron: 0 }, done: (s) => s.level >= 5 },
+  { id: 'spearmen5', reward: { wood: 500, stone: 400, food: 300, iron: 0 }, done: (s) => (s.fightingLandUnits ?? 0) >= 5 },
+  // The server only records a hunt once spearmen5 is claimed; demo mode never sets huntStarted.
   { id: 'hunt1', reward: { wood: 400, stone: 300, food: 300, iron: 0 }, done: (s) => s.huntStarted === true },
 ];
 

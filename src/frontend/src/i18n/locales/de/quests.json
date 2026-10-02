@@ -35,6 +35,10 @@
       "title": "Baue dein Langhaus auf Stufe 5 aus",
       "hint": "Baue das Langhaus weiter aus. Jede Stufe dauert etwas länger."
     },
+    "spearmen5": {
+      "title": "Bilde 5 Speerkämpfer aus",
+      "hint": "Baue eine Kaserne und bilde dort Speerkämpfer aus. Jede kämpfende Landeinheit zählt mit."
+    },
     "hunt1": {
       "title": "Jage ein Wildtierlager",
       "hint": "Klicke ein Lager auf deiner Insel an, wähle Jagen und schicke Landtruppen. Schwache Lager (Hasen, Hirsche, Robben) sind die leichte erste Beute."

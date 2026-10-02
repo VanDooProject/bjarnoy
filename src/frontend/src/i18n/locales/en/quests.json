@@ -35,6 +35,10 @@
       "title": "Upgrade your Longhouse to level 5",
       "hint": "Keep upgrading the Longhouse. Each level takes a little longer."
     },
+    "spearmen5": {
+      "title": "Train 5 spearmen",
+      "hint": "Build a Barracks and train spearmen there. Any fighting land unit counts toward the five."
+    },
     "hunt1": {
       "title": "Hunt a wildlife camp",
       "hint": "Click a camp on your island, choose Hunt and send land troops. Weak camps (hares, deer, seals) are the easy first prey."

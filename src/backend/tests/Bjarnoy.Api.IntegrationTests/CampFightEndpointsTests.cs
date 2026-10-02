@@ -195,40 +195,55 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Starting_a_hunt_completes_the_hunt_quest_and_it_can_be_claimed_once()
+    public async Task The_hunt_quest_unlocks_after_the_spearmen_quest_is_claimed_and_pays_once()
     {
         using var client = Client();
-        var (_, settlement, campHex, _) = await SetUpAsync(client);
+        var (_, settlement, campHex, _) = await SetUpAsync(client, axemen: 4);
         Task<SettlementResponse?> Get() =>
             client.GetFromJsonAsync<SettlementResponse>($"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
-        var claimUrl = $"/api/v1/settlements/{settlement.Id}/quests/hunt1/claim";
+        bool Done(SettlementResponse s, string id) => s.Quests.Single(q => q.Id == id).Completed;
+        var huntUrl = $"/api/v1/settlements/{settlement.Id}/quests/hunt1/claim";
+        var spearmenUrl = $"/api/v1/settlements/{settlement.Id}/quests/spearmen5/claim";
 
-        Assert.False((await Get())!.Quests.Single(q => q.Id == "hunt1").Completed);
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(claimUrl, null, Ct)).StatusCode);
+        Assert.False(Done((await Get())!, "spearmen5"));
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(spearmenUrl, null, Ct)).StatusCode);
 
-        // A plain move does not count as a hunt.
-        var moved = await client.PostJsonAsync(
-            $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest(
-                [new UnitCountRequest("axeman", 2)], null, new HexPointRequest(campHex.Q, campHex.R), 20, "move"),
-            Ct);
-        Assert.Equal(HttpStatusCode.Created, moved.StatusCode);
-        Assert.False((await Get())!.Quests.Single(q => q.Id == "hunt1").Completed);
+        // A hunt sent while spearmen5 is unclaimed does not count, and two units left at home are too few.
+        Assert.Equal(HttpStatusCode.Created, (await HuntAsync(client, settlement.Id, campHex, count: 2)).StatusCode);
+        var early = (await Get())!;
+        Assert.False(Done(early, "hunt1"));
+        Assert.False(Done(early, "spearmen5"));
 
-        // Starting the hunt is enough: the army has not arrived, let alone won.
-        Assert.Equal(HttpStatusCode.Created, (await HuntAsync(client, settlement.Id, campHex)).StatusCode);
+        // Five fighting units at home complete spearmen5; it pays, but the earlier hunt still does not count.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var stack = await db.UnitStacks.SingleAsync(u => u.SettlementId == settlement.Id && u.UnitType == UnitType.Axeman, Ct);
+            stack.Count = 8;
+            await db.SaveChangesAsync(Ct);
+        }
+
         var before = (await Get())!;
-        Assert.True(before.Quests.Single(q => q.Id == "hunt1").Completed);
+        Assert.True(Done(before, "spearmen5"));
+        var claimSpearmen = await client.PostAsync(spearmenUrl, null, Ct);
+        Assert.Equal(HttpStatusCode.OK, claimSpearmen.StatusCode);
+        Assert.False(Done((await Get())!, "hunt1"));
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(huntUrl, null, Ct)).StatusCode);
 
-        var claim = await client.PostAsync(claimUrl, null, Ct);
+        // A hunt started after the claim completes hunt1.
+        Assert.Equal(HttpStatusCode.Created, (await HuntAsync(client, settlement.Id, campHex, count: 2)).StatusCode);
+        var unlocked = (await Get())!;
+        Assert.True(Done(unlocked, "hunt1"));
+
+        var claim = await client.PostAsync(huntUrl, null, Ct);
         Assert.Equal(HttpStatusCode.OK, claim.StatusCode);
         var after = (await claim.Content.ReadFromJsonAsync<SettlementResponse>(SqliteApiFixture.StrictJson, Ct))!;
         Assert.True(after.Quests.Single(q => q.Id == "hunt1").Claimed);
         Assert.Equal(
-            Math.Min(before.Resources.Stock.Wood + 400, after.Resources.Capacity.Wood), after.Resources.Stock.Wood, 1);
+            Math.Min(unlocked.Resources.Stock.Wood + 400, after.Resources.Capacity.Wood), after.Resources.Stock.Wood, 1);
         Assert.Equal(
-            Math.Min(before.Resources.Stock.Food + 300, after.Resources.Capacity.Food), after.Resources.Stock.Food, 1);
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(claimUrl, null, Ct)).StatusCode);
+            Math.Min(unlocked.Resources.Stock.Food + 300, after.Resources.Capacity.Food), after.Resources.Stock.Food, 1);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(huntUrl, null, Ct)).StatusCode);
     }
 
     [Fact]

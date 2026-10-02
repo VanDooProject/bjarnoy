@@ -126,6 +126,15 @@ public sealed record Settlement
     /// </summary>
     public int ProducerCount => Buildings.Count(b => Quests.IsProducer(b.Type));
 
+    /// <summary>
+    /// How many fighting land units stand in the home <see cref="Garrison"/>: every
+    /// unit whose class is neither <see cref="UnitClass.Civilian"/> nor
+    /// <see cref="UnitClass.Ship"/>. Completes the onboarding quest <c>spearmen5</c>.
+    /// </summary>
+    public int FightingLandUnitCount => Garrison
+        .Where(g => UnitCatalogue.Get(g.Type).Class is not (UnitClass.Civilian or UnitClass.Ship))
+        .Sum(g => g.Count);
+
     /// <summary>The level of the standing Town Square (0 when there is none).</summary>
     public int TownSquareLevel =>
         Buildings.Where(b => b.Type == BuildingType.TownSquare).Select(b => b.Level).DefaultIfEmpty(0).Max();
