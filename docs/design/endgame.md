@@ -80,8 +80,8 @@ friend's) or an **Utgard wall**.
 - Levels destroyed = `LevelsDestroyed(total siege power of surviving siege units)`; a wall hex at level 0 is
   **breached** (a palisade hex is removed; an Utgard wall becomes rubble).
 - Before the siege strike a full battle is fought against the wall's defenders: for a palisade, the owner's
-  armies standing on or next to it; for an Utgard wall, nothing (but towers and Utgard ambush armies that come
-  into their range, see below).
+  armies standing on or next to it; for an Utgard wall, nothing: walls and gates hold **no garrison**, they are
+  pure siege targets (but towers and Utgard ambush armies that come into their range, see below).
 - **Utgard walls repair**: a breached or damaged Utgard wall regains 1 level every `WallRepairInterval` = 24 h,
   up to its ring level, while no player army stands on or next to it. Player palisades are rebuilt by their
   owner as usual.
@@ -159,5 +159,4 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 
 ## Open questions
 
-- Should Utgard's wall rings also hold small garrisons (the gates especially), or stay pure siege targets?
 - Should winning credit the whole guild's members on the leaderboard (hall of fame), or the winner only?
