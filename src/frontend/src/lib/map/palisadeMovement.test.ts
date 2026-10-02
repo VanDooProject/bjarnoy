@@ -104,7 +104,7 @@ describe('palisadeRestrictions', () => {
 
 describe('Utgard walls in the palisade rules (the jötnar owner key)', () => {
   const JOTNAR = 'jotnar';
-  const jotnarColumn = (fromR: number, toR: number, gateAtR?: number): PalisadeWalls => {
+  const jotnarColumn = (fromR: number, toR: number, gateAtR?: number) => {
     const walls = new Map<string, { gate: boolean; owner: string }>();
     for (let r = fromR; r <= toR; r++) walls.set(`3,${r}`, { gate: r === gateAtR, owner: JOTNAR });
     return walls;
