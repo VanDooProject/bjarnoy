@@ -21,7 +21,7 @@ public sealed record WallRules(
 /// </summary>
 /// <remarks>
 /// Every wall hex blocks land armies, the owner's included, with two exceptions (<c>docs/design/economy.md</c> section 5): a gate is
-/// passable for its owner's armies only, and a land end (a plain palisade hex with exactly one wall neighbour) is half open, passable for
+/// passable for its owner's armies and their friends (<c>areFriends</c>: the same guild, or guilds at peace), and a land end (a plain palisade hex with exactly one wall neighbour) is half open, passable for
 /// every army at <see cref="HexPathfinder.HalfOpenEndCost"/>, unless it touches a mountain or a wide river (a sealed end, which
 /// blocks like any wall hex). The sea end stands on a sea hex a land army never enters anyway. Fleets are unaffected.
 /// </remarks>
@@ -32,9 +32,14 @@ public sealed class PalisadeIndex
     private readonly Dictionary<HexCoord, bool> _halfOpen = [];
     private readonly Func<HexCoord, Terrain> _terrainAt;
     private readonly Func<HexCoord, bool> _isWideRiver;
+    private readonly Func<Guid, Guid, bool> _areFriends;
 
-    public PalisadeIndex(IEnumerable<StandingWall> walls, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool> isWideRiver)
+    /// <param name="areFriends">Whether two owner keys are friends (same guild, or guilds at peace); a key is always its own friend. Default: nobody is.</param>
+    public PalisadeIndex(
+        IEnumerable<StandingWall> walls, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool> isWideRiver,
+        Func<Guid, Guid, bool>? areFriends = null)
     {
+        _areFriends = areFriends ?? ((_, _) => false);
         ArgumentNullException.ThrowIfNull(walls);
         _terrainAt = terrainAt ?? throw new ArgumentNullException(nameof(terrainAt));
         _isWideRiver = isWideRiver ?? throw new ArgumentNullException(nameof(isWideRiver));
@@ -77,6 +82,6 @@ public sealed class PalisadeIndex
         ? null
         : new WallRules(
             IsWall,
-            hex => _walls.TryGetValue(hex, out var wall) && wall.IsGate && wall.OwnerKey == ownerKey,
+            hex => _walls.TryGetValue(hex, out var wall) && wall.IsGate && (wall.OwnerKey == ownerKey || _areFriends(wall.OwnerKey, ownerKey)),
             IsHalfOpen);
 }

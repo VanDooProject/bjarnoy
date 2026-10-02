@@ -17,12 +17,14 @@ export interface MovementWorldView {
 /**
  * `ownerKey` is the owner of the army that walks (the owning player of the selected settlement, for the range tint): the palisade rules
  * need it to tell a friendly gate from somebody else's. Without it every wall is somebody else's (a gate blocks too).
+ * `friendOwners` are the other accounts whose gates open too: the owner's guildmates and the guilds at peace with theirs.
  */
 export function gamePathContext(
   world: MovementWorldView,
   rules: MovementRules,
   hexesPerHour: number,
   ownerKey?: string,
+  friendOwners?: ReadonlySet<string>,
 ): PathContext {
   const riverAt = (c: AxialCoord) => world.getRiverTile(c.q, c.r);
   const wide = new Map<string, boolean>();
@@ -43,6 +45,6 @@ export function gamePathContext(
     isWideRiver,
     rules,
     hexesPerHour,
-    restrictions: palisadeRestrictions(world.standingPalisadeWalls?.() ?? new Map(), terrainAt, isWideRiver, ownerKey ?? ''),
+    restrictions: palisadeRestrictions(world.standingPalisadeWalls?.() ?? new Map(), terrainAt, isWideRiver, ownerKey ?? '', friendOwners),
   };
 }

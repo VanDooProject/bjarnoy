@@ -29,6 +29,8 @@ export function palisadeRestrictions(
   terrainAt: (c: AxialCoord) => Terrain,
   isWideRiver: (c: AxialCoord) => boolean,
   ownerKey: string,
+  /** The other owners whose gates also open for this army (same guild, or a guild at peace); an owner is always its own friend. */
+  friendOwners: ReadonlySet<string> = new Set(),
 ): Pick<PathRestrictions, 'blocked' | 'friendlyGate' | 'halfOpen'> | undefined {
   if (walls.size === 0) return undefined;
   const halfOpenMemo = new Map<string, boolean>();
@@ -36,7 +38,7 @@ export function palisadeRestrictions(
     blocked: (c) => walls.has(coordKey(c)),
     friendlyGate: (c) => {
       const wall = walls.get(coordKey(c));
-      return wall !== undefined && wall.gate && wall.owner === ownerKey;
+      return wall !== undefined && wall.gate && (wall.owner === ownerKey || friendOwners.has(wall.owner));
     },
     halfOpen: (c) => {
       const key = coordKey(c);
