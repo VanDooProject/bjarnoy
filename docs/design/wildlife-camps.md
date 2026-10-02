@@ -289,3 +289,20 @@ Amounts: see [Loot](#loot) under Gameplay (`CampRules.LootPool`); the docs page 
   `TILE_ORIENTATIONS` order, and bearrapids picks the kept rotation with its river's channel
   (orientation index mod 3, a straight channel is symmetric).
 - Preview: `npm run worldgen-preview -- --layers terrain,camps` (markers per family, ring = guard range).
+
+## Screenshots
+
+Taken for the camp-fights PR (#363). The live ones are a real local run (API on SQLite, frontend in live
+mode) hunting a level 3 beaver lodge; the demo ones inject camp state through the demo-world hook.
+
+| | |
+|---|---|
+| Hunt from the camp's ring menu | ![ring](img/camp-fights/live_camp_ring.png) |
+| Hunt panel: beasts per tier, loot estimate, attack vs camp defense | ![hunt panel](img/camp-fights/live_hunt_panel_filled.png) |
+| Army on its way | ![sent](img/camp-fights/live_hunt_sent.png) |
+| After the hunt: camp empty, cleared once | ![cleared](img/camp-fights/live_camp_cleared.png) |
+| Reports, Camps tab | ![reports](img/camp-fights/live_reports_camps.png) |
+| Camp report | ![report](img/camp-fights/live_report_detail.png) |
+| Tower in a strong camp's range: a warning, not a lock | ![tower warning](img/camp-fights/tower_warning.png) |
+| Camp art: guarded, cleared, removed by a building | ![guarded](img/camp-fights/art_guarded.png) ![cleared](img/camp-fights/art_cleared.png) ![removed](img/camp-fights/art_removed.png) |
+| Docs page | ![docs](img/camp-fights/docs_camps_top.png) |
