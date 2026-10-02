@@ -2,7 +2,7 @@
 
   <!-- Version must match AspireVersion in Directory.Packages.props: an Sdk
        reference cannot read its version from central package management. -->
-  <Sdk Name="Aspire.AppHost.Sdk" Version="13.5.2" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.6.0" />
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>

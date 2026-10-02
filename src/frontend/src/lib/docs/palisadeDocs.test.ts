@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ref } from 'vue';
 import { PALISADE_FAMILY, isRefusal } from '../map/palisadeTiles';
 import {
   PALISADE_PIECES,
@@ -9,6 +10,7 @@ import {
   pieceFrameNames,
   resolveExampleWall,
   stagesOf,
+  usePieceStages,
 } from './palisadeDocs';
 import { coordKey } from '../hex/coords';
 
@@ -105,5 +107,36 @@ describe('the example wall', () => {
     const seaEnd = walls.find((t) => t.terrain === 'sea');
     expect(seaEnd && coordKey(seaEnd)).toBe(coordKey(exampleWallHexes().at(-1)!.coord));
     expect(tiles.filter((t) => t.terrain === 'sea').every((t) => t.isCoastalWater)).toBe(true);
+  });
+});
+
+describe('usePieceStages', () => {
+  // The atlas manifests arrive after the page has set up: `has` misses everything at first.
+  const lateAtlas = () => {
+    const frames = ref<string[]>([]);
+    return { frames, has: (name: string) => frames.value.includes(name) };
+  };
+  const straightStages = (n: number) => Array.from({ length: n }, (_, i) => `palisade_straight180_SE_level00${i}`);
+
+  it('picks up the stages once the atlas arrives after setup', () => {
+    const { frames, has } = lateAtlas();
+    const { stages, stageOf } = usePieceStages(has);
+    expect(stages.value.straight180).toEqual([]);
+    expect(stageOf('straight180')).toBe(0);
+
+    frames.value = straightStages(3);
+    expect(stages.value.straight180).toEqual([0, 1, 2]);
+    expect(stageOf('straight180')).toBe(2);
+    expect(stages.value.bend60).toEqual([]);
+  });
+
+  it("keeps the reader's pick when more of the atlas arrives", () => {
+    const { frames, has } = lateAtlas();
+    const { stageOf, pick } = usePieceStages(has);
+    frames.value = straightStages(3);
+    pick('straight180', 0);
+    frames.value = straightStages(4);
+    expect(stageOf('straight180')).toBe(0);
+    expect(stageOf('bend60')).toBe(0);
   });
 });

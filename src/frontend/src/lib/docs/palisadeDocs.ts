@@ -2,6 +2,7 @@
 // palisade pieces and the atlas names of their art, how many stages the atlas has for each (read off the
 // atlas, so the stage the art pipeline adds next shows up by itself), the ground a piece stands on, and
 // the small example wall - resolved with the game's own `palisadeTiles.ts`, not with a hand-written table.
+import { computed, reactive, type ComputedRef } from 'vue';
 import { coordKey, hexDistance, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import {
   PALISADE_FAMILY,
@@ -50,6 +51,30 @@ export function stagesOf(piece: PalisadePiece, has: (frameName: string) => boole
     stages.push(stage);
   }
   return stages;
+}
+
+/**
+ * The stages the page offers per piece and the one each piece shows, derived reactively from `has`. The atlas
+ * manifests are fetched lazily, so at setup `has` usually finds nothing yet: the stages (and with them the
+ * stage pickers) appear once the manifests are in - `findAtlasFrame` depends on `atlasManifestVersion`, so the
+ * computed re-runs then. Until the reader picks a stage, a piece shows its top stage, whatever that is by now.
+ */
+export function usePieceStages(has: (frameName: string) => boolean): {
+  stages: ComputedRef<Record<PalisadePiece, number[]>>;
+  stageOf: (piece: PalisadePiece) => number;
+  pick: (piece: PalisadePiece, stage: number) => void;
+} {
+  const stages = computed(
+    () => Object.fromEntries(PALISADE_PIECES.map((p) => [p, stagesOf(p, has)])) as Record<PalisadePiece, number[]>,
+  );
+  const picked = reactive<Partial<Record<PalisadePiece, number>>>({});
+  return {
+    stages,
+    stageOf: (piece) => picked[piece] ?? stages.value[piece].at(-1) ?? 0,
+    pick: (piece, stage) => {
+      picked[piece] = stage;
+    },
+  };
 }
 
 /** Frame names of one drawn piece: the ground (`terrain` category) and the wall on it (`buildings-static`). */
