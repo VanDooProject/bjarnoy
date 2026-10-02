@@ -168,3 +168,11 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 ## Open questions
 
 None open. (Player palisades take the full `LevelsDestroyed` per siege; only Utgard walls are capped at 1 level per 24 h.)
+
+## Screenshots
+
+The in-game docs page (`/docs/wasted-lands`, section "How the endgame plays"):
+
+![Endgame rules on the Wasted Lands docs page](img/endgame/docs_rules_en.png)
+![Jötnar and garrison tables, German](img/endgame/docs_tables_de.png)
+![Garrison tables on a phone, scrolling sideways](img/endgame/docs_tables_mobile.png)
