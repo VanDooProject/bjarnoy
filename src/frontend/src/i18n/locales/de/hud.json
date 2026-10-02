@@ -74,7 +74,13 @@
     "campEmpty": "Geräumt: leer",
     "campCalmUntil": "Ruhig bis {time}",
     "campAggressive": "Aggressiv",
-    "campClears": "Einmal geräumt | {count}-mal geräumt"
+    "campClears": "Einmal geräumt | {count}-mal geräumt",
+    "wallLevel2": "Unversehrte Mauer",
+    "wallLevel1": "Beschädigte Mauer",
+    "wallLevel0": "Mauerbruch",
+    "towerLevel2": "Besetzt",
+    "towerLevel1": "Beschädigt",
+    "towerLevel0": "Eingenommen"
   },
   "ringMenu": {
     "shrineLimitLock": "Diese Siedlung hat bereits einen Schrein",

@@ -85,6 +85,7 @@
     "UnknownQuest": "There is no such quest.",
     "NoCampAtDestination": "There is no wildlife camp at that hex.",
     "HuntRequiresLandUnits": "Only land units can hunt a wildlife camp.",
-    "HexOccupiedByCamp": "Wild beasts still hold that hex."
+    "HexOccupiedByCamp": "Wild beasts still hold that hex.",
+    "HexOccupiedByEndgameSite": "An Utgard wall or a jötun watchtower stands on that hex."
   }
 }

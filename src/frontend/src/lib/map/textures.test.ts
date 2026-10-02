@@ -25,6 +25,8 @@ import {
   KEY_FAMILY,
   LAKE_PROP_VARIANT,
   PALISADE_TEXTURE_KEY,
+  UTGARD_WALL_TEXTURE_KEY,
+  endgameDrawTile,
   palisadeArtFor,
   selectVariantFrames,
   type FamilyFrame,
@@ -1947,6 +1949,121 @@ describe('palisade art', () => {
           if (!frames.has(top)) missing.push(top);
           // The sea end brings its own base per level; the land pieces stand on the hex's own ground.
           if (family === 'palisade_end_coast' && !frames.has(`${top}_base`)) missing.push(`${top}_base`);
+        }
+      }
+    }
+
+    expect(missing).toEqual([]);
+  });
+});
+
+// The Utgard wall set and the Jötun watchtower (wasted pack): the server resolves piece and camera, the renderer draws them at the
+// site's level (level000 breached/taken, level001 damaged, level002 full/garrisoned) and the vendored atlas carries every frame.
+describe('endgame site art', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+  function emptyTextures(): TileTextures {
+    return {
+      base: {},
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      riverBase: {} as TileTextures['riverBase'],
+      riverTop: {} as TileTextures['riverTop'],
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+  }
+  const wall = (piece: NonNullable<Tile['utgardWall']>['piece'], level: number, dir: NonNullable<Tile['utgardWall']>['dir'] = 'NW'): Tile => ({
+    q: 0, r: 0, terrain: 'grass', wasted: true, orientation: 'SE', utgardWall: { ring: 'inner', piece, dir, isGate: piece === 'gate180', level },
+  });
+
+  it('maps every piece and the tower to the atlas family the art ships under', () => {
+    expect(
+      (['straight180', 'bend60', 'bend120', 'gate180', 'end', 'end_coast'] as const).map((piece) => KEY_FAMILY[UTGARD_WALL_TEXTURE_KEY[piece]]),
+    ).toEqual([
+      'utgardwall_straight180',
+      'utgardwall_bend60',
+      'utgardwall_bend120',
+      'utgardwall_gate180',
+      'utgardwall_end',
+      'utgardwall_end_coast',
+    ]);
+    expect(KEY_FAMILY.jotunwatchtower).toBe('jotunwatchtower');
+  });
+
+  it('draws the server-resolved piece in the server-resolved camera, not the tile\'s own rotation', () => {
+    const drawn = endgameDrawTile(wall('bend120', 2, 'SW'))!;
+    expect(drawn.art).toEqual({ key: 'utgardwallbend120', orientation: 'SW' });
+    expect(endgameDrawTile(wall('gate180', 2, 'E'))!.art.key).toBe('utgardwallgate');
+    expect(endgameDrawTile({ q: 0, r: 0, terrain: 'grass', jotunTower: { orientation: 'NE', level: 2 } })!.art).toEqual({
+      key: 'jotunwatchtower',
+      orientation: 'NE',
+    });
+    expect(endgameDrawTile({ q: 0, r: 0, terrain: 'grass' })).toBeUndefined();
+  });
+
+  it('draws a wall at its current level: rubble, damaged, full', () => {
+    const textures = emptyTextures();
+    textures.top.utgardwallstraight = orientationMap(['rubble', 'damaged', 'full'] as unknown as never);
+
+    for (const [level, texture] of [[0, 'rubble'], [1, 'damaged'], [2, 'full']] as const) {
+      const drawn = endgameDrawTile(wall('straight180', level))!;
+      expect(topTextureFor(textures, drawn.tile, drawn.art)).toBe(texture);
+    }
+  });
+
+  it('draws the tower at its level too, on the hex\'s own wasted ground', () => {
+    const textures = emptyTextures();
+    textures.top.jotunwatchtower = orientationMap(['taken', 'damaged', 'garrisoned'] as unknown as never);
+    textures.base.wasteland = orientationMap('wasteland-base' as unknown as never);
+    const tile: Tile = { q: 0, r: 0, terrain: 'grass', wasted: true, orientation: 'SE', jotunTower: { orientation: 'SE', level: 2 } };
+    const drawn = endgameDrawTile(tile)!;
+
+    expect(topTextureFor(textures, drawn.tile, drawn.art)).toBe('garrisoned');
+    expect(baseTextureFor(textures, drawn.tile, drawn.art)).toBe('wasteland-base');
+    expect(topTextureFor(textures, endgameDrawTile({ ...tile, jotunTower: { orientation: 'SE', level: 0 } })!.tile, drawn.art)).toBe('taken');
+  });
+
+  it('keeps a land wall on the wasted ground and the shore end on its own coastal base per level', () => {
+    const textures = emptyTextures();
+    textures.base.wasteland = orientationMap('wasteland-base' as unknown as never);
+    textures.baseIndexed.utgardwallendcoast = orientationMap(['coast-0', 'coast-1', 'coast-2'] as unknown as never);
+    const land = endgameDrawTile(wall('straight180', 2))!;
+    expect(baseTextureFor(textures, land.tile, land.art)).toBe('wasteland-base');
+
+    const shore: Tile = {
+      q: 0, r: 0, terrain: 'sea', isCoastalWater: true, orientation: 'SE',
+      utgardWall: { ring: 'outer', piece: 'end_coast', dir: 'W', isGate: false, level: 1 },
+    };
+    const drawn = endgameDrawTile(shore)!;
+    expect(baseTextureFor(textures, drawn.tile, drawn.art)).toBe('coast-1');
+  });
+
+  const manifests = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/wasted-buildings-{static,level1}-*.json', {
+    eager: true,
+    import: 'default',
+  }) as Record<string, { frames: Record<string, unknown> }>;
+  const vendored = Object.keys(manifests).length > 0;
+
+  it.skipIf(!vendored)('the vendored wasted atlas carries every frame the walls and towers can ask for', () => {
+    const frames = new Set<string>();
+    for (const manifest of Object.values(manifests)) {
+      for (const name of Object.keys(manifest.frames)) if (name.startsWith('utgardwall_') || name.startsWith('jotunwatchtower_')) frames.add(name);
+    }
+    const missing: string[] = [];
+    for (const family of [...Object.values(UTGARD_WALL_TEXTURE_KEY).map((k) => KEY_FAMILY[k]!), 'jotunwatchtower']) {
+      for (const dir of ORIENTATIONS) {
+        for (const level of [0, 1, 2]) {
+          const top = `${family}_${dir}_level00${level}`;
+          if (!frames.has(top)) missing.push(top);
+          if (family === 'utgardwall_end_coast' && !frames.has(`${top}_base`)) missing.push(`${top}_base`);
         }
       }
     }

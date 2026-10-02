@@ -169,6 +169,18 @@ describe('hoverSubjectFor', () => {
     expect(hoverSubjectFor({ ...tileOf('grass'), camp, giant }, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
   });
 
+  it('names an Utgard wall piece and a watchtower with their level, a gate apart from a plain wall', () => {
+    const wall = { ring: 'inner' as const, piece: 'straight180' as const, dir: 'NW' as const, isGate: false, level: 1 };
+    expect(hoverSubjectFor({ ...tileOf('grass'), utgardWall: wall }, undefined)).toEqual({ kind: 'utgardwall', gate: false, level: 1 });
+    expect(hoverSubjectFor({ ...tileOf('grass'), utgardWall: { ...wall, piece: 'gate180', isGate: true, level: 0 } }, undefined)).toEqual({
+      kind: 'utgardwall',
+      gate: true,
+      level: 0,
+    });
+    expect(hoverSubjectFor({ ...tileOf('sea'), utgardWall: { ...wall, piece: 'end_coast' } }, undefined).kind).toBe('utgardwall');
+    expect(hoverSubjectFor({ ...tileOf('grass'), jotunTower: { orientation: 'SE', level: 2 } }, undefined)).toEqual({ kind: 'jotuntower', level: 2 });
+  });
+
   it('carries the live camp state and the effective level, and drops a removed camp', () => {
     const camp = {
       family: 'wolfden',

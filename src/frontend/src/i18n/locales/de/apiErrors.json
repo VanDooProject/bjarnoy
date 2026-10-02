@@ -85,6 +85,7 @@
     "UnknownQuest": "Diese Aufgabe gibt es nicht.",
     "NoCampAtDestination": "Auf diesem Feld steht kein Wildtierlager.",
     "HuntRequiresLandUnits": "Nur Landeinheiten können ein Wildtierlager jagen.",
-    "HexOccupiedByCamp": "Wilde Tiere halten dieses Feld noch."
+    "HexOccupiedByCamp": "Wilde Tiere halten dieses Feld noch.",
+    "HexOccupiedByEndgameSite": "Auf diesem Feld steht eine Utgardmauer oder ein Jötunn-Wachturm."
   }
 }

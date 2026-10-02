@@ -389,6 +389,25 @@ export interface Tile {
     orientation: TileOrientation;
   };
   /**
+   * An Utgard wall piece on this hex (a wasted island's wall ring, see `endgamePlacement.ts` and `docs/design/endgame.md`); a sea
+   * hex carries the `end_coast` piece. A standing wall (level 1+) blocks land armies; not buildable.
+   */
+  utgardWall?: {
+    ring: 'inner' | 'outer';
+    piece: import('./palisadeTiles').PalisadePiece;
+    /** The art file's camera, as the server resolved it through the palisade rules. */
+    dir: TileOrientation;
+    isGate: boolean;
+    /** 2 full, 1 damaged, 0 breached rubble (passable). */
+    level: number;
+  };
+  /** A Jötun watchtower on this hex (see `endgamePlacement.ts`); not buildable. `orientation` is the tile's own rotation. */
+  jotunTower?: {
+    orientation: TileOrientation;
+    /** 2 garrisoned, 1 damaged, 0 taken; later endgame steps switch it. */
+    level: number;
+  };
+  /**
    * A wildlife camp on this hex (see `campPlacement.ts` and
    * `docs/design/wildlife-camps.md`): an animated topping on the tile's own
    * ground. Spawn and render only — every camp is guarded (art level 1), and a

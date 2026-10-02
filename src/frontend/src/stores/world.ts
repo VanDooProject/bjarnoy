@@ -52,6 +52,7 @@ import {
 import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
 import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
+import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 
@@ -579,6 +580,29 @@ export const useWorldStore = defineStore('world', {
             coord: { q: camp.q, r: camp.r },
             level: camp.level,
             orientation: camp.orientation as TileOrientation,
+          })),
+        ),
+      );
+      // Server-generated Utgard walls and Jötun watchtowers of the wasted islands (see `IslandResponse.utgardWalls`): tagged for
+      // rendering and the client's route preview; the server is authoritative on pieces, rotations and levels.
+      this.model.setUtgardWalls(
+        this.islands.flatMap((island) =>
+          (island.utgardWalls ?? []).map((wall) => ({
+            coord: { q: wall.q, r: wall.r },
+            ring: wall.ring,
+            piece: wall.piece as PalisadePiece,
+            dir: wall.orientation as TileOrientation,
+            isGate: wall.isGate,
+            level: wall.level,
+          })),
+        ),
+      );
+      this.model.setJotunTowers(
+        this.islands.flatMap((island) =>
+          (island.jotunTowers ?? []).map((tower) => ({
+            coord: { q: tower.q, r: tower.r },
+            orientation: tower.orientation as TileOrientation,
+            level: 2,
           })),
         ),
       );
