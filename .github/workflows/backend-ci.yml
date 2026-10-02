@@ -42,7 +42,7 @@ jobs:
         run: dotnet build Bjarnoy.slnx --configuration Release --no-restore
 
       - name: Domain tests
-        run: dotnet test --project tests/Bjarnoy.Domain.Tests --configuration Release --no-build
+        run: dotnet test --project tests/Bjarnoy.Domain.Tests --configuration Release --no-build --report-xunit-trx --report-xunit-trx-filename domain.trx --results-directory ${{ runner.temp }}/test-results
 
       # Runs the SQLite suite and, because GitHub runners have Docker, the
       # Testcontainers PostgreSQL suite as well.
@@ -55,9 +55,21 @@ jobs:
       # Overriding it back down to Warning here keeps a failing run's own
       # assertion output the thing actually visible in the log.
       - name: Integration tests
-        run: dotnet test --project tests/Bjarnoy.Api.IntegrationTests --configuration Release --no-build
+        run: dotnet test --project tests/Bjarnoy.Api.IntegrationTests --configuration Release --no-build --report-xunit-trx --report-xunit-trx-filename integration.trx --results-directory ${{ runner.temp }}/test-results
         env:
           Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+
+      # The job log is capped (the API returns only the last ~5000 lines), so
+      # a failing test's name can scroll out of view behind the host's stdout.
+      # The TRX files name every failed test and carry its assertion output.
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: ${{ runner.temp }}/test-results/
+          retention-days: 7
+          if-no-files-found: warn
 
   # The migration sets are generated from the model, so they can silently fall
   # out of step with it. This fails the build when they have.
