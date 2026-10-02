@@ -260,6 +260,25 @@ public sealed class ArmyService(
             }
         }
 
+        // Siege-specific: the destination names the wall hex. With no standing wall of another settlement there the dispatch
+        // is refused by Army.PlanDispatch (targetWallCoord stays null); a wall of the sender's own or a friend's is refused
+        // as friendly. The route ends on the passable neighbour of the wall with the shortest way from home.
+        HexCoord? targetWallCoord = null;
+        var targetWallFriendly = false;
+        if (mission == ArmyMission.Siege)
+        {
+            var wall = await FindStandingWallAsync(settlement.WorldId, effectiveDestination, cancellationToken).ConfigureAwait(false);
+            if (wall is { } standing)
+            {
+                targetWallCoord = effectiveDestination;
+                targetWallFriendly = !await IsHostileWallAsync(
+                    settlement.WorldId, WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id), standing, cancellationToken)
+                    .ConfigureAwait(false);
+                effectiveDestination = Army.SiegeRouteDestination(
+                    effectiveDestination, settled.Centre, sampler.TerrainAt, rivers.IsRiver, rivers.IsWide, walls);
+            }
+        }
+
         // Founding-specific, dispatch-time-only checks (issue #55 §6): renown/
         // slot and target-hex spacing both need database access the pure
         // Army.PlanDispatch cannot reach on its own, so they are resolved
@@ -306,7 +325,8 @@ public sealed class ArmyService(
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord);
+            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord,
+            targetWallCoord: targetWallCoord, targetWallFriendly: targetWallFriendly);
 
         if (!decision.Accepted)
         {
@@ -851,6 +871,13 @@ public sealed class ArmyService(
             return await ResolveHuntAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
         }
 
+        if (domain.Mission == ArmyMission.Siege
+            && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } siegeTransit
+            && now >= siegeTransit.Movement.ArrivesAt)
+        {
+            return await ResolveSiegeAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
+        }
+
         if (domain.Mission == ArmyMission.Found
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } foundTransit
             && now >= foundTransit.Movement.ArrivesAt)
@@ -1098,6 +1125,161 @@ public sealed class ArmyService(
 
         return ApplyArmyOutcome(armyEntity, returning, now);
     }
+
+    /// <summary>A standing palisade or gate hex: whose settlement it belongs to, and its owner's account.</summary>
+    private sealed record StandingWall(Guid SettlementId, Guid OwnerUserId, BuildingType Type);
+
+    private async Task<StandingWall?> FindStandingWallAsync(Guid worldId, HexCoord hex, CancellationToken cancellationToken) =>
+        await _dbContext.PlacedBuildings
+            .AsNoTracking()
+            .Where(b => b.Settlement!.WorldId == worldId
+                && (b.Type == BuildingType.Palisade || b.Type == BuildingType.PalisadeGate)
+                && b.Level >= 1
+                && b.Q == hex.Q && b.R == hex.R)
+            .Select(b => new StandingWall(b.SettlementId, b.Settlement!.UserId, b.Type))
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
+    /// <summary>A wall is a siege target for <paramref name="attackerKey"/> unless it is the attacker's own or a friend's (same guild, or guilds at peace).</summary>
+    private async Task<bool> IsHostileWallAsync(
+        Guid worldId, Guid attackerKey, StandingWall wall, CancellationToken cancellationToken)
+    {
+        var wallKey = WorldPalisades.OwnerKeyOf(wall.OwnerUserId, wall.SettlementId);
+        if (wallKey == attackerKey)
+        {
+            return false;
+        }
+
+        var areFriends = await WorldPalisades.FriendsAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        return !areFriends(wallKey, attackerKey);
+    }
+
+    /// <summary>
+    /// Settles an <see cref="ArmyMission.Siege"/> army's arrival next to its wall: the wall must still stand and still be
+    /// hostile, otherwise the army just turns home. Then the wall owner's armies standing on or next to the wall hex fight
+    /// a full battle (none: no losses), and an attacker that wins strikes the wall with its surviving siege units: the
+    /// full <see cref="SiegeResolver.LevelsDestroyed"/> comes off the palisade or gate, which leaves its settlement at
+    /// level 0. A battle report (with the siege line) goes to both settlements; the survivors walk home.
+    /// </summary>
+    private async Task<ArmySettleOutcome> ResolveSiegeAsync(
+        ArmyEntity armyEntity, Army domain, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var movement = ((ArmyLocation.InTransit)domain.Location).Movement;
+        var arrivesAt = movement.ArrivesAt;
+        var worldId = armyEntity.Settlement!.WorldId;
+        var attackerKey = WorldPalisades.OwnerKeyOf(armyEntity.Settlement.UserId, armyEntity.SettlementId);
+
+        var wall = domain.TargetWallCoord is { } coord
+            ? await FindStandingWallAsync(worldId, coord, cancellationToken).ConfigureAwait(false)
+            : null;
+        if (wall is null || !await IsHostileWallAsync(worldId, attackerKey, wall, cancellationToken).ConfigureAwait(false))
+        {
+            _logger.LogWarning(
+                "Army {ArmyId}'s siege target {Target} is gone or no longer hostile; recalling home without a strike.",
+                armyEntity.Id, domain.TargetWallCoord);
+
+            return ApplyArmyOutcome(armyEntity, TurnHomeWithoutBattle(domain, movement), now);
+        }
+
+        var wallHex = domain.TargetWallCoord!.Value;
+        var ownerEntity = await LoadSettlementAsync(wall.SettlementId, cancellationToken).ConfigureAwait(false);
+        if (ownerEntity?.World is null)
+        {
+            return ApplyArmyOutcome(armyEntity, TurnHomeWithoutBattle(domain, movement), now);
+        }
+
+        var defenders = await LoadWallDefendersAsync(
+            worldId, ownerEntity.UserId, ownerEntity.Id, wallHex, arrivesAt, cancellationToken).ConfigureAwait(false);
+        var pooled = defenders
+            .SelectMany(d => d.Stacks.Select(s => new UnitStack(s.UnitType, s.Count)))
+            .GroupBy(s => s.Type)
+            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+            .OrderBy(s => s.Type)
+            .ToList();
+
+        var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
+        var landAttackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(UnitClass.Infantry) ?? 0;
+
+        // A full battle (no raid cap) in the open field: no tower bonus, nothing to loot.
+        var seed = Random.Shared.Next();
+        var plan = BattleResolver.Resolve(
+            domain.Stacks, pooled, 0, ResourceAmounts.Zero, seed, landAttackBonusPercent: landAttackBonusPercent);
+
+        // The pooled losses go back to the armies in proportion to what each holds; an army left empty is gone.
+        GuestArmyAllocation.ApplyLosses(defenders, plan.DefenderLosses);
+        foreach (var defender in defenders.Where(a => a.Stacks.Count == 0))
+        {
+            _dbContext.Armies.Remove(defender);
+        }
+
+        var speedFactor = ownerEntity.World.SpeedFactor;
+        var settledOwner = ownerEntity.ToDomain().SettleTo(arrivesAt, speedFactor).Settlement;
+        var siege = plan.Winner == BattleWinner.Attacker
+            ? SiegeResolver.ResolveWall(plan.AttackerSurvivors, settledOwner.Buildings, wallHex)
+            : SiegeOutcome.None;
+        if (siege.Applied)
+        {
+            settledOwner = settledOwner.WithSiegeDamage(siege.UpdatedBuildings!, wallHex, arrivesAt, speedFactor);
+
+            // A removed wall hex may have held a construction slot: let the head of the waiting queue take it.
+            settledOwner = settledOwner.PromoteWaitingOrders(arrivesAt, speedFactor).Settlement;
+        }
+
+        ownerEntity.ApplyDomain(settledOwner.SettleTo(now, speedFactor).Settlement);
+
+        var report = BattleReport.From(
+            Guid.CreateVersion7(), arrivesAt, armyEntity.Id, armyEntity.SettlementId, ownerEntity.Id,
+            domain.Stacks, plan, seed, siege, wasWallSiege: true);
+        _dbContext.BattleReports.Add(BattleReportEntity.FromDomain(report));
+
+        _logger.LogInformation(
+            "Army {ArmyId} besieged the {Type} at {Wall} of settlement {TargetId}: {Winner} won ({AttackPower} vs {DefensePower}), "
+                + "{Defenders} defending army(ies); wall level {Before} -> {After}.",
+            armyEntity.Id, wall.Type, wallHex, ownerEntity.Id, plan.Winner, plan.AttackPower, plan.DefensePower,
+            defenders.Count, siege.Applied ? siege.LevelBefore : null, siege.Applied ? siege.LevelAfter : null);
+
+        var returning = domain.SettleSiegeArrival(plan.AttackerSurvivors, arrivesAt);
+        if (returning is null)
+        {
+            _dbContext.Armies.Remove(armyEntity);
+            return ArmySettleOutcome.FoldedHome;
+        }
+
+        return ApplyArmyOutcome(armyEntity, returning, now);
+    }
+
+    /// <summary>
+    /// The wall owner's armies standing on or next to <paramref name="wallHex"/> at <paramref name="at"/>: arrived on an
+    /// outbound leg ending within one hex of the wall and not yet turned around, land units only (an anonymous owner's
+    /// own settlement's armies only). Tracked, ordered by id.
+    /// </summary>
+    private async Task<List<ArmyEntity>> LoadWallDefendersAsync(
+        Guid worldId, Guid ownerUserId, Guid ownerSettlementId, HexCoord wallHex, DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        var anonymous = ownerUserId == SystemUserIds.Abandoned;
+        var candidates = await _dbContext.Armies
+            .Include(a => a.Stacks)
+            .Where(a => a.Settlement!.WorldId == worldId
+                && (anonymous ? a.SettlementId == ownerSettlementId : a.Settlement.UserId == ownerUserId)
+                && !a.AtHome
+                && !a.IsSupporting
+                && !a.IsReturning)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. candidates
+                .Where(a => IsStandingNear(a.ToDomain(), wallHex, at))
+                .OrderBy(a => a.Id),
+        ];
+    }
+
+    private static bool IsStandingNear(Army army, HexCoord hex, DateTimeOffset at) =>
+        !army.IsFleet
+        && army.Location is ArmyLocation.InTransit { Movement: { IsReturning: false } movement }
+        && movement.ArrivesAt <= at
+        && at < movement.TurnAroundAt
+        && movement.Path[^1].DistanceTo(hex) <= 1;
 
     /// <summary>
     /// Builds the "no battle happened, just go home" return leg for

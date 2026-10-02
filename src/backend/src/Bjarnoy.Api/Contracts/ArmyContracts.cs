@@ -253,7 +253,7 @@ public sealed record BattleReportSiegeResponse(
 
 /// <summary>A resolved battle (issue #40 phase 3), as read from either side's inbox.</summary>
 /// <param name="Mission">
-/// <c>"attack"</c> or <c>"raid"</c> (issue #40 phase 7) — which mission fought
+/// <c>"attack"</c>, <c>"raid"</c> (issue #40 phase 7) or <c>"siege"</c> (a wall siege) — which mission fought
 /// this battle; see <see cref="Domain.Armies.ArmyMission.Raid"/>.
 /// </param>
 public sealed record BattleReportResponse(
@@ -283,7 +283,7 @@ public sealed record BattleReportResponse(
             domain.AttackerArmyId,
             domain.AttackerSettlementId,
             domain.DefenderSettlementId,
-            domain.WasRaid ? "raid" : "attack",
+            domain.WasWallSiege ? "siege" : domain.WasRaid ? "raid" : "attack",
             domain.Winner.ToString().ToLowerInvariant(),
             domain.AttackPower,
             domain.DefensePower,
