@@ -173,6 +173,25 @@ public static class UnitCatalogue
             RequiredUnitType = UnitType.Berserker,
             RequiredBuildingType = BuildingType.ArcheryRange,
         },
+        [UnitType.Ram] = new UnitDefinition
+        {
+            Type = UnitType.Ram,
+            Class = UnitClass.Siege,
+            Attack = 10,
+            Defense = 30,
+            Speed = 1.0,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 0,
+            UpkeepPerHour = 3,
+            // Same siege pattern as the catapult (siege power 40, the same
+            // SiegeResolver.LevelsDestroyed): more staying power, slower.
+            SiegePower = 40,
+            TrainingCost = new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150),
+            TrainingDuration = TimeSpan.FromHours(1),
+            RequiredLonghouseLevel = 20,
+            RequiredUnitType = UnitType.Berserker,
+            RequiredBuildingType = BuildingType.ArcheryRange,
+        },
         [UnitType.Karve] = new UnitDefinition
         {
             Type = UnitType.Karve,

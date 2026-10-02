@@ -86,12 +86,40 @@ public static class SiegeResolver
         survivingSiegePower <= 0 ? 0 : Math.Max(1, (int)Math.Floor(Math.Sqrt(survivingSiegePower / 2.0)));
 
     /// <summary>
+    /// Sum of <see cref="UnitDefinition.SiegePower"/> over every stack with siege power
+    /// (catapults and rams alike).
+    /// </summary>
+    public static long TotalSiegePower(IEnumerable<UnitStack> stacks)
+    {
+        ArgumentNullException.ThrowIfNull(stacks);
+        return stacks.Sum(s => (long)UnitCatalogue.Get(s.Type).SiegePower * s.Count);
+    }
+
+    /// <summary>
+    /// The siege strike on a player's wall hex (<see cref="Armies.ArmyMission.Siege"/>): the full
+    /// <see cref="LevelsDestroyed"/> of the surviving siege power comes off the palisade or gate standing on
+    /// <paramref name="wallCoord"/>, which is removed from <see cref="SiegeOutcome.UpdatedBuildings"/> at level 0 (the
+    /// wall is breached and its hex freed). <see cref="SiegeOutcome.None"/> when no wall of level 1 or more stands
+    /// there any more or no siege unit survived.
+    /// </summary>
+    public static SiegeOutcome ResolveWall(
+        IReadOnlyList<UnitStack> attackerSurvivors, IReadOnlyList<PlacedBuilding> buildings, HexCoord wallCoord)
+    {
+        ArgumentNullException.ThrowIfNull(attackerSurvivors);
+        ArgumentNullException.ThrowIfNull(buildings);
+
+        var isWall = buildings.Any(b =>
+            b.Coord == wallCoord && b.Type is BuildingType.Palisade or BuildingType.PalisadeGate && b.Level >= 1);
+        return isWall ? Resolve(attackerSurvivors, buildings, wallCoord, seed: 0) : SiegeOutcome.None;
+    }
+
+    /// <summary>
     /// Applies catapult damage from <paramref name="attackerSurvivors"/>
     /// against one of <paramref name="defenderBuildings"/>.
     /// </summary>
     /// <param name="attackerSurvivors">
     /// The attacking army's stacks that survived the battle (<see cref="BattlePlan.AttackerSurvivors"/>).
-    /// Only <see cref="UnitType.Catapult"/> stacks contribute; call this only
+    /// Only stacks with siege power (catapults, rams) contribute; call this only
     /// when the attacker actually won — an attacker that lost contributes no
     /// siege damage regardless of what it brought, and this method does not
     /// check the battle's winner itself (the caller already knows).
@@ -126,9 +154,7 @@ public static class SiegeResolver
             return SiegeOutcome.None;
         }
 
-        var survivingSiegePower = attackerSurvivors
-            .Where(s => s.Type == UnitType.Catapult)
-            .Sum(s => (long)UnitCatalogue.Get(s.Type).SiegePower * s.Count);
+        var survivingSiegePower = TotalSiegePower(attackerSurvivors);
 
         var levelsDestroyed = LevelsDestroyed(survivingSiegePower);
         if (levelsDestroyed <= 0)

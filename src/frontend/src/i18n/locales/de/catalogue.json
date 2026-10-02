@@ -40,6 +40,7 @@
     "berserker": "Berserker",
     "provisioner": "Versorger",
     "catapult": "Katapult",
+    "ram": "Rammbock",
     "karve": "Karve",
     "longship": "Langschiff",
     "settlercrew": "Siedlertrupp"
@@ -92,7 +93,8 @@
     "support": "Unterstützung",
     "raid": "Überfall",
     "found": "Siedlung gründen",
-    "hunt": "Jagd"
+    "hunt": "Jagd",
+    "siege": "Belagerung"
   },
   "runes": {
     "types": {

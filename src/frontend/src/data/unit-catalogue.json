@@ -110,6 +110,21 @@
       "requiredBuildingType": "archeryrange"
     },
     {
+      "type": "ram",
+      "class": "siege",
+      "attack": 10,
+      "defense": 30,
+      "speed": 1,
+      "carryCapacity": 0,
+      "foodCarryCapacity": 0,
+      "upkeepPerHour": 3,
+      "trainingCost": { "wood": 400, "stone": 100, "food": 40, "iron": 150 },
+      "trainingSeconds": 3600,
+      "requiredLonghouseLevel": 20,
+      "requiredUnitType": "berserker",
+      "requiredBuildingType": "archeryrange"
+    },
+    {
       "type": "karve",
       "class": "ship",
       "attack": 5,

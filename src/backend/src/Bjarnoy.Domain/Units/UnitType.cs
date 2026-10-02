@@ -44,6 +44,12 @@ public enum UnitType
     /// <see cref="Bjarnoy.Domain.Settlers.Founding"/>.
     /// </summary>
     SettlerCrew = 9,
+
+    /// <summary>
+    /// Siege unit (endgame step 2b): sturdier and slower than the catapult, the same siege power;
+    /// requires Berserker to be trainable first.
+    /// </summary>
+    Ram = 10,
 }
 
 public static class UnitTypeExtensions
@@ -60,6 +66,7 @@ public static class UnitTypeExtensions
         UnitType.Karve => "karve",
         UnitType.Longship => "longship",
         UnitType.SettlerCrew => "settlercrew",
+        UnitType.Ram => "ram",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };
 }
