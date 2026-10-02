@@ -106,7 +106,8 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 - **Attack**: new mission **`assault`** against a watchtower or Utgard (land units; Utgard's hex is reached
   through a breach or an open ring). A full battle: army attack vs garrison defense. Losses stay with the
   garrison; it regrows linearly per tier over the full-regrowth time (`CampState.GarrisonAt` pattern).
-  A watchtower with no jötnar left is **taken** (empty art, no longer attacks, still regrows).
+  A watchtower with no jötnar left is **taken** (empty art, no longer attacks). A taken site stays empty for a
+  **grace period** of `TakenGrace` = 1 h, then starts to regrow (unless an army holds it, see siege).
 - **Siege (holding a site)**: an army **standing on a site's hex** (arrived, not turned around) besieges it.
   Every `SiegeTick` = 1 h the jötnar that regrew during that hour come out and fight it in a **full battle**.
   If the army wins they are dead and the garrison does not recover; if it loses, the army is gone and regrowth
@@ -158,7 +159,5 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 
 ## Open questions
 
-- Should a watchtower that was taken stay taken while no army holds it (no regrowth) for a while, or regrow at
-  once as specified?
 - Should Utgard's wall rings also hold small garrisons (the gates especially), or stay pure siege targets?
 - Should winning credit the whole guild's members on the leaderboard (hall of fame), or the winner only?
