@@ -275,6 +275,22 @@
   the current diff doesn't have, and CI (which always builds fresh)
   disagrees with it.
 
+# before pausing or stopping
+- before every pause or stop (end of turn, waiting on CI, waiting on a decision of mine), give me a
+  minimal state table so I can see at a glance what is still open
+- one row per piece of work (PR, task, test run, ...), with just these columns: what, state, waiting on
+  - state: `done`, `open work` (something is still for u to do), or `waiting`
+  - waiting on: `tests`, `CI`, `my decision`, or `-` when nothing
+- keep it to the rows that matter: no prose recap, no finished work that needs nothing further, and
+  say `nothing open` instead of an empty table
+- example:
+
+  | what | state | waiting on |
+  |---|---|---|
+  | PR 384 walls docs | waiting | CI |
+  | AGENTS.MD state table | open work | - |
+  | gate rule golden case | waiting | my decision |
+
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path
   (landing → world map → landfall → settlement view, plus a panned/hover
