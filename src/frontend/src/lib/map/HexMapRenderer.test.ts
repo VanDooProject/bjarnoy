@@ -155,6 +155,11 @@ describe('hoverSubjectFor', () => {
     expect(hoverSubjectFor(tile, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
   });
 
+  it('names the whale road on its open-sea hex, as a camp rather than as water', () => {
+    const camp = { family: 'whaleroad', level: 2, orientation: 'NE' as const, strong: true, guardRange: 0 };
+    expect(hoverSubjectFor({ ...tileOf('sea'), camp }, undefined)).toEqual({ kind: 'camp', family: 'whaleroad', level: 2, strong: true });
+  });
+
   it('names a wildlife camp with its level and strength, ahead of a building type and the terrain', () => {
     const camp = { family: 'wolfden', level: 4, orientation: 'SE' as const, strong: true, guardRange: 6 };
     expect(hoverSubjectFor({ ...tileOf('grass'), camp }, undefined)).toEqual({ kind: 'camp', family: 'wolfden', level: 4, strong: true });
