@@ -57,7 +57,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
 
     await expect(settlement.questTray).toBeVisible();
     await expect(settlement.questTray).toContainText('Build 3 resource producers');
-    await expect(settlement.questTray.getByTestId('quest-progress')).toHaveText('0 of 6');
+    await expect(settlement.questTray.getByTestId('quest-progress')).toHaveText('0 of 8');
   });
 
   test('clicking an empty hex inside the realm places a building', async ({ page }) => {

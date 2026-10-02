@@ -113,10 +113,50 @@ public sealed record Settlement
     public int ClaimedQuests { get; init; }
 
     /// <summary>
+    /// Whether this settlement has ever dispatched an army with
+    /// <see cref="ArmyMission.Hunt"/> (starting the attack counts; winning is not
+    /// required). An event rather than state derivable from the settlement, so it
+    /// is persisted; it completes the onboarding quest <c>hunt1</c>.
+    /// </summary>
+    public bool HuntStarted { get; init; }
+
+    /// <summary>
+    /// Whether this settlement ever had at least <see cref="TroopsTrainedThreshold"/>
+    /// fighting land units in its home garrison. Latches true the first time and never
+    /// goes back (see <see cref="WithQuestLatches"/>), so the onboarding quest
+    /// <c>spearmen5</c> stays completed after the troops leave or die, and <c>hunt1</c>
+    /// unlocks without the player having to claim anything.
+    /// </summary>
+    public bool TroopsTrained { get; init; }
+
+    /// <summary>Fighting land units in the garrison that latch <see cref="TroopsTrained"/>.</summary>
+    public const int TroopsTrainedThreshold = 5;
+
+    /// <summary>
+    /// This settlement with its persisted quest latches (<see cref="TroopsTrained"/>)
+    /// brought up to date with the current <see cref="Garrison"/>; returns the same
+    /// instance when nothing changes. Call wherever the domain settles or changes the
+    /// garrison and the result is persisted.
+    /// </summary>
+    public Settlement WithQuestLatches() =>
+        !TroopsTrained && FightingLandUnitCount >= TroopsTrainedThreshold
+            ? this with { TroopsTrained = true }
+            : this;
+
+    /// <summary>
     /// How many completed resource producers stand here (queued orders do not
     /// count — <see cref="Buildings"/> only holds finished buildings).
     /// </summary>
     public int ProducerCount => Buildings.Count(b => Quests.IsProducer(b.Type));
+
+    /// <summary>
+    /// How many fighting land units stand in the home <see cref="Garrison"/>: every
+    /// unit whose class is neither <see cref="UnitClass.Civilian"/> nor
+    /// <see cref="UnitClass.Ship"/>. Completes the onboarding quest <c>spearmen5</c>.
+    /// </summary>
+    public int FightingLandUnitCount => Garrison
+        .Where(g => UnitCatalogue.Get(g.Type).Class is not (UnitClass.Civilian or UnitClass.Ship))
+        .Sum(g => g.Count);
 
     /// <summary>The level of the standing Town Square (0 when there is none).</summary>
     public int TownSquareLevel =>
@@ -591,10 +631,13 @@ public sealed record Settlement
             || guestDeaths.Count > 0 || rateIsStale || promotedAny || droppedAny || feastEnded;
         if (!changed)
         {
-            return new SettleResult(this, Changed: false, [], [], [], []);
+            // A settlement whose garrison already holds the troops (seeded, admin-set)
+            // but was never latched still has to persist the latch.
+            var latched = WithQuestLatches();
+            return new SettleResult(latched, Changed: !ReferenceEquals(latched, this), [], [], [], []);
         }
 
-        var settled = this with
+        var settled = (this with
         {
             Buildings = buildings,
             Garrison = garrison,
@@ -603,7 +646,7 @@ public sealed record Settlement
             Resources = resources,
             Feast = feast,
             PendingFeastRenown = pendingRenown,
-        };
+        }).WithQuestLatches();
 
         return new SettleResult(settled, Changed: true, completedBuilds, completedTraining, deaths, guestDeaths);
     }
@@ -1737,7 +1780,7 @@ public sealed record Settlement
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, garrison, guestStacks ?? []), capacity, now);
 
-        return AdminGarrisonEditResult.Accept(this with { Garrison = garrison, Resources = resources });
+        return AdminGarrisonEditResult.Accept((this with { Garrison = garrison, Resources = resources }).WithQuestLatches());
     }
 
     /// <summary>
