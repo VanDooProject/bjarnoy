@@ -406,7 +406,7 @@ const openRequests = computed(() =>
           <tbody>
             <tr v-for="key in keys" :key="key.id" :data-testid="`key-${key.id}`">
               <td>{{ key.name }}</td>
-              <td><code>{{ key.hint }}</code></td>
+              <td><code>{{ key.keyHint }}</code></td>
               <td>{{ key.ownerUserName }}</td>
               <td>{{ key.createdByUserName ?? '' }}</td>
               <td>

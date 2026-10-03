@@ -1727,15 +1727,17 @@ export interface ApiKeyResponse extends ApiKeyScope {
   name: string;
   purpose: string | null;
   /** `bjk_<keyId>_…` — enough to recognise a key, never enough to use it. */
-  hint: string;
+  keyHint: string;
   ownerUserId: string;
   ownerUserName: string;
+  createdByUserId: string;
   createdByUserName: string | null;
   status: ApiKeyStatus;
   createdAt: string;
   expiresAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
+  replacedByApiKeyId: string | null;
   autoRenewUntil: string | null;
   requestsPerMinute: number;
 }
@@ -1776,8 +1778,21 @@ export interface ApiKeyRequestResponse extends ApiKeyScope {
   createdAt: string;
   expiresAt: string;
   decidedAt: string | null;
-  /** Final owner once approved. */
-  ownerUserId: string | null;
+  decidedByUserId: string | null;
+  decidedByUserName: string | null;
+  apiKeyId: string | null;
+  completedAt: string | null;
+  /** What the admin decided; null until approval and after a denial. */
+  approved: ApiKeyApprovedSettings | null;
+}
+
+/** The settings an admin approved a key request with. */
+export interface ApiKeyApprovedSettings extends ApiKeyScope {
+  ownerUserId: string;
+  ownerUserName: string | null;
+  requestsPerMinute: number;
+  lifetimeMinutes: number;
+  autoRenewUntil: string | null;
 }
 
 /** Body of `POST /admin/api-key-requests/{id}/approve`; every field overrides the request. */
