@@ -1,4 +1,5 @@
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Trade;
@@ -18,7 +19,8 @@ public static class TradeEndpoints
 
         var settlements = app.MapGroup("/api/v1/settlements")
             .WithApiVersionSet(versionSet)
-            .WithTags("Trade");
+            .WithTags("Trade")
+            .WithApiKeyFeature(ApiKeyFeature.Trade);
 
         settlements.MapPost("/{settlementId:guid}/trade-offers", PostOffer)
             .WithName("PostTradeOffer")
@@ -59,7 +61,8 @@ public static class TradeEndpoints
 
         var offers = app.MapGroup("/api/v1/trade-offers")
             .WithApiVersionSet(versionSet)
-            .WithTags("Trade");
+            .WithTags("Trade")
+            .WithApiKeyFeature(ApiKeyFeature.Trade);
 
         offers.MapPost("/{offerId:guid}/accept", Accept)
             .WithName("AcceptTradeOffer")

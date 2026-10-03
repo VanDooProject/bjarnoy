@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Shrines;
@@ -30,10 +31,12 @@ public static class AdminSettlementEndpoints
             .WithApiVersionSet(versionSet)
             .HasApiVersion(new ApiVersion(1, 0))
             .WithTags("Admin", "Settlements")
-            .RequireAuthorization("Admin");
+            .RequireAuthorization("Admin")
+            .WithApiKeyFeature(ApiKeyFeature.AdminSettlements);
 
         settlements.MapGet("/", Search)
             .WithName("AdminSearchSettlements")
+            .ApiKeyWorldFromQuery()
             .WithSummary("Searches settlements by world and/or owner name, paged.");
 
         settlements.MapGet("/{settlementId:guid}", Get)

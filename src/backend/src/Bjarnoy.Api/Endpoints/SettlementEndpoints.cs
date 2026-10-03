@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
@@ -24,7 +25,8 @@ public static class SettlementEndpoints
 
         var worlds = app.MapGroup("/api/v1/worlds")
             .WithApiVersionSet(versionSet)
-            .WithTags("Settlements");
+            .WithTags("Settlements")
+            .WithApiKeyFeature(ApiKeyFeature.Settlements);
 
         worlds.MapPost("/{worldId:guid}/settlements", Found)
             .WithName("FoundSettlement")
@@ -45,7 +47,8 @@ public static class SettlementEndpoints
 
         var settlements = app.MapGroup("/api/v1/settlements")
             .WithApiVersionSet(versionSet)
-            .WithTags("Settlements");
+            .WithTags("Settlements")
+            .WithApiKeyFeature(ApiKeyFeature.Settlements);
 
         settlements.MapGet("/{settlementId:guid}", Get)
             .WithName("GetSettlement")
@@ -113,13 +116,15 @@ public static class SettlementEndpoints
             .WithApiVersionSet(versionSet)
             .WithTags("Settlements")
             .WithName("GetBuildingCatalogue")
-            .WithSummary("The build options: costs, durations, and the terrain each may stand on.");
+            .WithSummary("The build options: costs, durations, and the terrain each may stand on.")
+            .ApiKeyPublic();
 
         app.MapGet("/api/v1/units", UnitsCatalogue)
             .WithApiVersionSet(versionSet)
             .WithTags("Settlements")
             .WithName("GetUnitCatalogue")
-            .WithSummary("The unit roster: stats, training costs, and prerequisites.");
+            .WithSummary("The unit roster: stats, training costs, and prerequisites.")
+            .ApiKeyPublic();
 
         return app;
     }

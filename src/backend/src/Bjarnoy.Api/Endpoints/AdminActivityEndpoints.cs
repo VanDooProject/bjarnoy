@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -25,7 +26,8 @@ public static class AdminActivityEndpoints
             .WithApiVersionSet(versionSet)
             .HasApiVersion(new ApiVersion(1, 0))
             .WithTags("Admin", "Activity")
-            .RequireAuthorization("Admin");
+            .RequireAuthorization("Admin")
+            .WithApiKeyFeature(ApiKeyFeature.AdminActivity);
 
         activity.MapGet("/summary", GetSummary)
             .WithName("AdminGetActivitySummary")

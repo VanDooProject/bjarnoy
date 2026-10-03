@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Services;
@@ -19,7 +20,8 @@ public static class AuthEndpoints
         var auth = app.MapGroup("/api/v1/auth")
             .WithApiVersionSet(versionSet)
             .HasApiVersion(new ApiVersion(1, 0))
-            .WithTags("Auth");
+            .WithTags("Auth")
+            .ApiKeyForbidden();
 
         auth.MapPost("/register", Register)
             .WithName("Register")
@@ -40,7 +42,9 @@ public static class AuthEndpoints
         auth.MapGet("/me", Me)
             .WithName("Me")
             .WithSummary("The current user, from live database state.")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            // Public to a key (overriding the group's Forbidden): "who am I acting as" is how an agent checks its key.
+            .ApiKeyPublic();
 
         return app;
     }

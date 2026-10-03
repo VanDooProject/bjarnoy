@@ -217,6 +217,13 @@ export const router = createRouter({
           component: () => import('../views/admin/AdminUsersView.vue'),
         },
         {
+          // Debug API keys and the key requests an agent files; the approval
+          // link an agent hands out is /admin/api-keys?request=<userCode>.
+          path: 'api-keys',
+          name: 'admin-api-keys',
+          component: () => import('../views/admin/AdminApiKeysView.vue'),
+        },
+        {
           path: 'settlements',
           name: 'admin-settlements',
           component: () => import('../views/admin/AdminSettlementsView.vue'),

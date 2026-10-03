@@ -60,6 +60,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
 
+    public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
+
+    public DbSet<ApiKeyRequestEntity> ApiKeyRequests => Set<ApiKeyRequestEntity>();
+
     public DbSet<GuildEntity> Guilds => Set<GuildEntity>();
 
     public DbSet<GuildMembershipEntity> GuildMemberships => Set<GuildMembershipEntity>();
@@ -573,6 +577,89 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Looked up by hash on every refresh/logout call.
             token.HasIndex(t => t.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<ApiKeyEntity>(key =>
+        {
+            key.ToTable("api_keys");
+            key.HasKey(k => k.Id);
+            key.Property(k => k.Id).ValueGeneratedNever();
+            key.Property(k => k.Name).HasMaxLength(100).IsRequired();
+            key.Property(k => k.KeyId).HasMaxLength(16).IsRequired();
+            key.Property(k => k.SecretHash).HasMaxLength(64).IsRequired();
+            key.Property(k => k.Purpose).HasMaxLength(500);
+
+            // Same list-column convention as the island hex lists: one text column, a converter and a comparer so
+            // in-place edits of the collection are seen by change tracking.
+            key.Property(k => k.Features)
+                .HasMaxLength(1000)
+                .IsRequired()
+                .HasConversion(new ApiKeyFeaturesConverter())
+                .Metadata.SetValueComparer(ApiKeyFeaturesConverter.Comparer);
+            key.Property(k => k.WorldIds)
+                .IsRequired()
+                .HasConversion(new GuidListConverter())
+                .Metadata.SetValueComparer(GuidListConverter.Comparer);
+
+            // Looked up by this public half of the token on every authenticated request.
+            key.HasIndex(k => k.KeyId).IsUnique();
+            key.HasIndex(k => k.OwnerUserId);
+
+            // Restrict: deleting a user must not silently take the audit trail of what their keys did with it; an
+            // admin revokes keys first. (Accounts are banned, not deleted, in practice.)
+            key.HasOne(k => k.OwnerUser)
+                .WithMany()
+                .HasForeignKey(k => k.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            key.HasOne(k => k.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(k => k.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ApiKeyRequestEntity>(request =>
+        {
+            request.ToTable("api_key_requests");
+            request.HasKey(r => r.Id);
+            request.Property(r => r.Id).ValueGeneratedNever();
+            request.Property(r => r.Kind).HasConversion<int>();
+
+            // The concurrency token: an UPDATE only lands if Status is still what was read, so approve/deny/pickup
+            // race to exactly one winner on both providers.
+            request.Property(r => r.Status).HasConversion<int>().IsConcurrencyToken();
+
+            request.Property(r => r.UserCode).HasMaxLength(9).IsRequired();
+            request.Property(r => r.PollSecretHash).HasMaxLength(64).IsRequired();
+            request.Property(r => r.Name).HasMaxLength(100).IsRequired();
+            request.Property(r => r.Purpose).HasMaxLength(500);
+            request.Property(r => r.Description).HasMaxLength(1000);
+            request.Property(r => r.ContextUrl).HasMaxLength(500);
+            request.Property(r => r.RequestedOwnerUserName).HasMaxLength(100);
+            request.Property(r => r.RequesterIp).HasMaxLength(64);
+            request.Property(r => r.RequesterUserAgent).HasMaxLength(500);
+
+            request.Property(r => r.Features)
+                .HasMaxLength(1000)
+                .IsRequired()
+                .HasConversion(new ApiKeyFeaturesConverter())
+                .Metadata.SetValueComparer(ApiKeyFeaturesConverter.Comparer);
+            request.Property(r => r.WorldIds)
+                .IsRequired()
+                .HasConversion(new GuidListConverter())
+                .Metadata.SetValueComparer(GuidListConverter.Comparer);
+            request.Property(r => r.ApprovedFeatures)
+                .HasMaxLength(1000)
+                .IsRequired()
+                .HasConversion(new ApiKeyFeaturesConverter())
+                .Metadata.SetValueComparer(ApiKeyFeaturesConverter.Comparer);
+            request.Property(r => r.ApprovedWorldIds)
+                .IsRequired()
+                .HasConversion(new GuidListConverter())
+                .Metadata.SetValueComparer(GuidListConverter.Comparer);
+
+            // Admins find a request by the code the agent shows them.
+            request.HasIndex(r => r.UserCode).IsUnique();
+            request.HasIndex(r => r.Status);
         });
 
         modelBuilder.Entity<GuildEntity>(guild =>

@@ -1,4 +1,5 @@
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.Hosting;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -40,7 +41,8 @@ public static class InfoEndpoints
             .WithApiVersionSet(versionSet)
             .WithTags("Info")
             .WithName("GetBuildInfo")
-            .WithSummary("The version, commit and branch this deployment was built from.");
+            .WithSummary("The version, commit and branch this deployment was built from.")
+            .ApiKeyPublic();
 
         if (!publicAccess)
         {

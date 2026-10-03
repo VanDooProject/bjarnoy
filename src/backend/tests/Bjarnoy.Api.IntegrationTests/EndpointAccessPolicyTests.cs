@@ -93,6 +93,11 @@ public sealed class EndpointAccessPolicyTests
         ["GET /api/v1/guilds/{guildId:guid}/board/topics/{topicId:guid}"] = "Public guild board topic detail — same reasoning as the topic listing above.",
         ["GET /api/v1/guilds/{guildId:guid}/treaties"] = "Public guild treaty listing — diplomatic state between guilds is public information, not a member secret.",
 
+        // --- API keys: the agent-facing half of getting a key has to work before any credential exists ---
+        ["GET /api/v1/api-keys/features"] = "Static catalogue of the features an API key can be granted — the same list for everyone, so an agent knows what to ask for before it has any credential.",
+        ["POST /api/v1/api-key-requests/"] = "Opens an anonymous API key request (device-flow style): it grants nothing until an admin approves it by its code, and is capped per address and in total (ApiKeyOptions).",
+        ["POST /api/v1/api-key-requests/{requestId:guid}/token"] = "The requester's poll for its token, authorised by the poll secret in the body (hash-compared) rather than a session; unknown id and wrong secret are both 404.",
+
         // --- Onboarding: anonymous play is the model, not a gap ---
         ["POST /api/v1/worlds/{worldId:guid}/settlements"] = "Anonymous founding is the onboarding model — it binds the new realm to the caller's own X-Owner-Id.",
 

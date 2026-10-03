@@ -105,4 +105,42 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
         // in must make no difference.
         Assert.Equal(tiles[0], tiles[1]);
     }
+
+    [Fact]
+    public async Task An_api_key_and_a_key_request_round_trip_through_postgresql()
+    {
+        await using var factory = CreateFactory();
+        await factory.MigrateAsync(Ct);
+        var harness = new ApiKeys.ApiKeyHarness(factory);
+
+        var (admin, _, _) = await harness.CreateAdminAsync();
+        var world = await factory.CreateWorldAsync($"pg-{Guid.CreateVersion7():N}"[..20], seed: 7, radius: 30, cancellationToken: Ct);
+        var created = await harness.CreateKeyAsync(
+            admin,
+            ApiKeys.ApiKeyHarness.Features(("worlds", Bjarnoy.Infrastructure.Entities.ApiKeyAccess.Read), ("settlements", Bjarnoy.Infrastructure.Entities.ApiKeyAccess.ReadWrite)),
+            allWorlds: false,
+            worldIds: [world.Id]);
+
+        // Features and world list survive the text-column converters, and the key authenticates and is scoped.
+        Assert.Equal(2, created.ApiKey.Features.Count);
+        Assert.Equal([world.Id], created.ApiKey.WorldIds);
+        using var keyClient = harness.KeyClient(created.Token);
+        Assert.Equal(System.Net.HttpStatusCode.OK, (await keyClient.GetAsync($"/api/v1/worlds/{world.Id}", Ct)).StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, (await keyClient.GetAsync("/api/v1/worlds/", Ct)).StatusCode);
+
+        // The request flow: the status concurrency token, the unique user code and the one-time pickup.
+        using var agent = factory.CreateClient();
+        var requested = await (await agent.PostJsonAsync(
+                "/api/v1/api-key-requests/",
+                new CreateApiKeyRequestRequest(
+                    "pg agent", null, null, null, null,
+                    ApiKeys.ApiKeyHarness.Features(("worlds", Bjarnoy.Infrastructure.Entities.ApiKeyAccess.Read)), true, null, 60, null),
+                Ct))
+            .ReadStrictAsync<ApiKeyRequestCreatedResponse>(Ct);
+        Assert.Equal(System.Net.HttpStatusCode.OK, (await admin.PostAsync($"/api/v1/admin/api-key-requests/{requested.Id}/approve", null, Ct)).StatusCode);
+
+        var poll = new ApiKeyTokenPollRequest(requested.PollSecret);
+        Assert.Equal(System.Net.HttpStatusCode.OK, (await agent.PostJsonAsync($"/api/v1/api-key-requests/{requested.Id}/token", poll, Ct)).StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.Gone, (await agent.PostJsonAsync($"/api/v1/api-key-requests/{requested.Id}/token", poll, Ct)).StatusCode);
+    }
 }

@@ -1,0 +1,108 @@
+{
+  "title": "API keys",
+  "loading": "Loading API keys…",
+  "loadError": "Could not load API keys.",
+  "saveError": "Could not save the API key.",
+  "actionError": "That action failed.",
+  "confirmDeny": "Deny the request \"{name}\"?",
+  "confirmRecreate": "Revoke \"{name}\" and issue a new key with the same settings?",
+  "confirmRevoke": "Revoke \"{name}\"? It stops working immediately.",
+  "allWorlds": "All worlds",
+  "noWorlds": "No worlds",
+  "access": {
+    "None": "None",
+    "Read": "Read",
+    "ReadWrite": "Read + write"
+  },
+  "keyStatus": {
+    "Active": "Active",
+    "Expired": "Expired",
+    "Revoked": "Revoked"
+  },
+  "requestKind": {
+    "New": "New key",
+    "Renewal": "Renewal"
+  },
+  "requestStatus": {
+    "Pending": "Pending",
+    "Approved": "Approved, waiting for pickup",
+    "Denied": "Denied",
+    "Completed": "Completed",
+    "Expired": "Expired"
+  },
+  "lifetime": {
+    "days": "{n} d",
+    "hours": "{n} h",
+    "minutes": "{n} min"
+  },
+  "token": {
+    "title": "Token for \"{name}\"",
+    "warning": "Copy this token now. It will not be shown again.",
+    "copy": "Copy token",
+    "copied": "Copied",
+    "dismiss": "I have copied it"
+  },
+  "requests": {
+    "title": "Open requests",
+    "empty": "No pending or approved requests.",
+    "purpose": "Purpose",
+    "description": "Description",
+    "context": "Context",
+    "requester": "Requester",
+    "owner": "Requested owner",
+    "features": "Features",
+    "worlds": "Worlds",
+    "lifetime": "Lifetime",
+    "expires": "Request expires",
+    "approve": "Approve…",
+    "deny": "Deny"
+  },
+  "keys": {
+    "title": "Keys",
+    "new": "New key",
+    "includeInactive": "Show revoked and expired",
+    "empty": "No API keys.",
+    "neverUsed": "Never",
+    "edit": "Edit",
+    "recreate": "Recreate",
+    "revoke": "Revoke",
+    "columns": {
+      "name": "Name",
+      "hint": "Key",
+      "owner": "Owner",
+      "createdBy": "Created by",
+      "status": "Status",
+      "expires": "Expires",
+      "lastUsed": "Last used",
+      "features": "Features",
+      "worlds": "Worlds",
+      "actions": "Actions"
+    }
+  },
+  "editor": {
+    "name": "Name",
+    "purpose": "Purpose",
+    "owner": "Owner (the key acts as this user)",
+    "adminBadge": "admin",
+    "ownerSearch": "Search users",
+    "searchButton": "Search",
+    "ownerSelf": "Me",
+    "features": "Features",
+    "feature": "Feature",
+    "worldScoped": "world-scoped",
+    "worlds": "Worlds",
+    "allWorlds": "All worlds",
+    "expiresAt": "Expires at",
+    "lifetimeMinutes": "Lifetime (minutes)",
+    "requestsPerMinute": "Requests per minute (empty = default)",
+    "autoRenewMinutes": "Auto-renew window (minutes, empty = off)",
+    "save": "Save",
+    "approve": "Approve",
+    "cancel": "Cancel",
+    "errors": {
+      "nameRequired": "A name is required.",
+      "featureRequired": "Grant at least one feature.",
+      "worldRequired": "Pick at least one world or allow all worlds."
+    }
+  }
+}
