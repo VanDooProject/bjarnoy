@@ -1456,6 +1456,19 @@ describe('WorldModel wildlife camps', () => {
     });
   });
 
+  it('findLandfall never lands on a river hex, wide or not (mirrors WorldGenerator.FindStartPositions)', () => {
+    const spot = new WorldModel(DEMO_SEED).findLandfall({ q: 0, r: 0 })!;
+
+    for (const width of ['river', 'stream'] as const) {
+      const model = new WorldModel(DEMO_SEED);
+      model.setRiverTiles([{ q: spot.q, r: spot.r, shape: 'straight', inDirections: [], outDirection: null, width }]);
+      const at = model.findLandfall({ q: 0, r: 0 })!;
+      expect(at).not.toBeNull();
+      expect(model.getRiverTile(at.q, at.r)).toBeUndefined();
+      expect(at).not.toEqual(spot);
+    }
+  });
+
   it('findLandfall keeps out of a strong camp\'s guard range plus the margin, but not a weak camp\'s', () => {
     const model = new WorldModel(DEMO_SEED);
     const spot = model.findLandfall({ q: 0, r: 0 })!;
