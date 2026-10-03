@@ -176,3 +176,8 @@ The in-game docs page (`/docs/wasted-lands`, section "How the endgame plays"):
 ![Endgame rules on the Wasted Lands docs page](img/endgame/docs_rules_en.png)
 ![Jötnar and garrison tables, German](img/endgame/docs_tables_de.png)
 ![Garrison tables on a phone, scrolling sideways](img/endgame/docs_tables_mobile.png)
+
+The map (step 2a), demo mode on a wasted island:
+
+![Utgard with its inner and outer wall rings](img/endgame/map_utgard_walls.png)
+![A garrisoned jötun watchtower](img/endgame/map_jotun_tower.png)

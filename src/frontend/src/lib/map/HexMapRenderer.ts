@@ -72,6 +72,7 @@ import {
   baseTextureFor,
   campArtFor,
   drawnCampOf,
+  endgameDrawTile,
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
@@ -617,7 +618,11 @@ export type HoverSubject =
         aggressive: boolean;
         clears: number;
       };
-    };
+    }
+  // An Utgard wall piece (a gate is named apart) at its current level: 2 intact, 1 damaged, 0 breached.
+  | { kind: 'utgardwall'; gate: boolean; level: number }
+  // A Jötun watchtower at its current level: 2 garrisoned, 1 damaged, 0 taken.
+  | { kind: 'jotuntower'; level: number };
 
 export interface HoverInfo {
   screenX: number;
@@ -686,6 +691,8 @@ export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): Hover
           : undefined,
     };
   }
+  if (tile.utgardWall) return { kind: 'utgardwall', gate: tile.utgardWall.isGate, level: tile.utgardWall.level };
+  if (tile.jotunTower) return { kind: 'jotuntower', level: tile.jotunTower.level };
   if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
   const { terrain, isRiver, wasted } = terrainTitleFor(tile, river);
   return { kind: 'terrain', terrain, isRiver, wasted };
@@ -3652,6 +3659,16 @@ export class HexMapRenderer {
           fogPerfStats.terrainDrawnCount++;
           continue;
         }
+      }
+      // An Utgard wall piece or a Jötun watchtower (a wasted island's endgame sites) draws its server-resolved piece and camera at its
+      // current level, on the hex's own ground (the sea end brings its own coastal base).
+      const endgame = endgameDrawTile(tile);
+      if (endgame) {
+        baseEntries.set(key, { texture: baseTextureFor(textures, endgame.tile, endgame.art), coord: c });
+        const siteTop = topTextureFor(textures, endgame.tile, endgame.art);
+        if (siteTop) topEntries.set(key, { texture: siteTop, coord: c, anim: topAnimFor(textures, endgame.tile, endgame.art) });
+        fogPerfStats.terrainDrawnCount++;
+        continue;
       }
       // A wall hex (palisade or gate) draws the piece and camera its wall neighbours decide (palisadeArtFor), on its own ground (on
       // coastal water, the sea end brings its own base). The whole visible region is re-resolved on every rebuild, so a hex whose

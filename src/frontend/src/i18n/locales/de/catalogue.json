@@ -205,5 +205,10 @@
       "adult": "Otter",
       "alpha": "Alter Otter"
     }
+  },
+  "endgame": {
+    "utgardwall": "Utgardmauer",
+    "utgardgate": "Utgardtor",
+    "jotunwatchtower": "Jötunn-Wachturm"
   }
 }

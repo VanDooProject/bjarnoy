@@ -11,7 +11,7 @@ import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { BuildingOutput, BuildingModifier } from '../../lib/map/buildingEconomy';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName, terrainName, wastedTerrainName, resourceName, giantName, campName, beastName } from '../../i18n/catalogueNames';
+import { buildingName, terrainName, wastedTerrainName, resourceName, giantName, campName, beastName, endgameName } from '../../i18n/catalogueNames';
 
 // Mirrors textures.ts's WASTED_TEXTURE_KEY (grass/forest/sand -> their
 // wasted-island art family) plus the coastal case (sea bordering wasted
@@ -43,6 +43,8 @@ const title = computed(() => {
   if (subject.kind === 'building') return buildingName(subject.buildingType);
   if (subject.kind === 'giant') return giantName(subject.family);
   if (subject.kind === 'camp') return campName(subject.family);
+  if (subject.kind === 'utgardwall') return endgameName(subject.gate ? 'utgardgate' : 'utgardwall');
+  if (subject.kind === 'jotuntower') return endgameName('jotunwatchtower');
   if (subject.isRiver) return t('hud.hoverTooltip.river');
   if (subject.wasted) {
     const key = WASTED_TERRAIN_LABEL_KEY[subject.terrain];
@@ -69,6 +71,9 @@ const stat = computed(() => {
   if (subject.kind === 'building') return undefined;
   // A wildlife camp: not buildable, so no "click to build" line — say how strong it is.
   if (subject.kind === 'camp') return subject.strong ? t('hud.hoverTooltip.campStrong') : t('hud.hoverTooltip.campWeak');
+  // An endgame site is not buildable either: say what state it is in.
+  if (subject.kind === 'utgardwall') return t(`hud.hoverTooltip.wallLevel${Math.min(Math.max(subject.level, 0), 2)}`);
+  if (subject.kind === 'jotuntower') return t(`hud.hoverTooltip.towerLevel${Math.min(Math.max(subject.level, 0), 2)}`);
   const owner = props.info.owner;
   if (!owner) return t('hud.hoverTooltip.unclaimed');
   return owner.mine ? t('hud.hoverTooltip.clickToBuildHere') : t('hud.hoverTooltip.claimedGround');

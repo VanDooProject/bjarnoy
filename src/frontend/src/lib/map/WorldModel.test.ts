@@ -14,6 +14,7 @@ import { placeLakeProps } from './lakeProps';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { BogTile, RiverTile } from './types';
+import { JOTNAR_OWNER_KEY } from './endgamePlacement';
 
 function foundLandedSettlement(model: WorldModel) {
   const at = model.findLandfall({ q: 0, r: 0 });
@@ -2085,5 +2086,60 @@ describe('WorldModel palisade and gate', () => {
 
     expect(model.wallNeighbourFlags(line[0]!).filter(Boolean)).toHaveLength(0);
     expect(model.standingPalisadeWalls().size).toBe(1);
+  });
+});
+
+describe('WorldModel Utgard walls and Jötun watchtowers', () => {
+  const wall = (q: number, r: number, level: number, extra: { isGate?: boolean; piece?: 'straight180' | 'gate180' | 'end_coast' } = {}) => ({
+    coord: { q, r },
+    ring: 'inner' as const,
+    piece: extra.piece ?? ('straight180' as const),
+    dir: 'NW' as const,
+    isGate: extra.isGate ?? false,
+    level,
+  });
+
+  it('tags the hexes and reports a change only when something moved', () => {
+    const model = new WorldModel(1);
+    expect(model.setUtgardWalls([wall(5, 5, 2), wall(6, 5, 1)])).toBe(true);
+    expect(model.getTile(5, 5).utgardWall).toEqual({ ring: 'inner', piece: 'straight180', dir: 'NW', isGate: false, level: 2 });
+    expect(model.setUtgardWalls([wall(5, 5, 2)])).toBe(false);
+    // A breach lowers the level on the same hex.
+    expect(model.setUtgardWalls([wall(5, 5, 0)])).toBe(true);
+    expect(model.getTile(5, 5).utgardWall?.level).toBe(0);
+
+    expect(model.setJotunTowers([{ coord: { q: 9, r: 9 }, orientation: 'NE', level: 2 }])).toBe(true);
+    expect(model.getTile(9, 9).jotunTower).toEqual({ orientation: 'NE', level: 2 });
+    expect(model.setJotunTowers([{ coord: { q: 9, r: 9 }, orientation: 'NE', level: 2 }])).toBe(false);
+  });
+
+  it('hands the movement rules only standing walls, under the jötnar owner key, gates included', () => {
+    const model = new WorldModel(1);
+    model.setUtgardWalls([wall(5, 5, 2), wall(6, 5, 1, { isGate: true, piece: 'gate180' }), wall(7, 5, 0)]);
+
+    const standing = model.standingPalisadeWalls();
+
+    expect([...standing.keys()].sort()).toEqual(['5,5', '6,5']);
+    expect(standing.get('5,5')).toEqual({ gate: false, owner: JOTNAR_OWNER_KEY });
+    expect(standing.get('6,5')).toEqual({ gate: true, owner: JOTNAR_OWNER_KEY });
+  });
+
+  it('refuses to build on a wall (rubble included) or a watchtower hex, claimed or not', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
+    const free = hexesInRadius(at, model.borderRadius(settlement)).filter((c) => {
+      const tile = model.getTile(c.q, c.r);
+      return tile.ownerId === settlement.id && tile.terrain === 'grass' && !tile.buildingType && !model.getRiverTile(c.q, c.r);
+    });
+    const [onWall, onRubble, onTower, elsewhere] = free.slice(0, 4) as [AxialCoord, AxialCoord, AxialCoord, AxialCoord];
+    model.setUtgardWalls([wall(onWall.q, onWall.r, 2), wall(onRubble.q, onRubble.r, 0)]);
+    model.setJotunTowers([{ coord: onTower, orientation: 'SE', level: 2 }]);
+
+    expect(model.placeBuilding(settlement.id, onWall, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, onRubble, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, onTower, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, elsewhere, 'hut')).toBe(true);
   });
 });

@@ -191,6 +191,86 @@ public class GoldenRegenerationTests
     }
 
     [Fact]
+    public void Regenerate_endgame_placement_golden()
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable(EnvVar) == "1", $"set {EnvVar}=1 to regenerate");
+
+        var candidates = new List<Candidate>();
+        for (var seed = 1; seed <= 40; seed++)
+        {
+            var world = new WorldGenerator(TestWorlds.Options(seed)).Generate(TestContext.Current.CancellationToken);
+            candidates.AddRange(world.Islands
+                .Where(i => i.IsWasted && i.Giants.Any(g => g.Family == GiantGenerator.UtgardFamily))
+                .Select(i => new Candidate(seed, i)));
+        }
+
+        static int Rings(GeneratedIsland i) => i.UtgardWalls.Select(w => w.Ring).Distinct().Count();
+        static bool TwoGatesEverywhere(GeneratedIsland i) =>
+            i.UtgardWalls.GroupBy(w => w.Ring).All(g => g.Count(w => w.IsGate) == 2);
+
+        Candidate Smallest(string what, Func<Candidate, bool> filter) =>
+            candidates.Where(filter).OrderBy(c => c.Island.TileCount).ThenBy(c => c.Seed).FirstOrDefault()
+            ?? throw new InvalidOperationException($"no candidate island for '{what}' in seeds 1-40");
+
+        var scenarios = new (string Name, Candidate Pick)[]
+        {
+            ("wasted_island_two_rings_with_gates", Smallest("two rings", c => Rings(c.Island) == 2 && TwoGatesEverywhere(c.Island)
+                && c.Island.UtgardWalls.Any(w => w.Piece == Palisades.PalisadePiece.EndCoast))),
+            ("wasted_island_one_ring", Smallest("one ring", c => Rings(c.Island) == 1 && c.Island.UtgardWalls.Any(w => w.IsGate))),
+            ("wasted_island_closed_two_rings_max_towers", candidates.Where(c => Rings(c.Island) == 2 && c.Island.JotunTowers.Count == 6)
+                .OrderByDescending(c => c.Island.UtgardWalls.Count).ThenBy(c => c.Seed).FirstOrDefault()
+                ?? throw new InvalidOperationException("no two-ring six-tower island")),
+            ("wasted_island_most_open_ends", candidates
+                .OrderByDescending(c => c.Island.UtgardWalls.Count(w => w.Piece is Palisades.PalisadePiece.End or Palisades.PalisadePiece.EndCoast))
+                .ThenBy(c => c.Island.TileCount).ThenBy(c => c.Seed).First()),
+        };
+
+        var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        var sb = new StringBuilder();
+        sb.Append("{\n  \"_comment\": ").Append(JsonSerializer.Serialize(
+            "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order. Covers: an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (both rings closed all the way round), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls` and `towers` lists (order matters: walls by ring then ring order, towers in placement order).",
+            options)).Append(",\n  \"scenarios\": [\n");
+
+        for (var s = 0; s < scenarios.Length; s++)
+        {
+            var (name, pick) = scenarios[s];
+            var island = pick.Island;
+            var terrain = new TerrainSampler(TestWorlds.Options(pick.Seed));
+            sb.Append("    {\n");
+            sb.Append($"      \"name\": \"{name}\",\n      \"worldSeed\": {pick.Seed},\n      \"islandIndex\": {island.Index},\n");
+            sb.Append("      \"tiles\": [\n");
+            sb.Append(string.Join(",\n", island.Tiles.Select(t => $"        [{t.Q}, {t.R}, \"{terrain.WastedTerrainAt(t).ToWireName()}\"]")));
+            sb.Append("\n      ],\n      \"rivers\": [\n");
+            sb.Append(string.Join(",\n", island.RiverTiles.Select(t => $"        [{t.Coord.Q}, {t.Coord.R}]")));
+            sb.Append("\n      ],\n      \"giants\": [\n");
+            sb.Append(string.Join(",\n", island.Giants.Select(g => $"        {{\"q\": {g.Anchor.Q}, \"r\": {g.Anchor.R}, \"family\": \"{g.Family}\"}}")));
+            sb.Append("\n      ],\n      \"camps\": [\n");
+            sb.Append(string.Join(",\n", island.Camps.Select(c => $"        [{c.Coord.Q}, {c.Coord.R}]")));
+            sb.Append("\n      ],\n      \"walls\": [\n");
+
+            // The frozen expectation is the placement core's own output.
+            var sites = EndgameGenerator.PlaceCore(
+                island.Tiles,
+                island.Tiles.ToDictionary(t => t, terrain.WastedTerrainAt),
+                island.RiverTiles.Select(t => t.Coord).ToHashSet(),
+                [.. island.Giants.Select(g => new GiantGenerator.Placement(g.Anchor, g.Family))],
+                island.Camps.Select(c => c.Coord).ToHashSet(),
+                pick.Seed,
+                island.Index);
+            sb.Append(string.Join(",\n", sites.Walls.Select(w =>
+                "        {\"q\": " + w.Coord.Q + ", \"r\": " + w.Coord.R + ", \"ring\": \"" + (w.Ring == UtgardRing.Inner ? "inner" : "outer")
+                + "\", \"piece\": \"" + Palisades.PalisadeRules.FamilyOf(w.Piece)["palisade_".Length..] + "\", \"dir\": \"" + w.Dir.ToWireName()
+                + "\", \"gate\": " + (w.IsGate ? "true" : "false") + ", \"level\": " + w.Level + "}")));
+            sb.Append("\n      ],\n      \"towers\": [\n");
+            sb.Append(string.Join(",\n", sites.Towers.Select(t => $"        [{t.Q}, {t.R}]")));
+            sb.Append("\n      ]\n    }").Append(s < scenarios.Length - 1 ? ",\n" : "\n");
+        }
+
+        sb.Append("  ]\n}\n");
+        File.WriteAllText(SharedPath("endgame-placement-golden.json"), sb.ToString());
+    }
+
+    [Fact]
     public void Regenerate_bog_generation_golden()
     {
         Assert.SkipUnless(Environment.GetEnvironmentVariable(EnvVar) == "1", $"set {EnvVar}=1 to regenerate");

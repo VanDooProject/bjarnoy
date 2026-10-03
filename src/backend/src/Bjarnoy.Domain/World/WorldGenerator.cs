@@ -98,6 +98,8 @@ public sealed class WorldGenerator
                 IReadOnlyList<BogTile> bogTiles = [];
                 IReadOnlyList<Giant> giants;
                 IReadOnlyList<Camp> camps;
+                IReadOnlyList<UtgardWall> utgardWalls = [];
+                IReadOnlyList<JotunTower> jotunTowers = [];
                 IReadOnlyList<HexCoord> startPositions;
                 if (wasted)
                 {
@@ -106,6 +108,8 @@ public sealed class WorldGenerator
                     giants = GiantGenerator.Generate(
                         tiles, land, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet(), wasted: true);
                     camps = CampGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, wasted: true);
+                    // Utgard's wall rings and the Jötun watchtowers, after giants and camps (they keep clear of both).
+                    (utgardWalls, jotunTowers) = EndgameGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, camps);
                     startPositions = [];
                 }
                 else
@@ -138,6 +142,8 @@ public sealed class WorldGenerator
                     BogTiles = bogTiles,
                     Giants = giants,
                     Camps = camps,
+                    UtgardWalls = utgardWalls,
+                    JotunTowers = jotunTowers,
                     IsWasted = wasted,
                 };
             });

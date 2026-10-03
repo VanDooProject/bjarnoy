@@ -91,6 +91,17 @@ public class IslandEntity
     public List<CampRecord> Camps { get; set; } = [];
 
     /// <summary>
+    /// This wasted island's Utgard wall rings — see <c>Bjarnoy.Domain.World.EndgameGenerator</c>. A wall hex's level changes
+    /// as siege engines breach it, so the column is the live state, not just the generated one. Empty for every green island, for a
+    /// wasted island without Utgard and for an island stored before the endgame existed (a reseed adds them). See
+    /// <see cref="Persistence.UtgardWallListConverter"/> for the encoding.
+    /// </summary>
+    public List<UtgardWallRecord> UtgardWalls { get; set; } = [];
+
+    /// <summary>This wasted island's Jötun watchtowers — empty like <see cref="UtgardWalls"/>. See <see cref="Persistence.JotunTowerListConverter"/>.</summary>
+    public List<JotunTowerRecord> JotunTowers { get; set; } = [];
+
+    /// <summary>
     /// True for an island generated from the wasted-island terrain layer —
     /// see <c>Bjarnoy.Domain.World.GeneratedIsland.IsWasted</c>. Hidden from
     /// the islands list until the world's endboss triggers; defaults to
@@ -115,6 +126,15 @@ public readonly record struct GiantRecord(int Q, int R, string Family, int Orien
 /// family (<c>CampFamilies</c>).
 /// </summary>
 public readonly record struct CampRecord(int Q, int R, string Family, int Level, int Orientation);
+
+/// <summary>
+/// A stored Utgard wall hex. <c>Ring</c>, <c>Piece</c> and <c>Dir</c> are the domain's <c>UtgardRing</c>, <c>PalisadePiece</c> and
+/// <c>TileOrientation</c> values by their plain numeric index, like <see cref="GiantRecord"/>.
+/// </summary>
+public readonly record struct UtgardWallRecord(int Q, int R, int Ring, int Piece, int Dir, bool IsGate, int Level);
+
+/// <summary>A stored Jötun watchtower. <c>Orientation</c> is the domain's <c>TileOrientation</c> by its plain numeric index.</summary>
+public readonly record struct JotunTowerRecord(int Q, int R, int Orientation);
 
 /// <summary>
 /// A stored bog hex. <c>Kind</c>, <c>InDirections</c>, <c>OutDirection</c> and <c>WaterEdges</c> are the domain's
