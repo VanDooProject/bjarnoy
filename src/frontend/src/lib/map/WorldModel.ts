@@ -971,7 +971,7 @@ export class WorldModel {
 
   /**
    * Whether `at` would satisfy the backend's own start-position rule
-   * (`WorldGenerator.FindStartPositions`): a Grass hex with at least one
+   * (`WorldGenerator.FindStartPositions`): a Grass hex off any river with at least one
    * Forest and two Grass neighbours, no sea within two hexes, and plain bog within `BOG_REACH`. Demo mode
    * has no backend to ask for a real start position — `findLandfall` uses
    * this to steer clear of a coastal sliver of sand or a lone tile at an
@@ -981,6 +981,9 @@ export class WorldModel {
   private isGoodStartCandidate(at: AxialCoord): boolean {
     const tile = this.getTile(at.q, at.r);
     if (tile.terrain !== 'grass') return false;
+    // Never on a river hex (narrow or wide) — `WorldGenerator.FindStartPositions` skips them: a settlement in a river is
+    // wrong, and on a wide one a land army has no way home.
+    if (this.getRiverTile(at.q, at.r)) return false;
 
     let forest = 0;
     let grass = 0;
