@@ -31,7 +31,10 @@ A key's effective rights are the intersection of:
 | Expiry | mandatory, at most `ApiKeys:MaxLifetime` |
 
 Keys are checked against the database on every request, so revoking a key or
-banning its owner takes effect immediately. Requests made with a key do not
+banning its owner takes effect immediately. A key that fails authentication
+(wrong, expired or revoked) is a 401 on every `/api` route, including anonymous
+ones, rather than falling back to anonymous access. Under `/api` a key gets 403
+on an unknown path too, since the JSON 404 fallback carries no key marker. Requests made with a key do not
 count as the owner's activity (`UserActivityEndpointFilter` skips them).
 
 ### Features
@@ -70,7 +73,10 @@ Every endpoint carries exactly one key marker (a feature, *public*, or
 
 For a key limited to some worlds, the world of a world-scoped request comes
 from the route (`worldId`, or the world of the `settlementId`, `armyId`,
-`guildId`, `treatyId`, `offerId` or report it names) or a `?worldId=` query.
+`guildId`, `treatyId`, `offerId` or report it names), or from a `?worldId=`
+query on the endpoints whose handler filters by it (the admin settlement and
+army lists, marked `.ApiKeyWorldFromQuery()`); anywhere else the query value
+is ignored, so it cannot stand in for a world the endpoint doesn't act on.
 A request naming a world outside the list is refused, and so is a
 world-scoped request that names no world at all (e.g. the admin settlement
 list without `?worldId=`). A resource that does not exist passes through so
