@@ -124,7 +124,9 @@ public sealed class WorldGenerator
                     camps = CampGenerator.Generate(
                         tiles, terrainLand, _sampler, _options, index, riverTiles, giants,
                         plainBog: BogTerrain.PlainBog(bogTiles));
-                    startPositions = FindStartPositions(tiles, terrainLand, giants, camps, BogTerrain.PlainBog(bogTiles), _options.BogReach);
+                    startPositions = FindStartPositions(
+                        tiles, terrainLand, giants, camps, BogTerrain.PlainBog(bogTiles), _options.BogReach,
+                        riverTiles.Select(t => t.Coord).ToHashSet());
                 }
 
                 built[i] = new GeneratedIsland
@@ -375,6 +377,9 @@ public sealed class WorldGenerator
     /// footprint hex outright, since that distance would be 0 or 1.
     /// </remarks>
     /// <remarks>
+    /// River hexes (<paramref name="riverTiles"/>, narrow or wide) are never start positions.
+    /// </remarks>
+    /// <remarks>
     /// Wildlife camps are placed before this runs (<see cref="CampGenerator"/>), and a spot
     /// within <c>GuardRange + StartPositionMargin</c> hex steps of a <em>strong</em> camp is
     /// dropped.
@@ -390,13 +395,21 @@ public sealed class WorldGenerator
         IReadOnlyList<Giant> giants,
         IReadOnlyList<Camp> camps,
         IReadOnlySet<HexCoord> plainBog,
-        int bogReach)
+        int bogReach,
+        IReadOnlySet<HexCoord>? riverTiles = null)
     {
         var candidates = new List<(HexCoord Coord, int Score)>();
 
         foreach (var tile in tiles)
         {
             if (land[tile] != Terrain.Grass)
+            {
+                continue;
+            }
+
+            // Never on a river hex: a settlement standing in a river is wrong, and on a wide river hex a land army
+            // could not even walk home (HexPathfinder.LandStepCost), so every land dispatch would be refused.
+            if (riverTiles is not null && riverTiles.Contains(tile))
             {
                 continue;
             }
