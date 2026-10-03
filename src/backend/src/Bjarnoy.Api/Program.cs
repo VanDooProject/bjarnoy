@@ -42,6 +42,7 @@ builder.Services.AddScoped<TradeService>();
 builder.Services.AddScoped<FieldBattleService>();
 builder.Services.AddScoped<CampAmbushService>();
 builder.Services.AddScoped<CampAggressionService>();
+builder.Services.AddScoped<AttackProtectionService>();
 builder.Services.AddScoped<ArmyService>();
 builder.Services.AddScoped<BattleReportService>();
 builder.Services.AddScoped<FieldBattleReportService>();
