@@ -360,6 +360,9 @@ app.MapAdminArmyEndpoints(versionSet);
 app.MapChatEndpoints(versionSet);
 app.MapAdminReportEndpoints(versionSet);
 app.MapAdminActivityEndpoints(versionSet);
+app.MapApiKeyEndpoints(versionSet);
+app.MapApiKeyRequestEndpoints(versionSet);
+app.MapAdminApiKeyEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot
