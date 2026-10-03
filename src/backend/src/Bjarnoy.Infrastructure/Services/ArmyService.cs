@@ -101,6 +101,7 @@ public sealed class ArmyService(
     FieldBattleService fieldBattleService,
     CampService campService,
     CampAmbushService campAmbushService,
+    AttackProtectionService attackProtectionService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
@@ -111,6 +112,7 @@ public sealed class ArmyService(
     private readonly FieldBattleService _fieldBattleService = fieldBattleService;
     private readonly CampService _campService = campService;
     private readonly CampAmbushService _campAmbushService = campAmbushService;
+    private readonly AttackProtectionService _attackProtectionService = attackProtectionService;
     private readonly ILogger<ArmyService> _logger = logger;
 
     /// <summary>
@@ -359,6 +361,31 @@ public sealed class ArmyService(
             .Where(a => a.Id == armyId)
             .Select(a => (Guid?)a.SettlementId)
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether an Attack/Raid from <paramref name="settlementId"/> on <paramref name="targetSettlementId"/> would be
+    /// turned back by the anti-snowball rule if it arrived now (issue #336) — the dispatch-time note. Null when
+    /// either settlement is missing or they sit in different worlds.
+    /// </summary>
+    public async Task<AttackProtectionVerdict?> GetAttackProtectionAsync(
+        Guid settlementId, Guid targetSettlementId, CancellationToken cancellationToken = default)
+    {
+        var attacker = await _dbContext.Settlements.AsNoTracking().Include(s => s.World)
+            .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken).ConfigureAwait(false);
+        var targetWorldId = await _dbContext.Settlements.AsNoTracking()
+            .Where(s => s.Id == targetSettlementId)
+            .Select(s => (Guid?)s.WorldId)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (attacker?.World is null || targetWorldId != attacker.WorldId)
+        {
+            return null;
+        }
+
+        var wallNow = _timeProvider.GetUtcNow();
+        return await _attackProtectionService.EvaluateAsync(
+            settlementId, targetSettlementId, attacker.World.ToClock().ToGameTime(wallNow), wallNow, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -958,6 +985,20 @@ public sealed class ArmyService(
             _logger.LogWarning(
                 "Army {ArmyId}'s attack target {TargetId} no longer exists; recalling home without a battle.",
                 armyEntity.Id, targetId);
+
+            return ApplyArmyOutcome(armyEntity, TurnHomeWithoutBattle(domain, movement), now);
+        }
+
+        // Anti-snowball (issue #336), enforced on arrival rather than at dispatch: the revenge window is read at
+        // the arrival instant (as the report's OccurredAt is), inactivity against the wall clock. A protected
+        // target is never fought — no report, no loot — and the army just walks home.
+        var protection = await _attackProtectionService.EvaluateAsync(
+            armyEntity.SettlementId, targetId, movement.ArrivesAt, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        if (protection is { Protected: true })
+        {
+            _logger.LogInformation(
+                "Army {ArmyId} turned back from protected settlement {TargetId} without a battle (Longhouse {AttackerLevel} vs {DefenderLevel}).",
+                armyEntity.Id, targetId, protection.AttackerLonghouseLevel, protection.DefenderLonghouseLevel);
 
             return ApplyArmyOutcome(armyEntity, TurnHomeWithoutBattle(domain, movement), now);
         }

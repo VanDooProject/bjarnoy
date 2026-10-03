@@ -639,12 +639,37 @@ peaceful NPC villages.
 
 ### Keeping snowballing in check
 
-- **Size-gap protection with revenge.** A player can't attack a settlement
-  whose Longhouse is more than 5 levels below theirs, unless that settlement
-  attacked them in the last 48 hours. Inactive players (§ above) are exempt.
-- **Hideout.** Storage buildings hide a share of the stock from plunder
-  (10% by default, growing with the storage house level) — Travian's cranny,
-  built into the storage houses rather than a separate building.
+Implemented in issue #336.
+
+- **Size-gap protection with revenge.** An attack or raid can't land on a
+  player whose size is more than 5 Longhouse levels below the attacker's.
+  - **Size** is measured per account: the highest Longhouse level across all
+    of the player's settlements in that world, for both sides. A big
+    account's fresh second settlement doesn't count as small, and an
+    attacker can't get around the rule by sending from a small settlement.
+  - **Revenge** opens for the whole account. If any settlement of the
+    smaller player attacked any settlement of the bigger player in the last
+    48 hours of game time, read from the battle reports, every settlement of
+    the bigger player may hit back at any of theirs. Attacking a guild member
+    doesn't open revenge for the whole guild (not in v1).
+  - **Exempt targets:** inactive players (no activity for 7 days of wall
+    time) and settlements without a real owner (the system "abandoned"
+    user).
+  - **Enforced on arrival.** Sending the attack is never refused. An army
+    that reaches a protected target turns home without a fight (no battle,
+    no loot, no report). The send dialog shows a note when the target is
+    protected at that moment
+    (`GET /settlements/{id}/attack-protection/{targetId}`). The rule is
+    checked again on arrival because a target can go inactive, become
+    active again, or have its revenge window close while the army is
+    marching.
+  - The rule lives in `AttackProtection` (domain) and
+    `AttackProtectionService` (infrastructure).
+- **Hideout.** The storage buildings hide a share of every resource from
+  plunder: 10%, plus 1 point per level of the best Storage House or Great
+  Storehouse, up to 40%. Loot only reaches the stock above that share. This
+  is Travian's cranny, built into the storage houses rather than a separate
+  building (`Settlement.HideoutShare`).
 - When an active player's first settlement slows down, the answer is a
   **second settlement**, not attacking smaller neighbours (§6).
 
@@ -679,7 +704,8 @@ Open work, in rough order. Each is its own PR.
    unlock levels follow the building ladder, matched to the iron sources.~~
    Done (§8).
 8. **Raiding and snowballing** (§10): wildlife on empty islands, beast dens,
-   merchant ships, size-gap protection with revenge, and the hideout.
+   merchant ships, ~~size-gap protection with revenge, and the hideout~~
+   (done).
 
 ## 12. Open questions
 

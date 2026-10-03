@@ -406,3 +406,28 @@ public sealed record CampReportResponse(
             report.TowerBurned);
     }
 }
+
+/// <summary>
+/// Whether an attack from the caller's settlement on a target would be turned back on arrival by the
+/// anti-snowball rule (issue #336). <c>Reason</c> is the camelCase <see cref="AttackProtectionReason"/> name.
+/// </summary>
+public sealed record AttackProtectionResponse(
+    bool Protected,
+    string Reason,
+    int AttackerLonghouseLevel,
+    int DefenderLonghouseLevel,
+    int MaxLonghouseGap)
+{
+    public static AttackProtectionResponse From(AttackProtectionVerdict verdict)
+    {
+        ArgumentNullException.ThrowIfNull(verdict);
+
+        var reason = verdict.Reason.ToString();
+        return new AttackProtectionResponse(
+            verdict.Protected,
+            char.ToLowerInvariant(reason[0]) + reason[1..],
+            verdict.AttackerLonghouseLevel,
+            verdict.DefenderLonghouseLevel,
+            AttackProtection.MaxLonghouseGap);
+    }
+}

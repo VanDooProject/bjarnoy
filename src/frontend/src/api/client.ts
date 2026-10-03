@@ -12,6 +12,7 @@ import type {
   AdminUserResponse,
   AdminWorldResponse,
   ArmyResponse,
+  AttackProtectionResponse,
   ArmySummary,
   BattleReportResponse,
   BuildingDefinitionResponse,
@@ -617,6 +618,11 @@ export const api = {
     request<ArmyResponse>(`/settlements/${settlementId}/armies`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  // Issue #336: would an attack from `settlementId` on `targetSettlementId` be turned back by the size-gap protection?
+  getAttackProtection: (settlementId: string, targetSettlementId: string, ownerId?: string) =>
+    request<AttackProtectionResponse>(`/settlements/${settlementId}/attack-protection/${targetSettlementId}`, {
       headers: ownerHeader(ownerId),
     }),
   getSettlementArmies: (settlementId: string, ownerId?: string) =>

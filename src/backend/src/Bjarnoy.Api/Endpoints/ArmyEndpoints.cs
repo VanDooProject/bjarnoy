@@ -39,6 +39,11 @@ public static class ArmyEndpoints
             // per-player state a rival must not be able to enumerate.
             .RequireSettlementOwner();
 
+        settlements.MapGet("/{settlementId:guid}/attack-protection/{targetSettlementId:guid}", GetAttackProtection)
+            .WithName("GetAttackProtection")
+            .WithSummary("Whether an attack on the target settlement would be turned back by the size-gap protection (issue #336).")
+            .RequireSettlementOwner();
+
         settlements.MapGet("/{settlementId:guid}/guests", ListGuestArmies)
             .WithName("ListGuestArmies")
             .WithSummary("Lists guest (support) armies currently stationed at a settlement — the host's view; counts only.")
@@ -213,6 +218,18 @@ public static class ArmyEndpoints
 
         var (entity, clock) = found.Value;
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static async Task<Results<Ok<AttackProtectionResponse>, NotFound>> GetAttackProtection(
+        Guid settlementId,
+        Guid targetSettlementId,
+        ArmyService armies,
+        CancellationToken cancellationToken)
+    {
+        var verdict = await armies.GetAttackProtectionAsync(settlementId, targetSettlementId, cancellationToken);
+        return verdict is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(AttackProtectionResponse.From(verdict));
     }
 
     private static async Task<Ok<IReadOnlyList<ArmySummary>>> ListForSettlement(

@@ -625,7 +625,9 @@ public sealed record Army
             .Max();
         var defenseBonusPercent = BuildingCatalogue.TowerDefenseBonusPercent(towerLevel);
 
-        var lootAvailable = settledDefender.Resources.At(battleInstant);
+        // The storage houses' hideout (issue #336) keeps a share of every
+        // resource out of reach: only the stock above it can be carried off.
+        var lootAvailable = settledDefender.Resources.At(battleInstant) * (1 - settledDefender.HideoutShare);
 
         // Guest armies fight alongside the home garrison (issue #40 phase 4
         // §3): their stacks are merged, by type, into the defense side the

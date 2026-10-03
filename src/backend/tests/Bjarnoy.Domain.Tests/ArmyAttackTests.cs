@@ -714,6 +714,53 @@ public class ArmyAttackTests
         Assert.NotEqual(ResourceAmounts.Zero, arrival.Army!.Loot);
     }
 
+    /// <summary>
+    /// Issue #336: the storage houses' hideout keeps 10% of every resource,
+    /// plus 1% per level of the best storage building, out of a raider's
+    /// reach - an attacker with carry capacity to spare still leaves it behind.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0.10)]
+    [InlineData(10, 0.20)]
+    public void The_hideout_keeps_its_share_of_the_stock_out_of_the_loot(int storageLevel, double hiddenShare)
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Axeman, 1000)]);
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: 1_000, requested: [new UnitStack(UnitType.Axeman, 200)]);
+        Assert.Equal(DispatchRejection.None, decision.Rejection);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var storage = storageLevel > 0
+            ? new[] { new PlacedBuilding(new HexCoord(5, 5), BuildingType.StorageHouse, storageLevel) }
+            : [];
+        var defender = Found(centre: TargetHex, garrison: [], extraBuildings: storage);
+        defender = defender with
+        {
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000), ResourceAmounts.Zero, ResourceAmounts.Uniform(100_000), T0),
+        };
+        var stockAtBattle = defender.SettleTo(movement.ArrivesAt).Settlement.Resources.At(movement.ArrivesAt);
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 7);
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        var expectedLoot = stockAtBattle * (1 - hiddenShare);
+        Assert.Equal(expectedLoot.Wood, arrival.Army!.Loot.Wood, 6);
+        Assert.Equal(expectedLoot.Iron, arrival.Army.Loot.Iron, 6);
+        var left = arrival.DefenderSettlement.Resources.At(movement.ArrivesAt);
+        Assert.Equal(stockAtBattle.Stone * hiddenShare, left.Stone, 6);
+    }
+
+    [Theory]
+    [InlineData(0, 0.10)]
+    [InlineData(1, 0.11)]
+    [InlineData(20, 0.30)]
+    [InlineData(30, 0.40)]
+    [InlineData(99, 0.40)]
+    public void The_hideout_share_grows_with_the_storage_level_up_to_the_cap(int storageLevel, double expected) =>
+        Assert.Equal(expected, Settlement.HideoutShareFor(storageLevel), 9);
+
     [Fact]
     public void Existing_attack_behavior_is_unaffected_by_the_raid_mission_existing()
     {

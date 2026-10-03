@@ -382,6 +382,7 @@
     "change": "Ändern",
     "searchSettlements": "Siedlungen zum {mission} suchen…",
     "noSettlementsFound": "Bisher keine weiteren Siedlungen gefunden.",
+    "protectedNote": "Diese Siedlung ist geschützt: ihr Langhaus liegt mehr als {gap} Stufen unter deinem ({defender} gegenüber {attacker}). Dein Heer kehrt bei der Ankunft um, es sei denn, sie greifen dich zuerst an oder spielen 7 Tage lang nicht.",
     "supportNote": "Der Gastgeber versorgt deine Truppen, sobald sie ankommen, aber sie brauchen weiterhin genug Proviant für die Rückreise, falls sie zurückgerufen werden.",
     "buildingPickerHint": "Bevorzugtes Katapultziel — kann sich ändern, falls es beim Eintreffen deiner Armee nicht mehr dort steht.",
     "clear": "Löschen",

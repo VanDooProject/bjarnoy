@@ -31,6 +31,7 @@ const getIslands = vi.fn();
 const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
+const getAttackProtection = vi.fn();
 const getWorldCamps = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
@@ -65,6 +66,7 @@ async function loadStoreModule(demoMode: boolean) {
   vi.doMock('../api/client', () => ({
     api: {
       getSettlementArmies: (...args: unknown[]) => getSettlementArmies(...args),
+      getAttackProtection: (...args: unknown[]) => getAttackProtection(...args),
       getArmy: (...args: unknown[]) => getArmy(...args),
       getSettlementGuests: (...args: unknown[]) => getSettlementGuests(...args),
       recallArmy: (...args: unknown[]) => recallArmy(...args),
@@ -226,6 +228,83 @@ describe('useWorldStore confirmDispatch with no land route', () => {
     expect(store.dispatchDraft!.route).toEqual([{ q: 5, r: 0 }]);
     expect(store.dispatchDraft!.submitting).toBe(false);
     expect(store.dispatchDraft!.error).toBe("No land route: mountains and wide rivers can't be crossed.");
+  });
+});
+
+// Issue #336: picking an Attack target fetches its size-gap protection status into the draft, purely as a
+// note — a failed lookup must never block or error the dispatch.
+describe('useWorldStore attack protection note', () => {
+  const protectedStatus = {
+    protected: true,
+    reason: 'sizeGapProtected',
+    attackerLonghouseLevel: 10,
+    defenderLonghouseLevel: 4,
+    maxLonghouseGap: 5,
+  };
+
+  it('stores the protection status on the draft when an attack target is picked', async () => {
+    const store = await loadStoreModule(false);
+    getAttackProtection.mockReset().mockResolvedValue(protectedStatus);
+    store.selectedSettlementId = 'home-1';
+    store.startDispatch();
+    store.setDispatchMission('attack');
+
+    store.setDispatchTarget('rival-1');
+    await vi.waitFor(() => expect(store.dispatchDraft!.protection).toEqual(protectedStatus));
+
+    expect(getAttackProtection).toHaveBeenCalledWith('home-1', 'rival-1', undefined);
+  });
+
+  it('does not look the status up for a support target and clears it when the target changes', async () => {
+    const store = await loadStoreModule(false);
+    getAttackProtection.mockReset().mockResolvedValue(protectedStatus);
+    store.selectedSettlementId = 'home-1';
+    store.startDispatch();
+    store.setDispatchMission('support');
+    store.setDispatchTarget('ally-1');
+    expect(getAttackProtection).not.toHaveBeenCalled();
+
+    store.setDispatchMission('attack');
+    store.setDispatchTarget('rival-1');
+    await vi.waitFor(() => expect(store.dispatchDraft!.protection).not.toBeNull());
+    store.setDispatchTarget(null);
+
+    expect(store.dispatchDraft!.protection).toBeNull();
+  });
+
+  it('ignores a lookup failure and keeps the draft usable', async () => {
+    const store = await loadStoreModule(false);
+    getAttackProtection.mockReset().mockRejectedValue(new Error('boom'));
+    store.selectedSettlementId = 'home-1';
+    store.startDispatch();
+    store.setDispatchMission('attack');
+
+    store.setDispatchTarget('rival-1');
+    await vi.waitFor(() => expect(getAttackProtection).toHaveBeenCalled());
+    await Promise.resolve();
+
+    expect(store.dispatchDraft!.protection).toBeNull();
+    expect(store.dispatchDraft!.error).toBeNull();
+  });
+
+  it('drops a late response for a target the player has since moved off', async () => {
+    const store = await loadStoreModule(false);
+    let resolveFirst!: (v: typeof protectedStatus) => void;
+    getAttackProtection
+      .mockReset()
+      .mockImplementationOnce(() => new Promise((r) => { resolveFirst = r; }))
+      .mockResolvedValueOnce({ ...protectedStatus, protected: false, reason: 'withinSizeGap' });
+    store.selectedSettlementId = 'home-1';
+    store.startDispatch();
+    store.setDispatchMission('attack');
+
+    store.setDispatchTarget('rival-1');
+    store.setDispatchTarget('rival-2');
+    await vi.waitFor(() => expect(store.dispatchDraft!.protection?.reason).toBe('withinSizeGap'));
+    resolveFirst(protectedStatus);
+    await Promise.resolve();
+
+    expect(store.dispatchDraft!.protection?.reason).toBe('withinSizeGap');
   });
 });
 
