@@ -5,7 +5,6 @@ using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -266,9 +265,15 @@ public static class AdminApiKeyEndpoints
         Guid requestId,
         ClaimsPrincipal user,
         ApiKeyRequestService requests,
-        [FromBody] ApproveApiKeyRequestRequest? body,
+        HttpRequest httpRequest,
         CancellationToken cancellationToken)
     {
+        var (body, bodyError) = await OptionalBody.ReadAsync<ApproveApiKeyRequestRequest>(httpRequest, cancellationToken);
+        if (bodyError is not null)
+        {
+            return bodyError;
+        }
+
         body ??= new ApproveApiKeyRequestRequest();
         var result = await requests.ApproveAsync(
             requestId,

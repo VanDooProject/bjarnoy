@@ -193,7 +193,7 @@ public sealed class ApiKeyRequestService(
             RequestsPerMinute = rpm,
             LifetimeMinutes = input.LifetimeMinutes,
             RequesterIp = requesterIp,
-            RequesterUserAgent = userAgent is { Length: > 500 } ? userAgent[..500] : userAgent,
+            RequesterUserAgent = TrimUserAgent(userAgent),
             CreatedAt = now,
             ExpiresAt = now + _options.RequestTimeout,
         };
@@ -289,7 +289,7 @@ public sealed class ApiKeyRequestService(
             OwnerUserId = key.OwnerUserId,
             AutoRenewUntil = key.AutoRenewUntil,
             RequesterIp = requesterIp,
-            RequesterUserAgent = userAgent is { Length: > 500 } ? userAgent[..500] : userAgent,
+            RequesterUserAgent = TrimUserAgent(userAgent),
             CreatedAt = now,
             ExpiresAt = now + _options.RequestTimeout,
         };
@@ -668,6 +668,9 @@ public sealed class ApiKeyRequestService(
 
         throw new InvalidOperationException("Could not generate a unique API key request code.");
     }
+
+    private static string? TrimUserAgent(string? userAgent) =>
+        string.IsNullOrWhiteSpace(userAgent) ? null : userAgent.Length > 500 ? userAgent[..500] : userAgent;
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 

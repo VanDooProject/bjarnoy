@@ -79,7 +79,6 @@ public static class ApiKeyRequestEndpoints
     }
 
     private static async Task<IResult> Renew(
-        RenewApiKeyRequest? body,
         HttpContext http,
         ApiKeyRequestService requests,
         IOptions<ApiKeyOptions> options,
@@ -88,6 +87,12 @@ public static class ApiKeyRequestEndpoints
         if (http.User.GetApiKeyId() is not { } keyId)
         {
             return Results.Unauthorized();
+        }
+
+        var (body, bodyError) = await OptionalBody.ReadAsync<RenewApiKeyRequest>(http.Request, cancellationToken);
+        if (bodyError is not null)
+        {
+            return bodyError;
         }
 
         var result = await requests.CreateRenewalAsync(
