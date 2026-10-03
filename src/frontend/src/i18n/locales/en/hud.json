@@ -382,6 +382,7 @@
     "change": "Change",
     "searchSettlements": "Search settlements to {mission}…",
     "noSettlementsFound": "No other settlements found yet.",
+    "protectedNote": "This settlement is protected: its Longhouse is more than {gap} levels below yours ({defender} vs {attacker}). Your army will turn back on arrival unless they attack you first or stop playing for 7 days.",
     "supportNote": "The host feeds your troops once they arrive, but they still need enough food loaded for the round trip home if recalled.",
     "buildingPickerHint": "Preferred catapult target — may change if it's no longer there by the time your army arrives.",
     "clear": "Clear",

@@ -5,6 +5,7 @@ import { apiErrorMessage } from '../i18n/apiErrors';
 import { i18n } from '../i18n';
 import type {
   ArmyResponse,
+  AttackProtectionResponse,
   BuildOrderResponse,
   GuestArmySummary,
   IslandResponse,
@@ -321,6 +322,9 @@ export const useWorldStore = defineStore('world', {
       // picked one. Always `null` outside `mission: 'attack'` — a Move/Support
       // dispatch has no battle to apply it in (see `setDispatchMission`).
       targetBuildingCoord: { q: number; r: number } | null;
+      // Issue #336: size-gap protection status of the picked Attack target (an army sent anyway turns back on
+      // arrival). A non-blocking note only — `null` until fetched, and stays `null` if the lookup fails.
+      protection: AttackProtectionResponse | null;
     } | null,
     // Issue #156 phase 1: waypoint-editing state for an army already out in
     // the field, given a "move on"/"append goal" order — same click-to-plot
@@ -1452,6 +1456,7 @@ export const useWorldStore = defineStore('world', {
         targetSettlementId: null,
         targetCamp: null,
         targetBuildingCoord: null,
+        protection: null,
       };
       this.dispatchTargetBuildings = null;
       this.dispatchTargetBuildingsFor = null;
@@ -1489,6 +1494,7 @@ export const useWorldStore = defineStore('world', {
       this.dispatchDraft.targetSettlementId = null;
       this.dispatchDraft.targetCamp = null;
       this.dispatchDraft.targetBuildingCoord = null;
+      this.dispatchDraft.protection = null;
       this.dispatchDraft.error = null;
     },
     setDispatchTarget(settlementId: string | null) {
@@ -1498,8 +1504,10 @@ export const useWorldStore = defineStore('world', {
       // was selected before — it doesn't carry over to a new (or cleared)
       // target's layout.
       this.dispatchDraft.targetBuildingCoord = null;
+      this.dispatchDraft.protection = null;
       if (settlementId && this.dispatchDraft.mission === 'attack') {
         void this.loadDispatchTargetBuildings(settlementId);
+        void this.loadDispatchProtection(settlementId);
       } else {
         this.dispatchTargetBuildings = null;
         this.dispatchTargetBuildingsFor = null;
@@ -1509,6 +1517,23 @@ export const useWorldStore = defineStore('world', {
     setDispatchTargetBuilding(coord: { q: number; r: number } | null) {
       if (!this.dispatchDraft) return;
       this.dispatchDraft.targetBuildingCoord = coord;
+    },
+    /**
+     * Fetches the size-gap protection status (issue #336) of an Attack target into the draft, for ArmyPanel's
+     * "your army will turn back" note. Errors are ignored on purpose: the note is advisory and dispatch is never
+     * blocked by it. A response for a target the player has since moved off is dropped.
+     */
+    async loadDispatchProtection(targetSettlementId: string) {
+      const from = this.selectedSettlementId;
+      if (!from) return;
+      try {
+        const protection = await api.getAttackProtection(from, targetSettlementId, this.ownerId ?? undefined);
+        if (this.dispatchDraft?.targetSettlementId === targetSettlementId) {
+          this.dispatchDraft.protection = protection;
+        }
+      } catch {
+        // advisory only
+      }
     },
     /**
      * Fetches the target settlement's placed buildings for the "preferred

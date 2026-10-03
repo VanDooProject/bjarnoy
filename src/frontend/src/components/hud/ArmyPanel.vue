@@ -454,6 +454,16 @@ async function confirmFieldOrderClick() {
             {{ t('hud.armyPanel.supportNote') }}
           </p>
 
+          <p v-if="draft.protection?.protected" class="status-subtext protection-note" role="note">
+            {{
+              t('hud.armyPanel.protectedNote', {
+                gap: draft.protection.maxLonghouseGap,
+                defender: draft.protection.defenderLonghouseLevel,
+                attacker: draft.protection.attackerLonghouseLevel,
+              })
+            }}
+          </p>
+
           <div v-if="showBuildingPicker" class="building-picker">
             <p class="status-subtext building-picker-hint">
               {{ t('hud.armyPanel.buildingPickerHint') }}
@@ -741,6 +751,10 @@ async function confirmFieldOrderClick() {
 }
 .support-note {
   margin-top: 0;
+}
+.protection-note {
+  margin-top: 0;
+  color: var(--gold);
 }
 .target-selected {
   display: flex;

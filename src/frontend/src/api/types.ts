@@ -1414,6 +1414,20 @@ export interface UnitCountRequest {
 }
 
 /**
+ * Anti-snowball size-gap protection status (issue #336) for an attack from one
+ * of the caller's settlements on `targetSettlementId`: `protected` means the
+ * army would turn back on arrival. `reason` is the camelCase backend reason
+ * (`sizeGapProtected`, `withinSizeGap`, `revenge`, `inactiveTarget`, ...).
+ */
+export interface AttackProtectionResponse {
+  protected: boolean;
+  reason: string;
+  attackerLonghouseLevel: number;
+  defenderLonghouseLevel: number;
+  maxLonghouseGap: number;
+}
+
+/**
  * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
  * `destination`: required for `mission: 'move'` (the default); ignored for
  * attack/support/raid, whose destination is always the target settlement's
