@@ -290,7 +290,7 @@ public sealed class SettlementService(
         // Founding is restricted to the plots the generator already vetted, so
         // the terrain rules are enforced once at world creation rather than
         // re-derived per request.
-        if (!island.StartPositions.Any(p => p.Q == coord.Q && p.R == coord.R))
+        if (!island.FoundableStartPositions().Any(p => p.Q == coord.Q && p.R == coord.R))
         {
             return new FoundingResult(FoundingRejection.NotAStartPosition);
         }
