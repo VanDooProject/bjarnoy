@@ -572,6 +572,9 @@ legacy design: email verification, password reset, and a `logout-all` that
 revokes every refresh token (e.g. on ban/lock) rather than just the current
 session's.
 
+Scripts and agents authenticate with admin-issued API keys instead of a
+session — scoped per feature, world and owner; see [api-keys.md](./api-keys.md).
+
 World creation (`POST /api/v1/worlds`) and most read endpoints (a settlement's
 full resources/garrison/queue, its battle reports) are still unauthenticated —
 closing those is a separate, larger pass across the test suite's world-creation

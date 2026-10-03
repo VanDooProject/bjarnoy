@@ -307,3 +307,19 @@
   this instead of re-deriving the click path from scratch each time a UI
   change needs visual verification. See `scripts/screenshot-helpers/README.md`
   for setup and usage.
+
+# debugging a deployed world with an API key
+- to read or change a running deployment's worlds (not the local dev stack), request a scoped API key instead of asking me for a password — the whole flow is in `docs/tech/api-keys.md`
+- ask for the least you need: only the features (`GET /api/v1/api-keys/features`) and worlds the task touches, `Read` unless you must write, a short lifetime (60 min) — I can widen it on approval
+- request it, then show me the `userCode` and `approvalUrl` from the response and poll the token endpoint every `pollIntervalSeconds` until I approve:
+  ```bash
+  curl -sX POST https://<host>/api/v1/api-key-requests -H 'Content-Type: application/json' -d '{
+    "name":"claude <task>", "purpose":"<what you need to find out>",
+    "description":"Claude Code session for <user>", "contextUrl":"<this session url>",
+    "features":{"worlds":"Read","settlements":"Read"}, "allWorlds":false, "worldIds":["<worldId>"],
+    "lifetimeMinutes":60}'
+  curl -sX POST https://<host>/api/v1/api-key-requests/<id>/token -H 'Content-Type: application/json' -d '{"pollSecret":"<pollSecret>"}'
+  ```
+- to act as a player (build, dispatch, ...) put the account in `ownerUserName`; I pick the owner on approval
+- send it as `Authorization: Bearer bjk_…`; `GET /api/v1/api-keys/self` shows what the key can do
+- never commit, log or paste the token anywhere (PR bodies, comments, docs); renew with `POST /api/v1/api-key-requests/renewal` before it expires instead of requesting a new one
