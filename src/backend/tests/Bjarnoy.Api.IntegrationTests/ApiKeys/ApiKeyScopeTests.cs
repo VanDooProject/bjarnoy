@@ -177,6 +177,27 @@ public sealed class ApiKeyScopeTests : ApiKeyTestBase
     }
 
     [Fact]
+    public async Task The_world_query_value_counts_only_where_the_handler_filters_by_it()
+    {
+        var (admin, adminId, _) = await Harness.CreateAdminAsync();
+        var worldA = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("a"), 21, 60, cancellationToken: Ct);
+        var created = await Harness.CreateKeyAsync(
+            admin, ApiKeyHarness.Features(("admin.worlds", ApiKeyAccess.ReadWrite)),
+            ownerUserId: adminId, allWorlds: false, worldIds: [worldA.Id]);
+        using var client = Harness.KeyClient(created.Token);
+
+        // The admin world list and world creation ignore ?worldId=, so naming the key's own world there must not
+        // unlock every world (or a brand-new one).
+        var list = await client.GetAsync($"/api/v1/admin/worlds/?worldId={worldA.Id}", Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, list.StatusCode);
+        Assert.Equal("API key is limited to specific worlds; this request names none.", await TitleAsync(list));
+
+        var create = await client.PostAsJsonAsync(
+            $"/api/v1/admin/worlds/?worldId={worldA.Id}", new { name = ApiKeyHarness.Unique("sneaky") }, Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, create.StatusCode);
+    }
+
+    [Fact]
     public async Task An_all_worlds_key_reaches_every_world()
     {
         var (admin, _, _) = await Harness.CreateAdminAsync();

@@ -28,6 +28,17 @@ public sealed record ApiKeyEndpointMarker(ApiKeyEndpointKind Kind, string? Featu
     public static readonly ApiKeyEndpointMarker Forbidden = new(ApiKeyEndpointKind.Forbidden);
 }
 
+/// <summary>
+/// Marks an endpoint whose handler really filters its result by a <c>worldId</c> query value (the admin settlement
+/// and army lists). Only then does <see cref="ApiKeyScopeMiddleware"/> accept that query value as the request's world
+/// for a world-limited key: on any other endpoint the handler ignores it, so <c>POST /admin/worlds?worldId=&lt;allowed&gt;</c>
+/// would otherwise pass the world check while acting on no world at all.
+/// </summary>
+public sealed record ApiKeyWorldFromQueryMarker
+{
+    public static readonly ApiKeyWorldFromQueryMarker Instance = new();
+}
+
 /// <summary>Group- or endpoint-level wiring for <see cref="ApiKeyEndpointMarker"/>.</summary>
 public static class ApiKeyEndpointExtensions
 {
@@ -58,5 +69,16 @@ public static class ApiKeyEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder.WithMetadata(ApiKeyEndpointMarker.Forbidden);
+    }
+
+    /// <summary>
+    /// Lets a world-limited key name its world through the <c>worldId</c> query value — only for a handler that
+    /// filters by it, see <see cref="ApiKeyWorldFromQueryMarker"/>.
+    /// </summary>
+    public static TBuilder ApiKeyWorldFromQuery<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.WithMetadata(ApiKeyWorldFromQueryMarker.Instance);
     }
 }

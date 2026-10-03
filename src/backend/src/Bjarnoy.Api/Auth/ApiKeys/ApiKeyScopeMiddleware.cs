@@ -15,7 +15,7 @@ namespace Bjarnoy.Api.Auth.ApiKeys;
 /// <item>The per-key fixed-window rate limit (429 with <c>Retry-After</c>); applied before any database work so an abusive loop is cheap to refuse.</item>
 /// <item>A <see cref="ApiKeyEndpointKind.Public"/> endpoint passes.</item>
 /// <item>The key must hold the endpoint's feature at the level its HTTP method needs.</item>
-/// <item>For a world-scoped feature and a key limited to some worlds: the world the request names (route <c>worldId</c>, or the world of the settlement/army/guild/treaty/offer/report it names, or the <c>worldId</c> query value) must be one of them.</item>
+/// <item>For a world-scoped feature and a key limited to some worlds: the world the request names (route <c>worldId</c>, or the world of the settlement/army/guild/treaty/offer/report it names, or the <c>worldId</c> query value on an endpoint marked <see cref="ApiKeyWorldFromQueryMarker"/>) must be one of them.</item>
 /// </list>
 /// Paths outside <c>/api/</c> (health probes, OpenAPI and Scalar, the SPA and its assets) carry no game data and pass.
 /// </remarks>
@@ -128,7 +128,8 @@ public sealed class ApiKeyScopeMiddleware(RequestDelegate next)
             await Consider("reportId", id => resolver.ForCampReportAsync(id, cancellationToken));
         }
 
-        if (Guid.TryParse(context.Request.Query["worldId"].ToString(), out var queryWorld))
+        if (endpoint.Metadata.GetMetadata<ApiKeyWorldFromQueryMarker>() is not null
+            && Guid.TryParse(context.Request.Query["worldId"].ToString(), out var queryWorld))
         {
             sources++;
             lists.Add([queryWorld]);

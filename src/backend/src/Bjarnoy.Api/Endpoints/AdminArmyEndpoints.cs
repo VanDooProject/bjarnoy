@@ -34,6 +34,7 @@ public static class AdminArmyEndpoints
 
         armies.MapGet("/", List)
             .WithName("AdminListArmies")
+            .ApiKeyWorldFromQuery()
             .WithSummary("Lists armies, filtered by world or by home settlement.");
 
         armies.MapPatch("/{armyId:guid}", Edit)

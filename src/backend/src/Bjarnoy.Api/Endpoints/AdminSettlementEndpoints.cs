@@ -36,6 +36,7 @@ public static class AdminSettlementEndpoints
 
         settlements.MapGet("/", Search)
             .WithName("AdminSearchSettlements")
+            .ApiKeyWorldFromQuery()
             .WithSummary("Searches settlements by world and/or owner name, paged.");
 
         settlements.MapGet("/{settlementId:guid}", Get)
