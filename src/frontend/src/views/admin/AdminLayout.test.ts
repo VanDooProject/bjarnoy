@@ -19,7 +19,7 @@ import { generationSettings } from '../../lib/map/testing/generationFixture';
 function testRouter() {
   return createRouter({
     history: createMemoryHistory(),
-    routes: ['worlds', 'users', 'settlements', 'reports', 'activity', 'economy', 'island-lab'].map((tab) => ({
+    routes: ['worlds', 'users', 'settlements', 'reports', 'activity', 'economy', 'api-keys', 'island-lab'].map((tab) => ({
       path: `/admin/${tab}`,
       component: { template: '<div />' },
     })),

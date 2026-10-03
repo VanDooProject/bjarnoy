@@ -1695,3 +1695,98 @@ export interface FogChunksResponse {
   cvMax: number;
   chunks: FogChunkResponse[];
 }
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ApiKeyContracts.cs (debug API
+// keys, docs/tech/api-keys.md). Only the admin-facing parts are used here.
+
+/** Access level one feature is granted at; serialised as the enum name. */
+export type ApiKeyAccess = 'None' | 'Read' | 'ReadWrite';
+
+/** Feature id (e.g. `settlements`, `admin.users`) -> access level. */
+export type ApiKeyFeatureMap = Record<string, ApiKeyAccess>;
+
+/** One row of `GET /api-keys/features`. */
+export interface ApiKeyFeatureInfo {
+  id: string;
+  worldScoped: boolean;
+  admin: boolean;
+  description: string;
+}
+
+/** The scope shape shared by keys, requests and every create/edit body. */
+export interface ApiKeyScope {
+  features: ApiKeyFeatureMap;
+  allWorlds: boolean;
+  worldIds: string[];
+}
+
+export type ApiKeyStatus = 'Active' | 'Expired' | 'Revoked';
+
+export interface ApiKeyResponse extends ApiKeyScope {
+  id: string;
+  name: string;
+  purpose: string | null;
+  /** `bjk_<keyId>_…` — enough to recognise a key, never enough to use it. */
+  hint: string;
+  ownerUserId: string;
+  ownerUserName: string;
+  createdByUserName: string | null;
+  status: ApiKeyStatus;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  autoRenewUntil: string | null;
+  requestsPerMinute: number;
+}
+
+/** Create / recreate response: the only time the token is ever returned. */
+export interface ApiKeyTokenResponse {
+  token: string;
+  apiKey: ApiKeyResponse;
+}
+
+/** Body of `POST /admin/api-keys` and `PUT /admin/api-keys/{id}`. */
+export interface SaveApiKeyRequest extends ApiKeyScope {
+  name: string;
+  purpose?: string | null;
+  ownerUserId?: string | null;
+  expiresAt: string;
+  requestsPerMinute?: number | null;
+}
+
+export type ApiKeyRequestKind = 'New' | 'Renewal';
+export type ApiKeyRequestStatus = 'Pending' | 'Approved' | 'Denied' | 'Completed' | 'Expired';
+
+export interface ApiKeyRequestResponse extends ApiKeyScope {
+  id: string;
+  userCode: string;
+  kind: ApiKeyRequestKind;
+  status: ApiKeyRequestStatus;
+  name: string;
+  purpose: string | null;
+  description: string | null;
+  contextUrl: string | null;
+  requestedOwnerUserName: string | null;
+  requestsPerMinute: number | null;
+  lifetimeMinutes: number;
+  renewsApiKeyId: string | null;
+  requesterIp: string | null;
+  requesterUserAgent: string | null;
+  createdAt: string;
+  expiresAt: string;
+  decidedAt: string | null;
+  /** Final owner once approved. */
+  ownerUserId: string | null;
+}
+
+/** Body of `POST /admin/api-key-requests/{id}/approve`; every field overrides the request. */
+export interface ApproveApiKeyRequestBody {
+  ownerUserId?: string | null;
+  features?: ApiKeyFeatureMap;
+  allWorlds?: boolean;
+  worldIds?: string[];
+  lifetimeMinutes?: number;
+  requestsPerMinute?: number | null;
+  autoRenewMinutes?: number | null;
+}

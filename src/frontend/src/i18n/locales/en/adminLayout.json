@@ -7,6 +7,7 @@
     "reports": "Reports",
     "activity": "Activity",
     "economy": "Economy",
+    "apiKeys": "API keys",
     "tools": "Tools"
   },
   "noWorlds": "No worlds yet — create one",
