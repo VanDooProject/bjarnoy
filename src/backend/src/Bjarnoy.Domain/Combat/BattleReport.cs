@@ -79,6 +79,12 @@ public sealed record BattleReport
     public bool WasRaid { get; init; }
 
     /// <summary>
+    /// True when this battle was fought as an <see cref="Armies.ArmyMission.Siege"/> against a player's wall: the
+    /// defenders were the wall owner's armies standing on or beside it, and <see cref="Siege"/> is the strike on the wall.
+    /// </summary>
+    public bool WasWallSiege { get; init; }
+
+    /// <summary>
     /// The building-damage outcome (issue #40 phase 5), or <see langword="null"/>
     /// when no catapult damage happened this battle — the attacker lost, no
     /// catapults survived to fire, or the defender had no buildings to hit.
@@ -105,7 +111,8 @@ public sealed record BattleReport
         BattlePlan plan,
         int seed,
         SiegeOutcome? siege = null,
-        bool wasRaid = false)
+        bool wasRaid = false,
+        bool wasWallSiege = false)
     {
         ArgumentNullException.ThrowIfNull(attackerSent);
         ArgumentNullException.ThrowIfNull(plan);
@@ -148,6 +155,7 @@ public sealed record BattleReport
             Winner = plan.Winner,
             Seed = seed,
             WasRaid = wasRaid,
+            WasWallSiege = wasWallSiege,
             Siege = BattleReportSiegeLine.From(siege),
         };
     }

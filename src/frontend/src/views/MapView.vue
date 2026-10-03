@@ -69,7 +69,8 @@ import type { Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable, towerThreatAt } from '../lib/map/campRules';
-import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { isHostileWallTile } from '../lib/map/siegeRules';
+import { classifyUnitSelection, isSiegeUnit, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -380,6 +381,7 @@ function overlayTargets(selectedArmy: (typeof world.armies)[number] | undefined)
   if (draft) {
     add(draft.targetSettlementId, draft.mission);
     if (draft.mission === 'hunt') addCamp(draft.targetCamp ?? undefined);
+    if (draft.mission === 'siege') addCamp(draft.targetWall ?? undefined);
   }
   if (selectedArmy && !selectedArmy.movement?.isReturning) {
     add(selectedArmy.targetSettlementId, selectedArmy.mission);
@@ -839,19 +841,42 @@ function huntActions(tile: Tile): RingAction[] {
   ];
 }
 
+// Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is
+// neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. Needs a catapult or battering
+// ram at home; without one the bubble stays but is disabled with a hint, like the other army actions.
+function siegeActions(tile: Tile): RingAction[] {
+  if (
+    DEMO_MODE
+    || !tile.ownerId
+    || !isHostileWallTile(tile, world.model.rivalWallOwner(tile.q, tile.r), player.id, guild.friendlyUserIds)
+  ) {
+    return [];
+  }
+  const hasSiege = world.hud.garrison.some((g) => g.count > 0 && isSiegeUnit(g.unit, unitCatalogue.byType));
+  return [
+    {
+      id: 'siege',
+      label: t('hud.ringMenu.actions.siege'),
+      color: 'var(--rival)',
+      disabled: !hasSiege,
+      hint: hasSiege ? undefined : t('hud.ringMenu.actions.noSiegeUnitsAtHome'),
+    },
+  ];
+}
+
 const rootActions = computed<RingAction[]>(() => {
   const tile = selectedTile.value;
   if (!tile) return [];
   // World zoom only offers the army action: BuildingModal/TrainingModal and
   // the build fan only exist in the settlement template, so Build/Upgrade/
   // Info bubbles here would open nothing.
-  if (mode.value === 'world') return [...huntActions(tile), sendArmyAction(tile)];
+  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [{ id: 'info', label: t('hud.ringMenu.actions.info') }, sendArmyAction(tile)];
+    return [{ id: 'info', label: t('hud.ringMenu.actions.info') }, ...siegeActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
@@ -1302,6 +1327,10 @@ async function onRingSelect(id: string) {
       return;
     case 'hunt':
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'hunt' });
+      closeRing();
+      return;
+    case 'siege':
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'siege' });
       closeRing();
       return;
     case 'attack':

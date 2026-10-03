@@ -17,7 +17,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -93,6 +93,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid?>("TargetSettlementId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("TargetWallQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetWallR")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("TurnAroundAt")
                         .HasColumnType("timestamp with time zone");
@@ -237,6 +243,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("integer");
 
                     b.Property<bool>("WasRaid")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("WasWallSiege")
                         .HasColumnType("boolean");
 
                     b.Property<int>("Winner")

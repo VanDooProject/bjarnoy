@@ -156,7 +156,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt, siege.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -543,6 +543,12 @@ public static class ArmyEndpoints
             return true;
         }
 
+        if (string.Equals(value, "siege", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.Siege;
+            return true;
+        }
+
         mission = default;
         return false;
     }
@@ -603,6 +609,10 @@ public static class ArmyEndpoints
                     "The target hex is too close to an already-claimed settlement's border.",
                 DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
                 DispatchRejection.HuntRequiresLandUnits => "Only land units can hunt a wildlife camp; ships cannot.",
+                DispatchRejection.NoWallAtDestination => "No palisade or gate stands on the destination hex.",
+                DispatchRejection.CannotSiegeFriendlyWall => "That wall is your own or a friend's; only hostile walls can be besieged.",
+                DispatchRejection.SiegeRequiresSiegeUnit => "A siege needs at least one siege unit (catapult or ram).",
+                DispatchRejection.SiegeRequiresLandUnits => "Only land units can besiege a wall; ships cannot.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

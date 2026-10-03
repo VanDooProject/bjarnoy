@@ -3,6 +3,7 @@ import { coordKey, type AxialCoord } from '../hex/coords';
 import { findPath, hoursFrom, HALF_OPEN_END_COST, type PathContext } from './hexPath';
 import { palisadeRestrictions, type PalisadeWalls } from './palisadeMovement';
 import type { Terrain } from './types';
+import { WorldModel } from './WorldModel';
 
 const OWNER = 'owner-a';
 
@@ -99,5 +100,30 @@ describe('palisadeRestrictions', () => {
 
     const plain = new Map([...column(-3, 3)].map(([k, w]) => [k, { ...w, owner: 'someone-else' }] as const));
     expect(findPath(west, east, ctx(terrain, plain, OWNER, () => false, friends))).toBeNull();
+  });
+});
+
+describe('palisadeRestrictions with a rival wall from the walls read', () => {
+  it('opens a rival gate for its own friends only, and blocks a rival wall for everyone else', () => {
+    const rival = new WorldModel(20260825);
+    rival.applyRivalWalls([
+      { q: 3, r: 0, type: 'palisadegate', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
+      { q: 3, r: -1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
+      { q: 3, r: 1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
+    ]);
+    const walls = rival.standingPalisadeWalls();
+    const terrainAt = (): Terrain => 'grass';
+
+    const stranger = palisadeRestrictions(walls, terrainAt, () => false, 'someone-else')!;
+    const friend = palisadeRestrictions(walls, terrainAt, () => false, 'someone-else', new Set(['user-rival']))!;
+
+    const gate = { q: 3, r: 0 };
+    const wall = { q: 3, r: 1 };
+    // Every wall hex blocks; a gate is only open for its owner's friends.
+    expect(stranger.blocked!(gate)).toBe(true);
+    expect(stranger.friendlyGate!(gate)).toBe(false);
+    expect(friend.friendlyGate!(gate)).toBe(true);
+    expect(friend.friendlyGate!(wall)).toBe(false);
+    expect(friend.blocked!(wall)).toBe(true);
   });
 });

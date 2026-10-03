@@ -1,9 +1,12 @@
+using System.Security.Claims;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
@@ -52,6 +55,11 @@ public static class WorldEndpoints
         worlds.MapGet("/{worldId:guid}/camps", GetCamps)
             .WithName("GetWorldCamps")
             .WithSummary("Every wildlife camp's live state (garrison, calm, clears, loot left) at the world's game time, optionally for one island.");
+
+        worlds.MapGet("/{worldId:guid}/walls", GetWalls)
+            .WithName("GetWorldWalls")
+            .WithSummary("Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded).")
+            .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
@@ -250,6 +258,56 @@ public static class WorldEndpoints
         var realm = await campService.LoadRealmAsync(worldId, cancellationToken);
 
         IReadOnlyList<CampStateResponse> response = [.. camps.Select(c => CampStateResponse.From(c, now, realm))];
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The standing wall hexes (level 1 or more) of the world's rival settlements, so a live client can draw, hit-test and plan routes
+    /// around walls it never fetched a settlement for. Gated exactly like <c>GET /worlds/{id}/settlements</c> (<c>SettlementEndpoints.ListForWorld</c>):
+    /// a settlement's walls are listed only when its centre hex is in the caller's explored area, and the caller's own settlements are
+    /// left out (their walls already ship in their own settlement read). No resolvable realm or world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<WallResponse>>> GetWalls(
+        Guid worldId,
+        HttpContext httpContext,
+        GameDbContext db,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
+        }
+
+        var idClaim = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
+
+        var rows = (await WorldPalisades.ListStandingAsync(db, worldId, cancellationToken))
+            .Where(w => w.OwnerId != realm.OwnerId && !(callerUserId is not null && w.UserId == callerUserId))
+            .ToList();
+
+        var explored = await exploredArea.ExploredAmongAsync(
+            area, rows.Select(w => new HexCoord(w.CentreQ, w.CentreR)).Distinct(), cancellationToken);
+
+        IReadOnlyList<WallResponse> response =
+        [
+            .. rows
+                .Where(w => explored.Contains(new HexCoord(w.CentreQ, w.CentreR)))
+                .Select(w => new WallResponse(
+                    w.Q, w.R, w.Type.ToWireName(), w.Level, w.SettlementId,
+                    w.UserId == SystemUserIds.Abandoned ? null : w.UserId)),
+        ];
+
         return TypedResults.Ok(response);
     }
 

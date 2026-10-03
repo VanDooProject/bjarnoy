@@ -38,6 +38,34 @@ public class SiegeResolverTests
     }
 
     [Fact]
+    public void Siege_power_sums_over_catapults_and_rams()
+    {
+        IReadOnlyList<UnitStack> survivors =
+        [
+            new UnitStack(UnitType.Catapult, 2),
+            new UnitStack(UnitType.Ram, 3),
+            new UnitStack(UnitType.Axeman, 50),
+        ];
+
+        Assert.Equal(200, SiegeResolver.TotalSiegePower(survivors));
+
+        // 200 siege power -> 10 levels: a Longhouse of level 5 is razed by the mixed army.
+        var outcome = SiegeResolver.Resolve(survivors, Buildings(), Longhouse, seed: 1);
+        Assert.True(outcome.Applied);
+        Assert.Equal(0, outcome.LevelAfter);
+    }
+
+    [Fact]
+    public void Rams_alone_siege_a_building()
+    {
+        var outcome = SiegeResolver.Resolve([new UnitStack(UnitType.Ram, 5)], Buildings(), FarmHex, seed: 1);
+
+        Assert.True(outcome.Applied);
+        Assert.Equal(3, outcome.LevelBefore);
+        Assert.Equal(0, outcome.LevelAfter);
+    }
+
+    [Fact]
     public void Zero_surviving_catapults_does_zero_damage()
     {
         var survivors = new[] { new UnitStack(UnitType.Axeman, 50) }; // no catapults at all

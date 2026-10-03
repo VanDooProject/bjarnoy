@@ -2100,3 +2100,65 @@ describe('WorldModel palisade and gate', () => {
     expect(model.standingPalisadeWalls().size).toBe(1);
   });
 });
+
+describe('WorldModel.applyRivalWalls', () => {
+  const rivalWall = (q: number, r: number, over: Partial<{ type: string; level: number; ownerUserId: string | null }> = {}) => ({
+    q, r, type: 'palisade', level: 2, settlementId: 'rival-1', ownerUserId: 'user-rival' as string | null, ...over,
+  });
+
+  it('puts the walls on their tiles like own walls, with the owner kept per hex', () => {
+    const model = new WorldModel(20260825);
+    model.applyRivalWalls([rivalWall(5, 5), rivalWall(5, 6, { type: 'palisadegate', level: 1 }), rivalWall(5, 7, { ownerUserId: null })]);
+
+    expect(model.getTile(5, 5)).toMatchObject({ buildingType: 'palisade', buildingLevel: 2, ownerId: 'rival-1' });
+    expect(model.getTile(5, 6)).toMatchObject({ buildingType: 'palisadegate', buildingLevel: 1 });
+    expect(model.rivalWallOwner(5, 5)).toBe('user-rival');
+    expect(model.rivalWallOwner(5, 7)).toBeNull();
+    expect(model.rivalWallOwner(9, 9)).toBeUndefined();
+    // The piece a wall draws follows its wall neighbours, rival or not.
+    expect(model.wallNeighbourFlags({ q: 5, r: 6 }).filter(Boolean)).toHaveLength(2);
+  });
+
+  it('replaces the previous set: moved walls follow and walls gone server-side disappear', () => {
+    const model = new WorldModel(20260825);
+    model.applyRivalWalls([rivalWall(5, 5), rivalWall(5, 6)]);
+    model.applyRivalWalls([rivalWall(5, 6, { level: 3 })]);
+
+    expect(model.getTile(5, 5).buildingType).toBeUndefined();
+    expect(model.getTile(5, 5).buildingLevel).toBeUndefined();
+    expect(model.rivalWallOwner(5, 5)).toBeUndefined();
+    expect(model.getTile(5, 6).buildingLevel).toBe(3);
+    expect([...model.standingPalisadeWalls().keys()]).toEqual(['5,6']);
+
+    model.applyRivalWalls([]);
+    expect(model.standingPalisadeWalls().size).toBe(0);
+  });
+
+  it('keys a rival wall to its account (or its settlement when anonymous) for the route rules', () => {
+    const model = new WorldModel(20260825);
+    model.applyRivalWalls([rivalWall(5, 5, { type: 'palisadegate' }), rivalWall(5, 6, { ownerUserId: null })]);
+
+    const standing = model.standingPalisadeWalls();
+    expect(standing.get('5,5')).toEqual({ gate: true, owner: 'user-rival' });
+    expect(standing.get('5,6')).toEqual({ gate: false, owner: 'rival-1' });
+  });
+
+  it('never overwrites a hex one of the player\'s own settlements renders, nor clears it', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const own = { q: settlement.q + 1, r: settlement.r };
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [{ ...own, type: 'palisade', level: 1 }],
+    });
+
+    model.applyRivalWalls([rivalWall(own.q, own.r)]);
+    model.applyRivalWalls([]);
+
+    expect(model.getTile(own.q, own.r)).toMatchObject({ buildingType: 'palisade', ownerId: settlement.id });
+    expect(model.rivalWallOwner(own.q, own.r)).toBeUndefined();
+  });
+});

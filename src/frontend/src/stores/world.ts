@@ -24,10 +24,12 @@ import type {
 import { DEMO_MODE } from '../config';
 import { useAuthStore } from './auth';
 import { usePlayerStore } from './player';
+import { useUnitCatalogueStore } from './unitCatalogue';
 import type { AxialCoord } from '../lib/hex/coords';
 import {
   buildAttackDispatchRequest,
   buildHuntDispatchRequest,
+  buildSiegeDispatchRequest,
   buildFieldOrderRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
@@ -311,9 +313,11 @@ export const useWorldStore = defineStore('world', {
       // phase 4) is shaped identically to 'attack' — a target settlement plus
       // optional waypoints — see `buildSupportDispatchRequest`.
       // 'hunt' targets a wildlife camp's hex (`targetCamp`); the route holds only intermediate waypoints.
-      mission: 'move' | 'attack' | 'support' | 'hunt';
+      // 'siege' targets another player's palisade/gate hex (`targetWall`), also with waypoints only in `route`.
+      mission: 'move' | 'attack' | 'support' | 'hunt' | 'siege';
       targetSettlementId: string | null;
       targetCamp: { q: number; r: number } | null;
+      targetWall: { q: number; r: number } | null;
       // Issue #40 phase 5: the coordinate of a building within the target
       // settlement a Catapult-carrying Attack would prefer to hit — a
       // *preference*, not a guarantee (see `buildAttackDispatchRequest`'s own
@@ -1215,8 +1219,14 @@ export const useWorldStore = defineStore('world', {
     },
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
-      const summaries = await api.listSettlements(this.worldId, this.ownerId ?? undefined);
+      // Rival walls ride the same cadence: the settlement list is data-only, so this is the only way the client learns where another
+      // player's palisades stand (to draw them, offer Siege on them and route around them). A failed walls read keeps the last set.
+      const [summaries, walls] = await Promise.all([
+        api.listSettlements(this.worldId, this.ownerId ?? undefined),
+        api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
+      ]);
       this.registerSettlementSummaries(summaries);
+      if (walls) this.model.applyRivalWalls(walls);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1451,6 +1461,7 @@ export const useWorldStore = defineStore('world', {
         mission: 'move',
         targetSettlementId: null,
         targetCamp: null,
+        targetWall: null,
         targetBuildingCoord: null,
       };
       this.dispatchTargetBuildings = null;
@@ -1468,12 +1479,15 @@ export const useWorldStore = defineStore('world', {
      * to fill in. Units are still picked manually (no default selection);
      * this only sets the mission and destination the tap already implied.
      */
-    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {}) {
+    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support' | 'hunt' | 'siege'; targetSettlementId?: string } = {}) {
       this.startDispatch();
       if (!this.dispatchDraft) return;
       if (opts.mission === 'hunt') {
         this.dispatchDraft.mission = 'hunt';
         this.dispatchDraft.targetCamp = { q: coord.q, r: coord.r };
+      } else if (opts.mission === 'siege') {
+        this.dispatchDraft.mission = 'siege';
+        this.dispatchDraft.targetWall = { q: coord.q, r: coord.r };
       } else if (opts.mission && opts.targetSettlementId) {
         this.dispatchDraft.mission = opts.mission;
         this.setDispatchTarget(opts.targetSettlementId);
@@ -1482,12 +1496,13 @@ export const useWorldStore = defineStore('world', {
       }
     },
     /** Switching mission clears the plotted route/target — a move destination and an attack's/support's waypoint-only route aren't interchangeable, and a stale target settlement from a previous draft shouldn't silently carry over. */
-    setDispatchMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
+    setDispatchMission(mission: 'move' | 'attack' | 'support' | 'hunt' | 'siege') {
       if (!this.dispatchDraft) return;
       this.dispatchDraft.mission = mission;
       this.dispatchDraft.route = [];
       this.dispatchDraft.targetSettlementId = null;
       this.dispatchDraft.targetCamp = null;
+      this.dispatchDraft.targetWall = null;
       this.dispatchDraft.targetBuildingCoord = null;
       this.dispatchDraft.error = null;
     },
@@ -1622,7 +1637,10 @@ export const useWorldStore = defineStore('world', {
             ? buildSupportDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
             : draft.mission === 'hunt'
               ? buildHuntDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetCamp)
-              : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+              : draft.mission === 'siege'
+                ? buildSiegeDispatchRequest(
+                    draft.unitCounts, draft.route, draft.provisions, draft.targetWall, useUnitCatalogueStore().byType)
+                : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
@@ -1630,6 +1648,10 @@ export const useWorldStore = defineStore('world', {
           draft.error = i18n.global.t('common.errors.clickMapForDestination');
         } else if (draft.mission === 'hunt' && !draft.targetCamp) {
           draft.error = i18n.global.t('common.errors.chooseCampToHunt');
+        } else if (draft.mission === 'siege' && !draft.targetWall) {
+          draft.error = i18n.global.t('common.errors.chooseWallToSiege');
+        } else if (draft.mission === 'siege' && Object.values(draft.unitCounts).some((c) => c > 0)) {
+          draft.error = i18n.global.t('common.errors.siegeNeedsSiegeUnit');
         } else if ((draft.mission === 'attack' || draft.mission === 'support') && !draft.targetSettlementId) {
           draft.error = i18n.global.t('common.errors.chooseSettlementFor', { mission: draft.mission });
         } else {

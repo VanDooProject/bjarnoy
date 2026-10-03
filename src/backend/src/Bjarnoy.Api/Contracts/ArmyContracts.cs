@@ -23,7 +23,8 @@ public sealed record HexPointRequest(int Q, int R)
 /// <param name="Destination">
 /// Required for a <c>"move"</c> mission (the default); ignored for
 /// <c>"attack"</c>/<c>"support"</c>/<c>"raid"</c>, whose destination is always
-/// the target settlement's own hex.
+/// the target settlement's own hex. For <c>"hunt"</c> it is the wildlife camp's hex, for <c>"siege"</c> the palisade or gate
+/// hex to breach (the army marches to a passable hex next to it).
 /// </param>
 /// <param name="Provisions">
 /// Food to load onto the army, capped by what its units can carry and what
@@ -35,8 +36,8 @@ public sealed record HexPointRequest(int Q, int R)
 /// <param name="Mission">
 /// <c>"move"</c> (default), <c>"attack"</c>, <c>"support"</c>, or
 /// <c>"raid"</c> (issue #40 phase 7 — like <c>"attack"</c>, but the fight
-/// breaks off early with reduced losses on both sides) — see
-/// <see cref="ArmyMission"/>.
+/// breaks off early with reduced losses on both sides), <c>"hunt"</c> or <c>"siege"</c> (land units with at least one siege
+/// unit against another player's palisade) — see <see cref="ArmyMission"/>.
 /// </param>
 /// <param name="TargetSettlementId">
 /// Required when <paramref name="Mission"/> is <c>"attack"</c>/<c>"raid"</c>
@@ -253,7 +254,7 @@ public sealed record BattleReportSiegeResponse(
 
 /// <summary>A resolved battle (issue #40 phase 3), as read from either side's inbox.</summary>
 /// <param name="Mission">
-/// <c>"attack"</c> or <c>"raid"</c> (issue #40 phase 7) — which mission fought
+/// <c>"attack"</c>, <c>"raid"</c> (issue #40 phase 7) or <c>"siege"</c> (a wall siege) — which mission fought
 /// this battle; see <see cref="Domain.Armies.ArmyMission.Raid"/>.
 /// </param>
 public sealed record BattleReportResponse(
@@ -283,7 +284,7 @@ public sealed record BattleReportResponse(
             domain.AttackerArmyId,
             domain.AttackerSettlementId,
             domain.DefenderSettlementId,
-            domain.WasRaid ? "raid" : "attack",
+            domain.WasWallSiege ? "siege" : domain.WasRaid ? "raid" : "attack",
             domain.Winner.ToString().ToLowerInvariant(),
             domain.AttackPower,
             domain.DefensePower,

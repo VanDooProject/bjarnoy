@@ -40,6 +40,7 @@
     "berserker": "Berserker",
     "provisioner": "Provisioner",
     "catapult": "Catapult",
+    "ram": "Battering ram",
     "karve": "Karve",
     "longship": "Longship",
     "settlercrew": "Settler Crew"
@@ -92,7 +93,8 @@
     "support": "Support",
     "raid": "Raid",
     "found": "Found settlement",
-    "hunt": "Hunt"
+    "hunt": "Hunt",
+    "siege": "Siege"
   },
   "runes": {
     "types": {

@@ -50,11 +50,32 @@ public static class WorldPalisades
             areFriends);
     }
 
+    /// <summary>One standing wall hex with its settlement's identity and centre, for <see cref="ListStandingAsync"/>.</summary>
+    public sealed record StandingWallRow(
+        int Q, int R, BuildingType Type, int Level, Guid SettlementId, Guid UserId, string OwnerId, int CentreQ, int CentreR);
+
+    /// <summary>Every standing wall hex (level 1 or more) of <paramref name="worldId"/> with who owns it, for the world-wide walls read.</summary>
+    public static async Task<IReadOnlyList<StandingWallRow>> ListStandingAsync(
+        GameDbContext db, Guid worldId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return await db.PlacedBuildings
+            .AsNoTracking()
+            .Where(b => b.Settlement!.WorldId == worldId
+                && (b.Type == BuildingType.Palisade || b.Type == BuildingType.PalisadeGate)
+                && b.Level >= 1)
+            .OrderBy(b => b.SettlementId).ThenBy(b => b.Q).ThenBy(b => b.R)
+            .Select(b => new StandingWallRow(
+                b.Q, b.R, b.Type, b.Level, b.SettlementId, b.Settlement!.UserId, b.Settlement.OwnerId,
+                b.Settlement.CentreQ, b.Settlement.CentreR))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Who a gate also opens for besides its owner: two accounts are friends when they are in the same guild or in guilds with an active
     /// peace treaty. An anonymous settlement's key (the settlement itself) is in no guild and so nobody's friend.
     /// </summary>
-    private static async Task<Func<Guid, Guid, bool>> FriendsAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
+    public static async Task<Func<Guid, Guid, bool>> FriendsAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
     {
         var memberships = await db.GuildMemberships
             .AsNoTracking()

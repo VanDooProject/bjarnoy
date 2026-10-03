@@ -70,6 +70,15 @@ public enum ArmyMission
     /// see <see cref="Army.SettleHuntArrival"/>.
     /// </summary>
     Hunt = 5,
+
+    /// <summary>
+    /// Travel to a passable hex next to another player's palisade or gate (<see cref="Army.TargetWallCoord"/>), fight
+    /// the wall owner's armies standing on or beside it, and, if the army survives, strike the wall with its surviving
+    /// siege units (<c>docs/design/endgame.md</c>, "Breaching walls"). Land units, at least one siege unit. Like
+    /// <see cref="Attack"/> there is no standing at the destination: the army walks home at once, see
+    /// <see cref="Army.SettleSiegeArrival"/>.
+    /// </summary>
+    Siege = 6,
 }
 
 /// <summary>
@@ -155,6 +164,13 @@ public sealed record Army
     /// <see langword="null"/> for every other mission.
     /// </summary>
     public HexCoord? TargetCampCoord { get; init; }
+
+    /// <summary>
+    /// The palisade or gate hex this <see cref="ArmyMission.Siege"/> army was sent to breach. The route ends on a
+    /// passable neighbour (<see cref="SiegeRouteDestination"/>), never on the wall hex itself. <see langword="null"/>
+    /// for every other mission.
+    /// </summary>
+    public HexCoord? TargetWallCoord { get; init; }
 
     /// <summary>
     /// Resources looted from a won <see cref="ArmyMission.Attack"/> battle,
@@ -282,7 +298,9 @@ public sealed record Army
         Func<HexCoord, bool>? isWideRiver = null,
         IGiantIndex? giants = null,
         WallRules? walls = null,
-        HexCoord? targetCampCoord = null)
+        HexCoord? targetCampCoord = null,
+        HexCoord? targetWallCoord = null,
+        bool targetWallFriendly = false)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -341,6 +359,32 @@ public sealed record Army
             if (targetCampCoord is null)
             {
                 return DispatchDecision.Rejected(DispatchRejection.NoCampAtDestination);
+            }
+        }
+
+        if (mission == ArmyMission.Siege)
+        {
+            // Walls are breached on land with siege engines; the wall itself is looked up by the caller, which passes
+            // its hex as targetWallCoord only when a standing palisade or gate is there, and flags a wall of the
+            // sender's own or a friend's.
+            if (isFleet)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.SiegeRequiresLandUnits);
+            }
+
+            if (!normalisedRequest.Any(s => UnitCatalogue.Get(s.Type).SiegePower > 0))
+            {
+                return DispatchDecision.Rejected(DispatchRejection.SiegeRequiresSiegeUnit);
+            }
+
+            if (targetWallCoord is null)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.NoWallAtDestination);
+            }
+
+            if (targetWallFriendly)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.CannotSiegeFriendlyWall);
             }
         }
 
@@ -530,6 +574,7 @@ public sealed record Army
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null,
             TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
+            TargetWallCoord = mission == ArmyMission.Siege ? targetWallCoord : null,
         };
 
         return DispatchDecision.Accept(settlementDecision.Settlement!, army);
@@ -775,6 +820,84 @@ public sealed record Army
             Provisions = provisionsAtBattle,
             Loot = plan.Loot,
         };
+    }
+
+    /// <summary>
+    /// The army after a siege at <paramref name="battleInstant"/> (the outbound leg's arrival): the
+    /// <paramref name="survivors"/> are put straight onto the precomputed return leg, retreat-immune like
+    /// <see cref="SettleArrival"/>'s survivors, with the provisions burned on the way out already deducted. A siege
+    /// carries no loot. Returns <see langword="null"/> when nobody survived.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The army is not on its outbound leg.</exception>
+    public Army? SettleSiegeArrival(IReadOnlyList<UnitStack> survivors, DateTimeOffset battleInstant)
+    {
+        ArgumentNullException.ThrowIfNull(survivors);
+
+        if (Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
+        {
+            throw new InvalidOperationException("A siege can only be settled on the outbound leg.");
+        }
+
+        if (survivors.Sum(s => s.Count) == 0)
+        {
+            return null;
+        }
+
+        var movement = inTransit.Movement;
+        var elapsedOutboundHours = (battleInstant - movement.DepartedAt).TotalHours;
+        var provisionsAtBattle = Math.Max(0, Provisions - (TotalUpkeepPerHour * elapsedOutboundHours));
+
+        var returning = new Movement.Movement
+        {
+            DepartedAt = battleInstant,
+            Path = movement.ReturnPath,
+            CumulativeHours = movement.ReturnCumulativeHours,
+            ReturnPath = movement.ReturnPath,
+            ReturnCumulativeHours = movement.ReturnCumulativeHours,
+            TurnAroundAt = battleInstant,
+            IsReturning = true,
+            RetreatImmune = true,
+        };
+
+        return this with
+        {
+            Stacks = survivors,
+            Location = new ArmyLocation.InTransit(returning),
+            Provisions = provisionsAtBattle,
+        };
+    }
+
+    /// <summary>
+    /// The hex a <see cref="ArmyMission.Siege"/> route ends on: the passable land hex next to <paramref name="wall"/> with
+    /// the shortest route from <paramref name="from"/> (ties by neighbour order, so the pick is deterministic). The wall hex
+    /// itself blocks, and so does every other wall hex. Falls back to the wall's own hex when no neighbour can be reached, so
+    /// the dispatch is refused as unreachable.
+    /// </summary>
+    public static HexCoord SiegeRouteDestination(
+        HexCoord wall, HexCoord from, Func<HexCoord, Terrain> terrainAt,
+        Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null, WallRules? walls = null)
+    {
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        HexCoord? best = null;
+        var bestLength = int.MaxValue;
+        foreach (var neighbour in wall.Neighbours())
+        {
+            if (!terrainAt(neighbour).IsTraversable(isLandUnit: true) || walls?.Blocked(neighbour) == true)
+            {
+                continue;
+            }
+
+            var path = HexPathfinder.FindPath(
+                from, neighbour, terrainAt, true, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+            if (path is { Count: > 0 } && path.Count < bestLength)
+            {
+                best = neighbour;
+                bestLength = path.Count;
+            }
+        }
+
+        return best ?? wall;
     }
 
     /// <summary>
@@ -1785,6 +1908,18 @@ public enum DispatchRejection
 
     /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch included ships; only land units hunt.</summary>
     HuntRequiresLandUnits,
+
+    /// <summary>A <see cref="ArmyMission.Siege"/> dispatch's destination hex holds no standing palisade or gate.</summary>
+    NoWallAtDestination,
+
+    /// <summary>A <see cref="ArmyMission.Siege"/> dispatch targets a wall of the sender's own or of a friend (same guild, or a guild at peace).</summary>
+    CannotSiegeFriendlyWall,
+
+    /// <summary>A <see cref="ArmyMission.Siege"/> dispatch carries no siege unit (catapult or ram).</summary>
+    SiegeRequiresSiegeUnit,
+
+    /// <summary>A <see cref="ArmyMission.Siege"/> dispatch included ships; only land units breach walls.</summary>
+    SiegeRequiresLandUnits,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

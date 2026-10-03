@@ -21,7 +21,9 @@
     "clickMapForDestination": "Klicke zuerst auf die Karte, um ein Ziel festzulegen.",
     "chooseSettlementFor": "Wähle zuerst eine Siedlung zum {mission}.",
     "fieldOrderPremiumRequired": "Premium erforderlich, um mehr als einen Stopp zu planen — entferne den zusätzlichen Stopp oder führe ein Upgrade durch.",
-    "chooseCampToHunt": "Wähle zuerst ein Wildtierlager zum Jagen."
+    "chooseCampToHunt": "Wähle zuerst ein Wildtierlager zum Jagen.",
+    "chooseWallToSiege": "Wähle zuerst eine feindliche Mauer zum Belagern.",
+    "siegeNeedsSiegeUnit": "Eine Belagerung braucht mindestens ein Katapult oder einen Rammbock."
   },
   "localeSwitcher": {
     "label": "Sprache",

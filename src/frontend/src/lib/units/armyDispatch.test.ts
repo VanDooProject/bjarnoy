@@ -5,6 +5,10 @@ import {
   buildAttackDispatchRequest,
   buildFieldOrderRequest,
   buildHuntDispatchRequest,
+  buildSiegeDispatchRequest,
+  hasSiegeUnitSelected,
+  isSiegeMissionUnit,
+  isSiegeUnit,
   isHuntUnit,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
@@ -141,6 +145,10 @@ describe('hasCatapultSelected', () => {
 
   it('is true when at least one catapult is selected', () => {
     expect(hasCatapultSelected({ spearman: 5, catapult: 2 })).toBe(true);
+  });
+
+  it('is true for a battering ram too: rams join the building siege of an attack', () => {
+    expect(hasCatapultSelected({ spearman: 5, ram: 1 })).toBe(true);
   });
 });
 
@@ -421,5 +429,53 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('spearman', byType)).toBe(true);
     expect(isHuntUnit('longship', byType)).toBe(false);
     expect(isHuntUnit('unknown', byType)).toBe(false);
+  });
+});
+
+describe('buildSiegeDispatchRequest', () => {
+  const byType = {
+    spearman: unit({ type: 'spearman', class: 'infantry' }),
+    ram: unit({ type: 'ram', class: 'siege' }),
+    catapult: unit({ type: 'catapult', class: 'siege' }),
+    longship: unit({ type: 'longship', class: 'ship' }),
+  };
+
+  it('returns null without units, a wall target or a siege unit', () => {
+    expect(buildSiegeDispatchRequest({ ram: 0 }, [], 10, { q: 1, r: 2 }, byType)).toBeNull();
+    expect(buildSiegeDispatchRequest({ ram: 2 }, [], 10, null, byType)).toBeNull();
+    expect(buildSiegeDispatchRequest({ spearman: 9 }, [], 10, { q: 1, r: 2 }, byType)).toBeNull();
+  });
+
+  it('sends the wall hex as the destination with a siege mission and the route as waypoints', () => {
+    expect(
+      buildSiegeDispatchRequest({ ram: 2, spearman: 10, catapult: 0 }, [{ q: 0, r: 1 }], 40, { q: 4, r: -2 }, byType),
+    ).toEqual({
+      units: [
+        { unit: 'ram', count: 2 },
+        { unit: 'spearman', count: 10 },
+      ],
+      waypoints: [{ q: 0, r: 1 }],
+      destination: { q: 4, r: -2 },
+      provisions: 40,
+      mission: 'siege',
+    });
+    expect(buildSiegeDispatchRequest({ catapult: 1 }, [], 0, { q: 4, r: -2 }, byType)?.waypoints).toBeUndefined();
+  });
+
+  it('classifies siege engines, and lets only land units join a siege', () => {
+    expect(isSiegeUnit('ram', byType)).toBe(true);
+    expect(isSiegeUnit('catapult', byType)).toBe(true);
+    expect(isSiegeUnit('spearman', byType)).toBe(false);
+    expect(isSiegeUnit('unknown', byType)).toBe(false);
+    expect(hasSiegeUnitSelected({ spearman: 4, ram: 1 }, byType)).toBe(true);
+    expect(hasSiegeUnitSelected({ spearman: 4, ram: 0 }, byType)).toBe(false);
+    expect(isSiegeMissionUnit('ram', byType)).toBe(true);
+    expect(isSiegeMissionUnit('longship', byType)).toBe(false);
+  });
+
+  it('labels a besieging army', () => {
+    expect(armyStatusLabel({ atHome: false, supporting: false, movement: { isReturning: false }, mission: 'siege' })).toBe(
+      'Besieging',
+    );
   });
 });
