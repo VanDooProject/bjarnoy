@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Armies;
@@ -22,7 +23,8 @@ public static class ArmyEndpoints
 
         var settlements = app.MapGroup("/api/v1/settlements")
             .WithApiVersionSet(versionSet)
-            .WithTags("Armies");
+            .WithTags("Armies")
+            .WithApiKeyFeature(ApiKeyFeature.Armies);
 
         settlements.MapPost("/{settlementId:guid}/armies", Dispatch)
             .WithName("DispatchArmy")
@@ -53,7 +55,8 @@ public static class ArmyEndpoints
 
         var armies = app.MapGroup("/api/v1/armies")
             .WithApiVersionSet(versionSet)
-            .WithTags("Armies");
+            .WithTags("Armies")
+            .WithApiKeyFeature(ApiKeyFeature.Armies);
 
         armies.MapGet("/{armyId:guid}", Get)
             .WithName("GetArmy")
@@ -88,7 +91,8 @@ public static class ArmyEndpoints
 
         var reports = app.MapGroup("/api/v1")
             .WithApiVersionSet(versionSet)
-            .WithTags("Battle reports");
+            .WithTags("Battle reports")
+            .WithApiKeyFeature(ApiKeyFeature.Armies);
 
         reports.MapGet("/reports/{reportId:guid}", GetReport)
             .WithName("GetBattleReport")

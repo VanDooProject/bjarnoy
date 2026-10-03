@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Guilds;
@@ -26,7 +27,8 @@ public static class GuildEndpoints
         var worlds = app.MapGroup("/api/v1/worlds")
             .WithApiVersionSet(versionSet)
             .WithTags("Guilds")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .WithApiKeyFeature(ApiKeyFeature.Guilds);
 
         worlds.MapPost("/{worldId:guid}/guilds", Create)
             .WithName("CreateGuild")
@@ -41,7 +43,8 @@ public static class GuildEndpoints
         var guilds = app.MapGroup("/api/v1/guilds")
             .WithApiVersionSet(versionSet)
             .WithTags("Guilds")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .WithApiKeyFeature(ApiKeyFeature.Guilds);
 
         guilds.MapGet("/{guildId:guid}", Get)
             .WithName("GetGuild")
@@ -117,7 +120,8 @@ public static class GuildEndpoints
         var treaties = app.MapGroup("/api/v1/treaties")
             .WithApiVersionSet(versionSet)
             .WithTags("Guilds")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .WithApiKeyFeature(ApiKeyFeature.Guilds);
 
         treaties.MapPost("/{treatyId:guid}/accept", AcceptTreaty)
             .WithName("AcceptGuildTreaty")

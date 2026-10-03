@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -29,7 +30,9 @@ public sealed class UserActivityEndpointFilter : IEndpointFilter
         ArgumentNullException.ThrowIfNull(next);
 
         var user = context.HttpContext.User;
-        if (user.Identity?.IsAuthenticated == true)
+
+        // A debug API key acts as its owner but must not make that person look online: no activity is recorded for it.
+        if (user.Identity?.IsAuthenticated == true && !user.IsApiKey())
         {
             var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
             if (Guid.TryParse(idClaim, out var userId))

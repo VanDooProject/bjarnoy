@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
@@ -27,7 +28,8 @@ public static class SettlerEndpoints
 
         var worlds = app.MapGroup("/api/v1/worlds")
             .WithApiVersionSet(versionSet)
-            .WithTags("Settlers");
+            .WithTags("Settlers")
+            .WithApiKeyFeature(ApiKeyFeature.Worlds);
 
         worlds.MapGet("/{worldId:guid}/renown", GetOwnRenown)
             .WithName("GetOwnRenown")

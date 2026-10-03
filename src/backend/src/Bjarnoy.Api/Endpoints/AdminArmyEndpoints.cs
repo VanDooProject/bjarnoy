@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
@@ -28,7 +29,8 @@ public static class AdminArmyEndpoints
             .WithApiVersionSet(versionSet)
             .HasApiVersion(new ApiVersion(1, 0))
             .WithTags("Admin", "Armies")
-            .RequireAuthorization("Admin");
+            .RequireAuthorization("Admin")
+            .WithApiKeyFeature(ApiKeyFeature.AdminArmies);
 
         armies.MapGet("/", List)
             .WithName("AdminListArmies")

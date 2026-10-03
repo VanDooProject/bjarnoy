@@ -1,6 +1,7 @@
 using System.Text;
 using Asp.Versioning;
 using Bjarnoy.Api.Auth;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Endpoints;
 using Bjarnoy.Api.Hosting;
 using Bjarnoy.Api.Json;
@@ -10,11 +11,13 @@ using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
 using Bjarnoy.ServiceDefaults;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using ApiKeyOptions = Bjarnoy.Api.Auth.ApiKeys.ApiKeyOptions;
 
 // Migrator mode: this executable applies (or reports on) migrations and exits,
 // so a deployment can bring the schema forward with the exact image it is about
@@ -133,7 +136,28 @@ if (migrationCommand == MigrationCommandKind.None)
         ?? throw new InvalidOperationException(
             $"{JwtOptions.SectionName}:SigningKey is required to sign access tokens.");
 
-    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    // Debug API keys (docs/tech/api-keys.md): a "bjk_..." token authenticates as the key's owner, narrowed by
+    // ApiKeyScopeMiddleware. The default scheme is a policy scheme that picks per request, so every existing
+    // [Authorize]/RequireAuthorization endpoint accepts either credential without knowing about keys.
+    builder.Services.AddOptions<ApiKeyOptions>()
+        .Bind(builder.Configuration.GetSection(ApiKeyOptions.SectionName))
+        .ValidateOnStart();
+    builder.Services.AddSingleton<ApiKeyRateLimiter>();
+    builder.Services.AddScoped<ApiKeyWorldResolver>();
+    builder.Services.AddScoped<ApiKeyService>();
+    builder.Services.AddScoped<ApiKeyRequestService>();
+
+    const string jwtOrApiKeyScheme = "JwtOrApiKey";
+    builder.Services.AddAuthentication(jwtOrApiKeyScheme)
+        .AddPolicyScheme(jwtOrApiKeyScheme, "JWT or API key", options =>
+        {
+            options.ForwardDefaultSelector = context =>
+                ApiKeyAuthenticationHandler.ExtractToken(context.Request) is not null
+                    ? ApiKeyAuthenticationHandler.SchemeName
+                    : JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
+            ApiKeyAuthenticationHandler.SchemeName, configureOptions: null)
         .AddJwtBearer(options =>
         {
             options.TokenValidationParameters = new TokenValidationParameters
@@ -296,6 +320,10 @@ forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseAuthentication();
+
+// Narrows a request authenticated with an API key to its features, worlds and rate limit (and 401s a key that
+// failed authentication). A no-op for every other request.
+app.UseMiddleware<ApiKeyScopeMiddleware>();
 app.UseAuthorization();
 
 // Development always; otherwise whatever DiagnosticsOptions decided — which

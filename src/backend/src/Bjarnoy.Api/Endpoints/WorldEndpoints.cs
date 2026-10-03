@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
@@ -23,7 +24,8 @@ public static class WorldEndpoints
         var worlds = app.MapGroup("/api/v1/worlds")
             .WithApiVersionSet(versionSet)
             .HasApiVersion(new ApiVersion(1, 0))
-            .WithTags("Worlds");
+            .WithTags("Worlds")
+            .WithApiKeyFeature(ApiKeyFeature.Worlds);
 
         worlds.MapGet("/", ListWorlds)
             .WithName("ListWorlds")
