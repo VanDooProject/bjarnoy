@@ -538,12 +538,22 @@ public sealed class WorldService(
         Guid? worldId = null,
         CancellationToken cancellationToken = default)
     {
-        var islands = await _dbContext.Islands
+        var islandRows = await _dbContext.Islands
             .AsNoTracking()
             .Where(i => !i.IsWasted && (worldId == null || i.WorldId == worldId))
-            .Select(i => new { i.Id, i.WorldId, i.StartPositions })
+            .Select(i => new { i.Id, i.WorldId, i.StartPositions, i.RiverTiles })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        // Stored plots on a river hex are never handed out (IslandEntity.FoundableStartPositions), so they are no capacity.
+        var islands = islandRows
+            .Select(i => new
+            {
+                i.Id,
+                i.WorldId,
+                StartPositions = IslandEntity.WithoutRiverHexes(i.StartPositions, i.RiverTiles),
+            })
+            .ToList();
 
         var settlements = await _dbContext.Settlements
             .AsNoTracking()

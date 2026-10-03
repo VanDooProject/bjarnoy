@@ -110,6 +110,41 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_stored_start_position_on_a_river_hex_cannot_be_founded_on()
+    {
+        // Worlds generated before the generator skipped rivers keep such plots in islands.StartPositions; founding
+        // there leaves every land dispatch without a way home, so the founding path filters them out.
+        using var client = Client();
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 1);
+        var onRiver = island.StartPositions[0];
+        var dry = island.StartPositions[1];
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var entity = await db.Islands.SingleAsync(i => i.Id == island.Id, Ct);
+            entity.RiverTiles = [.. entity.RiverTiles, new RiverTileRecord(onRiver.Q, onRiver.R, 0, [], null, 0)];
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var refused = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, onRiver.Q, onRiver.R, "Wetstead", "Ulf", OwnerId),
+            Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("NotAStartPosition", await refused.RejectionAsync(Ct));
+
+        var accepted = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, dry.Q, dry.R, "Drystead", "Ulf", OwnerId),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, accepted.StatusCode);
+    }
+
+    [Fact]
     public async Task The_same_plot_cannot_be_founded_twice()
     {
         using var client = Client();

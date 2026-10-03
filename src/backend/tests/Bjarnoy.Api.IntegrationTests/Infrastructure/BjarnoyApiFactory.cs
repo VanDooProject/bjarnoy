@@ -193,6 +193,11 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         // the hosted scan would only race them on the test clock.
         builder.UseSetting("CampAggression:Enabled", "false");
 
+        // Same for the leaderboard poll: its real 60 s wall-clock timer can fire mid-test on a loaded machine,
+        // refresh a half-seeded world and stamp the watermark, so the test's explicit RefreshCurrentBoardsAsync
+        // is then skipped as "still fresh" (the fake clock has not moved) and the board misses entries.
+        builder.UseSetting("LeaderboardAggregation:Enabled", "false");
+
         // A fixed key so tokens minted by one test are still valid tokens (not
         // that any test relies on that) and so the app has something to sign
         // with — Program.cs requires Jwt:SigningKey to be set, same as it
