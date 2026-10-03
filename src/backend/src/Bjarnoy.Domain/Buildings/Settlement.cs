@@ -126,6 +126,25 @@ public sealed record Settlement
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
 
     /// <summary>
+    /// The share of each resource the storage houses hide from plunder
+    /// (issue #336, <c>docs/design/economy.md</c> §10): Travian's cranny, built
+    /// into the storage buildings. <see cref="HideoutBaseShare"/> always, plus
+    /// <see cref="HideoutSharePerStorageLevel"/> per level of the best Storage
+    /// House or Great Storehouse, capped at <see cref="HideoutMaxShare"/>.
+    /// </summary>
+    public double HideoutShare =>
+        HideoutShareFor(Math.Max(HighestLevelOf(BuildingType.StorageHouse), HighestLevelOf(BuildingType.GreatStorehouse)));
+
+    public const double HideoutBaseShare = 0.10;
+
+    public const double HideoutSharePerStorageLevel = 0.01;
+
+    public const double HideoutMaxShare = 0.40;
+
+    public static double HideoutShareFor(int storageLevel) =>
+        Math.Min(HideoutBaseShare + (HideoutSharePerStorageLevel * Math.Max(0, storageLevel)), HideoutMaxShare);
+
+    /// <summary>
     /// The level of this settlement's best building of <paramref name="type"/>,
     /// or 0 when it has none. A settlement may hold several buildings of one
     /// type (two storage houses, a second tower), so a prerequisite asking for
