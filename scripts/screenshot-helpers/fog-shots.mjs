@@ -14,6 +14,7 @@
 import { chromium } from '../../src/frontend/node_modules/playwright-core/index.mjs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { gotoMapReady } from './util.mjs';
 
 const outDir = process.argv[2] || '.';
 const baseUrl = process.argv[3] || 'http://localhost:5183';
@@ -28,7 +29,7 @@ const shoot = async (name) => {
   console.log('Wrote', path.join(outDir, `${name}.png`));
 };
 
-await page.goto(baseUrl + '/', { waitUntil: 'networkidle' });
+await gotoMapReady(page, baseUrl + '/');
 await page.waitForTimeout(1500);
 
 // Place the longhouse on the landing preview island -> landfall modal.

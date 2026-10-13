@@ -23,7 +23,7 @@
 import { chromium } from '../../src/frontend/node_modules/playwright-core/index.mjs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { forceRebuild } from './util.mjs';
+import { forceRebuild, gotoMapReady } from './util.mjs';
 
 const outDir = process.argv[2] || '.';
 const baseUrl = process.argv[3] || 'http://localhost:5183';
@@ -50,7 +50,7 @@ async function shoot(page, name) {
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
-await page.goto(baseUrl + '/', { waitUntil: 'networkidle' });
+await gotoMapReady(page, baseUrl + '/');
 await shoot(page, 'landing');
 
 // The deterministic starter plot (LandingView's own screenBiasX=0.16 bias,
@@ -97,6 +97,11 @@ if (wantStop('settlement_tower_border')) {
   const towerInfo = await page.evaluate(() => {
     const store = window.__demoWorld();
     const settlement = store.model.getSettlement(store.selectedSettlementId);
+    // A longhouse below level 3 allows no tower at all (maxTowers, mirrored by
+    // WorldModel.placeBuilding), and a fresh demo settlement is level 1 — level
+    // it up and re-claim first, the same way e2e/tower-border-expansion.spec.ts does.
+    settlement.level = 3;
+    store.model.claimTerritory(settlement.id);
     const radius = store.model.borderRadius(settlement);
     // q,r here are already true axial coords (see WorldModel.hexDistance) —
     // not odd-q offset coords, so no offset->cube conversion is needed.
@@ -105,19 +110,23 @@ if (wantStop('settlement_tower_border')) {
       const s2 = -q2 - r2;
       return Math.max(Math.abs(q1 - q2), Math.abs(r1 - r2), Math.abs(s1 - s2));
     }
-    let edge = null;
-    for (let dq = -radius; dq <= radius && !edge; dq++) {
-      for (let dr = -radius; dr <= radius && !edge; dr++) {
+    // The first land hex on the border ring is often not buildable (a giant,
+    // a guarded camp, a river, bog or lake — placeBuilding refuses all of
+    // them), so try the ring in order and take the first hex a tower is
+    // actually allowed on.
+    let tried = 0;
+    for (let dq = -radius; dq <= radius; dq++) {
+      for (let dr = -radius; dr <= radius; dr++) {
         const q = settlement.q + dq;
         const r = settlement.r + dr;
         if (cubeDist(settlement.q, settlement.r, q, r) !== radius) continue;
         if (!store.model.isLand(q, r)) continue;
-        edge = { q, r };
+        tried++;
+        const edge = { q, r };
+        if (store.model.placeBuilding(store.selectedSettlementId, edge, 'tower')) return { ok: true, edge, radius, tried };
       }
     }
-    if (!edge) return { ok: false };
-    const placed = store.model.placeBuilding(store.selectedSettlementId, edge, 'tower');
-    return { ok: placed, edge, radius };
+    return { ok: false, radius, tried };
   });
   if (!towerInfo.ok) throw new Error('failed to place test tower: ' + JSON.stringify(towerInfo));
   console.log('Placed test tower at', towerInfo.edge, 'border radius', towerInfo.radius);
