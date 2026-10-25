@@ -962,6 +962,18 @@ describe('WorldModel.previewCropTiles', () => {
     expect(tiles).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
   });
 
+  it('takes an optional wider radius, served from the same cached landmass without truncation', () => {
+    const model = new WorldModel(1);
+    const center: AxialCoord = { q: 0, r: 0 };
+    // A finite island (an unbroken one would hit the flood-fill bound and fall back to the narrow radius).
+    model.isLand = (q: number, r: number) => hexDistance(center, { q, r }) <= 30;
+    const wide = 11;
+    expect(PREVIEW_ISLAND_FLOOD_MAX_RADIUS).toBeGreaterThan(wide);
+    // Narrow first, so a radius-keyed cache would hand the wide call a truncated set.
+    expect(model.previewCropTiles(center)).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+    expect(model.previewCropTiles(center, wide)).toHaveLength(hexesInRadius(center, wide).length);
+  });
+
   it('both at once: a foreign, also-oversized island neither leaks in nor gets the crop drawn past its own radius', () => {
     const model = new WorldModel(1);
     const center: AxialCoord = { q: 0, r: 0 };

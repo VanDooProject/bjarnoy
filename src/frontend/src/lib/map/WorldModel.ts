@@ -670,8 +670,9 @@ export class WorldModel {
    * doesn't check membership, so a foreign island within the same radius
    * shows up too. Only the intersection gets both right.
    */
-  previewCropTiles(center: AxialCoord): AxialCoord[] {
-    return this.previewIslandTiles(center).filter((c) => hexDistance(center, c) <= PREVIEW_ISLAND_RADIUS);
+  previewCropTiles(center: AxialCoord, radius = PREVIEW_ISLAND_RADIUS): AxialCoord[] {
+    // The cached flood fill is radius-independent (membership only, bounded by PREVIEW_ISLAND_FLOOD_MAX_RADIUS), so a wider crop never sees a truncated set.
+    return this.previewIslandTiles(center).filter((c) => hexDistance(center, c) <= radius);
   }
 
   /**
