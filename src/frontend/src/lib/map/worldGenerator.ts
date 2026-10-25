@@ -817,7 +817,7 @@ export function wastedTerrainAt(q: number, r: number, world: WorldSeed): Terrain
   // island's coast.
   if (neighbors({ q, r }).some((n) => isLand(n.q, n.r, world))) return 'sea';
 
-  if (island.t > gen.beachThreshold) return 'sand';
+  if (island.t > gen.beachThreshold && seesSea(q, r, world, true)) return 'sand';
   const rockiness = valueNoise(q, r, world.seed + 2, 2.5);
   if (island.t < gen.mountainThreshold && rockiness > gen.mountainRockiness) return 'mountain';
   return rockiness > gen.forestRockiness ? 'forest' : 'grass';
@@ -912,11 +912,38 @@ function nearestLandWithin(from: { q: number; r: number }, maxRadius: number, wo
   return null;
 }
 
+/**
+ * How close (in hex steps) open sea must be for a hex past `beachThreshold` to be sand —
+ * mirrors the backend's `TerrainSampler.BeachSeaRadius`. The depth alone is not enough: the
+ * domain warp and the shoreline noise make interior "saddles" where the depth climbs close to 1
+ * without the coast opening there, which put beach bands deep inland. 2 keeps the usual 1-2 hex
+ * wide beach of a real coast whole (1 halves it).
+ */
+export const BEACH_SEA_RADIUS = 2;
+
+// Axial offsets of the hexes within BEACH_SEA_RADIUS (the centre left out), nearest ring first
+// so a real beach finds its sea after a step or two.
+const BEACH_SEA_OFFSETS: { q: number; r: number }[] = [];
+for (let k = 1; k <= BEACH_SEA_RADIUS; k++) BEACH_SEA_OFFSETS.push(...hexRing({ q: 0, r: 0 }, k));
+
+/**
+ * Whether the island shape leaves sea within `BEACH_SEA_RADIUS` of `(q, r)` — mirrors
+ * `TerrainSampler.SeesSea`. Only the shape's own land test (`closestIsland`) is asked, never
+ * `terrainAt`, so this cannot recurse into the sand rule. A wasted hex asks the wasted shape.
+ */
+function seesSea(q: number, r: number, world: WorldSeed, wasted: boolean): boolean {
+  for (const o of BEACH_SEA_OFFSETS) {
+    const { col, row } = axialToOddQ({ q: q + o.q, r: r + o.r });
+    if (!closestIsland(col, row, world, wasted)) return true;
+  }
+  return false;
+}
+
 export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
   const { col, row } = axialToOddQ({ q, r });
   const island = closestIsland(col, row, world, false);
   if (!island) return 'sea';
-  if (island.t > world.generation.beachThreshold) return 'sand';
+  if (island.t > world.generation.beachThreshold && seesSea(q, r, world, false)) return 'sand';
   if (island.t < world.generation.mountainThreshold && mountainField(q, r, world.seed) > world.generation.mountainRockiness) {
     return 'mountain';
   }

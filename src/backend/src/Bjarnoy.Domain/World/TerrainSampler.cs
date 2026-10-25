@@ -743,7 +743,7 @@ public sealed class TerrainSampler
             return Terrain.Sea;
         }
 
-        if (depth > _options.BeachThreshold)
+        if (depth > _options.BeachThreshold && SeesSea(coord, wasted: false))
         {
             return Terrain.Sand;
         }
@@ -756,6 +756,36 @@ public sealed class TerrainSampler
         return ValueNoise.Sample(coord.Q, coord.R, _options.Seed + 2, ForestPatchScale) > _options.ForestRockiness
             ? Terrain.Forest
             : Terrain.Grass;
+    }
+
+    /// <summary>
+    /// How close (in hex steps) open sea must be for a hex past <see cref="WorldGenerationOptions.BeachThreshold"/> to be
+    /// sand — mirrors the frontend's <c>BEACH_SEA_RADIUS</c>. The depth alone is not enough: the domain warp and the
+    /// shoreline noise make interior "saddles" where the depth climbs close to 1 without the coast opening there, which
+    /// put beach bands deep inland. 2 keeps the usual 1-2 hex wide beach of a real coast whole (1 halves it).
+    /// </summary>
+    public const int BeachSeaRadius = 2;
+
+    // The hexes within BeachSeaRadius of the origin (the origin left out), nearest ring first so a real beach
+    // finds its sea after a step or two.
+    private static readonly HexCoord[] BeachSeaOffsets = HexCoord.Origin.WithinRadius(BeachSeaRadius)
+        .Where(c => c != HexCoord.Origin)
+        .OrderBy(c => HexCoord.Distance(HexCoord.Origin, c))
+        .ToArray();
+
+    // Whether the island shape leaves sea within BeachSeaRadius of the hex. Only the shape's own land test (the depth)
+    // is asked, never TerrainAt, so this cannot recurse into the sand rule. A wasted hex asks the wasted shape.
+    private bool SeesSea(HexCoord coord, bool wasted)
+    {
+        foreach (var offset in BeachSeaOffsets)
+        {
+            if (DepthAt(coord + offset, wasted) is null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Wavelength (hexes) of the forest/grass patch noise — mirrors the frontend's <c>FOREST_PATCH_SCALE</c>.</summary>
@@ -819,7 +849,7 @@ public sealed class TerrainSampler
             }
         }
 
-        if (depth > _options.BeachThreshold)
+        if (depth > _options.BeachThreshold && SeesSea(coord, wasted: true))
         {
             return Terrain.Sand;
         }

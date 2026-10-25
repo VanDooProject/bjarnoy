@@ -119,7 +119,8 @@ public sealed record WorldGenerationOptions
 
     /// <summary>
     /// Fraction of an island's radius, measured from its centre, beyond which
-    /// land becomes beach. The coastal ring the settlers land on.
+    /// land becomes beach, as long as open sea is within <see cref="TerrainSampler.BeachSeaRadius"/>
+    /// hexes. The coastal ring the settlers land on.
     /// </summary>
     public double BeachThreshold { get; init; } = 0.9;
 
