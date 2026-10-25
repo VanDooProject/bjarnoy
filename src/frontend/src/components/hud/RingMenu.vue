@@ -20,15 +20,20 @@
 //    edge, or a HUD panel excluded via `bounds`, the ring opens into the free
 //    half instead of being clipped, and the detail card docks clear of it.
 //
-// Interaction, uniform at every level: hover goes deeper, click commits,
-// click on the hub or ‹ BACK goes up one level, Escape goes up and then
-// closes. This component owns layout and navigation only — the caller
-// supplies the tree and reacts to `select`, the same contract as before.
+// Interaction, uniform at every level: click goes deeper (Build opens its
+// categories, a category opens its buildings) and click commits, click on the
+// hub or ‹ BACK goes up one level, Escape goes up and then closes. Hover never
+// navigates — it only previews: hovering a building (or the root Upgrade /
+// Details bubble) shows its read-out card. This component owns layout and
+// navigation only — the caller supplies the tree and reacts to `select`.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
 import type { MessageSchema } from '../../i18n/schema';
+import { resourceName } from '../../i18n/catalogueNames';
+import { formatBuildTime } from '../../lib/map/ringCatalogue';
+import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
 import {
   BUB1,
   BUB2,
@@ -49,25 +54,56 @@ export interface RingAction {
   id: string;
   label: string;
   disabled?: boolean;
-  /** Shown as a tooltip on a disabled action, e.g. why it's unavailable. */
+  /** Shown beside a disabled action on hover, e.g. why it's unavailable. */
   hint?: string;
   /** Overrides the bubble's tint; defaults to gold for `build`, plain text otherwise. */
   color?: string;
+  /**
+   * Availability look for a bubble that is disabled for a *reason worth
+   * explaining*: `locked` (progression) gets a lock badge, `waiting`
+   * (resources / slots) a clock badge. A `disabled` action without a state
+   * gets the plain "not possible here" look (ban badge + hint chip).
+   */
+  state?: RingAvailabilityState;
+  /** Read-out card shown while this root action is hovered (Upgrade). */
+  card?: RingCard;
+  /** Info card shown while this root action is hovered (Details). */
+  info?: RingInfo;
 }
 
-export interface RingBuilding extends RingAction {
+/** What a detail card for a buildable thing (a building, or an upgrade) shows. */
+export interface RingCard {
+  title: string;
+  /** Second line under the title, e.g. "Level 1" or "Level 2 → 3". */
+  sub?: string;
   /** Resource cost, rendered as coloured hex chips in the detail card. */
   cost?: { wood?: number; stone?: number; food?: number; iron?: number };
   /** Formatted build duration, e.g. "4:00" (BuildingCatalogue's BuildDuration). */
   time?: string;
   /** One-line summary of what it produces. */
   gives?: string;
-  /** Reason it can't be built yet, e.g. "Requires longhouse 2". */
-  lock?: string;
+  /** Progression blockers (longhouse level, prerequisites, limits), each as a sentence. */
+  locks?: string[];
   /** A non-blocking caution (the building can still be placed), e.g. wild beasts burning an unguarded tower. */
   warning?: string;
   /** Art for the card thumbnail. */
   art?: ArtRef;
+  availability?: RingAvailability;
+}
+
+/** A purely informational card: the tile's own facts (the Details bubble's hover). */
+export interface RingInfo {
+  title: string;
+  sub?: string;
+  art?: ArtRef;
+  rows: { label: string; value: string }[];
+}
+
+export interface RingBuilding extends RingAction, Omit<RingCard, 'title'> {
+  /** Level the card shows (1 for a new building). */
+  level?: number;
+  /** The first progression blocker, kept for callers that pass a single sentence; `locks` wins when both are given. */
+  lock?: string;
 }
 
 export interface RingCategory {
@@ -105,8 +141,18 @@ const props = withDefaults(
      * covering the menu. Defaults to the window minus the top bar.
      */
     cardBounds?: Rect;
-    /** Stock, used to mark a cost the player can't currently afford. */
+    /**
+     * Spendable stock (`hud.available`: stock minus the waiting queue's
+     * reservation), used to mark a cost the player can't currently afford
+     * when a card carries no `availability` of its own.
+     */
     stock?: { wood: number; stone: number; food: number; iron: number };
+    /**
+     * Why the last build / upgrade from this ring was rejected (the server's
+     * message). The ring stays open and shows it — on the card when one is
+     * up, otherwise as a chip docked beside the ring.
+     */
+    error?: string | null;
     /**
      * Design handoff "2a": a persistent, muted explanation shown beside a
      * flat ring (no `categories`) — e.g. why the one disabled guided
@@ -124,6 +170,7 @@ const props = withDefaults(
     bounds: undefined,
     cardBounds: undefined,
     stock: undefined,
+    error: null,
     note: null,
   },
 );
@@ -146,6 +193,8 @@ const emit = defineEmits<{
 /** [] = root · ['build'] = categories · ['build', catId] = that category's buildings. */
 const path = ref<string[]>([]);
 const hover = ref<string | null>(null);
+/** The root / category bubble under the pointer — only to preview its card or hint chip, never to navigate. */
+const hoverLane1 = ref<string | null>(null);
 
 const viewport = ref({ w: window.innerWidth, h: window.innerHeight });
 function onResize() {
@@ -184,6 +233,7 @@ watch(
   () => {
     path.value = [];
     hover.value = null;
+    hoverLane1.value = null;
   },
 );
 
@@ -213,6 +263,20 @@ const hoveredIndex = computed(() => {
 // No card until a building is genuinely hovered — opening the ring must not
 // preselect one and pop a card the player didn't ask for.
 const hovered = computed(() => (hoveredIndex.value === null ? null : buildings.value[hoveredIndex.value]));
+/** Index (on the inner lane) of the hovered root bubble that has a card or info to show. */
+const hoveredLane1Index = computed(() => {
+  const i = laneItems.value.findIndex((item) => item.id === hoverLane1.value);
+  if (i < 0 || !atRoot.value) return null;
+  const item = laneItems.value[i];
+  return item.card || item.info ? i : null;
+});
+/** A disabled root bubble with a reason, hovered: its hint shows as a chip beside it. */
+const hintedLane1 = computed(() => {
+  if (!atRoot.value) return null;
+  const entry = lane1.value.find((e) => e.item.id === hoverLane1.value);
+  if (!entry || !entry.item.disabled || !entry.item.hint) return null;
+  return entry;
+});
 
 const layout = computed(() =>
   layoutRing({
@@ -224,7 +288,8 @@ const layout = computed(() =>
     lane2Count: buildings.value.length,
     parentIndex: activeCategory.value ? props.categories.indexOf(activeCategory.value) : -1,
     cardAnchor: hoveredIndex.value,
-    wantsNote: !!props.note,
+    lane1CardAnchor: hoveredLane1Index.value,
+    wantsNote: !!props.note || !!props.error,
   }),
 );
 
@@ -238,6 +303,10 @@ const lane1 = computed(() =>
       y: spot.y,
       active,
       dim: !!activeCategory.value && !active,
+      state: item.state,
+      // A disabled bubble with no availability state is the plain "can't do
+      // that here" look; one with a state explains itself with a badge instead.
+      ban: !!item.disabled && !item.state,
       color: item.color ?? (item.id === 'build' ? 'var(--gold)' : 'var(--text)'),
     };
   }),
@@ -273,17 +342,129 @@ const lane2 = computed(() => {
 });
 
 const RESOURCE_COLORS = { wood: 'var(--wood)', stone: 'var(--stone)', food: 'var(--food)', iron: 'var(--iron)' } as const;
-const costChips = computed(() => {
-  const cost = hovered.value?.cost;
-  if (!cost) return [];
-  return (['wood', 'stone', 'food', 'iron'] as const)
-    .filter((key) => !!cost[key])
-    .map((key) => ({
-      key,
-      color: RESOURCE_COLORS[key],
-      amount: cost[key]!,
-      short: !!props.stock && cost[key]! > props.stock[key],
-    }));
+const RESOURCE_KEYS = ['wood', 'stone', 'food', 'iron'] as const;
+
+/** A building's own fields as the card shape the hover card renders. */
+function cardOf(b: RingBuilding): RingCard {
+  return {
+    title: b.label,
+    sub: t('hud.ringMenu.card.level', { level: b.level ?? 1 }),
+    cost: b.cost,
+    time: b.time,
+    gives: b.gives,
+    locks: b.locks?.length ? b.locks : b.lock ? [b.lock] : [],
+    warning: b.warning,
+    art: b.art,
+    availability: b.availability,
+  };
+}
+
+/** What state a building bubble is in: a lock wins, otherwise whatever the availability says. */
+function stateOf(b: RingBuilding): RingAvailabilityState {
+  if (b.lock || b.locks?.length) return 'locked';
+  return b.state ?? b.availability?.state ?? 'ready';
+}
+
+const activeCard = computed<RingCard | null>(() => {
+  if (hovered.value) return cardOf(hovered.value);
+  const item = hoveredLane1Index.value === null ? null : laneItems.value[hoveredLane1Index.value];
+  return item?.card ?? null;
+});
+const activeInfo = computed<RingInfo | null>(() => {
+  if (hovered.value || hoveredLane1Index.value === null) return null;
+  return laneItems.value[hoveredLane1Index.value].info ?? null;
+});
+
+type Tone = 'lock' | 'wait' | 'queue';
+interface CardView {
+  title: string;
+  sub?: string;
+  art?: ArtRef;
+  badge?: { text: string; tone: 'ok' | Tone };
+  chips: { key: string; color: string; amount: number; short: boolean }[];
+  time?: string;
+  gives?: string;
+  slots?: { text: string; short: boolean };
+  rows: { label: string; value: string }[];
+  warning?: string;
+  statuses: { text: string; tone: Tone }[];
+}
+
+function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], number>>): string {
+  return RESOURCE_KEYS.filter((key) => shortfall[key])
+    .map((key) => `${shortfall[key]} ${resourceName(key)}`)
+    .join(' · ');
+}
+
+const cardView = computed<CardView | null>(() => {
+  const info = activeInfo.value;
+  if (info) {
+    return { title: info.title, sub: info.sub, art: info.art, chips: [], rows: info.rows, statuses: [] };
+  }
+  const card = activeCard.value;
+  if (!card) return null;
+  const a = card.availability;
+  const locks = card.locks ?? [];
+  const chips = RESOURCE_KEYS.filter((key) => !!card.cost?.[key]).map((key) => ({
+    key,
+    color: RESOURCE_COLORS[key],
+    amount: card.cost![key]!,
+    short: a ? !!a.shortfall[key] : !!props.stock && card.cost![key]! > props.stock[key],
+  }));
+
+  const statuses: CardView['statuses'] = locks.map((text) => ({ text, tone: 'lock' as const }));
+  const resourcesShort = !!a && Object.keys(a.shortfall).length > 0;
+  if (a && resourcesShort) {
+    statuses.push({ text: t('hud.ringMenu.card.needResources', { resources: resourceList(a.shortfall) }), tone: 'wait' });
+  }
+  if (a?.slots.short) {
+    if (a.queue.hasRoom && !resourcesShort) {
+      statuses.push({
+        text: t('hud.ringMenu.card.willQueue', { waiting: a.queue.waiting, max: a.queue.max }),
+        tone: 'queue',
+      });
+    } else {
+      const params = { needed: a.slots.needed, free: a.slots.free, total: a.slots.total };
+      statuses.push({
+        text:
+          a.nextSlotFreeInSeconds === null
+            ? t('hud.ringMenu.card.needSlots', params, a.slots.needed)
+            : t('hud.ringMenu.card.needSlotsNext', { ...params, time: formatBuildTime(a.nextSlotFreeInSeconds) }, a.slots.needed),
+        tone: 'wait',
+      });
+      if (a.queue.max > 0 && !a.queue.hasRoom) {
+        statuses.push({ text: t('hud.ringMenu.card.queueFull', { waiting: a.queue.waiting, max: a.queue.max }), tone: 'wait' });
+      }
+    }
+  }
+
+  let badge: CardView['badge'];
+  if (locks.length) badge = { text: locks[0].toUpperCase(), tone: 'lock' };
+  else if (resourcesShort) badge = { text: t('hud.ringMenu.card.badgeNoResources').toUpperCase(), tone: 'wait' };
+  else if (a?.state === 'waiting') badge = { text: t('hud.ringMenu.card.badgeNoSlot').toUpperCase(), tone: 'wait' };
+  else badge = { text: t('hud.ringMenu.buildableHere'), tone: 'ok' };
+
+  let slots: CardView['slots'];
+  if (a) {
+    const params = { needed: a.slots.needed, free: a.slots.free, total: a.slots.total };
+    // "All (3)" when the order takes every slot the settlement has.
+    const all = a.slots.needed >= a.slots.total && a.slots.total > 1;
+    slots = { text: all ? t('hud.ringMenu.card.slotsAll', params) : t('hud.ringMenu.card.slotsValue', params), short: a.slots.short };
+  }
+
+  return {
+    title: card.title,
+    sub: card.sub,
+    art: card.art,
+    badge,
+    chips,
+    time: card.time,
+    gives: card.gives,
+    slots,
+    rows: [],
+    warning: card.warning,
+    statuses,
+  };
 });
 
 const hubLabel = computed(() => (atRoot.value ? props.terrainLabel : t('hud.ringMenu.buildHub')));
@@ -325,24 +506,13 @@ function goUp() {
   if (path.value.length) {
     path.value = path.value.slice(0, -1);
     hover.value = null;
+    hoverLane1.value = null;
   } else {
     emit('close');
   }
 }
-// Hover drills in; it never commits. Only the two navigation transitions
-// (root "build", and picking a category) advance — every other action either
-// mutates state or is terminal, so it still needs a real click.
-function onLaneEnter(item: RingAction) {
-  if (item.disabled) return;
-  if (atRoot.value) {
-    if (item.id === 'build' && props.categories.length) path.value = ['build'];
-    return;
-  }
-  if (props.categories.some((c) => c.id === item.id)) {
-    path.value = ['build', item.id];
-    hover.value = null;
-  }
-}
+// Navigation is click-only: Build opens its categories, a category opens its
+// buildings, exactly as going back already needed a click. Hover only previews.
 function onLaneClick(item: RingAction) {
   if (item.disabled) return;
   if (atRoot.value) {
@@ -350,10 +520,13 @@ function onLaneClick(item: RingAction) {
     else emit('select', item.id);
     return;
   }
-  if (props.categories.some((c) => c.id === item.id)) path.value = ['build', item.id];
+  if (props.categories.some((c) => c.id === item.id)) {
+    path.value = ['build', item.id];
+    hover.value = null;
+  }
 }
 function onBuildingClick(building: RingBuilding) {
-  if (building.lock || building.disabled) return;
+  if (building.disabled || !isActionable(stateOf(building))) return;
   emit('select', building.id);
 }
 // Touch has no hover, so the desktop "hover previews, click commits" pattern
@@ -372,6 +545,27 @@ function onBuildingTouchStart(e: TouchEvent, building: RingBuilding) {
     hover.value = building.id;
   }
 }
+// Where the hint chip of a hovered, disabled root bubble sits: just outside the
+// bubble, away from the tile, anchored so it grows away from the bubble.
+const hintStyle = computed(() => {
+  const entry = hintedLane1.value;
+  if (!entry) return null;
+  const dx = entry.x - props.x;
+  const dy = entry.y - props.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const reach = BUB1 / 2 + 8;
+  const tx = ux > 0.35 ? '0' : ux < -0.35 ? '-100%' : '-50%';
+  const ty = uy > 0.35 ? '0' : uy < -0.35 ? '-100%' : '-50%';
+  return {
+    left: `${entry.x + ux * reach}px`,
+    top: `${entry.y + uy * reach}px`,
+    transform: `translate(${tx}, ${ty})`,
+    maxWidth: `${NOTE_W}px`,
+  };
+});
+
 function onBackdropPointerDown(e: PointerEvent) {
   emit('outsidePointerDown', e);
 }
@@ -432,7 +626,15 @@ function onBackdropPointerDown(e: PointerEvent) {
       v-for="entry in lane1"
       :key="entry.item.id"
       class="ring-bubble"
-      :class="{ active: entry.active, dim: entry.dim, disabled: entry.item.disabled, dot: layout.collapsed }"
+      :class="{
+        active: entry.active,
+        dim: entry.dim,
+        disabled: entry.ban,
+        'is-locked': entry.state === 'locked',
+        'is-waiting': entry.state === 'waiting',
+        soft: !!note,
+        dot: layout.collapsed,
+      }"
       :style="{
         left: `${entry.x}px`,
         top: `${entry.y}px`,
@@ -442,12 +644,19 @@ function onBackdropPointerDown(e: PointerEvent) {
         '--tint': entry.color,
       }"
       :aria-disabled="entry.item.disabled || undefined"
-      :title="entry.item.disabled ? entry.item.hint : layout.collapsed ? entry.item.label : undefined"
+      :title="layout.collapsed ? entry.item.label : undefined"
+      :aria-description="entry.item.disabled ? entry.item.hint : undefined"
       :aria-label="entry.item.label"
       @click="onLaneClick(entry.item)"
-      @mouseenter="onLaneEnter(entry.item)"
+      @mouseenter="hoverLane1 = entry.item.id"
+      @mouseleave="hoverLane1 = null"
     >
       <template v-if="!layout.collapsed">{{ entry.item.label }}</template>
+      <span v-if="!layout.collapsed && (entry.ban || entry.state)" class="ring-badge" :class="entry.ban ? 'ban' : entry.state" aria-hidden="true">
+        <svg v-if="entry.state === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
+        <svg v-else-if="entry.state === 'waiting'" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
+        <svg v-else viewBox="0 0 12 12"><path d="M3 6h6" /></svg>
+      </span>
     </button>
 
     <button
@@ -463,7 +672,12 @@ function onBackdropPointerDown(e: PointerEvent) {
       v-for="b in lane2"
       :key="b.building.id"
       class="ring-bubble child"
-      :class="{ hot: hover === b.building.id, locked: !!b.building.lock, disabled: b.building.disabled }"
+      :class="{
+        hot: hover === b.building.id,
+        locked: stateOf(b.building) === 'locked',
+        waiting: stateOf(b.building) === 'waiting',
+        disabled: b.building.disabled,
+      }"
       :style="{
         left: `${b.x}px`,
         top: `${b.y}px`,
@@ -472,64 +686,90 @@ function onBackdropPointerDown(e: PointerEvent) {
         fontSize: bubbleFont(b.building.label, BUB2, b.building.label.length > 7 ? 8.4 : 9.4),
         '--tint': b.color,
       }"
-      :title="b.building.lock"
+      :aria-disabled="!isActionable(stateOf(b.building)) || b.building.disabled || undefined"
       @touchstart="onBuildingTouchStart($event, b.building)"
       @click="onBuildingClick(b.building)"
       @mouseenter="hover = b.building.id"
     >
       {{ b.building.label }}
+      <span v-if="stateOf(b.building) !== 'ready' && stateOf(b.building) !== 'queues'" class="ring-badge" :class="stateOf(b.building)" aria-hidden="true">
+        <svg v-if="stateOf(b.building) === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
+        <svg v-else viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
+      </span>
     </button>
 
     <div
-      v-if="hovered && layout.card"
+      v-if="cardView && layout.card"
       class="ring-card"
+      data-testid="ring-card"
       :style="{ left: `${layout.card.x}px`, top: `${layout.card.y}px`, width: `${CARD_W}px` }"
     >
       <div class="card-art">
-        <AtlasSprite v-if="hovered.art?.kind === 'atlas'" :frame="hovered.art.frame" class="card-art-img" />
-        <img v-else-if="hovered.art?.kind === 'png'" class="card-art-img" :src="hovered.art.url" alt="" />
+        <AtlasSprite v-if="cardView.art?.kind === 'atlas'" :frame="cardView.art.frame" class="card-art-img" />
+        <img v-else-if="cardView.art?.kind === 'png'" class="card-art-img" :src="cardView.art.url" alt="" />
         <div class="card-head">
-          <span class="card-name">{{ hovered.label }}</span>
-          <span class="card-sub">
-            {{ t('hud.ringMenu.level1', { status: hovered.lock ? t('hud.ringMenu.locked') : t('hud.ringMenu.ready') }) }}
-          </span>
-          <span class="card-badge" :class="{ locked: !!hovered.lock }">
-            {{ hovered.lock ? hovered.lock.toUpperCase() : t('hud.ringMenu.buildableHere') }}
-          </span>
+          <span class="card-name">{{ cardView.title }}</span>
+          <span v-if="cardView.sub" class="card-sub">{{ cardView.sub }}</span>
+          <span v-if="cardView.badge" class="card-badge" :class="cardView.badge.tone">{{ cardView.badge.text }}</span>
         </div>
       </div>
       <dl class="card-rows">
-        <template v-if="costChips.length">
+        <template v-if="cardView.chips.length">
           <dt>{{ t('hud.ringMenu.cost') }}</dt>
           <dd class="cost">
-            <span v-for="chip in costChips" :key="chip.key" class="chip">
+            <span v-for="chip in cardView.chips" :key="chip.key" class="chip">
               <i :style="{ background: chip.color }" />
               <b :class="{ short: chip.short }">{{ chip.amount }}</b>
             </span>
           </dd>
         </template>
-        <template v-if="hovered.time">
+        <template v-if="cardView.time">
           <dt>{{ t('hud.ringMenu.buildTime') }}</dt>
-          <dd>{{ hovered.time }}</dd>
+          <dd>{{ cardView.time }}</dd>
         </template>
-        <template v-if="hovered.gives">
+        <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
-          <dd class="nowrap">{{ hovered.gives }}</dd>
+          <dd class="nowrap">{{ cardView.gives }}</dd>
+        </template>
+        <template v-if="cardView.slots">
+          <dt>{{ t('hud.ringMenu.card.slots') }}</dt>
+          <dd class="nowrap" :class="{ 'slots-short': cardView.slots.short }" data-testid="ring-card-slots">{{ cardView.slots.text }}</dd>
+        </template>
+        <template v-for="row in cardView.rows" :key="row.label">
+          <dt>{{ row.label }}</dt>
+          <dd>{{ row.value }}</dd>
         </template>
       </dl>
-      <p v-if="hovered.warning" class="card-warning" data-testid="ring-card-warning">{{ hovered.warning }}</p>
-      <button
-        class="card-cta"
-        :class="{ locked: !!hovered.lock }"
-        :disabled="!!hovered.lock || !!hovered.disabled"
-        @click="onBuildingClick(hovered)"
-      >
-        {{ hovered.lock ? t('hud.ringMenu.lockedCta') : t('hud.ringMenu.buildCta', { label: hovered.label.toUpperCase() }) }}
-      </button>
+      <p v-if="cardView.warning" class="card-warning" data-testid="ring-card-warning">{{ cardView.warning }}</p>
+      <ul v-if="cardView.statuses.length || error" class="card-status" data-testid="ring-card-status">
+        <li v-for="status in cardView.statuses" :key="status.text" :class="status.tone">{{ status.text }}</li>
+        <li v-if="error" class="lock" data-testid="ring-error">{{ error }}</li>
+      </ul>
+      <div v-else class="card-foot" />
     </div>
 
     <div
-      v-if="note && layout.note"
+      v-if="hintedLane1 && hintStyle"
+      class="ring-hint"
+      data-testid="ring-hint"
+      :style="hintStyle"
+    >
+      {{ hintedLane1.item.hint }}
+    </div>
+
+    <!-- A rejected build / upgrade: the server's message stays visible with the
+         ring still open. On the card when one is up (above); otherwise here. -->
+    <div
+      v-if="error && !(cardView && layout.card) && layout.note"
+      class="ring-note ring-error"
+      data-testid="ring-error"
+      :style="{ left: `${layout.note.x}px`, top: `${layout.note.y}px`, width: `${NOTE_W}px` }"
+    >
+      <div class="note-body">{{ error }}</div>
+    </div>
+
+    <div
+      v-if="note && !error && lane2.length === 0 && layout.note"
       class="ring-note"
       data-testid="ring-note"
       :style="{ left: `${layout.note.x}px`, top: `${layout.note.y}px`, width: `${NOTE_W}px` }"
@@ -630,7 +870,7 @@ function onBackdropPointerDown(e: PointerEvent) {
   color: var(--tint);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
-.ring-bubble:hover:not(.disabled) {
+.ring-bubble:hover:not(.disabled):not(.is-locked):not(.is-waiting) {
   background: color-mix(in oklab, var(--tint) 18%, rgba(8, 18, 26, 0.9));
 }
 .ring-bubble.active {
@@ -644,9 +884,64 @@ function onBackdropPointerDown(e: PointerEvent) {
   border-color: rgba(255, 255, 255, 0.14);
   color: rgba(232, 240, 245, 0.45);
 }
+/* Not possible here at all (Raze on the longhouse, Send army without units,
+   Build on open water ...). Deliberately not the 40% opacity that .dim uses:
+   full-strength label, dashed muted-red border, a ban badge. */
 .ring-bubble.disabled {
-  opacity: 0.4;
   cursor: not-allowed;
+  border: 1.5px dashed rgba(226, 112, 95, 0.55);
+  color: var(--text);
+  background: rgba(8, 18, 26, 0.9);
+}
+/* The onboarding ring's "why it's dim" design keeps its soft, dimmed look. */
+.ring-bubble.disabled.soft {
+  opacity: 0.4;
+  border: 1px solid color-mix(in oklab, var(--tint) 50%, transparent);
+}
+.ring-bubble.is-locked {
+  cursor: not-allowed;
+  border: 1.5px dashed rgba(226, 112, 95, 0.55);
+  color: rgba(240, 163, 150, 0.9);
+}
+.ring-bubble.is-waiting {
+  cursor: not-allowed;
+  border: 1.5px solid rgba(255, 179, 71, 0.65);
+  color: rgba(232, 240, 245, 0.62);
+}
+.ring-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+.ring-badge svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ring-badge.locked {
+  background: #7d2e24;
+  color: #ffd9d2;
+}
+.ring-badge.ban {
+  background: #4a2a26;
+  color: #f0a396;
+}
+.ring-badge.waiting {
+  background: #7a5410;
+  color: #ffe2a8;
 }
 /* Two full lanes didn't fit: the spent inner lane shrinks to markers so the
    buildings lane has somewhere to go, rather than the two overlapping. */
@@ -677,18 +972,34 @@ function onBackdropPointerDown(e: PointerEvent) {
   font-weight: 700;
 }
 .ring-bubble.child.locked {
-  border-style: dashed;
-  border-color: rgba(226, 112, 95, 0.5);
+  border: 1.5px dashed rgba(226, 112, 95, 0.55);
   color: rgba(240, 163, 150, 0.85);
   background: rgba(14, 24, 20, 0.94);
   cursor: not-allowed;
+}
+/* Temporarily unavailable (resources / slots): solid, muted, no category fill on hover. */
+.ring-bubble.child.waiting {
+  border: 1.5px solid rgba(255, 179, 71, 0.65);
+  color: rgba(232, 240, 245, 0.55);
+  background: rgba(14, 24, 20, 0.94);
+  cursor: not-allowed;
+}
+.ring-bubble.child.waiting.hot,
+.ring-bubble.child.locked.hot {
+  background: rgba(14, 24, 20, 0.94);
+  font-weight: 600;
+}
+.ring-bubble.child.waiting.hot {
+  color: rgba(232, 240, 245, 0.55);
+}
+.ring-bubble.child.locked.hot {
+  color: rgba(240, 163, 150, 0.85);
 }
 .ring-card {
   position: absolute;
   /* The card is an informational read-out that happens to sit next to the
      bubbles, so it must never swallow a click aimed at one — building is a
-     click on the bubble itself, and the card's button is only a second way to
-     do the same thing. Its own button opts back in below. */
+     click on the bubble itself. The card carries no button of its own. */
   pointer-events: none;
   overflow: hidden;
   border-radius: 11px;
@@ -738,8 +1049,14 @@ function onBackdropPointerDown(e: PointerEvent) {
   line-height: 1.35;
   color: var(--gold);
 }
-.card-badge.locked {
+.card-badge.lock {
   color: var(--rival);
+}
+.card-badge.wait {
+  color: #ffb347;
+}
+.card-badge.queue {
+  color: var(--gold);
 }
 .card-rows {
   margin: 0;
@@ -784,26 +1101,50 @@ function onBackdropPointerDown(e: PointerEvent) {
 .chip b.short {
   color: var(--rival);
 }
-.card-cta {
-  pointer-events: auto;
-  margin: 11px 12px 12px;
-  width: calc(100% - 24px);
-  padding: 9px 0;
-  border: none;
-  border-radius: 8px;
-  background: var(--gold);
-  color: #20160a;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
+.card-foot {
+  height: 12px;
 }
-.card-cta.locked,
-.card-cta:disabled {
-  background: rgba(255, 197, 92, 0.22);
-  color: #8a7448;
-  cursor: not-allowed;
+.card-status {
+  list-style: none;
+  margin: 0;
+  padding: 10px 12px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.card-status .lock {
+  color: var(--rival);
+}
+.card-status .wait {
+  color: #ffb347;
+}
+.card-status .queue {
+  color: var(--gold);
+}
+.card-rows dd.slots-short {
+  color: #ffb347;
+}
+.ring-hint {
+  position: absolute;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(10, 20, 27, 0.96);
+  border: 1px solid rgba(226, 112, 95, 0.45);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+  font-size: 11px;
+  line-height: 1.35;
+  color: #f0c3ba;
+  pointer-events: none;
+  width: max-content;
+}
+.ring-error {
+  border-color: rgba(226, 112, 95, 0.55);
+}
+.ring-error .note-body {
+  color: #f0c3ba;
 }
 .ring-note {
   position: absolute;

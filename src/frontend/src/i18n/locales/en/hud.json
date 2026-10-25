@@ -123,19 +123,35 @@
       "bogNothingHere": "Nothing can be built on this bog hex",
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
+      "maxLevel": "Max level",
       "noLandUnitsAtHome": "No land units at home"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
-    "level1": "Level 1 · {status}",
-    "locked": "locked",
-    "ready": "ready",
     "buildableHere": "BUILDABLE HERE",
     "cost": "Cost",
     "buildTime": "Build time",
     "gives": "Gives",
-    "lockedCta": "LOCKED",
-    "buildCta": "BUILD {label}",
+    "card": {
+      "level": "Level {level}",
+      "upgradeTitle": "Upgrade to level {level}",
+      "upgradeSub": "{building} · Level {from} → {to}",
+      "slots": "Build slots",
+      "slotsValue": "{needed} · {free} of {total} free",
+      "slotsAll": "All ({total}) · {free} of {total} free",
+      "needResources": "Need {resources}",
+      "needSlots": "Needs {needed} build slot · {free} of {total} free | Needs {needed} build slots · {free} of {total} free",
+      "needSlotsNext": "Needs {needed} build slot · {free} of {total} free · next free in {time} | Needs {needed} build slots · {free} of {total} free · next free in {time}",
+      "willQueue": "Will queue behind current builds ({waiting} of {max} waiting)",
+      "queueFull": "The waiting queue is full ({waiting} of {max})",
+      "badgeNoResources": "Not enough resources",
+      "badgeNoSlot": "No free build slot",
+      "requiresBuilding": "Requires {building} level {level}"
+    },
+    "details": {
+      "tileTitle": "Tile",
+      "claimedHere": "Claimed ground"
+    },
     "errors": {
       "couldNotQueueBuild": "Could not queue that build.",
       "couldNotQueueUpgrade": "Could not queue that upgrade."

@@ -363,6 +363,12 @@ export interface RingLayoutInput {
   /** Outer-lane index the card belongs to, or null when nothing is hovered. */
   cardAnchor: number | null;
   /**
+   * Inner-lane index whose card is up (the root Upgrade / Details bubbles show
+   * one while hovered), or null/undefined. Only used while no outer-lane
+   * building owns the card.
+   */
+  lane1CardAnchor?: number | null;
+  /**
    * The onboarding ring's flat case (lane2Count === 0) has no category to
    * drill into and so never anchors the usual detail card — but it still
    * wants a persistent explanation card (RingMenu.vue's `note` prop). Only
@@ -399,7 +405,7 @@ function nearest(px: number, py: number, spots: { x: number; y: number }[]) {
 
 /** Lays out one open ring. Pure: same input, same positions, no DOM. */
 export function layoutRing(input: RingLayoutInput): RingLayoutResult {
-  const { x, y, area, cardArea, lane1Count, lane2Count, parentIndex, cardAnchor, wantsNote } = input;
+  const { x, y, area, cardArea, lane1Count, lane2Count, parentIndex, cardAnchor, lane1CardAnchor, wantsNote } = input;
   const base = baseAngle(x, y, area);
   const lane1 = lane1Spots(lane1Count, x, y, area);
 
@@ -469,14 +475,23 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
       ];
       card = cardSpot(x, y, lane2[cardAnchor].ang, cardArea, obstacles);
     }
-  } else if (wantsNote) {
-    // The flat onboarding ring: no category, no drill-down, so there's
-    // never a lane2 bubble to anchor a hover card on — but the ring still
-    // wants its persistent "why it's dim" note docked clear of lane1.
-    const hub: Circle = { x, y, r: HUB / 2 };
-    const obstacles: Circle[] = [hub, ...lane1.map((s) => ({ x: s.x, y: s.y, r: BUB1 / 2 }))];
-    note = cardSpot(x, y, base, cardArea, obstacles, NOTE_W, NOTE_H);
   }
+
+  const hubCircle: Circle = { x, y, r: HUB / 2 };
+  const everything = (): Circle[] => [
+    hubCircle,
+    ...lane1.map((s) => ({ x: s.x, y: s.y, r: BUB1 / 2 })),
+    ...lane2.map((s) => ({ x: s.x, y: s.y, r: BUB2 / 2 })),
+  ];
+  // A root bubble's own card (Upgrade, Details) docks the way a building's
+  // does, in the direction that bubble sits.
+  if (!card && lane1CardAnchor !== null && lane1CardAnchor !== undefined && lane1[lane1CardAnchor]) {
+    card = cardSpot(x, y, lane1[lane1CardAnchor].ang, cardArea, everything());
+  }
+  // The note (the flat onboarding ring's "why it's dim", or a rejected
+  // build's message) has no bubble to anchor on, so it docks clear of the
+  // ring wherever there's room — unless a card is already up.
+  if (wantsNote && !card) note = cardSpot(x, y, base, cardArea, everything(), NOTE_W, NOTE_H);
 
   return {
     lane1,
