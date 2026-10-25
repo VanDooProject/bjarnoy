@@ -25,9 +25,11 @@ import type { AtlasFrameRect } from '../lib/map/atlas';
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-// A familiar, known-good archipelago rather than a fresh roll on every page
-// load (stores/world.ts's demo seed until the island-density change moved it).
-const DEFAULT_SEED = 20260824;
+// A fixed, known-good archipelago rather than a fresh roll on every page load.
+// Picked by scoring 3000 seeds (20260000..20262999) on the "one view" frame: its
+// island frames a big bog lake and moss land, a river-side village, a giant
+// mountain and a sand coast with seals, with little forest filler (~8%).
+const DEFAULT_SEED = 20261823;
 // The whole default world: islands are ~150 hexes across and ~100+ apart, so a
 // small disc around the origin is usually open sea. Listing the labels costs
 // nothing like DEMO_MASK_RADIUS's fog mask (this page never fogs — see

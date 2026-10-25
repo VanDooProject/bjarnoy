@@ -5,7 +5,7 @@ import { DEFAULT_GENERATION, enumerateIslands } from '../map/worldGenerator';
 import { maxLevelFor } from '../map/buildingEconomy';
 import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
 
-const SEED = 20260824;
+const SEED = 20261823;
 
 function build() {
   const model = new WorldModel(SEED);
