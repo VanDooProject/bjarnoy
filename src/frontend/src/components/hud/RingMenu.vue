@@ -408,7 +408,8 @@ const cardView = computed<CardView | null>(() => {
   const chips = RESOURCE_KEYS.filter((key) => !!card.cost?.[key]).map((key) => ({
     key,
     color: RESOURCE_COLORS[key],
-    amount: card.cost![key]!,
+    // Upgrade costs scale by a fractional factor; show what the player has to have, rounded up.
+    amount: Math.ceil(card.cost![key]!),
     short: a ? !!a.shortfall[key] : !!props.stock && card.cost![key]! > props.stock[key],
   }));
 

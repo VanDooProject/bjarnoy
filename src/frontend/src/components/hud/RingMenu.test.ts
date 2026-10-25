@@ -590,6 +590,14 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('select')).toBeUndefined();
     });
 
+    it('rounds a fractional (scaled) cost up on the chips', async () => {
+      const wrapper = ring({
+        actions: [{ id: 'upgrade', label: 'Upgrade', card: { title: 'Upgrade to level 2', cost: { wood: 160.8, food: 80.4 } } }],
+      });
+      await bubble(wrapper, 'Upgrade').trigger('mouseenter');
+      expect(wrapper.get('.ring-card').findAll('.chip b').map((b) => b.text())).toEqual(['161', '81']);
+    });
+
     it('shows a lock badge on a locked Upgrade bubble', () => {
       const wrapper = ring({
         actions: [{ id: 'upgrade', label: 'Upgrade', disabled: true, state: 'locked', card: { ...upgradeCard, locks: ['Requires longhouse 3'] } }],
