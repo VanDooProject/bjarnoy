@@ -9,6 +9,7 @@ import type { MessageSchema } from '../i18n/schema';
 import { buildingName, unitName } from '../i18n/catalogueNames';
 import { useWorldStore } from '../stores/world';
 import { formatCountdown, formatCountdownShort } from '../lib/hud/countdown';
+import { isPendingOrder } from '../lib/hud/pendingBuild';
 
 // Mirrors Settlement.MaxTrainingQueueLength (backend) — no endpoint exposes
 // this as data, so it's kept in sync here manually. Shared by
@@ -45,13 +46,16 @@ export function useBuildOrders(): ComputedRef<BuildOrderRow[]> {
   return computed(() => {
     void world.hud.tick; // reactive dependency so the countdown ticks every second
     const elapsed = (Date.now() - world.hud.queueFetchedAt) / 1000;
-    const liveIds = new Set(world.hud.queue.map((q) => q.id));
+    // A pending (optimistic, not yet confirmed) order only exists to put the
+    // "…" dial on its hex — it is not a queue row.
+    const orders = world.hud.queue.filter((q) => !isPendingOrder(q));
+    const liveIds = new Set(orders.map((q) => q.id));
     for (const id of lastProgress.keys()) {
       if (!liveIds.has(id)) {
         lastProgress.delete(id);
       }
     }
-    return world.hud.queue.map((q) => {
+    return orders.map((q) => {
       const label = buildingName(q.building);
       const waiting = q.state === 'waiting';
       // A waiting order has no real completion instant yet (see

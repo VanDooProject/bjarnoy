@@ -41,6 +41,8 @@ import { formatCountdownShort } from '../hud/countdown';
 import {
   DIAL_FINISH_MS,
   dialFinishFrame,
+  dialRejectFrame,
+  DIAL_REJECT_MS,
   polylinePartial,
   retainFinishingDials,
   dialProgress,
@@ -4613,7 +4615,9 @@ export class HexMapRenderer {
       for (let i = 2; i < path.length; i += 2) g.lineTo(path[i], path[i + 1]);
       g.stroke({ width, color, alpha, cap: 'round', join: 'round' });
     };
-    const live = this.constructionDials.filter((d) => d.endMs === null || nowMs - d.endMs < DIAL_FINISH_MS);
+    const live = this.constructionDials.filter((d) =>
+      d.rejectedAtMs !== undefined ? nowMs - d.rejectedAtMs < DIAL_REJECT_MS : d.endMs === null || nowMs - d.endMs < DIAL_FINISH_MS,
+    );
     if (live.length !== this.constructionDials.length) this.constructionDials = live.length > 0 ? live : null;
     for (const dial of live) {
       const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
@@ -4623,9 +4627,12 @@ export class HexMapRenderer {
         x: grid.x + TILE_W / 2,
         y: grid.y + TILE_CENTER_Y_OFFSET - lift,
       });
-      const cx = anchor.x;
+      // A refused build's "…" dial shakes, then shrinks and fades (dialRejectFrame).
+      const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs) : null;
+      const dAlpha = reject?.alpha ?? 1;
+      const cx = anchor.x + (reject?.offsetX ?? 0);
       const cy = anchor.y;
-      const r = 22 * zs * 1.25;
+      const r = 22 * zs * 1.25 * (reject?.scale ?? 1);
       const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
 
       if (frame) {
@@ -4656,10 +4663,11 @@ export class HexMapRenderer {
       }
 
       g.poly(hexPoints(cx, cy, r))
-        .fill({ color: 0x08121a, alpha: 0.85 })
-        .stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3, join: 'round' });
-      strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, 1);
-      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2);
+        .fill({ color: 0x08121a, alpha: 0.85 * dAlpha })
+        .stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
+      strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2 * (reject?.scale ?? 1));
+      label.alpha = dAlpha;
       label.text = remaining === null ? '…' : formatCountdownShort(remaining);
       label.tint = remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
       label.anchor.set(0.5);
@@ -4910,6 +4918,27 @@ export class HexMapRenderer {
   setConstructionDials(dials: ConstructionDial[] | null) {
     const merged = retainFinishingDials(this.constructionDials ?? [], dials ?? [], Date.now());
     this.constructionDials = merged.length > 0 ? merged : null;
+  }
+
+  /**
+   * The server refused a build that was shown optimistically: the "…" dial on
+   * `coord` shakes, then shrinks and fades (`dialRejectFrame`) even though its
+   * pending order is already gone from the queue.
+   */
+  rejectConstructionDial(coord: AxialCoord) {
+    const rest = (this.constructionDials ?? []).filter((d) => d.coord.q !== coord.q || d.coord.r !== coord.r);
+    this.constructionDials = [...rest, { coord, startMs: null, endMs: null, rejectedAtMs: Date.now() }];
+  }
+
+  /**
+   * Screen position (the space `hexCenterScreen` reports in) of the middle of
+   * the construction dial over `coord`: the hex's centre lifted by the same
+   * `CONSTRUCTION_DIAL_LIFT` `drawConstructionDials` uses, so an HTML overlay
+   * (the queue card's flying token) starts exactly where the dial is drawn.
+   */
+  dialScreenPoint(coord: AxialCoord): { x: number; y: number } {
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    return this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET - CONSTRUCTION_DIAL_LIFT });
   }
 
   /**
