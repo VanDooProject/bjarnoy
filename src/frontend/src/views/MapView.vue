@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
-import { buildingName, resourceName, terrainName } from '../i18n/catalogueNames';
+import { buildingName, campName, giantName, resourceName, terrainName } from '../i18n/catalogueNames';
 import { useRoute, useRouter } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
@@ -21,7 +21,7 @@ import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
-import RingMenu, { type RingAction, type RingBuilding, type RingCategory } from '../components/hud/RingMenu.vue';
+import RingMenu, { type RingAction, type RingBuilding, type RingCard, type RingCategory, type RingInfo } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import FpsMeter from '../components/hud/FpsMeter.vue';
@@ -65,6 +65,12 @@ import {
   storageHouseLock,
   towerLimitLock,
 } from '../lib/map/ringCatalogue';
+import {
+  computeAvailability,
+  missingPrerequisites,
+  slotsNeeded,
+  type RingAvailability,
+} from '../lib/map/ringAvailability';
 import type { Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
@@ -839,6 +845,100 @@ function huntActions(tile: Tile): RingAction[] {
   ];
 }
 
+// The root Upgrade bubble. It states up front whether the upgrade is possible
+// and, on hover, shows the same card a building does — for the NEXT level:
+// its cost, time, output, slots and what (if anything) still blocks it.
+function upgradeActionFor(tile: Tile): RingAction {
+  const type = tile.buildingType!;
+  const label = t('hud.ringMenu.actions.upgrade');
+  const level = tile.buildingLevel ?? 1;
+  const nextLevel = level + 1;
+  const definitions = buildingCatalogue.byType[type];
+  const upgradeDefinition = definitions?.find((d) => d.level === nextLevel);
+  // A catalogue that lists the building but has no further level: nothing left to upgrade to.
+  if (definitions?.length && !upgradeDefinition) {
+    return { id: 'upgrade', label, color: 'var(--gold)', disabled: true, hint: t('hud.ringMenu.actions.maxLevel') };
+  }
+  const cost = upgradeDefinition?.cost ?? buildingUpgradeCost(type, nextLevel);
+  const locks = [
+    longhouseLock(upgradeDefinition?.requiredLonghouseLevel, world.hud.level),
+    ...prerequisiteLocks(upgradeDefinition?.prerequisites, builtLevels()),
+  ].filter((lock): lock is string => !!lock);
+  const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
+  const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
+  const stats = buildingStatsAt(type, nextLevel, tile, tileAt);
+  const missing = formatMissingResources(cost, world.hud.available);
+  const blocked = availability.state === 'locked' || availability.state === 'waiting';
+  return {
+    id: 'upgrade',
+    label,
+    color: 'var(--gold)',
+    disabled: blocked,
+    state: blocked ? availability.state : undefined,
+    // Read out by screen readers; sighted players get the card on hover.
+    hint: !blocked
+      ? undefined
+      : locks.length
+        ? locks[0]
+        : missing
+          ? t('hud.ringMenu.actions.notEnough', { resources: missing })
+          : t('hud.ringMenu.card.badgeNoSlot'),
+    card: {
+      title: t('hud.ringMenu.card.upgradeTitle', { level: nextLevel }),
+      sub: t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: nextLevel }),
+      cost,
+      time: upgradeDefinition ? formatBuildTime(upgradeDefinition.buildSeconds * wisdomFactor()) : undefined,
+      gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      locks,
+      art: buildingArt(type, nextLevel),
+      availability,
+    },
+  };
+}
+
+// The Details bubble (opens BuildingModal on click) also previews the tile on
+// hover: for a building its name, level and what it gives, for ground the
+// terrain and who holds it — the same facts HexTooltip shows on the map.
+function detailsAction(tile: Tile): RingAction {
+  return { id: 'details', label: t('hud.ringMenu.actions.details'), info: tileInfo(tile) };
+}
+
+function tileInfo(tile: Tile): RingInfo {
+  const owner = tile.ownerId ? world.model.getSettlement(tile.ownerId) : undefined;
+  const mine = !!owner && owner.ownerId === player.id;
+  const ownerLine = !owner
+    ? t('hud.hoverTooltip.unclaimed')
+    : mine
+      ? owner.name
+      : t('hud.hoverTooltip.ownedByOther', { owner: owner.ownerName, name: owner.name });
+  const rows: RingInfo['rows'] = [];
+  if (tile.giant) return { title: giantName(tile.giant.family), sub: ownerLine, rows };
+  if (tile.camp && !tile.camp.removed) {
+    return {
+      title: campName(tile.camp.family),
+      sub: tile.camp.strong ? t('hud.hoverTooltip.campStrong') : t('hud.hoverTooltip.campWeak'),
+      rows,
+    };
+  }
+  if (tile.buildingType) {
+    const level = tile.buildingLevel ?? 1;
+    const title = buildingName(tile.buildingType);
+    // Like the hover tooltip, stats are for the player's own buildings only.
+    if (mine) {
+      const stats = buildingStatsAt(tile.buildingType, level, tile, tileAt);
+      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(stats.output) });
+      if (stats.modifier) rows.push({ label: t('hud.hoverTooltip.modifier'), value: formatModifier(stats.modifier) });
+    }
+    return {
+      title,
+      sub: `${t('hud.hoverTooltip.level', { level })} · ${ownerLine}`,
+      art: buildingArt(tile.buildingType, level),
+      rows,
+    };
+  }
+  return { title: ringTerrainLabel.value, sub: ownerLine, rows };
+}
+
 const rootActions = computed<RingAction[]>(() => {
   const tile = selectedTile.value;
   if (!tile) return [];
@@ -851,12 +951,12 @@ const rootActions = computed<RingAction[]>(() => {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [{ id: 'info', label: t('hud.ringMenu.actions.info') }, sendArmyAction(tile)];
+    return [{ id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) }, sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
     return [
-      { id: 'info', label: t('hud.ringMenu.actions.info') },
+      { id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) },
       {
         id: onCoast ? 'land-here' : 'send-settlers',
         label: onCoast ? t('hud.ringMenu.actions.landHere') : t('hud.ringMenu.actions.sendSettlers'),
@@ -878,20 +978,10 @@ const rootActions = computed<RingAction[]>(() => {
     // hovered — root actions carry no cost/card), Upgrade needs to say up
     // front whether it's even possible: same disabled+hint pattern already
     // used for Raze/Train/Attack above, not a new affordance.
-    const nextLevel = (tile.buildingLevel ?? 1) + 1;
-    const upgradeDefinition = buildingCatalogue.byType[tile.buildingType]?.find((d) => d.level === nextLevel);
-    const upgradeCost = upgradeDefinition?.cost ?? buildingUpgradeCost(tile.buildingType, nextLevel);
-    const stock = world.hud.resources;
-    const missing = formatMissingResources(upgradeCost, stock);
+    const upgrade = upgradeActionFor(tile);
     const actions: RingAction[] = [
-      {
-        id: 'upgrade',
-        label: t('hud.ringMenu.actions.upgrade'),
-        color: 'var(--gold)',
-        disabled: missing.length > 0,
-        hint: missing.length ? t('hud.ringMenu.actions.notEnough', { resources: missing }) : undefined,
-      },
-      { id: 'details', label: t('hud.ringMenu.actions.details') },
+      upgrade,
+      detailsAction(tile),
       {
         id: 'raze',
         label: t('hud.ringMenu.actions.raze'),
@@ -937,7 +1027,7 @@ const rootActions = computed<RingAction[]>(() => {
     // A bog shore, mouth or spring takes no building at all (only plain moss, a creek and a half shore do).
     const bareBog = tile.terrain === 'bog' && categoriesFor(tile).length === 0;
     return [
-      { id: 'details', label: t('hud.ringMenu.actions.details') },
+      detailsAction(tile),
       {
         id: 'build',
         label: t('hud.ringMenu.actions.build'),
@@ -956,7 +1046,7 @@ const rootActions = computed<RingAction[]>(() => {
       sendArmyAction(tile),
     ];
   }
-  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }, ...huntActions(tile), sendArmyAction(tile)];
+  return [detailsAction(tile), ...huntActions(tile), sendArmyAction(tile)];
 });
 
 function tileAt(q: number, r: number): Tile {
@@ -1122,24 +1212,73 @@ function towerCampWarning(coord: AxialCoord): string | undefined {
   return towerThreatAt(world.model.camps(), coord) ? t('hud.ringMenu.towerCampWarning') : undefined;
 }
 
-function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
+// The highest level of each building type the selected settlement has — what a
+// building's `prerequisites` are judged against (like Settlement.HighestLevelOf
+// on the server). Live mode reads the polled building list (reactive), demo the
+// local model.
+function builtLevels(): Record<string, number> {
+  if (DEMO_MODE) {
+    const id = world.selectedSettlementId;
+    return id ? world.model.highestBuildingLevels(id) : {};
+  }
+  const levels: Record<string, number> = {};
+  for (const b of world.hud.buildings) levels[b.type] = Math.max(levels[b.type] ?? 0, b.level);
+  return levels;
+}
+
+/** One sentence per prerequisite building still missing (all of them are required). */
+function prerequisiteLocks(
+  prerequisites: readonly { type: string; level: number }[] | undefined,
+  levels: Record<string, number>,
+): string[] {
+  return missingPrerequisites(prerequisites, levels).map((p) =>
+    t('hud.ringMenu.card.requiresBuilding', { building: buildingName(p.type), level: p.level }),
+  );
+}
+
+/** Availability against what is actually spendable: `hud.available` (stock minus the waiting queue's reservation). */
+function availabilityFor(
+  cost: RingCard['cost'],
+  definition: { slotCost?: number; occupiesAllSlots?: boolean } | undefined,
+  locked: boolean,
+  hexBusy = false,
+): RingAvailability {
+  const construction = world.hud.construction;
+  return computeAvailability({
+    cost,
+    available: world.hud.available,
+    slotsNeeded: slotsNeeded(definition, construction.slots),
+    construction,
+    queue: world.hud.queue,
+    locked,
+    hexBusy,
+  });
+}
+
+function ringBuildingFor(type: BuildableType, coord: AxialCoord, levels: Record<string, number>): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const stats = buildingStatsAt(type, 1, tileAt(coord.q, coord.r), tileAt);
+  const cost = definition?.cost ?? buildingUpgradeCost(type, 1);
+  const locks = [
+    longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
+    type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined,
+    SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined,
+    type === 'storagehouse' ? storageHouseLockFor() : undefined,
+    isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
+    ...prerequisiteLocks(definition?.prerequisites, levels),
+  ].filter((lock): lock is string => !!lock);
   return {
     id: type,
     label: buildingName(type),
-    cost: definition?.cost ?? buildingUpgradeCost(type, 1),
+    level: 1,
+    cost,
     // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
     time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
     gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
-    lock:
-      longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
-      ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
-      ?? (SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined)
-      ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined)
-      ?? (isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined),
+    locks,
     warning: type === 'tower' ? towerCampWarning(coord) : undefined,
     art: buildingArt(type, 1),
+    availability: availabilityFor(cost, definition, locks.length > 0),
   };
 }
 
@@ -1147,6 +1286,7 @@ const ringCategories = computed<RingCategory[]>(() => {
   const tile = selectedTile.value;
   const coord = selectedCoord.value;
   if (!tile || !coord || mode.value === 'world') return [];
+  const levels = builtLevels();
   return categoriesFor(tile).map((category) => ({
     id: category.id,
     label: t(`hud.ringMenu.categories.${category.id}`),
@@ -1154,7 +1294,7 @@ const ringCategories = computed<RingCategory[]>(() => {
     buildings: category.buildings
       .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)))
       .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
-      .map((b) => ringBuildingFor(b.type, coord)),
+      .map((b) => ringBuildingFor(b.type, coord, levels)),
   }));
 });
 
@@ -1259,11 +1399,10 @@ async function onRingSelect(id: string) {
     // message for whatever the ring tried to build, with a "Build here"
     // button that would then build a hut instead of retrying the real
     // pick. Closing the ring on a rejection is its own wrong signal too —
-    // it reads as "something happened" — so a rejected build now just
-    // leaves the ring exactly as it was, the same as a click the ring
-    // already refuses (a locked or terrain-inappropriate bubble).
+    // it reads as "something happened" — so a rejected build leaves the
+    // ring open and shows the rejection's message in it (`actionError`,
+    // passed to the ring as `error`) instead of swallowing it.
     if (placed) closeRing();
-    else actionError.value = null;
     return;
   }
   switch (id) {
@@ -1275,14 +1414,9 @@ async function onRingSelect(id: string) {
       return;
     case 'upgrade':
       // upgrade() already closes on success (both branches); on failure it
-      // deliberately leaves selectedTile/ringScreen alone so this can drop
-      // through to BuildingModal instead, where the error renders.
+      // leaves selectedTile/ringScreen alone, so the ring stays open and
+      // shows the rejection's message (`actionError`, passed as `error`).
       await upgrade();
-      if (actionError.value) {
-        ringScreen.value = null;
-      } else {
-        closeRing();
-      }
       return;
     case 'train':
       // Same hand-off pattern as 'details'/'info', to TrainingModal.
@@ -1344,6 +1478,7 @@ async function buildType(type: BuildableType): Promise<boolean> {
   if (DEMO_MODE) {
     const placed = world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
     if (placed) canvasRef.value?.renderer?.forceRebuild();
+    else actionError.value = t('hud.ringMenu.errors.couldNotQueueBuild');
     return placed;
   }
   modalBusy.value = true;
@@ -1471,7 +1606,8 @@ async function upgrade() {
         :coord-label="ringCoordLabel"
         :bounds="ringBounds"
         :card-bounds="ringCardBounds"
-        :stock="world.hud.resources"
+        :stock="world.hud.available"
+        :error="actionError"
         @select="onRingSelect"
         @close="closeRing"
         @outside-pointer-down="onRingOutsidePointerDown"
@@ -1515,7 +1651,8 @@ async function upgrade() {
         :coord-label="ringCoordLabel"
         :bounds="ringBounds"
         :card-bounds="ringCardBounds"
-        :stock="world.hud.resources"
+        :stock="world.hud.available"
+        :error="actionError"
         @select="onRingSelect"
         @close="closeRing"
         @outside-pointer-down="onRingOutsidePointerDown"

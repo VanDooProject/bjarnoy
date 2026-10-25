@@ -1602,6 +1602,20 @@ export class WorldModel {
     return levels;
   }
 
+  /**
+   * The highest level of each building type this settlement has standing (a
+   * level-0 foundation counts as 0) — what a building's `prerequisites` are
+   * judged against, like `Settlement.HighestLevelOf` on the server.
+   */
+  highestBuildingLevels(settlementId: string): Record<string, number> {
+    const levels: Record<string, number> = {};
+    for (const tile of this.storedTiles()) {
+      if (tile.ownerId !== settlementId || !tile.buildingType) continue;
+      levels[tile.buildingType] = Math.max(levels[tile.buildingType] ?? 0, tile.buildingLevel ?? 1);
+    }
+    return levels;
+  }
+
   /** Bumped whenever a building appears, vanishes or levels, so the cached wall index below is rebuilt. */
   protected wallRevision = 0;
 
