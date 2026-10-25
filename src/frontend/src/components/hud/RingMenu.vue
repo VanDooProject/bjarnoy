@@ -287,11 +287,14 @@ const hoveredLane1Index = computed(() => {
   const item = laneItems.value[i];
   return item.card || item.info ? i : null;
 });
-/** A disabled root bubble with a reason, hovered: its hint shows as a chip beside it. */
+/**
+ * A disabled root bubble with a reason, hovered: its hint shows as a chip beside it.
+ * Not for a bubble with its own card (Upgrade): the card already lists the reasons.
+ */
 const hintedLane1 = computed(() => {
   if (!atRoot.value) return null;
   const entry = lane1.value.find((e) => e.item.id === hoverLane1.value);
-  if (!entry || !entry.item.disabled || !entry.item.hint) return null;
+  if (!entry || !entry.item.disabled || !entry.item.hint || entry.item.card) return null;
   return entry;
 });
 
@@ -719,7 +722,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         <svg v-else-if="entry.state === 'waiting'" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
         <svg v-else viewBox="0 0 12 12"><path d="M3 6h6" /></svg>
       </span><span
-        v-if="armed === entry.item.id && !layout.collapsed" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
+        v-if="armed === entry.item.id && !entry.item.disabled && !layout.collapsed" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
     </button>
 
     <button
@@ -760,7 +763,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         <svg v-if="stateOf(b.building) === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
         <svg v-else viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
       </span><span
-        v-if="armed === b.building.id" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
+        v-if="armed === b.building.id && !b.building.disabled && isActionable(stateOf(b.building))" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
     </button>
 
     <div

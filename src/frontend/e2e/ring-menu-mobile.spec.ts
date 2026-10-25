@@ -78,6 +78,8 @@ for (const layout of LAYOUTS) {
       // check treats as "not enabled" — a real finger taps it regardless.
       await herder.tap({ force: true });
       await expect(herder).toHaveClass(/armed/);
+      // No "2" badge: a second tap would do nothing.
+      await expect(herder.getByTestId('ring-arm-badge')).toHaveCount(0);
       const card = settlement.ring.card;
       await expect(card.getByTestId('ring-card-status')).toContainText(/Need \d+ Wood/);
       await expect(card.getByTestId('ring-tap-hint')).toHaveCount(0);

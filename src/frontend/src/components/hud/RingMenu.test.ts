@@ -266,6 +266,24 @@ describe('RingMenu', () => {
     expect(labels(wrapper)).toEqual(['Details', 'Build']);
   });
 
+  it('shows no hint chip on a disabled action that has its own card, since the card lists the reasons', async () => {
+    const wrapper = ring({
+      actions: [
+        {
+          id: 'upgrade',
+          label: 'Upgrade',
+          disabled: true,
+          hint: 'Needs 161 Wood',
+          card: { title: 'Upgrade to level 2', availability: availability({ available: { wood: 0, stone: 0, food: 0, iron: 0 } }) },
+        },
+        { id: 'details', label: 'Details' },
+      ],
+    });
+    await bubble(wrapper, 'Upgrade').trigger('mouseenter');
+    expect(wrapper.find('.ring-card').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="ring-hint"]').exists()).toBe(false);
+  });
+
   it('explains a disabled action in a hint chip on hover, with aria kept and no native disabled attribute', async () => {
     // A native `disabled` button doesn't fire mouse events in most browsers,
     // so hover (and with it the chip) would never show. aria-disabled keeps
@@ -672,6 +690,8 @@ describe('RingMenu', () => {
       const hut = bubble(wrapper, 'Hut');
       await hut.trigger('touchstart');
       expect(hut.classes()).toContain('armed');
+      // No "2" badge: a second tap would do nothing here.
+      expect(hut.find('[data-testid="ring-arm-badge"]').exists()).toBe(false);
       expect(wrapper.find('[data-testid="ring-tap-hint"]').exists()).toBe(false);
       expect(wrapper.get('[data-testid="ring-card-status"]').text()).toContain('Need 100 Wood · 80 Stone');
       await hut.trigger('touchstart');
