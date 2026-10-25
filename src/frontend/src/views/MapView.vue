@@ -72,6 +72,7 @@ import {
   type RingAvailability,
 } from '../lib/map/ringAvailability';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
+import { retractRing } from '../lib/map/ringMotion';
 import type { Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
@@ -646,6 +647,15 @@ watch(queueDrawerOpen, (open) => {
 watch(isHudDrawerOpen, (open) => {
   if (open) queueDrawerOpen.value = false;
 });
+
+// X3: closing the ring (Escape, an outside click, the context menu, a build)
+// does not unmount it at once: <Transition> holds the DOM while the bubbles
+// are pulled into the hub and the hub fades (or, after a confirmed build, the
+// chosen bubble drops onto the hex). `retractRing` makes the leaving ring
+// click-through first, so a map drag started on it still begins immediately.
+function onRingLeave(el: Element, done: () => void) {
+  retractRing(el as HTMLElement).then(done, done);
+}
 
 // A mousedown on the ring's own backdrop (not a bubble) closes the ring and
 // hands back the same PointerEvent so the map can start dragging from it
@@ -1617,23 +1627,25 @@ async function upgrade() {
       <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
-      <RingMenu
-        v-if="selectedTile && ringScreen"
-        :x="ringScreen.x"
-        :y="ringScreen.y"
-        :actions="rootActions"
-        :categories="ringCategories"
-        :terrain-label="ringTerrainLabel"
-        :coord-label="ringCoordLabel"
-        :bounds="ringBounds"
-        :card-bounds="ringCardBounds"
-        :stock="world.hud.available"
-        :error="actionError"
-        :dock="ringDock"
-        @select="onRingSelect"
-        @close="closeRing"
-        @outside-pointer-down="onRingOutsidePointerDown"
-      />
+      <Transition :css="false" @leave="onRingLeave">
+        <RingMenu
+          v-if="selectedTile && ringScreen"
+          :x="ringScreen.x"
+          :y="ringScreen.y"
+          :actions="rootActions"
+          :categories="ringCategories"
+          :terrain-label="ringTerrainLabel"
+          :coord-label="ringCoordLabel"
+          :bounds="ringBounds"
+          :card-bounds="ringCardBounds"
+          :stock="world.hud.available"
+          :error="actionError"
+          :dock="ringDock"
+          @select="onRingSelect"
+          @close="closeRing"
+          @outside-pointer-down="onRingOutsidePointerDown"
+        />
+      </Transition>
       <BuildingModal
         v-if="selectedTile && !ringScreen && !trainModalOpen"
         :tile="selectedTile"
@@ -1663,23 +1675,25 @@ async function upgrade() {
            mode-agnostic. -->
       <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       <ArmyPanel v-if="!isMobile" />
-      <RingMenu
-        v-if="selectedTile && ringScreen"
-        :x="ringScreen.x"
-        :y="ringScreen.y"
-        :actions="rootActions"
-        :categories="ringCategories"
-        :terrain-label="ringTerrainLabel"
-        :coord-label="ringCoordLabel"
-        :bounds="ringBounds"
-        :card-bounds="ringCardBounds"
-        :stock="world.hud.available"
-        :error="actionError"
-        :dock="ringDock"
-        @select="onRingSelect"
-        @close="closeRing"
-        @outside-pointer-down="onRingOutsidePointerDown"
-      />
+      <Transition :css="false" @leave="onRingLeave">
+        <RingMenu
+          v-if="selectedTile && ringScreen"
+          :x="ringScreen.x"
+          :y="ringScreen.y"
+          :actions="rootActions"
+          :categories="ringCategories"
+          :terrain-label="ringTerrainLabel"
+          :coord-label="ringCoordLabel"
+          :bounds="ringBounds"
+          :card-bounds="ringCardBounds"
+          :stock="world.hud.available"
+          :error="actionError"
+          :dock="ringDock"
+          @select="onRingSelect"
+          @close="closeRing"
+          @outside-pointer-down="onRingOutsidePointerDown"
+        />
+      </Transition>
     </template>
     <MobileDispatchSheet v-if="isMobile && hasActiveDraft" />
   </div>
