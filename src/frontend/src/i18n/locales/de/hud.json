@@ -123,19 +123,36 @@
       "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden",
       "hunt": "Jagen",
       "campOccupied": "Von wilden Tieren belegt",
+      "maxLevel": "Höchste Stufe",
       "noLandUnitsAtHome": "Keine Landeinheiten zu Hause"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
-    "level1": "Stufe 1 · {status}",
-    "locked": "gesperrt",
-    "ready": "bereit",
     "buildableHere": "HIER BAUBAR",
     "cost": "Kosten",
     "buildTime": "Bauzeit",
     "gives": "Ertrag",
-    "lockedCta": "GESPERRT",
-    "buildCta": "{label} BAUEN",
+    "card": {
+      "level": "Stufe {level}",
+      "upgradeTitle": "Ausbau auf Stufe {level}",
+      "upgradeSub": "{building} · Stufe {from} → {to}",
+      "slots": "Bauplätze",
+      "slotsValue": "{needed} · {free} von {total} frei",
+      "slotsAll": "Alle ({total}) · {free} von {total} frei",
+      "needResources": "Es fehlen {resources}",
+      "needSlots": "Braucht {needed} Bauplatz · {free} von {total} frei | Braucht {needed} Bauplätze · {free} von {total} frei",
+      "needSlotsNext": "Braucht {needed} Bauplatz · {free} von {total} frei · nächster frei in {time} | Braucht {needed} Bauplätze · {free} von {total} frei · nächster frei in {time}",
+      "willQueue": "Wird hinter den laufenden Bauten eingereiht ({waiting} von {max} wartend)",
+      "queueFull": "Die Warteschlange ist voll ({waiting} von {max})",
+      "badgeNoResources": "Nicht genug Rohstoffe",
+      "badgeNoSlot": "Kein freier Bauplatz",
+      "requiresBuilding": "Benötigt {building} Stufe {level}"
+    },
+    "tap": {
+      "build": "{name} noch einmal antippen, um zu bauen",
+      "upgrade": "{name} noch einmal antippen, um auszubauen",
+      "details": "{name} noch einmal antippen für alle Details"
+    },
     "errors": {
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
       "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden."

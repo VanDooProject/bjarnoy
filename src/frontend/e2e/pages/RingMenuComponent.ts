@@ -22,7 +22,7 @@ export class RingMenuComponent {
   readonly backBubble: Locator;
   /** The inner lane: root actions before drilling, build categories after. */
   readonly categoryBubbles: Locator;
-  /** The outer lane: the buildings inside the hovered category. */
+  /** The outer lane: the buildings inside the opened category. */
   readonly childBubbles: Locator;
   /** The informational cost/time/gate card docked beside the ring. */
   readonly card: Locator;
@@ -62,10 +62,10 @@ export class RingMenuComponent {
   }
 
   /**
-   * Moves the real pointer onto a bubble's centre — the ring drills in on
-   * hover (see SettlementView's onRingHover), and `steps: 6` is what makes
-   * that a genuine pointer traversal rather than a teleport the component's
-   * own enter/leave handling can miss.
+   * Moves the real pointer onto a bubble's centre — what previews a building's
+   * card (hover never navigates any more), and `steps: 6` is what makes that a
+   * genuine pointer traversal rather than a teleport the component's own
+   * enter/leave handling can miss.
    */
   async hover(bubble: Locator): Promise<void> {
     await expect(bubble).toBeVisible();
@@ -73,14 +73,20 @@ export class RingMenuComponent {
     await this.page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2, { steps: 6 });
   }
 
+  /** Moves the real pointer onto a bubble and clicks it — how the ring navigates (hover only previews). */
+  async click(bubble: Locator): Promise<void> {
+    await this.hover(bubble);
+    await bubble.click();
+  }
+
   /** Root "Build" action → the build categories on the inner lane. */
   async openBuildCategories(): Promise<void> {
-    await this.hover(this.action('Build').first());
+    await this.click(this.action('Build').first());
   }
 
   /** A named category → its buildings on the outer lane. */
   async openCategory(label: string): Promise<void> {
-    await this.hover(this.category(label).first());
+    await this.click(this.category(label).first());
   }
 
   /**
@@ -88,6 +94,6 @@ export class RingMenuComponent {
    * terrain offers" rather than a named one.
    */
   async openFirstCategory(): Promise<void> {
-    await this.hover(this.categoryBubbles.first());
+    await this.click(this.categoryBubbles.first());
   }
 }

@@ -212,6 +212,36 @@ describe('ring layout behaviour', () => {
   });
 });
 
+// A root bubble (Upgrade, Details) shows its own card while hovered: it has no
+// lane2 building to anchor on, so the card docks off that bubble's lane1 spot.
+describe('ring layout root-bubble card', () => {
+  const open = { x: 330, y: 240, area: FRAME, cardArea: FRAME_CARD };
+  const input = { ...open, lane1Count: 4, lane2Count: 0, parentIndex: -1, cardAnchor: null };
+
+  it('shows no card unless a root bubble is anchored', () => {
+    expect(layoutRing(input).card).toBeNull();
+  });
+
+  it('docks a card clear of the ring and inside cardArea for each root bubble', () => {
+    for (let i = 0; i < 4; i++) {
+      const layout = layoutRing({ ...input, lane1CardAnchor: i });
+      expect(layout.card, `bubble ${i}`).not.toBeNull();
+      const card = layout.card!;
+      expect(card.x).toBeGreaterThanOrEqual(FRAME_CARD.left);
+      expect(card.y).toBeGreaterThanOrEqual(FRAME_CARD.top);
+      expect(card.x + CARD_W).toBeLessThanOrEqual(FRAME_CARD.right);
+      expect(card.y + CARD_H).toBeLessThanOrEqual(FRAME_CARD.bottom);
+      expect(cardGap(card, circlesOf(layout, open.x, open.y)), `bubble ${i}`).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('docks the rejected-build note even though a drilled ring has buildings, when nothing is hovered', () => {
+    const layout = layoutRing({ ...input, lane2Count: 2, parentIndex: 1, wantsNote: true });
+    expect(layout.card).toBeNull();
+    expect(layout.note).not.toBeNull();
+  });
+});
+
 // The onboarding ring is flat (lane2Count === 0, no category to drill into)
 // but still wants a persistent "why it's dim" note docked clear of the ring
 // — unlike the detail card above, which only ever appears once a lane2

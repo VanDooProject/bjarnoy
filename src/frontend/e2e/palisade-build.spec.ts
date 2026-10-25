@@ -24,6 +24,8 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
   const settlement = await SettlementPage.found(page);
   // Unlocks at Longhouse 7: level the longhouse up, rather than weaken the gate for the test.
   await settlement.setSettlementLevel(8);
+  // ...and its prerequisite, a level-5 tower (BuildingCatalogue.cs Prerequisites).
+  await settlement.standBuildings([{ type: 'tower', level: 5 }]);
   await settlement.setResources({ wood: 5000, stone: 5000, food: 5000, iron: 0 });
 
   // Find the layout through the model: four free plain hexes in a row and the hex that turns 120 degrees off the last one.
