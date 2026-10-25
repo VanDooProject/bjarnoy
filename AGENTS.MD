@@ -147,6 +147,11 @@
 - ask questions if anything is unclear or you need more context
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
+- artifacts that go through rounds (UX reviews, design options, motion
+  demos, ...) keep every earlier round viewable: publish the new round as
+  its own page or section in the same artifact and link the rounds to each
+  other — never overwrite or delete an earlier round's content when
+  publishing the next one, I still compare against it
 
 # sandbox tooling (Claude Code cloud sessions)
 - the cloud sandbox does **not** come with the .NET SDK preinstalled, and
