@@ -4,6 +4,7 @@ import {
   clampAnimationDeltaMs,
   fadeAlphaAt,
   hoverSubjectFor,
+  isIslandNearViewport,
   isWaypointTap,
   landfallBurstFrames,
   loadProgressFraction,
@@ -878,5 +879,29 @@ describe('clientToCanvasPoint', () => {
   it('falls back to 1:1 for a canvas with no layout size', () => {
     const rect = { left: 10, top: 10, width: 0, height: 0 };
     expect(clientToCanvasPoint({ x: 30, y: 40 }, rect, { width: 0, height: 0 })).toEqual({ x: 20, y: 30 });
+  });
+});
+
+describe('isIslandNearViewport', () => {
+  const viewport = { width: 1000, height: 600 };
+
+  it('keeps an island centred on screen', () => {
+    expect(isIslandNearViewport({ x: 500, y: 300 }, viewport, 100)).toBe(true);
+  });
+
+  it('keeps an island whose centre is off screen but within its reach of the edge', () => {
+    expect(isIslandNearViewport({ x: -90, y: 300 }, viewport, 100)).toBe(true);
+    expect(isIslandNearViewport({ x: 500, y: 690 }, viewport, 100)).toBe(true);
+  });
+
+  it('culls an island further than its reach past any edge', () => {
+    expect(isIslandNearViewport({ x: -101, y: 300 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 1101, y: 300 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 500, y: -101 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 500, y: 701 }, viewport, 100)).toBe(false);
+  });
+
+  it('culls nothing before the viewport has a size', () => {
+    expect(isIslandNearViewport({ x: 99999, y: 99999 }, { width: 0, height: 0 }, 100)).toBe(true);
   });
 });

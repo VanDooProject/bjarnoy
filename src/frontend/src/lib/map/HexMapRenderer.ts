@@ -50,7 +50,7 @@ import {
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
-import type { RiverTile, Settlement, Terrain, Tile } from './types';
+import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
@@ -932,6 +932,29 @@ export function previewIslandBounds(tiles: AxialCoord[]): {
 }
 
 /**
+ * Whether an island whose centre sits at screen point `centre` can have any
+ * part of itself or its name label inside the viewport. An island reaches at
+ * most `marginPx` (generation.islandMaxReach hexes at the current zoom) from
+ * its centre, and its label sits within that reach too, so a centre further
+ * than that outside the viewport rectangle can be skipped without measuring
+ * its (potentially 100k-tile) footprint. An unsized viewport (before the
+ * first resize) culls nothing.
+ */
+export function isIslandNearViewport(
+  centre: { x: number; y: number },
+  viewport: { width: number; height: number },
+  marginPx: number,
+): boolean {
+  if (viewport.width === 0 || viewport.height === 0) return true;
+  return (
+    centre.x >= -marginPx &&
+    centre.x <= viewport.width + marginPx &&
+    centre.y >= -marginPx &&
+    centre.y <= viewport.height + marginPx
+  );
+}
+
+/**
  * Zoom that fits `tiles` (the preview crop's actual drawn hexes — see
  * `previewIslandBounds`, and `WorldModel.previewCropTiles` for what's in
  * `tiles`) inside the viewport, for the landing page's locked static
@@ -1698,6 +1721,13 @@ export class HexMapRenderer {
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
+  /**
+   * World-space Y of each island's bottom edge, for placing its name label.
+   * Measuring it walks the island's whole footprint, so it is done once per
+   * island and kept here, valid only for the island list it was measured from.
+   */
+  private islandBottomCache = new Map<string, number>();
+  private islandBottomCacheFor: IslandLabel[] | null = null;
   // Issue #40 phase 2: see `setArmyOverlay` — drawn every tick alongside the
   // settlement badge (rebuildMarkers), same "recomputed from hex coords on
   // every rebuild" pattern as everything else in this layer, so it keeps up
@@ -4350,10 +4380,24 @@ export class HexMapRenderer {
     // between a settlement and an island id; demo mode never populates it,
     // so its island names simply stay neutral there, same as before.
     const myIslandId = worldModel.listSettlements().find((s) => s.ownerId === playerId)?.islandId;
-    for (const island of worldModel.listIslands()) {
+    const islands = worldModel.listIslands();
+    // setIslands() swaps in a new array (and clears the model's footprint
+    // cache), so a changed reference means every cached bottom is stale.
+    if (this.islandBottomCacheFor !== islands) {
+      this.islandBottomCache.clear();
+      this.islandBottomCacheFor = islands;
+    }
+    // A world with thousands of islands (the showcase page, or a player who has
+    // explored a lot) would otherwise measure every one every tick. An island
+    // reaches at most islandMaxReach hexes from its centre; a centre further
+    // than that outside the viewport can't show itself or its label.
+    const reach = worldModel.generation.islandMaxReach;
+    const cullMarginPx = reach > 0 ? reach * TILE_W * this.camera.zoom : Infinity;
+    for (const island of islands) {
       if (fogActive && !worldModel.isExplored(island.q, island.r)) continue;
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      if (!isIslandNearViewport(center, this.viewport, cullMarginPx)) continue;
       const mineIsland = island.id === myIslandId;
       // Reference styling: uppercase, letter-spaced small-caps label, muted
       // gray for other islands, gold + bold for the player's own (see
@@ -4366,10 +4410,14 @@ export class HexMapRenderer {
       // offset either overlaps a big island or floats far below a small one
       // — instead, measure the real bottom edge from the island's actual
       // (flood-filled, cached) tile footprint and clear past that.
-      let bottomWorldY = grid.y + TILE_H; // this hex's own bottom vertex, as a floor
-      for (const tile of worldModel.islandFootprint(island)) {
-        const tileGrid = isoGridPosition(tile, TILE_W, TILE_H);
-        bottomWorldY = Math.max(bottomWorldY, tileGrid.y + TILE_H);
+      let bottomWorldY = this.islandBottomCache.get(island.id);
+      if (bottomWorldY === undefined) {
+        bottomWorldY = grid.y + TILE_H; // this hex's own bottom vertex, as a floor
+        for (const tile of worldModel.islandFootprint(island)) {
+          const tileGrid = isoGridPosition(tile, TILE_W, TILE_H);
+          bottomWorldY = Math.max(bottomWorldY, tileGrid.y + TILE_H);
+        }
+        this.islandBottomCache.set(island.id, bottomWorldY);
       }
       const bottom = this.toScreen({ x: grid.x + TILE_W / 2, y: bottomWorldY });
       label.anchor.set(0.5, 0);
