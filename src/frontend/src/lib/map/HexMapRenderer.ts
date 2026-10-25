@@ -49,7 +49,7 @@ import {
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
-import type { WorldModel } from './WorldModel';
+import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
@@ -381,6 +381,8 @@ export interface HexMapRendererOptions {
    * position. Ignored once `settlementId` is set.
    */
   previewCenter?: AxialCoord;
+  /** Radius of the no-settlement preview crop around `previewCenter` (default `PREVIEW_ISLAND_RADIUS`); the showcase frame shows a wider one than the landing page. */
+  previewRadius?: number;
   /**
    * A single hex to keep highlighted every frame, independent of hover —
    * zip 6a's "click to place" glow on the one buildable plot before the
@@ -1922,7 +1924,7 @@ export class HexMapRenderer {
         // asymmetric crop while pushing the long side out of frame. `at`
         // still decides *which* island and *where* the crop is taken from;
         // it stops being the camera target.
-        const tiles = this.options.worldModel.previewCropTiles(at);
+        const tiles = this.options.worldModel.previewCropTiles(at, this.options.previewRadius ?? PREVIEW_ISLAND_RADIUS);
         const bounds = previewIslandBounds(tiles);
         const zoom = previewFitZoom({
           tiles,
@@ -3585,7 +3587,7 @@ export class HexMapRenderer {
     // to — the two must agree, or the framing goes wrong again (see that
     // method's own comment).
     const previewTileKeys = preview
-      ? new Set(worldModel.previewCropTiles(previewCenter).map((c) => coordKey(c)))
+      ? new Set(worldModel.previewCropTiles(previewCenter, this.options.previewRadius ?? PREVIEW_ISLAND_RADIUS).map((c) => coordKey(c)))
       : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];

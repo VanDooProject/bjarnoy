@@ -11,10 +11,10 @@
 import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from '../map/WorldModel';
 import { riverBuildingAllowedHere } from '../map/ringCatalogue';
-import { CAMP_FAMILIES } from '../map/campPlacement';
+import { campFamilyInfo, type CampFamily, type CampGround } from '../map/campPlacement';
 import { maxLevelFor } from '../map/buildingEconomy';
 import { giantCoverage } from '../map/giantTiles';
-import { TILE_ORIENTATIONS, type Settlement, type Tile } from '../map/types';
+import { straightOrientationOf, TILE_ORIENTATIONS, type Settlement, type Tile, type TileOrientation } from '../map/types';
 
 /**
  * Owner id of the showcase village. Deliberately not the page's viewer id
@@ -22,6 +22,16 @@ import { TILE_ORIENTATIONS, type Settlement, type Tile } from '../map/types';
  * settlement, and the showcase wants the whole archipelago visible.
  */
 export const SHOWCASE_VILLAGE_OWNER = 'showcase-village';
+
+/**
+ * Radius (hexes) of the frame's crop around the bog centre: wider than the
+ * landing page's `PREVIEW_ISLAND_RADIUS` so the village, the bog and a camp of
+ * every wildlife family fit in one view. ShowcaseView passes it to the canvas
+ * as `previewRadius`; camps, the giant and the looks use the same crop. Site
+ * scoring stays on the landing radius: it scans every bog hex as a candidate,
+ * and the village site it picks (mills by the river) was tuned there.
+ */
+export const SHOWCASE_PREVIEW_RADIUS = 11;
 
 /** How far from `near` village sites are sampled, and the grid step between samples (bounds the scoring cost to a few hundred candidates). */
 const SITE_SEARCH_RADIUS = 60;
@@ -245,8 +255,8 @@ const GIANT_HOME_CLEARANCE = 2;
 const GIANT_BUILDING_CLEARANCE = 2;
 const CAMP_MIN_HOME_DISTANCE = 4;
 const CAMP_MIN_SPACING = 3;
-const CAMPS_WANTED = 2;
-const CAMPS_MAX = 3;
+/** Fallback spacing when a family finds no spot at CAMP_MIN_SPACING. */
+const CAMP_RELAXED_SPACING = 2;
 
 /** Whether the crop already shows a giant. */
 function cropHasGiant(model: WorldModel, crop: AxialCoord[]): boolean {
@@ -263,7 +273,7 @@ function cropHasGiant(model: WorldModel, crop: AxialCoord[]): boolean {
  * plate partly outside the crop (>= 4 of 7 hexes inside) and reaches farther.
  */
 function ensureGiantMountain(model: WorldModel, center: AxialCoord, home: AxialCoord, seed: number, buildings: AxialCoord[]) {
-  const crop = model.previewCropTiles(center);
+  const crop = model.previewCropTiles(center, SHOWCASE_PREVIEW_RADIUS);
   if (cropHasGiant(model, crop)) return;
   const inCrop = new Set(crop.map((c) => `${c.q},${c.r}`));
   const rand = mulberry32(seed ^ 0x9e3779b1);
@@ -291,28 +301,68 @@ function ensureGiantMountain(model: WorldModel, center: AxialCoord, home: AxialC
 }
 
 /**
- * Wildlife camps are sparse (one per 600-1500 land tiles), so the crop often
- * has none. Adds weak/strong camps from the real family table on suitable
- * ground (grass, forest, sand) away from the longhouse, giants, buildings,
- * rivers and bog, until the crop shows `CAMPS_WANTED`..`CAMPS_MAX`.
+ * The families the frame shows one camp of, in placement order: the scarce
+ * grounds (bog, river) first so they get the spots, then grass, forest, shore.
+ * Strong boar wallow is optional — the generator's own camps often cover it.
+ */
+const SHOWCASE_CAMP_FAMILIES: CampFamily[] = [
+  'moosemire', 'beaverlodge', 'cranedance', 'bearrapids',
+  'wolfden', 'harewarren', 'deerglade', 'boarwallow', 'sealhaulout',
+];
+
+/** A straight river-width tile — the only river shape with bearrapids art (mirrors `placeCamps`). */
+function straightRiverOrientation(model: WorldModel, c: AxialCoord): TileOrientation | null {
+  const river = model.getRiverTile(c.q, c.r);
+  if (!river || river.wasted || river.shape !== 'straight' || (river.width ?? 'river') !== 'river') return null;
+  const direction = river.inDirections.length > 0 ? river.inDirections[0] : river.outDirection;
+  return direction ? straightOrientationOf(direction) : null;
+}
+
+/** The ground a hex offers a camp, using `placeCamps`'s own rules; sand counts only on the shore (a sea hex within 1), as the generator's inland sand is a known artefact. */
+function campGroundOf(model: WorldModel, c: AxialCoord, tile: Tile): CampGround | null {
+  if (model.getRiverTile(c.q, c.r)) return straightRiverOrientation(model, c) ? 'riverStraight' : null;
+  if (tile.bog) return tile.bog.kind === 'bog' ? 'bog' : null;
+  if (tile.terrain === 'grass' || tile.terrain === 'forest') return tile.terrain;
+  if (tile.terrain === 'sand' && neighbors(c).some((n) => model.getTile(n.q, n.r).terrain === 'sea')) return 'sand';
+  return null;
+}
+
+/**
+ * Wildlife camps are sparse (one per 600-1500 land tiles), so the crop shows
+ * few of them. Adds, on top of the generator's own camps, one camp of each
+ * family in `SHOWCASE_CAMP_FAMILIES` the crop does not show yet where its
+ * ground exists: away from the longhouse, giants, buildings and other camps,
+ * as spread out as the crop allows. A family without ground in the crop is skipped.
  */
 function ensureCamps(model: WorldModel, center: AxialCoord, home: AxialCoord, seed: number) {
-  const crop = model.previewCropTiles(center);
+  const crop = model.previewCropTiles(center, SHOWCASE_PREVIEW_RADIUS);
   const camps = crop.filter((c) => model.getTile(c.q, c.r).camp).map((c) => ({ q: c.q, r: c.r }));
-  if (camps.length >= CAMPS_WANTED) return;
+  const present = new Set(crop.map((c) => model.getTile(c.q, c.r).camp?.family));
   const rand = mulberry32(seed ^ 0x85ebca6b);
-  const added: { family: string; coord: AxialCoord; level: number; orientation: (typeof TILE_ORIENTATIONS)[number] }[] = [];
-  for (const c of shuffled(crop, rand)) {
-    if (camps.length >= CAMPS_MAX) break;
+  const hexes = shuffled(crop, rand).filter((c) => {
     const tile = model.getTile(c.q, c.r);
-    if (tile.giant || tile.camp || tile.buildingType || tile.bog || model.getRiverTile(c.q, c.r)) continue;
-    if (tile.terrain !== 'grass' && tile.terrain !== 'forest' && tile.terrain !== 'sand') continue;
-    if (hexDistance(home, c) < CAMP_MIN_HOME_DISTANCE) continue;
-    if (camps.some((o) => hexDistance(o, c) < CAMP_MIN_SPACING)) continue;
-    const families = CAMP_FAMILIES.filter((f) => f.ground === tile.terrain);
-    if (families.length === 0) continue;
-    const family = families[Math.floor(rand() * families.length)].family;
-    added.push({ family, coord: { q: c.q, r: c.r }, level: 1 + Math.floor(rand() * 3), orientation: tile.orientation ?? 'SE' });
+    return !tile.giant && !tile.camp && !tile.buildingType && hexDistance(home, c) >= CAMP_MIN_HOME_DISTANCE;
+  });
+  const added: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[] = [];
+  for (const family of SHOWCASE_CAMP_FAMILIES) {
+    if (present.has(family)) continue;
+    const ground = campFamilyInfo(family)!.ground;
+    const nearest = (c: AxialCoord) => camps.reduce((d, o) => Math.min(d, hexDistance(o, c)), Infinity);
+    let best: { c: AxialCoord; tile: Tile; spread: number } | null = null;
+    for (const spacing of [CAMP_MIN_SPACING, CAMP_RELAXED_SPACING]) {
+      for (const c of hexes) {
+        const tile = model.getTile(c.q, c.r);
+        if (campGroundOf(model, c, tile) !== ground) continue;
+        const spread = nearest(c);
+        if (spread < spacing || (best && spread <= best.spread)) continue;
+        best = { c, tile, spread };
+      }
+      if (best) break;
+    }
+    if (!best) continue;
+    const { c, tile } = best;
+    const orientation = ground === 'riverStraight' ? straightRiverOrientation(model, c)! : (tile.orientation ?? 'SE');
+    added.push({ family, coord: { q: c.q, r: c.r }, level: 1 + Math.floor(rand() * 3), orientation });
     camps.push({ q: c.q, r: c.r });
   }
   model.setCamps(added);
@@ -345,7 +395,7 @@ function lookKey(tile: Tile): string {
 export function diversifyLooks(model: WorldModel, center: AxialCoord, seed: number) {
   const rand = mulberry32(seed ^ 0xc2b2ae35);
   const done = new Set<string>();
-  for (const c of shuffled(model.previewCropTiles(center), rand)) {
+  for (const c of shuffled(model.previewCropTiles(center, SHOWCASE_PREVIEW_RADIUS), rand)) {
     const tile = model.getTile(c.q, c.r);
     const key = `${c.q},${c.r}`;
     if (tile.buildingType || tile.giant || tile.camp) continue;

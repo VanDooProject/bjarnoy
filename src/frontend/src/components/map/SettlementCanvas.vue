@@ -24,6 +24,8 @@ const props = defineProps<{
   // no-settlement fog bypass.
   settlementId?: string;
   previewCenter?: AxialCoord;
+  // Wider (or narrower) preview crop than the landing page's default — see HexMapRendererOptions.previewRadius.
+  previewRadius?: number;
   highlightCoord?: AxialCoord;
   highlightCoords?: AxialCoord[];
   screenBiasX?: number;
@@ -70,6 +72,7 @@ const { renderer, loadState, mountError, retry: retryMount } = useHexMapRenderer
   playerId: props.playerId,
   settlementId: props.settlementId,
   previewCenter: props.previewCenter,
+  previewRadius: props.previewRadius,
   highlightCoord: props.highlightCoord,
   highlightCoords: props.highlightCoords,
   screenBiasX: props.screenBiasX,

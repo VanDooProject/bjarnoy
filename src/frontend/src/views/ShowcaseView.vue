@@ -17,7 +17,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { hexDistance } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
-import { buildShowcaseVillage } from '../lib/showcase/showcaseVillage';
+import { buildShowcaseVillage, SHOWCASE_PREVIEW_RADIUS } from '../lib/showcase/showcaseVillage';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
@@ -198,6 +198,7 @@ const ENGINEERING: EngineeringCard[] = [
             :world-model="heroModel"
             :player-id="PLAYER_ID"
             :preview-center="islandCenter"
+            :preview-radius="SHOWCASE_PREVIEW_RADIUS"
             lock-camera
             hide-settlement-badge
             background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"

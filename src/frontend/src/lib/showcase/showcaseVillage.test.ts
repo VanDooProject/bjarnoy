@@ -3,7 +3,7 @@ import { hexesInRadius, neighbors } from '../hex/coords';
 import { WorldModel } from '../map/WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands } from '../map/worldGenerator';
 import { maxLevelFor } from '../map/buildingEconomy';
-import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
+import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
 
 const SEED = 20260824;
 
@@ -33,17 +33,17 @@ describe('buildShowcaseVillage', () => {
   });
 
   it('puts the preview crop on varied ground, not just grass and sand', () => {
-    const terrains = new Set(built.model.previewCropTiles(built.center).map((c) => built.model.getTile(c.q, c.r).terrain));
+    const terrains = new Set(built.model.previewCropTiles(built.center, SHOWCASE_PREVIEW_RADIUS).map((c) => built.model.getTile(c.q, c.r).terrain));
     expect(terrains.size).toBeGreaterThanOrEqual(3);
   });
 
-  const cropTiles = () => built.model.previewCropTiles(built.center).map((c) => built.model.getTile(c.q, c.r));
+  const cropTiles = () => built.model.previewCropTiles(built.center, SHOWCASE_PREVIEW_RADIUS).map((c) => built.model.getTile(c.q, c.r));
 
   it('frames the island\'s bog land, with open lake water and no plain look 0 on any bog hex', () => {
     const bog = cropTiles().filter((t) => t.bog);
     expect(bog.length).toBeGreaterThanOrEqual(20);
     expect(bog.filter((t) => t.bog?.kind === 'lake').length).toBeGreaterThanOrEqual(3);
-    for (const tile of bog.filter((t) => !t.buildingType)) {
+    for (const tile of bog.filter((t) => !t.buildingType && !t.camp)) {
       expect((tile.variant ?? 0) % 9).not.toBe(0);
       if (tile.bog?.kind !== 'bog') expect(DECORATED_BOG_VARIANTS).toContain(tile.variant);
     }
@@ -56,6 +56,29 @@ describe('buildShowcaseVillage', () => {
     const types = new Set(tiles.filter((t) => t.buildingType).map((t) => t.buildingType));
     expect(types.has('longhouse')).toBe(true);
     expect(types.size).toBeGreaterThanOrEqual(10);
+  });
+
+  it('shows a camp of each wildlife family the wider crop has ground for, on its own ground', () => {
+    const { model } = built;
+    const crop = model.previewCropTiles(built.center, SHOWCASE_PREVIEW_RADIUS);
+    const camps = crop.filter((c) => model.getTile(c.q, c.r).camp).map((c) => ({ c, tile: model.getTile(c.q, c.r) }));
+    const families = camps.map((x) => x.tile.camp!.family);
+    const bog = camps.filter((x) => ['moosemire', 'beaverlodge', 'cranedance'].includes(x.tile.camp!.family));
+    expect(bog.length).toBeGreaterThanOrEqual(2);
+    for (const x of bog) expect(x.tile.bog?.kind).toBe('bog');
+    for (const family of ['wolfden', 'harewarren', 'deerglade', 'bearrapids']) expect(families).toContain(family);
+    // Seals only on shore sand, never on inland sand.
+    for (const x of camps.filter((y) => y.tile.camp!.family === 'sealhaulout')) {
+      expect(x.tile.terrain).toBe('sand');
+      expect(neighbors(x.c).some((n) => model.getTile(n.q, n.r).terrain === 'sea')).toBe(true);
+    }
+    // Each ground-bound family stands on a straight river tile (bearrapids) / off rivers (the rest).
+    for (const x of camps) {
+      const onRiver = model.getRiverTile(x.c.q, x.c.r) !== undefined;
+      if (x.tile.camp!.family === 'bearrapids') expect(onRiver).toBe(true);
+      if (['moosemire', 'beaverlodge', 'cranedance', 'wolfden', 'harewarren', 'deerglade'].includes(x.tile.camp!.family)) expect(onRiver).toBe(false);
+    }
+    expect(new Set(families).size).toBe(families.length);
   });
 
   it('stands the village by the river: a Sawmill or Crop Mill on a river tile, a tower and the bog\'s own buildings', () => {
@@ -87,7 +110,7 @@ describe('buildShowcaseVillage', () => {
       const t = built.model.getTile(q, r);
       return t.bog?.kind === 'bog' && !t.buildingType && !t.giant && !t.camp ? t : null;
     };
-    const crop = built.model.previewCropTiles(built.center);
+    const crop = built.model.previewCropTiles(built.center, SHOWCASE_PREVIEW_RADIUS);
     const inCrop = new Set(crop.map((c) => `${c.q},${c.r}`));
     for (const c of crop) {
       const a = moss(c.q, c.r);
@@ -101,7 +124,7 @@ describe('buildShowcaseVillage', () => {
 
   it('only re-rolls looks: terrain, bog kinds and buildings stay as generated', () => {
     const snapshot = () =>
-      built.model.previewCropTiles(built.center).map((c) => {
+      built.model.previewCropTiles(built.center, SHOWCASE_PREVIEW_RADIUS).map((c) => {
         const t = built.model.getTile(c.q, c.r);
         return `${c.q},${c.r}:${t.terrain}:${t.bog?.kind ?? ''}:${t.buildingType ?? ''}:${t.giant ? 'g' : ''}${t.camp ? 'c' : ''}`;
       });
