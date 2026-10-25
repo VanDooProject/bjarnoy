@@ -280,6 +280,43 @@ export class SettlementPage {
     }, level);
   }
 
+  /**
+   * Stands buildings of these types and levels on free owned land hexes —
+   * for a building whose `prerequisites` (BuildingCatalogue.cs, mirrored by
+   * the ring's lock) need another building first, the way a player would have
+   * to build it, rather than weakening the gate for the test. Picks hexes from
+   * the far end of the realm's scan, so `findHex` (which scans from the near
+   * end) still hands back the same target it would have otherwise.
+   */
+  async standBuildings(buildings: { type: string; level: number }[]): Promise<void> {
+    await this.page.evaluate((wanted) => {
+      const world = (window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+      }).__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      const free: { q: number; r: number }[] = [];
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId !== world.selectedSettlementId || tile.buildingType || tile.camp || tile.giant) continue;
+          if (!['grass', 'forest', 'sand', 'mountain'].includes(tile.terrain) || world.model.getRiverTile(at.q, at.r)) continue;
+          free.push(at);
+        }
+      }
+      for (const building of wanted) {
+        const at = free.pop();
+        if (!at) throw new Error(`no free owned hex left to stand a ${building.type} on`);
+        const tile = world.model.getTile(at.q, at.r);
+        tile.buildingType = building.type;
+        tile.buildingLevel = building.level;
+      }
+      world.syncHud();
+    }, buildings);
+  }
+
   /** Sets the settlement's stock outright — for the affordability gates. */
   async setResources(resources: { wood: number; stone: number; food: number; iron: number }): Promise<void> {
     await this.page.evaluate((r) => {
