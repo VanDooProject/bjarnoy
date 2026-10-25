@@ -5,7 +5,7 @@
 // explicit `hud.lastSpend` event, so an ordinary production tick (the stock
 // changing on its own) never triggers it.
 import { createPinia, setActivePinia } from 'pinia';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import ResourceBar from './ResourceBar.vue';
 import { useWorldStore } from '../../stores/world';
