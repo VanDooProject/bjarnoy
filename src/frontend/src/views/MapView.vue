@@ -22,6 +22,7 @@ import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
+import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
 import RingMenu, { type RingAction, type RingBuilding, type RingCard, type RingCategory, type RingInfo } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
@@ -1484,7 +1485,8 @@ async function buildFromRing(type: BuildableType) {
   if (!world.selectedSettlementId || !coord) return;
   actionError.value = null;
   // What the ring promised this building costs (read before the ring closes: the categories follow the selected tile).
-  const cost = ringCategories.value.flatMap((c) => c.buildings).find((b) => b.id === type)?.cost;
+  const entry = ringCategories.value.flatMap((c) => c.buildings).find((b) => b.id === type);
+  const cost = entry?.cost;
   if (DEMO_MODE) {
     const settlement = world.model.getSettlement(world.selectedSettlementId);
     const before = settlement ? { ...settlement.resources } : null;
@@ -1507,14 +1509,25 @@ async function buildFromRing(type: BuildableType) {
   }
   const renderer = canvasRef.value?.renderer;
   closeRing();
+  // Hold the new queue row back until the confirmation animation reveals it (Q1/Q5, BuildQueuePanel).
+  holdBuildRow(coord);
   try {
     await world.queueBuildOptimistic(type, coord, cost);
   } catch (err) {
+    releaseBuildRow(coord);
     console.error('Failed to queue building against the backend', err);
     // Surface the rejection's detail (NoFreeSlot's premium hint included, issue #158).
     renderer?.rejectConstructionDial(coord);
     showBuildRefusal(coord, describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild')));
+    return;
   }
+  announceConfirmedBuild({
+    coord,
+    name: entry?.label ?? buildingName(type),
+    level: 1,
+    time: entry?.time ?? null,
+    from: renderer?.dialScreenPoint(coord) ?? null,
+  });
 }
 
 const RESOURCE_KINDS: ResourceKind[] = ['wood', 'stone', 'food', 'iron'];
