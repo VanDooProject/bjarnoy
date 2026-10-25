@@ -5,7 +5,7 @@
 // count bumps. A card that was hidden (no orders yet) slides in from the left
 // first. Reduced motion skips the flight but the row and count still appear.
 import { createPinia, setActivePinia } from 'pinia';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import BuildQueuePanel from './BuildQueuePanel.vue';
 import { useWorldStore } from '../../stores/world';
