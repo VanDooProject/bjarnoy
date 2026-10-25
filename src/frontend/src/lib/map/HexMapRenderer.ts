@@ -834,8 +834,10 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 // badge) over a building under construction — white track, yellow elapsed arc,
 // remaining time inside.
 const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
-// Dial height above the tile centre.
-const CONSTRUCTION_DIAL_LIFT = TILE_H * 0.9;
+// Dial height above the tile centre: half a tile, so the dial's middle sits on
+// the hex's upper edge and the dial overlaps its own tile instead of floating
+// above it.
+const CONSTRUCTION_DIAL_LIFT = TILE_H / 2;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
