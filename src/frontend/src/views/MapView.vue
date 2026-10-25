@@ -74,7 +74,7 @@ import {
 } from '../lib/map/ringAvailability';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { retractRing } from '../lib/map/ringMotion';
-import type { Tile } from '../lib/map/types';
+import type { ResourceKind, Resources, Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable, towerThreatAt } from '../lib/map/campRules';
@@ -1483,7 +1483,11 @@ async function buildFromRing(type: BuildableType) {
   const coord = selectedCoord.value;
   if (!world.selectedSettlementId || !coord) return;
   actionError.value = null;
+  // What the ring promised this building costs (read before the ring closes: the categories follow the selected tile).
+  const cost = ringCategories.value.flatMap((c) => c.buildings).find((b) => b.id === type)?.cost;
   if (DEMO_MODE) {
+    const settlement = world.model.getSettlement(world.selectedSettlementId);
+    const before = settlement ? { ...settlement.resources } : null;
     const placed = world.model.placeBuilding(world.selectedSettlementId, coord, type);
     if (!placed) {
       // Unlike live mode there is no optimistic phase: the ring stays open with the reason in it.
@@ -1491,13 +1495,20 @@ async function buildFromRing(type: BuildableType) {
       return;
     }
     canvasRef.value?.renderer?.forceRebuild();
+    // X8: tick the resource bar down, but only by what placing really took out of the stock.
+    if (settlement && before) {
+      const spent: Partial<Resources> = {};
+      for (const kind of RESOURCE_KINDS) if (settlement.resources[kind] < before[kind]) spent[kind] = before[kind] - settlement.resources[kind];
+      world.syncHud();
+      world.recordSpend(spent);
+    }
     closeRing();
     return;
   }
   const renderer = canvasRef.value?.renderer;
   closeRing();
   try {
-    await world.queueBuildOptimistic(type, coord);
+    await world.queueBuildOptimistic(type, coord, cost);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
     // Surface the rejection's detail (NoFreeSlot's premium hint included, issue #158).
@@ -1506,6 +1517,7 @@ async function buildFromRing(type: BuildableType) {
   }
 }
 
+const RESOURCE_KINDS: ResourceKind[] = ['wood', 'stone', 'food', 'iron'];
 const BUILD_REFUSAL_MS = 2500;
 const buildRefusal = ref<{ coord: AxialCoord; message: string } | null>(null);
 let buildRefusalTimer: ReturnType<typeof setTimeout> | null = null;
