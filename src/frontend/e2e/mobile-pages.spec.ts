@@ -332,8 +332,20 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
       await expect(banner).toBeVisible();
       const chip = settlement.guidancePointer.locator('.chip');
       await expect(chip).toBeVisible();
+      // One in-page read of both boxes per poll attempt. The map's render loop keeps the
+      // main thread busy, so every Playwright box lookup waits for a frame; four of them in
+      // one poll callback (chip, banner, banner, banner) could outlast the whole 5s poll
+      // timeout on a loaded runner without ever returning a value, even though the chip
+      // was already well clear of the banner. A single evaluate is one round trip and
+      // measures both from the same frame.
       await expect
-        .poll(async () => (await box(chip, 'chip')).y - ((await box(banner, 'banner')).y + (await box(banner, 'banner')).height))
+        .poll(() =>
+          page.evaluate(() => {
+            const chipBox = document.querySelector('[data-testid="guidance-pointer"] .chip')!.getBoundingClientRect();
+            const bannerBox = document.querySelector('[data-testid="onboarding-banner"]')!.getBoundingClientRect();
+            return chipBox.top - bannerBox.bottom;
+          }),
+        )
         .toBeGreaterThanOrEqual(0);
     });
   });
