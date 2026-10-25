@@ -904,15 +904,21 @@ export interface TileTextures {
   giantAnims: Partial<Record<string, GiantTextureMap<TileAnimClip>>>;
 }
 
-function framesOfFamily(atlas: LoadedAtlas, family: string): FamilyFrame<Texture>[] {
-  const frames: FamilyFrame<Texture>[] = [];
+/**
+ * Groups an atlas's resolved frames by family once, in the atlas's own frame order. `buildTileTextures` looks
+ * up ~100 families; scanning the whole (tens of thousands of frames) `frameMeta` per family made every build
+ * cost families x frames.
+ */
+function indexFramesByFamily(atlas: LoadedAtlas): (family: string) => FamilyFrame<Texture>[] {
+  const byFamily = new Map<string, FamilyFrame<Texture>[]>();
   for (const [name, meta] of Object.entries(atlas.frameMeta)) {
-    if (meta.family !== family) continue;
     const value = atlas.textures[name];
     if (!value) continue;
-    frames.push({ name, layer: meta.layer, value });
+    let list = byFamily.get(meta.family);
+    if (!list) byFamily.set(meta.family, (list = []));
+    list.push({ name, layer: meta.layer, value });
   }
-  return frames;
+  return (family) => byFamily.get(family) ?? [];
 }
 
 /**
@@ -952,12 +958,13 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
     Object.assign(merged.clips, atlas.clips);
   }
 
+  const framesOf = indexFramesByFamily(merged);
   const base: TileTextures['base'] = {};
   const baseIndexed: TileTextures['baseIndexed'] = {};
   const top: TileTextures['top'] = {};
   const animTop: TileTextures['animTop'] = {};
   for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
-    const rawFrames = framesOfFamily(merged, family);
+    const rawFrames = framesOf(family);
     const propVariant = LAKE_PROP_VARIANT[key];
     const frames =
       propVariant !== undefined
@@ -1000,7 +1007,7 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
   // layer for it), so whichever bucket actually turned out indexed is the
   // one that reproduces that variety; `baseIndexed` is preferred only in
   // case a future render puts the variants there instead.
-  const coastalClassified = classifyFamilyFrames(framesOfFamily(merged, COASTAL_FAMILY));
+  const coastalClassified = classifyFamilyFrames(framesOf(COASTAL_FAMILY));
   const coastalBase =
     coastalClassified.baseIndexed ?? coastalClassified.top ?? emptyOrientationMap<Texture[]>(() => []);
 
@@ -1014,14 +1021,14 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
   // (from before this family moved into terrain — see the wasted-islands
   // asset-bump commit), and its lone-frame-per-orientation shape is its own
   // kind of gap classifyFamilyFrames would otherwise reject outright.
-  const wastedCoastalClassified = classifyFamilyFrames(renumberTopVariants(framesOfFamily(merged, WASTED_COASTAL_FAMILY)));
+  const wastedCoastalClassified = classifyFamilyFrames(renumberTopVariants(framesOf(WASTED_COASTAL_FAMILY)));
   const wastedCoastalBase =
     wastedCoastalClassified.baseIndexed ?? wastedCoastalClassified.top ?? emptyOrientationMap<Texture[]>(() => []);
 
   const riverBase = {} as Record<RiverArtShape, OrientationMap<Texture>>;
   const riverTop = {} as Record<RiverArtShape, OrientationMap<Texture>>;
   for (const [shape, family] of Object.entries(RIVER_FAMILY) as [RiverArtShape, string][]) {
-    const classified = classifyFamilyFrames(framesOfFamily(merged, family));
+    const classified = classifyFamilyFrames(framesOf(family));
     riverBase[shape] = classified.base ?? emptyOrientationMap<Texture>(() => Texture.EMPTY);
     const topArr = classified.top ?? emptyOrientationMap<Texture[]>(() => []);
     riverTop[shape] = mapOrientations(topArr, (_o, arr) => arr[0] ?? Texture.EMPTY);
@@ -1030,7 +1037,7 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
   const lavaRiverBase: TileTextures['lavaRiverBase'] = {};
   const lavaRiverTop: TileTextures['lavaRiverTop'] = {};
   for (const [shape, family] of Object.entries(LAVA_RIVER_FAMILY) as [LavaRiverShape, string][]) {
-    const classified = classifyFamilyFrames(framesOfFamily(merged, family));
+    const classified = classifyFamilyFrames(framesOf(family));
     if (classified.base) lavaRiverBase[shape] = classified.base;
     if (classified.top) lavaRiverTop[shape] = mapOrientations(classified.top, (_o, arr) => arr[0] ?? Texture.EMPTY);
   }
@@ -1038,7 +1045,7 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas, opts
   const giants: TileTextures['giants'] = {};
   const giantAnims: TileTextures['giantAnims'] = {};
   for (const family of GIANT_FAMILIES) {
-    const frames = framesOfFamily(merged, family);
+    const frames = framesOf(family);
     if (frames.length > 0) giants[family] = classifyGiantFrames(frames);
 
     if (animAtlas) {
