@@ -455,6 +455,8 @@ describe('RingMenu', () => {
       expect(hut.classes()).not.toContain('locked');
       expect(hut.find('.ring-badge.waiting').exists()).toBe(true);
       expect(hut.attributes('aria-disabled')).toBe('true');
+      // The badge adds no text, not even whitespace: specs and screen readers read the label as-is.
+      expect(hut.element.textContent).toBe('Hut');
 
       const card = wrapper.get('.ring-card');
       expect(card.text()).toContain('NOT ENOUGH RESOURCES');
@@ -639,5 +641,107 @@ describe('RingMenu', () => {
       const wrapper = ring({ error: 'No free construction slot.' });
       expect(wrapper.get('[data-testid="ring-error"]').text()).toBe('No free construction slot.');
     });
+  });
+
+  describe('touch: arm, then commit', () => {
+    it('arms a building on the first tap with a visible ring, a “2” badge and a tap-again hint', async () => {
+      const wrapper = ringWith({ availability: availability() });
+      await bubble(wrapper, 'Build').trigger('click');
+      await bubble(wrapper, 'Housing').trigger('click');
+      const hut = bubble(wrapper, 'Hut');
+      expect(hut.classes()).not.toContain('armed');
+
+      await hut.trigger('touchstart');
+      expect(hut.classes()).toContain('armed');
+      expect(hut.find('[data-testid="ring-arm-badge"]').exists()).toBe(true);
+      // The badge's digit is CSS, so the bubble's label is unchanged.
+      expect(hut.text()).toBe('Hut');
+      expect(wrapper.get('[data-testid="ring-tap-hint"]').text()).toBe('Tap Hut again to build');
+      expect(wrapper.emitted('select')).toBeUndefined();
+
+      // Second tap on the same bubble: touchstart lets the click through, which commits.
+      await hut.trigger('touchstart');
+      await hut.trigger('click');
+      expect(wrapper.emitted('select')).toEqual([['hut']]);
+    });
+
+    it('shows the reasons instead of the hint for an armed blocked building, and never commits it', async () => {
+      const wrapper = ringWith({ availability: availability({ available: { wood: 0, stone: 0, food: 0, iron: 0 } }) });
+      await bubble(wrapper, 'Build').trigger('click');
+      await bubble(wrapper, 'Housing').trigger('click');
+      const hut = bubble(wrapper, 'Hut');
+      await hut.trigger('touchstart');
+      expect(hut.classes()).toContain('armed');
+      expect(wrapper.find('[data-testid="ring-tap-hint"]').exists()).toBe(false);
+      expect(wrapper.get('[data-testid="ring-card-status"]').text()).toContain('Need 100 Wood · 80 Stone');
+      await hut.trigger('touchstart');
+      await hut.trigger('click');
+      expect(wrapper.emitted('select')).toBeUndefined();
+    });
+
+    it('moves the arm to another bubble on a tap there', async () => {
+      const wrapper = ring();
+      await bubble(wrapper, 'Build').trigger('click');
+      await bubble(wrapper, 'Defense').trigger('click');
+      await bubble(wrapper, 'Barracks').trigger('touchstart');
+      await bubble(wrapper, 'Watchtower').trigger('touchstart');
+      expect(bubble(wrapper, 'Barracks').classes()).not.toContain('armed');
+      expect(bubble(wrapper, 'Watchtower').classes()).toContain('armed');
+      expect(wrapper.get('.ring-card').text()).toContain('Watchtower');
+    });
+
+    it('arms Upgrade and Details on the first tap and commits on the second', async () => {
+      const wrapper = ring({
+        actions: [
+          { id: 'upgrade', label: 'Upgrade', card: { title: 'Upgrade to level 2', availability: availability() } },
+          { id: 'details', label: 'Details', info: { title: 'Longhouse', rows: [] } },
+          { id: 'build', label: 'Build' },
+        ],
+      });
+      const upgrade = bubble(wrapper, 'Upgrade');
+      await upgrade.trigger('touchstart');
+      expect(upgrade.classes()).toContain('armed');
+      expect(wrapper.get('.ring-card').text()).toContain('Upgrade to level 2');
+      expect(wrapper.get('[data-testid="ring-tap-hint"]').text()).toBe('Tap Upgrade again to upgrade');
+
+      const details = bubble(wrapper, 'Details');
+      await details.trigger('touchstart');
+      expect(upgrade.classes()).not.toContain('armed');
+      expect(wrapper.get('[data-testid="ring-tap-hint"]').text()).toBe('Tap Details again for all details');
+      await details.trigger('touchstart');
+      await details.trigger('click');
+      expect(wrapper.emitted('select')).toEqual([['details']]);
+    });
+
+    it('never arms a bubble without a card: Build still opens on the first tap', async () => {
+      const wrapper = ring();
+      await bubble(wrapper, 'Build').trigger('touchstart');
+      expect(bubble(wrapper, 'Build').classes()).not.toContain('armed');
+      await bubble(wrapper, 'Build').trigger('click');
+      expect(labels(wrapper)).toContain('Housing');
+    });
+
+    it('does not arm on a mouse hover', async () => {
+      const wrapper = ringWith({ availability: availability() });
+      await hoverHut(wrapper);
+      expect(bubble(wrapper, 'Hut').classes()).not.toContain('armed');
+      expect(wrapper.find('[data-testid="ring-tap-hint"]').exists()).toBe(false);
+    });
+  });
+
+  describe('docked card (phone layout)', () => {
+    for (const dock of ['bottom', 'left', 'right'] as const) {
+      it(`docks the card to the ${dock} edge instead of floating it`, async () => {
+        const wrapper = ringWith({ availability: availability() }, { dock });
+        await bubble(wrapper, 'Build').trigger('click');
+        await bubble(wrapper, 'Housing').trigger('click');
+        await bubble(wrapper, 'Hut').trigger('touchstart');
+        const card = wrapper.get('.ring-card');
+        expect(card.classes()).toContain(`docked-${dock}`);
+        expect(card.attributes('data-dock')).toBe(dock);
+        expect(card.attributes('style') ?? '').not.toContain('left:');
+        expect(card.find('button').exists()).toBe(false);
+      });
+    }
   });
 });

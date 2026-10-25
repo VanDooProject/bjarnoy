@@ -148,9 +148,10 @@
       "badgeNoSlot": "Kein freier Bauplatz",
       "requiresBuilding": "Benötigt {building} Stufe {level}"
     },
-    "details": {
-      "tileTitle": "Feld",
-      "claimedHere": "Beanspruchter Boden"
+    "tap": {
+      "build": "{name} noch einmal antippen, um zu bauen",
+      "upgrade": "{name} noch einmal antippen, um auszubauen",
+      "details": "{name} noch einmal antippen für alle Details"
     },
     "errors": {
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",

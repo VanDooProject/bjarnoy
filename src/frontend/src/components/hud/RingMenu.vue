@@ -34,6 +34,7 @@ import type { MessageSchema } from '../../i18n/schema';
 import { resourceName } from '../../i18n/catalogueNames';
 import { formatBuildTime } from '../../lib/map/ringCatalogue';
 import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
+import { tapArm, type RingDock } from '../../lib/map/ringDock';
 import {
   BUB1,
   BUB2,
@@ -154,6 +155,12 @@ const props = withDefaults(
      */
     error?: string | null;
     /**
+     * Phone layout: dock the detail card to a screen edge (a bottom strip in
+     * portrait, a side panel in landscape — see lib/map/ringDock.ts) instead
+     * of floating it beside the ring. Null keeps the floating desktop card.
+     */
+    dock?: RingDock | null;
+    /**
      * Design handoff "2a": a persistent, muted explanation shown beside a
      * flat ring (no `categories`) — e.g. why the one disabled guided
      * building doesn't fit this hex. Explains the *hex*, not the click, so
@@ -171,6 +178,7 @@ const props = withDefaults(
     cardBounds: undefined,
     stock: undefined,
     error: null,
+    dock: null,
     note: null,
   },
 );
@@ -195,6 +203,11 @@ const path = ref<string[]>([]);
 const hover = ref<string | null>(null);
 /** The root / category bubble under the pointer — only to preview its card or hint chip, never to navigate. */
 const hoverLane1 = ref<string | null>(null);
+/**
+ * Touch only: the bubble the first tap "armed" (its card is showing); a second
+ * tap on it commits. Mouse hover never arms — a mouse previews by hovering.
+ */
+const armed = ref<string | null>(null);
 
 const viewport = ref({ w: window.innerWidth, h: window.innerHeight });
 function onResize() {
@@ -234,8 +247,12 @@ watch(
     path.value = [];
     hover.value = null;
     hoverLane1.value = null;
+    armed.value = null;
   },
 );
+watch(path, () => {
+  armed.value = null;
+});
 
 const area = computed<Rect>(
   () => props.bounds ?? { left: 16, top: 76, right: viewport.value.w - 16, bottom: viewport.value.h - 16 },
@@ -287,8 +304,9 @@ const layout = computed(() =>
     lane1Count: laneCount.value,
     lane2Count: buildings.value.length,
     parentIndex: activeCategory.value ? props.categories.indexOf(activeCategory.value) : -1,
-    cardAnchor: hoveredIndex.value,
-    lane1CardAnchor: hoveredLane1Index.value,
+    // A docked card lives at a screen edge, so the ring doesn't make room for it.
+    cardAnchor: props.dock ? null : hoveredIndex.value,
+    lane1CardAnchor: props.dock ? null : hoveredLane1Index.value,
     wantsNote: !!props.note || !!props.error,
   }),
 );
@@ -388,6 +406,8 @@ interface CardView {
   rows: { label: string; value: string }[];
   warning?: string;
   statuses: { text: string; tone: Tone }[];
+  /** Touch: "Tap X again to build" — only while the shown item is armed and committable. */
+  tapHint?: string;
 }
 
 function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], number>>): string {
@@ -399,7 +419,7 @@ function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], 
 const cardView = computed<CardView | null>(() => {
   const info = activeInfo.value;
   if (info) {
-    return { title: info.title, sub: info.sub, art: info.art, chips: [], rows: info.rows, statuses: [] };
+    return { title: info.title, sub: info.sub, art: info.art, chips: [], rows: info.rows, statuses: [], tapHint: tapHint.value };
   }
   const card = activeCard.value;
   if (!card) return null;
@@ -465,8 +485,31 @@ const cardView = computed<CardView | null>(() => {
     rows: [],
     warning: card.warning,
     statuses,
+    tapHint: tapHint.value,
   };
 });
+
+/**
+ * What a second tap on the armed bubble would do, spelled out — touch has no
+ * hover, so the two-tap rule has to be visible. Only for an item that the
+ * second tap would actually commit; a blocked one shows its reasons instead.
+ */
+const tapHint = computed<string | undefined>(() => {
+  const id = armed.value;
+  if (!id) return undefined;
+  const building = hovered.value;
+  if (building && building.id === id) {
+    if (building.disabled || !isActionable(stateOf(building))) return undefined;
+    return t('hud.ringMenu.tap.build', { name: building.label });
+  }
+  const item = hoveredLane1Index.value === null ? null : laneItems.value[hoveredLane1Index.value];
+  if (!item || item.id !== id || item.disabled) return undefined;
+  if (item.info) return t('hud.ringMenu.tap.details', { name: item.label });
+  return t('hud.ringMenu.tap.upgrade', { name: item.label });
+});
+
+/** Whether the card (floating or docked) is on screen. */
+const cardShown = computed(() => !!cardView.value && (!!props.dock || !!layout.value.card));
 
 const hubLabel = computed(() => (atRoot.value ? props.terrainLabel : t('hud.ringMenu.buildHub')));
 const hubSub = computed(() => (atRoot.value ? props.coordLabel : props.terrainLabel));
@@ -541,10 +584,25 @@ function onBuildingClick(building: RingBuilding) {
 // `pointerdown`: Chromium only suppresses the tap's compatibility `click`
 // when the *touch* event, not the pointer event, was the one canceled.
 function onBuildingTouchStart(e: TouchEvent, building: RingBuilding) {
-  if (hover.value !== building.id) {
-    e.preventDefault();
-    hover.value = building.id;
-  }
+  const tap = tapArm(armed.value, building.id);
+  if (tap.commit) return;
+  e.preventDefault();
+  armed.value = tap.armed;
+  hover.value = building.id;
+  hoverLane1.value = null;
+}
+// The same two-tap rule for the root bubbles that carry a card (Upgrade) or
+// tile info (Details): the first tap arms and shows it, the second commits.
+// Every other root bubble (Build, a category, Send army …) acts on the first
+// tap as before — navigating or opening a sheet spends nothing.
+function onLaneTouchStart(e: TouchEvent, item: RingAction) {
+  if (!atRoot.value || (!item.card && !item.info)) return;
+  const tap = tapArm(armed.value, item.id);
+  if (tap.commit) return;
+  e.preventDefault();
+  armed.value = tap.armed;
+  hoverLane1.value = item.id;
+  hover.value = null;
 }
 // Where the hint chip of a hovered, disabled root bubble sits: just outside the
 // bubble, away from the tile, anchored so it grows away from the bubble.
@@ -634,6 +692,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         'is-locked': entry.state === 'locked',
         'is-waiting': entry.state === 'waiting',
         soft: !!note,
+        armed: armed === entry.item.id,
         dot: layout.collapsed,
       }"
       :style="{
@@ -648,6 +707,7 @@ function onBackdropPointerDown(e: PointerEvent) {
       :title="layout.collapsed ? entry.item.label : undefined"
       :aria-description="entry.item.disabled ? entry.item.hint : undefined"
       :aria-label="entry.item.label"
+      @touchstart="onLaneTouchStart($event, entry.item)"
       @click="onLaneClick(entry.item)"
       @mouseenter="hoverLane1 = entry.item.id"
       @mouseleave="hoverLane1 = null"
@@ -658,7 +718,8 @@ function onBackdropPointerDown(e: PointerEvent) {
         <svg v-if="entry.state === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
         <svg v-else-if="entry.state === 'waiting'" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
         <svg v-else viewBox="0 0 12 12"><path d="M3 6h6" /></svg>
-      </span>
+      </span><span
+        v-if="armed === entry.item.id && !layout.collapsed" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
     </button>
 
     <button
@@ -679,6 +740,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         locked: stateOf(b.building) === 'locked',
         waiting: stateOf(b.building) === 'waiting',
         disabled: b.building.disabled,
+        armed: armed === b.building.id,
       }"
       :style="{
         left: `${b.x}px`,
@@ -697,14 +759,17 @@ function onBackdropPointerDown(e: PointerEvent) {
         v-if="stateOf(b.building) !== 'ready' && stateOf(b.building) !== 'queues'" class="ring-badge" :class="stateOf(b.building)" aria-hidden="true">
         <svg v-if="stateOf(b.building) === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
         <svg v-else viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
-      </span>
+      </span><span
+        v-if="armed === b.building.id" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
     </button>
 
     <div
-      v-if="cardView && layout.card"
+      v-if="cardView && cardShown"
       class="ring-card"
+      :class="dock ? ['docked', `docked-${dock}`] : []"
       data-testid="ring-card"
-      :style="{ left: `${layout.card.x}px`, top: `${layout.card.y}px`, width: `${CARD_W}px` }"
+      :data-dock="dock ?? undefined"
+      :style="dock || !layout.card ? undefined : { left: `${layout.card.x}px`, top: `${layout.card.y}px`, width: `${CARD_W}px` }"
     >
       <div class="card-art">
         <AtlasSprite v-if="cardView.art?.kind === 'atlas'" :frame="cardView.art.frame" class="card-art-img" />
@@ -747,7 +812,10 @@ function onBackdropPointerDown(e: PointerEvent) {
         <li v-for="status in cardView.statuses" :key="status.text" :class="status.tone">{{ status.text }}</li>
         <li v-if="error" class="lock" data-testid="ring-error">{{ error }}</li>
       </ul>
-      <div v-else class="card-foot" />
+      <p v-if="cardView.tapHint" class="card-tap-hint" data-testid="ring-tap-hint">
+        <i class="tap-bubble" aria-hidden="true" />{{ cardView.tapHint }}
+      </p>
+      <div v-else-if="!(cardView.statuses.length || error)" class="card-foot" />
     </div>
 
     <div
@@ -762,7 +830,7 @@ function onBackdropPointerDown(e: PointerEvent) {
     <!-- A rejected build / upgrade: the server's message stays visible with the
          ring still open. On the card when one is up (above); otherwise here. -->
     <div
-      v-if="error && !(cardView && layout.card) && layout.note"
+      v-if="error && !cardShown && layout.note"
       class="ring-note ring-error"
       data-testid="ring-error"
       :style="{ left: `${layout.note.x}px`, top: `${layout.note.y}px`, width: `${NOTE_W}px` }"
@@ -1105,6 +1173,95 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-foot {
   height: 12px;
+}
+.card-tap-hint {
+  margin: 0;
+  padding: 9px 12px 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--gold);
+}
+/* A tiny bubble with the armed ring: "this bubble, again". Not a button. */
+.tap-bubble {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(8, 18, 26, 0.9);
+  box-shadow: 0 0 0 2px var(--gold);
+}
+/* Touch: the first tap armed this bubble; a second tap commits it. */
+.ring-bubble.armed {
+  animation: ring-arm-pulse 1.3s ease-in-out infinite;
+}
+@keyframes ring-arm-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--gold),
+      0 0 0 2px rgba(255, 197, 92, 0.6);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--gold),
+      0 0 0 10px rgba(255, 197, 92, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ring-bubble.armed {
+    animation: none;
+    box-shadow: 0 0 0 4px var(--gold);
+  }
+}
+.arm-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  color: #20160a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+/* The digit is drawn by CSS so it never becomes part of the bubble's label text. */
+.arm-badge::before {
+  content: '2';
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+}
+/* Phone layout: the card docks to a screen edge (lib/map/ringDock.ts). The
+   --hud-inset-* variables come from MapView's root and keep it clear of the
+   HUD bar wherever it is docked; env() keeps it clear of notches. */
+.ring-card.docked {
+  border-radius: 12px;
+}
+.ring-card.docked-bottom {
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  bottom: calc(var(--hud-inset-bottom, 0px) + 8px + env(safe-area-inset-bottom, 0px));
+  max-height: 236px;
+}
+.ring-card.docked-left,
+.ring-card.docked-right {
+  top: calc(var(--hud-inset-top, 0px) + 8px + env(safe-area-inset-top, 0px));
+  bottom: calc(var(--hud-inset-bottom, 0px) + 8px + env(safe-area-inset-bottom, 0px));
+  width: 248px;
+}
+.ring-card.docked-left {
+  left: calc(var(--hud-inset-left, 0px) + 8px + env(safe-area-inset-left, 0px));
+}
+.ring-card.docked-right {
+  right: calc(8px + env(safe-area-inset-right, 0px));
 }
 .card-status {
   list-style: none;

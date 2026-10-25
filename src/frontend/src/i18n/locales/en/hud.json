@@ -148,9 +148,10 @@
       "badgeNoSlot": "No free build slot",
       "requiresBuilding": "Requires {building} level {level}"
     },
-    "details": {
-      "tileTitle": "Tile",
-      "claimedHere": "Claimed ground"
+    "tap": {
+      "build": "Tap {name} again to build",
+      "upgrade": "Tap {name} again to upgrade",
+      "details": "Tap {name} again for all details"
     },
     "errors": {
       "couldNotQueueBuild": "Could not queue that build.",

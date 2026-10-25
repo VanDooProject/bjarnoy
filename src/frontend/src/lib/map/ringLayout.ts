@@ -52,8 +52,12 @@ export const HUB = 66;
 /** Diameter a spent inner lane collapses to when two full lanes don't fit. */
 export const DOT = 14;
 export const CARD_W = 200;
-/** Measured, not nominal — the rendered card is ~222px tall, and a 200 here made every clearance test 20px optimistic. */
-export const CARD_H = 222;
+/**
+ * Measured, not nominal: with the build-slots row and a status footer the
+ * rendered card is ~180-240px tall (230 for a locked building with one line
+ * of reasons); a lower figure here makes every clearance test optimistic.
+ */
+export const CARD_H = 240;
 /**
  * The onboarding ring's "why it's dim" note (design handoff "2a", frame 3)
  * — a short muted explanation, not the full building-detail card, so it
