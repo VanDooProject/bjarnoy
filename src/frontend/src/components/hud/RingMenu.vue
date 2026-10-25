@@ -26,7 +26,7 @@
 // navigates — it only previews: hovering a building (or the root Upgrade /
 // Details bubble) shows its read-out card. This component owns layout and
 // navigation only — the caller supplies the tree and reacts to `select`.
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
@@ -35,6 +35,8 @@ import { resourceName } from '../../i18n/catalogueNames';
 import { formatBuildTime } from '../../lib/map/ringCatalogue';
 import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
+import { motionEnabled } from '../../lib/motion';
+import * as ringMotion from '../../lib/map/ringMotion';
 import {
   BUB1,
   BUB2,
@@ -200,6 +202,10 @@ const emit = defineEmits<{
 
 /** [] = root · ['build'] = categories · ['build', catId] = that category's buildings. */
 const path = ref<string[]>([]);
+/** The backdrop element: the choreography in lib/map/ringMotion.ts finds the bubbles, links and hub inside it. */
+const rootEl = ref<HTMLElement | null>(null);
+/** A layer swap is animating; navigation clicks are ignored until it has landed. */
+const swapping = ref(false);
 const hover = ref<string | null>(null);
 /** The root / category bubble under the pointer — only to preview its card or hint chip, never to navigate. */
 const hoverLane1 = ref<string | null>(null);
@@ -233,6 +239,8 @@ onMounted(() => {
   window.addEventListener('resize', onResize);
   window.addEventListener('keydown', onWindowKeydown);
   window.addEventListener('pointerdown', onWindowPointerDown, true);
+  // O1: the hub grows, then the bubbles bloom out of it.
+  if (rootEl.value) void ringMotion.openRing(rootEl.value);
 });
 onUnmounted(() => {
   window.removeEventListener('pointerdown', onWindowPointerDown, true);
@@ -514,6 +522,15 @@ const tapHint = computed<string | undefined>(() => {
 /** Whether the card (floating or docked) is on screen. */
 const cardShown = computed(() => !!cardView.value && (!!props.dock || !!layout.value.card));
 
+/**
+ * H4: the soft gold glow on the building that can be built while its card is
+ * shown (hover on desktop, armed on touch). `ready` and `queues` are the two
+ * committable states.
+ */
+function glowing(b: RingBuilding): boolean {
+  return hover.value === b.id && cardShown.value && !b.disabled && isActionable(stateOf(b));
+}
+
 const hubLabel = computed(() => (atRoot.value ? props.terrainLabel : t('hud.ringMenu.buildHub')));
 const hubSub = computed(() => (atRoot.value ? props.coordLabel : props.terrainLabel));
 // Real glyph widths of the UI font for bubbleLabelFontPx — a per-glyph
@@ -549,32 +566,93 @@ const hubLabelFont = computed(
     })}px`,
 );
 
-function goUp() {
-  if (path.value.length) {
-    path.value = path.value.slice(0, -1);
+/**
+ * Moves to another layer. With motion the departing layer is pulled into its
+ * parent first (the hub, or the category bubble), the path only changes once
+ * that has finished, and the new layer then blooms out of its parent
+ * (lib/map/ringMotion.ts). Without motion (reduced motion, jsdom) the path
+ * changes immediately.
+ */
+async function go(next: string[]) {
+  const root = rootEl.value;
+  if (!root || !motionEnabled()) {
+    path.value = next;
     hover.value = null;
     hoverLane1.value = null;
-  } else {
-    emit('close');
+    return;
   }
+  if (swapping.value) return;
+  swapping.value = true;
+  try {
+    const prev = path.value;
+    const hubPoint = { x: props.x, y: props.y };
+    const parentPoint = () => {
+      const kid = lane2.value[0];
+      return kid ? { x: kid.parentX, y: kid.parentY } : hubPoint;
+    };
+    // The lane1 bubbles are swapped when the root <-> build boundary is crossed;
+    // the buildings lane when a category opens, closes or changes.
+    const lane1Swap = (prev.length === 0) !== (next.length === 0);
+    if (lane1Swap) await ringMotion.layerOut(root, 'lane1', hubPoint);
+    else if (prev.length === 2) await ringMotion.layerOut(root, 'kids', parentPoint());
+    path.value = next;
+    hover.value = null;
+    hoverLane1.value = null;
+    await nextTick();
+    ringMotion.release(root);
+    if (lane1Swap) await ringMotion.layerIn(root, 'lane1', hubPoint);
+    else if (next.length === 2) await ringMotion.layerIn(root, 'kids', parentPoint());
+  } finally {
+    swapping.value = false;
+  }
+}
+
+function goUp() {
+  if (path.value.length) void go(path.value.slice(0, -1));
+  else emit('close');
+}
+/** X11: the hub / ‹ BACK squish, then go back. At the root the hub just closes (the retract is its own motion). */
+async function onBackClick(e: MouseEvent) {
+  if (swapping.value) return;
+  if (path.value.length && motionEnabled()) await ringMotion.press(e.currentTarget as HTMLElement);
+  goUp();
 }
 // Navigation is click-only: Build opens its categories, a category opens its
 // buildings, exactly as going back already needed a click. Hover only previews.
-function onLaneClick(item: RingAction) {
-  if (item.disabled) return;
+function onLaneClick(e: MouseEvent, item: RingAction) {
+  if (item.disabled) {
+    // A blocked root action (Raze on the longhouse, Send army without units ...) shakes and flashes its reason.
+    blockedFeedback(e.currentTarget as HTMLElement);
+    return;
+  }
+  if (swapping.value) return;
   if (atRoot.value) {
-    if (item.id === 'build' && props.categories.length) path.value = ['build'];
+    if (item.id === 'build' && props.categories.length) void go(['build']);
     else emit('select', item.id);
     return;
   }
   if (props.categories.some((c) => c.id === item.id)) {
-    path.value = ['build', item.id];
-    hover.value = null;
+    void go(['build', item.id]);
   }
 }
-function onBuildingClick(building: RingBuilding) {
-  if (building.disabled || !isActionable(stateOf(building))) return;
+function onBuildingClick(e: MouseEvent, building: RingBuilding) {
+  const el = e.currentTarget as HTMLElement;
+  if (building.disabled || !isActionable(stateOf(building))) {
+    blockedFeedback(el);
+    return;
+  }
+  if (swapping.value) return;
+  // X2: tells the retract (MapView's <Transition> leave hook) which bubble
+  // drops onto the hex; cleared again in case the caller kept the ring open.
+  el.setAttribute(ringMotion.DROPPING_ATTR, '');
   emit('select', building.id);
+  setTimeout(() => el.removeAttribute(ringMotion.DROPPING_ATTR), 50);
+}
+/** X1: the shake, the badge wobble and the reason flash for a click on something that is blocked. */
+function blockedFeedback(bubble: HTMLElement) {
+  const root = rootEl.value;
+  const reason = root?.querySelector<HTMLElement>('[data-testid="ring-card-status"], .ring-hint') ?? null;
+  void ringMotion.shake(bubble, reason);
 }
 // Touch has no hover, so the desktop "hover previews, click commits" pattern
 // would otherwise collapse into "one tap spends resources blind". A touch
@@ -634,7 +712,7 @@ function onBackdropPointerDown(e: PointerEvent) {
 </script>
 
 <template>
-  <div class="ring-backdrop" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
+  <div ref="rootEl" class="ring-backdrop" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
     <div
       v-if="layout.showLane1Track"
       class="ring-track"
@@ -672,9 +750,9 @@ function onBackdropPointerDown(e: PointerEvent) {
 
     <button
       class="ring-hub"
-      :style="{ left: `${x}px`, top: `${y}px`, width: `${HUB}px`, height: `${HUB}px` }"
+      :style="{ left: `${x}px`, top: `${y}px`, width: `${HUB}px`, height: `${HUB}px`, '--d': `${HUB}px` }"
       :title="atRoot ? undefined : t('hud.ringMenu.back')"
-      @click="goUp"
+      @click="onBackClick"
     >
       <span class="hub-label" :style="{ fontSize: hubLabelFont }">{{ hubLabel }}</span>
       <span v-if="hubSub" class="hub-sub">{{ hubSub }}</span>
@@ -703,6 +781,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         top: `${entry.y}px`,
         width: `${layout.collapsed ? DOT : BUB1}px`,
         height: `${layout.collapsed ? DOT : BUB1}px`,
+        '--d': `${layout.collapsed ? DOT : BUB1}px`,
         fontSize: bubbleFont(entry.item.label, BUB1, entry.item.label.length > 7 ? 8.2 : 9.2),
         '--tint': entry.color,
       }"
@@ -711,7 +790,7 @@ function onBackdropPointerDown(e: PointerEvent) {
       :aria-description="entry.item.disabled ? entry.item.hint : undefined"
       :aria-label="entry.item.label"
       @touchstart="onLaneTouchStart($event, entry.item)"
-      @click="onLaneClick(entry.item)"
+      @click="onLaneClick($event, entry.item)"
       @mouseenter="hoverLane1 = entry.item.id"
       @mouseleave="hoverLane1 = null"
     >
@@ -728,8 +807,8 @@ function onBackdropPointerDown(e: PointerEvent) {
     <button
       v-if="backSpot"
       class="ring-bubble back"
-      :style="{ left: `${backSpot.x}px`, top: `${backSpot.y}px`, width: `${BUB1}px`, height: `${BUB1}px` }"
-      @click="goUp"
+      :style="{ left: `${backSpot.x}px`, top: `${backSpot.y}px`, width: `${BUB1}px`, height: `${BUB1}px`, '--d': `${BUB1}px` }"
+      @click="onBackClick"
     >
       {{ t('hud.ringMenu.backButton') }}
     </button>
@@ -740,6 +819,7 @@ function onBackdropPointerDown(e: PointerEvent) {
       class="ring-bubble child"
       :class="{
         hot: hover === b.building.id,
+        glow: glowing(b.building),
         locked: stateOf(b.building) === 'locked',
         waiting: stateOf(b.building) === 'waiting',
         disabled: b.building.disabled,
@@ -750,12 +830,13 @@ function onBackdropPointerDown(e: PointerEvent) {
         top: `${b.y}px`,
         width: `${BUB2}px`,
         height: `${BUB2}px`,
+        '--d': `${BUB2}px`,
         fontSize: bubbleFont(b.building.label, BUB2, b.building.label.length > 7 ? 8.4 : 9.4),
         '--tint': b.color,
       }"
       :aria-disabled="!isActionable(stateOf(b.building)) || b.building.disabled || undefined"
       @touchstart="onBuildingTouchStart($event, b.building)"
-      @click="onBuildingClick(b.building)"
+      @click="onBuildingClick($event, b.building)"
       @mouseenter="hover = b.building.id"
     >
       {{ b.building.label }}<span
@@ -889,9 +970,35 @@ function onBackdropPointerDown(e: PointerEvent) {
 .ring-bubble {
   position: absolute;
   pointer-events: auto;
-  transform: translate(-50%, -50%);
+  /* Centred on left/top with a margin (--d is the diameter) rather than a
+     translate, so `transform` stays free for the entrance / retract
+     animations and the hover lift, and `translate` for the shake. */
+  margin: calc(var(--d, 0px) / -2) 0 0 calc(var(--d, 0px) / -2);
   font-family: inherit;
   cursor: pointer;
+  /* X4: a quick lift on hover. */
+  transition:
+    transform 160ms ease-out,
+    box-shadow 160ms ease-out,
+    background-color 160ms ease-out,
+    border-color 160ms ease-out,
+    color 160ms ease-out;
+}
+.ring-bubble:hover,
+.ring-bubble.armed {
+  transform: scale(1.07);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+}
+/* Blocked (locked / waiting / not possible): only a hint of lift, and never a fill. */
+.ring-bubble.disabled:hover,
+.ring-bubble.is-locked:hover,
+.ring-bubble.is-waiting:hover,
+.ring-bubble.child.locked:hover,
+.ring-bubble.child.waiting:hover,
+.ring-bubble.disabled.armed,
+.ring-bubble.child.locked.armed,
+.ring-bubble.child.waiting.armed {
+  transform: scale(1.03);
 }
 .ring-hub {
   border: none;
@@ -1214,10 +1321,39 @@ function onBackdropPointerDown(e: PointerEvent) {
       0 0 0 10px rgba(255, 197, 92, 0);
   }
 }
+/* H4: the building that can be built, while its card is up: a slow gold pulse. */
+.ring-bubble.glow {
+  border-color: var(--gold);
+  animation: ring-glow 2.6s ease-in-out infinite;
+}
+@keyframes ring-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(255, 197, 92, 0),
+      0 6px 18px rgba(0, 0, 0, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 7px 1.5px rgba(255, 197, 92, 0.42),
+      0 6px 18px rgba(0, 0, 0, 0.45);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
+  .ring-bubble,
+  .ring-hub {
+    transition: none;
+  }
   .ring-bubble.armed {
     animation: none;
     box-shadow: 0 0 0 4px var(--gold);
+  }
+  /* The glow becomes a static gold ring. */
+  .ring-bubble.glow {
+    animation: none;
+    box-shadow:
+      0 0 0 2px rgba(255, 197, 92, 0.6),
+      0 6px 18px rgba(0, 0, 0, 0.45);
   }
 }
 .arm-badge {
