@@ -186,6 +186,17 @@ describe('scenario files', () => {
     expect(png.subarray(1, 4).toString('ascii')).toBe('PNG');
     expect(lines.some((l) => l.startsWith('ROUTE A ENEMY') && l.includes('NO ROUTE'))).toBe(true);
   });
+
+  it('renders on the scenario\'s own generation overrides, not the defaults', { timeout: 60_000 }, () => {
+    // Regression: renderScenario dropped scn.generation, so the PNG used the default island density
+    // and every route read "DESTINATION IS SEA" although runScenario (which the other tests use) was fine.
+    const scn = load('e-mountain-to-river-seals');
+    expect(scn.generation).toBeDefined();
+    const { lines } = renderScenario(scn);
+    expect(lines.some((l) => l.includes('DESTINATION IS SEA'))).toBe(false);
+    const withDefaults = renderScenario({ ...scn, generation: undefined });
+    expect(withDefaults.png.equals(renderScenario(scn).png)).toBe(false);
+  });
 });
 
 describe('pathing-stats', () => {
