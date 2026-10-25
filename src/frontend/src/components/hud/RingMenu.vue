@@ -151,9 +151,11 @@ const props = withDefaults(
      */
     stock?: { wood: number; stone: number; food: number; iron: number };
     /**
-     * Why the last build / upgrade from this ring was rejected (the server's
-     * message). The ring stays open and shows it — on the card when one is
-     * up, otherwise as a chip docked beside the ring.
+     * Why the last upgrade (or an instant, demo-mode placement) from this ring
+     * was refused. The ring stays open and shows it — on the card when one is
+     * up, otherwise as a chip docked beside the ring. A live-mode build from
+     * the building fan no longer comes back here: it closes the ring at once
+     * and a refusal shows under the hex instead (MapView's `buildFromRing`).
      */
     error?: string | null;
     /**
