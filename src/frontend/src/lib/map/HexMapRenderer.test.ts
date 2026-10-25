@@ -902,4 +902,21 @@ describe('waterMaskTerrainFor', () => {
   it.each(['settlement', 'world'] as const)('still counts the sea as water in %s mode', (mode) => {
     expect(waterMaskTerrainFor(world, mode).isLand(5, 5)).toBe(false);
   });
+
+  it.each(['settlement', 'world'] as const)('answers noFoam for a river mouth only, in %s mode', (mode) => {
+    const rivers = new StaticWorldModel([
+      { q: 0, r: 0, terrain: 'grass' },
+      { q: 1, r: 0, terrain: 'grass' },
+    ]);
+    rivers.setRivers([
+      { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null },
+      { q: 1, r: 0, shape: 'straight', inDirections: ['NE'], outDirection: 'SW' },
+    ]);
+    const terrain = waterMaskTerrainFor(rivers, mode);
+    expect(terrain.noFoam!(0, 0)).toBe(true);
+    expect(terrain.noFoam!(1, 0)).toBe(false);
+    expect(terrain.noFoam!(5, 5)).toBe(false);
+    // The worker is handed the same hexes as a list.
+    expect(rivers.riverMouthHexKeys()).toHaveLength(1);
+  });
 });

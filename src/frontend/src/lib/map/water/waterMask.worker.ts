@@ -49,6 +49,13 @@ export interface BakeRequest {
    * caller's assumption) when omitted.
    */
   wastedRevealed?: boolean;
+  /**
+   * River-mouth hexes (`WorldModel.riverMouthHexKeys`, packed with `hexKey`).
+   * Rivers are server state the worker cannot derive from the seed, so like
+   * `buildingHexes` they travel as a short list. Omitted or empty means the
+   * no-foam field is all zero.
+   */
+  noFoamHexes?: number[];
 }
 
 export interface BakeResponse {
@@ -58,6 +65,8 @@ export interface BakeResponse {
   height: number;
   /** See `WaterMask.taint`. */
   taint: Uint8Array;
+  /** See `WaterMask.noFoam`. */
+  noFoam: Uint8Array;
   /** What the bake itself took here, so the panel reports the real cost rather than the round trip. */
   bakeMs: number;
 }
@@ -205,7 +214,8 @@ function hasPropFor(
 // has one, so this changes nothing there.
 if (typeof self !== 'undefined') {
   self.onmessage = (event: MessageEvent<BakeRequest>) => {
-    const { id, region, tileWidth, tileHeight, seed, generation, buildingHexes, wastedRevealed } = event.data;
+    const { id, region, tileWidth, tileHeight, seed, generation, buildingHexes, wastedRevealed, noFoamHexes } = event.data;
+    const noFoamSet = noFoamHexes && noFoamHexes.length > 0 ? new Set(noFoamHexes) : null;
     const started = performance.now();
     const isLand = isLandFor(seed, generation, wastedRevealed ?? false);
     // No prop predicate at all where the caller sent no building list: that
@@ -215,6 +225,7 @@ if (typeof self !== 'undefined') {
       isLand,
       hasProp: buildingHexes ? hasPropFor(seed, generation, isLand, buildingHexes) : undefined,
       isWastedLand: isWastedLandFor(seed, generation, wastedRevealed ?? false),
+      noFoam: noFoamSet ? (q, r) => noFoamSet.has(hexKey(q, r)) : undefined,
     });
     const response: BakeResponse = {
       id,
@@ -222,11 +233,12 @@ if (typeof self !== 'undefined') {
       width: mask.width,
       height: mask.height,
       taint: mask.taint,
+      noFoam: mask.noFoam,
       bakeMs: performance.now() - started,
     };
     // Transferred, not copied: the mask is 2.7MB at world zoom and
     // structured cloning it would put a chunk of the cost back on the main
     // thread, which is the whole thing this is here to avoid.
-    (self as unknown as Worker).postMessage(response, [response.data.buffer, response.taint.buffer]);
+    (self as unknown as Worker).postMessage(response, [response.data.buffer, response.taint.buffer, response.noFoam.buffer]);
   };
 }

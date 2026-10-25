@@ -65,6 +65,7 @@ out vec4 finalColor;
 
 uniform sampler2D uWaterMask;
 uniform sampler2D uWaterTaint;
+uniform sampler2D uWaterNoFoam;
 
 uniform float uTime;
 uniform float uWaveTime;
@@ -470,6 +471,14 @@ float sampleTaint() {
   return texture(uWaterTaint, vUV).r;
 }
 
+// The no-foam field (WaterMask.noFoam): 1 around a river mouth (out to
+// NO_FOAM_INNER_TILES, fading by NO_FOAM_REACH_TILES), 0 elsewhere. Same UVs
+// and filtering as the main mask. The shoreline foam is multiplied by one
+// minus this, so the sea does not lap foam across the mouth's outflow.
+float sampleNoFoam() {
+  return texture(uWaterNoFoam, vUV).r;
+}
+
 // The raw-channel debug view (§5's showWaterMask). Hard-stepped contour bands
 // on R, so the coastline the mask believes in reads as a crisp line you can
 // lay over the painted art and see any disagreement immediately. This is what
@@ -668,7 +677,11 @@ void main() {
   // is deliberately loose (it ignores the prop-tile narrowing, which can only
   // make the real band smaller) so it can never clip the band it is skipping.
   float foamReach = uFoamWidth * (1.0 + uFoamSurge) + uFoamNoise;
-  if (uShorelineFoam > 0.5 && dist < foamReach) {
+  // River mouths carry no foam: skip the block (and its noise) where the
+  // field has fully suppressed it, and scale the result by what is left of it
+  // in the fade-out ring below.
+  float noFoam = sampleNoFoam();
+  if (uShorelineFoam > 0.5 && dist < foamReach && noFoam < 0.999) {
     // World-anchored, slowly drifting — the same reasoning as fog's cloud
     // field: anchored to the world rather than the screen, the pattern neither
     // stretches with world size nor slides out from under a camera pan.
@@ -747,7 +760,7 @@ void main() {
     // to begin with, so it needs more of a pull to stop reading as clean surf
     // against a dead coast.
     vec3 foamColor = mix(uFoamColor, uTaintFoamColor, taint);
-    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y) * mix(1.0, 0.55, taint);
+    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y) * mix(1.0, 0.55, taint) * (1.0 - noFoam);
     acc = vec4(foamColor * foam, foam) + acc * (1.0 - foam);
   }
 

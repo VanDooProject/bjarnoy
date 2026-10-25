@@ -1273,11 +1273,15 @@ export function isWaypointTap(startCoordKey: string, lastCoordKey: string, moved
 export function waterMaskTerrainFor(worldModel: WorldModel, mode: HexMapRendererOptions['mode']): TerrainLookup {
   const isLand = (q: number, r: number) => worldModel.isLandOrLake(q, r);
   const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
-  if (mode !== 'settlement') return { isLand, isWastedLand };
+  // River mouths carry no sea foam (both modes draw foam). The worker gets the
+  // same hexes as a list (`riverMouthHexKeys`), so both bake paths agree.
+  const noFoam = (q: number, r: number) => worldModel.getRiverTile(q, r)?.shape === 'mouth';
+  if (mode !== 'settlement') return { isLand, isWastedLand, noFoam };
   return {
     isLand,
     hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
     isWastedLand,
+    noFoam,
   };
 }
 
@@ -1609,6 +1613,14 @@ export class HexMapRenderer {
    */
   private waterMaskWastedRevealed = false;
   /**
+   * `worldModel.riverRevision` for the bake behind `waterMaskRegionBuilt`. The
+   * mask's no-foam field depends on where the river mouths are, which the
+   * worker only learns from the request, so — exactly like the reveal flag —
+   * `maybeBakeWaterMask` drops the recorded region when the model's revision
+   * has moved (rivers arrive after the first bake in live mode).
+   */
+  private waterMaskRiverRevision = 0;
+  /**
    * Set whenever a rebuild wanted a bake but deferred it (see
    * `maybeBakeWaterMask`), and cleared by the bake that services it.
    *
@@ -1640,9 +1652,9 @@ export class HexMapRenderer {
    * fetched and compiled while the map is still loading, instead of on the
    * first camera move that needs a mask.
    */
-  private maskBaker = new WaterMaskBaker((mask, region, bakeMs, wastedRevealed) => {
+  private maskBaker = new WaterMaskBaker((mask, region, bakeMs, wastedRevealed, riverRevision) => {
     if (this.destroyed) return;
-    this.applyWaterMask(mask, region, bakeMs, true, wastedRevealed);
+    this.applyWaterMask(mask, region, bakeMs, true, wastedRevealed, riverRevision);
   });
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
@@ -3363,7 +3375,11 @@ export class HexMapRenderer {
     // The reveal flag isn't part of the viewport, so a coverage check alone
     // would never notice it flipped — drop the recorded region outright so
     // the coverage check below always misses and a fresh bake goes out.
-    if (this.waterMaskRegionBuilt && this.waterMaskWastedRevealed !== worldModel.isWastedRevealed()) {
+    if (
+      this.waterMaskRegionBuilt &&
+      (this.waterMaskWastedRevealed !== worldModel.isWastedRevealed() ||
+        this.waterMaskRiverRevision !== worldModel.riverRevision)
+    ) {
       this.waterMaskRegionBuilt = null;
     }
     const viewport = visibleWorldRect(this.camera, this.viewport);
@@ -3406,11 +3422,14 @@ export class HexMapRenderer {
         // list, not a lookup, is what lets that mode bake off-thread at all.
         buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
         wastedRevealed: worldModel.isWastedRevealed(),
+        // Both modes draw sea foam, so both need the mouths.
+        noFoamHexes: worldModel.riverMouthHexKeys(),
+        riverRevision: worldModel.riverRevision,
       },
       this.waterMaskTerrain(),
     );
     if (!mask) return; // off to the worker; applyWaterMask finishes it
-    this.applyWaterMask(mask, region, performance.now() - bakeStart, false, worldModel.isWastedRevealed());
+    this.applyWaterMask(mask, region, performance.now() - bakeStart, false, worldModel.isWastedRevealed(), worldModel.riverRevision);
   }
 
   /**
@@ -3427,6 +3446,7 @@ export class HexMapRenderer {
     bakeMs: number,
     onWorker: boolean,
     wastedRevealed: boolean,
+    riverRevision: number,
   ) {
     waterPerfStats.bakeMs = bakeMs;
     waterPerfStats.bakedOnWorker = onWorker;
@@ -3442,6 +3462,7 @@ export class HexMapRenderer {
     this.waterLayer.setMask(mask);
     this.waterMaskRegionBuilt = region;
     this.waterMaskWastedRevealed = wastedRevealed;
+    this.waterMaskRiverRevision = riverRevision;
   }
 
   /**
