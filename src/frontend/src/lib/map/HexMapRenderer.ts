@@ -1261,6 +1261,27 @@ export function isWaypointTap(startCoordKey: string, lastCoordKey: string, moved
 }
 
 /**
+ * `HexMapRenderer.waterMaskTerrain`'s lookup, as a pure function of the model
+ * and mode so it can be tested without a renderer.
+ *
+ * `isLand` is `isLandOrLake`, not `isLand`: a bog lake is water to the game
+ * (`WorldModel.isLand` says so), but to the water mask it is land. Lakes are
+ * drawn entirely by their own art, so the sea's shader must never reach into
+ * them. This is also what the bake worker already answers (its
+ * seed-only `isLandFor` never sees a bog lake), so both bake paths agree.
+ */
+export function waterMaskTerrainFor(worldModel: WorldModel, mode: HexMapRendererOptions['mode']): TerrainLookup {
+  const isLand = (q: number, r: number) => worldModel.isLandOrLake(q, r);
+  const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
+  if (mode !== 'settlement') return { isLand, isWastedLand };
+  return {
+    isLand,
+    hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
+    isWastedLand,
+  };
+}
+
+/**
  * The largest per-tick delta `advanceTopAnimations` is ever fed, in ms —
  * `onTick` runs this over `app.ticker.deltaMS` before handing it to
  * animation playback. Pixi's own ticker already caps `deltaMS` at 100 ms
@@ -3443,14 +3464,7 @@ export class HexMapRenderer {
    * materialising a `Tile` per water texel.
    */
   private waterMaskTerrain(): TerrainLookup {
-    const { worldModel } = this.options;
-    const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
-    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r), isWastedLand };
-    return {
-      isLand: (q, r) => worldModel.isLand(q, r),
-      hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
-      isWastedLand,
-    };
+    return waterMaskTerrainFor(this.options.worldModel, this.options.mode);
   }
 
   /**

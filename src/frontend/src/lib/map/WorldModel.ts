@@ -958,8 +958,12 @@ export class WorldModel {
     return keys;
   }
 
-  /** Everything an island's picture is made of: land and the bog lakes among it (not the sea). */
-  private isLandOrLake(q: number, r: number): boolean {
+  /**
+   * Everything an island's picture is made of: land and the bog lakes among it (not the sea).
+   * Also what the water mask calls land: a bog lake is drawn by its own art, never by the sea's
+   * water shader, so the shader (foam included) must stop at the sea's coast.
+   */
+  isLandOrLake(q: number, r: number): boolean {
     return this.isLand(q, r) || this.terrainOf(q, r) === 'lake';
   }
 
