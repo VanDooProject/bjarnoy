@@ -2,7 +2,7 @@
 // Public marketing/portfolio page (issue: "showcase page"). Deliberately a
 // route inside the game app rather than a static page of screenshots: the
 // hero and "one view" sections mount the *real* WorldMapCanvas/
-// SettlementCanvas components against a standalone, backend-free WorldModel
+// SettlementCanvas components against standalone, backend-free models
 // (same trick stores/world.ts's own DEMO_MODE model uses), so this page can
 // never go stale relative to what the live renderer actually looks like.
 import { computed, markRaw, ref, watch } from 'vue';
@@ -17,6 +17,8 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { hexDistance } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
+import { StaticWorldModel } from '../lib/map/StaticWorldModel';
+import { buildShowcaseSection } from '../lib/showcase/showcaseSection';
 import { buildShowcaseVillage } from '../lib/showcase/showcaseVillage';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
@@ -38,11 +40,11 @@ const PLAYER_ID = 'showcase';
 const seed = ref(DEFAULT_SEED);
 
 /**
- * One model per seed, shared by both map frames: the whole archipelago (its
- * labels cost nothing like DEMO_MASK_RADIUS's fog mask) plus a built-up village
- * on the island nearest the origin (where the world-mode camera starts), so the
- * hero map and the "one view" frame show the same place at two zooms. Building
- * the world once also halves the (whole-world) island enumeration.
+ * The hero map's model per seed: the whole archipelago (its labels cost
+ * nothing like DEMO_MASK_RADIUS's fog mask) plus a built-up village on the
+ * island nearest the origin (where the world-mode camera starts). The "one
+ * view" frame does not preview this island: a real island is big patches of
+ * one ground, so it gets its own composed section (`sectionModel`).
  */
 function buildShowcase(worldSeed: number) {
   const model = new WorldModel(worldSeed);
@@ -62,8 +64,14 @@ function buildShowcase(worldSeed: number) {
 
 const showcase = ref(buildShowcase(seed.value));
 const heroModel = computed(() => showcase.value.model);
-// The village site: the "one view" frame previews it and the hero map pans to it.
+// The village site on the real island: the hero map pans to it.
 const islandCenter = computed(() => showcase.value.center);
+
+// The "one view" frame's own hand-composed section (see showcaseSection.ts): a
+// fixed tile list around (0, 0), so a static model rather than a seeded world.
+// Rebuilt per seed with the re-roll; `markRaw` for the same reason as above.
+const SECTION_CENTER = { q: 0, r: 0 };
+const sectionModel = computed(() => markRaw(new StaticWorldModel(buildShowcaseSection(seed.value))));
 
 // useHexMapRenderer captures its options once at mount (see
 // SettlementCanvas.vue's own comment on `mode`) — a `:key="seed"` on the
@@ -90,7 +98,7 @@ watch(
 const exploring = ref(false);
 
 // Same opt-in for the village frame, which additionally starts camera-locked
-// (fit to the island crop): exploring unlocks zoom/pan so the buildings can be
+// (fit to the section): exploring unlocks zoom/pan so the buildings can be
 // looked at up close, and finishing re-locks it.
 const villageCanvas = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 const villageExploring = ref(false);
@@ -195,9 +203,9 @@ const ENGINEERING: EngineeringCard[] = [
           <SettlementCanvas
             ref="villageCanvas"
             :key="seed"
-            :world-model="heroModel"
+            :world-model="sectionModel"
             :player-id="PLAYER_ID"
-            :preview-center="islandCenter"
+            :preview-center="SECTION_CENTER"
             lock-camera
             hide-settlement-badge
             background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
