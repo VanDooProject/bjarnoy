@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { hexesInRadius, neighbors } from '../hex/coords';
+import { hexDistance, hexesInRadius, neighbors } from '../hex/coords';
 import { WorldModel } from '../map/WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands } from '../map/worldGenerator';
 import { maxLevelFor } from '../map/buildingEconomy';
-import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
+import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_RENDER_RADIUS, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
 
 const SEED = 20261823;
 
@@ -29,7 +29,21 @@ describe('buildShowcaseVillage', () => {
     expect(built.settlement.ownerId).toBe(SHOWCASE_VILLAGE_OWNER);
     const types = new Set(buildingsOf(built.model, built.settlement.id, built.center).map((t) => t.buildingType));
     expect(types.has('longhouse')).toBe(true);
-    expect(types.size).toBeGreaterThanOrEqual(6);
+    expect(types.size).toBeGreaterThanOrEqual(20);
+  });
+
+  it('raises a bigger village: dozens of buildings, three towers, a dockyard and the coast', () => {
+    const own = buildingsOf(built.model, built.settlement.id, built.center);
+    expect(own.length).toBeGreaterThanOrEqual(30);
+    expect(own.filter((t) => t.buildingType === 'tower')).toHaveLength(3);
+    expect(own.filter((t) => t.buildingType === 'hut').length).toBeGreaterThanOrEqual(5);
+    expect(own.some((t) => t.buildingType === 'dockyard')).toBe(true);
+  });
+
+  it('draws a wider island than the camera fits, so the crop edge lies outside the frame', () => {
+    expect(SHOWCASE_RENDER_RADIUS).toBeGreaterThan(SHOWCASE_PREVIEW_RADIUS);
+    const fit = built.model.previewCropTiles(built.center, SHOWCASE_PREVIEW_RADIUS).length;
+    expect(built.model.previewCropTiles(built.center, SHOWCASE_RENDER_RADIUS).length).toBeGreaterThan(fit * 3);
   });
 
   it('puts the preview crop on varied ground, not just grass and sand', () => {
@@ -55,7 +69,7 @@ describe('buildShowcaseVillage', () => {
     expect(tiles.filter((t) => t.camp).length).toBeGreaterThanOrEqual(2);
     const types = new Set(tiles.filter((t) => t.buildingType).map((t) => t.buildingType));
     expect(types.has('longhouse')).toBe(true);
-    expect(types.size).toBeGreaterThanOrEqual(10);
+    expect(types.size).toBeGreaterThanOrEqual(15);
   });
 
   it('shows a camp of each wildlife family the wider crop has ground for, on its own ground', () => {
@@ -92,7 +106,10 @@ describe('buildShowcaseVillage', () => {
 
   it('raises every building to a high level (7, or its own ceiling) so the richest art shows', () => {
     for (const tile of buildingsOf(built.model, built.settlement.id, built.center)) {
-      expect(tile.buildingLevel).toBe(Math.min(7, maxLevelFor(tile.buildingType!)));
+      // The longhouse is raised past 7 (to its planning level) for the tower limit, and towers stay at 3 (their claim disc would shade the sea); the level pass never lowers either.
+      if (tile.buildingType === 'longhouse') expect(tile.buildingLevel).toBeGreaterThanOrEqual(7);
+      else if (tile.buildingType === 'tower') expect(tile.buildingLevel).toBe(3);
+      else expect(tile.buildingLevel).toBe(Math.min(7, maxLevelFor(tile.buildingType!)));
     }
   });
 
@@ -140,6 +157,12 @@ describe('buildShowcaseVillage', () => {
     for (const count of [9, 4, 3, 2]) {
       for (const variant of DECORATED_BOG_VARIANTS) expect(variant % count).not.toBe(0);
     }
+  });
+
+  it('centres the frame between the bog site and the longhouse, on land', () => {
+    const home = { q: built.settlement.q, r: built.settlement.r };
+    expect(built.model.isLand(built.frameCenter.q, built.frameCenter.r)).toBe(true);
+    expect(hexDistance(built.frameCenter, home)).toBeLessThan(hexDistance(built.center, home));
   });
 
   it('is deterministic for a seed', () => {

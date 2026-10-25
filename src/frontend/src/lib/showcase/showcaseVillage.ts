@@ -27,17 +27,27 @@ export const SHOWCASE_VILLAGE_OWNER = 'showcase-village';
  * Radius (hexes) of the frame's crop around the bog centre: wider than the
  * landing page's `PREVIEW_ISLAND_RADIUS` so the village, the bog and a camp of
  * every wildlife family fit in one view. ShowcaseView passes it to the canvas
- * as `previewRadius`; camps, the giant and the looks use the same crop. Site
+ * as `previewRadius` (the locked camera fits it); camps and the giant use the same crop. Site
  * scoring stays on the landing radius: it scans every bog hex as a candidate,
  * and the village site it picks (mills by the river) was tuned there.
  */
-export const SHOWCASE_PREVIEW_RADIUS = 11;
+export const SHOWCASE_PREVIEW_RADIUS = 13;
+
+/**
+ * Radius (hexes) of what the frame draws, wider than the camera fit so the crop's
+ * hexagonal outline lies outside the frame. The fit leaves the frame's short axis
+ * with slack (the fitted disc is ~3x wider than tall, the frame is not), so the
+ * frame's corners reach ~26 hexes from the centre on desktop (570x480) and ~30 on a
+ * phone (390x405) at the fit radius; the rest is a cushion for the fitted island's
+ * off-centre bounds and for panning in explore mode.
+ */
+export const SHOWCASE_RENDER_RADIUS = 34;
 
 /** How far from `near` village sites are sampled, and the grid step between samples (bounds the scoring cost to a few hundred candidates). */
 const SITE_SEARCH_RADIUS = 60;
 const SITE_GRID_STEP = 6;
-/** Longhouse level the village is raised to: the border must be wide enough to hold the whole building list. */
-const VILLAGE_LONGHOUSE_LEVEL = 4;
+/** Longhouse level the village is raised to: it caps the towers (`maxTowers`: 3 at level 9) whose discs widen the border, and gates the larger buildings. */
+const VILLAGE_LONGHOUSE_LEVEL = 9;
 /** How far from the longhouse buildings are tried; claimed hexes beyond it are not worth scanning. */
 const BUILD_SEARCH_RADIUS = 14;
 
@@ -50,11 +60,19 @@ type BuildingType = NonNullable<Tile['buildingType']>;
  */
 const VILLAGE_BUILDINGS: BuildingType[] = [
   'sawmill', 'cropmill',
-  'hut', 'hut', 'farm', 'lumberjack', 'quarry', 'storagehouse',
-  'shrineofthor', 'fishinghut', 'dockyard', 'barracks', 'smithy', 'meadery', 'townsquare',
+  'hut', 'hut', 'hut', 'hut', 'hut', 'farm', 'farm', 'pumpkinfarm', 'lumberjack', 'quarry', 'storagehouse', 'greatstorehouse',
+  'shrineofthor', 'barracks', 'smithy', 'meadery', 'townsquare',
+  'archeryrange', 'druidhut', 'cartworkshop', 'reindeerherder', 'odinstatue',
 ];
-/** The tower goes on the claimed hex nearest the bog (its disc widens the border towards it), then the bog's own buildings (moss, creek, lake shore) on the claimed hexes nearest the bog. */
+/** The coast buildings, placed once a tower has widened the border to the shore. */
+const COAST_BUILDINGS: BuildingType[] = ['dockyard', 'fishinghut'];
+/**
+ * Towers widen the border (a disc of radius = tower level) and the base claim (radius 3) has room for few buildings, so they go up first;
+ * each is raised to `TOWER_PLAN_LEVEL`.
+ */
 const BOG_SIDE_TOWER: BuildingType = 'tower';
+const TOWER_PLAN_LEVEL = 3;
+/** The bog's own buildings (moss, creek, lake shore) go on the claimed hexes nearest the bog. */
 const BOG_BUILDINGS: BuildingType[] = ['bogoreworks', 'claybrickworks', 'hammerschmiede', 'fishinghut'];
 /** How far (hexes) from the bog centre the longhouse may be moved to sit on the river. */
 const RIVER_SITE_RADIUS = 5;
@@ -392,10 +410,10 @@ function lookKey(tile: Tile): string {
  * grass and forest, `orientation`) changes: terrain never does, and river,
  * shore, creek, lake and mouth orientations encode connectivity.
  */
-export function diversifyLooks(model: WorldModel, center: AxialCoord, seed: number) {
+export function diversifyLooks(model: WorldModel, center: AxialCoord, seed: number, radius = SHOWCASE_RENDER_RADIUS) {
   const rand = mulberry32(seed ^ 0xc2b2ae35);
   const done = new Set<string>();
-  for (const c of shuffled(model.previewCropTiles(center, SHOWCASE_PREVIEW_RADIUS), rand)) {
+  for (const c of shuffled(model.previewCropTiles(center, radius), rand)) {
     const tile = model.getTile(c.q, c.r);
     const key = `${c.q},${c.r}`;
     if (tile.buildingType || tile.giant || tile.camp) continue;
@@ -447,7 +465,7 @@ export function buildShowcaseVillage(
   model: WorldModel,
   near: AxialCoord,
   worldSeed: number,
-): { settlement: Settlement; center: AxialCoord } {
+): { settlement: Settlement; center: AxialCoord; frameCenter: AxialCoord } {
   // Same order as stores/world.ts's foundStartingSettlement: giants, bogs and
   // camps must exist before the first territory claim (claiming is one-way).
   const provisional = model.findLandfall(near) ?? near;
@@ -473,28 +491,51 @@ export function buildShowcaseVillage(
   };
   const byHome = claimedSpots().sort((a, b) => hexDistance(home, a) - hexDistance(home, b));
   // River hexes are kept for the mills: any other building would take them from the animated art.
-  const dryHome = byHome.filter((c) => !model.getRiverTile(c.q, c.r));
-  for (const type of VILLAGE_BUILDINGS) place(type, (RIVER_MILLS as readonly string[]).includes(type) ? byHome : dryHome);
+  const dry = () => claimedSpots().filter((c) => !model.getRiverTile(c.q, c.r));
+  const nearHome = () => dry().sort((a, b) => hexDistance(home, a) - hexDistance(home, b));
+  const isMill = (type: BuildingType) => (RIVER_MILLS as readonly string[]).includes(type);
+  for (const type of VILLAGE_BUILDINGS.filter(isMill)) place(type, byHome);
 
-  // The bog side: a tower on the claimed hex nearest the bog widens the border towards it
-  // (so the bog buildings have claimed moss, creek and shore to stand on), then the bog's
-  // own buildings, each on the claimed hex nearest the bog.
+  // Towers go up while the base claim still has free hexes (it fills fast): each is raised so its disc
+  // widens the border. The first sits on the claimed hex nearest the bog (so the bog buildings have claimed
+  // moss, creek and shore to stand on), the second nearest the sea, the third farthest from both.
   const bogs = hexesInRadius(home, BUILD_SEARCH_RADIUS).filter((c) => model.getTile(c.q, c.r).bog);
+  const seas = hexesInRadius(home, BUILD_SEARCH_RADIUS + 4).filter((c) => model.getTile(c.q, c.r).terrain === 'sea');
+  const byDistanceTo = (targets: AxialCoord[]) => (spots: AxialCoord[]) =>
+    spots.sort((a, b) => distanceToBog(targets, a) - distanceToBog(targets, b) || hexDistance(home, a) - hexDistance(home, b));
+  const byBog = byDistanceTo(bogs);
+  const towers: AxialCoord[] = [];
+  const raiseTower = (spot: AxialCoord | undefined) => {
+    if (!spot) return;
+    towers.push(spot);
+    const tile = model.getTile(spot.q, spot.r);
+    while ((tile.buildingLevel ?? 1) < TOWER_PLAN_LEVEL && model.upgradeBuilding(settlement.id, spot)) {
+      // one level per call
+    }
+  };
+  if (bogs.length > 0) raiseTower(place(BOG_SIDE_TOWER, byBog(dry())));
+  // Two hexes inland where it can, so the tower leaves the shore hexes themselves to the dockyard and fishing hut.
+  if (seas.length > 0) {
+    const inland = dry().filter((c) => distanceToBog(seas, c) >= 2);
+    raiseTower(place(BOG_SIDE_TOWER, byDistanceTo(seas)(inland.length > 0 ? inland : dry())));
+  }
+  const apart = (c: AxialCoord) => towers.reduce((d, t) => Math.min(d, hexDistance(t, c)), Infinity);
+  raiseTower(place(BOG_SIDE_TOWER, dry().sort((a, b) => apart(b) - apart(a) || hexDistance(home, a) - hexDistance(home, b))));
+
   if (bogs.length > 0) {
-    const byBog = (spots: AxialCoord[]) =>
-      spots.sort((a, b) => distanceToBog(bogs, a) - distanceToBog(bogs, b) || hexDistance(home, a) - hexDistance(home, b));
-    const dryBog = (spots: AxialCoord[]) => byBog(spots.filter((c) => !model.getRiverTile(c.q, c.r)));
-    place(BOG_SIDE_TOWER, dryBog(claimedSpots()));
-    const bogSpots = dryBog(claimedSpots());
+    const bogSpots = byBog(dry());
     for (const type of BOG_BUILDINGS) place(type, bogSpots);
   }
-  const buildings = hexesInRadius(home, BUILD_SEARCH_RADIUS).filter((c) => model.getTile(c.q, c.r).buildingType);
-  // Only now, with the layout settled at the longhouse's planning level: the
-  // longhouse's (and towers') wider border afterwards claims more ground but
-  // moves nothing already standing.
+  for (const type of VILLAGE_BUILDINGS.filter((t) => !isMill(t))) place(type, nearHome());
+  // The coast last: its buildings need shore hexes, which nothing else should have taken.
+  const shore = byDistanceTo(seas);
+  for (const type of COAST_BUILDINGS) place(type, shore(dry()));
+  const buildings = hexesInRadius(home, BUILD_SEARCH_RADIUS + 4).filter((c) => model.getTile(c.q, c.r).buildingType);
+  // Only now, with the layout settled: raising levels afterwards moves nothing already standing.
   for (const c of buildings) {
     const tile = model.getTile(c.q, c.r);
-    const target = Math.min(SHOWCASE_BUILDING_LEVEL, maxLevelFor(tile.buildingType!));
+    // A tower's claim disc is as wide as its level: past TOWER_PLAN_LEVEL it would shade far more sea than land around the coast.
+    const target = tile.buildingType === 'tower' ? TOWER_PLAN_LEVEL : Math.min(SHOWCASE_BUILDING_LEVEL, maxLevelFor(tile.buildingType!));
     while ((tile.buildingLevel ?? 1) < target && model.upgradeBuilding(settlement.id, c)) {
       // one level per call
     }
@@ -503,5 +544,37 @@ export function buildShowcaseVillage(
   ensureGiantMountain(model, center, home, worldSeed, buildings);
   ensureCamps(model, center, home, worldSeed);
   diversifyLooks(model, center, worldSeed);
-  return { settlement, center };
+  return { settlement, center, frameCenter: frameCenterBetween(model, center, { q: settlement.q, r: settlement.r }) };
+}
+
+/**
+ * Where the frame's camera centres: halfway from the bog site (`center`, what the
+ * village was planned around) towards the longhouse, so the village sits well
+ * inside the wider frame instead of at its edge. The crop is flood-filled from
+ * this hex, so it must be land on the same island; the nearest land on the way
+ * back to `center` is taken otherwise.
+ */
+function frameCenterBetween(model: WorldModel, center: AxialCoord, home: AxialCoord): AxialCoord {
+  const steps = hexDistance(center, home);
+  for (let k = Math.round(steps / 2); k > 0; k--) {
+    const c = hexLerp(center, home, k / steps);
+    if (model.isLand(c.q, c.r)) return c;
+  }
+  return center;
+}
+
+/** The hex a fraction `t` of the way from `a` to `b` (cube lerp + round). */
+function hexLerp(a: AxialCoord, b: AxialCoord, t: number): AxialCoord {
+  const x = a.q + (b.q - a.q) * t;
+  const z = a.r + (b.r - a.r) * t;
+  const y = -x - z;
+  let rx = Math.round(x);
+  const ry = Math.round(y);
+  let rz = Math.round(z);
+  const dx = Math.abs(rx - x);
+  const dy = Math.abs(ry - y);
+  const dz = Math.abs(rz - z);
+  if (dx > dy && dx > dz) rx = -ry - rz;
+  else if (dy <= dz) rz = -rx - ry;
+  return { q: rx, r: rz };
 }

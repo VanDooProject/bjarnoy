@@ -17,7 +17,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { hexDistance } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
-import { buildShowcaseVillage, SHOWCASE_PREVIEW_RADIUS } from '../lib/showcase/showcaseVillage';
+import { buildShowcaseVillage, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_RENDER_RADIUS } from '../lib/showcase/showcaseVillage';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
@@ -55,7 +55,7 @@ function buildShowcase(worldSeed: number) {
       !best || hexDistance({ q: 0, r: 0 }, island) < hexDistance({ q: 0, r: 0 }, best) ? island : best,
     undefined,
   );
-  const { center } = buildShowcaseVillage(model, nearest ?? { q: 0, r: 0 }, worldSeed);
+  const { frameCenter: center } = buildShowcaseVillage(model, nearest ?? { q: 0, r: 0 }, worldSeed);
   // `markRaw`: same reasoning as stores/world.ts's own model — a plain class
   // meant to be read directly by the renderer, not walked by Vue's reactivity
   // proxy on every tile access.
@@ -201,6 +201,7 @@ const ENGINEERING: EngineeringCard[] = [
             :player-id="PLAYER_ID"
             :preview-center="islandCenter"
             :preview-radius="SHOWCASE_PREVIEW_RADIUS"
+            :preview-render-radius="SHOWCASE_RENDER_RADIUS"
             lock-camera
             hide-settlement-badge
             background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"

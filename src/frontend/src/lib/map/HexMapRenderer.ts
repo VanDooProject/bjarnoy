@@ -384,6 +384,11 @@ export interface HexMapRendererOptions {
   /** Radius of the no-settlement preview crop around `previewCenter` (default `PREVIEW_ISLAND_RADIUS`); the showcase frame shows a wider one than the landing page. */
   previewRadius?: number;
   /**
+   * Radius of the hexes actually drawn in preview mode (default `previewRadius`); never below it. The locked camera still fits `previewRadius`,
+   * so a larger value pushes the crop's hexagonal outline out of the frame instead of cutting through the island inside it.
+   */
+  previewRenderRadius?: number;
+  /**
    * A single hex to keep highlighted every frame, independent of hover —
    * zip 6a's "click to place" glow on the one buildable plot before the
    * player has founded anything.
@@ -876,6 +881,12 @@ const PREVIEW_FIT_VERTICAL_OVERHANG = TILE_TOPFACE_Y_OFFSET + TILE_H / 2;
 // A further small fixed cushion (world units) so the island reads as
 // sitting inside the frame rather than exactly touching its edge.
 const PREVIEW_FIT_MARGIN = 24;
+
+/** Radius of the preview hexes `rebuildTerrain` draws: at least the radius the camera fits, so the fitted island is never itself culled. */
+export function previewDrawRadius(options: { previewRadius?: number; previewRenderRadius?: number }): number {
+  const fit = options.previewRadius ?? PREVIEW_ISLAND_RADIUS;
+  return Math.max(fit, options.previewRenderRadius ?? fit);
+}
 
 /**
  * Client (viewport) point -> canvas layout pixels. `rect` is the canvas's
@@ -1924,7 +1935,16 @@ export class HexMapRenderer {
         // asymmetric crop while pushing the long side out of frame. `at`
         // still decides *which* island and *where* the crop is taken from;
         // it stops being the camera target.
-        const tiles = this.options.worldModel.previewCropTiles(at, this.options.previewRadius ?? PREVIEW_ISLAND_RADIUS);
+        // When the preview draws past its fit radius (the showcase frame), the
+        // island continues out of frame on every side, so the framing is the
+        // whole hex disc around `at` (land or not), centred on `at` itself —
+        // the land crop's own box would drift the camera away from wherever
+        // the sea eats into the disc.
+        const fitRadius = this.options.previewRadius ?? PREVIEW_ISLAND_RADIUS;
+        const tiles =
+          previewDrawRadius(this.options) > fitRadius
+            ? hexesInRadius(at, fitRadius)
+            : this.options.worldModel.previewCropTiles(at, fitRadius);
         const bounds = previewIslandBounds(tiles);
         const zoom = previewFitZoom({
           tiles,
@@ -3587,7 +3607,7 @@ export class HexMapRenderer {
     // to — the two must agree, or the framing goes wrong again (see that
     // method's own comment).
     const previewTileKeys = preview
-      ? new Set(worldModel.previewCropTiles(previewCenter, this.options.previewRadius ?? PREVIEW_ISLAND_RADIUS).map((c) => coordKey(c)))
+      ? new Set(worldModel.previewCropTiles(previewCenter, previewDrawRadius(this.options)).map((c) => coordKey(c)))
       : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
