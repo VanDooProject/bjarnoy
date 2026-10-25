@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { hexesInRadius } from '../hex/coords';
+import { hexesInRadius, neighbors } from '../hex/coords';
 import { WorldModel } from '../map/WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands } from '../map/worldGenerator';
-import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
+import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
 
 const SEED = 20260824;
 
@@ -36,15 +36,55 @@ describe('buildShowcaseVillage', () => {
     expect(terrains.size).toBeGreaterThanOrEqual(3);
   });
 
-  it('frames the island\'s bog land, every undeveloped bog hex in a decorated look', () => {
-    const crop = built.model.previewCropTiles(built.center).map((c) => built.model.getTile(c.q, c.r));
-    const bog = crop.filter((t) => t.bog);
+  const cropTiles = () => built.model.previewCropTiles(built.center).map((c) => built.model.getTile(c.q, c.r));
+
+  it('frames the island\'s bog land, with open lake water and no plain look 0 on any bog hex', () => {
+    const bog = cropTiles().filter((t) => t.bog);
     expect(bog.length).toBeGreaterThanOrEqual(20);
-    // More bog than the forest/mountain filler that used to fill the frame.
-    expect(bog.length).toBeGreaterThan(crop.filter((t) => t.terrain === 'forest' || t.terrain === 'mountain').length);
+    expect(bog.filter((t) => t.bog?.kind === 'lake').length).toBeGreaterThanOrEqual(3);
     for (const tile of bog.filter((t) => !t.buildingType)) {
-      expect(DECORATED_BOG_VARIANTS).toContain(tile.variant);
+      expect((tile.variant ?? 0) % 9).not.toBe(0);
+      if (tile.bog?.kind !== 'bog') expect(DECORATED_BOG_VARIANTS).toContain(tile.variant);
     }
+  });
+
+  it('shows a whole giant mountain, at least two camps and a wide spread of buildings in the crop', () => {
+    const tiles = cropTiles();
+    expect(tiles.filter((t) => t.giant?.family === 'giantmountain')).toHaveLength(7);
+    expect(tiles.filter((t) => t.camp).length).toBeGreaterThanOrEqual(2);
+    const types = new Set(tiles.filter((t) => t.buildingType).map((t) => t.buildingType));
+    expect(types.has('longhouse')).toBe(true);
+    expect(types.size).toBeGreaterThanOrEqual(10);
+  });
+
+  it('never puts two neighbouring undeveloped moss hexes in the same look', () => {
+    const moss = (q: number, r: number) => {
+      const t = built.model.getTile(q, r);
+      return t.bog?.kind === 'bog' && !t.buildingType && !t.giant && !t.camp ? t : null;
+    };
+    const crop = built.model.previewCropTiles(built.center);
+    const inCrop = new Set(crop.map((c) => `${c.q},${c.r}`));
+    for (const c of crop) {
+      const a = moss(c.q, c.r);
+      if (!a) continue;
+      for (const n of neighbors(c)) {
+        const b = inCrop.has(`${n.q},${n.r}`) ? moss(n.q, n.r) : null;
+        if (b) expect((a.variant ?? 0) % 9).not.toBe((b.variant ?? 0) % 9);
+      }
+    }
+  });
+
+  it('only re-rolls looks: terrain, bog kinds and buildings stay as generated', () => {
+    const snapshot = () =>
+      built.model.previewCropTiles(built.center).map((c) => {
+        const t = built.model.getTile(c.q, c.r);
+        return `${c.q},${c.r}:${t.terrain}:${t.bog?.kind ?? ''}:${t.buildingType ?? ''}:${t.giant ? 'g' : ''}${t.camp ? 'c' : ''}`;
+      });
+    const variants = () => cropTiles().map((t) => t.variant);
+    const before = { shape: snapshot(), variants: variants() };
+    diversifyLooks(built.model, built.center, SEED + 1);
+    expect(snapshot()).toEqual(before.shape);
+    expect(variants()).not.toEqual(before.variants);
   });
 
   it('never resolves a decorated variant to a bog family\'s plain look 0', () => {

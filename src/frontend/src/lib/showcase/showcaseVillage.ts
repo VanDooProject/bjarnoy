@@ -8,9 +8,11 @@
 // peat cuttings, creeks and lakes, rather than wall-to-wall forest and
 // mountain), and raise a spread of buildings — so the frame shows what the
 // section copy promises.
-import { hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
+import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from '../map/WorldModel';
-import type { Settlement, Tile } from '../map/types';
+import { CAMP_FAMILIES } from '../map/campPlacement';
+import { giantCoverage } from '../map/giantTiles';
+import { TILE_ORIENTATIONS, type Settlement, type Tile } from '../map/types';
 
 /**
  * Owner id of the showcase village. Deliberately not the page's viewer id
@@ -61,6 +63,10 @@ function siteVariety(model: WorldModel, at: AxialCoord): number {
 const BOG_SITE_GRID_STEP = 2;
 /** Dry hexes (grass/sand) a bog site needs within the crop so the village itself has room to stand. */
 const MIN_DRY_HEXES = 24;
+/** The longhouse's border at VILLAGE_LONGHOUSE_LEVEL reaches about this far: only buildable ground inside it hosts the village. */
+const VILLAGE_CLAIM_RADIUS = 4;
+/** Bog-lake hexes a bog site's crop should hold, so the frame shows open water inside the bog. */
+const MIN_LAKE_HEXES = 3;
 
 /**
  * Bog looks shown in the frame. Every bog family numbers its looks from 0, and
@@ -82,39 +88,193 @@ export const DECORATED_BOG_VARIANTS = [1, 5, 7, 11, 13, 17] as const;
 function pickBogSite(model: WorldModel): AxialCoord | null {
   let best: AxialCoord | null = null;
   let bestScore = -Infinity;
+  let bestTier = -1;
   for (const bog of model.listBogTiles()) {
     if (bog.q % BOG_SITE_GRID_STEP !== 0 || bog.r % BOG_SITE_GRID_STEP !== 0) continue;
     let bogHexes = 0;
     let dry = 0;
     let filler = 0;
     let feature = 0;
+    let lake = 0;
+    let dryNear = 0;
     const kinds = new Set<string>();
     for (const c of hexesInRadius(bog, PREVIEW_ISLAND_RADIUS)) {
       const tile = model.getTile(c.q, c.r);
       if (tile.bog) {
         bogHexes++;
         kinds.add(tile.bog.kind);
+        if (tile.bog.kind === 'lake') lake++;
       } else if (tile.terrain === 'grass' || tile.terrain === 'sand') dry++;
       else if (tile.terrain === 'forest' || tile.terrain === 'mountain') filler++;
       if (tile.giant || tile.camp || model.getRiverTile(c.q, c.r)) feature++;
+      if (!tile.bog && (tile.terrain === 'grass' || tile.terrain === 'sand') && hexDistance(bog, c) <= VILLAGE_CLAIM_RADIUS) dryNear++;
     }
     if (dry < MIN_DRY_HEXES) continue;
-    const score = bogHexes * 2 + kinds.size * 6 + Math.min(feature, 10) - filler * 2;
-    if (score > bestScore) {
+    const score = bogHexes * 2 + kinds.size * 6 + Math.min(lake, 8) * 3 + Math.min(dryNear, 24) * 8 + Math.min(feature, 10) - filler * 2;
+    // A lake-less site only competes when no site shows a lake at all.
+    const lakeTier = lake >= MIN_LAKE_HEXES ? 1 : 0;
+    if (lakeTier > bestTier || (lakeTier === bestTier && score > bestScore)) {
       best = { q: bog.q, r: bog.r };
       bestScore = score;
+      bestTier = lakeTier;
     }
   }
   return best;
 }
 
-/** Gives every undeveloped bog hex in the crop around `center` one of the decorated looks (see `DECORATED_BOG_VARIANTS`). */
-function decorateBog(model: WorldModel, center: AxialCoord) {
-  for (const c of model.previewCropTiles(center)) {
+/** mulberry32: a tiny seeded PRNG, so the showcase looks differ per seed but are the same every run. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Fisher-Yates with the seeded PRNG (the input is not mutated). */
+function shuffled<T>(items: readonly T[], rand: () => number): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Moss looks the art pack has (the renderer shows a moss hex's look as `variant % 9`). */
+const MOSS_LOOKS = 9;
+const GRASS_LOOKS = 4;
+const FOREST_LOOKS = 3;
+
+/** A giant is an anchor plus its six neighbours. */
+const GIANT_PLATE_HEXES = 7;
+/** A giant needs this much of its 7-hex plate inside the crop when the strict (fully inside) anchors run out. */
+const GIANT_FALLBACK_MIN_PARTS = 4;
+const GIANT_MIN_DISTANCE = 3;
+const GIANT_MAX_DISTANCE = 6;
+const GIANT_FALLBACK_MAX_DISTANCE = 8;
+/** Giants and camps keep this many hexes clear of the longhouse (giant) or this far from it (camps). */
+const GIANT_HOME_CLEARANCE = 2;
+const CAMP_MIN_HOME_DISTANCE = 4;
+const CAMP_MIN_SPACING = 3;
+const CAMPS_WANTED = 2;
+const CAMPS_MAX = 3;
+
+/** Whether the crop already shows a giant. */
+function cropHasGiant(model: WorldModel, crop: AxialCoord[]): boolean {
+  return crop.some((c) => model.getTile(c.q, c.r).giant);
+}
+
+/**
+ * The real generator rarely drops a giant into the village's crop, but the
+ * frame promises one: places a giant mountain on the crop's grass/forest,
+ * clear of the longhouse (and, as buildings are already up, of those — the
+ * model refuses a footprint with a building). Anchors are tried nearest-first
+ * from `center`, seeded-shuffled within one distance. The fallback accepts a
+ * plate partly outside the crop (>= 4 of 7 hexes inside) and reaches farther.
+ */
+function ensureGiantMountain(model: WorldModel, center: AxialCoord, home: AxialCoord, seed: number) {
+  const crop = model.previewCropTiles(center);
+  if (cropHasGiant(model, crop)) return;
+  const inCrop = new Set(crop.map((c) => `${c.q},${c.r}`));
+  const rand = mulberry32(seed ^ 0x9e3779b1);
+  const candidates = shuffled(crop, rand);
+  const attempt = (minDistance: number, maxDistance: number, minParts: number) => {
+    const anchors = candidates
+      .filter((c) => {
+        const d = hexDistance(center, c);
+        return d >= minDistance && d <= maxDistance;
+      })
+      .sort((a, b) => hexDistance(center, a) - hexDistance(center, b)); // stable: ties keep the shuffle
+    for (const anchor of anchors) {
+      const plate = giantCoverage(anchor).map((p) => p.coord);
+      if (plate.some((c) => hexDistance(home, c) <= GIANT_HOME_CLEARANCE)) continue;
+      if (plate.filter((c) => inCrop.has(`${c.q},${c.r}`)).length < minParts) continue;
+      if (model.placeGiant(anchor, 'giantmountain')) return true;
+    }
+    return false;
+  };
+  if (attempt(GIANT_MIN_DISTANCE, GIANT_MAX_DISTANCE, GIANT_PLATE_HEXES)) return;
+  // The anchor must be in the crop, but the fallback may reach out to distance 8 of it.
+  attempt(GIANT_MIN_DISTANCE, GIANT_FALLBACK_MAX_DISTANCE, GIANT_FALLBACK_MIN_PARTS);
+}
+
+/**
+ * Wildlife camps are sparse (one per 600-1500 land tiles), so the crop often
+ * has none. Adds weak/strong camps from the real family table on suitable
+ * ground (grass, forest, sand) away from the longhouse, giants, buildings,
+ * rivers and bog, until the crop shows `CAMPS_WANTED`..`CAMPS_MAX`.
+ */
+function ensureCamps(model: WorldModel, center: AxialCoord, home: AxialCoord, seed: number) {
+  const crop = model.previewCropTiles(center);
+  const camps = crop.filter((c) => model.getTile(c.q, c.r).camp).map((c) => ({ q: c.q, r: c.r }));
+  if (camps.length >= CAMPS_WANTED) return;
+  const rand = mulberry32(seed ^ 0x85ebca6b);
+  const added: { family: string; coord: AxialCoord; level: number; orientation: (typeof TILE_ORIENTATIONS)[number] }[] = [];
+  for (const c of shuffled(crop, rand)) {
+    if (camps.length >= CAMPS_MAX) break;
     const tile = model.getTile(c.q, c.r);
-    if (!tile.bog || tile.buildingType) continue;
-    const slot = (((c.q * 7 + c.r * 13) % DECORATED_BOG_VARIANTS.length) + DECORATED_BOG_VARIANTS.length) % DECORATED_BOG_VARIANTS.length;
-    tile.variant = DECORATED_BOG_VARIANTS[slot];
+    if (tile.giant || tile.camp || tile.buildingType || tile.bog || model.getRiverTile(c.q, c.r)) continue;
+    if (tile.terrain !== 'grass' && tile.terrain !== 'forest' && tile.terrain !== 'sand') continue;
+    if (hexDistance(home, c) < CAMP_MIN_HOME_DISTANCE) continue;
+    if (camps.some((o) => hexDistance(o, c) < CAMP_MIN_SPACING)) continue;
+    const families = CAMP_FAMILIES.filter((f) => f.ground === tile.terrain);
+    if (families.length === 0) continue;
+    const family = families[Math.floor(rand() * families.length)].family;
+    added.push({ family, coord: { q: c.q, r: c.r }, level: 1 + Math.floor(rand() * 3), orientation: tile.orientation ?? 'SE' });
+    camps.push({ q: c.q, r: c.r });
+  }
+  model.setCamps(added);
+}
+
+/** The looks a hex may take: moss 1..8 (compared mod 9, never the plain 0), grass/forest by their counts, other bog kinds from the decorated list too. */
+function allowedLooks(tile: Tile): number[] {
+  // Moss has 8 non-plain looks: more than a hex has neighbours, so a distinct one always exists.
+  if (tile.bog?.kind === 'bog') return Array.from({ length: MOSS_LOOKS - 1 }, (_, i) => i + 1);
+  if (tile.bog) return [...DECORATED_BOG_VARIANTS];
+  if (tile.terrain === 'grass') return Array.from({ length: GRASS_LOOKS }, (_, i) => i);
+  if (tile.terrain === 'forest') return Array.from({ length: FOREST_LOOKS }, (_, i) => i);
+  return [];
+}
+
+/** What the renderer resolves a hex's look to, for comparing neighbours. */
+function lookKey(tile: Tile): string {
+  const variant = tile.variant ?? 0;
+  return `${tile.terrain}:${tile.bog ? tile.bog.kind : ''}:${tile.bog?.kind === 'bog' ? variant % MOSS_LOOKS : variant}`;
+}
+
+/**
+ * The generator's own looks often repeat side by side (and the old linear hash
+ * striped the bog), which reads as a flat pattern. Walks the crop in a random
+ * order and gives each plain grass/forest/bog hex a look none of its already
+ * assigned neighbours shows. Only `variant` (and, for freely rotatable moss,
+ * grass and forest, `orientation`) changes: terrain never does, and river,
+ * shore, creek, lake and mouth orientations encode connectivity.
+ */
+export function diversifyLooks(model: WorldModel, center: AxialCoord, seed: number) {
+  const rand = mulberry32(seed ^ 0xc2b2ae35);
+  const done = new Set<string>();
+  for (const c of shuffled(model.previewCropTiles(center), rand)) {
+    const tile = model.getTile(c.q, c.r);
+    const key = `${c.q},${c.r}`;
+    if (tile.buildingType || tile.giant || tile.camp) continue;
+    const looks = allowedLooks(tile);
+    if (looks.length === 0) continue;
+    const taken = new Set<string>();
+    for (const n of neighbors(c)) {
+      if (done.has(`${n.q},${n.r}`)) taken.add(lookKey(model.getTile(n.q, n.r)));
+    }
+    const fresh = looks.filter((v) => !taken.has(lookKey({ ...tile, variant: v })));
+    const pool = fresh.length > 0 ? fresh : looks;
+    tile.variant = pool[Math.floor(rand() * pool.length)];
+    const rotatable = tile.terrain === 'grass' || tile.terrain === 'forest' || tile.bog?.kind === 'bog';
+    if (rotatable && !model.getRiverTile(c.q, c.r)) {
+      tile.orientation = TILE_ORIENTATIONS[Math.floor(rand() * TILE_ORIENTATIONS.length)];
+    }
+    done.add(key);
   }
 }
 
@@ -175,6 +335,9 @@ export function buildShowcaseVillage(
     const at = spots.find((c) => model.placeBuilding(settlement.id, c, type));
     if (at && UPGRADED_TYPES.has(type)) model.upgradeBuilding(settlement.id, at);
   }
-  decorateBog(model, center);
+  // Buildings first, so the giant and camps avoid them.
+  ensureGiantMountain(model, center, home, worldSeed);
+  ensureCamps(model, center, home, worldSeed);
+  diversifyLooks(model, center, worldSeed);
   return { settlement, center };
 }
