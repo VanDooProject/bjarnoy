@@ -12,6 +12,7 @@ import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/c
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from '../map/WorldModel';
 import { riverBuildingAllowedHere } from '../map/ringCatalogue';
 import { CAMP_FAMILIES } from '../map/campPlacement';
+import { maxLevelFor } from '../map/buildingEconomy';
 import { giantCoverage } from '../map/giantTiles';
 import { TILE_ORIENTATIONS, type Settlement, type Tile } from '../map/types';
 
@@ -49,8 +50,13 @@ const BOG_BUILDINGS: BuildingType[] = ['bogoreworks', 'claybrickworks', 'hammers
 const RIVER_SITE_RADIUS = 5;
 /** The river buildings the village wants a river hex for. */
 const RIVER_MILLS = ['sawmill', 'cropmill'] as const;
-/** Types shown above level 1 so the frame also shows the higher-level art. */
-const UPGRADED_TYPES = new Set<Tile['buildingType']>(['hut', 'farm', 'tower', 'sawmill']);
+/**
+ * Every building is raised to this level once the village stands (or its own
+ * ceiling, `maxLevelFor`), so the frame shows the richest art each family has:
+ * the art pack's top rungs sit around level 4-7, and a level past a family's
+ * top rung renders at that rung.
+ */
+const SHOWCASE_BUILDING_LEVEL = 7;
 
 /** Whether a Sawmill or Crop Mill (`type`, or either when omitted) may stand on `c`'s river tile — the same rule `WorldModel.placeBuilding` applies. */
 function riverMillAllowed(model: WorldModel, c: AxialCoord, type?: (typeof RIVER_MILLS)[number]): boolean {
@@ -413,9 +419,7 @@ export function buildShowcaseVillage(
   const claimedSpots = () =>
     hexesInRadius(home, BUILD_SEARCH_RADIUS).filter((c) => model.getTile(c.q, c.r).ownerId === settlement.id);
   const place = (type: BuildingType, spots: AxialCoord[]) => {
-    const at = spots.find((c) => model.placeBuilding(settlement.id, c, type));
-    if (at && UPGRADED_TYPES.has(type)) model.upgradeBuilding(settlement.id, at);
-    return at;
+    return spots.find((c) => model.placeBuilding(settlement.id, c, type));
   };
   const byHome = claimedSpots().sort((a, b) => hexDistance(home, a) - hexDistance(home, b));
   // River hexes are kept for the mills: any other building would take them from the animated art.
@@ -435,6 +439,16 @@ export function buildShowcaseVillage(
     for (const type of BOG_BUILDINGS) place(type, bogSpots);
   }
   const buildings = hexesInRadius(home, BUILD_SEARCH_RADIUS).filter((c) => model.getTile(c.q, c.r).buildingType);
+  // Only now, with the layout settled at the longhouse's planning level: the
+  // longhouse's (and towers') wider border afterwards claims more ground but
+  // moves nothing already standing.
+  for (const c of buildings) {
+    const tile = model.getTile(c.q, c.r);
+    const target = Math.min(SHOWCASE_BUILDING_LEVEL, maxLevelFor(tile.buildingType!));
+    while ((tile.buildingLevel ?? 1) < target && model.upgradeBuilding(settlement.id, c)) {
+      // one level per call
+    }
+  }
   // Buildings first, so the giant and camps avoid them.
   ensureGiantMountain(model, center, home, worldSeed, buildings);
   ensureCamps(model, center, home, worldSeed);

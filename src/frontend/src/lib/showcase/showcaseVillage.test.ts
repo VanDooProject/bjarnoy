@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hexesInRadius, neighbors } from '../hex/coords';
 import { WorldModel } from '../map/WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands } from '../map/worldGenerator';
+import { maxLevelFor } from '../map/buildingEconomy';
 import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
 
 const SEED = 20260824;
@@ -64,6 +65,12 @@ describe('buildShowcaseVillage', () => {
     expect(own.some((t) => t.buildingType === 'tower')).toBe(true);
     const bogTypes = new Set(own.map((t) => t.buildingType).filter((b) => b === 'bogoreworks' || b === 'claybrickworks' || b === 'hammerschmiede'));
     expect(bogTypes.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('raises every building to a high level (7, or its own ceiling) so the richest art shows', () => {
+    for (const tile of buildingsOf(built.model, built.settlement.id, built.center)) {
+      expect(tile.buildingLevel).toBe(Math.min(7, maxLevelFor(tile.buildingType!)));
+    }
   });
 
   it('keeps the giant mountain off the river and the bog', () => {
