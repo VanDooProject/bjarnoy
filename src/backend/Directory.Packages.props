@@ -17,6 +17,10 @@
     <PackageVersion Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="$(AspireVersion)" />
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="$(AspireVersion)" />
+    <!-- Transitive via the Aspire hosting packages (2.5.302). Pinned to the first
+         release patched for GHSA-qhrr-8q5h-9q3h; applied to transitive deps by
+         CentralPackageTransitivePinningEnabled. Drop once Aspire ships >= 2.5.303. -->
+    <PackageVersion Include="MessagePack" Version="2.5.303" />
   </ItemGroup>
 
   <ItemGroup Label="Hosting and telemetry">
