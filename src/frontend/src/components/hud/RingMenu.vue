@@ -652,8 +652,9 @@ function onBackdropPointerDown(e: PointerEvent) {
       @mouseenter="hoverLane1 = entry.item.id"
       @mouseleave="hoverLane1 = null"
     >
-      <template v-if="!layout.collapsed">{{ entry.item.label }}</template>
-      <span v-if="!layout.collapsed && (entry.ban || entry.state)" class="ring-badge" :class="entry.ban ? 'ban' : entry.state" aria-hidden="true">
+      <!-- No whitespace between the label and the badges: it would end up in the label's text. -->
+      <template v-if="!layout.collapsed">{{ entry.item.label }}</template><span
+        v-if="!layout.collapsed && (entry.ban || entry.state)" class="ring-badge" :class="entry.ban ? 'ban' : entry.state" aria-hidden="true">
         <svg v-if="entry.state === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
         <svg v-else-if="entry.state === 'waiting'" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
         <svg v-else viewBox="0 0 12 12"><path d="M3 6h6" /></svg>
@@ -692,8 +693,8 @@ function onBackdropPointerDown(e: PointerEvent) {
       @click="onBuildingClick(b.building)"
       @mouseenter="hover = b.building.id"
     >
-      {{ b.building.label }}
-      <span v-if="stateOf(b.building) !== 'ready' && stateOf(b.building) !== 'queues'" class="ring-badge" :class="stateOf(b.building)" aria-hidden="true">
+      {{ b.building.label }}<span
+        v-if="stateOf(b.building) !== 'ready' && stateOf(b.building) !== 'queues'" class="ring-badge" :class="stateOf(b.building)" aria-hidden="true">
         <svg v-if="stateOf(b.building) === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
         <svg v-else viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
       </span>
