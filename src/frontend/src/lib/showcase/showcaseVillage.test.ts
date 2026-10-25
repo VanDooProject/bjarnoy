@@ -57,6 +57,24 @@ describe('buildShowcaseVillage', () => {
     expect(types.size).toBeGreaterThanOrEqual(10);
   });
 
+  it('stands the village by the river: a Sawmill or Crop Mill on a river tile, a tower and the bog\'s own buildings', () => {
+    const own = buildingsOf(built.model, built.settlement.id, built.center);
+    const mills = own.filter((t) => (t.buildingType === 'sawmill' || t.buildingType === 'cropmill') && built.model.getRiverTile(t.q, t.r));
+    expect(mills.length).toBeGreaterThanOrEqual(1);
+    expect(own.some((t) => t.buildingType === 'tower')).toBe(true);
+    const bogTypes = new Set(own.map((t) => t.buildingType).filter((b) => b === 'bogoreworks' || b === 'claybrickworks' || b === 'hammerschmiede'));
+    expect(bogTypes.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps the giant mountain off the river and the bog', () => {
+    const giants = cropTiles().filter((t) => t.giant?.family === 'giantmountain');
+    expect(giants).toHaveLength(7);
+    for (const t of giants) {
+      expect(built.model.getRiverTile(t.q, t.r)).toBeUndefined();
+      expect(t.bog).toBeUndefined();
+    }
+  });
+
   it('never puts two neighbouring undeveloped moss hexes in the same look', () => {
     const moss = (q: number, r: number) => {
       const t = built.model.getTile(q, r);

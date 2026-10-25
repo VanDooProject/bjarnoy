@@ -10,6 +10,7 @@
 // section copy promises.
 import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from '../map/WorldModel';
+import { riverBuildingAllowedHere } from '../map/ringCatalogue';
 import { CAMP_FAMILIES } from '../map/campPlacement';
 import { giantCoverage } from '../map/giantTiles';
 import { TILE_ORIENTATIONS, type Settlement, type Tile } from '../map/types';
@@ -29,15 +30,87 @@ const VILLAGE_LONGHOUSE_LEVEL = 4;
 /** How far from the longhouse buildings are tried; claimed hexes beyond it are not worth scanning. */
 const BUILD_SEARCH_RADIUS = 14;
 
-/** Buildings to raise, in order, each on the claimed hex nearest the longhouse that `placeBuilding` accepts. Mixes economy, defence, faith and coast so the frame shows variety. */
-const VILLAGE_BUILDINGS: NonNullable<Tile['buildingType']>[] = [
-  'hut', 'hut', 'farm', 'lumberjack', 'quarry', 'sawmill', 'storagehouse', 'tower',
-  'shrineofthor', 'fishinghut', 'dockyard', 'barracks', 'smithy', 'meadery', 'townsquare', 'cropmill',
-  // The bog's own buildings (moss, creek): only placed when the village stands by a bog.
-  'bogoreworks', 'claybrickworks', 'hammerschmiede',
+type BuildingType = NonNullable<Tile['buildingType']>;
+
+/**
+ * Buildings to raise, in order, each on the claimed hex nearest the longhouse that `placeBuilding` accepts. Mixes economy, defence, faith
+ * and coast so the frame shows variety. The river mills come first: they only stand on a river hex, which the nearest-first scan would
+ * otherwise leave to the dry buildings' claim-order luck.
+ */
+const VILLAGE_BUILDINGS: BuildingType[] = [
+  'sawmill', 'cropmill',
+  'hut', 'hut', 'farm', 'lumberjack', 'quarry', 'storagehouse',
+  'shrineofthor', 'fishinghut', 'dockyard', 'barracks', 'smithy', 'meadery', 'townsquare',
 ];
+/** The tower goes on the claimed hex nearest the bog (its disc widens the border towards it), then the bog's own buildings (moss, creek, lake shore) on the claimed hexes nearest the bog. */
+const BOG_SIDE_TOWER: BuildingType = 'tower';
+const BOG_BUILDINGS: BuildingType[] = ['bogoreworks', 'claybrickworks', 'hammerschmiede', 'fishinghut'];
+/** How far (hexes) from the bog centre the longhouse may be moved to sit on the river. */
+const RIVER_SITE_RADIUS = 5;
+/** The river buildings the village wants a river hex for. */
+const RIVER_MILLS = ['sawmill', 'cropmill'] as const;
 /** Types shown above level 1 so the frame also shows the higher-level art. */
 const UPGRADED_TYPES = new Set<Tile['buildingType']>(['hut', 'farm', 'tower', 'sawmill']);
+
+/** Whether a Sawmill or Crop Mill (`type`, or either when omitted) may stand on `c`'s river tile — the same rule `WorldModel.placeBuilding` applies. */
+function riverMillAllowed(model: WorldModel, c: AxialCoord, type?: (typeof RIVER_MILLS)[number]): boolean {
+  const river = model.getRiverTile(c.q, c.r);
+  if (!river) return false;
+  const variant = model.riverVariantAt(c, river.shape);
+  return (type ? [type] : RIVER_MILLS).some((t) => riverBuildingAllowedHere(t, river.shape, variant, river.width));
+}
+
+/** River hexes within the crop of `at` a Sawmill or Crop Mill may stand on. */
+function millRiverHexes(model: WorldModel, at: AxialCoord): number {
+  return hexesInRadius(at, PREVIEW_ISLAND_RADIUS).filter((c) => riverMillAllowed(model, c)).length;
+}
+
+/**
+ * The longhouse site for the village: within `RIVER_SITE_RADIUS` of the frame's
+ * bog `center` (and inside its crop), the landfall-valid hex whose claim has the
+ * most river hexes a Sawmill or Crop Mill may stand on (each is wanted, so the
+ * counts are capped), plus dry grass for the rest of the village. Ties go to the
+ * hex nearest the bog. Null when no hex nearby has a mill-capable river hex.
+ */
+function pickRiverSite(model: WorldModel, center: AxialCoord): AxialCoord | null {
+  const inCrop = new Set(model.previewCropTiles(center).map((c) => `${c.q},${c.r}`));
+  const seen = new Set<string>();
+  let best: AxialCoord | null = null;
+  let bestScore = -Infinity;
+  for (const candidate of hexesInRadius(center, RIVER_SITE_RADIUS)) {
+    if (!model.isLand(candidate.q, candidate.r)) continue;
+    const site = model.findLandfall(candidate, 2);
+    if (!site || hexDistance(center, site) > RIVER_SITE_RADIUS || !inCrop.has(`${site.q},${site.r}`)) continue;
+    const key = `${site.q},${site.r}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    let sawmills = 0;
+    let cropmills = 0;
+    let dry = 0;
+    for (const c of hexesInRadius(site, VILLAGE_CLAIM_RADIUS)) {
+      const tile = model.getTile(c.q, c.r);
+      if (tile.giant || tile.camp) continue;
+      if (riverMillAllowed(model, c)) {
+        if (riverMillAllowed(model, c, 'sawmill')) sawmills++;
+        if (riverMillAllowed(model, c, 'cropmill')) cropmills++;
+      } else if (!tile.bog && !model.getRiverTile(c.q, c.r) && (tile.terrain === 'grass' || tile.terrain === 'sand')) dry++;
+    }
+    if (sawmills + cropmills === 0) continue;
+    const score = Math.min(sawmills, 4) * 10 + Math.min(cropmills, 4) * 10 + Math.min(dry, 24) - hexDistance(center, site);
+    if (score > bestScore) {
+      best = site;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/** Distance from `c` to the nearest bog hex of `bogs` (Infinity without any). */
+function distanceToBog(bogs: AxialCoord[], c: AxialCoord): number {
+  let best = Infinity;
+  for (const b of bogs) best = Math.min(best, hexDistance(b, c));
+  return best;
+}
 
 /**
  * How varied the ground within the preview crop of `at` is: distinct terrains,
@@ -67,6 +140,8 @@ const MIN_DRY_HEXES = 24;
 const VILLAGE_CLAIM_RADIUS = 4;
 /** Bog-lake hexes a bog site's crop should hold, so the frame shows open water inside the bog. */
 const MIN_LAKE_HEXES = 3;
+/** Mill-capable river hexes in a bog site's crop that still add to its score. */
+const MAX_SCORED_MILL_HEXES = 6;
 
 /**
  * Bog looks shown in the frame. Every bog family numbers its looks from 0, and
@@ -110,7 +185,9 @@ function pickBogSite(model: WorldModel): AxialCoord | null {
       if (!tile.bog && (tile.terrain === 'grass' || tile.terrain === 'sand') && hexDistance(bog, c) <= VILLAGE_CLAIM_RADIUS) dryNear++;
     }
     if (dry < MIN_DRY_HEXES) continue;
-    const score = bogHexes * 2 + kinds.size * 6 + Math.min(lake, 8) * 3 + Math.min(dryNear, 24) * 8 + Math.min(feature, 10) - filler * 2;
+    // Rivers a Sawmill / Crop Mill can stand on: the village is moved onto them (`pickRiverSite`), so the crop must hold some.
+    const mills = Math.min(millRiverHexes(model, bog), MAX_SCORED_MILL_HEXES);
+    const score = mills * 12 + bogHexes * 2 + kinds.size * 6 + Math.min(lake, 8) * 3 + Math.min(dryNear, 24) * 8 + Math.min(feature, 10) - filler * 2;
     // A lake-less site only competes when no site shows a lake at all.
     const lakeTier = lake >= MIN_LAKE_HEXES ? 1 : 0;
     if (lakeTier > bestTier || (lakeTier === bestTier && score > bestScore)) {
@@ -158,6 +235,8 @@ const GIANT_MAX_DISTANCE = 6;
 const GIANT_FALLBACK_MAX_DISTANCE = 8;
 /** Giants and camps keep this many hexes clear of the longhouse (giant) or this far from it (camps). */
 const GIANT_HOME_CLEARANCE = 2;
+/** A giant's plate stays this many hexes from every village building. */
+const GIANT_BUILDING_CLEARANCE = 2;
 const CAMP_MIN_HOME_DISTANCE = 4;
 const CAMP_MIN_SPACING = 3;
 const CAMPS_WANTED = 2;
@@ -172,11 +251,12 @@ function cropHasGiant(model: WorldModel, crop: AxialCoord[]): boolean {
  * The real generator rarely drops a giant into the village's crop, but the
  * frame promises one: places a giant mountain on the crop's grass/forest,
  * clear of the longhouse (and, as buildings are already up, of those — the
- * model refuses a footprint with a building). Anchors are tried nearest-first
+ * model refuses a footprint with a building), of rivers (the giant's art would
+ * cover the animated river art) and of bog. Anchors are tried nearest-first
  * from `center`, seeded-shuffled within one distance. The fallback accepts a
  * plate partly outside the crop (>= 4 of 7 hexes inside) and reaches farther.
  */
-function ensureGiantMountain(model: WorldModel, center: AxialCoord, home: AxialCoord, seed: number) {
+function ensureGiantMountain(model: WorldModel, center: AxialCoord, home: AxialCoord, seed: number, buildings: AxialCoord[]) {
   const crop = model.previewCropTiles(center);
   if (cropHasGiant(model, crop)) return;
   const inCrop = new Set(crop.map((c) => `${c.q},${c.r}`));
@@ -192,6 +272,8 @@ function ensureGiantMountain(model: WorldModel, center: AxialCoord, home: AxialC
     for (const anchor of anchors) {
       const plate = giantCoverage(anchor).map((p) => p.coord);
       if (plate.some((c) => hexDistance(home, c) <= GIANT_HOME_CLEARANCE)) continue;
+      if (plate.some((c) => model.getRiverTile(c.q, c.r) || model.getTile(c.q, c.r).bog)) continue;
+      if (plate.some((c) => buildings.some((b) => hexDistance(b, c) < GIANT_BUILDING_CLEARANCE))) continue;
       if (plate.filter((c) => inCrop.has(`${c.q},${c.r}`)).length < minParts) continue;
       if (model.placeGiant(anchor, 'giantmountain')) return true;
     }
@@ -315,11 +397,11 @@ export function buildShowcaseVillage(
   const provisional = model.findLandfall(near) ?? near;
   model.placeGiantsForIsland(provisional, worldSeed);
 
-  // The frame centres on the bog; the longhouse goes on the nearest good dry
-  // hex, close enough that the village shares the frame with it.
+  // The frame centres on the bog; the longhouse goes on the river within reach
+  // of it (the animated river buildings), else on the nearest good dry hex.
   const bogSite = pickBogSite(model);
   const center = bogSite ?? pickVillageSite(model, provisional);
-  const landfall = bogSite ? (model.findLandfall(bogSite, 4) ?? bogSite) : center;
+  const landfall = bogSite ? (pickRiverSite(model, bogSite) ?? model.findLandfall(bogSite, 4) ?? bogSite) : center;
   const settlement = model.foundSettlement(SHOWCASE_VILLAGE_OWNER, 'Ragnar', 'Ragnarsvik', landfall);
   const home = { q: settlement.q, r: settlement.r };
   while (settlement.level < VILLAGE_LONGHOUSE_LEVEL && model.upgradeBuilding(settlement.id, home)) {
@@ -328,15 +410,33 @@ export function buildShowcaseVillage(
 
   // placeBuilding is the rule book (claimed, dry/coastal, river shape, tower
   // limit...): a refused hex just means "not here", so try the next nearest.
-  const spots = hexesInRadius(home, BUILD_SEARCH_RADIUS)
-    .filter((c) => model.getTile(c.q, c.r).ownerId === settlement.id)
-    .sort((a, b) => hexDistance(home, a) - hexDistance(home, b));
-  for (const type of VILLAGE_BUILDINGS) {
+  const claimedSpots = () =>
+    hexesInRadius(home, BUILD_SEARCH_RADIUS).filter((c) => model.getTile(c.q, c.r).ownerId === settlement.id);
+  const place = (type: BuildingType, spots: AxialCoord[]) => {
     const at = spots.find((c) => model.placeBuilding(settlement.id, c, type));
     if (at && UPGRADED_TYPES.has(type)) model.upgradeBuilding(settlement.id, at);
+    return at;
+  };
+  const byHome = claimedSpots().sort((a, b) => hexDistance(home, a) - hexDistance(home, b));
+  // River hexes are kept for the mills: any other building would take them from the animated art.
+  const dryHome = byHome.filter((c) => !model.getRiverTile(c.q, c.r));
+  for (const type of VILLAGE_BUILDINGS) place(type, (RIVER_MILLS as readonly string[]).includes(type) ? byHome : dryHome);
+
+  // The bog side: a tower on the claimed hex nearest the bog widens the border towards it
+  // (so the bog buildings have claimed moss, creek and shore to stand on), then the bog's
+  // own buildings, each on the claimed hex nearest the bog.
+  const bogs = hexesInRadius(home, BUILD_SEARCH_RADIUS).filter((c) => model.getTile(c.q, c.r).bog);
+  if (bogs.length > 0) {
+    const byBog = (spots: AxialCoord[]) =>
+      spots.sort((a, b) => distanceToBog(bogs, a) - distanceToBog(bogs, b) || hexDistance(home, a) - hexDistance(home, b));
+    const dryBog = (spots: AxialCoord[]) => byBog(spots.filter((c) => !model.getRiverTile(c.q, c.r)));
+    place(BOG_SIDE_TOWER, dryBog(claimedSpots()));
+    const bogSpots = dryBog(claimedSpots());
+    for (const type of BOG_BUILDINGS) place(type, bogSpots);
   }
+  const buildings = hexesInRadius(home, BUILD_SEARCH_RADIUS).filter((c) => model.getTile(c.q, c.r).buildingType);
   // Buildings first, so the giant and camps avoid them.
-  ensureGiantMountain(model, center, home, worldSeed);
+  ensureGiantMountain(model, center, home, worldSeed, buildings);
   ensureCamps(model, center, home, worldSeed);
   diversifyLooks(model, center, worldSeed);
   return { settlement, center };
