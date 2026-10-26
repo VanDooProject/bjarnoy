@@ -56,27 +56,97 @@ export class RingMenuComponent {
     return this.page.locator('.ring-bubble.child', { hasText: label });
   }
 
+  /**
+   * Every bubble's accessible name (its aria-label), at any depth, in **one** round trip - for the
+   * assertions about which bubbles are on screen, which would otherwise be one `toHaveCount` round
+   * trip per label (see `settledCentre` for what a round trip costs on this app's canvas views).
+   */
+  labels(): Promise<string[]> {
+    return this.bubbles.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? (el.textContent ?? '').trim()));
+  }
+
   /** Waits for a ring to have opened at all. */
   async waitForOpen(): Promise<void> {
     await expect(this.bubbles.first()).toBeVisible();
   }
 
   /**
+   * The bubble's centre once it can be pointed at, found in **one** round trip.
+   *
+   * Every Playwright call is a round trip to a page whose render loop is busy
+   * (a frame is hundreds of milliseconds on a software-rendered runner, several
+   * times that with parallel workers). Before the loop was paced (framePacing.ts)
+   * a bare `evaluate` measured ~1s, a `boundingBox()` ~2.5s and a
+   * `locator.click()` ~5s (visible, enabled, stable and hit-target checks, each
+   * its own round trip) on an otherwise idle machine; they are far cheaper now,
+   * but still one wait each. A hover spelled
+   * `expect(visible)` + `boundingBox()` + `mouse.move` was ~6s, so a spec that
+   * drives a few dozen bubbles spent its whole budget waiting for frames.
+   *
+   * So the waiting happens in the page instead, one rAF at a time, for what
+   * Playwright's own click waits for: the bubble is laid out, visible, enabled
+   * (when `enabled`), no longer animating (the bloom and the hover lift are Web
+   * Animations; the endless glow and pulse never settle, so they do not count), and is what a
+   * real pointer would hit at its centre.
+   */
+  private async settledCentre(bubble: Locator, enabled: boolean): Promise<{ x: number; y: number }> {
+    return bubble.evaluate(
+      (el, needEnabled) =>
+        new Promise<{ x: number; y: number }>((resolve, reject) => {
+          const deadline = performance.now() + 30_000;
+          const look = () => {
+            const r = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            const x = r.x + r.width / 2;
+            const y = r.y + r.height / 2;
+            const animating = (() => {
+              for (let n: Element | null = el; n; n = n.parentElement) {
+                if (n.getAnimations().some((a) => a.effect?.getComputedTiming().iterations !== Infinity)) return true;
+              }
+              return false;
+            })();
+            const top = document.elementFromPoint(x, y);
+            const box = `${r.x},${r.y},${r.width},${r.height}`;
+            const ready =
+              r.width > 0 &&
+              r.height > 0 &&
+              style.visibility !== 'hidden' &&
+              !(needEnabled && (el as HTMLButtonElement).disabled) &&
+              !animating &&
+              top !== null &&
+              el.contains(top);
+            if (ready) resolve({ x, y });
+            else if (performance.now() > deadline) reject(new Error(`ring bubble never became pointable (box ${box}, animating ${animating}, top ${top?.className})`));
+            else requestAnimationFrame(look);
+          };
+          look();
+        }),
+      enabled,
+    );
+  }
+
+  /**
    * Moves the real pointer onto a bubble's centre — what previews a building's
-   * card (hover never navigates any more), and `steps: 6` is what makes that a
+   * card (hover never navigates any more), and `steps` is what makes that a
    * genuine pointer traversal rather than a teleport the component's own
    * enter/leave handling can miss.
    */
   async hover(bubble: Locator): Promise<void> {
-    await expect(bubble).toBeVisible();
-    const rect = (await bubble.boundingBox())!;
-    await this.page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2, { steps: 6 });
+    const { x, y } = await this.settledCentre(bubble, false);
+    await this.page.mouse.move(x, y, { steps: 3 });
+  }
+
+  /** Presses and releases the real pointer where it is - after `hover(bubble)`, that is a click on the bubble. */
+  async press(): Promise<void> {
+    await this.page.mouse.down();
+    await this.page.mouse.up();
   }
 
   /** Moves the real pointer onto a bubble and clicks it — how the ring navigates (hover only previews). */
   async click(bubble: Locator): Promise<void> {
-    await this.hover(bubble);
-    await bubble.click();
+    const { x, y } = await this.settledCentre(bubble, true);
+    await this.page.mouse.move(x, y, { steps: 3 });
+    await this.press();
   }
 
   /** Root "Build" action → the build categories on the inner lane. */
