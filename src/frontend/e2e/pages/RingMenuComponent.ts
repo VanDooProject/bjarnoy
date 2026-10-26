@@ -85,8 +85,8 @@ export class RingMenuComponent {
    *
    * So the waiting happens in the page instead, one rAF at a time, for what
    * Playwright's own click waits for: the bubble is laid out, visible, enabled
-   * (when `enabled`), no longer animating (the bloom and the hover lift are Web
-   * Animations; the endless glow and pulse never settle, so they do not count), and is what a
+   * (when `enabled`), no longer animating - nor is anything else in the ring (the bloom, a layer swap and the
+   * hover lift are Web Animations; the endless glow and pulse never settle, so they do not count), and is what a
    * real pointer would hit at its centre.
    */
   private async settledCentre(bubble: Locator, enabled: boolean): Promise<{ x: number; y: number }> {
@@ -99,11 +99,14 @@ export class RingMenuComponent {
             const style = getComputedStyle(el);
             const x = r.x + r.width / 2;
             const y = r.y + r.height / 2;
+            // The whole ring, not just this bubble: a layer swap staggers its bubbles in, and RingMenu ignores
+            // navigation clicks until the last of them has landed - a bubble already at rest is not enough.
+            const ring = el.closest('.ring-backdrop') ?? el;
             const animating = (() => {
               for (let n: Element | null = el; n; n = n.parentElement) {
                 if (n.getAnimations().some((a) => a.effect?.getComputedTiming().iterations !== Infinity)) return true;
               }
-              return false;
+              return ring.getAnimations({ subtree: true }).some((a) => a.effect?.getComputedTiming().iterations !== Infinity);
             })();
             const top = document.elementFromPoint(x, y);
             const box = `${r.x},${r.y},${r.width},${r.height}`;
