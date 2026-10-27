@@ -5,7 +5,7 @@ import { DEFAULT_GENERATION, enumerateIslands } from '../map/worldGenerator';
 import { maxLevelFor } from '../map/buildingEconomy';
 import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_RENDER_RADIUS, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
 
-// A seed whose village site has shore for the dockyard (the showcase page has its own default seed).
+// The showcase page's own default seed (ShowcaseView.vue DEFAULT_SEED): its village site has shore for the dockyard.
 const SEED = 20261824;
 
 function build() {
