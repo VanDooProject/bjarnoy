@@ -133,6 +133,48 @@ export function polylinePartial(points: { x: number; y: number }[], fraction: nu
   return out;
 }
 
+/** The dial label's font size in px at map scale 1 (`LABEL_STYLES.dialTime` is 12 px, drawn at 1.2x). */
+export const DIAL_LABEL_BASE_PX = 12 * 1.2;
+/** A dial's time label is hidden while it would be smaller than this many on-screen px. */
+export const DIAL_MIN_LABEL_PX = 10;
+/** How long a dial takes to grow to / shrink back from its hovered size. */
+export const DIAL_HOVER_MS = 150;
+
+export interface DialScale {
+  /** Multiplier for the dial's radius, strokes and label (1 = the size at the settlement's default zoom). */
+  zs: number;
+  /** Whether the time label is drawn. */
+  showLabel: boolean;
+}
+
+/**
+ * Dial sizing. `mapScale` is `camera.zoom / SETTLEMENT_DEFAULT_ZOOM`: the dial
+ * scales exactly with the map (no floor, so it stays the same fraction of a
+ * tile at every zoom). The time label is dropped once it would be below
+ * `DIAL_MIN_LABEL_PX` on screen. `hoverT` (0..1, the linear tween progress)
+ * lifts the dial to at least its default-zoom size (`max(mapScale, 1)`, so a
+ * dial already bigger than that never shrinks) and, from halfway, forces the
+ * label. `rejectScale` is the rejection animation's shrink.
+ */
+export function dialScale(mapScale: number, hoverT: number, rejectScale = 1): DialScale {
+  const t = clamp01(hoverT);
+  const eased = easeInOut(t);
+  const zs = mapScale + (Math.max(mapScale, 1) - mapScale) * eased;
+  return { zs, showLabel: t >= 0.5 || DIAL_LABEL_BASE_PX * zs * rejectScale >= DIAL_MIN_LABEL_PX };
+}
+
+/**
+ * One tween step of a dial's hover progress: toward 1 while `hovered`, toward
+ * 0 otherwise, taking `DIAL_HOVER_MS` for the full range. With reduced motion
+ * it jumps straight to the target.
+ */
+export function dialHoverStep(t: number, hovered: boolean, dtMs: number, reducedMotion: boolean): number {
+  const target = hovered ? 1 : 0;
+  if (reducedMotion) return target;
+  const step = Math.max(0, dtMs) / DIAL_HOVER_MS;
+  return target > t ? Math.min(target, t + step) : Math.max(target, t - step);
+}
+
 /** How long the completion animation plays after a build ends. */
 export const DIAL_FINISH_MS = 2600;
 

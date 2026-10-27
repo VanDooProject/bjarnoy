@@ -48,6 +48,7 @@ import {
   dialProgress,
   dialRemainingSeconds,
   hexPerimeterPath,
+  dialScale,
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -840,8 +841,7 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 }
 
 // Construction progress dial (see `constructionDial.ts`): drawn in screen space
-// by `drawConstructionDials` (constant on-screen size, like the settlement
-// badge) over a building under construction — white track, yellow elapsed arc,
+// by `drawConstructionDials` (scaled with the map, grows on hover) over a building under construction — white track, yellow elapsed arc,
 // remaining time inside.
 const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
 // Dial height above the tile centre: half a tile, so the dial's middle sits on
@@ -4601,9 +4601,11 @@ export class HexMapRenderer {
   }
 
   /**
-   * Construction progress dials, in screen space (markerLayer): a constant
-   * on-screen size at/below the settlement's default zoom that grows past it,
-   * like the settlement badge. Must run before the unused-label hide loop in
+   * Construction progress dials, in screen space (markerLayer): they scale
+   * exactly with the map (`camera.zoom / SETTLEMENT_DEFAULT_ZOOM`, no floor),
+   * so a dial stays the same fraction of a tile at every zoom. The time label
+   * is dropped while it would be under `DIAL_MIN_LABEL_PX` on screen (the ring
+   * and progress edge still draw); see `dialScale`. Must run before the unused-label hide loop in
    * `rebuildMarkers` since it acquires pooled labels. A completed dial plays
    * `dialFinishFrame` (pop, flash, shockwaves, check mark) and is then pruned.
    */
@@ -4611,7 +4613,7 @@ export class HexMapRenderer {
     if (!this.constructionDials) return;
     const lift = CONSTRUCTION_DIAL_LIFT;
     const nowMs = Date.now();
-    const zs = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
+    const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
     const g = this.markerLayer;
     const strokePath = (path: number[], width: number, color: number, alpha: number) => {
       if (path.length < 4) return;
@@ -4636,6 +4638,7 @@ export class HexMapRenderer {
       const dAlpha = reject?.alpha ?? 1;
       const cx = anchor.x + (reject?.offsetX ?? 0);
       const cy = anchor.y;
+      const { zs, showLabel } = dialScale(mapScale, 0, reject?.scale ?? 1);
       const r = 22 * zs * 1.25 * (reject?.scale ?? 1);
       const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
 
@@ -4670,6 +4673,7 @@ export class HexMapRenderer {
         .fill({ color: 0x08121a, alpha: 0.85 * dAlpha })
         .stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
       strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+      if (!showLabel) continue;
       const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2 * (reject?.scale ?? 1));
       label.alpha = dAlpha;
       label.text = remaining === null ? '…' : formatCountdownShort(remaining);
