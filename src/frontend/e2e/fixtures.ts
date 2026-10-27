@@ -19,7 +19,93 @@ import { AdminAuthFixture } from './pages/AdminAuthFixture';
 // everything else still fails the run.
 const isEnvironmentNoise = (text: string) => text.includes('net::ERR_CONNECTION_RESET');
 
-export const test = base.extend<{ forbidConsoleErrors: void; pinnedLocale: void; adminAuth: AdminAuthFixture }>({
+/** Which of the map's optional layers a spec renders. See the `mapLayers` fixture. */
+export interface MapLayers {
+  /** The water shader. Omitted is on. */
+  water?: boolean;
+  /** Both fog quads (out-of-sight tint and never-scouted mist). Omitted is on. */
+  fog?: boolean;
+}
+
+export const test = base.extend<{
+  forbidConsoleErrors: void;
+  pinnedLocale: void;
+  adminAuth: AdminAuthFixture;
+  antialias: 'on' | 'off';
+  mapLayers: MapLayers;
+  graphicsSettings: void;
+}>({
+  /**
+   * The map's "Smooth edges" setting (lib/perf/antialiasPreference.ts), set
+   * the way a player sets it: through its own localStorage key, before the
+   * app loads. Off for the suite: MSAA multiplies the fill cost of every
+   * frame on CI's software renderer, and only geometry edges change with it.
+   * A spec that judges how the map looks opts back in with
+   * `test.use({ antialias: 'on' })`.
+   */
+  antialias: ['off', { option: true }],
+
+  /**
+   * Explicit, per-spec opt-out of the water shader and/or the fog (issue #416), for specs
+   * whose assertions are DOM and game state only: ring navigation and its
+   * DOM motion, HUD, cards, the queue drawer. Water is the most expensive pass of a
+   * settlement frame on a software renderer (~150 ms of ~300-450 ms), and
+   * hex picking is geometry, not pixels, so it cannot change their result.
+   *
+   * Opting out flips the same runtime switch a developer uses in the water
+   * debug panel (`window.__waterDebug.water`), the moment the app installs
+   * it; the app never learns it is under test. Never the default, and never
+   * for a spec that looks at the map's pixels as an image, or at water, shore
+   * or fog behaviour -
+   * src/test/e2eWaterOptOut.test.ts enforces those rules. Use
+   * `test.use({ mapLayers: { water: false } })`.
+   *
+   * Fog (`{ fog: false }`) works the same way through `window.__fogDebug`'s
+   * two mask switches, and is held to the same rules. Hiding the fog *layer*
+   * does not change what is scouted: game state and picking are unaffected.
+   */
+  mapLayers: [{ water: true }, { option: true }],
+
+  graphicsSettings: [
+    async ({ page, antialias, mapLayers }, use) => {
+      await page.addInitScript((value) => {
+        window.localStorage.setItem('bjarnoy.antialias', value);
+      }, antialias);
+      if (mapLayers.water === false) {
+        await page.addInitScript(() => {
+          // main.ts assigns the flags object once at startup (demo builds);
+          // catch that assignment and switch water off before the first frame.
+          let flags: { water: boolean } | undefined;
+          Object.defineProperty(window, '__waterDebug', {
+            configurable: true,
+            get: () => flags,
+            set: (value: { water: boolean }) => {
+              value.water = false;
+              flags = value;
+            },
+          });
+        });
+      }
+      if (mapLayers.fog === false) {
+        await page.addInitScript(() => {
+          // Same catch for the fog debug flags: both fog quads off before the first frame.
+          let flags: { maskUnknown: boolean; maskOutOfSight: boolean } | undefined;
+          Object.defineProperty(window, '__fogDebug', {
+            configurable: true,
+            get: () => flags,
+            set: (value: { maskUnknown: boolean; maskOutOfSight: boolean }) => {
+              value.maskUnknown = false;
+              value.maskOutOfSight = false;
+              flags = value;
+            },
+          });
+        });
+      }
+      await use();
+    },
+    { auto: true },
+  ],
+
   /**
    * A mocked authenticated session (issue #189). Not autouse — asking for it
    * only builds the object; nothing is intercepted until a test calls

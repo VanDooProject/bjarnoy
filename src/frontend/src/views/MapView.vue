@@ -656,7 +656,11 @@ watch(isHudDrawerOpen, (open) => {
 // chosen bubble drops onto the hex). `retractRing` makes the leaving ring
 // click-through first, so a map drag started on it still begins immediately.
 function onRingLeave(el: Element, done: () => void) {
-  retractRing(el as HTMLElement).then(done, done);
+  const finish = () => {
+    clearRingFootprint();
+    done();
+  };
+  retractRing(el as HTMLElement).then(finish, finish);
 }
 
 // A mousedown on the ring's own backdrop (not a bubble) closes the ring and
@@ -1411,6 +1415,16 @@ function onWaypointTap(index: number) {
   world.removeWaypoint(index);
 }
 
+// While the ring is open the renderer fades out the canvas markers (dials, the
+// realm badge) beneath its footprint; lifted again as soon as the ring unmounts.
+function onRingFootprint(circle: { x: number; y: number; r: number }) {
+  canvasRef.value?.renderer?.setMarkerOcclusion(circle);
+}
+function clearRingFootprint() {
+  // A ring reopened during the retract animation has already re-set it.
+  if (!ringOpen.value) canvasRef.value?.renderer?.setMarkerOcclusion(null);
+}
+
 function closeRing() {
   selectedCoord.value = null;
   selectedTile.value = null;
@@ -1709,6 +1723,7 @@ async function upgrade() {
           @select="onRingSelect"
           @close="closeRing"
           @outside-pointer-down="onRingOutsidePointerDown"
+          @footprint="onRingFootprint"
         />
       </Transition>
       <BuildingModal
@@ -1757,6 +1772,7 @@ async function upgrade() {
           @select="onRingSelect"
           @close="closeRing"
           @outside-pointer-down="onRingOutsidePointerDown"
+          @footprint="onRingFootprint"
         />
       </Transition>
     </template>

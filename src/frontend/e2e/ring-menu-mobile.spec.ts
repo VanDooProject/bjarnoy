@@ -2,6 +2,9 @@ import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
+// DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
+test.use({ mapLayers: { water: false } });
+
 /**
  * The ring's phone layout: touch has no hover, so building is two taps — the
  * first arms a bubble and fills the docked card (a bottom strip in portrait,
