@@ -926,6 +926,16 @@ describe('WorldModel.previewIslandTiles', () => {
 // it's meaningful (an island that is both foreign *and* oversized), since
 // either bug alone can hide the other if only one is checked.
 describe('WorldModel.previewCropTiles', () => {
+  it('keeps the requested radius when the flood fill hits its safety bound, rather than the landing radius', () => {
+    // A centre on an island that reaches past PREVIEW_ISLAND_FLOOD_MAX_RADIUS: the showcase frame's
+    // 34-hex crop used to come back as the landing page's 7-hex disc.
+    const model = new WorldModel(1);
+    model.isLand = () => true;
+    const center = { q: 0, r: 0 };
+    expect(model.previewCropTiles(center, 34)).toHaveLength(hexesInRadius(center, 34).length);
+    expect(model.previewCropTiles(center)).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+  });
+
   it('excludes a foreign island within PREVIEW_ISLAND_RADIUS — the L5 property', () => {
     const model = new WorldModel(1);
     const center: AxialCoord = { q: 0, r: 0 };

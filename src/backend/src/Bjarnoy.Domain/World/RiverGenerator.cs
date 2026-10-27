@@ -304,7 +304,7 @@ internal static partial class RiverGenerator
         // Bog sites: through-river lakes (the river is re-routed through them), sinks and spawns.
         var bp = new BogPaths(paths, mergedFlags);
         Func<BogPaths, List<RiverTile>> widthTrial = trial =>
-            AssignWidths(BuildRiverTiles(trial), riverLand, seed, null, trial.RequireRiver);
+            AssignWidths(BuildRiverTiles(trial), seed, null, trial.RequireRiver);
         Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver = (exit, startIn, current, blocked) =>
         {
             // A spawned river must reach the sea from wherever the bog is: every basin gets an outlet.
@@ -329,7 +329,7 @@ internal static partial class RiverGenerator
 
         // A stream out of every mountain-enclosed valley that the rivers and bogs left cut off.
         var bogTiles = bogs.Classify();
-        var settled = AssignWidths(BuildRiverTiles(bp), riverLand, seed, null, bp.RequireRiver);
+        var settled = AssignWidths(BuildRiverTiles(bp), seed, null, bp.RequireRiver);
         CarveValleyStreams(
             islandTiles,
             land,
@@ -342,7 +342,7 @@ internal static partial class RiverGenerator
             settled,
             stats);
         var nodes = BuildRiverTiles(bp);
-        var rivers = AssignWidths(nodes, riverLand, seed, stats, bp.RequireRiver);
+        var rivers = AssignWidths(nodes, seed, stats, bp.RequireRiver);
         return new Result(rivers, bogTiles);
     }
 
@@ -406,6 +406,9 @@ internal static partial class RiverGenerator
         public readonly int[] Neighbour;
         public readonly bool[] Interior;
         public readonly bool[] Outlet;
+
+        /// <summary>Per (tile, direction): the neighbour there is open sea (not island land, not bog water). A river ends on a coastal tile only head-on, towards such a direction, so every sea mouth is a delta.</summary>
+        public readonly bool[] SeaAt;
         public readonly double[] Step;
         public readonly double[] Dist;
         public readonly double BendCost;
@@ -433,6 +436,7 @@ internal static partial class RiverGenerator
             Neighbour = new int[n * 6];
             Interior = new bool[n];
             Outlet = new bool[n];
+            SeaAt = new bool[n * 6];
             Step = new double[n];
             Dist = new double[n * 6];
             Array.Fill(Dist, double.PositiveInfinity);
@@ -457,9 +461,10 @@ internal static partial class RiverGenerator
 
                 // Neighbours that are island tiles are land without asking the (costly) sampler.
                 coastal[i] = false;
-                for (var d = 0; d < 6 && !coastal[i]; d++)
+                for (var d = 0; d < 6; d++)
                 {
-                    coastal[i] = !Index.ContainsKey(ns[d]) && !isLand(ns[d]);
+                    SeaAt[(i * 6) + d] = !Index.ContainsKey(ns[d]) && !isLand(ns[d]);
+                    coastal[i] |= SeaAt[(i * 6) + d];
                 }
 
                 if (isBlocked[i])
@@ -482,6 +487,12 @@ internal static partial class RiverGenerator
                 Outlet[o] = true;
                 for (var j = 0; j < 6; j++)
                 {
+                    // Head-on only: the river arrives from direction j, so the sea must lie straight ahead.
+                    if (!SeaAt[(o * 6) + ((j + 3) % 6)])
+                    {
+                        continue;
+                    }
+
                     Dist[(o * 6) + j] = 0.0;
                     heap.Push(0.0, (o * 6) + j);
                 }
@@ -599,7 +610,9 @@ internal static partial class RiverGenerator
                 for (var d = 0; d < 6 && !receives; d++)
                 {
                     var n = Neighbour[(i * 6) + d];
-                    receives = n >= 0 && Interior[n];
+
+                    // Flow from direction d leaves head-on only if the sea lies straight ahead of it.
+                    receives = n >= 0 && Interior[n] && SeaAt[(i * 6) + ((d + 3) % 6)];
                 }
 
                 if (!receives)
@@ -724,7 +737,7 @@ internal static partial class RiverGenerator
                 for (var d = 0; d < 6; d++)
                 {
                     var m = Neighbour[(o * 6) + d];
-                    if (m >= 0 && Interior[m])
+                    if (m >= 0 && Interior[m] && SeaAt[(o * 6) + ((d + 3) % 6)])
                     {
                         drained[basin[m]] = true;
                     }
@@ -745,7 +758,7 @@ internal static partial class RiverGenerator
                 for (var d = 0; d < 6; d++)
                 {
                     var m = Neighbour[(o * 6) + d];
-                    if (m < 0 || !Interior[m])
+                    if (m < 0 || !Interior[m] || !SeaAt[(o * 6) + ((d + 3) % 6)])
                     {
                         continue;
                     }
@@ -879,6 +892,8 @@ internal static partial class RiverGenerator
 
             while (guard-- > 0)
             {
+                // Outlets are seeded head-on only (Dist is finite at an outlet just for arrivals with sea straight ahead)
+                // and BestOut never offers an infinite state, so the walk can only end on an outlet as a delta.
                 if (drainage.Outlet[current])
                 {
                     return path;
@@ -933,8 +948,9 @@ internal static partial class RiverGenerator
                     }
                 }
 
-                // No drawable junction: run on alone to the nearest free coast (a new mouth).
-                var alone = SearchJunction(drainage, path, claims, onPath, double.PositiveInfinity, options.MergeReach * 3.0, 0.0, true);
+                // No drawable junction: run on alone to the nearest free coast (a new mouth). Head-on mouths are rarer than
+                // any coastal tile, so the reach is 10x MergeReach: at 3x about 2% more rivers found none and were dropped.
+                var alone = SearchJunction(drainage, path, claims, onPath, double.PositiveInfinity, options.MergeReach * 10.0, 0.0, true);
                 if (alone is not null)
                 {
                     path.AddRange(alone);
@@ -1018,7 +1034,7 @@ internal static partial class RiverGenerator
 
                 if (toMouth)
                 {
-                    // Alone to the sea: any free coastal tile is a new mouth.
+                    // Alone to the sea: any free coastal tile with sea straight ahead is a new mouth.
                     if (claims[n] is not null || onPath[n])
                     {
                         continue;
@@ -1026,6 +1042,12 @@ internal static partial class RiverGenerator
 
                     if (!drainage.Interior[n])
                     {
+                        // A new mouth must be head-on too: the sea straight ahead of the step.
+                        if (!drainage.SeaAt[(n * 6) + dir])
+                        {
+                            continue;
+                        }
+
                         var total = d + turn + drainage.Step[n] + Crowding(drainage, claims, n);
                         if (!found || total < bestTotal)
                         {
@@ -1703,7 +1725,7 @@ internal static partial class RiverGenerator
     /// second half of its stream run, and is truncated when that half has none.
     /// </summary>
     private static List<RiverTile> AssignWidths(
-        List<Node> nodes, Func<HexCoord, bool> isLand, int seed, RiverStats? stats, HashSet<HexCoord>? requireRiver = null)
+        List<Node> nodes, int seed, RiverStats? stats, HashSet<HexCoord>? requireRiver = null)
     {
         var byCoord = nodes.ToDictionary(n => n.Coord);
 
@@ -1750,7 +1772,28 @@ internal static partial class RiverGenerator
                 return false;
             }
 
-            var pick = candidates[(int)Math.Floor(ValueNoise.Hash2(requirement.Q, requirement.R, seed + 47) * candidates.Count)];
+            WidenAt(chain, candidates[(int)Math.Floor(ValueNoise.Hash2(requirement.Q, requirement.R, seed + 47) * candidates.Count)]);
+            return true;
+        }
+
+        // Widens on the Straight tile nearest the end of the chain (never the spring); false when there is none.
+        bool TryWidenNearest(List<Node> chain)
+        {
+            for (var i = chain.Count - 1; i >= 1; i--)
+            {
+                if (chain[i].Shape == RiverTileShape.Straight)
+                {
+                    WidenAt(chain, i);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // The tile at `pick` widens; every tile after it is river width.
+        void WidenAt(List<Node> chain, int pick)
+        {
             chain[pick].Width = RiverWidth.Widen;
             chain[pick].OutRiver = true;
             for (var i = pick + 1; i < chain.Count; i++)
@@ -1763,8 +1806,6 @@ internal static partial class RiverGenerator
             {
                 stats.Widenings++;
             }
-
-            return true;
         }
 
         void Remove(List<Node> chain)
@@ -1869,13 +1910,10 @@ internal static partial class RiverGenerator
                         {
                             v.Width = RiverWidth.River;
                         }
-                        else if (!isLand(v.Coord + HexCoord.Directions[(v.Ins[0] + 3) % 6]))
+                        else if (TryWidenNearest(chain))
                         {
-                            v.Width = RiverWidth.Widen;
-                            if (stats is not null)
-                            {
-                                stats.Widenings++;
-                            }
+                            // Never on the mouth itself: the nearest straight tile upstream carries the widening.
+                            v.Width = RiverWidth.River;
                         }
                         else
                         {
