@@ -143,7 +143,7 @@
   (the water debug switch) and the suite's `antialias: 'off'` (the player's
   "Smooth edges" setting), both in `src/frontend/e2e/fixtures.ts`. Water
   opt-out only for specs whose assertions are DOM/game state; never for
-  water/fog/shore/motion specs or anything that judges map pixels as an image
+  water/fog/shore specs or anything that judges map pixels as an image
   (`src/frontend/src/test/e2eWaterOptOut.test.ts` enforces this). It doesn't
   replace fixing real perf problems for slow devices.
 

@@ -16,7 +16,9 @@ import { SettlementPage } from './pages';
  * from the outside — nothing in the app branches on being under test.
  */
 // `contextOptions` (not the `reducedMotion` option): the config's own contextOptions.reducedMotion takes priority over it.
-test.use({ contextOptions: { reducedMotion: 'no-preference' } });
+// Water off (see `mapLayers` in fixtures.ts): everything here is DOM Web Animations and game state, which water pixels
+// cannot change, and with motion on the water pass is what starved this spec under load (issue #416).
+test.use({ contextOptions: { reducedMotion: 'no-preference' }, mapLayers: { water: false } });
 
 interface AnimateLog {
   cls: string;

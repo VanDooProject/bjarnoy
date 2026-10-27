@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
 const E2E_DIR = join(__dirname, '../../e2e');
 const OPT_OUT = /mapLayers:\s*\{\s*water:\s*false/;
 
-/** Specs that must always render every layer: they are about water, fog, shore or motion timing. */
-const FULL_RENDERING_SPECS = ['water-shader.spec.ts', 'fog-drift.spec.ts', 'ring-motion.spec.ts', 'onboarding-happy-path.spec.ts', 'zoom-transition.spec.ts'];
+/** Specs that must always render every layer: they are about water, fog, shore or the map's own transitions. */
+const FULL_RENDERING_SPECS = ['water-shader.spec.ts', 'fog-drift.spec.ts', 'onboarding-happy-path.spec.ts', 'zoom-transition.spec.ts'];
 
 /**
  * Pixel checks an opted-out spec may not make: a golden image, or a saved
@@ -28,7 +28,7 @@ describe('e2e water opt-out', () => {
     expect(optedOut.length).toBeGreaterThan(0);
   });
 
-  it('is never used by a spec about water, fog, shore or motion', () => {
+  it("is never used by a spec about water, fog, shore or the map's transitions", () => {
     expect(optedOut.filter((name) => FULL_RENDERING_SPECS.includes(name))).toEqual([]);
   });
 

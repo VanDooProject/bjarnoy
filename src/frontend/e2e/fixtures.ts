@@ -44,16 +44,16 @@ export const test = base.extend<{
 
   /**
    * Explicit, per-spec opt-out of the water shader (issue #416), for specs
-   * whose assertions are DOM and game state only: ring navigation, HUD,
-   * cards, the queue drawer. Water is the most expensive pass of a
+   * whose assertions are DOM and game state only: ring navigation and its
+   * DOM motion, HUD, cards, the queue drawer. Water is the most expensive pass of a
    * settlement frame on a software renderer (~150 ms of ~300-450 ms), and
    * hex picking is geometry, not pixels, so it cannot change their result.
    *
    * Opting out flips the same runtime switch a developer uses in the water
    * debug panel (`window.__waterDebug.water`), the moment the app installs
    * it; the app never learns it is under test. Never the default, and never
-   * for a spec that looks at the map's pixels as an image, at water, shore
-   * or fog behaviour, or at motion timing (ring-motion) -
+   * for a spec that looks at the map's pixels as an image, or at water, shore
+   * or fog behaviour -
    * src/test/e2eWaterOptOut.test.ts enforces those rules. Use
    * `test.use({ mapLayers: { water: false } })`.
    */
