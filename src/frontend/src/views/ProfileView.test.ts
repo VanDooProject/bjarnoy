@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileView from './ProfileView.vue';
 import type { ProfileResponse } from '../api/types';
 import { animationPreference } from '../lib/perf/animationPreference';
+import { antialiasPreference } from '../lib/perf/antialiasPreference';
 import { useAuthStore } from '../stores/auth';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { createTestI18n } from '../test/i18n';
@@ -291,7 +292,7 @@ describe('ProfileView', () => {
       const names = wrapper
         .findAll('[role="group"]')
         .map((group) => document.getElementById(group.attributes('aria-labelledby')!)?.textContent);
-      expect(names).toEqual(['Bar position', 'Map animations']);
+      expect(names).toEqual(['Bar position', 'Map animations', 'Smooth edges']);
       wrapper.unmount();
     });
 
@@ -389,6 +390,25 @@ describe('ProfileView', () => {
       expect(animationPreference.setting).toBe('on');
       expect(localStorage.getItem('bjarnoy.animations')).toBe('on');
       expect(wrapper.text()).toContain('On (this device)');
+    });
+
+    it('the smooth-edges toggle persists the antialias setting to localStorage', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      const offButton = wrapper
+        .findAll('.antialias-toggle button')
+        .find((button) => button.text() === 'Off')!;
+      await offButton.trigger('click');
+
+      expect(antialiasPreference.enabled).toBe(false);
+      expect(localStorage.getItem('bjarnoy.antialias')).toBe('off');
+      expect(offButton.attributes('aria-pressed')).toBe('true');
+      antialiasPreference.setting = 'on';
     });
 
     it("shows the 'measuring' status for auto before the fps governor has decided", async () => {

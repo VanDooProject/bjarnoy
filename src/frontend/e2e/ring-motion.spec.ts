@@ -16,7 +16,10 @@ import { SettlementPage } from './pages';
  * from the outside — nothing in the app branches on being under test.
  */
 // `contextOptions` (not the `reducedMotion` option): the config's own contextOptions.reducedMotion takes priority over it.
-test.use({ contextOptions: { reducedMotion: 'no-preference' } });
+// Water and fog off (see `mapLayers` in fixtures.ts): everything here is DOM Web Animations and game state, which water
+// and fog pixels cannot change, and with motion on those two passes are what starved this spec under load (issue #416). User-approved in
+// #420, recorded in src/test/e2eWaterOptOut.test.ts's APPROVED_MOTION_OPT_OUTS.
+test.use({ contextOptions: { reducedMotion: 'no-preference' }, mapLayers: { water: false, fog: false } });
 
 interface AnimateLog {
   cls: string;

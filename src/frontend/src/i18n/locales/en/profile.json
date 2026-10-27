@@ -28,6 +28,8 @@
     "auto": "Auto",
     "on": "On",
     "off": "Off",
+    "antialias": "Smooth edges",
+    "antialiasHint": "Smoother borders and outlines on the map. Off is faster on slow devices; applies the next time the map opens.",
     "status": {
       "forcedOn": "On (this device)",
       "forcedOff": "Off (this device)",
