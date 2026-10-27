@@ -304,6 +304,78 @@ public class RiverStreamTests
             $"{stats.TruncatedBranches} truncated + {stats.DroppedRivers} dropped of {stats.Rivers} rivers");
     }
 
+    /// <summary>Every spring's walk down the finished river tiles (to its mouth, or to where the water leaves them into a bog), with the terrain each tile stands on.</summary>
+    private static IEnumerable<List<(HexCoord Coord, Terrain Terrain)>> SpringWalks()
+    {
+        foreach (var (_, island, sampler) in GreenIslands())
+        {
+            var byCoord = island.RiverTiles.ToDictionary(t => t.Coord);
+            foreach (var spring in island.RiverTiles.Where(t => t.Shape == RiverTileShape.Spring))
+            {
+                var walk = new List<(HexCoord, Terrain)>();
+                var cur = spring;
+                while (walk.Count <= island.Tiles.Count)
+                {
+                    walk.Add((cur.Coord, sampler.TerrainAt(cur.Coord)));
+                    if (cur.OutDirection is not { } o || !byCoord.TryGetValue(Step(cur.Coord, o), out var next))
+                    {
+                        break;
+                    }
+
+                    cur = next;
+                }
+
+                yield return walk;
+            }
+        }
+    }
+
+    [Fact]
+    public void Rivers_meander_instead_of_running_straight()
+    {
+        var sinuosity = SpringWalks()
+            .Where(w => w.Count >= 10)
+            .Select(w => (w.Count - 1) / (double)HexCoord.Distance(w[0].Coord, w[^1].Coord))
+            .Order()
+            .ToList();
+
+        Assert.True(sinuosity.Count > 50, $"only {sinuosity.Count} spring walks");
+        var median = sinuosity[sinuosity.Count / 2];
+        Assert.True(median >= 1.2, $"median spring-to-mouth sinuosity {median:0.00} over {sinuosity.Count} walks");
+    }
+
+    [Fact]
+    public void Rivers_rarely_climb_back_into_a_mountain_range_they_left()
+    {
+        var walks = SpringWalks().ToList();
+        var reentered = 0;
+        foreach (var walk in walks)
+        {
+            var seenMountain = false;
+            var left = false;
+            foreach (var (_, terrain) in walk)
+            {
+                if (terrain == Terrain.Mountain)
+                {
+                    if (left)
+                    {
+                        reentered++;
+                        break;
+                    }
+
+                    seenMountain = true;
+                }
+                else if (seenMountain)
+                {
+                    left = true;
+                }
+            }
+        }
+
+        Assert.True(walks.Count > 50, $"only {walks.Count} spring walks");
+        Assert.True(reentered < 0.15 * walks.Count, $"{reentered} of {walks.Count} spring walks re-enter mountains after leaving them");
+    }
+
     [Fact]
     public void Springs_are_spread_apart()
     {
