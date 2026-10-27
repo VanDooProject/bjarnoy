@@ -11,6 +11,7 @@ import {
   plotRippleFrames,
   previewDrawRadius,
   previewFitZoom,
+  confineCamera,
   previewIslandBounds,
   READY_LOAD_STATE,
   startTextureLoad,
@@ -956,5 +957,29 @@ describe('isIslandNearViewport', () => {
 
   it('culls nothing before the viewport has a size', () => {
     expect(isIslandNearViewport({ x: 99999, y: 99999 }, { width: 0, height: 0 }, 100)).toBe(true);
+  });
+});
+
+describe('confineCamera', () => {
+  const bounds = { minX: -100, maxX: 100, minY: -50, maxY: 50 };
+
+  it('keeps a camera that is inside the bounds and above the minimum zoom untouched', () => {
+    expect(confineCamera({ x: 10, y: -20, zoom: 1.5 }, bounds, 0.5)).toEqual({ x: 10, y: -20, zoom: 1.5 });
+  });
+
+  it('pulls a centre outside the bounds back to the nearest edge, per axis', () => {
+    expect(confineCamera({ x: 900, y: 0, zoom: 1 }, bounds, 0.5)).toEqual({ x: 100, y: 0, zoom: 1 });
+    expect(confineCamera({ x: -900, y: 400, zoom: 1 }, bounds, 0.5)).toEqual({ x: -100, y: 50, zoom: 1 });
+  });
+
+  it('raises a zoom below the minimum and keeps one above it', () => {
+    expect(confineCamera({ x: 0, y: 0, zoom: 0.1 }, bounds, 0.5).zoom).toBe(0.5);
+    expect(confineCamera({ x: 0, y: 0, zoom: 3 }, bounds, 0.5).zoom).toBe(3);
+  });
+
+  it('does not mutate the input camera', () => {
+    const camera = { x: 900, y: 900, zoom: 0.1 };
+    confineCamera(camera, bounds, 0.5);
+    expect(camera).toEqual({ x: 900, y: 900, zoom: 0.1 });
   });
 });

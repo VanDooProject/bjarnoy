@@ -132,12 +132,12 @@ rather than silently blaming the wall; pick endpoints on walkable land.
 The shipped scenarios are pinned to the legacy island density (the `generation` line above: the island-density change
 keeps legacy settings byte-identical), so their walls and routes stay on the terrain they were laid out on. A change to
 the terrain rule itself still moves them (the shore-only sand rule turned inland sand into grass and let bogs grow there):
-re-lay the affected walls and routes on the new terrain, as `a` (route B) and `f` (four wall groups) were then. The shipped
+re-lay the affected walls and routes on the new terrain, as `a` (route B) and `f` (four wall groups) were then, and as `a` (route A), `c`, `d`, `d2` (their wall's river end) and `e` (the whole wall) were when rivers began to meander. The shipped
 scenarios, all on seed 11 at radius 1000 (g on seeds 1 and 5):
 
 | file | shows |
 | --- | --- |
-| `a-wide-river-vs-stream` | route A across a wide river walks 33 steps upstream to where it starts as a stream (cost 45.3, was 15.7); route B across a stream goes straight over at +8, same as before |
+| `a-wide-river-vs-stream` | route A across a wide river walks 24 steps round to where it starts as a stream (cost 36.2, was 11.1); route B across a stream goes straight over at +8, same as before |
 | `b-mountains-block` | mountains impassable: the route round a horseshoe ridge is 25 steps instead of 8 |
 | `c-sea-end-seals` | wall from a wide river to the sea, ending in `palisade_end_coast`, with a gate: the enemy has no route in, the friendly army walks through the gate |
 | `d-land-end-at-coast` | the same wall with a plain land end: the enemy walks over the half-open end at a penalty (see below) |

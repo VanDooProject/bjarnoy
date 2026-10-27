@@ -50,6 +50,11 @@ const props = defineProps<{
   // screen and disables drag/wheel zoom, while clicks still work (founding
   // must keep working) — see HexMapRendererOptions.lockCamera.
   lockCamera?: boolean;
+  // Settlement-mode preview: draw the sea tiles (the whole drawn disc), and keep
+  // pan/zoom enabled but confined to the fitted island — see
+  // HexMapRendererOptions.previewSea / confineCamera.
+  previewSea?: boolean;
+  confineCamera?: boolean;
 }>();
 const emit = defineEmits<{
   'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }];
@@ -81,6 +86,8 @@ const { renderer, loadState, mountError, retry: retryMount } = useHexMapRenderer
   screenBiasX: props.screenBiasX,
   hideSettlementBadge: props.hideSettlementBadge,
   lockCamera: props.lockCamera,
+  previewSea: props.previewSea,
+  confineCamera: props.confineCamera,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
   onHoverChange: (info) => emit('hover', info),
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),

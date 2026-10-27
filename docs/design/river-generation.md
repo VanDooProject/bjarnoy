@@ -271,12 +271,50 @@ the search looks along the trunk for a bend, and otherwise the tributary makes i
 
 Hash offsets used by the tracer on the island seed (`worldSeed + islandIndex * 104729`): `+41` spring
 candidates, `+43` legacy meander, `+47` widening pick, `+53` per-tile drainage noise, `+59` outlet score, `+61`
-valley noise.
+valley noise, `+113` and `+127` the meander side and stretch lengths (see "Meanders and mountain entry").
 
 Acceptance (`scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000`, and
 `RiverStreamTests`): 0 inland mouths, every confluence drawable, truncated + dropped under 5% of rivers, at
 least one merge per island with 4+ rivers on average, hugging adjacencies under 3% of river tiles (river-width
 Straight tiles per island are reported, not asserted).
+
+### Meanders and mountain entry (green islands)
+
+Cheapest-path tracing alone gives ruler-straight rivers (median spring-to-mouth sinuosity 1.07, path steps over hex
+distance), and a mountain tile costs only `MountainCost` 2 over an average step of about 4.75, so a river that had left
+its range often climbed into a second one (29% of spring walks on seeds 1-8). Two changes, both mirrored in
+`riverGenerator.ts`:
+
+1. **Mountain-entry cost.** `Drainage.Edge[tile * 6 + dir]` is `MountainEntryCost` (15) when the tile is not a
+   mountain and its neighbour in `dir` is one, else 0. It is added wherever a step from a tile to a neighbour is
+   priced: the backward Dijkstra (water flows `t -> node`, so `Edge[t * 6 + outDir]`), `BestOut`, the steered choice
+   below and all three step sums of `SearchJunction`. Leaving a range stays cheap; only entering one costs.
+2. **Arcs (meander steering).** The walk from a spring (`TraceDrainage`, every caller on green islands: springs,
+   bog-spawned rivers, valley streams) no longer always takes `BestOut`'s direction. It keeps a `side` (+1 or -1,
+   from `Hash2(spring, seed + 113)`) and cuts the run into stretches of `MeanderMinStretch`..`MeanderMaxStretch`
+   (8..16) steps, each length drawn from `Hash2(spring.Q + stretch * 7, spring.R, seed + 127)`. Once past the spring, in
+   the middle half of a stretch (`at >= len * 0.25 && at < len * 0.75`) the target is the natural direction turned
+   by `side`; otherwise the natural direction. At the end of a stretch `side` flips, so the river arcs left then
+   right. `Drainage.SteeredOut` picks the out-direction minimising the usual step price plus `steer`: 0 for the
+   target, `MeanderSteer * 0.5` (8) for 60 degrees off it, else `MeanderSteer` (16); tiles already on the walk are
+   skipped, the lowest direction wins ties, and with nothing left the natural direction is used. Everything else
+   (junction searches, claims, merging, the `naturalCost` the searches are priced on) stays on the unsteered
+   `BestOut`. 120 degree turns stay cheap (`SharpBendCost` 1): the art has Bend60 tiles for them.
+   **Safety retry:** a steered walk that is dropped or shorter than `MinRiverLength` is traced again unsteered
+   (`TraceDrainage` calls an inner walk with a `steer` flag; the `onPath` cleanup in its `finally` leaves the state clean).
+   `MeanderSteer` 0 turns steering off.
+
+Parameters (`WorldGenerationOptions`, TS constants of the same name in upper snake case): `MeanderSteer` 16,
+`MeanderMinStretch` 8, `MeanderMaxStretch` 16, `MountainEntryCost` 15. Lava (wasted) islands do not use the drainage tracer and are
+unchanged (their river tiles for seeds 1-20 are byte-identical before and after).
+
+Measured over seeds 1-8 (`RiverStreamTests`, spring walks down the finished tiles):
+
+| | before | after | bound |
+|---|---|---|---|
+| median sinuosity | 1.07 | 1.32 | >= 1.2 |
+| spring walks re-entering mountains after leaving them | 29% | 11.3% | < 15% |
+| truncated + dropped rivers | 2.4% | 2.4% | < 5% |
 
 ### Width assignment
 
