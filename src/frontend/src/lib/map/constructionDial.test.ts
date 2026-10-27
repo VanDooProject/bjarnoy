@@ -20,7 +20,6 @@ import {
   dialRadiusPx,
   pickTappedDial,
   nextTapReveal,
-  DIAL_TOUCH_MIN_RADIUS_PX,
 } from './constructionDial';
 
 function order(p: Partial<BuildOrderResponse>): BuildOrderResponse {
@@ -327,7 +326,7 @@ describe('dialHoverStep', () => {
 describe('dial touch hit test', () => {
   const dials = [
     { key: 'a', cx: 100, cy: 100, r: 7 },
-    { key: 'b', cx: 120, cy: 100, r: 7 },
+    { key: 'b', cx: 110, cy: 100, r: 7 },
     { key: 'big', cx: 300, cy: 300, r: 40 },
   ];
 
@@ -337,19 +336,19 @@ describe('dial touch hit test', () => {
     expect(dialRadiusPx(1, 0.6)).toBeCloseTo(16.5);
   });
 
-  it('hits a tiny dial within the finger-sized minimum radius', () => {
-    expect(pickTappedDial({ x: 100 + DIAL_TOUCH_MIN_RADIUS_PX - 1, y: 100 }, [dials[0]])).toBe('a');
-    expect(pickTappedDial({ x: 100 + DIAL_TOUCH_MIN_RADIUS_PX + 1, y: 100 }, [dials[0]])).toBeNull();
+  it('hits a tiny dial only on its drawn disc, so the tile under it stays tappable', () => {
+    expect(pickTappedDial({ x: 100, y: 106 }, [dials[0]])).toBe('a');
+    expect(pickTappedDial({ x: 100, y: 108 }, [dials[0]])).toBeNull();
   });
 
-  it('uses the drawn radius when it exceeds the minimum', () => {
+  it('hits a big dial anywhere on its drawn disc', () => {
     expect(pickTappedDial({ x: 335, y: 300 }, dials)).toBe('big');
     expect(pickTappedDial({ x: 345, y: 300 }, dials)).toBeNull();
   });
 
   it('picks the nearest centre when several dials are hit', () => {
-    expect(pickTappedDial({ x: 108, y: 100 }, dials)).toBe('a');
-    expect(pickTappedDial({ x: 112, y: 100 }, dials)).toBe('b');
+    expect(pickTappedDial({ x: 104, y: 100 }, dials)).toBe('a');
+    expect(pickTappedDial({ x: 106, y: 100 }, dials)).toBe('b');
   });
 
   it('returns null with no dials', () => {
