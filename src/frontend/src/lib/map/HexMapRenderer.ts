@@ -113,6 +113,7 @@ import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { animationPreference } from '../perf/animationPreference';
+import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame } from './clipPlayback';
 
 export type RenderMode = 'world' | 'settlement';
@@ -2080,7 +2081,8 @@ export class HexMapRenderer {
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
       backgroundAlpha: 0,
-      antialias: true,
+      // A per-device setting (antialiasPreference.ts): MSAA multiplies the fill cost of every blended pixel, which a slow renderer feels.
+      antialias: antialiasPreference.enabled,
     });
     this.app = app;
     this.viewport = { width, height };

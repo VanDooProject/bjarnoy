@@ -8,11 +8,13 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { animationPreference, type AnimationSetting } from '../../lib/perf/animationPreference';
+import { antialiasPreference, type AntialiasSetting } from '../../lib/perf/antialiasPreference';
 import type { MessageSchema } from '../../i18n/schema';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const SETTINGS: AnimationSetting[] = ['auto', 'on', 'off'];
+const ANTIALIAS_SETTINGS: AntialiasSetting[] = ['on', 'off'];
 
 // AnimationReason ('forced-on', ...) -> profile.graphics.status's camelCase
 // key ('forcedOn', ...) — kept as a lookup rather than a string transform so
@@ -50,6 +52,21 @@ const statusText = computed(() => t(`profile.graphics.status.${STATUS_KEY[animat
       </button>
     </div>
     <p class="status muted">{{ statusText }}</p>
+    <p id="map-antialias-label" class="field-label">{{ t('profile.graphics.antialias') }}</p>
+    <div class="setting-toggle antialias-toggle" role="group" aria-labelledby="map-antialias-label">
+      <button
+        v-for="setting in ANTIALIAS_SETTINGS"
+        :key="setting"
+        type="button"
+        class="option"
+        :class="{ active: antialiasPreference.setting === setting }"
+        :aria-pressed="antialiasPreference.setting === setting"
+        @click="antialiasPreference.setting = setting"
+      >
+        {{ t(`profile.graphics.${setting}`) }}
+      </button>
+    </div>
+    <p class="status muted">{{ t('profile.graphics.antialiasHint') }}</p>
   </section>
 </template>
 
@@ -99,5 +116,8 @@ const statusText = computed(() => t(`profile.graphics.status.${STATUS_KEY[animat
 }
 .muted {
   color: var(--muted);
+}
+.status + .field-label {
+  margin-top: 14px;
 }
 </style>
