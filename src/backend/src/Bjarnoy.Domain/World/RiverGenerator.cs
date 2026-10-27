@@ -411,8 +411,15 @@ internal static partial class RiverGenerator
         public readonly bool[] SeaAt;
         public readonly double[] Step;
         public readonly double[] Dist;
+
+        /// <summary>Per (tile, direction): the extra cost of stepping from a non-mountain tile onto a mountain neighbour; leaving a range stays cheap.</summary>
+        public readonly double[] Edge;
         public readonly double BendCost;
         public readonly double SharpBendCost;
+        public readonly double MeanderSteer;
+        public readonly int MeanderMinStretch;
+        public readonly int MeanderMaxStretch;
+        public readonly int Seed;
         public int OutletCount;
 
         public Drainage(
@@ -426,6 +433,10 @@ internal static partial class RiverGenerator
         {
             BendCost = options.BendCost;
             SharpBendCost = options.SharpBendCost;
+            MeanderSteer = options.MeanderSteer;
+            MeanderMinStretch = options.MeanderMinStretch;
+            MeanderMaxStretch = options.MeanderMaxStretch;
+            Seed = seed;
             Tiles = islandTiles.OrderBy(t => t.Q).ThenBy(t => t.R).ToArray();
             var n = Tiles.Length;
             for (var i = 0; i < n; i++)
@@ -439,6 +450,7 @@ internal static partial class RiverGenerator
             SeaAt = new bool[n * 6];
             Step = new double[n];
             Dist = new double[n * 6];
+            Edge = new double[n * 6];
             Array.Fill(Dist, double.PositiveInfinity);
             var coastal = new bool[n];
             var isBlocked = new bool[n];
@@ -477,6 +489,16 @@ internal static partial class RiverGenerator
                     + (options.DrainageNoise * ValueNoise.Hash2(Tiles[i].Q, Tiles[i].R, seed + 53))
                     + (options.ValleyNoise * ValueNoise.Sample(Tiles[i].Q, Tiles[i].R, seed + 61, options.ValleyScale))
                     + (land[Tiles[i]] == Terrain.Mountain ? options.MountainCost : 0.0);
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var fromMountain = land[Tiles[i]] == Terrain.Mountain;
+                for (var d = 0; d < 6; d++)
+                {
+                    var nb = Neighbour[(i * 6) + d];
+                    Edge[(i * 6) + d] = nb >= 0 && !fromMountain && land[Tiles[nb]] == Terrain.Mountain ? options.MountainEntryCost : 0.0;
+                }
             }
 
             var outlets = PickOutlets(coastal, options, seed, outletPerBasin);
@@ -522,7 +544,7 @@ internal static partial class RiverGenerator
                         continue;
                     }
 
-                    var nd = d + Step[node] + TurnCost(i, outDir);
+                    var nd = d + Step[node] + TurnCost(i, outDir) + Edge[(t * 6) + outDir];
                     var ts = (t * 6) + i;
                     if (nd < Dist[ts])
                     {
@@ -579,7 +601,7 @@ internal static partial class RiverGenerator
                     continue;
                 }
 
-                var cost = d + Step[n] + TurnCost(inDir, o);
+                var cost = d + Step[n] + TurnCost(inDir, o) + Edge[(tile * 6) + o];
                 if (cost < bestCost)
                 {
                     bestCost = cost;
@@ -588,6 +610,42 @@ internal static partial class RiverGenerator
             }
 
             return (best, bestCost);
+        }
+
+        /// <summary>
+        /// Like <see cref="BestOut"/> but pulled towards <paramref name="target"/>: an out-direction costs
+        /// <see cref="MeanderSteer"/> extra when it is not the target (half that when 60 degrees off it), and tiles the walk
+        /// already holds are not offered. Returns -1 when nothing qualifies.
+        /// </summary>
+        public int SteeredOut(int tile, int inDir, int target, bool[] onPath)
+        {
+            var best = -1;
+            var bestCost = double.PositiveInfinity;
+            for (var o = 0; o < 6; o++)
+            {
+                var n = Neighbour[(tile * 6) + o];
+                if (n < 0 || (inDir >= 0 && o == inDir))
+                {
+                    continue;
+                }
+
+                var d = Dist[(n * 6) + ((o + 3) % 6)];
+                if (double.IsPositiveInfinity(d) || onPath[n])
+                {
+                    continue;
+                }
+
+                var off = Math.Min((o - target + 6) % 6, (target - o + 6) % 6);
+                var steer = off == 0 ? 0.0 : off == 1 ? MeanderSteer * 0.5 : MeanderSteer;
+                var cost = d + Step[n] + TurnCost(inDir, o) + Edge[(tile * 6) + o] + steer;
+                if (cost < bestCost)
+                {
+                    bestCost = cost;
+                    best = o;
+                }
+            }
+
+            return best;
         }
 
         /// <summary>
@@ -865,7 +923,36 @@ internal static partial class RiverGenerator
         out bool merged,
         int startIn = -1)
     {
+        // The meandering walk can box itself in; then the plain cheapest way is better than no river.
+        if (drainage.MeanderSteer > 0.0)
+        {
+            var steered = TraceDrainage(drainage, spring, claims, onPath, options, out merged, startIn, steer: true);
+            if (steered is not null && steered.Count >= options.MinRiverLength)
+            {
+                return steered;
+            }
+        }
+
+        return TraceDrainage(drainage, spring, claims, onPath, options, out merged, startIn, steer: false);
+    }
+
+    private static List<HexCoord>? TraceDrainage(
+        Drainage drainage,
+        HexCoord spring,
+        Claim?[] claims,
+        bool[] onPath,
+        WorldGenerationOptions options,
+        out bool merged,
+        int startIn,
+        bool steer)
+    {
         merged = false;
+        var seed = drainage.Seed;
+        var side = ValueNoise.Hash2(spring.Q, spring.R, seed + 113) < 0.5 ? 1 : -1;
+        var stretch = 0;
+        var stretchSpan = drainage.MeanderMaxStretch - drainage.MeanderMinStretch + 1;
+        var left = drainage.MeanderMinStretch + (int)Math.Floor(ValueNoise.Hash2(spring.Q, spring.R, seed + 127) * stretchSpan);
+        var len = left;
         var path = new List<HexCoord> { spring };
         var tiles = new List<int>();
         var current = drainage.Index[spring];
@@ -899,10 +986,33 @@ internal static partial class RiverGenerator
                     return path;
                 }
 
-                var (outDir, naturalCost) = drainage.BestOut(current, inDir, null);
-                if (outDir < 0)
+                var (naturalOut, naturalCost) = drainage.BestOut(current, inDir, null);
+                if (naturalOut < 0)
                 {
                     return null;
+                }
+
+                var outDir = naturalOut;
+                if (steer && inDir >= 0)
+                {
+                    // Each stretch of the walk bends to one side through its middle half, then the side flips: the river arcs.
+                    if (left <= 0)
+                    {
+                        side = -side;
+                        stretch++;
+                        left = drainage.MeanderMinStretch + (int)Math.Floor(ValueNoise.Hash2(spring.Q + (stretch * 7), spring.R, seed + 127) * stretchSpan);
+                        len = left;
+                    }
+
+                    left--;
+                    var at = len - 1 - left;
+                    var bent = at >= len * 0.25 && at < len * 0.75;
+                    var target = bent ? (((naturalOut + side) % 6) + 6) % 6 : naturalOut;
+                    var steered = drainage.SteeredOut(current, inDir, target, onPath);
+                    if (steered >= 0)
+                    {
+                        outDir = steered;
+                    }
                 }
 
                 var next = drainage.Neighbour[(current * 6) + outDir];
@@ -1048,7 +1158,7 @@ internal static partial class RiverGenerator
                             continue;
                         }
 
-                        var total = d + turn + drainage.Step[n] + Crowding(drainage, claims, n);
+                        var total = d + turn + drainage.Step[n] + drainage.Edge[(tile * 6) + dir] + Crowding(drainage, claims, n);
                         if (!found || total < bestTotal)
                         {
                             found = true;
@@ -1067,7 +1177,7 @@ internal static partial class RiverGenerator
                         continue;
                     }
 
-                    var total = d + turn + drainage.Step[n] + drainage.Dist[(n * 6) + claim.In1];
+                    var total = d + turn + drainage.Step[n] + drainage.Edge[(tile * 6) + dir] + drainage.Dist[(n * 6) + claim.In1];
 
                     // A stream reaching a river trunk prefers the wide Y: the river-stream Y needs no widening first.
                     var preferred = claim.Downstream && RiverConfluence.Classify(claim.In1, (dir + 3) % 6, claim.Out) == ConfluenceKind.Wide
@@ -1090,7 +1200,7 @@ internal static partial class RiverGenerator
                 }
 
                 var key = (n * 6) + ((dir + 3) % 6);
-                var nd = d + turn + drainage.Step[n] + (toMouth ? Crowding(drainage, claims, n) : 0.0);
+                var nd = d + turn + drainage.Step[n] + drainage.Edge[(tile * 6) + dir] + (toMouth ? Crowding(drainage, claims, n) : 0.0);
                 if (nd <= reach && (!cost.TryGetValue(key, out var known) || nd < known))
                 {
                     cost[key] = nd;
