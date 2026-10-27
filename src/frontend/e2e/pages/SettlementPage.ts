@@ -38,6 +38,13 @@ export interface HexQuery {
    * there first, the same way WorldModel.test.ts does.
    */
   withRiver?: boolean;
+  /**
+   * Hexes from the longhouse to scan, when the realm reaches past its centre
+   * disc (a Tower's satellite disc, see `standTowerTowardCoast`). Defaults to
+   * the centre disc's own radius, so the scan order — and the hex every other
+   * spec gets back — is unchanged.
+   */
+  reach?: number;
 }
 
 /**
@@ -181,7 +188,7 @@ export class SettlementPage {
       };
       const world = win.__demoWorld();
       const settlement = world.model.getSettlement(world.selectedSettlementId);
-      const radius = world.model.borderRadius(settlement);
+      const radius = q.reach ?? world.model.borderRadius(settlement);
       for (let dq = -radius; dq <= radius; dq++) {
         for (let dr = -radius; dr <= radius; dr++) {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
@@ -204,6 +211,56 @@ export class SettlementPage {
         `no empty, owned hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
       );
     }, query);
+  }
+
+  /**
+   * Stands a Tower on the realm's own hex nearest the closest coastal water,
+   * levelled until its satellite disc (one hex per level, BuildingCatalogue's
+   * Tower ClaimRadius, at most level 10) reaches that water — the way a player
+   * would push the border to the shore. A good start position never has sea
+   * within two hexes, so the centre disc only reaches coastal water when the
+   * coast happens to lie exactly at its edge. Goes through
+   * `placeBuilding`/`upgradeBuilding`, which re-claim the Tower's disc.
+   * Returns how far from the longhouse the realm can now reach, for
+   * `findHex`'s `reach`.
+   */
+  async standTowerTowardCoast(): Promise<number> {
+    return this.page.evaluate(() => {
+      const world = (window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+      }).__demoWorld();
+      const id = world.selectedSettlementId;
+      const settlement = world.model.getSettlement(id);
+      const distance = (a: { q: number; r: number }, b: { q: number; r: number }) =>
+        (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
+      const disc = (radius: number) => {
+        const out: { q: number; r: number }[] = [];
+        for (let dq = -radius; dq <= radius; dq++) {
+          for (let dr = -radius; dr <= radius; dr++) {
+            if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 <= radius) out.push({ q: settlement.q + dq, r: settlement.r + dr });
+          }
+        }
+        return out;
+      };
+      const coast = disc(12)
+        .filter((c) => world.model.getTile(c.q, c.r).isCoastalWater)
+        .sort((a, b) => distance(a, settlement) - distance(b, settlement))[0];
+      if (!coast) throw new Error('no coastal water within 12 hexes of the settlement — pick a different demo seed');
+      const site = disc(world.model.borderRadius(settlement))
+        .filter((c) => {
+          const tile = world.model.getTile(c.q, c.r);
+          return tile.ownerId === id && !tile.buildingType && !tile.camp && !tile.giant && !world.model.getRiverTile(c.q, c.r) &&
+            ['grass', 'forest', 'sand'].includes(tile.terrain);
+        })
+        .sort((a, b) => distance(a, coast) - distance(b, coast))[0];
+      if (!site) throw new Error('no free owned land hex to stand a tower on');
+      const towerLevel = distance(site, coast);
+      if (towerLevel > 10) throw new Error(`coastal water is ${towerLevel} hexes past the realm, beyond a level-10 tower — pick a different demo seed`);
+      if (!world.model.placeBuilding(id, site, 'tower')) throw new Error('could not stand a tower toward the coast');
+      for (let l = 1; l < towerLevel; l++) world.model.upgradeBuilding(id, site);
+      world.syncHud();
+      return distance(site, settlement) + towerLevel;
+    });
   }
 
   /** The longhouse's own hex, and where it is on screen. */

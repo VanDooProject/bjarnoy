@@ -28,7 +28,9 @@ test('building a dockyard from the ring menu on coastal water places it', async 
   // — same approach as shrine-build.spec.ts's grass-hex search, but for
   // terrain 'sea' with isCoastalWater set, which is what actually offers the
   // Water category.
-  const target = await settlement.findHex({ terrain: 'sea', coastalWater: true });
+  // The start position keeps two hexes from the sea, so the realm only reaches the shore once a tower pushes it there.
+  const reach = await settlement.standTowerTowardCoast();
+  const target = await settlement.findHex({ terrain: 'sea', coastalWater: true, reach });
 
   const before = await settlement.countBuildings();
 
