@@ -14,6 +14,22 @@ const OPT_OUT = /mapLayers:\s*\{\s*water:\s*false/;
 const FULL_RENDERING_SPECS = ['water-shader.spec.ts', 'fog-drift.spec.ts', 'onboarding-happy-path.spec.ts', 'zoom-transition.spec.ts'];
 
 /**
+ * Specs that play real motion (`reducedMotion: 'no-preference'`) and may still
+ * opt out, each only with the user's explicit approval and the reason it is
+ * safe. Motion specs were on the full-rendering side until one was approved
+ * here; any other motion spec that opts out fails below until it is added.
+ */
+const APPROVED_MOTION_OPT_OUTS: Record<string, string> = {
+  // User-approved 2026-10-27 (VanDooProject/bjarnoy#420, against #416's original
+  // "ring-motion should not opt out"): every assertion is on DOM Web Animations
+  // and game state, which water pixels cannot change, and with motion on the
+  // water pass starved it first - 8 of 10 runs timed out at --workers=4.
+  'ring-motion.spec.ts': 'DOM Web Animations and game state only; user-approved in #420',
+};
+
+const PLAYS_MOTION = /reducedMotion:\s*'no-preference'/;
+
+/**
  * Pixel checks an opted-out spec may not make: a golden image, or a saved
  * screenshot someone looks at. A before/after `Buffer.compare` ("the map
  * moved") stays allowed - with water off it is only stricter.
@@ -30,6 +46,11 @@ describe('e2e water opt-out', () => {
 
   it("is never used by a spec about water, fog, shore or the map's transitions", () => {
     expect(optedOut.filter((name) => FULL_RENDERING_SPECS.includes(name))).toEqual([]);
+  });
+
+  it('lets a spec that plays real motion opt out only with recorded user approval', () => {
+    const motion = optedOut.filter((name) => PLAYS_MOTION.test(readFileSync(join(E2E_DIR, name), 'utf8')));
+    expect(motion.filter((name) => !(name in APPROVED_MOTION_OPT_OUTS))).toEqual([]);
   });
 
   it.each(optedOut)('%s makes no golden-image or saved-screenshot check', (name) => {

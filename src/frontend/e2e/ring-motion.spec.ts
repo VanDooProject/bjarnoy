@@ -17,7 +17,8 @@ import { SettlementPage } from './pages';
  */
 // `contextOptions` (not the `reducedMotion` option): the config's own contextOptions.reducedMotion takes priority over it.
 // Water off (see `mapLayers` in fixtures.ts): everything here is DOM Web Animations and game state, which water pixels
-// cannot change, and with motion on the water pass is what starved this spec under load (issue #416).
+// cannot change, and with motion on the water pass is what starved this spec under load (issue #416). User-approved in
+// #420, recorded in src/test/e2eWaterOptOut.test.ts's APPROVED_MOTION_OPT_OUTS.
 test.use({ contextOptions: { reducedMotion: 'no-preference' }, mapLayers: { water: false } });
 
 interface AnimateLog {
