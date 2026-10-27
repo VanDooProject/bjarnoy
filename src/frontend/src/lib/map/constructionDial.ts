@@ -175,6 +175,50 @@ export function dialHoverStep(t: number, hovered: boolean, dtMs: number, reduced
   return target > t ? Math.min(target, t + step) : Math.max(target, t - step);
 }
 
+/** Dial hex radius in px at zoom factor `zs` (and reject shrink `rejectScale`). */
+export function dialRadiusPx(zs: number, rejectScale = 1): number {
+  return 22 * zs * 1.25 * rejectScale;
+}
+
+/** Minimum touch hit radius of a dial (a ~44 px finger target; the dial itself is ~7 px at phone zoom). */
+export const DIAL_TOUCH_MIN_RADIUS_PX = 22;
+
+/** How long a tap-revealed dial stays revealed without another tap. */
+export const DIAL_TAP_REVEAL_MS = 4000;
+
+export interface DialHitTarget {
+  key: string;
+  cx: number;
+  cy: number;
+  /** Currently drawn radius in px. */
+  r: number;
+}
+
+/**
+ * The dial a touch at `point` lands on: within `max(r, DIAL_TOUCH_MIN_RADIUS_PX)`
+ * of its centre; the nearest centre wins when several qualify. Null for none.
+ */
+export function pickTappedDial(point: { x: number; y: number }, dials: DialHitTarget[]): string | null {
+  let best: string | null = null;
+  let bestDist = Infinity;
+  for (const d of dials) {
+    const dist = Math.hypot(point.x - d.cx, point.y - d.cy);
+    if (dist <= Math.max(d.r, DIAL_TOUCH_MIN_RADIUS_PX) && dist < bestDist) {
+      best = d.key;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+/**
+ * Next tap-revealed dial after a tap: tapping a dial reveals it, tapping the
+ * revealed one again closes it, a tap elsewhere (`tapped` null) closes it too.
+ */
+export function nextTapReveal(current: string | null, tapped: string | null): string | null {
+  return tapped !== null && tapped !== current ? tapped : null;
+}
+
 /** How long the completion animation plays after a build ends. */
 export const DIAL_FINISH_MS = 2600;
 

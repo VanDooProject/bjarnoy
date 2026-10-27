@@ -17,6 +17,10 @@ import {
   polygonPerimeterPath,
   polylinePartial,
   retainFinishingDials,
+  dialRadiusPx,
+  pickTappedDial,
+  nextTapReveal,
+  DIAL_TOUCH_MIN_RADIUS_PX,
 } from './constructionDial';
 
 function order(p: Partial<BuildOrderResponse>): BuildOrderResponse {
@@ -318,4 +322,44 @@ describe('dialHoverStep', () => {
   it('ignores a negative delta', () => {
     expect(dialHoverStep(0.5, true, -50, false)).toBe(0.5);
   });
+});
+
+describe('dial touch hit test', () => {
+  const dials = [
+    { key: 'a', cx: 100, cy: 100, r: 7 },
+    { key: 'b', cx: 120, cy: 100, r: 7 },
+    { key: 'big', cx: 300, cy: 300, r: 40 },
+  ];
+
+  it('scales the radius with zoom and reject shrink', () => {
+    expect(dialRadiusPx(1)).toBeCloseTo(27.5);
+    expect(dialRadiusPx(0.22)).toBeCloseTo(6.05);
+    expect(dialRadiusPx(1, 0.6)).toBeCloseTo(16.5);
+  });
+
+  it('hits a tiny dial within the finger-sized minimum radius', () => {
+    expect(pickTappedDial({ x: 100 + DIAL_TOUCH_MIN_RADIUS_PX - 1, y: 100 }, [dials[0]])).toBe('a');
+    expect(pickTappedDial({ x: 100 + DIAL_TOUCH_MIN_RADIUS_PX + 1, y: 100 }, [dials[0]])).toBeNull();
+  });
+
+  it('uses the drawn radius when it exceeds the minimum', () => {
+    expect(pickTappedDial({ x: 335, y: 300 }, dials)).toBe('big');
+    expect(pickTappedDial({ x: 345, y: 300 }, dials)).toBeNull();
+  });
+
+  it('picks the nearest centre when several dials are hit', () => {
+    expect(pickTappedDial({ x: 108, y: 100 }, dials)).toBe('a');
+    expect(pickTappedDial({ x: 112, y: 100 }, dials)).toBe('b');
+  });
+
+  it('returns null with no dials', () => {
+    expect(pickTappedDial({ x: 0, y: 0 }, [])).toBeNull();
+  });
+});
+
+describe('nextTapReveal', () => {
+  it('reveals a tapped dial', () => expect(nextTapReveal(null, 'a')).toBe('a'));
+  it('switches to another tapped dial', () => expect(nextTapReveal('a', 'b')).toBe('b'));
+  it('closes the revealed dial when tapped again', () => expect(nextTapReveal('a', 'a')).toBeNull());
+  it('closes on a tap elsewhere', () => expect(nextTapReveal('a', null)).toBeNull());
 });

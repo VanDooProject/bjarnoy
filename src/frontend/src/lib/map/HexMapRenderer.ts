@@ -50,6 +50,10 @@ import {
   hexPerimeterPath,
   dialScale,
   dialHoverStep,
+  dialRadiusPx,
+  pickTappedDial,
+  nextTapReveal,
+  DIAL_TAP_REVEAL_MS,
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -1878,6 +1882,9 @@ export class HexMapRenderer {
   private hoverPointer: { x: number; y: number } | null = null;
   /** Per-dial hover tween progress 0..1 (`dialHoverStep`), keyed by `coordKey`; absent = 0. */
   private dialHover = new Map<string, number>();
+  /** Dial revealed by a touch/pen tap (acts as hovered); see `handleDialTap`. */
+  private tapRevealKey: string | null = null;
+  private tapRevealAtMs = 0;
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
   // top of the canvas, but this renderer's own pointer tracking is a
   // window-level listener (see onPointerMove below) that keeps resolving a
@@ -3003,6 +3010,9 @@ export class HexMapRenderer {
   private handleClick(e: PointerEvent) {
     const screen = this.clientToCanvas(e.clientX, e.clientY);
     if (!screen) return;
+    // Touch/pen has no hover: a tap on a construction dial reveals it instead
+    // of reaching the tile below. Mouse clicks always go to the tile.
+    if (e.pointerType !== 'mouse' && this.handleDialTap(screen)) return;
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
@@ -3013,6 +3023,28 @@ export class HexMapRenderer {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
     this.options.onHexClick?.(coord, tile, anchor);
+  }
+
+  /**
+   * Touch tap at canvas point `screen`: when it lands on a construction dial
+   * (`pickTappedDial`) toggles that dial's tap-reveal and returns true (the
+   * caller must not dispatch the tap to the tile); otherwise clears any
+   * reveal and returns false so the tap behaves normally.
+   */
+  private handleDialTap(screen: { x: number; y: number }): boolean {
+    const nowMs = Date.now();
+    const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
+    const targets = (this.constructionDials ?? [])
+      .filter((d) => d.rejectedAtMs === undefined)
+      .map((d) => {
+        const key = coordKey(d.coord);
+        const p = this.dialScreenPoint(d.coord);
+        return { key, cx: p.x, cy: p.y, r: dialRadiusPx(dialScale(mapScale, this.dialHover.get(key) ?? 0).zs) };
+      });
+    const hit = pickTappedDial(screen, targets);
+    this.tapRevealKey = nextTapReveal(this.tapRevealKey, hit);
+    this.tapRevealAtMs = nowMs;
+    return hit !== null;
   }
 
   /**
@@ -4622,7 +4654,6 @@ export class HexMapRenderer {
    */
   private drawConstructionDials() {
     if (!this.constructionDials) return;
-    const lift = CONSTRUCTION_DIAL_LIFT;
     const nowMs = Date.now();
     const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
     const g = this.markerLayer;
@@ -4641,12 +4672,9 @@ export class HexMapRenderer {
     const reduced = animationPreference.reducedMotion;
     const pointer = this.hoverPointer;
     const seen = new Set<string>();
+    if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
     const placed = live.map((dial) => {
-      const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
-      const anchor = this.toScreen({
-        x: grid.x + TILE_W / 2,
-        y: grid.y + TILE_CENTER_Y_OFFSET - lift,
-      });
+      const anchor = this.dialScreenPoint(dial.coord);
       // A refused build's "…" dial shakes, then shrinks and fades (dialRejectFrame).
       const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs) : null;
       const key = coordKey(dial.coord);
@@ -4655,24 +4683,25 @@ export class HexMapRenderer {
       const cy = anchor.y;
       let hoverT = this.dialHover.get(key) ?? 0;
       // On the dial's drawn disc (it sits half a tile above its hex, so the hex alone is the wrong hit test) or on its hex.
-      const r0 = 22 * dialScale(mapScale, hoverT, reject?.scale ?? 1).zs * 1.25 * (reject?.scale ?? 1);
+      const r0 = dialRadiusPx(dialScale(mapScale, hoverT, reject?.scale ?? 1).zs, reject?.scale ?? 1);
       const hovered =
-        pointer !== null &&
         !reject &&
-        (Math.hypot(pointer.x - cx, pointer.y - cy) <= r0 || this.hoveredKey === key);
+        (this.tapRevealKey === key ||
+          (pointer !== null && (Math.hypot(pointer.x - cx, pointer.y - cy) <= r0 || this.hoveredKey === key)));
       hoverT = dialHoverStep(hoverT, hovered, dtMs, reduced);
       if (hoverT > 0) this.dialHover.set(key, hoverT);
       else this.dialHover.delete(key);
       return { dial, reject, cx, cy, hoverT };
     });
     for (const key of this.dialHover.keys()) if (!seen.has(key)) this.dialHover.delete(key);
+    if (this.tapRevealKey !== null && !seen.has(this.tapRevealKey)) this.tapRevealKey = null;
     placed.sort((a, b) => a.hoverT - b.hoverT);
     for (const { dial, reject, cx, cy, hoverT } of placed) {
       const progress = dialProgress(dial, nowMs);
       const remaining = dialRemainingSeconds(dial, nowMs);
       const dAlpha = reject?.alpha ?? 1;
       const { zs, showLabel } = dialScale(mapScale, hoverT, reject?.scale ?? 1);
-      const r = 22 * zs * 1.25 * (reject?.scale ?? 1);
+      const r = dialRadiusPx(zs, reject?.scale ?? 1);
       const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
 
       if (frame) {
