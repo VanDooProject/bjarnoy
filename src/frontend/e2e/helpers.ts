@@ -433,12 +433,28 @@ export async function layoutOverflow(page: Page): Promise<{ pageScrollsSideways:
  */
 export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
   const pointer = settlement.guidancePointer;
+  const anchor = async (): Promise<string> => {
+    const style = (await pointer.getAttribute('style')) ?? '';
+    const x = style.match(/--anchor-x: (-?[\d.]+)px/)?.[1];
+    const y = style.match(/--anchor-y: (-?[\d.]+)px/)?.[1];
+    return x !== undefined && y !== undefined ? `${x},${y}` : '';
+  };
+  // The anchor follows the camera, which is still easing toward the new settlement right after landfall: a click on
+  // the first anchor it reports can land on the hex the guided one is about to slide away from. Wait until two reads
+  // a moment apart agree, so the click lands where the pointer comes to rest.
+  let previous = '';
   await expect
-    .poll(async () => (await pointer.getAttribute('style')) ?? '', { message: 'guidance pointer never got an anchor point' })
-    .toMatch(/--anchor-x: -?\d/);
-  const style = (await pointer.getAttribute('style'))!;
-  const x = Number(style.match(/--anchor-x: (-?[\d.]+)px/)![1]);
-  const y = Number(style.match(/--anchor-y: (-?[\d.]+)px/)![1]);
+    .poll(
+      async () => {
+        const now = await anchor();
+        const settled = now !== '' && now === previous;
+        previous = now;
+        return settled;
+      },
+      { message: 'guidance pointer never came to rest on an anchor point', intervals: [250] },
+    )
+    .toBe(true);
+  const [x, y] = previous.split(',').map(Number) as [number, number];
   const box = await settlement.canvasBox();
   await settlement.page.mouse.click(box.x + x, box.y + y);
   await settlement.ring.waitForOpen();
