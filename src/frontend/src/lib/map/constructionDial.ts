@@ -180,9 +180,6 @@ export function dialRadiusPx(zs: number, rejectScale = 1): number {
   return 22 * zs * 1.25 * rejectScale;
 }
 
-/** Minimum touch hit radius of a dial (a ~44 px finger target; the dial itself is ~7 px at phone zoom). */
-export const DIAL_TOUCH_MIN_RADIUS_PX = 22;
-
 /** How long a tap-revealed dial stays revealed without another tap. */
 export const DIAL_TAP_REVEAL_MS = 4000;
 
@@ -195,15 +192,16 @@ export interface DialHitTarget {
 }
 
 /**
- * The dial a touch at `point` lands on: within `max(r, DIAL_TOUCH_MIN_RADIUS_PX)`
- * of its centre; the nearest centre wins when several qualify. Null for none.
+ * The dial a touch at `point` lands on: within its drawn radius `r` (only the
+ * dial itself is tappable, so the tiles around and under it stay reachable);
+ * the nearest centre wins when several qualify. Null for none.
  */
 export function pickTappedDial(point: { x: number; y: number }, dials: DialHitTarget[]): string | null {
   let best: string | null = null;
   let bestDist = Infinity;
   for (const d of dials) {
     const dist = Math.hypot(point.x - d.cx, point.y - d.cy);
-    if (dist <= Math.max(d.r, DIAL_TOUCH_MIN_RADIUS_PX) && dist < bestDist) {
+    if (dist <= d.r && dist < bestDist) {
       best = d.key;
       bestDist = dist;
     }
