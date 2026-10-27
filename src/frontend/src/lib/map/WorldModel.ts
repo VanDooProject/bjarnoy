@@ -241,7 +241,7 @@ export function floodFillLandmass(
  * Good for |q|, |r| < 32768 — about 2000 times the radius of any world the
  * generator places islands in, and far past what a player could pan to.
  */
-function terrainKey(q: number, r: number): number {
+export function terrainKey(q: number, r: number): number {
   return ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
 }
 

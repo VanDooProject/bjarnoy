@@ -49,6 +49,14 @@ export interface BakeRequest {
    * caller's assumption) when omitted.
    */
   wastedRevealed?: boolean;
+  /**
+   * When set, the only hexes that may bake as land, packed with `hexKey`;
+   * every other hex bakes as sea. A preview that draws only part of the land
+   * (the showcase village frame's crop) sends what it draws, so land it
+   * leaves out — another island, or this one past the crop — reads as open
+   * sea instead of a hole ringed with foam.
+   */
+  landHexes?: number[];
 }
 
 export interface BakeResponse {
@@ -151,6 +159,16 @@ export function isWastedLandFor(
   };
 }
 
+/** `isLand` narrowed to `landHexes` (see `BakeRequest.landHexes`); unchanged when there is no list. */
+export function onlyLandHexes(
+  isLand: (q: number, r: number) => boolean,
+  landHexes: number[] | undefined,
+): (q: number, r: number) => boolean {
+  if (!landHexes) return isLand;
+  const allowed = new Set(landHexes);
+  return (q, r) => allowed.has(hexKey(q, r)) && isLand(q, r);
+}
+
 /** `neighbors()`'s directions, as scalars — this runs per sea hex in the region. */
 const NEIGHBOR_DQ = [1, 1, 0, -1, -1, 0];
 const NEIGHBOR_DR = [0, -1, -1, 0, 1, 1];
@@ -205,16 +223,16 @@ function hasPropFor(
 // has one, so this changes nothing there.
 if (typeof self !== 'undefined') {
   self.onmessage = (event: MessageEvent<BakeRequest>) => {
-    const { id, region, tileWidth, tileHeight, seed, generation, buildingHexes, wastedRevealed } = event.data;
+    const { id, region, tileWidth, tileHeight, seed, generation, buildingHexes, wastedRevealed, landHexes } = event.data;
     const started = performance.now();
-    const isLand = isLandFor(seed, generation, wastedRevealed ?? false);
+    const isLand = onlyLandHexes(isLandFor(seed, generation, wastedRevealed ?? false), landHexes);
     // No prop predicate at all where the caller sent no building list: that
     // is the documented way to ask for an all-zero A channel, and it is
     // what world mode reads anyway (see this file's header).
     const mask = bakeWaterMask(region, tileWidth, tileHeight, {
       isLand,
       hasProp: buildingHexes ? hasPropFor(seed, generation, isLand, buildingHexes) : undefined,
-      isWastedLand: isWastedLandFor(seed, generation, wastedRevealed ?? false),
+      isWastedLand: onlyLandHexes(isWastedLandFor(seed, generation, wastedRevealed ?? false), landHexes),
     });
     const response: BakeResponse = {
       id,

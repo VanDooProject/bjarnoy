@@ -7,7 +7,8 @@
 // a browser/worker global this repo's node-environment vitest config
 // doesn't provide.
 import { describe, expect, it } from 'vitest';
-import { isLandFor, isWastedLandFor } from './waterMask.worker';
+import { isLandFor, isWastedLandFor, onlyLandHexes } from './waterMask.worker';
+import { terrainKey } from '../WorldModel';
 import { DEFAULT_GENERATION } from '../worldGenerator';
 import { nearestLand } from '../testing/islandFinders';
 
@@ -98,5 +99,24 @@ describe('isWastedLandFor (water-mask taint field)', () => {
 
     const hiddenAgain = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
     expect(hiddenAgain(wastedLand.q, wastedLand.r)).toBe(false);
+  });
+});
+
+describe('onlyLandHexes (a preview that draws only part of the land)', () => {
+  const everywhereLand = () => true;
+
+  it('keeps the land lookup as is without a list', () => {
+    expect(onlyLandHexes(everywhereLand, undefined)).toBe(everywhereLand);
+  });
+
+  it('bakes land outside the list as sea, and land inside it as land', () => {
+    const isLand = onlyLandHexes(everywhereLand, [terrainKey(3, -2)]);
+    expect(isLand(3, -2)).toBe(true);
+    expect(isLand(4, -2)).toBe(false);
+  });
+
+  it('never turns sea inside the list into land', () => {
+    const isLand = onlyLandHexes(() => false, [terrainKey(3, -2)]);
+    expect(isLand(3, -2)).toBe(false);
   });
 });

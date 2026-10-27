@@ -51,7 +51,7 @@ import {
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
-import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
+import { PREVIEW_ISLAND_RADIUS, terrainKey, type WorldModel } from './WorldModel';
 import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
@@ -460,8 +460,8 @@ export interface HexMapRendererOptions {
    * Settlement-mode preview (no settlement) only: starts at the same fitted
    * framing as `lockCamera`, but drag-pan and wheel/pinch zoom stay enabled
    * and every camera change is clamped by `confineCamera` — zoom never drops
-   * below the fit zoom and the centre never leaves the fit tiles' bounding
-   * box, so the visitor can look closely at the island but not wander off it.
+   * below the fit zoom and the centre never leaves the bounding box of the
+   * island's land inside the fit, so the visitor can look closely at the island but not wander off it.
    */
   confineCamera?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
@@ -2001,21 +2001,26 @@ export class HexMapRenderer {
           minZoom: 0.05,
           maxZoom: 4,
         });
+        // The confine box is the island's own land inside the fit (not the
+        // whole fitted disc, which can be mostly sea), so the view's centre
+        // always sits over the island.
+        const land = this.options.confineCamera
+          ? previewIslandBounds(this.options.worldModel.previewCropTiles(at, fitRadius))
+          : null;
+        this.confineLimits = land
+          ? {
+              bounds: {
+                minX: this.biasedCenterX(land.minX, zoom),
+                maxX: this.biasedCenterX(land.maxX, zoom),
+                minY: land.minY,
+                maxY: land.maxY,
+              },
+              minZoom: zoom,
+            }
+          : null;
         // `bounds` is only null if `at` itself has no reachable land (a
         // malformed/empty seed) — fall back to centring on the plot itself
         // rather than propagating a NaN camera.
-        this.confineLimits =
-          this.options.confineCamera && bounds
-            ? {
-                bounds: {
-                  minX: this.biasedCenterX(bounds.minX, zoom),
-                  maxX: this.biasedCenterX(bounds.maxX, zoom),
-                  minY: bounds.minY,
-                  maxY: bounds.maxY,
-                },
-                minZoom: zoom,
-              }
-            : null;
         const centerX = bounds ? bounds.centerX : isoGridPosition(at, TILE_W, TILE_H).x + TILE_W / 2;
         const centerY = bounds ? bounds.centerY : isoGridPosition(at, TILE_W, TILE_H).y + TILE_H / 2;
         return { x: this.biasedCenterX(centerX, zoom), y: centerY, zoom };
@@ -2987,7 +2992,8 @@ export class HexMapRenderer {
     this.idleDrift = false;
     const prevZoom = this.camera.zoom;
     const before = screenToWorld(this.camera, screen, this.viewport);
-    const zoom = Math.min(4, Math.max(0.05, this.camera.zoom * factor));
+    // A confined preview floors the zoom here, before the zoom-around-the-cursor offset below, so the limit never shifts the view sideways.
+    const zoom = Math.min(4, Math.max(this.confineLimits?.minZoom ?? 0.05, this.camera.zoom * factor));
     this.camera = { ...this.camera, zoom };
     const after = screenToWorld(this.camera, screen, this.viewport);
     this.camera = this.clampCamera({
@@ -3518,6 +3524,7 @@ export class HexMapRenderer {
         // list, not a lookup, is what lets that mode bake off-thread at all.
         buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
         wastedRevealed: worldModel.isWastedRevealed(),
+        landHexes: this.previewWaterLandHexes() ?? undefined,
       },
       this.waterMaskTerrain(),
     );
@@ -3575,12 +3582,29 @@ export class HexMapRenderer {
    * fallback asks the same question the worker does, terrain-only, instead of
    * materialising a `Tile` per water texel.
    */
+  /**
+   * `previewWater`'s land list for the bake (see `BakeRequest.landHexes`): the
+   * preview's drawn crop, so land it doesn't draw bakes as sea. Null when the
+   * mask should follow the terrain as usual.
+   */
+  private previewWaterLandHexes(): number[] | null {
+    if (!this.options.previewWater || this.options.mode !== 'settlement' || this.settlement()) return null;
+    const center = this.options.previewCenter ?? { q: 0, r: 0 };
+    return this.options.worldModel.previewCropTiles(center, previewDrawRadius(this.options)).map((c) => terrainKey(c.q, c.r));
+  }
+
   private waterMaskTerrain(): TerrainLookup {
     const { worldModel } = this.options;
-    const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
-    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r), isWastedLand };
+    const landHexes = this.previewWaterLandHexes();
+    const drawn = landHexes ? new Set(landHexes) : null;
+    const isLand = drawn
+      ? (q: number, r: number) => drawn.has(terrainKey(q, r)) && worldModel.isLand(q, r)
+      : (q: number, r: number) => worldModel.isLand(q, r);
+    const isWastedLand = (q: number, r: number) =>
+      (!drawn || drawn.has(terrainKey(q, r))) && worldModel.isWastedLandAt(q, r);
+    if (this.options.mode !== 'settlement') return { isLand, isWastedLand };
     return {
-      isLand: (q, r) => worldModel.isLand(q, r),
+      isLand,
       hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
       isWastedLand,
     };

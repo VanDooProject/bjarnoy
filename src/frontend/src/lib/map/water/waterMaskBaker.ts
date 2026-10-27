@@ -19,6 +19,8 @@ export interface AsyncBakeInput {
   buildingHexes?: number[];
   /** See `BakeRequest.wastedRevealed`. */
   wastedRevealed?: boolean;
+  /** See `BakeRequest.landHexes`. */
+  landHexes?: number[];
 }
 
 export class WaterMaskBaker {
@@ -85,6 +87,7 @@ export class WaterMaskBaker {
       generation: input.generation,
       buildingHexes: input.buildingHexes,
       wastedRevealed: input.wastedRevealed,
+      landHexes: input.landHexes,
     };
     this.worker.postMessage(request);
     return null;
