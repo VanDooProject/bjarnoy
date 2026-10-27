@@ -448,6 +448,22 @@ export interface HexMapRendererOptions {
    * which don't otherwise know or care about the host's CSS.
    */
   allowPageScroll?: boolean;
+  /**
+   * Settlement-mode preview (no settlement) only: draw the water mesh even
+   * though there is no fog. The preview normally suppresses it (§3.6 — the
+   * landing page's tiny island has no use for it), so a preview that frames
+   * a stretch of open sea (the showcase's village frame) would otherwise show
+   * only the host's CSS background around the land.
+   */
+  previewWater?: boolean;
+  /**
+   * Settlement-mode preview (no settlement) only: starts at the same fitted
+   * framing as `lockCamera`, but drag-pan and wheel/pinch zoom stay enabled
+   * and every camera change is clamped by `confineCamera` — zoom never drops
+   * below the fit zoom and the centre never leaves the fit tiles' bounding
+   * box, so the visitor can look closely at the island but not wander off it.
+   */
+  confineCamera?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -1012,6 +1028,25 @@ export function previewFitZoom(params: {
   const usableHalfWidth = (0.5 - Math.abs(screenBiasX)) * viewport.width;
   const zoom = Math.min(usableHalfWidth / halfExtentX, viewport.height / 2 / halfExtentY);
   return Math.min(maxZoom, Math.max(minZoom, zoom));
+}
+
+/**
+ * Clamps a camera for `HexMapRendererOptions.confineCamera`: zoom is raised
+ * to at least `minZoom` (the fit zoom, so the island can't be zoomed out
+ * past its fitted framing) and the centre is pulled back inside `bounds`
+ * (the fit tiles' world bounding box, see `previewIslandBounds`). The upper
+ * zoom bound is the caller's own. Pure, so it's unit-testable without Pixi.
+ */
+export function confineCamera(
+  camera: Camera,
+  bounds: { minX: number; maxX: number; minY: number; maxY: number },
+  minZoom: number,
+): Camera {
+  return {
+    x: Math.min(bounds.maxX, Math.max(bounds.minX, camera.x)),
+    y: Math.min(bounds.maxY, Math.max(bounds.minY, camera.y)),
+    zoom: Math.max(minZoom, camera.zoom),
+  };
 }
 // How long the camera takes to ease from one position/zoom to another (see
 // animateCameraTo) — used for the founding transition (zip 6a: fog should
@@ -1883,6 +1918,14 @@ export class HexMapRenderer {
   // settlement must keep working). See `zoomBy` and the pan branch of
   // `onPointerMove`.
   private lockCamera = false;
+  // `confineCamera` option: user input stays enabled but is clamped to these
+  // limits, cached by `settlementCameraOrigin` (recomputed on every resize)
+  // so a pointer move never re-measures the crop.
+  private cameraTouched = false;
+  private confineLimits: {
+    bounds: { minX: number; maxX: number; minY: number; maxY: number };
+    minZoom: number;
+  } | null = null;
   // zip 4: "world view is already on screen and moving when the page loads" —
   // a gentle idle drift on the world map, cancelled on first user input.
   private idleDrift: boolean;
@@ -1920,7 +1963,7 @@ export class HexMapRenderer {
     const settlement = this.settlement();
     if (!settlement) {
       const at = this.options.previewCenter ?? { q: 0, r: 0 };
-      if (this.lockCamera) {
+      if (this.lockCamera || this.options.confineCamera) {
         // Locked static preview (landing page): fit the whole island to the
         // current viewport instead of the fixed PREVIEW_ZOOM, so it stays
         // fully framed regardless of viewport size/aspect. Bounds match
@@ -1961,6 +2004,18 @@ export class HexMapRenderer {
         // `bounds` is only null if `at` itself has no reachable land (a
         // malformed/empty seed) — fall back to centring on the plot itself
         // rather than propagating a NaN camera.
+        this.confineLimits =
+          this.options.confineCamera && bounds
+            ? {
+                bounds: {
+                  minX: this.biasedCenterX(bounds.minX, zoom),
+                  maxX: this.biasedCenterX(bounds.maxX, zoom),
+                  minY: bounds.minY,
+                  maxY: bounds.maxY,
+                },
+                minZoom: zoom,
+              }
+            : null;
         const centerX = bounds ? bounds.centerX : isoGridPosition(at, TILE_W, TILE_H).x + TILE_W / 2;
         const centerY = bounds ? bounds.centerY : isoGridPosition(at, TILE_W, TILE_H).y + TILE_H / 2;
         return { x: this.biasedCenterX(centerX, zoom), y: centerY, zoom };
@@ -2206,8 +2261,21 @@ export class HexMapRenderer {
     // had (re-projected onto the new viewport), a locked one has no other
     // event (no drag, no wheel) that would ever re-fit it.
     if (this.lockCamera) this.camera = this.settlementCameraOrigin();
+    else if (this.options.confineCamera && !this.settlement()) {
+      // Refreshes the cached limits for the new viewport. Until the visitor
+      // has moved the camera it follows the fit; afterwards it is only
+      // re-clamped, so a resize doesn't throw away where they were looking.
+      const origin = this.settlementCameraOrigin();
+      this.camera = this.cameraTouched ? this.clampCamera(this.camera) : origin;
+    }
     this.applyCameraTransform();
     this.scheduleCull();
+  }
+
+  /** `confineCamera` clamp (identity when not confined). */
+  private clampCamera(camera: Camera): Camera {
+    const limits = this.confineLimits;
+    return limits ? confineCamera(camera, limits.bounds, limits.minZoom) : camera;
   }
 
   private applyCameraTransform() {
@@ -2627,11 +2695,12 @@ export class HexMapRenderer {
       if (!step) return;
       this.dragMoved += Math.abs(step.pan.x) + Math.abs(step.pan.y);
       if (this.lockCamera) return;
-      this.camera = {
+      this.camera = this.clampCamera({
         ...this.camera,
         x: this.camera.x - step.pan.x / this.camera.zoom,
         y: this.camera.y - step.pan.y / this.camera.zoom,
-      };
+      });
+      this.cameraTouched = true;
       const screen = this.clientToCanvas(step.midpoint.x, step.midpoint.y) ?? step.midpoint;
       this.zoomBy(screen, step.factor);
       return;
@@ -2648,11 +2717,12 @@ export class HexMapRenderer {
     // so onPointerUp's click-vs-drag slop check keeps working (founding must
     // stay clickable) — only the actual camera pan is skipped.
     if (this.lockCamera) return;
-    this.camera = {
+    this.camera = this.clampCamera({
       ...this.camera,
       x: this.camera.x - dx / this.camera.zoom,
       y: this.camera.y - dy / this.camera.zoom,
-    };
+    });
+    this.cameraTouched = true;
     this.applyCameraTransform();
     this.scheduleCull();
   };
@@ -2920,11 +2990,12 @@ export class HexMapRenderer {
     const zoom = Math.min(4, Math.max(0.05, this.camera.zoom * factor));
     this.camera = { ...this.camera, zoom };
     const after = screenToWorld(this.camera, screen, this.viewport);
-    this.camera = {
+    this.camera = this.clampCamera({
       ...this.camera,
       x: this.camera.x + (before.x - after.x),
       y: this.camera.y + (before.y - after.y),
-    };
+    });
+    this.cameraTouched = true;
     this.applyCameraTransform();
     this.noteZoomActivity();
     this.scheduleCull();
@@ -2935,7 +3006,11 @@ export class HexMapRenderer {
     // threshold never spuriously re-triggers — only an actual gesture
     // crossing the line does. Mode flips in place (no camera move, which is
     // what makes this continuous); the route push is the caller's job.
-    const crossing = transitionForZoom(this.options.mode, prevZoom, zoom, zoomTransitionTuning);
+    // A confined preview never swaps modes: it is a self-contained frame, and
+    // its fit zoom is not guaranteed to sit above the exit threshold.
+    const crossing = this.confineLimits
+      ? null
+      : transitionForZoom(this.options.mode, prevZoom, zoom, zoomTransitionTuning);
     if (crossing) {
       const target: RenderMode = crossing === 'enter' ? 'settlement' : 'world';
       // Drop the terrain/water/building layers (this.world — fog and the
@@ -3364,8 +3439,10 @@ export class HexMapRenderer {
     // §3.6: the water mesh is off entirely where it would be invisible — the
     // landing page's preview (which draws no water at all today) and a
     // deepFogOnly viewport, where it would be both hidden under opaque mist and
-    // the most expensive thing on screen.
-    const waterSuppressed = deepFogOnly || !this.isFogActive();
+    // the most expensive thing on screen. A preview that opts in with
+    // `previewWater` (the showcase village frame) keeps the mesh: its sea is
+    // visible, there is just no fog over it.
+    const waterSuppressed = deepFogOnly || (!this.isFogActive() && !this.options.previewWater);
     this.waterLayer.setSuppressed(waterSuppressed);
     // A suppressed mesh has nothing to read the mask, so a bake owed from
     // before it was suppressed is owed no longer — the next rebuild that
