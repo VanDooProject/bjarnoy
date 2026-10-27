@@ -185,7 +185,9 @@
     "openLabel": "Bau, Ausbildung & Armeen öffnen",
     "closeLabel": "Bau, Ausbildung & Armeen schließen",
     "chevron": "›",
-    "armies": "Armeen"
+    "armies": "Armeen",
+    "peekQueued": "{time} · eingereiht",
+    "peekQueuedNoTime": "Eingereiht"
   },
   "buildingModal": {
     "close": "✕",

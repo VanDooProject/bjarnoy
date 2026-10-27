@@ -185,7 +185,9 @@
     "openLabel": "Open build, training & armies",
     "closeLabel": "Close build, training & armies",
     "chevron": "›",
-    "armies": "Armies"
+    "armies": "Armies",
+    "peekQueued": "{time} · queued",
+    "peekQueuedNoTime": "Queued"
   },
   "buildingModal": {
     "close": "✕",

@@ -31,7 +31,7 @@
 // judged against "would full notation fit", never against whatever is
 // currently on screen — that's what keeps the row from flip-flopping right
 // at the boundary.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useMediaQuery } from '../../composables/useMediaQuery';
@@ -40,6 +40,8 @@ import { isHudRail } from '../../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY, HUD_RAIL_TALL_QUERY } from '../../lib/breakpoints';
 import { formatHudNumber } from '../../lib/hud/compactNumber';
 import type { MessageSchema } from '../../i18n/schema';
+import { animate, motionEnabled } from '../../lib/motion';
+import type { ResourceKind } from '../../lib/map/types';
 
 const props = defineProps<{
   // Issue #16 "ring menu": dims the resource pills while a ring is open —
@@ -68,11 +70,60 @@ const isExpanded = computed(() => isCompact.value && isHudDrawerOpen.value && !i
 // already sitting in stock, earmarked for the waiting build queue and
 // unspendable elsewhere. Always zero in demo mode (`hud.reserved` never
 // changes from its empty default there — see stores/world.ts).
+// X8: after a confirmed build the affected pills count down from the old to the
+// new value instead of snapping. `tickBack` is the part of the spend the number
+// has not come down by yet; it is added to the live stock (so production ticks
+// keep showing meanwhile) and shrinks to zero over TICK_DOWN_MS. Driven by the
+// store's explicit `hud.lastSpend` event, never by watching the values: an
+// ordinary production tick must not trigger it.
+const TICK_DOWN_MS = 420;
+const tickBack = reactive<Record<ResourceKind, number>>({ wood: 0, stone: 0, food: 0, iron: 0 });
+const tickFrames = new Map<ResourceKind, number>();
+
+function tickDown(kind: ResourceKind, amount: number) {
+  cancelTick(kind);
+  const t0 = performance.now();
+  tickBack[kind] = amount;
+  const step = (now: number) => {
+    const k = Math.min(1, (now - t0) / TICK_DOWN_MS);
+    tickBack[kind] = amount * (1 - k);
+    if (k < 1) tickFrames.set(kind, requestAnimationFrame(step));
+    else tickFrames.delete(kind);
+  };
+  tickFrames.set(kind, requestAnimationFrame(step));
+}
+function cancelTick(kind: ResourceKind) {
+  const frame = tickFrames.get(kind);
+  if (frame !== undefined) cancelAnimationFrame(frame);
+  tickFrames.delete(kind);
+  tickBack[kind] = 0;
+}
+
+watch(
+  () => world.hud.lastSpend,
+  async (spend) => {
+    if (!spend) return;
+    const kinds = (Object.keys(spend.cost) as ResourceKind[]).filter((kind) => (spend.cost[kind] ?? 0) > 0);
+    if (motionEnabled()) for (const kind of kinds) tickDown(kind, spend.cost[kind]!);
+    await nextTick();
+    for (const kind of kinds) {
+      for (const el of barRef.value?.querySelectorAll(`[data-res="${kind}"]`) ?? []) {
+        // A red flash that eases back to the pill's own colours; a plain short fade under reduced motion.
+        const flash = [{ offset: 0, color: '#f0a396', background: 'rgba(226,112,95,.45)' }];
+        void animate(el, flash, { duration: 650, easing: 'ease-out', reduced: flash });
+      }
+    }
+  },
+);
+onBeforeUnmount(() => {
+  for (const kind of [...tickFrames.keys()]) cancelTick(kind);
+});
+
 const pills = computed(() => [
-  { key: 'wood', color: 'var(--wood)', value: world.hud.resources.wood, rate: world.hud.rates.wood, cap: world.hud.storageCap.wood, reserved: world.hud.reserved.wood },
-  { key: 'stone', color: 'var(--stone)', value: world.hud.resources.stone, rate: world.hud.rates.stone, cap: world.hud.storageCap.stone, reserved: world.hud.reserved.stone },
-  { key: 'food', color: 'var(--food)', value: world.hud.resources.food, rate: world.hud.rates.food, cap: world.hud.storageCap.food, reserved: world.hud.reserved.food },
-  { key: 'iron', color: 'var(--iron)', value: world.hud.resources.iron, rate: world.hud.rates.iron, cap: world.hud.storageCap.iron, reserved: world.hud.reserved.iron },
+  { key: 'wood', color: 'var(--wood)', value: world.hud.resources.wood + tickBack.wood, rate: world.hud.rates.wood, cap: world.hud.storageCap.wood, reserved: world.hud.reserved.wood },
+  { key: 'stone', color: 'var(--stone)', value: world.hud.resources.stone + tickBack.stone, rate: world.hud.rates.stone, cap: world.hud.storageCap.stone, reserved: world.hud.reserved.stone },
+  { key: 'food', color: 'var(--food)', value: world.hud.resources.food + tickBack.food, rate: world.hud.rates.food, cap: world.hud.storageCap.food, reserved: world.hud.reserved.food },
+  { key: 'iron', color: 'var(--iron)', value: world.hud.resources.iron + tickBack.iron, rate: world.hud.rates.iron, cap: world.hud.storageCap.iron, reserved: world.hud.reserved.iron },
 ]);
 
 const population = computed(() => world.hud.population);
@@ -275,7 +326,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
     }"
   >
     <template v-if="!isCompact || isExpanded">
-      <div v-for="pill in pills" :key="pill.key" class="resource">
+      <div v-for="pill in pills" :key="pill.key" class="resource" :data-res="pill.key">
         <span class="hex-icon" :style="{ background: pill.color }" />
         <div class="numbers">
           <span class="value">
@@ -312,6 +363,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
         :key="pill.key"
         type="button"
         class="resource resource--compact"
+        :data-res="pill.key"
         :data-stage="stage"
         :aria-label="t(`catalogue.resources.${pill.key}`) + ': ' + pillSummary(pill.value, pill.rate, pill.cap)"
         @click="onPillTap"

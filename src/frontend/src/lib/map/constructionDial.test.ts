@@ -3,7 +3,9 @@ import type { BuildOrderResponse } from '../../api/types';
 import {
   constructionDialsFromQueue,
   DIAL_FINISH_MS,
+  DIAL_REJECT_MS,
   dialFinishFrame,
+  dialRejectFrame,
   dialProgress,
   dialRemainingSeconds,
   hexPerimeterPath,
@@ -192,5 +194,56 @@ describe('retainFinishingDials', () => {
   it('does not duplicate a coord still present in next', () => {
     const next = [dial(1, now + 9000)];
     expect(retainFinishingDials([dial(1, now - 100)], next, now)).toEqual(next);
+  });
+});
+
+describe('dialRejectFrame', () => {
+  it('shakes +-4 px over 280 ms: still at 0, -4 at a quarter, +4 at the middle, -2 at three quarters, still again at the end', () => {
+    expect(dialRejectFrame(0)).toEqual({ offsetX: 0, scale: 1, alpha: 1 });
+    expect(dialRejectFrame(70)!.offsetX).toBeCloseTo(-4);
+    expect(dialRejectFrame(140)!.offsetX).toBeCloseTo(4);
+    expect(dialRejectFrame(210)!.offsetX).toBeCloseTo(-2);
+    expect(dialRejectFrame(279.99)!.offsetX).toBeCloseTo(0, 1);
+  });
+
+  it('interpolates between the shake keyframes', () => {
+    expect(dialRejectFrame(35)!.offsetX).toBeCloseTo(-2);
+    expect(dialRejectFrame(105)!.offsetX).toBeCloseTo(0);
+  });
+
+  it('keeps full size and opacity during the shake, then shrinks to .6 and fades over the next 200 ms', () => {
+    expect(dialRejectFrame(200)).toMatchObject({ scale: 1, alpha: 1 });
+    expect(dialRejectFrame(280)).toEqual({ offsetX: 0, scale: 1, alpha: 1 });
+    const mid = dialRejectFrame(380)!;
+    expect(mid.offsetX).toBe(0);
+    expect(mid.scale).toBeCloseTo(0.8);
+    expect(mid.alpha).toBeCloseTo(0.5);
+    const end = dialRejectFrame(DIAL_REJECT_MS - 0.01)!;
+    expect(end.scale).toBeCloseTo(0.6, 2);
+    expect(end.alpha).toBeCloseTo(0, 2);
+  });
+
+  it('is null before the rejection and once it has played', () => {
+    expect(dialRejectFrame(-1)).toBeNull();
+    expect(dialRejectFrame(DIAL_REJECT_MS)).toBeNull();
+    expect(DIAL_REJECT_MS).toBe(480);
+  });
+});
+
+describe('retainFinishingDials with a rejected dial', () => {
+  const rejected = { coord: { q: 1, r: 1 }, startMs: null, endMs: null, rejectedAtMs: 1000 };
+
+  it('keeps a rejected dial after its pending order left the queue, until its animation is over', () => {
+    expect(retainFinishingDials([rejected], [], 1200)).toEqual([rejected]);
+    expect(retainFinishingDials([rejected], [], 1000 + DIAL_REJECT_MS)).toEqual([]);
+  });
+
+  it('drops it when a real order now stands on that hex', () => {
+    const real = { coord: { q: 1, r: 1 }, startMs: 0, endMs: 99_999 };
+    expect(retainFinishingDials([rejected], [real], 1200)).toEqual([real]);
+  });
+
+  it('still drops an ordinary dial with unknown timing (a cancelled order)', () => {
+    expect(retainFinishingDials([{ coord: { q: 2, r: 2 }, startMs: null, endMs: null }], [], 1200)).toEqual([]);
   });
 });

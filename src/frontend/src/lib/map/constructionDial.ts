@@ -12,6 +12,11 @@ export interface ConstructionDial {
   startMs: number | null;
   /** `Date.now()`-epoch ms the build completes; null while waiting / unknown. */
   endMs: number | null;
+  /**
+   * `Date.now()`-epoch ms the server refused the build this (still "…") dial
+   * stood for: the dial plays `dialRejectFrame` from then and is pruned.
+   */
+  rejectedAtMs?: number;
 }
 
 /**
@@ -168,14 +173,53 @@ export function dialFinishFrame(msSinceEnd: number): DialFinishFrame | null {
   };
 }
 
+/** How long the rejection animation (shake, then fade out) plays. */
+export const DIAL_REJECT_MS = 480;
+const REJECT_SHAKE_MS = 280;
+
+export interface DialRejectFrame {
+  /** Horizontal shake offset in px. */
+  offsetX: number;
+  /** Dial size multiplier (shrinks to .6 while fading). */
+  scale: number;
+  /** Whole-dial opacity 0..1. */
+  alpha: number;
+}
+
+const REJECT_SHAKE_OFFSETS = [0, -4, 4, -2, 0];
+
+/**
+ * Rejection animation state `msSinceReject` after the server refused the
+ * build: a +-4 px shake over 280 ms, then fade and shrink to .6 over 200 ms;
+ * null outside it.
+ */
+export function dialRejectFrame(msSinceReject: number): DialRejectFrame | null {
+  if (msSinceReject < 0 || msSinceReject >= DIAL_REJECT_MS) return null;
+  if (msSinceReject < REJECT_SHAKE_MS) {
+    // Five evenly spaced keyframes (0, -4, 4, -2, 0), linearly interpolated.
+    const pos = (msSinceReject / REJECT_SHAKE_MS) * (REJECT_SHAKE_OFFSETS.length - 1);
+    const i = Math.min(REJECT_SHAKE_OFFSETS.length - 2, Math.floor(pos));
+    const offsetX = REJECT_SHAKE_OFFSETS[i] + (REJECT_SHAKE_OFFSETS[i + 1] - REJECT_SHAKE_OFFSETS[i]) * (pos - i);
+    return { offsetX, scale: 1, alpha: 1 };
+  }
+  const p = clamp01((msSinceReject - REJECT_SHAKE_MS) / (DIAL_REJECT_MS - REJECT_SHAKE_MS));
+  return { offsetX: 0, scale: 1 - 0.4 * p, alpha: 1 - p };
+}
+
 /**
  * Carry dials that just completed server-side (and so vanished from `next`)
  * over so their finish animation can play. Cancelled orders (end far in the
- * future / unknown) and expired animations are dropped.
+ * future / unknown) and expired animations are dropped. A dial that is playing
+ * its rejection (`rejectedAtMs`) is carried over until that has played.
  */
 export function retainFinishingDials(prev: ConstructionDial[], next: ConstructionDial[], nowMs: number): ConstructionDial[] {
   const out = [...next];
   for (const d of prev) {
+    // A refused build's dial outlives its (removed) pending order while it plays its rejection.
+    if (d.rejectedAtMs !== undefined) {
+      if (nowMs - d.rejectedAtMs < DIAL_REJECT_MS && !next.some((n) => n.coord.q === d.coord.q && n.coord.r === d.coord.r)) out.push(d);
+      continue;
+    }
     if (d.endMs === null || d.endMs > nowMs + 5000) continue;
     if (next.some((n) => n.coord.q === d.coord.q && n.coord.r === d.coord.r)) continue;
     const endMs = Math.min(d.endMs, nowMs);
