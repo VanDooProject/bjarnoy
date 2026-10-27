@@ -197,7 +197,7 @@ const ENGINEERING: EngineeringCard[] = [
             :preview-center="islandCenter"
             :preview-radius="SHOWCASE_PREVIEW_RADIUS"
             :preview-render-radius="SHOWCASE_RENDER_RADIUS"
-            preview-water
+            preview-sea
             confine-camera
             hide-settlement-badge
             background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"

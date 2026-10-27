@@ -51,7 +51,7 @@ import {
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
-import { PREVIEW_ISLAND_RADIUS, terrainKey, type WorldModel } from './WorldModel';
+import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
@@ -449,13 +449,13 @@ export interface HexMapRendererOptions {
    */
   allowPageScroll?: boolean;
   /**
-   * Settlement-mode preview (no settlement) only: draw the water mesh even
-   * though there is no fog. The preview normally suppresses it (§3.6 — the
-   * landing page's tiny island has no use for it), so a preview that frames
-   * a stretch of open sea (the showcase's village frame) would otherwise show
-   * only the host's CSS background around the land.
+   * Settlement-mode preview (no settlement) only: draw every hex within the
+   * drawn radius (`previewDrawRadius`) — the sea's own tile art, and any land
+   * in it — instead of only the preview island's land. The showcase's village
+   * frame uses it so the island sits in its sea rather than on the host's
+   * CSS background.
    */
-  previewWater?: boolean;
+  previewSea?: boolean;
   /**
    * Settlement-mode preview (no settlement) only: starts at the same fitted
    * framing as `lockCamera`, but drag-pan and wheel/pinch zoom stay enabled
@@ -1034,7 +1034,7 @@ export function previewFitZoom(params: {
  * Clamps a camera for `HexMapRendererOptions.confineCamera`: zoom is raised
  * to at least `minZoom` (the fit zoom, so the island can't be zoomed out
  * past its fitted framing) and the centre is pulled back inside `bounds`
- * (the fit tiles' world bounding box, see `previewIslandBounds`). The upper
+ * (the island's land inside the fit, see `previewIslandBounds`). The upper
  * zoom bound is the caller's own. Pure, so it's unit-testable without Pixi.
  */
 export function confineCamera(
@@ -3445,10 +3445,8 @@ export class HexMapRenderer {
     // §3.6: the water mesh is off entirely where it would be invisible — the
     // landing page's preview (which draws no water at all today) and a
     // deepFogOnly viewport, where it would be both hidden under opaque mist and
-    // the most expensive thing on screen. A preview that opts in with
-    // `previewWater` (the showcase village frame) keeps the mesh: its sea is
-    // visible, there is just no fog over it.
-    const waterSuppressed = deepFogOnly || (!this.isFogActive() && !this.options.previewWater);
+    // the most expensive thing on screen.
+    const waterSuppressed = deepFogOnly || !this.isFogActive();
     this.waterLayer.setSuppressed(waterSuppressed);
     // A suppressed mesh has nothing to read the mask, so a bake owed from
     // before it was suppressed is owed no longer — the next rebuild that
@@ -3524,7 +3522,6 @@ export class HexMapRenderer {
         // list, not a lookup, is what lets that mode bake off-thread at all.
         buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
         wastedRevealed: worldModel.isWastedRevealed(),
-        landHexes: this.previewWaterLandHexes() ?? undefined,
       },
       this.waterMaskTerrain(),
     );
@@ -3582,29 +3579,12 @@ export class HexMapRenderer {
    * fallback asks the same question the worker does, terrain-only, instead of
    * materialising a `Tile` per water texel.
    */
-  /**
-   * `previewWater`'s land list for the bake (see `BakeRequest.landHexes`): the
-   * preview's drawn crop, so land it doesn't draw bakes as sea. Null when the
-   * mask should follow the terrain as usual.
-   */
-  private previewWaterLandHexes(): number[] | null {
-    if (!this.options.previewWater || this.options.mode !== 'settlement' || this.settlement()) return null;
-    const center = this.options.previewCenter ?? { q: 0, r: 0 };
-    return this.options.worldModel.previewCropTiles(center, previewDrawRadius(this.options)).map((c) => terrainKey(c.q, c.r));
-  }
-
   private waterMaskTerrain(): TerrainLookup {
     const { worldModel } = this.options;
-    const landHexes = this.previewWaterLandHexes();
-    const drawn = landHexes ? new Set(landHexes) : null;
-    const isLand = drawn
-      ? (q: number, r: number) => drawn.has(terrainKey(q, r)) && worldModel.isLand(q, r)
-      : (q: number, r: number) => worldModel.isLand(q, r);
-    const isWastedLand = (q: number, r: number) =>
-      (!drawn || drawn.has(terrainKey(q, r))) && worldModel.isWastedLandAt(q, r);
-    if (this.options.mode !== 'settlement') return { isLand, isWastedLand };
+    const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
+    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r), isWastedLand };
     return {
-      isLand,
+      isLand: (q, r) => worldModel.isLand(q, r),
       hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
       isWastedLand,
     };
@@ -3712,7 +3692,12 @@ export class HexMapRenderer {
     // to — the two must agree, or the framing goes wrong again (see that
     // method's own comment).
     const previewTileKeys = preview
-      ? new Set(worldModel.previewCropTiles(previewCenter, previewDrawRadius(this.options)).map((c) => coordKey(c)))
+      ? new Set(
+          (this.options.previewSea
+            ? hexesInRadius(previewCenter, previewDrawRadius(this.options))
+            : worldModel.previewCropTiles(previewCenter, previewDrawRadius(this.options))
+          ).map((c) => coordKey(c)),
+        )
       : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
@@ -3724,7 +3709,8 @@ export class HexMapRenderer {
       // treats sea — see rebuildTerrainFlat) and membership in
       // `previewTileKeys` already excludes it (`previewCropTiles` only ever
       // returns land), so this one check replaces the old sea check and the
-      // old (membership-blind) radius check both.
+      // old (membership-blind) radius check both. `previewSea` widens the set
+      // to the whole drawn disc, so the sea there draws its own tile art.
       if (preview && !previewTileKeys!.has(coordKey(c))) continue;
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
