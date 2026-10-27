@@ -28,6 +28,9 @@ import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { loginTestUser } from './helpers';
 import { SettlementPage } from './pages';
 
+// DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
+test.use({ mapLayers: { water: false } });
+
 /**
  * ResourceBar.vue mounts a second, hidden `.resource-bar` alongside the real
  * one purely to measure whether full notation would fit (`data-measure` on

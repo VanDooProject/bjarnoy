@@ -14,7 +14,8 @@
   },
   "oneView": {
     "title": "One view — map and village",
-    "body": "The world map and your village are the same hex lattice, not two screens. Zoom in on an island and the same rendered surface turns from territory and terrain into huts, farms and people — nothing ever \"opens\" a separate view."
+    "body": "The world map and your village are the same hex lattice, not two screens. Zoom in on an island and the same rendered surface turns from territory and terrain into huts, farms and people — nothing ever \"opens\" a separate view.",
+    "explore": "Explore the village"
   },
   "features": {
     "title": "Built to play, not just to look at",

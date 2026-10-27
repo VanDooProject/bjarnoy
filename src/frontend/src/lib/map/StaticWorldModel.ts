@@ -94,7 +94,7 @@ export class StaticWorldModel extends WorldModel {
    * `settlementCameraOrigin`'s locked-preview branch fits the camera to, so
    * the whole island (not a radius-cropped slice of it) ends up on screen.
    */
-  override previewCropTiles(center: AxialCoord): AxialCoord[] {
+  override previewCropTiles(center: AxialCoord, _radius?: number): AxialCoord[] {
     return this.previewIslandTiles(center);
   }
 

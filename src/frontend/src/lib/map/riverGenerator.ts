@@ -478,7 +478,6 @@ const step = (from: AxialCoord, dir: number): AxialCoord => {
  */
 function assignWidths(
   nodes: Node[],
-  isLand: (c: AxialCoord) => boolean,
   seed: number,
   stats: RiverStats | undefined,
   requireRiver: Set<string> | null = null,
@@ -511,7 +510,12 @@ function assignWidths(
     }
     if (candidates.length === 0) return false;
 
-    const pick = candidates[Math.floor(hash2(requirement.q, requirement.r, seed + 47) * candidates.length)]!;
+    widenAt(chain, candidates[Math.floor(hash2(requirement.q, requirement.r, seed + 47) * candidates.length)]!);
+    return true;
+  };
+
+  // The tile at `pick` widens; every tile after it is river width.
+  const widenAt = (chain: Node[], pick: number): void => {
     chain[pick]!.width = 'widen';
     chain[pick]!.outRiver = true;
     for (let i = pick + 1; i < chain.length; i++) {
@@ -519,7 +523,17 @@ function assignWidths(
       chain[i]!.outRiver = true;
     }
     if (stats) stats.widenings++;
-    return true;
+  };
+
+  // Widens on the straight tile nearest the end of the chain (never the spring); false when there is none.
+  const tryWidenNearest = (chain: Node[]): boolean => {
+    for (let i = chain.length - 1; i >= 1; i--) {
+      if (chain[i]!.shape === 'straight') {
+        widenAt(chain, i);
+        return true;
+      }
+    }
+    return false;
   };
 
   const remove = (chain: Node[]) => {
@@ -583,9 +597,9 @@ function assignWidths(
           const chain = chainTo(up);
           if (tryWiden(chain, v.coord)) {
             v.width = 'river';
-          } else if (!isLand(step(v.coord, (v.ins[0]! + 3) % 6))) {
-            v.width = 'widen';
-            if (stats) stats.widenings++;
+          } else if (tryWidenNearest(chain)) {
+            // Never on the mouth itself: the nearest straight tile upstream carries the widening.
+            v.width = 'river';
           } else {
             chain.push(v);
             remove(chain);
@@ -710,6 +724,8 @@ class Drainage {
   readonly neighbour: Int32Array;
   readonly interior: boolean[];
   readonly outlet: boolean[];
+  /** Per (tile, direction): the neighbour there is open sea (not island land, not bog water). A river ends on a coastal tile only head-on, towards such a direction, so every sea mouth is a delta. */
+  readonly seaAt: boolean[];
   readonly step: number[];
   readonly dist: number[];
   outletCount = 0;
@@ -729,6 +745,7 @@ class Drainage {
     this.neighbour = new Int32Array(n * 6);
     this.interior = new Array<boolean>(n).fill(false);
     this.outlet = new Array<boolean>(n).fill(false);
+    this.seaAt = new Array<boolean>(n * 6).fill(false);
     this.step = new Array<number>(n).fill(0);
     this.dist = new Array<number>(n * 6).fill(Infinity);
     const coastal = new Array<boolean>(n).fill(false);
@@ -744,7 +761,10 @@ class Drainage {
       }
       // Neighbours that are island tiles are land without asking the (costly) sampler.
       coastal[i] = false;
-      for (let d = 0; d < 6 && !coastal[i]; d++) coastal[i] = !this.index.has(coordKey(ns[d]!)) && !isLand(ns[d]!);
+      for (let d = 0; d < 6; d++) {
+        this.seaAt[i * 6 + d] = !this.index.has(coordKey(ns[d]!)) && !isLand(ns[d]!);
+        coastal[i] = coastal[i]! || this.seaAt[i * 6 + d]!;
+      }
       if (isBlocked[i]) coastal[i] = false;
       this.interior[i] = !coastal[i] && !isBlocked[i];
       this.step[i] =
@@ -760,6 +780,8 @@ class Drainage {
     for (const o of outlets) {
       this.outlet[o] = true;
       for (let j = 0; j < 6; j++) {
+        // Head-on only: the river arrives from direction j, so the sea must lie straight ahead.
+        if (!this.seaAt[o * 6 + ((j + 3) % 6)]) continue;
         this.dist[o * 6 + j] = 0.0;
         heap.push(0.0, o * 6 + j);
       }
@@ -820,7 +842,8 @@ class Drainage {
       let receives = false;
       for (let d = 0; d < 6 && !receives; d++) {
         const n = this.neighbour[i * 6 + d]!;
-        receives = n >= 0 && this.interior[n]!;
+        // Flow from direction d leaves head-on only if the sea lies straight ahead of it.
+        receives = n >= 0 && this.interior[n]! && this.seaAt[i * 6 + ((d + 3) % 6)]!;
       }
       if (!receives) continue;
 
@@ -894,7 +917,7 @@ class Drainage {
     const markDrained = (o: number): void => {
       for (let d = 0; d < 6; d++) {
         const m = this.neighbour[o * 6 + d]!;
-        if (m >= 0 && this.interior[m]) drained[basin[m]!] = true;
+        if (m >= 0 && this.interior[m] && this.seaAt[o * 6 + ((d + 3) % 6)]) drained[basin[m]!] = true;
       }
     };
     for (const o of outlets) markDrained(o);
@@ -905,7 +928,7 @@ class Drainage {
       const o = candidates[c]!;
       for (let d = 0; d < 6; d++) {
         const m = this.neighbour[o * 6 + d]!;
-        if (m < 0 || !this.interior[m]) continue;
+        if (m < 0 || !this.interior[m] || !this.seaAt[o * 6 + ((d + 3) % 6)]) continue;
         const b = basin[m]!;
         if (best[b] === -1 || score[c]! > score[best[b]!]!) best[b] = c;
       }
@@ -959,6 +982,8 @@ function traceDrainage(
     }
 
     while (guard-- > 0) {
+      // Outlets are seeded head-on only (dist is finite at an outlet just for arrivals with sea straight ahead)
+      // and bestOut never offers an infinite state, so the walk can only end on an outlet as a delta.
       if (drainage.outlet[current]) return { path, merged: false };
 
       const { out: outDir, cost: naturalCost } = drainage.bestOut(current, inDir, null);
@@ -996,8 +1021,9 @@ function traceDrainage(
         }
       }
 
-      // No drawable junction: run on alone to the nearest free coast (a new mouth).
-      const alone = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH * 3.0, 0.0, true);
+      // No drawable junction: run on alone to the nearest free coast (a new mouth). Head-on mouths are rarer than
+      // any coastal tile, so the reach is 10x MERGE_REACH: at 3x about 2% more rivers found none and were dropped.
+      const alone = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH * 10.0, 0.0, true);
       if (alone) {
         path.push(...alone);
         return { path, merged: false };
@@ -1052,9 +1078,11 @@ function searchJunction(
 
       const claim = claims[n];
       if (toMouth) {
-        // Alone to the sea: any free coastal tile is a new mouth.
+        // Alone to the sea: any free coastal tile with sea straight ahead is a new mouth.
         if (claim || onPath[n]) continue;
         if (!drainage.interior[n]) {
+          // A new mouth must be head-on too: the sea straight ahead of the step.
+          if (!drainage.seaAt[n * 6 + dir]) continue;
           const total = d + turn + drainage.step[n]! + crowding(drainage, claims, n);
           if (!found || total < bestTotal) {
             found = true;
@@ -1319,7 +1347,7 @@ export function generateRiversWithBogs(
   // Bog sites: through-river lakes (the river is re-routed through them), sinks and spawns.
   const bp = new BogPaths(paths, mergedFlags);
   const widthTrial = (trial: BogPaths) =>
-    assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), riverLand, seed, undefined, trial.requireRiver);
+    assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), seed, undefined, trial.requireRiver);
   const traceRiver = (exit: AxialCoord, startIn: number, current: BogPaths, blocked: HexSet): AxialCoord[] | null => {
     // A spawned river must reach the sea from wherever the bog is: every basin gets an outlet.
     const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked, true);
@@ -1335,12 +1363,11 @@ export function generateRiversWithBogs(
 
   // A stream out of every mountain-enclosed valley that the rivers and bogs left cut off.
   const bogTiles = bogs.classify();
-  const settled = assignWidths(buildNodes(bp.paths, bp.forcedOut, bp.bogIn), riverLand, seed, undefined, bp.requireRiver);
+  const settled = assignWidths(buildNodes(bp.paths, bp.forcedOut, bp.bogIn), seed, undefined, bp.requireRiver);
   carveValleyStreams(
     islandTiles,
     islandLand,
     terrainOf,
-    riverLand,
     seed,
     bogTiles,
     bp,
@@ -1349,7 +1376,7 @@ export function generateRiversWithBogs(
     stats,
   );
   const nodes = buildNodes(bp.paths, bp.forcedOut, bp.bogIn);
-  return { rivers: assignWidths(nodes, riverLand, seed, stats, bp.requireRiver), bogs: bogTiles };
+  return { rivers: assignWidths(nodes, seed, stats, bp.requireRiver), bogs: bogTiles };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1507,7 +1534,6 @@ function carveValleyStreams(
   islandTiles: AxialCoord[],
   islandLand: Set<string>,
   terrainOf: (c: AxialCoord) => Terrain,
-  riverLand: (c: AxialCoord) => boolean,
   seed: number,
   bogTiles: BogTile[],
   bp: BogPaths,
@@ -1756,7 +1782,7 @@ function carveValleyStreams(
     const trial = bp.clone();
     trial.paths.push(path);
     trial.merged.push(merged);
-    const trialTiles = assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), riverLand, seed, undefined, trial.requireRiver);
+    const trialTiles = assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), seed, undefined, trial.requireRiver);
     const expected = new Set<string>(tiles.map((t) => coordKey(t)));
     for (let i = 0; i <= lastNew; i++) expected.add(coordKey(path[i]!));
     if (trialTiles.length !== expected.size || trialTiles.some((t) => !expected.has(coordKey(t)))) {

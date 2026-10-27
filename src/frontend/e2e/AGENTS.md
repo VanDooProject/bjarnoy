@@ -28,6 +28,17 @@ production build via `vite preview`, no backend — specs mock the API themselve
   (`page.touchscreen` only exposes single-finger `tap`), used by
   `pinch-zoom.spec.ts`.
 - `budgets.ts` — `MAP_SPEC_TIMEOUT_MS`, `HEAVY_MAP_SPEC_TIMEOUT_MS`.
+
+Cost model for specs that drive a map view: a Playwright call is a round trip
+to a page whose render loop is busy, so it costs about a frame or more
+(measured on the software renderer: ~1 s for a bare `evaluate`, ~2.5 s for a
+`boundingBox()`, ~5 s for a `locator.click()`). The render loop now leaves a gap
+after expensive frames (`src/lib/map/framePacing.ts`), which cuts those to tens of
+milliseconds, but a spec that spends a round trip per label or per hex still
+multiplies it. Read many things in one `evaluate`/`evaluateAll` (`rectsOf`,
+`ring.labels()`), use `ring.hover/click/press` for ring bubbles, and when a spec
+has to look at what was *drawn*, wait for `__settlementRenderer().whenFrameRendered()`:
+two `requestAnimationFrame`s no longer imply a Pixi render.
 - `globals.d.ts` — the app's `window.__fogDebug` / `__waterDebug` hooks. Don't
   add a `declare global` to a spec; two specs doing that with different shapes
   is a typecheck error across the suite.
@@ -84,7 +95,7 @@ one-off abstraction inside the spec.
 | Class | Covers |
 | --- | --- |
 | `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver })`, `centreHex()`, `clickHex()`, `countBuildings()`, `buildingTypeAt()`, `setSettlementLevel()`, `setResources()`, `hudResources()`, `canvasBox()` / `canvasCentre()`, plus `.ring`. Guided-onboarding UI (design handoff "2a"): `.guidancePointer`, `.checklist`, `.banner` (filter `.landfall`/`.complete`), `.continueButton`, `.ringNote`, `.profileNudge`. |
-| `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()`, `openBuildCategories()`, `openCategory()`. |
+| `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()` (previews a card), `click()`, `openBuildCategories()` / `openCategory()` (click — hover never navigates). |
 | `WorldMapPage` | `/world`: `open()`, `box()`, `centre()`, `pointAt(dx, dy)`, `moveTo(point)`, `screenshot()` for the canvas pixel-diff assertions. |
 | `AdminAuthFixture` | The mocked session. Reached as the **`adminAuth` fixture** (`async ({ page, adminAuth })`), then `adminAuth.login()` / `loginAsPlayer(name)`. |
 | `AdminTablePage` | The shared `table.table` list: `table` / `body` / `rows` / `row(text)` / `myRow`. |

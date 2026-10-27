@@ -311,6 +311,8 @@ export class WorldModel {
   private islandFootprintCache = new Map<string, AxialCoord[]>();
   /** previewIslandTiles()'s cache, keyed by `previewCenter` — see there for why this needs to exist at all. */
   private previewIslandTilesCache = new Map<string, AxialCoord[]>();
+  /** `previewIslandFlood`'s cache — null for a centre whose flood fill hit its bound. */
+  private previewIslandFloodCache = new Map<string, AxialCoord[] | null>();
   /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
   private riverTiles = new Map<string, RiverTile>();
   /**
@@ -471,6 +473,7 @@ export class WorldModel {
     }
     this.islandFootprintCache.clear();
     this.previewIslandTilesCache.clear();
+    this.previewIslandFloodCache.clear();
     this.lakePropsDirty = true;
   }
 
@@ -646,16 +649,23 @@ export class WorldModel {
     const cached = this.previewIslandTilesCache.get(key);
     if (cached) return cached;
 
-    const tiles =
-      floodFillLandmass(center, (c) => this.isLandOrLake(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS) ??
-      this.previewIslandFallback(center);
+    const tiles = this.previewIslandFlood(center) ?? this.previewIslandFallback(center, PREVIEW_ISLAND_RADIUS);
     this.previewIslandTilesCache.set(key, tiles);
     return tiles;
   }
 
-  /** The pre-L5 rule, kept only as `previewIslandTiles`'s safety-bound fallback (see there). */
-  private previewIslandFallback(center: AxialCoord): AxialCoord[] {
-    return hexesInRadius(center, PREVIEW_ISLAND_RADIUS).filter((c) => this.isLandOrLake(c.q, c.r));
+  /** The flood fill behind `previewIslandTiles`, or null when it hit `PREVIEW_ISLAND_FLOOD_MAX_RADIUS`; cached per centre, the null included. */
+  private previewIslandFlood(center: AxialCoord): AxialCoord[] | null {
+    const key = coordKey(center);
+    if (this.previewIslandFloodCache.has(key)) return this.previewIslandFloodCache.get(key)!;
+    const tiles = floodFillLandmass(center, (c) => this.isLandOrLake(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS);
+    this.previewIslandFloodCache.set(key, tiles);
+    return tiles;
+  }
+
+  /** The pre-L5 rule (land within `radius`, no membership check), kept only as the safety-bound fallback (see `previewIslandTiles`). */
+  private previewIslandFallback(center: AxialCoord, radius: number): AxialCoord[] {
+    return hexesInRadius(center, radius).filter((c) => this.isLandOrLake(c.q, c.r));
   }
 
   /**
@@ -679,8 +689,14 @@ export class WorldModel {
    * doesn't check membership, so a foreign island within the same radius
    * shows up too. Only the intersection gets both right.
    */
-  previewCropTiles(center: AxialCoord): AxialCoord[] {
-    return this.previewIslandTiles(center).filter((c) => hexDistance(center, c) <= PREVIEW_ISLAND_RADIUS);
+  previewCropTiles(center: AxialCoord, radius = PREVIEW_ISLAND_RADIUS): AxialCoord[] {
+    // The cached flood fill is radius-independent (membership only, bounded by PREVIEW_ISLAND_FLOOD_MAX_RADIUS), so a wider crop never sees a truncated set.
+    // When the flood fill hit its bound (an island reaching more than PREVIEW_ISLAND_FLOOD_MAX_RADIUS from `center`), the
+    // fallback disc must be this crop's own radius: `previewIslandTiles`' fallback is the landing radius, which would shrink a
+    // wider crop (the showcase frame's SHOWCASE_RENDER_RADIUS) to the landing page's few hexes.
+    const flood = this.previewIslandFlood(center);
+    if (!flood) return this.previewIslandFallback(center, radius);
+    return flood.filter((c) => hexDistance(center, c) <= radius);
   }
 
   /**
@@ -757,6 +773,7 @@ export class WorldModel {
     }
     this.islandFootprintCache.clear();
     this.previewIslandTilesCache.clear();
+    this.previewIslandFloodCache.clear();
   }
 
   isWastedRevealed(): boolean {
@@ -1625,6 +1642,20 @@ export class WorldModel {
       if (tile.ownerId === settlementId && tile.buildingType === 'storagehouse') {
         levels.push({ q: tile.q, r: tile.r, level: tile.buildingLevel ?? 1 });
       }
+    }
+    return levels;
+  }
+
+  /**
+   * The highest level of each building type this settlement has standing (a
+   * level-0 foundation counts as 0) — what a building's `prerequisites` are
+   * judged against, like `Settlement.HighestLevelOf` on the server.
+   */
+  highestBuildingLevels(settlementId: string): Record<string, number> {
+    const levels: Record<string, number> = {};
+    for (const tile of this.storedTiles()) {
+      if (tile.ownerId !== settlementId || !tile.buildingType) continue;
+      levels[tile.buildingType] = Math.max(levels[tile.buildingType] ?? 0, tile.buildingLevel ?? 1);
     }
     return levels;
   }

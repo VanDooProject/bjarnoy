@@ -215,34 +215,73 @@ public class RiverStreamTests
             var byCoord = island.RiverTiles.ToDictionary(t => t.Coord);
             foreach (var tile in island.RiverTiles.Where(t => t.Width == RiverWidth.Widen && t.Shape == RiverTileShape.Straight))
             {
-                // Tiles above it in the run (a run is a pure chain up to its spring).
-                var above = 0;
+                // The run it sits in (a run is a pure chain up to its spring), spring first.
+                var run = new List<RiverTile> { tile };
                 var up = tile;
                 while (up.InDirections.Count > 0 && byCoord.TryGetValue(Step(up.Coord, up.InDirections[0]), out var upstream))
                 {
                     up = upstream;
-                    above++;
+                    run.Insert(0, upstream);
                 }
+
+                var above = run.Count - 1;
 
                 // Tiles below it up to (excluding) the confluence or mouth the run feeds.
                 // (A run that hands its water to a bog creek ends at that tile.)
-                var below = 0;
                 var cursor = tile;
-                while (byCoord.TryGetValue(Step(cursor.Coord, cursor.OutDirection!.Value), out var next)
-                    && next.Shape != RiverTileShape.Confluence && next.Shape != RiverTileShape.Mouth)
+                RiverTile? end = null;
+                while (byCoord.TryGetValue(Step(cursor.Coord, cursor.OutDirection!.Value), out var next))
                 {
-                    below++;
+                    if (next.Shape == RiverTileShape.Confluence || next.Shape == RiverTileShape.Mouth)
+                    {
+                        end = next;
+                        break;
+                    }
+
+                    run.Add(next);
                     cursor = next;
                 }
 
-                var runLength = above + 1 + below;
+                var runLength = run.Count;
                 checkedWidenings++;
                 Assert.True(above >= 1, $"seed {seed}: widening {tile.Coord} is the spring");
+
+                // The documented fallback: a run into a sea mouth with no Straight tile in its second half widens
+                // on the Straight tile nearest the mouth instead (the mouth tile itself never widens).
+                var secondHalfHasStraight = run.Skip(Math.Max(1, (runLength + 1) / 2)).Any(t => t.Shape == RiverTileShape.Straight);
+                if (end?.Shape == RiverTileShape.Mouth && !secondHalfHasStraight)
+                {
+                    continue;
+                }
+
                 Assert.True(2 * above >= runLength, $"seed {seed}: widening {tile.Coord} at {above} of a {runLength}-tile run is in the first half");
             }
         }
 
         Assert.True(checkedWidenings > 5, $"only {checkedWidenings} widening straights across the seeds");
+    }
+
+    [Fact]
+    public void Every_green_island_sea_mouth_is_a_delta()
+    {
+        var mouths = 0;
+        foreach (var (seed, island, sampler) in GreenIslands())
+        {
+            var tiles = island.Tiles.ToHashSet();
+            foreach (var tile in island.RiverTiles.Where(t => t.Shape == RiverTileShape.Mouth))
+            {
+                var where = $"seed {seed} mouth {tile.Coord}";
+                mouths++;
+                Assert.Equal(RiverWidth.River, tile.Width);
+                var inflow = Assert.Single(tile.InDirections);
+
+                // The sea lies straight ahead of the single inflow: open sea, not island land and not bog water.
+                var ahead = Step(tile.Coord, (TileOrientation)(((int)inflow + 3) % 6));
+                Assert.False(tiles.Contains(ahead) || sampler.IsLand(ahead), $"{where}: no sea straight ahead of the inflow");
+            }
+        }
+
+        Assert.True(mouths > 20, $"only {mouths} mouths across the seeds");
     }
 
     [Fact]

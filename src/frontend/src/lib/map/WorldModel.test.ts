@@ -952,6 +952,16 @@ describe('WorldModel.previewIslandTiles', () => {
 // it's meaningful (an island that is both foreign *and* oversized), since
 // either bug alone can hide the other if only one is checked.
 describe('WorldModel.previewCropTiles', () => {
+  it('keeps the requested radius when the flood fill hits its safety bound, rather than the landing radius', () => {
+    // A centre on an island that reaches past PREVIEW_ISLAND_FLOOD_MAX_RADIUS: the showcase frame's
+    // 34-hex crop used to come back as the landing page's 7-hex disc.
+    const model = new WorldModel(1);
+    model.isLand = () => true;
+    const center = { q: 0, r: 0 };
+    expect(model.previewCropTiles(center, 34)).toHaveLength(hexesInRadius(center, 34).length);
+    expect(model.previewCropTiles(center)).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+  });
+
   it('excludes a foreign island within PREVIEW_ISLAND_RADIUS — the L5 property', () => {
     const model = new WorldModel(1);
     const center: AxialCoord = { q: 0, r: 0 };
@@ -986,6 +996,18 @@ describe('WorldModel.previewCropTiles', () => {
     // deliberately small framing (docs/design/img/but_building_on_map.png)
     // rather than "however big the connected landmass actually is".
     expect(tiles).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+  });
+
+  it('takes an optional wider radius, served from the same cached landmass without truncation', () => {
+    const model = new WorldModel(1);
+    const center: AxialCoord = { q: 0, r: 0 };
+    // A finite island (an unbroken one would hit the flood-fill bound and fall back to the narrow radius).
+    model.isLand = (q: number, r: number) => hexDistance(center, { q, r }) <= 30;
+    const wide = 11;
+    expect(PREVIEW_ISLAND_FLOOD_MAX_RADIUS).toBeGreaterThan(wide);
+    // Narrow first, so a radius-keyed cache would hand the wide call a truncated set.
+    expect(model.previewCropTiles(center)).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+    expect(model.previewCropTiles(center, wide)).toHaveLength(hexesInRadius(center, wide).length);
   });
 
   it('both at once: a foreign, also-oversized island neither leaks in nor gets the crop drawn past its own radius', () => {

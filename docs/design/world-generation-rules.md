@@ -150,7 +150,10 @@ Every one of them keeps the 24-hex gap from green land and from each other.
   streams join, or on a straight tile chosen at random within the second half of the stream's run before it
   must be river-width (sea mouth, bog, meeting a river). Never in the first half, and not always at the very
   last tile of a long run (that reads as artificial); the second half, rather than the last quarter, leaves
-  enough river-width tiles for the river buildings (Sawmill, Crop Mill, Hammer Forge).
+  enough river-width tiles for the river buildings (Sawmill, Crop Mill, Hammer Forge). The one exception is a
+  run into a sea mouth with no Straight tile in its second half: it widens on the Straight tile nearest the mouth.
+- On green islands every river reaches the sea head-on: the sea mouth is river width with the sea straight ahead
+  of its single inflow, so it always draws as a delta.
 - Springs are chosen as far apart from each other as possible so there are few parallel river runs.
 
 The old collision rule's limitation (about 2% of river mouths inland, a third river dropped at a full

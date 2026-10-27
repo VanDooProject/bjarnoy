@@ -28,6 +28,8 @@
     "auto": "Automatisch",
     "on": "An",
     "off": "Aus",
+    "antialias": "Kantenglättung",
+    "antialiasHint": "Glattere Grenzen und Umrisse auf der Karte. Aus ist auf langsamen Geräten schneller; gilt beim nächsten Öffnen der Karte.",
     "status": {
       "forcedOn": "An (auf diesem Gerät)",
       "forcedOff": "Aus (auf diesem Gerät)",

@@ -137,6 +137,16 @@
   work, lower default cost) so the *same* code is fast everywhere, rather
   than detecting the test/CI environment and skipping expensive work only
   there.
+- the one allowed exception is an **explicit, per-spec** opt-out that flips a
+  switch a real user or developer can flip too, set from the spec's side, with
+  no app code knowing it is under test: `test.use({ mapLayers: { water: false, fog: false } })`
+  (the water/fog debug switches) and the suite's `antialias: 'off'` (the player's
+  "Smooth edges" setting), both in `src/frontend/e2e/fixtures.ts`. Water/fog
+  opt-out only for specs whose assertions are DOM/game state; never for
+  water/fog/shore specs or anything that judges map pixels as an image
+  (`src/frontend/src/test/e2eWaterOptOut.test.ts` enforces this; a spec that plays
+  real motion needs a recorded user approval there). It doesn't
+  replace fixing real perf problems for slow devices.
 
 # interaction between u (AI) and user (me)
 
@@ -147,6 +157,11 @@
 - ask questions if anything is unclear or you need more context
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
+- artifacts that go through rounds (UX reviews, design options, motion
+  demos, ...) keep every earlier round viewable: publish the new round as
+  its own page or section in the same artifact and link the rounds to each
+  other — never overwrite or delete an earlier round's content when
+  publishing the next one, I still compare against it
 
 # sandbox tooling (Claude Code cloud sessions)
 - the cloud sandbox does **not** come with the .NET SDK preinstalled, and

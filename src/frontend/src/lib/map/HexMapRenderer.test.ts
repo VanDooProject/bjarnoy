@@ -4,10 +4,12 @@ import {
   clampAnimationDeltaMs,
   fadeAlphaAt,
   hoverSubjectFor,
+  isIslandNearViewport,
   isWaypointTap,
   landfallBurstFrames,
   loadProgressFraction,
   plotRippleFrames,
+  previewDrawRadius,
   previewFitZoom,
   previewIslandBounds,
   READY_LOAD_STATE,
@@ -249,6 +251,18 @@ describe('previewIslandBounds', () => {
 // contract change here is the fix, not incidental — the tests below were
 // updated to match rather than left calling a signature that no longer
 // exists.
+describe('previewDrawRadius', () => {
+  it('defaults to the fit radius, so the landing page and docs islands are unchanged', () => {
+    expect(previewDrawRadius({})).toBe(PREVIEW_ISLAND_RADIUS);
+    expect(previewDrawRadius({ previewRadius: 13 })).toBe(13);
+  });
+
+  it('draws a wider radius than the camera fits, but never a narrower one', () => {
+    expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 34 })).toBe(34);
+    expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 5 })).toBe(13);
+  });
+});
+
 describe('previewFitZoom', () => {
   // A regular hexagonal blob of tile centres, all land — stands in for "some
   // symmetric island of the given radius" wherever a test only cares about
@@ -918,5 +932,29 @@ describe('waterMaskTerrainFor', () => {
     expect(terrain.noFoam!(5, 5)).toBe(false);
     // The worker is handed the same hexes as a list.
     expect(rivers.riverMouthHexKeys()).toHaveLength(1);
+  });
+});
+
+describe('isIslandNearViewport', () => {
+  const viewport = { width: 1000, height: 600 };
+
+  it('keeps an island centred on screen', () => {
+    expect(isIslandNearViewport({ x: 500, y: 300 }, viewport, 100)).toBe(true);
+  });
+
+  it('keeps an island whose centre is off screen but within its reach of the edge', () => {
+    expect(isIslandNearViewport({ x: -90, y: 300 }, viewport, 100)).toBe(true);
+    expect(isIslandNearViewport({ x: 500, y: 690 }, viewport, 100)).toBe(true);
+  });
+
+  it('culls an island further than its reach past any edge', () => {
+    expect(isIslandNearViewport({ x: -101, y: 300 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 1101, y: 300 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 500, y: -101 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 500, y: 701 }, viewport, 100)).toBe(false);
+  });
+
+  it('culls nothing before the viewport has a size', () => {
+    expect(isIslandNearViewport({ x: 99999, y: 99999 }, { width: 0, height: 0 }, 100)).toBe(true);
   });
 });

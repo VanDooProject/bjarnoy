@@ -21,6 +21,8 @@ test('building a dockyard from the ring menu on coastal water places it', async 
   // docs/design/economy.md's ladder) — level the longhouse up first, same
   // approach shrine-build.spec.ts uses for the shrine's own gate.
   await settlement.setSettlementLevel(8);
+  // ...and stand its prerequisite, a level-5 fishing hut (BuildingCatalogue.cs Prerequisites).
+  await settlement.standBuildings([{ type: 'fishinghut', level: 5 }]);
 
   // Find a real owned coastal-water hex within the settlement's claim radius
   // — same approach as shrine-build.spec.ts's grass-hex search, but for
