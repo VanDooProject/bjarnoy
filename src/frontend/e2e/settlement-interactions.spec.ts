@@ -164,7 +164,11 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
 
-    const target = await settlement.findHex({ terrain: 'sand' });
+    // Sand only lies on the shore, and a start position keeps two hexes from the sea: a tower (unlocked at longhouse 3,
+    // BuildingCatalogue.cs UnlockLevels) pushes the realm onto the beach.
+    await settlement.setSettlementLevel(3);
+    const reach = await settlement.standTowerTowardCoast();
+    const target = await settlement.findHex({ terrain: 'sand', reach });
 
     await settlement.clickHex(target);
 
