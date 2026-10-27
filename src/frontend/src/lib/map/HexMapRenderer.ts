@@ -32,7 +32,7 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -51,6 +51,7 @@ import {
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
+import { attachFramePacing } from './framePacing';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
@@ -1551,6 +1552,7 @@ const ARMY_RESYNC_MS = 450;
 
 export class HexMapRenderer {
   private app: Application | null = null;
+  private detachFramePacing?: () => void;
   private world = new Container();
   private terrainBase = createSpriteLayer();
   private terrainTop = createSpriteLayer();
@@ -2192,6 +2194,8 @@ export class HexMapRenderer {
     app.stage.addChild(this.world, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
 
     app.ticker.add(this.onTick);
+    // See framePacing.ts: a loop whose frames outlast the vsync interval otherwise starves input and timers.
+    this.detachFramePacing = attachFramePacing(app.ticker);
 
     this.applyCameraTransform();
     this.rebuildAll();
@@ -4804,6 +4808,18 @@ export class HexMapRenderer {
   }
 
   /**
+   * Resolves once the renderer has drawn a frame after this call (at once if it is not mounted). Two animation frames are no
+   * guarantee of one: the render loop is paced when its frames are expensive (see `framePacing.ts`), so a spec that has to
+   * look at what was drawn - a screenshot after `forceRebuild` - waits for this instead of counting `requestAnimationFrame`s.
+   */
+  whenFrameRendered(): Promise<void> {
+    const ticker = this.app?.ticker;
+    if (!ticker) return Promise.resolve();
+    // After the render, which the Application runs at LOW.
+    return new Promise((resolve) => ticker.addOnce(() => resolve(), undefined, UPDATE_PRIORITY.UTILITY));
+  }
+
+  /**
    * Forces an immediate rebuild without moving the camera — rebuildAll is
    * otherwise only ever triggered by cameraMovedEnough() past a real pan/zoom
    * threshold (see scheduleCull), so something that changes rendering
@@ -5430,6 +5446,8 @@ export class HexMapRenderer {
     this.endZoomActivity();
     this.pinch.clear();
     this.app?.ticker.remove(this.onTick);
+    this.detachFramePacing?.();
+    this.detachFramePacing = undefined;
     // app.destroy({ children: true }) destroys everything still attached to
     // the stage, but the fog layers' meshes are — see mount()'s addChild —
     // so this covers them too; only the mask textures they hold are
