@@ -611,6 +611,32 @@ function riverTile(at: AxialCoord, shape: RiverTile['shape']): RiverTile {
   return { q: at.q, r: at.r, shape, inDirections: [], outDirection: null };
 }
 
+describe('WorldModel.riverMouthHexKeys / riverRevision', () => {
+  it('lists exactly the mouth tiles, of any width, and nothing else', () => {
+    const model = new WorldModel(20260825);
+    model.setRiverTiles([
+      riverTile({ q: 1, r: 2 }, 'mouth'),
+      { ...riverTile({ q: 3, r: 4 }, 'mouth'), width: 'stream' },
+      riverTile({ q: 5, r: 6 }, 'straight'),
+      riverTile({ q: 7, r: 8 }, 'bend'),
+    ]);
+    // Same packing as buildingHexKeys (and the bake worker's hexKey).
+    const key = (q: number, r: number) => ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
+    expect(model.riverMouthHexKeys().sort()).toEqual([key(1, 2), key(3, 4)].sort());
+  });
+
+  it('bumps riverRevision whenever the river set is replaced', () => {
+    const model = new WorldModel(20260825);
+    const before = model.riverRevision;
+    model.setRiverTiles([riverTile({ q: 1, r: 2 }, 'mouth')]);
+    expect(model.riverRevision).toBeGreaterThan(before);
+    const after = model.riverRevision;
+    model.setRiverTiles([]);
+    expect(model.riverRevision).toBeGreaterThan(after);
+    expect(model.riverMouthHexKeys()).toEqual([]);
+  });
+});
+
 // Which art family/orientation a Sawmill/Crop Mill renders with is
 // textures.ts's riverBuildingArtFor now (a pure function, unit-tested there
 // against real in/out directions) — WorldModel no longer has its own

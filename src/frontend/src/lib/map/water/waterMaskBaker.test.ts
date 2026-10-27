@@ -28,7 +28,7 @@ function regionFor(halfWidth: number): WaterMaskRegion {
 /** A stand-in worker that records what was posted and lets the test answer by hand. */
 class FakeWorker {
   static last: FakeWorker | null = null;
-  posted: { id: number; region: WaterMaskRegion; buildingHexes?: number[] }[] = [];
+  posted: { id: number; region: WaterMaskRegion; buildingHexes?: number[]; noFoamHexes?: number[] }[] = [];
   onmessage: ((event: { data: unknown }) => void) | null = null;
   onerror: (() => void) | null = null;
   terminated = false;
@@ -36,7 +36,7 @@ class FakeWorker {
   constructor() {
     FakeWorker.last = this;
   }
-  postMessage(request: { id: number; region: WaterMaskRegion; buildingHexes?: number[] }) {
+  postMessage(request: { id: number; region: WaterMaskRegion; buildingHexes?: number[]; noFoamHexes?: number[] }) {
     this.posted.push(request);
   }
   terminate() {
@@ -45,7 +45,7 @@ class FakeWorker {
   /** Answers request `id` with a mask whose width is distinctive, so the test can tell them apart. */
   respond(id: number, width: number) {
     this.onmessage?.({
-      data: { id, data: new Uint8Array(width * 4), width, height: 1, taint: new Uint8Array(width), bakeMs: 1 },
+      data: { id, data: new Uint8Array(width * 4), width, height: 1, taint: new Uint8Array(width), noFoam: new Uint8Array(width), bakeMs: 1 },
     });
   }
 }
@@ -85,6 +85,21 @@ describe('WaterMaskBaker', () => {
     const region = regionFor(400);
     baker.bake({ ...input(region), buildingHexes: [11, 22] }, LAND_EVERYWHERE);
     expect(FakeWorker.last!.posted[0].buildingHexes).toEqual([11, 22]);
+  });
+
+  it('sends the river-mouth hexes along, and hands the revision they were read at back with the result', () => {
+    installFakeWorker();
+    const seen: { revision: number; noFoamLength: number }[] = [];
+    const baker = new WaterMaskBaker((mask, _region, _ms, _wasted, revision) =>
+      seen.push({ revision, noFoamLength: mask.noFoam.length }),
+    );
+    baker.bake({ ...input(regionFor(400)), noFoamHexes: [5, 6], riverRevision: 3 }, LAND_EVERYWHERE);
+    expect(FakeWorker.last!.posted[0].noFoamHexes).toEqual([5, 6]);
+
+    FakeWorker.last!.respond(FakeWorker.last!.posted[0].id, 7);
+    // The response's noFoam buffer is installed on the rebuilt mask, and the
+    // revision is the one the request was made under, not a later one.
+    expect(seen).toEqual([{ revision: 3, noFoamLength: 7 }]);
   });
 
   it('hands the bake to the worker and applies the result when it arrives', () => {

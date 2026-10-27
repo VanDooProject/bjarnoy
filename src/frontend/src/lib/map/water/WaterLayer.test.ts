@@ -31,6 +31,7 @@ function maskOver(minX: number, minY: number, maxX: number, maxY: number): Water
     height: region.height,
     region,
     taint: new Uint8Array(region.width * region.height),
+    noFoam: new Uint8Array(region.width * region.height),
   };
 }
 

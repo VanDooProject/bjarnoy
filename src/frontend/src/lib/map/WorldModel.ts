@@ -241,7 +241,7 @@ export function floodFillLandmass(
  * Good for |q|, |r| < 32768 — about 2000 times the radius of any world the
  * generator places islands in, and far past what a player could pan to.
  */
-function terrainKey(q: number, r: number): number {
+export function terrainKey(q: number, r: number): number {
   return ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
 }
 
@@ -315,6 +315,13 @@ export class WorldModel {
   private previewIslandFloodCache = new Map<string, AxialCoord[] | null>();
   /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
   private riverTiles = new Map<string, RiverTile>();
+  /**
+   * Bumped whenever the river set changes (`setRiverTiles`, `addRiverTiles`).
+   * The renderer records it when it bakes the water mask — whose no-foam field
+   * depends on where the river mouths are — and rebakes when it has moved,
+   * the same way it does for `isWastedRevealed`.
+   */
+  riverRevision = 0;
   /** The island bogland known so far (live mode: every island at once; demo mode: island by island), by coordinate — see `setBogTiles`. */
   private bogByHex = new Map<string, BogTile>();
   /** The lake decorations (fish weir, boats) the buildings on the shores ask for, by coordinate — see `lakeProps.ts` and `recomputeLakeProps`. */
@@ -411,6 +418,7 @@ export class WorldModel {
    */
   setRiverTiles(tiles: RiverTile[]) {
     this.riverTiles = new Map(tiles.map((t) => [coordKey(t), t]));
+    this.riverRevision++;
   }
 
   /**
@@ -426,6 +434,7 @@ export class WorldModel {
     for (const tile of tiles) {
       this.riverTiles.set(coordKey(tile), tile);
     }
+    this.riverRevision++;
   }
 
   getRiverTile(q: number, r: number): RiverTile | undefined {
@@ -975,8 +984,26 @@ export class WorldModel {
     return keys;
   }
 
-  /** Everything an island's picture is made of: land and the bog lakes among it (not the sea). */
-  private isLandOrLake(q: number, r: number): boolean {
+  /**
+   * Packed keys (`terrainKey`) of every river-mouth hex, for the water-mask
+   * bake: the worker cannot derive rivers from the seed, so — like
+   * `buildingHexKeys` — the few of them cross as a list, and the sea's
+   * shoreline foam is suppressed around each.
+   */
+  riverMouthHexKeys(): number[] {
+    const keys: number[] = [];
+    for (const tile of this.riverTiles.values()) {
+      if (tile.shape === 'mouth') keys.push(terrainKey(tile.q, tile.r));
+    }
+    return keys;
+  }
+
+  /**
+   * Everything an island's picture is made of: land and the bog lakes among it (not the sea).
+   * Also what the water mask calls land: a bog lake is drawn by its own art, never by the sea's
+   * water shader, so the shader (foam included) must stop at the sea's coast.
+   */
+  isLandOrLake(q: number, r: number): boolean {
     return this.isLand(q, r) || this.terrainOf(q, r) === 'lake';
   }
 

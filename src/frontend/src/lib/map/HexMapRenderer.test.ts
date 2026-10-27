@@ -21,7 +21,9 @@ import {
   type MapLoadState,
   type TextureLoadDeps,
   clientToCanvasPoint,
+  waterMaskTerrainFor,
 } from './HexMapRenderer';
+import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
 import type { TileTextures } from './textures';
@@ -893,6 +895,44 @@ describe('clientToCanvasPoint', () => {
   it('falls back to 1:1 for a canvas with no layout size', () => {
     const rect = { left: 10, top: 10, width: 0, height: 0 };
     expect(clientToCanvasPoint({ x: 30, y: 40 }, rect, { width: 0, height: 0 })).toEqual({ x: 20, y: 30 });
+  });
+});
+
+describe('waterMaskTerrainFor', () => {
+  // A bog lake beside moss, both well inland. The lake is water to the game, but the water mask
+  // must call it land: it is drawn by its own art, and the sea's shader (shore foam above all)
+  // used to ring every lake in white on the inline bake path.
+  const world = new StaticWorldModel([
+    { q: 0, r: 0, terrain: 'lake' },
+    { q: 1, r: 0, terrain: 'bog' },
+  ]);
+
+  it.each(['settlement', 'world'] as const)('counts a bog lake as land in %s mode', (mode) => {
+    const terrain = waterMaskTerrainFor(world, mode);
+    expect(world.isLand(0, 0)).toBe(false);
+    expect(terrain.isLand(0, 0)).toBe(true);
+    expect(terrain.isLand(1, 0)).toBe(true);
+  });
+
+  it.each(['settlement', 'world'] as const)('still counts the sea as water in %s mode', (mode) => {
+    expect(waterMaskTerrainFor(world, mode).isLand(5, 5)).toBe(false);
+  });
+
+  it.each(['settlement', 'world'] as const)('answers noFoam for a river mouth only, in %s mode', (mode) => {
+    const rivers = new StaticWorldModel([
+      { q: 0, r: 0, terrain: 'grass' },
+      { q: 1, r: 0, terrain: 'grass' },
+    ]);
+    rivers.setRivers([
+      { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null },
+      { q: 1, r: 0, shape: 'straight', inDirections: ['NE'], outDirection: 'SW' },
+    ]);
+    const terrain = waterMaskTerrainFor(rivers, mode);
+    expect(terrain.noFoam!(0, 0)).toBe(true);
+    expect(terrain.noFoam!(1, 0)).toBe(false);
+    expect(terrain.noFoam!(5, 5)).toBe(false);
+    // The worker is handed the same hexes as a list.
+    expect(rivers.riverMouthHexKeys()).toHaveLength(1);
   });
 });
 
