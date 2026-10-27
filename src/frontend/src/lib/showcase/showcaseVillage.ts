@@ -34,14 +34,15 @@ export const SHOWCASE_VILLAGE_OWNER = 'showcase-village';
 export const SHOWCASE_PREVIEW_RADIUS = 13;
 
 /**
- * Radius (hexes) of what the frame draws, wider than the camera fit so the crop's
- * hexagonal outline lies outside the frame. The fit leaves the frame's short axis
- * with slack (the fitted disc is ~3x wider than tall, the frame is not), so the
- * frame's corners reach ~26 hexes from the centre on desktop (570x480) and ~30 on a
- * phone (390x405) at the fit radius; the rest is a cushion for the fitted island's
- * off-centre bounds and for panning in explore mode.
+ * Radius (hexes) of what the frame draws (land and sea), wider than the camera fit
+ * so the drawn disc's hexagonal outline lies outside the frame. The fit leaves the
+ * frame's short axis with slack (the fitted disc is ~3x wider than tall, the frame
+ * is not), so the frame's corners reach ~26 hexes from the centre on desktop
+ * (570x480) and ~30 on a phone (390x405) at the fit zoom. The confined camera's
+ * centre can move up to the edge of the island's land inside the fit radius (13
+ * hexes), so a phone corner can reach ~43; the rest is a cushion.
  */
-export const SHOWCASE_RENDER_RADIUS = 34;
+export const SHOWCASE_RENDER_RADIUS = 48;
 
 /** How far from `near` village sites are sampled, and the grid step between samples (bounds the scoring cost to a few hundred candidates). */
 const SITE_SEARCH_RADIUS = 60;

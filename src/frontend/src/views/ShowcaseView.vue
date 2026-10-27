@@ -26,10 +26,11 @@ const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // A fixed, known-good archipelago rather than a fresh roll on every page load.
-// Picked by scoring 3000 seeds (20260000..20262999) on the "one view" frame: its
-// island frames a big bog lake and moss land, a river-side village, a giant
-// mountain and a sand coast with seals, with little forest filler (~8%).
-const DEFAULT_SEED = 20261823;
+// Picked by scoring 3000 seeds (20260000..20262999) on the "one view" frame, then
+// moved one seed on by hand when the river generator started meandering: its
+// island frames a big bog lake and moss land, a village between the rivers and
+// the coast (with a dockyard), a giant mountain and a sand coast.
+const DEFAULT_SEED = 20261824;
 // The whole default world: islands are ~150 hexes across and ~100+ apart, so a
 // small disc around the origin is usually open sea. Listing the labels costs
 // nothing like DEMO_MASK_RADIUS's fog mask (this page never fogs — see
@@ -91,13 +92,8 @@ watch(
 // the usual "click to interact" pattern for maps embedded in a page.
 const exploring = ref(false);
 
-// Same opt-in for the village frame, which additionally starts camera-locked
-// (fit to the island crop): exploring unlocks zoom/pan so the buildings can be
-// looked at up close, and finishing re-locks it.
-const villageCanvas = ref<InstanceType<typeof SettlementCanvas> | null>(null);
-const villageExploring = ref(false);
-watch(villageExploring, (on) => villageCanvas.value?.renderer?.updateOptions({ lockCamera: !on }));
-watch(seed, () => (villageExploring.value = false));
+// The village frame needs no opt-in: its camera is confined to the island
+// (`confine-camera`), so the visitor can pan and zoom freely without leaving it.
 
 function goPlay() {
   router.push('/');
@@ -193,22 +189,19 @@ const ENGINEERING: EngineeringCard[] = [
 
       <!-- One view -->
       <section id="one-view" class="one-view">
-        <div class="one-view-frame" :class="{ exploring: villageExploring }">
+        <div class="one-view-frame">
           <SettlementCanvas
-            ref="villageCanvas"
             :key="seed"
             :world-model="heroModel"
             :player-id="PLAYER_ID"
             :preview-center="islandCenter"
             :preview-radius="SHOWCASE_PREVIEW_RADIUS"
             :preview-render-radius="SHOWCASE_RENDER_RADIUS"
-            lock-camera
+            preview-sea
+            confine-camera
             hide-settlement-badge
             background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
           />
-          <button type="button" class="explore" @click="villageExploring = !villageExploring">
-            {{ villageExploring ? t('showcase.hero.exploreDone') : t('showcase.oneView.explore') }}
-          </button>
         </div>
         <div class="one-view-copy">
           <h2>{{ t('showcase.oneView.title') }}</h2>
@@ -358,9 +351,8 @@ section {
   border: 1px solid var(--panel-border);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
 }
-/* See `exploring` in the script: the canvas ignores the pointer until opted in. */
-.map-frame:not(.exploring) :deep(.map-container),
-.one-view-frame:not(.exploring) :deep(.map-container) {
+/* See `exploring` in the script: the hero canvas ignores the pointer until opted in. */
+.map-frame:not(.exploring) :deep(.map-container) {
   pointer-events: none;
 }
 .explore {

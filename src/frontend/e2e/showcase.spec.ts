@@ -91,4 +91,28 @@ test.describe('showcase page', { tag: '@g2' }, () => {
     await page.mouse.wheel(0, 400);
     await expect.poll(() => view.scrollTop()).toBeGreaterThan(0);
   });
+
+  test('the village frame is always explorable: no opt-in button, the wheel and drag go to the map', async ({
+    page,
+  }) => {
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    const frame = page.locator('#one-view .one-view-frame');
+    await expect(frame.getByRole('button')).toHaveCount(0);
+
+    const view = new ScrollableView(page, '.showcase');
+    await frame.hover(); // scrolls the frame into view first
+    const before = await view.scrollTop();
+    await page.mouse.wheel(0, 400);
+    const box = await frame.boundingBox();
+    if (!box) throw new Error('village frame has no box');
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 2000, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    // Give a would-be page scroll a frame to land before asserting it didn't.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+    expect(await view.scrollTop()).toBe(before);
+  });
 });
