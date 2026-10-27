@@ -35,6 +35,7 @@ import { resourceName } from '../../i18n/catalogueNames';
 import { formatBuildTime } from '../../lib/map/ringCatalogue';
 import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
+import { ringFootprint } from '../../lib/map/markerOcclusion';
 import { motionEnabled } from '../../lib/motion';
 import * as ringMotion from '../../lib/map/ringMotion';
 import {
@@ -200,6 +201,11 @@ const emit = defineEmits<{
   // action id — GuidancePointer.vue aims at the enabled guided building's
   // spot for the onboarding ring (frame 3, "This one fits {terrain}").
   layout: [spots: Record<string, { x: number; y: number }>];
+  // The circle the open ring covers on screen (hub to the far edge of the
+  // farthest bubble, outer lane included); re-emitted as the buildings lane
+  // opens and closes. MapView hands it to the renderer so canvas markers
+  // beneath the ring fade out.
+  footprint: [circle: { x: number; y: number; r: number }];
 }>();
 
 /** [] = root · ['build'] = categories · ['build', catId] = that category's buildings. */
@@ -371,6 +377,19 @@ const lane2 = computed(() => {
     color: category.color,
   }));
 });
+
+const footprint = computed(() => {
+  const backIndex = atRoot.value ? -1 : props.categories.length;
+  const bubbles = layout.value.lane1.map((spot, i) => ({
+    x: spot.x,
+    y: spot.y,
+    // The reserved back slot stays full size even when the rest collapse to dots.
+    r: (layout.value.collapsed && i !== backIndex ? DOT : BUB1) / 2,
+  }));
+  if (lane2.value.length > 0) for (const b of lane2.value) bubbles.push({ x: b.x, y: b.y, r: BUB2 / 2 });
+  return ringFootprint({ x: props.x, y: props.y }, bubbles, HUB / 2);
+});
+watch(footprint, (circle) => emit('footprint', circle), { immediate: true });
 
 const RESOURCE_COLORS = { wood: 'var(--wood)', stone: 'var(--stone)', food: 'var(--food)', iron: 'var(--iron)' } as const;
 const RESOURCE_KEYS = ['wood', 'stone', 'food', 'iron'] as const;

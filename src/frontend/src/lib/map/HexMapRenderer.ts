@@ -32,6 +32,12 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
+import {
+  circleIntersectsRect,
+  circlesIntersect,
+  markerFadeStep,
+  type OcclusionCircle,
+} from './markerOcclusion';
 import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
@@ -1885,6 +1891,11 @@ export class HexMapRenderer {
   /** Dial revealed by a touch/pen tap (acts as hovered); see `handleDialTap`. */
   private tapRevealKey: string | null = null;
   private tapRevealAtMs = 0;
+  /** Screen-space circle (canvas px) of an open ring menu; markers beneath it fade out. See `setMarkerOcclusion`. */
+  private markerOcclusion: OcclusionCircle | null = null;
+  /** Per-marker visibility 0..1 (`markerFadeStep`): dials keyed by `coordKey`, badges by settlement id. Absent = 1. */
+  private dialVisibility = new Map<string, number>();
+  private badgeVisibility = new Map<string, number>();
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
   // top of the canvas, but this renderer's own pointer tracking is a
   // window-level listener (see onPointerMove below) that keeps resolving a
@@ -3036,6 +3047,7 @@ export class HexMapRenderer {
     const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
     const targets = (this.constructionDials ?? [])
       .filter((d) => d.rejectedAtMs === undefined)
+      .filter((d) => !this.isDialOccluded(this.dialScreenPoint(d.coord), mapScale))
       .map((d) => {
         const key = coordKey(d.coord);
         const p = this.dialScreenPoint(d.coord);
@@ -4623,16 +4635,37 @@ export class HexMapRenderer {
       // (see above), so this only needs a small breathing-room margin.
       const pillY = top.y - 10 * zoomScale - pillH;
 
+      // Beneath an open ring menu the badge fades out instead of showing through the bubbles.
+      const occluded =
+        this.markerOcclusion !== null &&
+        circleIntersectsRect(this.markerOcclusion, { x: pillX, y: pillY, w: pillW, h: pillH });
+      const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
+      const vis = markerFadeStep(
+        this.badgeVisibility.get(settlement.id) ?? 1,
+        occluded,
+        dtMs,
+        animationPreference.reducedMotion,
+      );
+      if (vis < 1) this.badgeVisibility.set(settlement.id, vis);
+      else this.badgeVisibility.delete(settlement.id);
+      if (vis <= 0) {
+        nameLabel.visible = false;
+        suffixLabel.visible = false;
+        continue;
+      }
+      nameLabel.alpha = vis;
+      suffixLabel.alpha = 0.6 * vis;
+
       this.markerLayer
         .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
-        .fill({ color: 0x08121a, alpha: 0.8 })
-        .stroke({ width: 1, color, alpha: 0.9 });
+        .fill({ color: 0x08121a, alpha: 0.8 * vis })
+        .stroke({ width: 1, color, alpha: 0.9 * vis });
       // Reference mockup: a small hex (not a round dot), matching the same
       // pointy-top hexagon TopBar's logo badge and ResourceBar's icons use
       // elsewhere in the HUD, not the isometric tile's own hex shape.
       this.markerLayer
         .poly(hexPoints(pillX + padX + dotR, pillY + pillH / 2, dotR))
-        .fill({ color });
+        .fill({ color, alpha: vis });
       nameLabel.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
       suffixLabel.position.set(nameLabel.x + nameLabel.width + nameGap, pillY + pillH / 2);
       nameLabel.visible = true;
@@ -4684,29 +4717,37 @@ export class HexMapRenderer {
       let hoverT = this.dialHover.get(key) ?? 0;
       // On the dial's drawn disc (it sits half a tile above its hex, so the hex alone is the wrong hit test) or on its hex.
       const r0 = dialRadiusPx(dialScale(mapScale, hoverT, reject?.scale ?? 1).zs, reject?.scale ?? 1);
+      // Beneath an open ring: fade out and don't react to hover (or a tap reveal).
+      const occluded = this.isDialOccluded({ x: cx, y: cy }, mapScale);
+      const vis = markerFadeStep(this.dialVisibility.get(key) ?? 1, occluded, dtMs, reduced);
+      if (vis < 1) this.dialVisibility.set(key, vis);
+      else this.dialVisibility.delete(key);
       const hovered =
         !reject &&
+        !occluded &&
         (this.tapRevealKey === key ||
           (pointer !== null && (Math.hypot(pointer.x - cx, pointer.y - cy) <= r0 || this.hoveredKey === key)));
       hoverT = dialHoverStep(hoverT, hovered, dtMs, reduced);
       if (hoverT > 0) this.dialHover.set(key, hoverT);
       else this.dialHover.delete(key);
-      return { dial, reject, cx, cy, hoverT };
+      return { dial, reject, cx, cy, hoverT, vis };
     });
     for (const key of this.dialHover.keys()) if (!seen.has(key)) this.dialHover.delete(key);
+    for (const key of this.dialVisibility.keys()) if (!seen.has(key)) this.dialVisibility.delete(key);
     if (this.tapRevealKey !== null && !seen.has(this.tapRevealKey)) this.tapRevealKey = null;
     placed.sort((a, b) => a.hoverT - b.hoverT);
-    for (const { dial, reject, cx, cy, hoverT } of placed) {
+    for (const { dial, reject, cx, cy, hoverT, vis } of placed) {
+      if (vis <= 0) continue;
       const progress = dialProgress(dial, nowMs);
       const remaining = dialRemainingSeconds(dial, nowMs);
-      const dAlpha = reject?.alpha ?? 1;
+      const dAlpha = (reject?.alpha ?? 1) * vis;
       const { zs, showLabel } = dialScale(mapScale, hoverT, reject?.scale ?? 1);
       const r = dialRadiusPx(zs, reject?.scale ?? 1);
       const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
 
       if (frame) {
         const fr = r * frame.scale;
-        const a = frame.alpha;
+        const a = frame.alpha * vis;
         g.poly(hexPoints(cx, cy, fr)).fill({ color: 0x08121a, alpha: 0.85 * a });
         g.poly(hexPoints(cx, cy, fr)).fill({ color: CONSTRUCTION_DIAL_ELAPSED_COLOR, alpha: 0.75 * frame.flash * a });
         strokePath(hexPerimeterPath(cx, cy, fr, 1), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, a);
@@ -4744,6 +4785,28 @@ export class HexMapRenderer {
       label.position.set(cx, cy);
       label.visible = true;
     }
+  }
+
+  /** True when a dial centred at `p` (at its resting size) overlaps the open ring's footprint. */
+  private isDialOccluded(p: { x: number; y: number }, mapScale: number): boolean {
+    if (!this.markerOcclusion) return false;
+    const r = dialRadiusPx(dialScale(mapScale, 0).zs);
+    return circlesIntersect(this.markerOcclusion, { x: p.x, y: p.y, r });
+  }
+
+  /**
+   * While a ring menu is open, markers beneath it (construction dials, the
+   * settlement name badge) fade out so they don't show through between its
+   * DOM bubbles. `circle` is the ring's footprint in canvas px; null restores
+   * them. Markers outside the circle are unaffected.
+   */
+  setMarkerOcclusion(circle: OcclusionCircle | null) {
+    this.markerOcclusion = circle;
+  }
+
+  /** Current marker visibility 0..1 (read-only): dials by `coordKey` ("q,r"), badges by settlement id; absent = fully visible. */
+  markerVisibility(): { dials: Record<string, number>; badges: Record<string, number> } {
+    return { dials: Object.fromEntries(this.dialVisibility), badges: Object.fromEntries(this.badgeVisibility) };
   }
 
   private hideUnusedIcons() {
