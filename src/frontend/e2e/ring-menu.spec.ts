@@ -3,6 +3,9 @@ import { distanceFrom, loginTestUser, rectsOf } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage, type ScreenPoint } from './pages';
 
+// DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
+test.use({ mapLayers: { water: false } });
+
 /**
  * Issue #16 "ring menu": covers bugs reported after the initial pass —
  * (1) drilling into a category/building level used to leave the

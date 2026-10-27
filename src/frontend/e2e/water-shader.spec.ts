@@ -42,6 +42,9 @@ import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
+// This spec judges the map's pixels, so it renders with the player's default smooth edges.
+test.use({ antialias: 'on' });
+
 /** A screen-space box centred on a hex, small enough to stay inside it. */
 interface Patch {
   x: number;
