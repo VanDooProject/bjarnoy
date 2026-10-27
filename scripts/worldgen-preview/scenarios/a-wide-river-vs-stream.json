@@ -7,7 +7,7 @@
   "window": { "q": -161, "r": 9, "size": 44 },
   "px": 22,
   "routes": [
-    { "from": [-160, 1], "to": [-167, 8], "army": "enemy" },
+    { "from": [-160, 1], "to": [-163, 3], "army": "enemy" },
     { "from": [-153, 19], "to": [-159, 19], "army": "enemy" }
   ]
 }
