@@ -49,6 +49,7 @@ import {
   dialRemainingSeconds,
   hexPerimeterPath,
   dialScale,
+  dialHoverStep,
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -1873,6 +1874,10 @@ export class HexMapRenderer {
   private suppressNextClick = false;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
+  /** Mouse position in canvas px while hovering the canvas (never set for touch/pen); null otherwise. */
+  private hoverPointer: { x: number; y: number } | null = null;
+  /** Per-dial hover tween progress 0..1 (`dialHoverStep`), keyed by `coordKey`; absent = 0. */
+  private dialHover = new Map<string, number>();
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
   // top of the canvas, but this renderer's own pointer tracking is a
   // window-level listener (see onPointerMove below) that keeps resolving a
@@ -2775,11 +2780,14 @@ export class HexMapRenderer {
     }
     const screen = this.clientToCanvas(e.clientX, e.clientY);
     if (!screen) return;
+    // Hover (and so the dial's grow-on-hover) is a mouse affordance only.
+    this.hoverPointer = e.pointerType === 'mouse' ? screen : null;
     const world = screenToWorld(this.camera, screen, this.viewport);
     this.setHoveredCoord(isoPixelToAxial(world, TILE_W, TILE_H));
   }
 
   private setHoveredCoord(coord: AxialCoord | null) {
+    if (!coord) this.hoverPointer = null;
     const key = coord ? coordKey(coord) : null;
     if (key === this.hoveredKey) return;
     this.hoveredKey = key;
@@ -4605,7 +4613,10 @@ export class HexMapRenderer {
    * exactly with the map (`camera.zoom / SETTLEMENT_DEFAULT_ZOOM`, no floor),
    * so a dial stays the same fraction of a tile at every zoom. The time label
    * is dropped while it would be under `DIAL_MIN_LABEL_PX` on screen (the ring
-   * and progress edge still draw); see `dialScale`. Must run before the unused-label hide loop in
+   * and progress edge still draw); see `dialScale`. Hovering a dial with the
+   * mouse (on the dial itself or on its hex) eases it up to at least its
+   * default-zoom size and shows its time; hovered dials are drawn last so they
+   * sit above their neighbours. Must run before the unused-label hide loop in
    * `rebuildMarkers` since it acquires pooled labels. A completed dial plays
    * `dialFinishFrame` (pop, flash, shockwaves, check mark) and is then pruned.
    */
@@ -4625,20 +4636,42 @@ export class HexMapRenderer {
       d.rejectedAtMs !== undefined ? nowMs - d.rejectedAtMs < DIAL_REJECT_MS : d.endMs === null || nowMs - d.endMs < DIAL_FINISH_MS,
     );
     if (live.length !== this.constructionDials.length) this.constructionDials = live.length > 0 ? live : null;
-    for (const dial of live) {
+    // Hover pass: advance each dial's tween, then draw the hovered ones last.
+    const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
+    const reduced = animationPreference.reducedMotion;
+    const pointer = this.hoverPointer;
+    const seen = new Set<string>();
+    const placed = live.map((dial) => {
       const grid = isoGridPosition(dial.coord, TILE_W, TILE_H);
-      const progress = dialProgress(dial, nowMs);
-      const remaining = dialRemainingSeconds(dial, nowMs);
       const anchor = this.toScreen({
         x: grid.x + TILE_W / 2,
         y: grid.y + TILE_CENTER_Y_OFFSET - lift,
       });
       // A refused build's "…" dial shakes, then shrinks and fades (dialRejectFrame).
       const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs) : null;
-      const dAlpha = reject?.alpha ?? 1;
+      const key = coordKey(dial.coord);
+      seen.add(key);
       const cx = anchor.x + (reject?.offsetX ?? 0);
       const cy = anchor.y;
-      const { zs, showLabel } = dialScale(mapScale, 0, reject?.scale ?? 1);
+      let hoverT = this.dialHover.get(key) ?? 0;
+      // On the dial's drawn disc (it sits half a tile above its hex, so the hex alone is the wrong hit test) or on its hex.
+      const r0 = 22 * dialScale(mapScale, hoverT, reject?.scale ?? 1).zs * 1.25 * (reject?.scale ?? 1);
+      const hovered =
+        pointer !== null &&
+        !reject &&
+        (Math.hypot(pointer.x - cx, pointer.y - cy) <= r0 || this.hoveredKey === key);
+      hoverT = dialHoverStep(hoverT, hovered, dtMs, reduced);
+      if (hoverT > 0) this.dialHover.set(key, hoverT);
+      else this.dialHover.delete(key);
+      return { dial, reject, cx, cy, hoverT };
+    });
+    for (const key of this.dialHover.keys()) if (!seen.has(key)) this.dialHover.delete(key);
+    placed.sort((a, b) => a.hoverT - b.hoverT);
+    for (const { dial, reject, cx, cy, hoverT } of placed) {
+      const progress = dialProgress(dial, nowMs);
+      const remaining = dialRemainingSeconds(dial, nowMs);
+      const dAlpha = reject?.alpha ?? 1;
+      const { zs, showLabel } = dialScale(mapScale, hoverT, reject?.scale ?? 1);
       const r = 22 * zs * 1.25 * (reject?.scale ?? 1);
       const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
 
