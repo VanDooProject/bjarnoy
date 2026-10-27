@@ -21,7 +21,10 @@ const isEnvironmentNoise = (text: string) => text.includes('net::ERR_CONNECTION_
 
 /** Which of the map's optional layers a spec renders. See the `mapLayers` fixture. */
 export interface MapLayers {
-  water: boolean;
+  /** The water shader. Omitted is on. */
+  water?: boolean;
+  /** Both fog quads (out-of-sight tint and never-scouted mist). Omitted is on. */
+  fog?: boolean;
 }
 
 export const test = base.extend<{
@@ -43,7 +46,7 @@ export const test = base.extend<{
   antialias: ['off', { option: true }],
 
   /**
-   * Explicit, per-spec opt-out of the water shader (issue #416), for specs
+   * Explicit, per-spec opt-out of the water shader and/or the fog (issue #416), for specs
    * whose assertions are DOM and game state only: ring navigation and its
    * DOM motion, HUD, cards, the queue drawer. Water is the most expensive pass of a
    * settlement frame on a software renderer (~150 ms of ~300-450 ms), and
@@ -56,6 +59,10 @@ export const test = base.extend<{
    * or fog behaviour -
    * src/test/e2eWaterOptOut.test.ts enforces those rules. Use
    * `test.use({ mapLayers: { water: false } })`.
+   *
+   * Fog (`{ fog: false }`) works the same way through `window.__fogDebug`'s
+   * two mask switches, and is held to the same rules. Hiding the fog *layer*
+   * does not change what is scouted: game state and picking are unaffected.
    */
   mapLayers: [{ water: true }, { option: true }],
 
@@ -64,7 +71,7 @@ export const test = base.extend<{
       await page.addInitScript((value) => {
         window.localStorage.setItem('bjarnoy.antialias', value);
       }, antialias);
-      if (!mapLayers.water) {
+      if (mapLayers.water === false) {
         await page.addInitScript(() => {
           // main.ts assigns the flags object once at startup (demo builds);
           // catch that assignment and switch water off before the first frame.
@@ -74,6 +81,21 @@ export const test = base.extend<{
             get: () => flags,
             set: (value: { water: boolean }) => {
               value.water = false;
+              flags = value;
+            },
+          });
+        });
+      }
+      if (mapLayers.fog === false) {
+        await page.addInitScript(() => {
+          // Same catch for the fog debug flags: both fog quads off before the first frame.
+          let flags: { maskUnknown: boolean; maskOutOfSight: boolean } | undefined;
+          Object.defineProperty(window, '__fogDebug', {
+            configurable: true,
+            get: () => flags,
+            set: (value: { maskUnknown: boolean; maskOutOfSight: boolean }) => {
+              value.maskUnknown = false;
+              value.maskOutOfSight = false;
               flags = value;
             },
           });
