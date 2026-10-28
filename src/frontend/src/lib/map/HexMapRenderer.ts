@@ -1977,6 +1977,8 @@ export class HexMapRenderer {
   // settlement must keep working). See `zoomBy` and the pan branch of
   // `onPointerMove`.
   private lockCamera = false;
+  /** See `renderedFrames`. */
+  private frames = 0;
   // `confineCamera` option: user input stays enabled but is clamped to these
   // limits, cached by `settlementCameraOrigin` (recomputed on every resize)
   // so a pointer move never re-measures the crop.
@@ -2361,6 +2363,7 @@ export class HexMapRenderer {
   }
 
   private onTick = () => {
+    this.frames++;
     this.options.worldModel.tick();
     this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
     this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
@@ -2959,6 +2962,17 @@ export class HexMapRenderer {
       const river = worldModel.getRiverTile(coord.q, coord.r);
       this.options.onHoverChange?.(this.hoverInfoFor(tile, grid, river));
     }
+  }
+
+  /**
+   * How many frames the render loop has run since mount (each tick is followed
+   * by its render). Read-only, for a test/debug script that has to wait for the
+   * map to actually draw a change rather than for wall-clock time: on a device
+   * whose frames are expensive the loop is paced (framePacing.ts) and can run
+   * at a frame a second, so a fixed sleep can end before a single frame drew.
+   */
+  get renderedFrames(): number {
+    return this.frames;
   }
 
   /**
