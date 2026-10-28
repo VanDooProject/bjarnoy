@@ -33,9 +33,13 @@ const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // (HexMapRenderer.hoverInfoFor), so only a small fixed margin is needed
 // here — the tile-width offset itself lives in world space and scales
 // with zoom on its own.
+// Positioned with a transform, not left/top: the tooltip jumps to a new
+// spot on every hex change, and a left/top move is a layout change that
+// repainted the whole page above the WebGL map each time — on a real GPU
+// that showed as short white rectangles flashing beside the cursor.
+// A transform only moves the tooltip's own compositor layer.
 const style = computed(() => ({
-  left: `${props.info.screenX + 12}px`,
-  top: `${props.info.screenY}px`,
+  transform: `translate(${props.info.screenX + 12}px, ${props.info.screenY}px) translateY(-50%)`,
 }));
 
 const title = computed(() => {
@@ -201,7 +205,9 @@ const workersText = computed(() =>
 <style scoped>
 .hex-tooltip {
   position: absolute;
-  transform: translate(0, -50%);
+  left: 0;
+  top: 0;
+  will-change: transform;
   z-index: 20;
   padding: 10px 14px;
   min-width: 170px;
@@ -210,6 +216,9 @@ const workersText = computed(() =>
      overridden here rather than there, since other .panel HUD chrome
      (BuildQueuePanel, etc.) is unaffected by this change. */
   border-radius: 0;
+  /* .panel's 80px-blur shadow is sized for big modals; on a card that is
+     re-rastered on every hex change it is a large, expensive paint. */
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
 }
 .title-row {
   display: flex;
