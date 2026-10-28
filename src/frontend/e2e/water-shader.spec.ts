@@ -41,6 +41,7 @@
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
+import { waitForRenderedFrames } from './helpers';
 
 // This spec judges the map's pixels, so it renders with the player's default smooth edges.
 test.use({ antialias: 'on' });
@@ -95,7 +96,15 @@ async function revealTheSea(page: import('@playwright/test').Page): Promise<void
   await page.evaluate(() => {
     Object.assign(window.__fogDebug, { maskUnknown: false, maskOutOfSight: false, terrainCull: false });
   });
-  await page.waitForTimeout(500);
+  // The water mask is baked off the main thread, so the first one can land
+  // after the view reports ready; the mesh only shows once there is one.
+  await expect
+    .poll(() => page.evaluate(() => window.__waterPerf.bakes), { message: 'the water mask was never baked' })
+    .toBeGreaterThan(0);
+  // Frames, not milliseconds, from here on: see waitForRenderedFrames. The
+  // loop is paced on a busy runner, and a sleep that ends before the next
+  // frame compares two pictures of the same frame.
+  await waitForRenderedFrames(page);
 }
 
 /**
@@ -207,7 +216,7 @@ test.describe('water shader', { tag: '@g1' }, () => {
     await page.evaluate(() => {
       window.__waterDebug.water = false;
     });
-    await page.waitForTimeout(600);
+    await waitForRenderedFrames(page);
 
     const without = await shoot();
 
@@ -217,7 +226,7 @@ test.describe('water shader', { tag: '@g1' }, () => {
     // below attributable: if the off state is static, then every pixel that
     // differs between an on-frame and an off-frame differs *because of the
     // layer*, whichever instant of the caustics' drift the on-frame caught.
-    await page.waitForTimeout(700);
+    await waitForRenderedFrames(page, 3);
     expect(await movedPct(page, without.sea, await page.screenshot({ clip: sea }))).toBe(0);
 
     // The sea patch: the layer is the only thing that can have changed it, so a
@@ -253,12 +262,15 @@ test.describe('water shader', { tag: '@g1' }, () => {
     await page.evaluate(() => {
       window.__fogDebug.drift = false;
     });
-    await page.waitForTimeout(500);
+    await waitForRenderedFrames(page);
 
     const sea = await patchDeepInside(settlement, 'sea', PATCH_HALF);
 
     const before = await page.screenshot({ clip: sea });
+    // Two seconds of drift, and at least two frames drawn across them: the
+    // drift is a function of time, but only a drawn frame shows it.
     await page.waitForTimeout(2_000);
+    await waitForRenderedFrames(page);
     const after = await page.screenshot({ clip: sea });
     // Two seconds is several caustic band-widths of drift and most of a foam
     // surge; 3% is the same floor fog-drift.spec.ts uses against the same kind
@@ -268,10 +280,11 @@ test.describe('water shader', { tag: '@g1' }, () => {
     await page.evaluate(() => {
       window.__waterDebug.water = false;
     });
-    await page.waitForTimeout(600);
+    await waitForRenderedFrames(page);
 
     const frozenFrom = await page.screenshot({ clip: sea });
     await page.waitForTimeout(2_000);
+    await waitForRenderedFrames(page);
     const frozenTo = await page.screenshot({ clip: sea });
     // With the layer gone and the fog frozen this view is a still image. This is
     // what makes the assertion above a statement about the *water* rather than

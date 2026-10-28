@@ -44,6 +44,27 @@ export async function waitForMapReady(page: Page): Promise<void> {
 }
 
 /**
+ * Waits until the settlement renderer (`window.__settlementRenderer`) has run
+ * `frames` more frames of its render loop than when this was called.
+ *
+ * For a spec that changes something and then looks at the canvas: the loop is
+ * paced on a device whose frames are expensive (framePacing.ts) and can drop
+ * to about a frame a second on a busy software-rendered runner, so a fixed
+ * `waitForTimeout` can end before the change was drawn at all, and a
+ * `requestAnimationFrame` wait counts browser frames the paced loop skips.
+ * Two frames by default: the one that may already be under way when the
+ * change landed, and one that started after it.
+ */
+export async function waitForRenderedFrames(page: Page, frames = 2): Promise<void> {
+  const read = () =>
+    page.evaluate(
+      () => (window as unknown as { __settlementRenderer: () => { renderedFrames: number } }).__settlementRenderer().renderedFrames,
+    );
+  const start = await read();
+  await expect.poll(read, { message: `the map never drew ${frames} more frames`, intervals: [100] }).toBeGreaterThanOrEqual(start + frames);
+}
+
+/**
  * Navigates to the world map and waits for its renderer to be ready.
  *
  * Real client-side navigation (the HudNav "World map" button), not
