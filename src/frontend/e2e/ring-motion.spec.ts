@@ -46,28 +46,44 @@ async function watchAnimations(page: Page): Promise<void> {
 }
 const animLog = (page: Page) => page.evaluate(() => (window as unknown as { __animLog: AnimateLog[] }).__animLog);
 
-/** Every ring animation has finished: nothing is mid-flight any more. */
+/**
+ * Every ring animation has finished: nothing is mid-flight any more.
+ *
+ * Waits on the animations themselves (their `finished` promises), round after
+ * round, since one layer's exit hands over to the next one's entrance. It
+ * used to poll the running count with a 5 s cutoff, but on a loaded runner
+ * every poll is a slow round trip and the choreography's own clock runs
+ * slow, so a ring that did settle could miss the cutoff. A ring that never
+ * settles still fails, at the test's own time limit.
+ */
 async function ringSettled(page: Page): Promise<void> {
-  await expect
-    .poll(
-      () =>
-        page.evaluate(
-          () =>
-            document
-              .getAnimations()
-              .filter((a) => (a.effect as KeyframeEffect | null)?.target?.closest?.('.ring-backdrop') && a.effect?.getComputedTiming().iterations !== Infinity && a.playState === 'running')
-              .length,
-        ),
-      { timeout: 5_000 },
-    )
-    .toBe(0);
+  await page.evaluate(async () => {
+    for (;;) {
+      const running = document
+        .getAnimations()
+        .filter(
+          (a) =>
+            (a.effect as KeyframeEffect | null)?.target?.closest?.('.ring-backdrop') &&
+            a.effect?.getComputedTiming().iterations !== Infinity &&
+            a.playState === 'running',
+        );
+      if (running.length === 0) return;
+      // A cancelled animation rejects `finished`; it is no longer mid-flight either.
+      await Promise.all(running.map((a) => a.finished.catch(() => undefined)));
+    }
+  });
 }
 
 /** The settled layout: each bubble sits at its left/top with full opacity and no leftover transform. */
 async function expectBubblesAtRest(page: Page, selector: string): Promise<void> {
-  // Park the pointer off the ring: a hovered bubble is legitimately lifted (scale 1.07).
+  // Park the pointer off the ring: a hovered bubble is legitimately lifted (scale 1.07). Leaving it starts the
+  // lift's way back down (a CSS transition), so wait for the hover to clear, then for that transition to end -
+  // under load the move is handled late, and a fixed sleep could end mid-transition.
   await page.mouse.move(4, 790);
-  await page.waitForTimeout(250);
+  await expect
+    .poll(() => page.evaluate(() => document.querySelectorAll('.ring-hub:hover, .ring-bubble:hover').length))
+    .toBe(0);
+  await ringSettled(page);
   const bubbles = await page.locator(selector).evaluateAll((els) =>
     els.map((el) => {
       const style = getComputedStyle(el);
