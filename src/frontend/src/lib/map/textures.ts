@@ -1857,10 +1857,9 @@ function topKeyAndIndex(textures: TileTextures, tile: Tile, riverArt?: RiverArt)
   if (tile.lakeProp && !tile.buildingType) return { key, index: 0 };
   if (tile.buildingType) return { key, index: tile.buildingLevel ?? 1 };
   const variant = tile.variant ?? 0;
-  // A biome forest that fell back to foresttile keeps its variant only if foresttile has that index, else its plain frame.
-  if (key === 'forest' && tile.terrain === 'forest' && !tile.wasted && variant >= (textures.top.forest?.[tileOrientationFor(tile, riverArt)]?.length ?? 0)) {
-    return { key, index: 0 };
-  }
+  // A biome forest that fell back to foresttile draws its plain frame: the variant indexes the biome looks (index 1, the
+  // full forest, is ~84% of hexes), and on foresttile that index is the bear, which would then stand in most forests.
+  if (key === 'forest' && tile.terrain === 'forest' && !tile.wasted) return { key, index: 0 };
   return { key, index: variant };
 }
 

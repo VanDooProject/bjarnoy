@@ -2018,10 +2018,11 @@ describe('biome forest art', () => {
   });
 
   describe('fallback to foresttile while the atlas has no biome art', () => {
-    it('draws foresttile (variant clamped to its frames) when the biome family is absent', () => {
+    it('draws plain foresttile when the biome family is absent, whatever the biome variant', () => {
       const textures = buildTileTextures([terrainAtlas('foresttile', 2)]);
-      // foresttile has indices 0..2: variant 1 keeps its own frame, variant 3 doesn't exist and falls to the plain frame.
-      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 1 }))).toBe(textures.top.forest!.E[1]);
+      // The variant indexes the biome looks; on foresttile index 1 would be the bear variant on ~84% of forests.
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 1 }))).toBe(textures.top.forest!.E[0]);
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 2 }))).toBe(textures.top.forest!.E[0]);
       expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 3 }))).toBe(textures.top.forest!.E[0]);
       expect(baseTextureFor(textures, forestTile({ forestKind: 'birch' }))).toBe(textures.base.forest!.E);
       expect(topAnimFor(textures, forestTile({ forestKind: 'taiga', variant: 1 }))).toBeUndefined();
@@ -2032,7 +2033,7 @@ describe('biome forest art', () => {
       expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 3 }))).toBe(textures.top.forest_taiga!.E[3]);
       expect(baseTextureFor(textures, forestTile({ forestKind: 'taiga' }))).toBe(textures.base.forest_taiga!.E);
       // birch has no frames: still foresttile.
-      expect(topTextureFor(textures, forestTile({ forestKind: 'birch', variant: 1 }))).toBe(textures.top.forest!.E[1]);
+      expect(topTextureFor(textures, forestTile({ forestKind: 'birch', variant: 1 }))).toBe(textures.top.forest!.E[0]);
     });
 
     it('leaves a wasted forest on deadforest art', () => {
