@@ -110,7 +110,7 @@ import {
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
-import { bogEdgeDebug, bogEdgeShapes, bogGrassEdges, type BogEdgeShape } from './bogEdge';
+import { bogEdgeDebug, bogEdgeShapes, bogEdgesOf, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { animationPreference } from '../perf/animationPreference';
@@ -4500,30 +4500,32 @@ export class HexMapRenderer {
   private rebuildBogEdges(coords: AxialCoord[]) {
     const { worldModel, mode } = this.options;
     this.bogEdgeLayer.clear();
-    const style = bogEdgeDebug.style;
-    if (mode !== 'settlement' || style === 'off') return;
+    const { style, forestStyle, color } = bogEdgeDebug;
+    if (mode !== 'settlement' || (style === 'off' && forestStyle === 'off')) return;
     const getTile = (q: number, r: number) => worldModel.getTile(q, r);
+    const isRiver = (q: number, r: number) => worldModel.getRiverTile(q, r) !== undefined;
     const top = isoTopPoints(TILE_W, TILE_H);
     const centre = { x: TILE_W / 2, y: TILE_H / 2 };
     const under: BogEdgeShape[] = [];
     const over: BogEdgeShape[] = [];
     // Not gated on exploration: it follows the ground art, which draws under the fog too.
     for (const c of coords) {
-      const edges = bogGrassEdges(getTile, c);
+      const edges = bogEdgesOf(getTile, isRiver, c);
       if (edges.length === 0) continue;
       const grid = isoGridPosition(c, TILE_W, TILE_H);
-      for (const edge of edges) {
+      for (const { edge, neighbour } of edges) {
         const a = top[edge];
         const b = top[(edge + 1) % 6];
         // Unit normal pointing out of the hex, measured in the squashed top-face space the edge itself lives in.
         const mid = { x: (a.x + b.x) / 2 - centre.x, y: (a.y + b.y) / 2 - centre.y };
         const len = Math.hypot(mid.x, mid.y);
         const shapes = bogEdgeShapes(
-          style,
+          neighbour === 'forest' ? forestStyle : style,
           { x: grid.x + a.x, y: grid.y + a.y },
           { x: grid.x + b.x, y: grid.y + b.y },
           { x: mid.x / len, y: mid.y / len },
           [c.q, c.r, edge],
+          color,
         );
         for (const shape of shapes) (shape.under ? under : over).push(shape);
       }
