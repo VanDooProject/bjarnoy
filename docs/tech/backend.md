@@ -361,6 +361,12 @@ count as production, since guessing "not production" would open a debugging
 surface on exactly the deployment that must not have one. A branch deployment is
 therefore debuggable the moment it comes up, with nothing to configure.
 
+**Temporary exception:** `/api/v1/info` is public on production builds too, so
+the live deployment can be asked which commit it runs without logging in. That
+default only holds until the end of 2026 (`InfoEndpoints.TemporarilyPublicUntilYear`);
+after that a production build without `Diagnostics__PublicBuildInfo` set answers
+it with a 500 that says to decide again, rather than staying open by accident.
+
 A Coolify **preview** deployment counts as production by that rule, because
 Coolify reports the application's branch (`main`) rather than the PR's — the
 override below is how a preview gets its API reference back. See
@@ -369,7 +375,7 @@ override below is how a preview gets its API reference back. See
 Override per deployment when needed:
 
 ```bash
-Diagnostics__PublicBuildInfo=true      # serve /api/v1/info to anyone
+Diagnostics__PublicBuildInfo=false     # keep /api/v1/info Admin-only (true: public, no expiry)
 Diagnostics__ExposeApiReference=false  # keep /scalar closed on a branch build
 ```
 

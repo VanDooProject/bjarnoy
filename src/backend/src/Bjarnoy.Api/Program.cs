@@ -99,7 +99,12 @@ var buildInfo = builder.Configuration.GetSection(BuildInfoOptions.SectionName).G
 var diagnostics = builder.Configuration.GetSection(DiagnosticsOptions.SectionName).Get<DiagnosticsOptions>()
     ?? new DiagnosticsOptions();
 var isProductionBuild = buildInfo.IsProductionBuild;
-var publicBuildInfo = diagnostics.PublicBuildInfo ?? !isProductionBuild;
+// Temporarily public on main and releases too, so the live deployment can be
+// asked which commit it runs without logging in. InfoEndpoints turns that into
+// an error once 2026 is over, so the decision gets made again rather than
+// forgotten; Diagnostics__PublicBuildInfo still overrides it either way.
+var publicBuildInfo = diagnostics.PublicBuildInfo ?? true;
+var buildInfoTemporarilyPublic = diagnostics.PublicBuildInfo is null && isProductionBuild;
 var exposeApiReference = diagnostics.ExposeApiReference ?? !isProductionBuild;
 
 builder.Services.AddProblemDetails();
@@ -313,7 +318,7 @@ var versionSet = app.NewApiVersionSet()
     .Build();
 
 app.MapDefaultEndpoints();
-app.MapInfoEndpoints(versionSet, publicBuildInfo);
+app.MapInfoEndpoints(versionSet, publicBuildInfo, buildInfoTemporarilyPublic);
 app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);

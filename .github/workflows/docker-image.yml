@@ -168,8 +168,8 @@ jobs:
           echo "::endgroup::"
 
           # Creating a world is admin-only (POST /api/v1/admin/worlds), and so
-          # is /api/v1/info on a main or release build (DiagnosticsOptions), so
-          # the container seeds an admin from ADMIN_BOOTSTRAP_* above and the
+          # is /api/v1/info on a main or release build once its temporary public
+          # default runs out (DiagnosticsOptions), so the container seeds an admin from ADMIN_BOOTSTRAP_* above and the
           # smoke test logs in as it first — which also proves admin bootstrap
           # and JWT signing work in the image.
           token=$(curl -fsS -X POST http://localhost:8080/api/v1/auth/login \
@@ -180,8 +180,8 @@ jobs:
           echo "::group::the running image says what it was built from"
           # An image that cannot say which commit it is defeats the point of
           # having the endpoint at all, so prove the build args reached it
-          # rather than leaving every field at "unknown". Asked as the admin:
-          # anonymously it is a 401 on every build that pushes (main, tags).
+          # rather than leaving every field at "unknown". Asked as the admin, so
+          # it keeps working when the temporary public default is dropped.
           curl -fsS http://localhost:8080/api/v1/info -H "Authorization: Bearer $token" -o /tmp/info.json
           cat /tmp/info.json
           echo

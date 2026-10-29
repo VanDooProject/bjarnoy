@@ -18,6 +18,11 @@ namespace Bjarnoy.Api.Endpoints;
 /// and can be overridden per deployment.
 /// </para>
 /// <para>
+/// For now main and releases are public too, until <see cref="TemporarilyPublicUntilYear"/>
+/// is over: then it answers with an error instead, so whether it stays public
+/// is decided again rather than forgotten.
+/// </para>
+/// <para>
 /// It answers only with what the build stamped into the image, never with
 /// configuration, connection strings, or anything a request could influence —
 /// so the open case leaks nothing beyond the identity of the build.
@@ -25,18 +30,29 @@ namespace Bjarnoy.Api.Endpoints;
 /// </remarks>
 public static class InfoEndpoints
 {
+    /// <summary>The last year a production build serves it to anyone without an explicit override.</summary>
+    public const int TemporarilyPublicUntilYear = 2026;
+
     /// <param name="publicAccess">
-    /// Whether anyone may read it. False puts it behind the Admin policy, which
-    /// is what a production build does — see <c>DiagnosticsOptions</c>.
+    /// Whether anyone may read it. False puts it behind the Admin policy — see
+    /// <c>DiagnosticsOptions</c>.
+    /// </param>
+    /// <param name="temporarilyPublic">
+    /// Whether it is public only because of the temporary production default,
+    /// which stops answering after <see cref="TemporarilyPublicUntilYear"/>.
     /// </param>
     public static IEndpointRouteBuilder MapInfoEndpoints(
         this IEndpointRouteBuilder app,
         ApiVersionSet versionSet,
-        bool publicAccess)
+        bool publicAccess,
+        bool temporarilyPublic = false)
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        var info = app.MapGet("/api/v1/info", GetBuildInfo)
+        var info = app.MapGet(
+                "/api/v1/info",
+                (BuildInfo build, IHostEnvironment environment, TimeProvider time) =>
+                    GetBuildInfo(build, environment, time, temporarilyPublic))
             .WithApiVersionSet(versionSet)
             .WithTags("Info")
             .WithName("GetBuildInfo")
@@ -50,12 +66,25 @@ public static class InfoEndpoints
         return app;
     }
 
-    private static Ok<BuildInfoResponse> GetBuildInfo(BuildInfo build, IHostEnvironment environment) =>
-        TypedResults.Ok(new BuildInfoResponse(
+    private static Results<Ok<BuildInfoResponse>, ProblemHttpResult> GetBuildInfo(
+        BuildInfo build, IHostEnvironment environment, TimeProvider time, bool temporarilyPublic)
+    {
+        if (temporarilyPublic && time.GetUtcNow().Year != TemporarilyPublicUntilYear)
+        {
+            return TypedResults.Problem(
+                title: "The temporary public /api/v1/info has expired.",
+                detail: $"Production builds serve /api/v1/info to anyone only until the end of {TemporarilyPublicUntilYear}. "
+                    + "Decide whether it stays public: set Diagnostics__PublicBuildInfo, "
+                    + "or change the default in Program.cs and remove this check in InfoEndpoints.",
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        return TypedResults.Ok(new BuildInfoResponse(
             Version: build.Version,
             Commit: build.Commit,
             ShortCommit: build.ShortCommit,
             Branch: build.Branch,
             BuiltAt: build.BuiltAt,
             Environment: environment.EnvironmentName));
+    }
 }
