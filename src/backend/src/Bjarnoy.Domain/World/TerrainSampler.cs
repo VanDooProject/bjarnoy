@@ -1062,10 +1062,10 @@ public sealed class TerrainSampler
     public const double ForestBiomeScale = 14;
 
     /// <summary>Seed offset of the biome noise — mirrors <c>FOREST_BIOME_SALT</c>.</summary>
-    public const int ForestBiomeSalt = 41;
+    public const int ForestBiomeSalt = 137;
 
     /// <summary>Seed offset of the per-hex mixed-wood roll — mirrors <c>FOREST_MIXED_SALT</c>.</summary>
-    public const int ForestMixedSalt = 43;
+    public const int ForestMixedSalt = 139;
 
     /// <summary>Chance of mixed wood away from a biome boundary — mirrors <c>FOREST_MIXED_BASE_CHANCE</c>.</summary>
     public const double ForestMixedBaseChance = 0.2;

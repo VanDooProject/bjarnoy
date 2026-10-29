@@ -1109,9 +1109,9 @@ export const FOREST_VARIANT_WEIGHTS = [0.04, 0.84, 0.06, 0.06];
 /** Wavelength (hexes) of the taiga/birch biome noise — mirrors `TerrainSampler.ForestBiomeScale`. */
 export const FOREST_BIOME_SCALE = 14;
 /** Seed offset of the biome noise (`kind = n >= 0.5 ? taiga : birch`). */
-export const FOREST_BIOME_SALT = 41;
+export const FOREST_BIOME_SALT = 137;
 /** Seed offset of the per-hex roll that turns a forest hex into mixed wood. */
-export const FOREST_MIXED_SALT = 43;
+export const FOREST_MIXED_SALT = 139;
 /** Chance of mixed wood away from a biome boundary. */
 export const FOREST_MIXED_BASE_CHANCE = 0.2;
 /** Extra mixed-wood chance exactly on the boundary (`n = 0.5`), fading linearly to 0 at `FOREST_MIXED_BAND`. */
