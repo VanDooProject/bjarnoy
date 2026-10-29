@@ -294,6 +294,21 @@ export function terrainArtByFamily(family: string, decorated = false): ArtRef {
   return terrainFamilyArt(family, decorated);
 }
 
+/**
+ * One decorated look of a terrain family — the flattened `_variantNNN`
+ * showcase frame (or loose PNG) — or `null` when the pack doesn't ship that
+ * look. Unlike `terrainArtByFamily` it never falls back to the plain tile,
+ * so a docs picker can offer exactly the looks that exist and pick up new
+ * ones as soon as a pack carries them.
+ */
+export function terrainVariantArt(family: string, variant: number): ArtRef | null {
+  const name = `${family}_SE_variant${String(variant).padStart(3, '0')}`;
+  const frame = findAtlasFrame('showcase', name);
+  if (frame) return { kind: 'atlas', frame };
+  const pngUrl = terrainPngByName[name];
+  return pngUrl ? { kind: 'png', url: pngUrl } : null;
+}
+
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */
 export function coastalWaterArt(): ArtRef {
   return terrainFamilyArt('coastalwatertile', false);

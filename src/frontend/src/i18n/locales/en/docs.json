@@ -166,6 +166,18 @@
       "saddleback": "Saddleback",
       "table": "Table"
     },
+    "sandLookLabel": "Look:",
+    "sandLooks": {
+      "plain": "Plain",
+      "dunes": "Dunes",
+      "driftwood": "Driftwood",
+      "driftwoodPile": "Driftwood pile",
+      "boulders": "Boulders",
+      "wreck": "Wreck",
+      "whaleBones": "Whale bones",
+      "boat": "Upturned boat",
+      "sandCastle": "Sand castle"
+    },
     "riverShapes": {
       "spring": "Spring",
       "straight": "Straight",
