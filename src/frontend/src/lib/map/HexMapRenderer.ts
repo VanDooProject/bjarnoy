@@ -114,7 +114,7 @@ import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { animationPreference } from '../perf/animationPreference';
 import { antialiasPreference } from '../perf/antialiasPreference';
-import { advanceClipFrame } from './clipPlayback';
+import { advanceClipFrame, clipTimingOf, sharedClockPlayback } from './clipPlayback';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -1635,6 +1635,8 @@ export class HexMapRenderer {
   // survives *between* rebuilds, so a looping clip doesn't reset its phase
   // every time the camera merely moves.
   private topAnimState = new Map<string, TopAnimState>();
+  /** The global animation clock in ms (advanced by `advanceTopAnimations`): where a `sharedClock` clip joins its cycle. */
+  private animClockMs = 0;
   // Pooled overlay sprites for an overlay clip's parts-only frames (see
   // `TopAnimState.overlay`) — a sibling pool to `terrainTop.pool`, kept
   // separate because these sprites aren't `terrainTop.active`'s own entries
@@ -4453,14 +4455,19 @@ export class HexMapRenderer {
       this.topOverlayPool.push(existing.overlay);
     }
     const overlay = anim.rest !== undefined ? (this.topOverlayPool.pop() ?? new Sprite()) : undefined;
-    const initial = topAnimTextures(anim, 0);
+    // A shared-clock clip (terrain wind sway) joins the global clock mid-cycle so neighbouring tiles stay in phase; others start at frame 0.
+    const start = anim.sharedClock
+      ? sharedClockPlayback(clipTimingOf({ ...anim, frameRects: anim.textures }), this.animClockMs)
+      : { playedMs: 0, frame: 0 };
+    const initial = topAnimTextures(anim, start.frame);
     sprite.texture = initial.base;
     if (overlay) overlay.texture = initial.overlay!;
-    this.topAnimState.set(key, { clip: anim, sprite, frame: 0, playedMs: 0, overlay });
+    this.topAnimState.set(key, { clip: anim, sprite, frame: start.frame, playedMs: start.playedMs, overlay });
   }
 
   /** Advances every active top-layer clip by `deltaMs` of playback, called once per app tick regardless of whether a rebuild ran this frame. */
   private advanceTopAnimations(deltaMs: number) {
+    this.animClockMs += deltaMs;
     for (const state of this.topAnimState.values()) {
       // clipPlayback.ts owns the frame math, so the clip's `pause` - the hold
       // on its last frame between cycles - applies on the map too.

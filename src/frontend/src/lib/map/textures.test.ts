@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Texture } from 'pixi.js';
 import {
   baseTextureFor,
+  buildTileTextures,
+  clipVariantSlot,
   BOG_TEXTURE_KEYS,
   bogOrientationFor,
   bogTextureKey,
@@ -33,7 +35,8 @@ import {
 import { PALISADE_FAMILY } from './palisadeTiles';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { BogTile, RiverTile, Tile } from './types';
-import { findAtlasClip, findAtlasFrame, type AtlasClip } from './atlas';
+import { findAtlasClip, findAtlasFrame, type AtlasClip, type LoadedAtlas } from './atlas';
+import { clipFrameIndex, clipTimingOf, sharedClockPlayback } from './clipPlayback';
 
 /** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
 function emptyOrientationArrayMap(): Record<string, unknown[]> {
@@ -1952,5 +1955,158 @@ describe('palisade art', () => {
     }
 
     expect(missing).toEqual([]);
+  });
+});
+
+// The biome forests (3D_assets hextile143-145): forest_taiga / forest_birch / forest_mixed replace foresttile on living islands,
+// fall back to it while the atlas has no frames for them, and play a wind-sway clip per top variant on one shared clock.
+describe('biome forest art', () => {
+  const fakeTexture = (name: string) => ({ label: name }) as unknown as Texture;
+
+  /** A `terrain`-atlas stand-in holding `family`'s plain + `variantCount` variant tops and a base, camera E only. */
+  function terrainAtlas(family: string, variantCount: number): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    const add = (name: string, layer: 'base' | 'top') => {
+      atlas.textures[name] = fakeTexture(name);
+      atlas.frameMeta[name] = { family, layer };
+    };
+    add(`${family}_E`, 'top');
+    for (let v = 0; v < variantCount; v++) add(`${family}_E_variant${String(v).padStart(3, '0')}`, 'top');
+    add(`${family}_E_base`, 'base');
+    return atlas;
+  }
+
+  /** A `buildings-anim` stand-in: one 4-frame overlay clip per variant (null = the plain pass), frames + rest image on `family`. */
+  function animAtlas(family: string, variants: (string | null)[]): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    for (const variant of variants) {
+      const name = variant === null ? `${family}_E` : `${family}_E_${variant}`;
+      const frames = [0, 1, 2, 3].map((i) => `${name}_f0${i}`);
+      for (const f of [...frames, `${name}_rest`]) {
+        atlas.textures[f] = fakeTexture(f);
+        atlas.frameMeta[f] = { family, layer: 'top' };
+      }
+      atlas.clips[name] = {
+        name, family, orientation: 'E', camera: 'E', layer: 'top', source_level: null, variant, pass_suffix: '',
+        anim_type: 'loop', playback: 'loop', fps: 4, pause: 0, frame_count: 4, frame_padding: 2, frames, parts: [],
+        overlay: true, rest: `${name}_rest`,
+      } as unknown as AtlasClip;
+    }
+    return atlas;
+  }
+
+  const forestTile = (extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'forest', orientation: 'E', ...extra });
+
+  describe('textureKeyFor', () => {
+    it('maps each forestKind to its biome key and an undefined kind to mixed', () => {
+      expect(textureKeyFor(forestTile({ forestKind: 'taiga' }))).toBe('forest_taiga');
+      expect(textureKeyFor(forestTile({ forestKind: 'birch' }))).toBe('forest_birch');
+      expect(textureKeyFor(forestTile({ forestKind: 'mixed' }))).toBe('forest_mixed');
+      expect(textureKeyFor(forestTile())).toBe('forest_mixed');
+    });
+
+    it('keeps a wasted forest on deadforest whatever its forestKind', () => {
+      expect(textureKeyFor(forestTile({ wasted: true, forestKind: 'taiga' }))).toBe('deadforest');
+      expect(textureKeyFor(forestTile({ wasted: true }))).toBe('deadforest');
+    });
+
+    it('ships a family per biome key, in the atlas under the same name', () => {
+      expect(KEY_FAMILY.forest_taiga).toBe('forest_taiga');
+      expect(KEY_FAMILY.forest_birch).toBe('forest_birch');
+      expect(KEY_FAMILY.forest_mixed).toBe('forest_mixed');
+    });
+  });
+
+  describe('fallback to foresttile while the atlas has no biome art', () => {
+    it('draws foresttile (variant clamped to its frames) when the biome family is absent', () => {
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2)]);
+      // foresttile has indices 0..2: variant 1 keeps its own frame, variant 3 doesn't exist and falls to the plain frame.
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 1 }))).toBe(textures.top.forest!.E[1]);
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 3 }))).toBe(textures.top.forest!.E[0]);
+      expect(baseTextureFor(textures, forestTile({ forestKind: 'birch' }))).toBe(textures.base.forest!.E);
+      expect(topAnimFor(textures, forestTile({ forestKind: 'taiga', variant: 1 }))).toBeUndefined();
+    });
+
+    it('switches to the biome art as soon as its frames are loaded, and only for the kinds that have them', () => {
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2), terrainAtlas('forest_taiga', 3)]);
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 3 }))).toBe(textures.top.forest_taiga!.E[3]);
+      expect(baseTextureFor(textures, forestTile({ forestKind: 'taiga' }))).toBe(textures.base.forest_taiga!.E);
+      // birch has no frames: still foresttile.
+      expect(topTextureFor(textures, forestTile({ forestKind: 'birch', variant: 1 }))).toBe(textures.top.forest!.E[1]);
+    });
+
+    it('leaves a wasted forest on deadforest art', () => {
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2), terrainAtlas('deadforest', 1), terrainAtlas('forest_taiga', 3)]);
+      expect(topTextureFor(textures, forestTile({ wasted: true, forestKind: 'taiga' }))).toBe(textures.top.deadforest!.E[0]);
+    });
+  });
+
+  describe('clips', () => {
+    it('slots a clip by its variant: null = index 0, variantNNN = NNN + 1', () => {
+      expect(clipVariantSlot({ variant: null })).toBe(0);
+      expect(clipVariantSlot({ variant: 'variant000' })).toBe(1);
+      expect(clipVariantSlot({ variant: 'variant002' })).toBe(3);
+      expect(clipVariantSlot({ variant: 'weird' })).toBeUndefined();
+    });
+
+    it('classifies a terrain family manifest by variant, with rest images, and marks them shared-clock', () => {
+      const anim = animAtlas('forest_taiga', [null, 'variant000', 'variant002']);
+      const textures = buildTileTextures([terrainAtlas('forest_taiga', 3)], anim);
+      const slots = textures.animTop.forest_taiga!.E;
+      expect(slots).toHaveLength(4);
+      expect(slots[0]!.textures).toHaveLength(4);
+      expect(slots[0]!.rest).toBe(anim.textures['forest_taiga_E_rest']);
+      expect(slots[1]!.textures[2]).toBe(anim.textures['forest_taiga_E_variant000_f02']);
+      expect(slots[2]).toBeUndefined(); // glade has no clip in this manifest
+      expect(slots[3]!.rest).toBe(anim.textures['forest_taiga_E_variant002_rest']);
+      expect(slots.filter(Boolean).every((c) => c!.sharedClock === true && c!.fps === 4)).toBe(true);
+      // topAnimFor reads the slot of the tile's variant (index + 1 for variants, no building level involved).
+      expect(topAnimFor(textures, forestTile({ forestKind: 'taiga', variant: 3 }))).toBe(slots[3]);
+      expect(topAnimFor(textures, forestTile({ forestKind: 'taiga', variant: 2 }))).toBeUndefined();
+    });
+
+    it('drops a clip whose rest image does not resolve', () => {
+      const anim = animAtlas('forest_taiga', [null]);
+      delete anim.textures['forest_taiga_E_rest'];
+      const textures = buildTileTextures([terrainAtlas('forest_taiga', 3)], anim);
+      expect(textures.animTop.forest_taiga).toBeUndefined();
+    });
+
+    it('does not slot other terrain clips as shared-clock (a building clip keeps its own start)', () => {
+      const anim = animAtlas('foresttile', [null]);
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2)], anim);
+      expect(textures.animTop.forest).toBeUndefined();
+    });
+
+    it('keeps a later, fuller terrain clip batch over an earlier partial one when merging', () => {
+      const terrain = terrainAtlas('forest_taiga', 3);
+      const partial = buildTileTextures([terrain], animAtlas('forest_taiga', [null]));
+      const full = buildTileTextures([terrain], animAtlas('forest_taiga', [null, 'variant000']));
+      const merged = mergeTileTextures(mergeTileTextures(buildTileTextures([terrain]), partial), full);
+      expect(merged.animTop.forest_taiga!.E[1]).toBeDefined();
+    });
+  });
+
+  describe('global clock', () => {
+    const timing = clipTimingOf({ frameRects: [0, 0, 0, 0], fps: 4, playback: 'loop', pause: 0 });
+
+    it('starts a clip at the shared clock time: every tile shows frame floor(t * fps) mod 4 whenever it spawned', () => {
+      for (const clockMs of [0, 260, 1010, 9999]) {
+        const start = sharedClockPlayback(timing, clockMs);
+        expect(start.frame).toBe(Math.floor((clockMs / 1000) * 4) % 4);
+        expect(start.frame).toBe(clipFrameIndex(timing, clockMs));
+        expect(start.playedMs).toBe(clockMs);
+      }
+    });
+
+    it('two tiles spawned at different times stay on the same frame once advanced by the same deltas', () => {
+      const a = sharedClockPlayback(timing, 400);
+      const b = sharedClockPlayback(timing, 400);
+      for (const delta of [16, 250, 90, 400]) {
+        a.playedMs += delta;
+        b.playedMs += delta;
+        expect(clipFrameIndex(timing, a.playedMs)).toBe(clipFrameIndex(timing, b.playedMs));
+      }
+    });
   });
 });
