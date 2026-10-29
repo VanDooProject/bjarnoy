@@ -6,6 +6,7 @@ import {
   clipVariantSlot,
   BOG_TEXTURE_KEYS,
   bogOrientationFor,
+  bogVariantIn,
   bogTextureKey,
   campArtFor,
   drawnCampOf,
@@ -1555,6 +1556,16 @@ describe('bog art', () => {
     expect(classified.base!.W).toBe('bog_W_base');
     expect(classified.top!.W).toHaveLength(9);
     expect(classified.top!.W[8]).toBe('bog_W_variant008');
+  });
+
+  it('draws a retired moss look (variant006, the peat cuttings) as plain moss, every other look in its own slot', () => {
+    const tops = Array.from({ length: 9 }, (_, i) => `bog_W_${i}`);
+    const slot = (variant: number) => bogVariantIn('bog', { variant } as Tile, tops);
+    expect(slot(6)).toBe(0);
+    expect(slot(15)).toBe(0);
+    expect([1, 2, 3, 4, 5, 7, 8].map(slot)).toEqual([1, 2, 3, 4, 5, 7, 8]);
+    // Only the moss retires slot 6: a lake shows its own variant there.
+    expect(bogVariantIn('lake', { variant: 6 } as Tile, tops)).toBe(6);
   });
 
   it('gives every bog family its own key and family, all of them terrain keys', () => {

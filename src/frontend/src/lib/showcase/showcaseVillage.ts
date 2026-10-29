@@ -14,6 +14,7 @@ import { riverBuildingAllowedHere } from '../map/ringCatalogue';
 import { campFamilyInfo, type CampFamily, type CampGround } from '../map/campPlacement';
 import { maxLevelFor } from '../map/buildingEconomy';
 import { giantCoverage } from '../map/giantTiles';
+import { RETIRED_BOG_VARIANTS } from '../map/textures';
 import { straightOrientationOf, TILE_ORIENTATIONS, type Settlement, type Tile, type TileOrientation } from '../map/types';
 
 /**
@@ -389,8 +390,10 @@ function ensureCamps(model: WorldModel, center: AxialCoord, home: AxialCoord, se
 
 /** The looks a hex may take: moss 1..8 (compared mod 9, never the plain 0), grass/forest by their counts, other bog kinds from the decorated list too. */
 function allowedLooks(tile: Tile): number[] {
-  // Moss has 8 non-plain looks: more than a hex has neighbours, so a distinct one always exists.
-  if (tile.bog?.kind === 'bog') return Array.from({ length: MOSS_LOOKS - 1 }, (_, i) => i + 1);
+  // Moss has 7 non-plain looks it still shows: more than a hex has neighbours, so a distinct one always exists.
+  if (tile.bog?.kind === 'bog') {
+    return Array.from({ length: MOSS_LOOKS - 1 }, (_, i) => i + 1).filter((v) => !RETIRED_BOG_VARIANTS.bog?.has(v));
+  }
   if (tile.bog) return [...DECORATED_BOG_VARIANTS];
   if (tile.terrain === 'grass') return Array.from({ length: GRASS_LOOKS }, (_, i) => i);
   if (tile.terrain === 'forest') return Array.from({ length: FOREST_LOOKS }, (_, i) => i);
