@@ -412,8 +412,8 @@ function evictOnReject(key: string, promise: Promise<LoadedAtlas>): void {
  * from 1, `total` is the category's page count known up front (`pages.length`,
  * fixed before the loop starts) — a best-effort progress signal for
  * HexMapRenderer's loading-state overlay (see `MapLoadState.progress`).
- * Sequential (one `Assets.load` at a time, same as before this was added),
- * so this is exact, not an estimate.
+ * Pages are counted in page order (see `loadPages` on when their downloads
+ * overlap), so this is exact, not an estimate.
  */
 export type AtlasPageProgress = (loaded: number, total: number) => void;
 
@@ -474,9 +474,28 @@ async function loadPages(
   const clips: Record<string, AtlasClip> = {};
   const aliases: Record<string, AtlasAliasEntry> = {};
 
+  // Without `onPartial` nothing is drawn until every page is in, so the
+  // pages are fetched and decoded all at once rather than one after another:
+  // one at a time, the category costs the sum of every page's round trip and
+  // decode (the terrain atlas's six pages took 7-10 s on a busy 4-core
+  // machine, with the landing page's "Loading map" overlay and the guided
+  // pointer waiting on all of it), where at once it costs about the slowest
+  // page. With `onPartial` the pages stay one at a time, so the first page's
+  // bytes are not shared with the rest and its art shows as early as it can.
+  // Each early start gets a no-op catch so a page that fails while an earlier
+  // one is still awaited is not reported as an unhandled rejection; the
+  // failure still surfaces when the loop reaches that page.
+  const prefetched = onPartial
+    ? null
+    : pages.map(({ webpUrl }) => {
+        const load = Assets.load<Texture>(webpUrl);
+        load.catch(() => {});
+        return load;
+      });
+
   let loaded = 0;
-  for (const { manifest, webpUrl } of pages) {
-    const pageTexture = await Assets.load<Texture>(webpUrl);
+  for (const [i, { manifest, webpUrl }] of pages.entries()) {
+    const pageTexture = await (prefetched ? prefetched[i] : Assets.load<Texture>(webpUrl));
     const sheet = new Spritesheet(pageTexture, manifest);
     await sheet.parse();
     Object.assign(textures, sheet.textures);

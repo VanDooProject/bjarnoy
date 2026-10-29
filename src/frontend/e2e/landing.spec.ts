@@ -1,6 +1,7 @@
 import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { waitForMapReady } from './helpers';
 import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
@@ -38,6 +39,10 @@ test('landing page holds the guided pointer back until the map has loaded', { ta
   await expect(settlement.guidancePointer).toHaveCount(0);
 
   releaseTerrain();
+  // The pointer follows the map's own "loaded" state, so wait for that the
+  // way every other landing spec does (openLanding) rather than giving the
+  // whole terrain atlas download and decode a bare expect timeout.
+  await waitForMapReady(page);
   await expect(settlement.guidancePointer).toBeVisible();
   await expect(settlement.guidancePointer).toContainText('Click this plot');
 });
