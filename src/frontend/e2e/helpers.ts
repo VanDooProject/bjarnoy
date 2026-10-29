@@ -132,10 +132,24 @@ export async function claimLandfall(page: Page): Promise<void> {
 
   // Founding is async (even in demo mode, it's a Vue reactive update away) —
   // wait for the store to actually have a selected settlement before poking
-  // it directly, rather than racing the click above.
+  // it directly, rather than racing the click above. Then wait out the
+  // founding camera transition too (HexMapRenderer.animateCameraTo, 1.4 s):
+  // until it lands, every hex's `hexCenterScreen` is still sliding toward the
+  // settlement framing, so a spec that reads a hex's screen point right after
+  // this returns (`SettlementPage.findHex`) and clicks it later hits whatever
+  // hex has moved under that point by then — under load the ring then never
+  // opened, because the stale point had become sea or the longhouse.
+  // `previewCenter` is cleared by the same `updateOptions` call that starts
+  // the ease, so "no preview and not animating" is the settled camera.
   await page.waitForFunction(
-    () => !!(window as unknown as { __demoWorld?: () => { selectedSettlementId: string | null } }).__demoWorld?.()
-      ?.selectedSettlementId,
+    () => {
+      const win = window as unknown as {
+        __demoWorld?: () => { selectedSettlementId: string | null };
+        __settlementRenderer?: () => { previewCenter?: unknown; cameraAnimating: boolean } | undefined;
+      };
+      const renderer = win.__settlementRenderer?.();
+      return !!win.__demoWorld?.()?.selectedSettlementId && !!renderer && !renderer.previewCenter && !renderer.cameraAnimating;
+    },
     undefined,
     { timeout: 15_000 },
   );
