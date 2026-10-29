@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Six tiny pictures of the palisade's movement rules: the ground as hexes, the wall as a brown line drawn along the
 // middle of its hexes (a gate is a gap in the line between two posts), and an army (the blue dot) walking at it from
-// the left. The arrow is green where the army gets through (a number is its cost) and red with a cross where it is
+// the left. The arrow is green where the army gets through (labelled where it is slower) and red with a cross where it is
 // stopped. Plain SVG, no art, so it also reads where the atlas is not loaded.
 const R = 12;
 const STEP = 21;
@@ -25,7 +25,7 @@ interface Row {
   /** The rows the wall's line runs between (inclusive); a sea end's last row is the water hex it stands in. */
   wall: { from: number; to: number; gate?: number };
   /** The row of the cells the army walks along, and whether it gets through. */
-  walk: { row: number; through: boolean; cost?: number };
+  walk: { row: number; through: boolean; slower?: boolean };
 }
 const ROWS: Row[] = [
   {
@@ -44,13 +44,13 @@ const ROWS: Row[] = [
     id: 'halfOpen',
     cells: ['grass', 'grass', 'sand', 'grass', 'mountain'],
     wall: { from: 1, to: 3 },
-    walk: { row: 1, through: true, cost: 3 },
+    walk: { row: 1, through: true, slower: true },
   },
   {
     id: 'stream',
     cells: ['stream', 'grass', 'sand', 'grass', 'mountain'],
     wall: { from: 1, to: 3 },
-    walk: { row: 1, through: true, cost: 3 },
+    walk: { row: 1, through: true, slower: true },
   },
   {
     id: 'seaEnd',
@@ -141,8 +141,8 @@ function segments(wall: Row['wall']): { y1: number; y2: number }[] {
             class="head ok"
             :points="`132,${CENTRES[row.walk.row]! - 5} 138,${CENTRES[row.walk.row]} 132,${CENTRES[row.walk.row]! + 5}`"
           />
-          <text v-if="row.walk.cost" class="cost" x="108" :y="CENTRES[row.walk.row]! - 6">
-            {{ row.walk.cost }}
+          <text v-if="row.walk.slower" class="slower" x="136" :y="CENTRES[row.walk.row]! - 6" text-anchor="end">
+            {{ $t('docs.walls.movement.diagram.slower') }}
           </text>
         </template>
         <template v-else>
@@ -311,9 +311,9 @@ path.stream.wide {
   stroke-linecap: round;
   fill: none;
 }
-.cost {
+.slower {
   fill: var(--text);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 figcaption {
