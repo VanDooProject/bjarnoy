@@ -68,6 +68,7 @@ public sealed class EndpointAccessPolicyTests
         // --- Static catalogues: the same data for every player, every world ---
         ["GET /api/v1/buildings"] = "Public catalogue — building costs/durations (BuildingCatalogue.cs) are static game data, not per-player.",
         ["GET /api/v1/units"] = "Public catalogue — the unit roster (UnitCatalogue.cs) is static game data, not per-player.",
+        ["GET /api/v1/info"] = "Build identity only (version, commit, branch, build time — InfoEndpoints). Public on branch builds by design, and on main/releases temporarily until the end of 2026, after which it errors until DiagnosticsOptions is decided again.",
 
         // --- Public world/leaderboard/profile surfaces: aggregate or public-by-design ---
         ["GET /api/v1/worlds/"] = "Public world listing (WorldSummaryResponse) — name, joinability and seat counts only, no seed/radius/generation/movement and no per-player data. World creation itself is admin-only (POST /api/v1/admin/worlds).",
