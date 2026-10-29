@@ -282,7 +282,15 @@ onBeforeUnmount(() => {
 });
 
 const drawerScrollRef = ref<HTMLElement | null>(null);
-const drawer = useHudDrawer(barPosition, availableDrawerHeight, () => drawerScrollRef.value);
+const drawerEl = ref<HTMLElement | null>(null);
+// liveOffset: the rendered height, so grabbing mid open/close animation
+// continues from where the drawer is showing rather than its target.
+const drawer = useHudDrawer(
+  barPosition,
+  availableDrawerHeight,
+  () => drawerScrollRef.value,
+  () => drawerEl.value?.getBoundingClientRect().height ?? null,
+);
 // Finding #12: hands this instance's own `close` to the shared singleton so
 // MapView/LandingView's mutual-exclusion watch (opening the queue drawer
 // should close this one) can reach it — see hudDrawerOpenState.ts's own
@@ -508,6 +516,7 @@ const backdropStyle = computed(() => {
   />
   <div
     v-if="dragEnabled"
+    ref="drawerEl"
     class="hud-drawer"
     :class="{ 'hud-drawer--bottom': barPosition === 'bottom', 'hud-drawer--rail': isRail, 'hud-drawer--rail-open': isRail && drawer.isOpen.value }"
     :style="isRail ? railDrawerStyle : drawerStyle"
