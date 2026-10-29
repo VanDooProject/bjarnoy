@@ -30,7 +30,7 @@ public class TerrainSamplerParityTests
     [MemberData(nameof(Seeds))]
     public void Terrain_matches_the_frontend_generator_hex_for_hex(int seed)
     {
-        var (terrain, _, _) = TerrainChecksumFixture.Compute(seed);
+        var (terrain, _, _, _) = TerrainChecksumFixture.Compute(seed);
 
         Assert.Equal(TerrainChecksumFixture.Expected(seed, "terrain"), terrain);
     }
