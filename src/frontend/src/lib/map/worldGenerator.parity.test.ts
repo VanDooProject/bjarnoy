@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { widestIslandCentre } from './testing/islandFinders';
 import {
   COMPACT_GENERATION,
+  forestKindAt,
   generateTile,
   isCoastalWater,
   orientationAt,
@@ -43,13 +44,16 @@ describe('generateTile parity with the per-question implementation', () => {
       for (let q = centre.q - 45; q <= centre.q + 45; q++) {
         for (let r = centre.r - 45; r <= centre.r + 45; r++) {
           const tile = generateTile(q, r, world);
+          const terrain = terrainAt(q, r, world);
           expect(tile).toEqual({
             q,
             r,
-            terrain: terrainAt(q, r, world),
+            terrain,
             isCoastalWater: isCoastalWater(q, r, world),
             orientation: orientationAt(q, r, world),
             variant: variantAt(q, r, world),
+            // Only a forest hex carries a biome.
+            ...(terrain === 'forest' ? { forestKind: forestKindAt(q, r, seed) } : {}),
           });
           if (tile.isCoastalWater) coastalSeen++;
           else if (tile.terrain === 'sea') seaSeen++;

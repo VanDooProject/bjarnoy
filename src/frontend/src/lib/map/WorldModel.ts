@@ -520,6 +520,7 @@ export class WorldModel {
   private decorateBogTile(tile: Tile, bog: BogTile, world: WorldSeed) {
     const terrain: Terrain = bog.kind === 'lake' ? 'lake' : 'bog';
     tile.terrain = terrain;
+    delete tile.forestKind;
     tile.bog = bog;
     tile.isCoastalWater = false;
     tile.orientation = defaultOrientation(tile.q, tile.r, world);
@@ -833,6 +834,7 @@ export class WorldModel {
       if (this.wastedRevealed) {
         if (this.isWastedLandAt(q, r)) {
           tile.wasted = true;
+          delete tile.forestKind; // wasted forest stays deadforest
           tile.variant = wastedVariantAt(q, r, { seed: this.seed, generation: this.generation }, tile.terrain);
         } else if (tile.terrain === 'sea' && tile.isCoastalWater) {
           // Coastal water bordering wasted land also renders as wasted
@@ -2081,6 +2083,7 @@ export class WorldModel {
     const tile = this.getTile(coord.q, coord.r);
     if (tile.terrain === 'forest') {
       tile.terrain = 'grass';
+      delete tile.forestKind;
       // Keep the pure terrain cache (`terrainOf`/`isLand`, see its own doc
       // comment) in step with the materialised `Tile` it was sampled from —
       // both are land either way, but leaving it stale as `forest` would
