@@ -23,6 +23,13 @@ export function useHudDrawer(
   // callers/tests that don't care about scrolling (e.g. useHudDrawer.test.ts's
   // plain-number gestures), which keeps the drag-only behaviour untouched.
   scrollEl?: () => HTMLElement | null,
+  // Optional getter for the drawer's height *as currently rendered* (null =
+  // unknown). The open/close animation is a CSS height transition (see
+  // TopBar.vue's `drawerStyle`), so mid-animation that differs from the
+  // resting target. A grab seeds from it at arm time, otherwise the drawer
+  // snaps to its target under the finger the moment the transition is
+  // switched off for the drag. Omitted by callers/tests that don't animate.
+  liveOffset?: () => number | null,
 ) {
   const isOpen = ref(false);
   const dragging = ref(false);
@@ -134,10 +141,17 @@ export function useHudDrawer(
       // capture-capable for the rest of the drag).
       capturedTarget = e.currentTarget as Element | null;
       capturedTarget?.setPointerCapture?.(pointerId);
+      // Grabbed mid-animation: continue from the height on screen, not the
+      // target it was heading for. Done here rather than at pointerdown
+      // because the transition keeps running during the intent threshold.
+      const live = liveOffset?.();
+      if (live != null && Number.isFinite(live)) startOffset = Math.min(Math.max(live, 0), drawerHeight.value);
       // Scroll-vs-drag routing only ever applies to a gesture that begins on
-      // an already fully-open drawer (`startOffset > 0` — see the spec's own
-      // "gestures that start on the collapsed bar are unaffected" carve-out).
-      scrollPriority = startOffset > 0;
+      // an already open drawer (`isOpen` and still showing some height — a
+      // drawer grabbed mid-close has no scroll position to give priority to;
+      // see the spec's "gestures that start on the collapsed bar are
+      // unaffected" carve-out).
+      scrollPriority = isOpen.value && startOffset > 0;
       // Seeds the running offset that every branch below now accumulates
       // onto incrementally (move-by-move), rather than recomputing from
       // `startOffset` + the *total* delta since gesture start each time —
