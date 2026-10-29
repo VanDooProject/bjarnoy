@@ -240,6 +240,20 @@ test.describe('mobile HUD bar', () => {
       const openBox = (await page.locator('.hud-drawer').boundingBox())!;
       expect(openBox.height).toBeGreaterThan(100);
     }).toPass();
+    // The close drag below is laid out from the open drawer's own box, so
+    // that box has to be the drawer's resting open height, not a frame of
+    // its open animation (TopBar.vue's `height 180ms ease`, which
+    // `reducedMotion` doesn't touch: it's an inline transition). The check
+    // above can't tell the two apart — the drawer is already ~220px tall
+    // the instant the drag releases, before it animates the rest of the
+    // way. Measured mid-animation (say 220 of 472px), the close drag only
+    // covers that much, releases with the drawer still past the 30% open
+    // threshold, and whether it closes then rests on the last of its 10
+    // steps alone happening to arrive fast enough to count as a flick —
+    // which a busy renderer's frame-delayed pointermove doesn't. That's
+    // the CI flake (drawer stuck at 472px). Wait for the transition itself
+    // to finish instead.
+    await expect.poll(() => page.locator('.hud-drawer').evaluate((el) => el.getAnimations().length)).toBe(0);
     await expect(page.locator('.hud-drawer .drawer-links')).toBeVisible();
     // ResourceBar's pills switch to their expanded (desktop-style stacked)
     // rendering while the drawer is open, instead of the collapsed
