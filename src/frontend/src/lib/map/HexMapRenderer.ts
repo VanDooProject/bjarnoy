@@ -5040,6 +5040,17 @@ export class HexMapRenderer {
   }
 
   /**
+   * True while the founding transition (animateCameraTo) is still easing the
+   * camera toward the new settlement — every hex's screen point
+   * (`hexCenterScreen`) is still moving. e2e founding helpers wait for this to
+   * clear before reading a hex's screen point to click it, rather than racing
+   * the ease. `cameraAnim` itself stays private.
+   */
+  get cameraAnimating(): boolean {
+    return this.cameraAnim !== null;
+  }
+
+  /**
    * The plot this renderer was mounted to preview, if any — LandingView's
    * `previewCoord` (demo: `findLandfall`; live: `plotSuggestion.plot`),
    * captured once at mount (see useHexMapRenderer's own remarks on options
