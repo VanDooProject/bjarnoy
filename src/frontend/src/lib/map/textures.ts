@@ -1642,9 +1642,20 @@ function tileOrientationFor(tile: Tile, riverArt?: RiverArt): TileOrientation {
   return usesBogOrientation(tile) ? bogOrientationFor(tile.bog!, own) : own;
 }
 
-/** A bog family's variant slot for a tile: its hashed variant, wrapped onto however many the family has (creeks have 2, shores 1-2, ...). */
-function bogVariantIn<T>(tile: Tile, arr: readonly T[]): number {
-  return arr.length <= 1 ? 0 : (tile.variant ?? 0) % arr.length;
+/**
+ * Bog looks the game no longer shows, per family: a hex whose variant lands on one draws the family's plain frame
+ * instead. The art pack still has them, so every other look keeps its slot (`variant % length` is unchanged).
+ * `bog` 6 is the peat cuttings: its stepped peat bank stands on the moss as a hard-edged slab.
+ */
+export const RETIRED_BOG_VARIANTS: Readonly<Partial<Record<TextureKey, ReadonlySet<number>>>> = {
+  bog: new Set([6]),
+};
+
+/** A bog family's variant slot for a tile: its hashed variant, wrapped onto however many the family has (creeks have 2, shores 1-2, ...); a retired look falls back to the plain frame. Exported for the tests. */
+export function bogVariantIn<T>(key: TextureKey, tile: Tile, arr: readonly T[]): number {
+  if (arr.length <= 1) return 0;
+  const slot = (tile.variant ?? 0) % arr.length;
+  return RETIRED_BOG_VARIANTS[key]?.has(slot) ? 0 : slot;
 }
 
 /** Clamps an index into `[0, length)` — the shared fallback for both terrain variants and building levels: an index the art pack doesn't have falls back to its richest known one. */
@@ -1729,7 +1740,7 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   if (indexed && BOG_TEXTURE_KEYS.has(key)) {
     // A bog family's base differs per variant (its submerged props), not per building level.
     const arr = indexed[orientation];
-    if (arr.length > 0) return arr[bogVariantIn(tile, arr)]!;
+    if (arr.length > 0) return arr[bogVariantIn(key, tile, arr)]!;
   }
   if (indexed && !BOG_TEXTURE_KEYS.has(key)) {
     const picked = pickIndexed(indexed[orientation], (tile.buildingLevel ?? 1));
@@ -1818,7 +1829,7 @@ export function topTextureFor(textures: TileTextures, tile: Tile, riverArt?: Riv
   const orientation = tileOrientationFor(tile, riverArt);
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
-  if (BOG_TEXTURE_KEYS.has(key)) return arr[bogVariantIn(tile, arr)];
+  if (BOG_TEXTURE_KEYS.has(key)) return arr[bogVariantIn(key, tile, arr)];
   return pickIndexed(arr, index);
 }
 

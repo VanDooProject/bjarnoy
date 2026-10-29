@@ -1045,6 +1045,8 @@ public sealed class TerrainSampler
         [Terrain.Mountain] = 4,
 
         // Bog: the plain moss plus variant001-008 (open mire x3, ore seep, fen, peat cuttings, birch copse, seep chain).
+        // The client draws variant006 (peat cuttings) as plain moss (textures.ts RETIRED_BOG_VARIANTS); its slot stays so
+        // the other looks keep theirs.
         [Terrain.Bog] = 9,
 
         // Lake: the plain water plus variant001-003 (islet, moss mat, reed island). variant004 (fish weir), 005 (ore boat)

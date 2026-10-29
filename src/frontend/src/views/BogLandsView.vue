@@ -9,6 +9,7 @@ import DocsToc from '../components/docs/DocsToc.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import BogIsland from '../components/docs/BogIsland.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import { RETIRED_BOG_VARIANTS } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -24,11 +25,11 @@ function showcase(name: string): AtlasFrameRect | undefined {
 }
 
 /** `''` for the plain look plus every `_variantNNN` the atlas has for this terrain family. */
-function looksOf(family: string): string[] {
+function looksOf(family: string, retired: ReadonlySet<number> = new Set()): string[] {
   const looks = [''];
   for (let i = 1; i < 20; i++) {
     const suffix = `_variant${String(i).padStart(3, '0')}`;
-    if (showcase(`${family}_SE${suffix}`)) looks.push(suffix);
+    if (!retired.has(i) && showcase(`${family}_SE${suffix}`)) looks.push(suffix);
   }
   return looks;
 }
@@ -46,8 +47,9 @@ function levelsOf(family: string): number[] {
 // beside the name and text, the pickers underneath. `family` is the showcase atlas family; ground and water entries
 // pick a look, buildings a stage, and each has its own camera.
 
-// Look names follow the variant order in 3D_assets' docs/bog-tiles.md.
-const GROUND_LOOKS = ['plain', 'mire1', 'mire2', 'mire3', 'oreSeep', 'fen', 'peat', 'copse', 'seepChain'] as const;
+// Look names follow the variant order in 3D_assets' docs/bog-tiles.md, minus the looks the game no longer shows
+// (variant006, the peat cuttings: `RETIRED_BOG_VARIANTS`).
+const GROUND_LOOKS = ['plain', 'mire1', 'mire2', 'mire3', 'oreSeep', 'fen', 'copse', 'seepChain'] as const;
 
 const WATER_SHAPES = [
   { id: 'creek', family: 'bogcreek' },
@@ -83,7 +85,7 @@ const ENTRIES: Entry[] = [
     id: 'ground',
     group: 'ground',
     family: 'bog',
-    looks: looksOf('bog'),
+    looks: looksOf('bog', RETIRED_BOG_VARIANTS.bog),
     levels: [],
   },
   ...WATER_SHAPES.map((s) => ({
