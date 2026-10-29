@@ -6,7 +6,7 @@ namespace Bjarnoy.Api.Hosting;
 /// <remarks>
 /// <para>
 /// Both default to the answer <see cref="BuildInfoOptions.IsProductionBuild"/>
-/// gives, so a branch deployment is debuggable the moment it comes up and the
+/// gives (except <see cref="PublicBuildInfo"/>, temporarily public everywhere), so a branch deployment is debuggable the moment it comes up and the
 /// production one is not, with nothing to configure either way — the branch is
 /// already stamped into the image, and Coolify rebuilds per branch.
 /// </para>
@@ -23,8 +23,10 @@ public sealed class DiagnosticsOptions
     public const string SectionName = "Diagnostics";
 
     /// <summary>
-    /// Serve <c>GET /api/v1/info</c> to anyone. Null follows the build: open on
-    /// a branch deployment, Admin-only on main and on releases.
+    /// Serve <c>GET /api/v1/info</c> to anyone. Null is open everywhere for now:
+    /// on main and on releases only until the end of
+    /// <c>InfoEndpoints.TemporarilyPublicUntilYear</c>, after which it answers
+    /// with an error until this is decided again.
     /// </summary>
     public bool? PublicBuildInfo { get; set; }
 
