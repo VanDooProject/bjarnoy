@@ -110,6 +110,7 @@ import {
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
+import { bogEdgeDebug, bogEdgeShapes, bogGrassEdges, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { animationPreference } from '../perf/animationPreference';
@@ -1393,6 +1394,7 @@ export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
 export type WorldLayerName =
   | 'water'
   | 'terrainBase'
+  | 'bogEdges'
   | 'waves'
   | 'terrainFlat'
   | 'rivers'
@@ -1442,8 +1444,8 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // to the scene graph there (rebuildRivers is never called for that mode
   // either, so it always stays empty).
   return mode === 'world'
-    ? ['water', 'terrainBase', 'waves', 'terrainFlat', 'rivers', ...rest]
-    : ['terrainBase', 'waves', 'terrainFlat', 'water', ...rest];
+    ? ['water', 'terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
+    : ['terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
 /**
@@ -1681,6 +1683,8 @@ export class HexMapRenderer {
    */
   private fadeIns = new Map<Sprite, { delayMs: number; durationMs: number; elapsedMs: number }>();
   private terrainFlat = new Graphics();
+  // The bog/grass edge border (bogEdge.ts): settlement mode only, the lowest thing drawn over the ground art.
+  private bogEdgeLayer = new Graphics();
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
   // here because which view this is decides whether it draws a sea body at all
@@ -2158,6 +2162,7 @@ export class HexMapRenderer {
     return {
       water: this.waterLayer.mesh,
       terrainBase: this.terrainBase.container,
+      bogEdges: this.bogEdgeLayer,
       waves: this.waveLayer,
       terrainFlat: this.terrainFlat,
       rivers: this.riverLayer,
@@ -3527,6 +3532,8 @@ export class HexMapRenderer {
       this.riverLayer.clear();
     }
 
+    this.rebuildBogEdges(coords);
+
     phaseStart = performance.now();
     this.rebuildBorders(coords, fogActive, deepFogOnly);
     fogPerfStats.bordersMs = performance.now() - phaseStart;
@@ -4487,6 +4494,47 @@ export class HexMapRenderer {
       // an overlay sprite exists — only the overlay cycles.
       if (state.overlay) state.overlay.texture = texture;
       else state.sprite.texture = texture;
+    }
+  }
+
+  private rebuildBogEdges(coords: AxialCoord[]) {
+    const { worldModel, mode } = this.options;
+    this.bogEdgeLayer.clear();
+    const style = bogEdgeDebug.style;
+    if (mode !== 'settlement' || style === 'off') return;
+    const getTile = (q: number, r: number) => worldModel.getTile(q, r);
+    const top = isoTopPoints(TILE_W, TILE_H);
+    const centre = { x: TILE_W / 2, y: TILE_H / 2 };
+    const under: BogEdgeShape[] = [];
+    const over: BogEdgeShape[] = [];
+    // Not gated on exploration: it follows the ground art, which draws under the fog too.
+    for (const c of coords) {
+      const edges = bogGrassEdges(getTile, c);
+      if (edges.length === 0) continue;
+      const grid = isoGridPosition(c, TILE_W, TILE_H);
+      for (const edge of edges) {
+        const a = top[edge];
+        const b = top[(edge + 1) % 6];
+        // Unit normal pointing out of the hex, measured in the squashed top-face space the edge itself lives in.
+        const mid = { x: (a.x + b.x) / 2 - centre.x, y: (a.y + b.y) / 2 - centre.y };
+        const len = Math.hypot(mid.x, mid.y);
+        const shapes = bogEdgeShapes(
+          style,
+          { x: grid.x + a.x, y: grid.y + a.y },
+          { x: grid.x + b.x, y: grid.y + b.y },
+          { x: mid.x / len, y: mid.y / len },
+          [c.q, c.r, edge],
+        );
+        for (const shape of shapes) (shape.under ? under : over).push(shape);
+      }
+    }
+    for (const shape of [...under, ...over]) {
+      const flat = shape.points.flatMap((p) => [p.x, p.y]);
+      if (shape.fill) this.bogEdgeLayer.poly(flat).fill(shape.fill);
+      // A rim under the moss ends flat: a round end would poke past the corner cap that covers it.
+      if (shape.stroke) {
+        this.bogEdgeLayer.poly(flat, false).stroke({ ...shape.stroke, join: 'round', cap: shape.under ? 'butt' : 'round' });
+      }
     }
   }
 
@@ -5681,6 +5729,7 @@ export class HexMapRenderer {
       // is the only thing that ever sets or refreshes them).
       this.syncSpriteLayer(this.terrainBase, new Map());
       this.syncSpriteLayer(this.terrainTop, new Map());
+      this.bogEdgeLayer.clear();
       this.topAnimState.clear();
       this.blackFogLayer.setArmyVisionSources([], 0);
       this.whiteMistLayer.setArmyVisionSources([], 0);

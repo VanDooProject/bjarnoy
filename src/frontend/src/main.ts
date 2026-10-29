@@ -6,6 +6,7 @@ import { i18n, initLocale } from './i18n';
 import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './lib/map/water/waterDebug';
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
 import { zoomTransitionTuning } from './lib/map/zoomTransition';
+import { bogEdgeDebug } from './lib/map/bogEdge';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
 import './style.css';
@@ -57,5 +58,7 @@ if (DEMO_MODE) {
   // Zoom-driven world<->settlement transition's tuning — the console-side
   // twin of ZoomDebugPanel (see zoomTransition.ts), exposed on the same
   // terms as __waterTuning/__fogTuning above.
+  // The bog/grass edge border's style switch (bogEdge.ts), e.g. `window.__bogEdge.style = 'rim'`; next rebuild.
+  (window as unknown as { __bogEdge: typeof bogEdgeDebug }).__bogEdge = bogEdgeDebug;
   (window as unknown as { __zoomTuning: typeof zoomTransitionTuning }).__zoomTuning = zoomTransitionTuning;
 }
