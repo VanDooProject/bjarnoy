@@ -148,6 +148,28 @@
   real motion needs a recorded user approval there). It doesn't
   replace fixing real perf problems for slow devices.
 
+# code reuse
+- never implement the same behaviour twice or differently in two places
+  (e.g. a component's mount + open/close animation wired one way in
+  `MapView.vue` and another way in `LandingView.vue`). Put it in one
+  shared place (the component itself, a wrapper component or a
+  composable) that every caller uses
+- a fix for something that's used in more than one place goes into that
+  shared place, not into each caller; if you find two diverging copies
+  while working, unify them in your change or open a task for it
+
+# UI changes
+- every UI change follows `docs/design/ui-guidelines.md` (no leftover
+  actions, no links back into finished flows, no chrome without
+  information on phones, safe areas, every enter has a leave, one
+  implementation per behaviour, real-touch gestures)
+- apply it in the same PR as the change: when a flow changes, check the
+  surfaces around it for what the change made stale (old buttons, links,
+  reserved space, copy) and remove it right away — don't leave it for a
+  later cleanup pass
+- when a change reveals a new kind of recurring UI leftover, add the rule
+  to `docs/design/ui-guidelines.md`
+
 # interaction between u (AI) and user (me)
 
 ## github cloud agent
