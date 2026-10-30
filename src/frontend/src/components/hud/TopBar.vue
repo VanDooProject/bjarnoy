@@ -389,6 +389,9 @@ function onBarPointerCancel(e: PointerEvent) {
 function onBarLostPointerCapture(e: PointerEvent) {
   if (dragGestureEnabled.value) drawer.onLostPointerCapture(e);
 }
+function onBarTouchMove(e: TouchEvent) {
+  if (dragGestureEnabled.value) drawer.onTouchMove(e);
+}
 function onGripClick() {
   if (dragEnabled.value) drawer.toggle();
 }
@@ -465,6 +468,7 @@ const backdropStyle = computed(() => {
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
     @lostpointercapture="onBarLostPointerCapture"
+    @touchmove="onBarTouchMove"
     @click.capture="onClickCapture"
   >
     <!-- The logo lives in the mobile settlement-bubble instead (below) —
@@ -578,6 +582,7 @@ const backdropStyle = computed(() => {
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
     @lostpointercapture="onBarLostPointerCapture"
+    @touchmove="onBarTouchMove"
     @click.capture="onClickCapture"
   >
     <!-- The collapsed bar (and its grip) stays pinned to the screen's own
@@ -1109,6 +1114,21 @@ const backdropStyle = computed(() => {
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* `.hud-drawer`'s own `touch-action: none` stops at this element: a
+     scroll container starts a fresh touch-action scope for its contents, so
+     without repeating it here a finger on overflowing drawer content is
+     claimed by the browser's native pan (`pointercancel`), and the drawer
+     can no longer be dragged closed by touch. Touch scrolling of this
+     element is driven from useHudDrawer instead (see `scrollEl` there);
+     wheel and `scrollIntoView` stay native. The chip layouts' drawers
+     (the rail sheet and the floating drawer) have no drag, so nothing
+     drives their scrolling from script: they opt back into native touch
+     scrolling below. */
+  touch-action: none;
+}
+.hud-drawer--rail .hud-drawer-scroll,
+.hud-drawer--floating .hud-drawer-scroll {
+  touch-action: auto;
 }
 .hud-drawer--bottom .hud-drawer-scroll {
   /* A flex column (not `column-reverse`, which would flip `scrollTop`
