@@ -29,6 +29,7 @@ import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { useWorldStore } from '../../stores/world';
 import { useLogout } from '../../composables/useLogout';
+import { useLandingLink } from '../../composables/useLandingLink';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { profileLocation } from '../../lib/profileRoute';
 import { modalLocation } from '../../lib/modalRoute';
@@ -46,6 +47,7 @@ const player = usePlayerStore();
 const reports = useReportsStore();
 const world = useWorldStore();
 const { logout } = useLogout();
+const showLandingLink = useLandingLink();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 function go(path: string) {
@@ -134,12 +136,12 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
     <button class="link" :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }" @click="go('/docs')">
       {{ t('hud.nav.docs') }}
     </button>
-    <!-- Mirrors HudNav.vue's own landing self-link rule: hidden on the
-         landing route itself rather than offering a click to nowhere
-         (finding #8 — this drawer is now shared by every page that shows
-         HudNav, docs pages included, which previously had no way back
-         "home" at all on a phone). -->
-    <button v-if="route.name !== 'landing'" class="link" @click="go('/')">
+    <!-- Same rule as HudNav.vue's Landing link (composables/useLandingLink.ts):
+         hidden on the landing route itself and once the player has founded.
+         Finding #8: this drawer is shared by every page that shows HudNav,
+         docs pages included, so a player with nothing yet still has a way
+         back "home" on a phone. -->
+    <button v-if="showLandingLink" class="link" @click="go('/')">
       {{ t('hud.nav.landing') }}
     </button>
     <!-- The language switcher's only home at phone width — see

@@ -12,6 +12,7 @@ import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { useLogout } from '../../composables/useLogout';
+import { useLandingLink } from '../../composables/useLandingLink';
 import { profileLocation } from '../../lib/profileRoute';
 import { modalLocation } from '../../lib/modalRoute';
 import { DEMO_MODE } from '../../config';
@@ -52,6 +53,7 @@ const auth = useAuthStore();
 const player = usePlayerStore();
 const reports = useReportsStore();
 const { logout } = useLogout();
+const showLandingLink = useLandingLink();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #40 phase 3: a lightweight "new reports" badge. HudNav is mounted
@@ -207,11 +209,10 @@ watch(() => route.fullPath, closeAccountMenu);
     >
       {{ t('hud.nav.docs') }}
     </button>
-    <!-- landing-page-defects.md L1: a self-link on the page you're already
-         on when route.name is 'landing' — HudNav is mounted there too, for
-         the post-founding half of LandingView (see that component's own
-         header split). Hide it there rather than offer a click to nowhere. -->
-    <button v-if="route.name !== 'landing'" class="link" @click="router.push('/')">
+    <!-- Hidden on the landing route itself (landing-page-defects.md L1) and
+         for good once the player has founded — see
+         composables/useLandingLink.ts, shared with MobileHudDrawer.vue. -->
+    <button v-if="showLandingLink" class="link" @click="router.push('/')">
       {{ t('hud.nav.landing') }}
     </button>
     <LocaleSwitcher />

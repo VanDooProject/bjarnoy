@@ -220,11 +220,21 @@ describe('HudNav link visibility', () => {
     expect(wrapper.text()).not.toContain('Landing');
   });
 
-  it('shows the Landing link on any other route', async () => {
+  it('shows the Landing link on any other route for a player who has not founded yet', async () => {
+    const wrapper = await mountHudNav('/docs');
+    expect(wrapper.text()).toContain('Landing');
+  });
+
+  // Phone screenshot: a founded player was still offered "Landing", which
+  // only reads as "start over" once there is a realm to return to.
+  it('hides the Landing link once the player has founded, on every route', async () => {
     const player = usePlayerStore();
     player.hasFoundedSettlement = true;
-    const wrapper = await mountHudNav('/settlement');
-    expect(wrapper.text()).toContain('Landing');
+    for (const path of ['/settlement', '/docs', '/']) {
+      const wrapper = await mountHudNav(path);
+      expect(wrapper.text()).not.toContain('Landing');
+      wrapper.unmount();
+    }
   });
 });
 
