@@ -341,6 +341,32 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
     await expectNoOverlap(settlement.profileNudge, page.locator('.settlement-bubble'), 'profile nudge covers the settlement bubble');
   });
 
+  // Owner request: "Name your jarl" stays an on-screen button after the nudge
+  // is dismissed with "Later", on the landing page and in the settlement view
+  // alike (where it floats under the Trade toggle instead of hiding in the
+  // drawer).
+  test('the "Name your jarl" chip stays after Later, on landing and on /settlement', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await settlement.placeGuidedBuildings();
+    await settlement.profileNudge.getByTestId('profile-nudge-later').click();
+    await expect(settlement.profileNudge).toHaveCount(0);
+
+    const trigger = page.getByTestId('returning-player-trigger');
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toContainText('Name your jarl');
+
+    await page.getByTestId('onboarding-continue').click();
+    await expect(page).toHaveURL(/\/settlement$/);
+    await waitForMapReady(page);
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toContainText('Name your jarl');
+    await expectInsideViewport(page, trigger);
+    await expectNoOverlap(trigger, page.locator('.trade-toggle'), 'the chip covers the Trade toggle');
+    await expectNoOverlap(trigger, page.locator('.settlement-bubble'), 'the chip covers the settlement bubble');
+  });
+
   test('the open queue drawer paints above the settlement bubble', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);

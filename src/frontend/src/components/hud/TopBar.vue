@@ -961,13 +961,6 @@ const backdropStyle = computed(() => {
   padding-left: 0;
   border-left: none;
 }
-/* The trigger was a bordered outline on the dark band; on the bare map it
-   needs a background of its own — the same chip look as the settlement
-   bubble beside it. */
-.hud-bar--floating .hud-bar-right :deep(.trigger) {
-  background: rgba(6, 12, 16, 0.94);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-}
 /* ProfileNudge hangs from the trigger chip, right-aligned with it (so 16px
    from the screen's edge), and is never wider than the screen minus both 16px
    gutters, so it stays wholly on screen on the narrowest phones. */

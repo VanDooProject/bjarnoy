@@ -447,12 +447,18 @@ test.describe('mobile HUD bar', () => {
     await expect(page).toHaveURL('/profile');
   });
 
-  test('drawer account section: anonymous shows the log-in entry (the trigger itself stays out of this bar)', async ({ page }) => {
+  // The anonymous trigger has no room in the bar itself: it floats as a chip
+  // below it (under the Trade toggle), and steps aside while the drawer is open.
+  test('drawer account section: anonymous shows the log-in entry (the trigger floats below the bar, not in it)', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page); // anonymous — no loginTestUser
 
-    await expect(page.locator('.hud-bar .returning-player-menu')).toBeHidden();
+    const trigger = page.getByTestId('returning-player-trigger');
+    await expect(trigger).toBeVisible();
+    const [triggerBox, barBox] = [await trigger.boundingBox(), await page.locator('header.hud-bar').boundingBox()];
+    expect(triggerBox!.y, 'the trigger sits in the bar').toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
     await page.locator('.hud-grip').click();
+    await expect(trigger).toBeHidden();
     await expect(page.locator('[data-testid="drawer-account-login"]')).toBeVisible();
     await expect(page.locator('[data-testid="drawer-account-worlds"]')).toBeVisible();
   });

@@ -152,8 +152,10 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
     <!-- Account section: Profile/Log out land here unconditionally (the
          avatar leaves every phone bar); the anonymous login/world-list entry
          points only land here on a `hasResourceBar` bar, where
-         ReturningPlayerMenu's own trigger is hidden instead of staying
-         inline — see this file's own top-of-file comment. -->
+         ReturningPlayerMenu's own trigger has no room in the bar (it floats
+         as a chip under the Trade toggle instead, see HudNav.vue, and steps
+         aside while this drawer is open) — see this file's own top-of-file
+         comment. -->
     <div class="drawer-account">
       <template v-if="auth.isAuthenticated">
         <button type="button" class="link" data-testid="drawer-account-profile" @click="goToProfile">

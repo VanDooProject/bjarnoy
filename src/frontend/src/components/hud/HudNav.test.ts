@@ -196,6 +196,54 @@ describe('HudNav auth gating', () => {
 // half is covered by e2e/landing.spec.ts instead, since it needs the real
 // router guard and canvas), because HudNav is reused by every other
 // pre-founding route this same bug could show up on.
+// Owner request: the "Name your jarl" trigger stays on screen after the nudge
+// is dismissed with "Later" — the same ReturningPlayerMenu everywhere, as a
+// chip on the floating landing header and on the in-game (ResourceBar) bar.
+describe('HudNav "Name your jarl" trigger', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  async function mountWith(props: Record<string, unknown>, path = '/settlement') {
+    const router = testRouter();
+    await router.push(path);
+    await router.isReady();
+    return mount(HudNav, {
+      props,
+      global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })] },
+    });
+  }
+
+  for (const [where, props] of [
+    ['the floating landing header', { floating: true }],
+    ['the in-game bar', { hasResourceBar: true }],
+  ] as const) {
+    it(`stays as a chip on ${where} after "Later"`, async () => {
+      const player = usePlayerStore();
+      foundAndOnboarded(player);
+      player.dismissProfileNudge();
+      const wrapper = await mountWith(props);
+      const trigger = wrapper.get('[data-testid="returning-player-trigger"]');
+      expect(trigger.text()).toContain('Name your jarl');
+      expect(trigger.classes()).toContain('trigger--chip');
+      expect(wrapper.find('[data-testid="profile-nudge"]').exists()).toBe(false);
+    });
+
+    it(`is gone from ${where} once registered`, async () => {
+      foundAndOnboarded(usePlayerStore());
+      authenticate(useAuthStore());
+      const wrapper = await mountWith(props);
+      expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
+    });
+  }
+
+  it('is not a chip on a plain bar (docs pages)', async () => {
+    foundAndOnboarded(usePlayerStore());
+    const wrapper = await mountWith({}, '/docs');
+    expect(wrapper.get('[data-testid="returning-player-trigger"]').classes()).not.toContain('trigger--chip');
+  });
+});
+
 describe('HudNav link visibility', () => {
   beforeEach(() => {
     setActivePinia(createPinia());

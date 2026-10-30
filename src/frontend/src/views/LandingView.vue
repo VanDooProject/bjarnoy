@@ -955,7 +955,7 @@ watch(
          top edge (its nudge glow/dot clipped there). It floats as chips
          instead — see TopBar.vue's `floating` prop. -->
     <TopBar v-if="player.hasFoundedSettlement && !hideBarForTutorial" floating>
-      <HudNav />
+      <HudNav floating />
       <template #drawer="{ close }">
         <MobileHudDrawer @close="close" />
       </template>
