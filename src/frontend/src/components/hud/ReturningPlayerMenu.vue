@@ -33,7 +33,7 @@ import type { MessageSchema } from '../../i18n/schema';
 //
 // `chip`: on a phone, the trigger floats over the bare map rather than
 // sitting on a dark bar (the founded landing's floating header, and the
-// in-game bar's chip under the Trade toggle — see HudNav.vue), so it gets a
+// in-game bar's top-right chip — see HudNav.vue), so it gets a
 // background of its own, the same chip look as the settlement bubble.
 withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean; chip?: boolean }>(), {
   nudging: false,

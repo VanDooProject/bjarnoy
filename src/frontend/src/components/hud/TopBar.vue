@@ -451,6 +451,7 @@ const backdropStyle = computed(() => {
   <header
     ref="barRef"
     class="hud-bar"
+    :style="{ '--settlement-bubble-top': settlementBubbleTop }"
     :class="{
       'hud-bar--docked': docked,
       'hud-bar--bottom': dragEnabled && barPosition === 'bottom',

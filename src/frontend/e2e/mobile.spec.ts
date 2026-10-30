@@ -343,8 +343,8 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
 
   // Owner request: "Name your jarl" stays an on-screen button after the nudge
   // is dismissed with "Later", on the landing page and in the settlement view
-  // alike (where it floats as a chip instead of hiding in the
-  // drawer).
+  // alike (where it floats as a chip in the top-right corner,
+  // on the settlement bubble's row, instead of hiding in the drawer).
   test('the "Name your jarl" chip stays after Later, on landing and on /settlement', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
@@ -364,6 +364,14 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
     await expect(trigger).toContainText('Name your jarl');
     await expectInsideViewport(page, trigger);
     await expectNoOverlap(trigger, page.locator('.settlement-bubble'), 'the chip covers the settlement bubble');
+
+    // Top right, on the settlement bubble's row: 16px from the right edge and
+    // vertically centred on the bubble.
+    const chip = (await trigger.boundingBox())!;
+    const bubble = (await page.locator('.settlement-bubble').boundingBox())!;
+    expect(PHONE.width - (chip.x + chip.width), 'the chip keeps the 16px right gutter').toBeCloseTo(16, 0);
+    expect(chip.y + chip.height / 2, 'the chip is vertically centred on the bubble').toBeCloseTo(bubble.y + bubble.height / 2, 0);
+    expect(chip.x, 'the chip sits right of the bubble').toBeGreaterThan(bubble.x + bubble.width);
   });
 
   test('the open queue drawer paints above the settlement bubble', async ({ page }) => {
