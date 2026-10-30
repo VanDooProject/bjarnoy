@@ -9,9 +9,30 @@ import type { Point } from '../hex/geometry';
 import { TILE_ORIENTATIONS, type RiverTile, type Tile } from './types';
 
 /** How the border looks — `bogEdgeDebug` picks one per neighbour kind; see `bogEdgeShapes`. */
-export type BogEdgeStyle = 'off' | 'feather' | 'rim' | 'straight' | 'lobes' | 'lobesRim';
+export type BogEdgeStyle =
+  | 'off'
+  | 'feather'
+  | 'rim'
+  | 'straight'
+  | 'lobes'
+  | 'lobesRim'
+  | 'shadow'
+  | 'darkLobes'
+  | 'forestLobes'
+  | 'forestLobesShadow';
 
-export const BOG_EDGE_STYLES: readonly BogEdgeStyle[] = ['off', 'feather', 'rim', 'straight', 'lobes', 'lobesRim'];
+export const BOG_EDGE_STYLES: readonly BogEdgeStyle[] = [
+  'off',
+  'feather',
+  'rim',
+  'straight',
+  'lobes',
+  'lobesRim',
+  'shadow',
+  'darkLobes',
+  'forestLobes',
+  'forestLobesShadow',
+];
 
 /** What a bordered bog edge faces. */
 export type BogEdgeNeighbour = 'grass' | 'forest';
@@ -19,6 +40,15 @@ export type BogEdgeNeighbour = 'grass' | 'forest';
 /** The bog art's moss and the brown of its pool rims, sampled off the rendered tiles. */
 export const BOG_MOSS = 0x799244;
 export const BOG_PEAT = 0x5e4a34;
+/**
+ * The forest art's ground between the trees (its baked shadow catcher), sampled off the rendered tiles: darker and
+ * more saturated than the moss, which is why moss pushed out over it reads as the wrong colour.
+ */
+export const FOREST_GROUND = 0x52822a;
+/** The moss darkened to the forest ground's brightness, for `darkLobes`. */
+export const BOG_MOSS_SHADED = 0x5f7a30;
+/** The shadow the trees cast onto the bog in `shadow` / `forestLobesShadow`, laid down in a few translucent bands. */
+const TREE_SHADOW = 0x1c3008;
 
 /**
  * Demo-mode debug switch (`window.__bogEdge`), read on every rebuild: the style against grass, the style against
@@ -185,7 +215,17 @@ function rangeShapes(
   color: number,
   startCorner: boolean,
   endCorner: boolean,
+  fill = BOG_MOSS,
 ): BogEdgeShape[] {
+  // Forest options: the moss stays inside the bog and the forest's side carries the transition.
+  if (style === 'darkLobes') return rangeShapes('lobes', a, b, outward, seed, color, startCorner, endCorner, BOG_MOSS_SHADED);
+  if (style === 'forestLobes' || style === 'forestLobesShadow') {
+    // The forest ground creeps into the bog instead: the same lobes, pointing inward, in the forest's ground colour.
+    const inward = { x: -outward.x, y: -outward.y };
+    const lobes = rangeShapes('lobes', a, b, inward, seed, color, startCorner, endCorner, FOREST_GROUND);
+    if (style === 'forestLobes') return lobes;
+    return [...lobes, ...rangeShapes('shadow', a, b, outward, seed, color, startCorner, endCorner)];
+  }
   const at = (t: number, off: number): Point => ({
     x: a.x + (b.x - a.x) * t + outward.x * off,
     y: a.y + (b.y - a.y) * t + outward.y * off,
@@ -215,6 +255,24 @@ function rangeShapes(
     return bands;
   }
 
+  if (style === 'shadow') {
+    // The trees' shadow carried on over the moss: stacked translucent bands reaching into the bog, darkest at the
+    // edge. Their inner ends are mitred at the corners so two shaded edges of one hex meet without a gap.
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const bands: BogEdgeShape[] = [];
+    // Many thin steps rather than three, so the gradient doesn't read as stripes.
+    for (let i = 1; i <= 8; i++) {
+      const w = i * 3.5;
+      const alpha = 0.035;
+      const trim = (w * Math.tan(Math.PI / 6)) / len;
+      bands.push({
+        points: [at(0, 0), at(1, 0), at(endCorner ? 1 - trim : 1, -w), at(startCorner ? trim : 0, -w)],
+        fill: { color: TREE_SHADOW, alpha },
+      });
+    }
+    return bands;
+  }
+
   if (style === 'straight') {
     // A plain line on the hex edge, with a faint shadow under it. Round caps join it to the next edge's line.
     const line = [a, b];
@@ -236,11 +294,11 @@ function rangeShapes(
   // 'lobes' / 'lobesRim': organic tongues of moss pushed out over the grass so the edge stops being a ruler line.
   const reach = 14;
   const outer = along((t) => reach * reachAt(t));
-  const lobe: BogEdgeShape = { points: [...outer, at(1, -2), at(0, -2)], fill: { color: BOG_MOSS, alpha: 1 } };
+  const lobe: BogEdgeShape = { points: [...outer, at(1, -2), at(0, -2)], fill: { color: fill, alpha: 1 } };
   // Round caps on the corners: two edges meeting at a corner point their reach in different directions, the cap
   // fills the wedge between them. Only the grass-facing side, so nothing of a cap shows inside the bog.
   const capR = reach * CORNER_REACH;
-  const caps = corners.map((p) => ({ points: fan(p, capR, outward), fill: { color: BOG_MOSS, alpha: 1 } }));
+  const caps = corners.map((p) => ({ points: fan(p, capR, outward), fill: { color: fill, alpha: 1 } }));
   if (style === 'lobes') return [...caps, lobe];
   // The rim is drawn *under* the moss of every edge (`under`): a wide stroke along the outline and a slightly larger
   // cap at each corner, with all the moss on top, so only the outer half shows and it follows the outline of the
