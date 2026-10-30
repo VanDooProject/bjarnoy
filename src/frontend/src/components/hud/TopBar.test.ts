@@ -481,6 +481,34 @@ describe('TopBar', () => {
       wrapper.unmount();
     });
 
+    it('sizes the open drawer to the content element\'s border-box, not its padding-less contentRect', async () => {
+      stubCompactMediaQuery(true);
+      const callbacks: Array<(entries: unknown[]) => void> = [];
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(cb: (entries: unknown[]) => void) { callbacks.push(cb); }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      });
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+
+      const content = wrapper.get('.hud-drawer-content').element;
+      // Padded content: 300px of border-box, only 276px of contentRect.
+      const entry = {
+        target: content,
+        contentRect: { height: 276 },
+        borderBoxSize: [{ blockSize: 300, inlineSize: 390 }],
+      };
+      for (const cb of callbacks) cb([entry]);
+      await wrapper.get('.hud-grip').trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-drawer').attributes('style')).toContain('height: 300px');
+      wrapper.unmount();
+    });
+
     it('keeps the band without the prop, on desktop, docked, and in landscape rail', async () => {
       const cases: Array<[string[], Record<string, unknown>]> = [
         [[HUD_COMPACT_QUERY], {}],

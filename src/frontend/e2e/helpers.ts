@@ -481,30 +481,34 @@ export async function layoutOverflow(page: Page): Promise<{ pageScrollsSideways:
  * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
  * (camera + arrowTipOffset) is exactly where the click needs to land.
  */
+/** Frames `openRingOnGuidedHex` waits for the pointer's anchor to stop moving: well past the 1.4 s founding ease at 60 fps. */
+const GUIDANCE_SETTLE_MAX_FRAMES = 600;
+
 export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
   const pointer = settlement.guidancePointer;
-  const anchor = async (): Promise<string> => {
-    const style = (await pointer.getAttribute('style')) ?? '';
-    const x = style.match(/--anchor-x: (-?[\d.]+)px/)?.[1];
-    const y = style.match(/--anchor-y: (-?[\d.]+)px/)?.[1];
-    return x !== undefined && y !== undefined ? `${x},${y}` : '';
-  };
-  // The anchor follows the camera, which is still easing toward the new settlement right after landfall: a click on
-  // the first anchor it reports can land on the hex the guided one is about to slide away from. Wait until two reads
-  // a moment apart agree, so the click lands where the pointer comes to rest.
-  let previous = '';
-  await expect
-    .poll(
-      async () => {
-        const now = await anchor();
-        const settled = now !== '' && now === previous;
-        previous = now;
-        return settled;
-      },
-      { message: 'guidance pointer never came to rest on an anchor point', intervals: [250] },
-    )
-    .toBe(true);
-  const [x, y] = previous.split(',').map(Number) as [number, number];
+  // The anchor follows the camera: a click on an anchor read mid-ease can land on the hex the guided one is about to
+  // slide away from. Wait in the page until useMapAnchor writes the same point on consecutive animation frames, so the
+  // click lands where the pointer comes to rest. The wait counts frames, not wall time, and takes one round trip.
+  // It used to be an `expect.poll` of two `getAttribute` reads 250 ms apart inside expect's 5 s budget. Under CPU
+  // starvation (8x CDP throttle) a single round trip took up to 4 s, so the second read landed after the deadline
+  // and the test failed with the anchor already at rest (every read in 20 throttled runs returned the same point).
+  const anchor = await pointer.evaluate(async (el, maxFrames) => {
+    const read = (): string => {
+      const x = el.style.getPropertyValue('--anchor-x');
+      const y = el.style.getPropertyValue('--anchor-y');
+      return x && y ? `${parseFloat(x)},${parseFloat(y)}` : '';
+    };
+    let previous = read();
+    for (let frame = 0; frame < maxFrames; frame++) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const now = read();
+      if (now !== '' && now === previous) return now;
+      previous = now;
+    }
+    return null;
+  }, GUIDANCE_SETTLE_MAX_FRAMES);
+  expect(anchor, 'guidance pointer never came to rest on an anchor point').not.toBeNull();
+  const [x, y] = anchor!.split(',').map(Number) as [number, number];
   const box = await settlement.canvasBox();
   await settlement.page.mouse.click(box.x + x, box.y + y);
   await settlement.ring.waitForOpen();
