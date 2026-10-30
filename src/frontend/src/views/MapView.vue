@@ -568,6 +568,9 @@ onUnmounted(() => stageObserver?.disconnect());
 //   TrainingQueuePanel            right:16 top:76    width:240
 //   ArmyPanel       .status-card  right:16 bottom:16 width:260
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
+// The right edge is set by the widest panel actually in the ring's way: ArmyPanel
+// (260 wide, runs down to the bottom bound) beats TrainingQueuePanel (240, top only)
+// -> right = stage width - (16 + 260 + 16), floored at 420.
 // These are worst-case constants: every panel is treated as present. On
 // mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
 // collapsed handle (.queue-drawer-handle, a 48px-wide tab) pinned to the left
@@ -592,7 +595,7 @@ function ringBoundsAt(x: number) {
     {
       left: isMobile.value ? 64 : 268, // 48px handle + 16px gap
       top: hudInsetTopPx.value + 12,
-      right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 348),
+      right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 292),
       bottom: stage.value.h - (hudInsetBottomPx.value + 16),
     },
     ringDockAt(x),
