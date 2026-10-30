@@ -26,7 +26,7 @@ import {
 import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
 import { confirmedBuild } from '../../composables/buildFeedback';
 import { motionEnabled } from '../../lib/motion';
-import { peek, popCount, pulseHandle } from '../../lib/hud/queueMotion';
+import { peek, popCount, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
 import axeIconUrl from '../../assets/icons/axe.svg?url';
 import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
@@ -378,9 +378,24 @@ onUnmounted(() => {
   // canvas interaction lock keyed off it — stuck at true.
   open.value = false;
 });
+
+// The column slides out to its docked edge when the last order finishes (and
+// back in when the queue refills) instead of vanishing; the force-close watch
+// above has already closed it, so nothing can be left open behind the exit.
+function onDrawerEnter(el: Element, done: () => void) {
+  const drawer = el.querySelector('.queue-drawer');
+  if (!drawer) return done();
+  void slideDrawer(drawer, 'in').then(done, done);
+}
+function onDrawerLeave(el: Element, done: () => void) {
+  const drawer = el.querySelector('.queue-drawer');
+  if (!drawer) return done();
+  void slideDrawer(drawer, 'out').then(done, done);
+}
 </script>
 
 <template>
+  <Transition :css="false" @enter="onDrawerEnter" @leave="onDrawerLeave">
   <div v-if="hasAnything">
     <div v-if="open" class="queue-drawer-backdrop" @pointerdown.self="close" />
     <div class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
@@ -544,6 +559,7 @@ onUnmounted(() => {
       </button>
     </div>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -771,10 +787,8 @@ onUnmounted(() => {
 .queue-drawer.is-dragging {
   transition: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .queue-drawer {
-    transition: none;
-  }
+html[data-hud-motion='reduced'] .queue-drawer {
+  transition: none;
 }
 .queue-drawer-panel {
   flex: 1;

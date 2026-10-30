@@ -44,7 +44,8 @@ import { SettlementPage } from './pages';
 import { waitForRenderedFrames } from './helpers';
 
 // This spec judges the map's pixels, so it renders with the player's default smooth edges.
-test.use({ antialias: 'on' });
+// Asserts the fog / water really move, so it opts in to their motion (the suite emulates reduced motion, which freezes them).
+test.use({ antialias: 'on', mapMotion: { water: 'on', fog: 'on' } });
 
 /** A screen-space box centred on a hex, small enough to stay inside it. */
 interface Patch {

@@ -4,17 +4,18 @@
 // has the per-animation timings): layer swaps wait for the out-animation, a
 // blocked click shakes instead of committing, the press precedes going back,
 // the glow marks only a buildable bubble whose card is up, and — wrapped in
-// a <Transition> with the leave hook MapView uses — the ring stays in the DOM
+// RingMenuHost (shared by MapView and LandingView) — the ring stays in the DOM
 // until its retract has finished.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h, nextTick, ref, Transition } from 'vue';
+import { defineComponent, h, nextTick, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import RingMenu, { type RingCategory } from './RingMenu.vue';
+import RingMenuHost from './RingMenuHost.vue';
 import { createTestI18n } from '../../test/i18n';
 import { installWaapi } from '../../test/waapi';
 import enHud from '../../i18n/locales/en/hud.json';
 import { computeAvailability } from '../../lib/map/ringAvailability';
-import { HUB_OUT_MS, PULL_MS, retractRing } from '../../lib/map/ringMotion';
+import { HUB_OUT_MS, PULL_MS } from '../../lib/map/ringMotion';
 
 const available = { wood: 1000, stone: 1000, food: 1000, iron: 1000 };
 const CATEGORIES: RingCategory[] = [
@@ -109,6 +110,32 @@ describe('RingMenu motion', () => {
       wrapper.unmount();
     });
 
+    it('under reduced motion still swaps layers through short opacity fades, never movement', async () => {
+      waapi.uninstall();
+      waapi = installWaapi(true);
+      vi.useFakeTimers();
+      const wrapper = mount(RingMenu, mountOptions);
+      // The open itself fades the hub and bubbles in.
+      expect(waapi.on('.ring-bubble')).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(2000);
+      waapi.calls.length = 0;
+
+      void bubble(wrapper, 'Build').trigger('click');
+      await nextTick();
+      // The departing root bubbles fade out first and the swap waits for that.
+      expect(labels(wrapper)).toEqual(['Details', 'Raze', 'Build']);
+      expect(waapi.on('.ring-bubble')).toHaveLength(3);
+      expect(waapi.on('.ring-bubble')[0].frames).toEqual([{ opacity: 1 }, { opacity: 0 }]);
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(labels(wrapper)).toEqual(['Housing', '‹ BACK']);
+      // The categories fade in rather than bloom.
+      const arriving = waapi.on('.ring-bubble').filter((c) => c.frames[0] && 'opacity' in c.frames[0] && c.frames[0].opacity === 0);
+      expect(arriving.length).toBeGreaterThanOrEqual(2);
+      for (const call of waapi.calls) expect(call.frames.every((f) => !('transform' in f))).toBe(true);
+      wrapper.unmount();
+    });
+
     it('ignores a second navigation click while a swap is running', async () => {
       const wrapper = mount(RingMenu, mountOptions);
       await vi.advanceTimersByTimeAsync(2000);
@@ -117,6 +144,36 @@ describe('RingMenu motion', () => {
       await bubble(wrapper, 'Details').trigger('click');
       expect(wrapper.emitted('select')).toBeUndefined();
       await vi.advanceTimersByTimeAsync(2000);
+      wrapper.unmount();
+    });
+
+    it('runs a category tap made while the categories bloom in once the bloom has ended', async () => {
+      const wrapper = mount(RingMenu, mountOptions);
+      await vi.advanceTimersByTimeAsync(2000);
+      void bubble(wrapper, 'Build').trigger('click');
+      // Past the pull-in: the categories are on screen and still blooming.
+      await vi.advanceTimersByTimeAsync(PULL_MS + 2 * 12);
+      expect(labels(wrapper)).toEqual(['Housing', '‹ BACK']);
+      expect(wrapper.get('.ring-backdrop').attributes('data-swapping')).toBeDefined();
+      void bubble(wrapper, 'Housing').trigger('click');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(labels(wrapper)).toContain('Hut');
+      wrapper.unmount();
+    });
+
+    it('commits a building tap made while its layer blooms in once the bloom has ended', async () => {
+      const wrapper = mount(RingMenu, mountOptions);
+      await vi.advanceTimersByTimeAsync(2000);
+      void bubble(wrapper, 'Build').trigger('click');
+      await vi.advanceTimersByTimeAsync(2000);
+      void bubble(wrapper, 'Housing').trigger('click');
+      await vi.advanceTimersByTimeAsync(PULL_MS);
+      expect(labels(wrapper)).toContain('Hut');
+      expect(wrapper.get('.ring-backdrop').attributes('data-swapping')).toBeDefined();
+      void bubble(wrapper, 'Hut').trigger('click');
+      expect(wrapper.emitted('select')).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(wrapper.emitted('select')).toEqual([['hut']]);
       wrapper.unmount();
     });
 
@@ -248,18 +305,20 @@ describe('RingMenu motion', () => {
     });
   });
 
-  describe('close retract (X3) behind a <Transition>', () => {
-    // The wrapper MapView uses: the ring only leaves the DOM when the leave hook calls done().
+  describe('close retract (X3) behind RingMenuHost', () => {
+    // The one host both MapView and LandingView mount the ring in: it only leaves the DOM when the retract is done.
     const Host = defineComponent({
       setup() {
         const open = ref(true);
         const closed = ref(0);
+        const retracted = ref(0);
         return () =>
           h('div', [
+            h('i', { id: 'retracted', 'data-n': retracted.value }),
             h('button', { id: 'toggle', onClick: () => (open.value = !open.value) }),
             h(
-              Transition,
-              { css: false, onLeave: (el: Element, done: () => void) => retractRing(el as HTMLElement).then(done, done) },
+              RingMenuHost,
+              { onRetracted: () => retracted.value++ },
               () =>
                 open.value
                   ? h(RingMenu, { ...mountOptions.props, onClose: () => { open.value = false; closed.value++; } })
@@ -285,6 +344,7 @@ describe('RingMenu motion', () => {
       expect(document.querySelector('.ring-backdrop')).not.toBeNull();
       await vi.advanceTimersByTimeAsync(10);
       expect(document.querySelector('.ring-backdrop')).toBeNull();
+      expect(wrapper.get('#retracted').attributes('data-n')).toBe('1');
       wrapper.unmount();
     });
 

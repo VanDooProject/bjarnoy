@@ -32,7 +32,8 @@ import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
 // This spec judges the map's pixels, so it renders with the player's default smooth edges.
-test.use({ antialias: 'on' });
+// Asserts the fog / water really move, so it opts in to their motion (the suite emulates reduced motion, which freezes them).
+test.use({ antialias: 'on', mapMotion: { fog: 'on' } });
 
 /** Fraction of pixels differing by more than `threshold` summed over RGB, and the largest such difference. */
 async function frameDelta(

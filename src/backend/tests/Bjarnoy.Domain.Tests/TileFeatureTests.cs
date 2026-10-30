@@ -188,6 +188,33 @@ public class TileFeatureTests
     }
 
     [Fact]
+    public void Sand_variants_follow_the_sand_weights()
+    {
+        var counts = new int[TerrainSampler.SandVariantWeights.Length];
+        var total = 0;
+        foreach (var seed in new[] { 1, 7, 42, 1337 })
+        {
+            var (sampler, centre) = IslandWorld(seed);
+            foreach (var coord in centre.WithinRadius(300))
+            {
+                if (sampler.TerrainAt(coord) != Terrain.Sand)
+                {
+                    continue;
+                }
+
+                counts[sampler.VariantAt(coord)]++;
+                total++;
+            }
+        }
+
+        Assert.True(total > 4_000);
+        for (var i = 0; i < counts.Length; i++)
+        {
+            Assert.InRange(Math.Abs((double)counts[i] / total - TerrainSampler.SandVariantWeights[i]), 0, 0.02);
+        }
+    }
+
+    [Fact]
     public void ForestKindAt_forms_taiga_and_birch_regions_with_a_mixed_sprinkle()
     {
         var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(1));
@@ -255,7 +282,7 @@ public class TileFeatureTests
             maxSeen = Math.Max(maxSeen, variant);
         }
 
-        // Sea/sand aren't asserted here — they only ever fall back to variant
+        // Sea isn't asserted here — it only ever falls back to variant
         // 0 — but grass/forest/mountain should each show more than one
         // variant over a big enough sample, or the "not all have variants"
         // fallback would be indistinguishable from a bug that always
@@ -271,7 +298,7 @@ public class TileFeatureTests
         foreach (var coord in centre.WithinRadius(60))
         {
             var terrain = sampler.TerrainAt(coord);
-            if (terrain is Terrain.Sea or Terrain.Sand)
+            if (terrain is Terrain.Sea)
             {
                 Assert.Equal(0, sampler.VariantAt(coord));
             }

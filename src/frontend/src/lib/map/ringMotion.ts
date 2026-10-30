@@ -13,10 +13,18 @@
  *    never blocked.
  *  - Exits use `fill: 'both'` and are meant to be followed by the element
  *    being removed (or by `release`).
- *  - Under prefers-reduced-motion every function resolves at once without
- *    touching the DOM (except `flashReason`, a colour flash, which still plays).
+ *  - Under reduced motion (the OS preference, or the player's "Menu
+ *    animations" setting) nothing moves: `openRing`, `layerOut` and `layerIn`
+ *    play a short opacity-only fade instead (lib/motion.ts's `reduced`
+ *    frames), so bubbles don't just pop; the other functions resolve at once
+ *    without touching the DOM (except `flashReason`, a colour flash, which
+ *    still plays). Without the Web Animations API (jsdom) everything is
+ *    instant.
  */
 import { animate, motionEnabled, wait } from '../motion';
+
+const FADE_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 1 }];
+const FADE_OUT: Keyframe[] = [{ opacity: 1 }, { opacity: 0 }];
 
 export interface Point {
   x: number;
@@ -65,7 +73,7 @@ function bloomBubbles(els: HTMLElement[], from: Point, delay = 0): Promise<void>
     animate(
       el,
       [{ opacity: 0, transform: toward(el, from) }, { opacity: 1, transform: 'none' }],
-      { duration: BLOOM_MS, delay: delay + i * BLOOM_STAGGER_MS, easing: OVERSHOOT },
+      { duration: BLOOM_MS, delay: delay + i * BLOOM_STAGGER_MS, easing: OVERSHOOT, reduced: FADE_IN },
     ),
   );
 }
@@ -76,14 +84,13 @@ function bloomBubbles(els: HTMLElement[], from: Point, delay = 0): Promise<void>
  * first frame through the delay).
  */
 export function openRing(root: HTMLElement): Promise<void> {
-  if (!motionEnabled()) return Promise.resolve();
   const hub = root.querySelector<HTMLElement>('.ring-hub');
   const from = hub ? centreOf(hub) : null;
   if (!hub || !from) return Promise.resolve();
   const pending: Promise<void>[] = [
-    animate(hub, [{ opacity: 0, transform: 'scale(.3)' }, { opacity: 1, transform: 'none' }], { duration: HUB_IN_MS, easing: OVERSHOOT }),
+    animate(hub, [{ opacity: 0, transform: 'scale(.3)' }, { opacity: 1, transform: 'none' }], { duration: HUB_IN_MS, easing: OVERSHOOT, reduced: FADE_IN }),
     ...all(root, '.ring-track').map((t) =>
-      animate(t, [{ opacity: 0, transform: 'scale(.4)' }, { opacity: 1, transform: 'none' }], { duration: BLOOM_MS, easing: 'ease-out' }),
+      animate(t, [{ opacity: 0, transform: 'scale(.4)' }, { opacity: 1, transform: 'none' }], { duration: BLOOM_MS, easing: 'ease-out', reduced: FADE_IN }),
     ),
     ...bloomBubbles(all(root, `${BUBBLES}:not(.child)`), from, HUB_IN_MS),
   ];
@@ -94,26 +101,24 @@ export type Layer = 'lane1' | 'kids';
 
 /** What a layer swap pulls in before the DOM changes. Resolves when the pull has finished. */
 export function layerOut(root: HTMLElement, layer: Layer, to: Point): Promise<void> {
-  if (!motionEnabled()) return Promise.resolve();
   const sel = layer === 'lane1' ? `${BUBBLES}:not(.child)` : `${BUBBLES}.child`;
   const dur = layer === 'lane1' ? PULL_MS : PULL_KIDS_MS;
   const pulls = all(root, sel).map((el, i) =>
     animate(
       el,
       [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: toward(el, to) }],
-      { duration: dur, delay: i * PULL_STAGGER_MS, easing: 'ease-in', fill: 'both' },
+      { duration: dur, delay: i * PULL_STAGGER_MS, easing: 'ease-in', fill: 'both', reduced: FADE_OUT },
     ),
   );
   if (layer === 'kids') {
-    for (const link of all(root, '.ring-link')) animate(link, [{ opacity: 0.45 }, { opacity: 0 }], { duration: 140, fill: 'both' });
-    for (const track of all(root, '.ring-track.faint')) animate(track, [{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'both' });
+    for (const link of all(root, '.ring-link')) animate(link, [{ opacity: 0.45 }, { opacity: 0 }], { duration: 140, fill: 'both', reduced: [{ opacity: 0.45 }, { opacity: 0 }] });
+    for (const track of all(root, '.ring-track.faint')) animate(track, [{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'both', reduced: FADE_OUT });
   }
   return Promise.all(pulls).then(() => undefined);
 }
 
 /** After the DOM has swapped: the new layer blooms out of `from` (the hub, or the category bubble). */
 export function layerIn(root: HTMLElement, layer: Layer, from: Point): Promise<void> {
-  if (!motionEnabled()) return Promise.resolve();
   if (layer === 'lane1') return Promise.all(bloomBubbles(all(root, `${BUBBLES}:not(.child)`), from)).then(() => undefined);
   const links = all(root, '.ring-link').map((link, i) => {
     const base = link.style.transform;
@@ -121,9 +126,10 @@ export function layerIn(root: HTMLElement, layer: Layer, from: Point): Promise<v
       duration: LINK_MS,
       delay: i * BLOOM_STAGGER_MS,
       easing: 'ease-out',
+      reduced: FADE_IN,
     });
   });
-  const tracks = all(root, '.ring-track.faint').map((t) => animate(t, [{ opacity: 0 }, { opacity: 1 }], { duration: 200 }));
+  const tracks = all(root, '.ring-track.faint').map((t) => animate(t, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, reduced: FADE_IN }));
   return Promise.all([...links, ...tracks, ...bloomBubbles(all(root, `${BUBBLES}.child`), from)]).then(() => undefined);
 }
 

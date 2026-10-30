@@ -105,6 +105,11 @@ export type TextureKey =
   | 'sawmillriver'
   | 'sawmillbend'
   | 'sawmillbend60'
+  // The river bridge (3D_assets hextile135-137), one family per river shape it spans: like the Sawmill's keys these are texture-lookup keys
+  // (a bridge's wire type stays 'bridge').
+  | 'riverbridge'
+  | 'riverbridgebend'
+  | 'riverbridgebend60'
   | 'wasteland'
   | 'deadforest'
   // Biome forests (3D_assets hextile143-145): the living forest's art by `Tile.forestKind`, animated with a wind-sway clip per pass.
@@ -201,6 +206,10 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   sawmillriver: 'sawmillriver',
   sawmillbend: 'sawmillbend',
   sawmillbend60: 'sawmillbend60',
+  // hextile135_riverbridge (straight, 180), hextile136_riverbridge_bend (120), hextile137_riverbridge_bend60 (60): level000 the building site, level001-004 the bridges.
+  riverbridge: 'riverbridge',
+  riverbridgebend: 'riverbridge_bend',
+  riverbridgebend60: 'riverbridge_bend60',
   meadery: 'meadery',
   townsquare: 'townsquare',
   cropmill: 'cropmill',
@@ -1645,6 +1654,7 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (riverArt) return riverArt.key;
   if (tile.lakeProp && !tile.buildingType) return LAKE_PROP_KEY[tile.lakeProp];
   if (tile.buildingType === 'sawmill') return 'sawmillriver';
+  if (tile.buildingType === 'bridge') return 'riverbridge';
   // A Fishing Hut on a bog lake's half shore has its own lake art; the Hammer Forge on a creek is the river hammer mill
   // (straight creek or bend), a placeholder until the bog-creek art exists.
   if (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half') return 'fisherhutlake';
@@ -2131,10 +2141,18 @@ export function riverBuildingArtFor(buildingType: string, river: RiverTile): Riv
     if (river.shape !== 'straight' && river.shape !== 'bend' && river.shape !== 'bend60') return undefined;
   } else if (buildingType === 'cropmill') {
     if (river.shape !== 'straight') return undefined;
+  } else if (buildingType === 'bridge') {
+    if (river.shape !== 'straight' && river.shape !== 'bend' && river.shape !== 'bend60') return undefined;
   } else {
     return undefined;
   }
   const { shape, orientation } = riverArtFor(river, null);
+  if (buildingType === 'bridge') {
+    if (shape === 'straight') return { key: 'riverbridge', orientation };
+    if (shape === 'bend') return { key: 'riverbridgebend', orientation };
+    if (shape === 'bend60') return { key: 'riverbridgebend60', orientation };
+    return undefined;
+  }
   if (buildingType === 'sawmill') {
     if (shape === 'straight') return { key: 'sawmillriver', orientation };
     if (shape === 'bend') return { key: 'sawmillbend', orientation };

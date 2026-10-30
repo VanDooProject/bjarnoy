@@ -47,6 +47,12 @@ export interface PathRestrictions {
    */
   halfOpen?(c: AxialCoord): boolean;
   halfOpenCost?: number;
+  /**
+   * What this army pays to enter a wide-river hex over a bridge it may cross (see `bridgeRestrictions`, bridgeMovement.ts), or `null`
+   * for a hex it may not (no bridge, or a guarded one of strangers). Only consulted for wide-river hexes, which stay impassable
+   * without it; streams are unaffected.
+   */
+  bridgeCost?(c: AxialCoord): number | null;
 }
 
 export interface PathContext {
@@ -73,7 +79,7 @@ export const MAX_TINT_HEXES = 4000;
  * Step cost for a land unit entering `c`, or `null` if impassable (sea, a lake, a wide river, a mountain
  * that is not also a stream, a palisade). A stream costs a flat `1.0 + riverCrossingCost` whatever
  * terrain it runs over — the C# twin is `HexPathfinder.LandStepCost`, and the two apply the rules in
- * the same order: wide river and mountain impassable -> stream flat 9 -> half-open palisade end 3 ->
+ * the same order: wide river (impassable unless a bridge this army may cross opens it, at the bridge's price) and mountain impassable -> stream flat 9 -> half-open palisade end 3 ->
  * blocked palisade hex (unless a friendly gate) -> terrain cost.
  */
 function stepCost(c: AxialCoord, ctx: PathContext): number | null {
@@ -83,7 +89,7 @@ function stepCost(c: AxialCoord, ctx: PathContext): number | null {
   const r = ctx.restrictions;
   const river = ctx.isRiver(c);
   const wide = river && ctx.isWideRiver(c);
-  if ((r?.wideRiversImpassable ?? true) && wide) return null;
+  if ((r?.wideRiversImpassable ?? true) && wide) return r?.bridgeCost?.(c) ?? null;
   if ((r?.streamsIgnoreTerrain ?? true) && river && !wide) return 1.0 + ctx.rules.riverCrossingCost;
   if ((r?.mountainsImpassable ?? true) && terrain === 'mountain') return null;
   if (r?.halfOpen?.(c)) return r.halfOpenCost ?? HALF_OPEN_END_COST;

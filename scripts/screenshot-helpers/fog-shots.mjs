@@ -14,6 +14,7 @@
 import { chromium } from '../../src/frontend/node_modules/playwright-core/index.mjs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { loginDemoPlayer } from './util.mjs';
 
 const outDir = process.argv[2] || '.';
 const baseUrl = process.argv[3] || 'http://localhost:5183';
@@ -21,6 +22,8 @@ mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+// The world map stops click HudNav's "World map" button, which needs a player session.
+await loginDemoPlayer(page);
 page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 400)));
 
 const shoot = async (name) => {

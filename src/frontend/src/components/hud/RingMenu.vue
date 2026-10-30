@@ -36,7 +36,7 @@ import { formatBuildTime } from '../../lib/map/ringCatalogue';
 import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
 import { ringFootprint } from '../../lib/map/markerOcclusion';
-import { motionEnabled } from '../../lib/motion';
+import { motionEnabled, supportsWaapi } from '../../lib/motion';
 import * as ringMotion from '../../lib/map/ringMotion';
 import {
   BUB1,
@@ -212,8 +212,30 @@ const emit = defineEmits<{
 const path = ref<string[]>([]);
 /** The backdrop element: the choreography in lib/map/ringMotion.ts finds the bubbles, links and hub inside it. */
 const rootEl = ref<HTMLElement | null>(null);
-/** A layer swap is animating; navigation clicks are ignored until it has landed. */
-const swapping = ref(false);
+/**
+ * Where a layer swap is: 'out' = the departing layer is being pulled in (its
+ * bubbles are leaving, clicks are ignored), 'in' = the new layer is blooming
+ * (its bubbles are the live ones, so a click is kept and run once it has landed).
+ */
+const swapPhase = ref<null | 'out' | 'in'>(null);
+const swapping = computed(() => swapPhase.value !== null);
+/** The latest click made while the new layer bloomed in; run when the swap ends. */
+let pendingAction: (() => void) | null = null;
+function runPendingAction() {
+  const pending = pendingAction;
+  pendingAction = null;
+  pending?.();
+}
+/**
+ * True when a swap is running and the click has been dealt with: dropped in the
+ * out phase, queued (latest wins) in the in phase. The action runs after the
+ * event is over, so it must capture whatever it needs from the event up front.
+ */
+function deferDuringSwap(action: () => void): boolean {
+  if (!swapping.value) return false;
+  if (swapPhase.value === 'in') pendingAction = action;
+  return true;
+}
 const hover = ref<string | null>(null);
 /** The root / category bubble under the pointer — only to preview its card or hint chip, never to navigate. */
 const hoverLane1 = ref<string | null>(null);
@@ -591,19 +613,21 @@ const hubLabelFont = computed(
  * Moves to another layer. With motion the departing layer is pulled into its
  * parent first (the hub, or the category bubble), the path only changes once
  * that has finished, and the new layer then blooms out of its parent
- * (lib/map/ringMotion.ts). Without motion (reduced motion, jsdom) the path
- * changes immediately.
+ * (lib/map/ringMotion.ts). Under reduced motion the same sequence runs with
+ * short opacity fades in place of the movement; without the Web Animations
+ * API (jsdom) the path changes immediately.
  */
 async function go(next: string[]) {
   const root = rootEl.value;
-  if (!root || !motionEnabled()) {
+  if (!root || !supportsWaapi()) {
     path.value = next;
     hover.value = null;
     hoverLane1.value = null;
     return;
   }
   if (swapping.value) return;
-  swapping.value = true;
+  swapPhase.value = 'out';
+  pendingAction = null;
   try {
     const prev = path.value;
     const hubPoint = { x: props.x, y: props.y };
@@ -621,10 +645,12 @@ async function go(next: string[]) {
     hoverLane1.value = null;
     await nextTick();
     ringMotion.release(root);
+    swapPhase.value = 'in';
     if (lane1Swap) await ringMotion.layerIn(root, 'lane1', hubPoint);
     else if (next.length === 2) await ringMotion.layerIn(root, 'kids', parentPoint());
   } finally {
-    swapping.value = false;
+    swapPhase.value = null;
+    runPendingAction();
   }
 }
 
@@ -634,9 +660,13 @@ function goUp() {
 }
 /** X11: the hub / ‹ BACK squish, then go back. At the root the hub just closes (the retract is its own motion). */
 async function onBackClick(e: MouseEvent) {
-  if (swapping.value) return;
-  if (path.value.length && motionEnabled()) await ringMotion.press(e.currentTarget as HTMLElement);
-  goUp();
+  const el = e.currentTarget as HTMLElement;
+  const back = async () => {
+    if (path.value.length && motionEnabled()) await ringMotion.press(el);
+    goUp();
+  };
+  if (deferDuringSwap(() => void back())) return;
+  await back();
 }
 // Navigation is click-only: Build opens its categories, a category opens its
 // buildings, exactly as going back already needed a click. Hover only previews.
@@ -646,15 +676,17 @@ function onLaneClick(e: MouseEvent, item: RingAction) {
     blockedFeedback(e.currentTarget as HTMLElement);
     return;
   }
-  if (swapping.value) return;
-  if (atRoot.value) {
-    if (item.id === 'build' && props.categories.length) void go(['build']);
-    else emit('select', item.id);
-    return;
-  }
-  if (props.categories.some((c) => c.id === item.id)) {
-    void go(['build', item.id]);
-  }
+  const act = () => {
+    if (atRoot.value) {
+      if (item.id === 'build' && props.categories.length) void go(['build']);
+      else emit('select', item.id);
+      return;
+    }
+    if (props.categories.some((c) => c.id === item.id)) {
+      void go(['build', item.id]);
+    }
+  };
+  if (!deferDuringSwap(act)) act();
 }
 function onBuildingClick(e: MouseEvent, building: RingBuilding) {
   const el = e.currentTarget as HTMLElement;
@@ -662,12 +694,14 @@ function onBuildingClick(e: MouseEvent, building: RingBuilding) {
     blockedFeedback(el);
     return;
   }
-  if (swapping.value) return;
-  // X2: tells the retract (MapView's <Transition> leave hook) which bubble
-  // drops onto the hex; cleared again in case the caller kept the ring open.
-  el.setAttribute(ringMotion.DROPPING_ATTR, '');
-  emit('select', building.id);
-  setTimeout(() => el.removeAttribute(ringMotion.DROPPING_ATTR), 50);
+  const commit = () => {
+    // X2: tells the retract (RingMenuHost's leave hook) which bubble
+    // drops onto the hex; cleared again in case the caller kept the ring open.
+    el.setAttribute(ringMotion.DROPPING_ATTR, '');
+    emit('select', building.id);
+    setTimeout(() => el.removeAttribute(ringMotion.DROPPING_ATTR), 50);
+  };
+  if (!deferDuringSwap(commit)) commit();
 }
 /** X1: the shake, the badge wobble and the reason flash for a click on something that is blocked. */
 function blockedFeedback(bubble: HTMLElement) {
@@ -733,7 +767,9 @@ function onBackdropPointerDown(e: PointerEvent) {
 </script>
 
 <template>
-  <div ref="rootEl" class="ring-backdrop" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
+  <!-- `data-swapping`: a layer change is mid-flight (old layer leaving, new one arriving), so the bubbles on screen
+       are not yet the final set. -->
+  <div ref="rootEl" class="ring-backdrop" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
     <div
       v-if="layout.showLane1Track"
       class="ring-track"
@@ -1360,22 +1396,20 @@ function onBackdropPointerDown(e: PointerEvent) {
       0 6px 18px rgba(0, 0, 0, 0.45);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ring-bubble,
-  .ring-hub {
-    transition: none;
-  }
-  .ring-bubble.armed {
-    animation: none;
-    box-shadow: 0 0 0 4px var(--gold);
-  }
-  /* The glow becomes a static gold ring. */
-  .ring-bubble.glow {
-    animation: none;
-    box-shadow:
-      0 0 0 2px rgba(255, 197, 92, 0.6),
-      0 6px 18px rgba(0, 0, 0, 0.45);
-  }
+html[data-hud-motion='reduced'] .ring-bubble,
+html[data-hud-motion='reduced'] .ring-hub {
+  transition: none;
+}
+html[data-hud-motion='reduced'] .ring-bubble.armed {
+  animation: none;
+  box-shadow: 0 0 0 4px var(--gold);
+}
+/* The glow becomes a static gold ring. */
+html[data-hud-motion='reduced'] .ring-bubble.glow {
+  animation: none;
+  box-shadow:
+    0 0 0 2px rgba(255, 197, 92, 0.6),
+    0 6px 18px rgba(0, 0, 0, 0.45);
 }
 .arm-badge {
   position: absolute;

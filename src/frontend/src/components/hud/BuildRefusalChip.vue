@@ -58,9 +58,7 @@ useMapAnchor(el, () => props.renderer, () => props.coord);
     transform: none;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .refusal-chip-body {
-    animation: none;
-  }
+html[data-hud-motion='reduced'] .refusal-chip-body {
+  animation: none;
 }
 </style>
