@@ -3204,7 +3204,10 @@ export class HexMapRenderer {
       this.handleClick(e);
       return;
     }
-    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: performance.now() };
+    // The event's own timestamp, not the time this handler runs: on a busy
+    // main thread both taps' events can queue up and be handled long after
+    // the finger lifted, which must not push a real double tap out of the window.
+    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: e.timeStamp };
     if (this.pendingTap && isDoubleTap(this.pendingTap.tap, tap)) {
       this.dropPendingTap();
       const screen = this.clientToCanvas(e.clientX, e.clientY);

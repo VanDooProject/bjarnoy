@@ -2,22 +2,18 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage, SettlementPage } from './pages';
+import { doubleTap } from './helpers';
 
 // The map canvases suppress the browser's own double-tap zoom (touch-action:
 // none + touchstart preventDefault, which pinch needs), so the renderer
 // recognises a double tap itself (src/lib/map/doubleTap.ts) and zooms 2x
 // around it through the same zoomBy() seam as wheel and pinch. Real touch
-// taps (page.touchscreen), since it keys on pointerType 'touch'.
+// events via CDP (helpers.ts's `doubleTap`), since it keys on pointerType 'touch'.
 async function cameraZoom(page: Page): Promise<number> {
   return page.evaluate(() => {
     const win = window as unknown as { __settlementRenderer?: () => { cameraZoom: number } };
     return win.__settlementRenderer!().cameraZoom;
   });
-}
-
-async function doubleTap(page: Page, p: { x: number; y: number }) {
-  await page.touchscreen.tap(p.x, p.y);
-  await page.touchscreen.tap(p.x, p.y);
 }
 
 test.describe('double tap to zoom on touch', { tag: '@g3' }, () => {

@@ -166,9 +166,10 @@ export class RingMenuComponent {
 
   /**
    * Waits for a layer change to finish. The outgoing layer leaves first (a short fade under reduced motion, which
-   * this suite emulates), so right after a click the bubbles on screen can still be the previous layer's.
+   * this suite emulates), so right after a click the bubbles on screen can still be the previous layer's. Specs that
+   * tap bubbles themselves (rather than through `click`) call this between taps.
    */
-  private async settledLayer(): Promise<void> {
+  async settledLayer(): Promise<void> {
     await expect(this.backdrop).not.toHaveAttribute('data-swapping');
   }
 

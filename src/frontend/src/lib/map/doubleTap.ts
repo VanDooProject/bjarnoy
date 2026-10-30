@@ -15,7 +15,7 @@ export interface Point {
 export interface Tap {
   /** Client coordinates of the tap. */
   at: Point;
-  /** `performance.now()` at the tap's pointerup. */
+  /** The pointerup event's `timeStamp` (same clock as `performance.now()`). */
   timeMs: number;
 }
 

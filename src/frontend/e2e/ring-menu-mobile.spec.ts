@@ -30,7 +30,9 @@ for (const layout of LAYOUTS) {
       await settlement.clickHex(target);
       await settlement.ring.waitForOpen();
       await settlement.ring.action('Build').first().tap();
+      await settlement.ring.settledLayer();
       await settlement.ring.category('Resource').first().tap();
+      await settlement.ring.settledLayer();
       const herder = settlement.ring.child('Reindeer Herder').first();
       await expect(herder).toBeVisible();
       return herder;
