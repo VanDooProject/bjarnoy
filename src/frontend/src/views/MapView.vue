@@ -13,7 +13,6 @@ import ResourceBar from '../components/hud/ResourceBar.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
-import TradePanel from '../components/hud/TradePanel.vue';
 import QuestTray from '../components/onboarding/QuestTray.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
@@ -543,10 +542,12 @@ onUnmounted(() => stageObserver?.disconnect());
 // treats a panel as an edge rather than opening underneath it:
 //   BuildQueuePanel .status-card  left:16  top:76    width:240  -> left 268
 //   ExpansionPanel  .status-card  left:16  top:340   width:240  (same column)
-//   TradePanel                    right:16 top:118   width:320  -> right -348
 //   TrainingQueuePanel            right:16 top:76    width:240
 //   ArmyPanel       .status-card  right:16 bottom:16 width:260
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
+// The right edge is set by the widest panel actually in the ring's way: ArmyPanel
+// (260 wide, runs down to the bottom bound) beats TrainingQueuePanel (240, top only)
+// -> right = stage width - (16 + 260 + 16), floored at 420.
 // These are worst-case constants: every panel is treated as present. On
 // mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
 // collapsed handle (.queue-drawer-handle, a 48px-wide tab) pinned to the left
@@ -571,7 +572,7 @@ function ringBoundsAt(x: number) {
     {
       left: isMobile.value ? 64 : 268, // 48px handle + 16px gap
       top: hudInsetTopPx.value + 12,
-      right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 348),
+      right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 292),
       bottom: stage.value.h - (hudInsetBottomPx.value + 16),
     },
     ringDockAt(x),
@@ -1255,7 +1256,6 @@ async function upgrade() {
         <TrainingQueuePanel />
       </template>
       <ExpansionPanel />
-      <TradePanel />
       <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />

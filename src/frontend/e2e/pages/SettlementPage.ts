@@ -428,14 +428,6 @@ export class SettlementPage {
     );
   }
 
-  /** The cosmetic cart shipments a trade acceptance drops onto the world map (issue #46). */
-  listCartShipments(): Promise<unknown[]> {
-    return this.page.evaluate(() =>
-      (window as unknown as { __demoWorld: () => { model: { listCartShipments: () => unknown[] } } })
-        .__demoWorld().model.listCartShipments(),
-    );
-  }
-
   /** Player logout/login gate: opens HudNav's authenticated account dropdown. */
   async openAccountMenu(): Promise<void> {
     await this.accountMenuTrigger.click();
