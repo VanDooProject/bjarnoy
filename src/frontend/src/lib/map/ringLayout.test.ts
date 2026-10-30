@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bubbleLabelFontPx,
+  estimateWordEm,
   BUB1,
   BUB2,
   CARD_H,
@@ -418,6 +419,13 @@ describe('bubbleLabelFontPx', () => {
     expect(size).toBeGreaterThan(6.5);
   });
 
+  it('fits the longest English label (Weaponsmith) into a building bubble at the floor instead of splitting it', () => {
+    // 6.5px was too big for it on a 320px phone: measured 44px of text in a 42px bubble, so it split mid-word.
+    const size = bubbleLabelFontPx('Weaponsmith', BUB2, 8.4);
+    expect(size).toBeGreaterThanOrEqual(6);
+    expect(size * (estimateWordEm('Weaponsmith') + 11 * 0.02)).toBeLessThanOrEqual(BUB2 - 6);
+  });
+
   it('accounts for uppercase and letter spacing (the hub label)', () => {
     const upper = bubbleLabelFontPx('Longhouse', HUB, 10.5, { uppercase: true, letterSpacingEm: 0.06 });
     const lower = bubbleLabelFontPx('Longhouse', HUB, 10.5);
@@ -433,6 +441,6 @@ describe('bubbleLabelFontPx', () => {
   });
 
   it('never goes below the readable floor', () => {
-    expect(bubbleLabelFontPx('Holzfällerhüttenerweiterung', BUB2, 9)).toBe(6.5);
+    expect(bubbleLabelFontPx('Holzfällerhüttenerweiterung', BUB2, 9)).toBe(6);
   });
 });

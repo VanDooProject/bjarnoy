@@ -75,10 +75,24 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
     await openRingOnGuidedHex(settlement);
-    // the long single word the bug was found on must be on screen, or the check below proves nothing
+    // The onboarding ring is the map's: Build, then a category, then its buildings. Check every layer.
+    const broken: string[] = [];
+    broken.push(...(await brokenLabels(page)));
+    await settlement.ring.action('Build').first().tap();
+    await settlement.ring.settledLayer();
+    broken.push(...(await brokenLabels(page)));
+    await settlement.ring.category('Military').first().tap();
+    await settlement.ring.settledLayer();
+    // the long single word the bug was found on must be on screen, or the check proves nothing
     await expect(settlement.ring.bubbles.filter({ hasText: 'Watchtower' })).toBeVisible();
+    broken.push(...(await brokenLabels(page)));
+    expect(broken).toEqual([]);
+  });
+});
 
-    const broken = await page.locator('.ring-hub, .ring-bubble').evaluateAll((els) =>
+/** Words that split across lines or run past their own bubble, for every bubble on screen. */
+async function brokenLabels(page: Page): Promise<string[]> {
+    return page.locator('.ring-hub, .ring-bubble').evaluateAll((els) =>
       els.flatMap((el) => {
         const box = el.getBoundingClientRect();
         const problems: string[] = [];
@@ -99,9 +113,7 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
         return problems;
       }),
     );
-    expect(broken).toEqual([]);
-  });
-});
+}
 
 test.describe('touch wording on a phone', { tag: '@g2' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });

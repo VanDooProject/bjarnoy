@@ -677,7 +677,7 @@ export function bubbleLabelFontPx(
   {
     uppercase = false,
     letterSpacingEm = 0.02,
-    minPx = 6.5,
+    minPx = 6,
     // The bubble's own 2px side padding, plus a little for the round edge.
     availablePx = diameter - 6,
     wordEm = estimateWordEm,
