@@ -507,9 +507,8 @@
     },
     "ground": {
       "heading": "Moorboden",
-      "body": "Schlichtes Moos, dazu verzierte Varianten, die sich über ein Moorgebiet mischen, so wie es auch im Ödland geschieht. Erzquelle und Quellkette zeigen, wo das Raseneisenerz an die Oberfläche tritt.",
+      "body": "Moosboden in mehreren Varianten, bunt über das Moor verteilt. Erzquelle und Quellkette zeigen, wo das Raseneisenerz an die Oberfläche tritt.",
       "looks": {
-        "plain": "Schlichtes Moos",
         "mire1": "Offenes Moor 1",
         "mire2": "Offenes Moor 2",
         "mire3": "Offenes Moor 3",

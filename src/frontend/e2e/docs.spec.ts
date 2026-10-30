@@ -306,6 +306,20 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(lastSection).toBeInViewport();
     expect(await view.noHorizontalOverflow()).toBe(true);
 
+    // The example island comes first, above the separate tiles.
+    expect(
+      await page.evaluate(() => {
+        const map = document.querySelector("#example-map")!;
+        const ground = document.querySelector("#ground")!;
+        return Boolean(map.compareDocumentPosition(ground) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }),
+    ).toBe(true);
+
+    // Bog ground never draws the plain moss, so the docs only offer its decorated looks.
+    const ground = page.locator("#ground");
+    await expect(ground.locator(".variant-button", { hasText: "Open mire 1" })).toBeVisible();
+    await expect(ground.locator(".variant-button", { hasText: "Plain moss" })).toHaveCount(0);
+
     // Ground + eight water shapes + four buildings, each its own entry with a thumbnail.
     await expect(
       page.locator(".bog-lands .tile .thumb .atlas-sprite"),

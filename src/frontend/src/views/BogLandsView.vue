@@ -24,9 +24,9 @@ function showcase(name: string): AtlasFrameRect | undefined {
   return findAtlasFrame('showcase', name);
 }
 
-/** `''` for the plain look plus every `_variantNNN` the atlas has for this terrain family. */
+/** `''` for the plain look plus every `_variantNNN` the atlas has for this terrain family, minus the retired ones (slot 0 is the plain look). */
 function looksOf(family: string, retired: ReadonlySet<number> = new Set()): string[] {
-  const looks = [''];
+  const looks = retired.has(0) ? [] : [''];
   for (let i = 1; i < 20; i++) {
     const suffix = `_variant${String(i).padStart(3, '0')}`;
     if (!retired.has(i) && showcase(`${family}_SE${suffix}`)) looks.push(suffix);
@@ -48,8 +48,8 @@ function levelsOf(family: string): number[] {
 // pick a look, buildings a stage, and each has its own camera.
 
 // Look names follow the variant order in 3D_assets' docs/bog-tiles.md, minus the looks the game no longer shows
-// (variant006, the peat cuttings: `RETIRED_BOG_VARIANTS`).
-const GROUND_LOOKS = ['plain', 'mire1', 'mire2', 'mire3', 'oreSeep', 'fen', 'copse', 'seepChain'] as const;
+// (the plain moss and variant006, the peat cuttings: `RETIRED_BOG_VARIANTS`).
+const GROUND_LOOKS = ['mire1', 'mire2', 'mire3', 'oreSeep', 'fen', 'copse', 'seepChain'] as const;
 
 const WATER_SHAPES = [
   { id: 'creek', family: 'bogcreek' },
@@ -112,8 +112,8 @@ const view = reactive(
     ENTRIES.map((e) => [
       e.id,
       {
-        // The ground opens on the first decorated look; a building on its last, finished stage.
-        look: e.group === 'ground' ? Math.min(1, e.looks.length - 1) : 0,
+        // A building opens on its last, finished stage.
+        look: 0,
         level: e.levels.at(-1) ?? 0,
         camera: 'SE' as TileOrientation,
       },
@@ -144,8 +144,8 @@ function textOf(entry: Entry): string {
 }
 
 const tocLinks = [
-  ...ENTRIES.map((entry) => ({ href: `#${entry.id}`, label: titleOf(entry) })),
   { href: '#example-map', label: t('docs.bogLands.example.heading') },
+  ...ENTRIES.map((entry) => ({ href: `#${entry.id}`, label: titleOf(entry) })),
   { href: '#map-rules', label: t('docs.bogLands.rules.heading') },
 ];
 </script>
@@ -162,6 +162,12 @@ const tocLinks = [
     </template>
 
     <DocsToc :links="tocLinks" />
+
+    <section id="example-map" class="block">
+      <h2>{{ $t('docs.bogLands.example.heading') }}</h2>
+      <p class="group-body">{{ $t('docs.bogLands.example.body') }}</p>
+      <BogIsland />
+    </section>
 
     <template v-for="group in GROUPS" :key="group">
       <h2 class="group-heading">
@@ -203,12 +209,6 @@ const tocLinks = [
         </template>
       </DocsTileEntry>
     </template>
-
-    <section id="example-map" class="block">
-      <h2>{{ $t('docs.bogLands.example.heading') }}</h2>
-      <p class="group-body">{{ $t('docs.bogLands.example.body') }}</p>
-      <BogIsland />
-    </section>
 
     <section id="map-rules" class="block">
       <h2>{{ $t('docs.bogLands.rules.heading') }}</h2>

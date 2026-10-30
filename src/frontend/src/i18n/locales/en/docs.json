@@ -507,9 +507,8 @@
     },
     "ground": {
       "heading": "Bog ground",
-      "body": "Plain moss, with decorated looks mixed across a bog region the way the wasteland mixes its looks. The ore seep and the seep chain are where bog iron shows at the surface.",
+      "body": "Moss ground in several looks, mixed across a bog. The ore seep and the seep chain are where bog iron shows at the surface.",
       "looks": {
-        "plain": "Plain moss",
         "mire1": "Open mire 1",
         "mire2": "Open mire 2",
         "mire3": "Open mire 3",

@@ -1758,19 +1758,24 @@ function tileOrientationFor(tile: Tile, riverArt?: RiverArt): TileOrientation {
 }
 
 /**
- * Bog looks the game no longer shows, per family: a hex whose variant lands on one draws the family's plain frame
- * instead. The art pack still has them, so every other look keeps its slot (`variant % length` is unchanged).
- * `bog` 6 is the peat cuttings: its stepped peat bank stands on the moss as a hard-edged slab.
+ * Bog looks the game no longer shows, per family: a hex never draws one, its variant is spread over the family's other
+ * looks instead. The art pack still has them, so every look keeps its slot index.
+ * `bog` 0 is the plain moss: bare green with nothing on it, so bog ground always draws one of its decorated looks
+ * (a building on the moss keeps the plain base, it never reads these tops). `bog` 6 is the peat cuttings: its stepped
+ * peat bank stands on the moss as a hard-edged slab.
  */
 export const RETIRED_BOG_VARIANTS: Readonly<Partial<Record<TextureKey, ReadonlySet<number>>>> = {
-  bog: new Set([6]),
+  bog: new Set([0, 6]),
 };
 
-/** A bog family's variant slot for a tile: its hashed variant, wrapped onto however many the family has (creeks have 2, shores 1-2, ...); a retired look falls back to the plain frame. Exported for the tests. */
+/** A bog family's variant slot for a tile: its hashed variant, wrapped onto the looks the family shows (creeks have 2, shores 1-2, ...), skipping retired ones. Exported for the tests. */
 export function bogVariantIn<T>(key: TextureKey, tile: Tile, arr: readonly T[]): number {
   if (arr.length <= 1) return 0;
-  const slot = (tile.variant ?? 0) % arr.length;
-  return RETIRED_BOG_VARIANTS[key]?.has(slot) ? 0 : slot;
+  const variant = tile.variant ?? 0;
+  const retired = RETIRED_BOG_VARIANTS[key];
+  if (!retired) return variant % arr.length;
+  const shown = arr.map((_, i) => i).filter((i) => !retired.has(i));
+  return shown.length > 0 ? shown[variant % shown.length]! : 0;
 }
 
 /** Clamps an index into `[0, length)` — the shared fallback for both terrain variants and building levels: an index the art pack doesn't have falls back to its richest known one. */
@@ -1832,8 +1837,10 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   // A land wall hex keeps its own ground: the terrain's base (grass, forest floor without the trees, sand, bog moss) as that hex would be drawn
   // plain, in the hex's own rotation so it blends with its neighbours; only the wall's top is drawn over it.
   if (riverArt && LAND_WALL_KEYS.has(riverArt.key)) {
-    // `variant: 0`: the plain base, never a bog variant's own props.
-    return baseTextureFor(textures, { ...tile, buildingType: undefined, buildingLevel: undefined, variant: 0 });
+    const ground: Tile = { ...tile, buildingType: undefined, buildingLevel: undefined, variant: 0 };
+    // The plain base, never a bog look's own props: slot 0 directly, since bare moss never draws that (retired) look.
+    const bogBase = tile.bog?.kind === 'bog' ? textures.baseIndexed.bog?.[tileOrientationFor(ground)]?.[0] : undefined;
+    return bogBase ?? baseTextureFor(textures, ground);
   }
   const orientation = tileOrientationFor(tile, riverArt);
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
