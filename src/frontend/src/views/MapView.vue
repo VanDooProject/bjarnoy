@@ -671,7 +671,6 @@ function onRingOutsidePointerDown(e: PointerEvent) {
 }
 
 type BuildableType =
-  | 'hut'
   | 'reindeerherder'
   | 'farm'
   | 'tower'
@@ -758,7 +757,6 @@ const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
 };
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
-    { id: 'housing', buildings: [{ type: 'hut' }] },
     {
       id: 'resource',
       buildings: [
@@ -800,7 +798,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
   ],
   sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_CATEGORY],
-  mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
+  // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
+  mountain: [],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
@@ -822,7 +821,6 @@ const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.val
 // Category tints, carried into each category's own buildings so a building
 // bubble reads as belonging to the category it fanned out of.
 const CATEGORY_COLORS: Record<string, string> = {
-  housing: 'var(--gold)',
   resource: 'var(--food)',
   military: 'var(--iron)',
   defense: 'var(--stone)',
@@ -1049,34 +1047,32 @@ const rootActions = computed<RingAction[]>(() => {
     return actions;
   }
   if (isMineTile.value) {
-    const buildableSea = (tile.terrain !== 'sea' && tile.terrain !== 'lake') || tile.isCoastalWater;
     // A giant hex is never buildable, claimed or not — its own art fully
     // occupies the ground there (mirrors WorldModel.placeBuilding's own
-    // `tile.giant` refusal). Checked ahead of the open-water hint since a
-    // giant is always land, so `buildableSea` alone would otherwise show
-    // "Build" as available on it.
+    // `tile.giant` refusal).
     const blockedByGiant = !!tile.giant;
     // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood) —
     // mirrors WorldModel.placeBuilding / the server's HexOccupiedByCamp rule.
     const blockedByCamp = !!tile.camp && !tile.buildingType && !campHexBuildable(tile.camp);
-    // A bog shore, mouth or spring takes no building at all (only plain moss, a creek and a half shore do).
-    const bareBog = tile.terrain === 'bog' && categoriesFor(tile).length === 0;
+    // A hex that offers no category at all (bog shore, mouth or spring, a mountain while quarries are off, a lake, open water)
+    // has no Build action — nothing in the ring that could only fail (docs/design/ui-guidelines.md, rule 1).
+    const canBuildHere = categoriesFor(tile).length > 0;
     return [
       detailsAction(tile),
-      {
-        id: 'build',
-        label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea || blockedByGiant || blockedByCamp || bareBog,
-        hint: blockedByGiant
-          ? t('hud.ringMenu.actions.giantOccupied')
-          : blockedByCamp
-            ? t('hud.ringMenu.actions.campOccupied')
-            : bareBog
-              ? t('hud.ringMenu.actions.bogNothingHere')
-              : buildableSea
-                ? undefined
-                : t('hud.ringMenu.actions.openWater'),
-      },
+      ...(canBuildHere
+        ? [
+            {
+              id: 'build',
+              label: t('hud.ringMenu.actions.build'),
+              disabled: blockedByGiant || blockedByCamp,
+              hint: blockedByGiant
+                ? t('hud.ringMenu.actions.giantOccupied')
+                : blockedByCamp
+                  ? t('hud.ringMenu.actions.campOccupied')
+                  : undefined,
+            },
+          ]
+        : []),
       ...huntActions(tile),
       sendArmyAction(tile),
     ];
@@ -1106,7 +1102,7 @@ function formatOutput(output: BuildingOutput): string {
     case 'storageCapacity':
       return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
     case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount, explored: output.explored });
   }
 }
 function formatModifier(modifier: BuildingModifier): string {

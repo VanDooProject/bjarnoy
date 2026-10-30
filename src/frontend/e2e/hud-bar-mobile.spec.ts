@@ -32,9 +32,9 @@ import { SettlementPage } from './pages';
 test.use({ mapLayers: { water: false } });
 
 /**
- * ResourceBar.vue mounts a second, hidden `.resource-bar` alongside the real
- * one purely to measure whether full notation would fit (`data-measure` on
- * its root) — off-screen (`position: fixed`, far outside the viewport) and
+ * ResourceBar.vue mounts hidden `.resource-bar` clones alongside the real
+ * one purely to measure whether a row would fit (`data-measure` on their
+ * roots: the collapsed phone row, and on desktop the full desktop row) — off-screen (`position: fixed`, far outside the viewport) and
  * `aria-hidden`/`inert`, but still real DOM sharing the same classes, so
  * every locator below that means "the pills the player actually sees" has
  * to exclude it explicitly or it silently doubles counts and pulls

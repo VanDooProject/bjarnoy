@@ -64,7 +64,7 @@ describe('TechTreeGraph', () => {
       expect(card(wrapper, type).classes(), type).toContain('card--soft');
     }
     // Unrelated.
-    expect(card(wrapper, 'quarry').classes()).toContain('card--dim');
+    expect(card(wrapper, 'claybrickworks').classes()).toContain('card--dim');
 
     expect(wrapper.find('.link--full').exists()).toBe(true);
     expect(wrapper.find('.link--soft').exists()).toBe(true);

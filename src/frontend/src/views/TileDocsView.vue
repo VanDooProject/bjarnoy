@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { newPlacementDisabled } from '../lib/map/ringCatalogue';
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
@@ -8,6 +9,7 @@ import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import {
   coastalWaterArt,
   riverArt,
@@ -176,7 +178,8 @@ const buildingsByTile = computed(() => {
     result[tile.id] = catalogue.types
       .filter((type) => {
         const def = catalogue.byType[type]?.[0];
-        if (!def) return false;
+        // A building that can no longer be placed (the Quarry) is no longer something to build on this ground.
+        if (!def || newPlacementDisabled(type)) return false;
         if (tile.coastal) return def.requiresCoastalWater;
         if (def.requiresCoastalWater || tile.terrain === null) return false;
         return def.allowedTerrain.length === 0 || def.allowedTerrain.includes(tile.terrain);
@@ -223,9 +226,11 @@ const buildingsByTile = computed(() => {
         <img v-else-if="thumbUrl(tile)" class="thumb-img" :src="thumbUrl(tile)!" alt="" />
       </template>
       <p class="lore">{{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.lore`) }}</p>
-      <p class="generation">
-        {{ $t('docs.tiles.generation') }} {{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.generation`) }}
-      </p>
+      <DocsAdminNote>
+        <p class="generation">
+          {{ $t('docs.tiles.generation') }} {{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.generation`) }}
+        </p>
+      </DocsAdminNote>
       <p v-if="tile.river" class="buildings">{{ $t('docs.tiles.riverSawmillNote') }}</p>
       <p v-else class="buildings">
         {{ $t('docs.tiles.buildings') }}

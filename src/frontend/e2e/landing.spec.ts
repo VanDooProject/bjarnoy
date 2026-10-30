@@ -99,13 +99,10 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
 
   const farm = settlement.ring.action('Reindeer Herder');
   const lumberjack = settlement.ring.action('Lumberjack');
-  const quarry = settlement.ring.action('Quarry');
   await expect(farm).toBeVisible();
   await expect(lumberjack).toBeVisible();
-  await expect(quarry).toBeVisible();
   await expect(farm).toBeEnabled();
   await expect(lumberjack).toBeDisabled();
-  await expect(quarry).toBeDisabled();
 
   // Frame 3: a persistent "why it's dim" note explaining the hex, not the
   // click, plus the pointer aimed at whichever bubble actually fits.
@@ -284,11 +281,17 @@ test('founding a settlement swaps the pre-founding header for the real in-game n
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
-  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toBeVisible();
+  // Reports/Alliance live in the returning-player menu, not inline.
+  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Leaderboards', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
+  await page.getByTestId('returning-player-trigger').click();
+  const menu = page.getByTestId('returning-player-menu');
+  await expect(menu.getByRole('menuitem', { name: 'Reports', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Alliance', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Leaderboards', exact: true })).toHaveCount(0);
+  // Founded: the landing page is no destination any more.
+  await expect(menu.getByRole('menuitem', { name: 'Landing', exact: true })).toHaveCount(0);
 });
 
 // Mobile tutorial focus (owner decision): the header-hiding and

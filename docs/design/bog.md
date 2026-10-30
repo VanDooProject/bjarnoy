@@ -43,7 +43,7 @@ The generator has to follow the art's map rules, or tiles are missing:
 
 On top of that, the economy needs one thing: **bog ground in reach of every
 start**. The Clay Brickworks on bog is the start's stone source (LH 1), and
-the bog-ore works on bog are its iron source (from about LH 6). A mountain
+the bog-ore works on bog are its iron source (from LH 3). A mountain
 is *not* needed at the start; where one is in reach, the Quarry is an
 alternative stone source.
 
@@ -218,7 +218,7 @@ both boats) are dropped. The variant is `tile.variant % variants.length`.
 `buildingEconomy.ts`; `BogBuildingTests.cs` and the frontend tests pin them.
 
 - **Bog-ore works** (`bogoreworks`): the iron producer, on **plain bog moss** only
-  (`BogTileKind.Bog`: not a shore, mouth, creek, spring or lake). Unlocks at LH 6 with no
+  (`BogTileKind.Bog`: not a shore, mouth, creek, spring or lake). Unlocks at LH 3 with no
   feeder, max level 25, storage-capped like the other producers. 7 art levels (level000-006);
   game level `L` shows art level `min(L, 6)`, the same clamp every producer uses. Iron P₁ is
   **20/h**, tuned in the Economy lab (`economy.md` §8), growing 1.20 per level. Terrain boost:

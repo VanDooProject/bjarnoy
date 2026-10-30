@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
@@ -23,7 +24,26 @@ import { GRAPH_CATEGORY_ORDER, graphCategoryOf } from '../lib/techtree/buildingP
 const catalogue = useBuildingCatalogueStore();
 const { t, te, n, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-onMounted(() => catalogue.load());
+const route = useRoute();
+
+/**
+ * Brings the section named by the URL hash (`/tech-tree#reindeerherder`, the
+ * links BuildingLink.vue makes) into view. The router does no scrolling of its
+ * own and the sections only exist once the catalogue has rendered, so this
+ * waits for them; without it a link into the page would open at the top.
+ */
+async function scrollToHash() {
+  const id = decodeURIComponent(route.hash.slice(1));
+  if (!id) return;
+  await nextTick();
+  document.getElementById(id)?.scrollIntoView({ block: 'start' });
+}
+
+onMounted(async () => {
+  await catalogue.load();
+  await scrollToHash();
+});
+watch([() => route.hash, () => catalogue.types.length], scrollToHash, { flush: 'post' });
 
 function lore(type: string): string {
   const key = `docs.techTree.lore.${type}`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -348,5 +348,13 @@ describe('the bridge in the ring menu', () => {
     expect(bridgeLock({ ok: true })).toBeUndefined();
     expect(bridgeLock({ ok: false, reason: 'notWide' })).toBe('This river is no wide river: armies already wade across it');
     expect(bridgeLock({ ok: false, reason: 'wasted' })).toBe('No bridge on a wasted island');
+  });
+});
+
+describe('newPlacementDisabled', () => {
+  it('switches off new quarries only (BuildingCatalogue.NewPlacementDisabled), the terrain rule stays for the ones standing', () => {
+    expect(newPlacementDisabled('quarry')).toBe(true);
+    for (const type of ['lumberjack', 'claybrickworks', 'bogoreworks', 'farm', 'tower']) expect(newPlacementDisabled(type), type).toBe(false);
+    expect(buildingAllowedOnHex('quarry', { terrain: 'mountain' })).toBe(true);
   });
 });
