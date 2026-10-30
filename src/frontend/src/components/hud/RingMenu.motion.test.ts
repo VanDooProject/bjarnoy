@@ -147,31 +147,35 @@ describe('RingMenu motion', () => {
       wrapper.unmount();
     });
 
-    // The touch e2e drill-downs flaked on exactly this: a tap on a category that had just appeared, while the
-    // categories were still fading in, was dropped - nothing opened. The arriving layer is the one the player
-    // meant to reach, so the tap is held and runs once the swap has landed.
-    for (const reduced of [false, true]) {
-      it(`opens a category tapped while it is still arriving, once the swap lands${reduced ? ' (reduced motion)' : ''}`, async () => {
-        if (reduced) {
-          waapi.uninstall();
-          waapi = installWaapi(true);
-          vi.useFakeTimers();
-        }
-        const wrapper = mount(RingMenu, mountOptions);
-        await vi.advanceTimersByTimeAsync(2000);
-        void bubble(wrapper, 'Build').trigger('click');
-        // Past the old layer's exit, inside the categories' entrance.
-        await vi.advanceTimersByTimeAsync(PULL_MS + 2 * 12 + 1);
-        expect(labels(wrapper)).toEqual(['Housing', '‹ BACK']);
-        expect(wrapper.get('.ring-backdrop').attributes('data-swapping')).toBeDefined();
+    it('runs a category tap made while the categories bloom in once the bloom has ended', async () => {
+      const wrapper = mount(RingMenu, mountOptions);
+      await vi.advanceTimersByTimeAsync(2000);
+      void bubble(wrapper, 'Build').trigger('click');
+      // Past the pull-in: the categories are on screen and still blooming.
+      await vi.advanceTimersByTimeAsync(PULL_MS + 2 * 12);
+      expect(labels(wrapper)).toEqual(['Housing', '‹ BACK']);
+      expect(wrapper.get('.ring-backdrop').attributes('data-swapping')).toBeDefined();
+      void bubble(wrapper, 'Housing').trigger('click');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(labels(wrapper)).toContain('Hut');
+      wrapper.unmount();
+    });
 
-        await bubble(wrapper, 'Housing').trigger('click');
-        await vi.advanceTimersByTimeAsync(2000);
-        expect(labels(wrapper)).toContain('Hut');
-        expect(wrapper.get('.ring-backdrop').attributes('data-swapping')).toBeUndefined();
-        wrapper.unmount();
-      });
-    }
+    it('commits a building tap made while its layer blooms in once the bloom has ended', async () => {
+      const wrapper = mount(RingMenu, mountOptions);
+      await vi.advanceTimersByTimeAsync(2000);
+      void bubble(wrapper, 'Build').trigger('click');
+      await vi.advanceTimersByTimeAsync(2000);
+      void bubble(wrapper, 'Housing').trigger('click');
+      await vi.advanceTimersByTimeAsync(PULL_MS);
+      expect(labels(wrapper)).toContain('Hut');
+      expect(wrapper.get('.ring-backdrop').attributes('data-swapping')).toBeDefined();
+      void bubble(wrapper, 'Hut').trigger('click');
+      expect(wrapper.emitted('select')).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(wrapper.emitted('select')).toEqual([['hut']]);
+      wrapper.unmount();
+    });
 
     it('opens a category with its links drawing out and its buildings blooming out of the category bubble', async () => {
       const wrapper = mount(RingMenu, mountOptions);

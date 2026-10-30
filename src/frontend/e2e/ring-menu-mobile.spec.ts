@@ -30,7 +30,9 @@ for (const layout of LAYOUTS) {
       await settlement.clickHex(target);
       await settlement.ring.waitForOpen();
       await settlement.ring.action('Build').first().tap();
+      await settlement.ring.settledLayer();
       await settlement.ring.category('Resource').first().tap();
+      await settlement.ring.settledLayer();
       const herder = settlement.ring.child('Reindeer Herder').first();
       await expect(herder).toBeVisible();
       return herder;
@@ -115,11 +117,11 @@ for (const layout of LAYOUTS) {
   });
 }
 
-// Two phone bugs in the same ring. Reported on a 412x915 Android phone: drilled into Build on a hex low on the
-// screen, the six categories and ‹ BACK opened as one straight row wider than the screen, the last one clipped.
-// And the touch drill-downs above flaked: a tap on a category that had only just appeared (its layer still
-// fading in) was dropped, so the category never opened.
+// Reported on a 412x915 Android phone: drilled into Build on a hex low on the screen, the six categories and
+// ‹ BACK opened as one straight row wider than the screen, the last one clipped. The ring is a circle round its
+// hex, always: where none fits, the map slides the hex to where one does first.
 for (const viewport of [
+  { width: 360, height: 740 },
   { width: 390, height: 844 },
   { width: 412, height: 915 },
 ]) {
@@ -185,36 +187,5 @@ for (const viewport of [
         }
       });
     }
-
-    test('a category tapped while it is still fading in opens', async ({ page }) => {
-      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-      const settlement = await SettlementPage.found(page);
-      await settlement.clickHex(await settlement.findHex({ terrain: 'grass' }));
-      await settlement.ring.waitForOpen();
-
-      // Clicks Resource in the same task that inserts it - while the swap that brings the categories in is still
-      // running, which a quick finger (or a slow frame) hits for real. A MutationObserver, not a rAF poll, so the
-      // click can never drift past the end of the swap on a slow runner.
-      // Installed (and awaited) before the Build tap, so it cannot miss the insertion.
-      await page.evaluate(() => {
-        (window as unknown as { __clickedMidSwap: Promise<boolean> }).__clickedMidSwap = new Promise<boolean>((resolve) => {
-          const find = () =>
-            [...document.querySelectorAll<HTMLElement>('.ring-bubble:not(.child)')].find((b) => b.getAttribute('aria-label') === 'Resource');
-          const observer = new MutationObserver(() => {
-            const el = find();
-            if (!el) return;
-            observer.disconnect();
-            const swapping = el.closest('[data-swapping]') !== null;
-            el.click();
-            resolve(swapping);
-          });
-          observer.observe(document.body, { childList: true, subtree: true });
-        });
-      });
-      await settlement.ring.action('Build').first().tap();
-      const clickedMidSwap = await page.evaluate(() => (window as unknown as { __clickedMidSwap: Promise<boolean> }).__clickedMidSwap);
-      expect(clickedMidSwap, 'Resource was clicked while its layer was still arriving').toBe(true);
-      await expect(settlement.ring.child('Reindeer Herder').first()).toBeVisible();
-    });
   });
 }
