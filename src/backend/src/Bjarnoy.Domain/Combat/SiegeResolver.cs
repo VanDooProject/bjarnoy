@@ -86,6 +86,14 @@ public static class SiegeResolver
         survivingSiegePower <= 0 ? 0 : Math.Max(1, (int)Math.Floor(Math.Sqrt(survivingSiegePower / 2.0)));
 
     /// <summary>
+    /// How many levels a won siege takes off a <paramref name="type"/> building: <paramref name="levelsDestroyed"/> for most, but exactly
+    /// one for a wall hex (palisade or gate) and a bridge, whatever the siege engines bring (<c>docs/design/economy.md</c> section 5).
+    /// A wall is breached a level at a time; a guarded bridge falls to the king's bridge, open to everyone, before it can be burnt away.
+    /// </summary>
+    public static int LevelsTakenFrom(BuildingType type, int levelsDestroyed) =>
+        type is BuildingType.Palisade or BuildingType.PalisadeGate or BuildingType.Bridge ? Math.Min(1, levelsDestroyed) : levelsDestroyed;
+
+    /// <summary>
     /// Applies catapult damage from <paramref name="attackerSurvivors"/>
     /// against one of <paramref name="defenderBuildings"/>.
     /// </summary>
@@ -151,9 +159,7 @@ public static class SiegeResolver
         }
 
         var target = buildings[index];
-        // A bridge burns one level per won siege whatever the catapults bring (docs/design/economy.md section 5): a guarded
-        // bridge falls to the king's bridge, open to everyone, before it can be burnt away.
-        var levelAfter = Math.Max(0, target.Level - (target.Type == BuildingType.Bridge ? 1 : levelsDestroyed));
+        var levelAfter = Math.Max(0, target.Level - LevelsTakenFrom(target.Type, levelsDestroyed));
 
         if (levelAfter <= 0)
         {

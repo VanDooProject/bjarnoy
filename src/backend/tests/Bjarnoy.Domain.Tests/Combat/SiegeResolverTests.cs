@@ -156,4 +156,34 @@ public class SiegeResolverTests
         Assert.Equal(2, outcome.LevelAfter);
         Assert.Contains(outcome.UpdatedBuildings!, b => b.Coord == TowerHex && b.Level == 2);
     }
+
+    [Theory]
+    [InlineData(BuildingType.Palisade)]
+    [InlineData(BuildingType.PalisadeGate)]
+    [InlineData(BuildingType.Bridge)]
+    public void A_wall_hex_or_a_bridge_loses_one_level_per_won_siege_however_strong_the_siege(BuildingType type)
+    {
+        var wallHex = new HexCoord(3, 0);
+        List<PlacedBuilding> buildings = [.. Buildings(), new(wallHex, type, 3)];
+        var survivors = new[] { new UnitStack(UnitType.Catapult, 10) }; // 400 siege power: 14 levels off any other building
+
+        var outcome = SiegeResolver.Resolve(survivors, buildings, requestedTargetCoord: wallHex, seed: 1);
+
+        Assert.True(outcome.Applied);
+        Assert.Equal(3, outcome.LevelBefore);
+        Assert.Equal(2, outcome.LevelAfter);
+        Assert.Contains(outcome.UpdatedBuildings!, b => b.Coord == wallHex && b.Type == type && b.Level == 2);
+    }
+
+    [Fact]
+    public void A_level_1_wall_hex_is_breached_by_one_won_siege()
+    {
+        var wallHex = new HexCoord(3, 0);
+        List<PlacedBuilding> buildings = [.. Buildings(), new(wallHex, BuildingType.Palisade, 1)];
+
+        var outcome = SiegeResolver.Resolve([new UnitStack(UnitType.Catapult, 1)], buildings, requestedTargetCoord: wallHex, seed: 1);
+
+        Assert.Equal(0, outcome.LevelAfter);
+        Assert.DoesNotContain(outcome.UpdatedBuildings!, b => b.Coord == wallHex);
+    }
 }
