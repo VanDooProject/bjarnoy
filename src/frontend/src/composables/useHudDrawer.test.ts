@@ -3,13 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { useHudDrawer } from './useHudDrawer';
 import type { HudBarPosition } from '../stores/hudPrefs';
 
+// The element the handlers are bound to (TopBar's `.hud-bar`/`.hud-drawer`),
+// shared by every event so the one a drag captures is the one a later
+// `lostpointercapture` names.
+const bar = { setPointerCapture: () => {}, hasPointerCapture: () => true, releasePointerCapture: () => {} };
+
 function fakeEvent(
   clientY: number,
   timeStamp: number,
   pointerId = 1,
-  opts: { isPrimary?: boolean; pointerType?: string; button?: number } = {},
+  opts: { isPrimary?: boolean; pointerType?: string; button?: number; target?: object } = {},
 ) {
-  const currentTarget = { setPointerCapture: () => {}, hasPointerCapture: () => true, releasePointerCapture: () => {} };
+  const currentTarget = bar;
   return {
     pointerId,
     clientY,
@@ -18,7 +23,7 @@ function fakeEvent(
     pointerType: opts.pointerType ?? 'touch',
     button: opts.button ?? 0,
     currentTarget,
-    target: currentTarget,
+    target: opts.target ?? currentTarget,
   } as unknown as PointerEvent;
 }
 
@@ -185,6 +190,43 @@ describe('useHudDrawer', () => {
     expect(drawer.isOpen.value).toBe(false);
     expect(drawer.dragging.value).toBe(false);
     expect(drawer.currentOffset()).toBe(0);
+  });
+
+  it('a touch drag survives the lostpointercapture its own capture fires on the child it started on', () => {
+    // A touch pointer is implicitly captured by the element it went down on
+    // (here a pill's inner `.fill`). Arming moves the capture to the bar, so
+    // the browser fires `lostpointercapture` on that child, which bubbles to
+    // the bar's own listener. That must not cancel the drag: it used to, on
+    // the very next move, so no touch drag ever opened the drawer.
+    const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+    const child = {};
+    drawer.onPointerDown(fakeEvent(0, 0, 1, { target: child }));
+    drawer.onPointerMove(fakeEvent(20, 10, 1, { target: child })); // arms, captures the bar
+    drawer.onLostPointerCapture(fakeEvent(20, 10, 1, { target: child }));
+    expect(drawer.dragging.value).toBe(true);
+    drawer.onPointerMove(fakeEvent(250, 50));
+    expect(drawer.currentOffset()).toBe(250);
+    drawer.onPointerUp(fakeEvent(250, 50));
+    expect(drawer.isOpen.value).toBe(true);
+  });
+
+  it('cancels touch moves only once a drag is armed, so a jittery tap is never canceled', () => {
+    // Canceling an armed drag's touchmoves keeps Chromium from starting a
+    // (scroll-filtered, invisible) fling at release, which would swallow the
+    // next tap. Before the intent threshold the moves must stay untouched.
+    const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+    const touchMove = () => {
+      let prevented = false;
+      drawer.onTouchMove({ cancelable: true, preventDefault: () => (prevented = true) } as unknown as TouchEvent);
+      return prevented;
+    };
+    drawer.onPointerDown(fakeEvent(0, 0));
+    drawer.onPointerMove(fakeEvent(4, 10)); // under the 8px threshold
+    expect(touchMove()).toBe(false);
+    drawer.onPointerMove(fakeEvent(40, 20)); // armed
+    expect(touchMove()).toBe(true);
+    drawer.onPointerUp(fakeEvent(40, 20));
+    expect(touchMove()).toBe(false);
   });
 
   it('finding #18: cancelDrag() tears down an in-flight drag without committing it', () => {
