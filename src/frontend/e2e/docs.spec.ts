@@ -42,6 +42,44 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     expect(await view.noHorizontalOverflow()).toBe(true);
   });
 
+  // Regression: the thumb box was shorter than a full 2:3 canvas, so
+  // max-height squashed the layered (animated) render but not the trimmed
+  // showcase picture, and the tile jumped where hovering the levels switched
+  // from one to the other (Sawmill level 2 -> 3).
+  test("tech tree thumbnail keeps the tile floor still across a building's levels", async ({
+    page,
+  }) => {
+    await page.goto("/tech-tree");
+    const sawmill = page.locator("section.building", {
+      has: page.locator("h3", { hasText: /^Sawmill/ }),
+    });
+    const art = sawmill.locator(".thumb > :not(.floating-art-shadow)");
+    const rows = sawmill.locator("table tbody tr");
+    await rows.first().waitFor();
+
+    const kinds = new Set<string>();
+    const bottoms = new Set<number>();
+    for (const level of [1, 2, 3, 4]) {
+      await rows.nth(level - 1).hover();
+      const sample = await art.evaluate((el) => {
+        const [w, h] = getComputedStyle(el).aspectRatio.split("/").map(Number);
+        const box = el.getBoundingClientRect();
+        const thumb = el.parentElement!.getBoundingClientRect();
+        return {
+          kind: el.className,
+          drift: Math.abs(box.width / box.height - w! / h!) / (w! / h!),
+          bottom: Math.round(thumb.bottom - box.bottom),
+        };
+      });
+      expect(sample.drift, `level ${level} art squashed`).toBeLessThan(0.02);
+      kinds.add(sample.kind);
+      bottoms.add(sample.bottom);
+    }
+    // Both art sources were actually exercised, and sit on the same floor.
+    expect(kinds).toEqual(new Set(["atlas-sprite", "animated-building"]));
+    expect(bottoms.size).toBe(1);
+  });
+
   test("tile docs page scrolls to reveal content below the fold", async ({
     page,
   }) => {
