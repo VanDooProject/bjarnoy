@@ -38,7 +38,7 @@ import {
   markerFadeStep,
   type OcclusionCircle,
 } from './markerOcclusion';
-import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
+import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -110,7 +110,7 @@ import {
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
-import { bogEdgeDebug, bogEdgeShapes, bogEdgesOf, type BogEdgeShape } from './bogEdge';
+import { bogEdgeDebug, bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { animationPreference } from '../perf/animationPreference';
@@ -1684,7 +1684,15 @@ export class HexMapRenderer {
   private fadeIns = new Map<Sprite, { delayMs: number; durationMs: number; elapsedMs: number }>();
   private terrainFlat = new Graphics();
   // The bog/grass edge border (bogEdge.ts): settlement mode only, the lowest thing drawn over the ground art.
-  private bogEdgeLayer = new Graphics();
+  // Two child containers, `under` then `over`: the peat rims of every edge sit under the moss of every edge. Each
+  // visible bog hex shows a pooled Graphics in each, sharing that hex's cached GraphicsContext (see rebuildBogEdges).
+  private bogEdgeLayer = new Container();
+  private bogEdgeUnder = new Container();
+  private bogEdgeOver = new Container();
+  private bogEdgeUnderPool: Graphics[] = [];
+  private bogEdgeOverPool: Graphics[] = [];
+  private bogEdgeCache = new Map<string, { under: GraphicsContext | null; over: GraphicsContext | null }>();
+  private bogEdgeCacheKey = '';
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
   // here because which view this is decides whether it draws a sea body at all
@@ -2001,6 +2009,7 @@ export class HexMapRenderer {
 
   constructor(options: HexMapRendererOptions) {
     this.options = options;
+    this.bogEdgeLayer.addChild(this.bogEdgeUnder, this.bogEdgeOver);
     this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
     this.idleDrift = options.mode === 'world';
     this.lockCamera = !!options.lockCamera;
@@ -3532,7 +3541,9 @@ export class HexMapRenderer {
       this.riverLayer.clear();
     }
 
+    phaseStart = performance.now();
     this.rebuildBogEdges(coords);
+    fogPerfStats.bogEdgesMs = performance.now() - phaseStart;
 
     phaseStart = performance.now();
     this.rebuildBorders(coords, fogActive, deepFogOnly);
@@ -4499,45 +4510,108 @@ export class HexMapRenderer {
 
   private rebuildBogEdges(coords: AxialCoord[]) {
     const { worldModel, mode } = this.options;
-    this.bogEdgeLayer.clear();
     const { style, forestStyle, color } = bogEdgeDebug;
-    if (mode !== 'settlement' || (style === 'off' && forestStyle === 'off')) return;
+    if (mode !== 'settlement' || (style === 'off' && forestStyle === 'off')) {
+      this.syncBogEdgeGraphics([], []);
+      return;
+    }
+    // The geometry depends on nothing but the hex, its neighbours (bog, giant, river) and the debug switches, so it is
+    // built once per hex and only thrown away when one of those changes (or the cache has grown past a few screens).
+    const cacheKey = `${style}|${forestStyle}|${color}|${worldModel.riverRevision}|${worldModel.overlayRevision}`;
+    if (cacheKey !== this.bogEdgeCacheKey || this.bogEdgeCache.size > 4000) {
+      this.clearBogEdgeCache();
+      this.bogEdgeCacheKey = cacheKey;
+    }
     const getTile = (q: number, r: number) => worldModel.getTile(q, r);
-    const isRiver = (q: number, r: number) => worldModel.getRiverTile(q, r) !== undefined;
+    const getRiver = (q: number, r: number) => worldModel.getRiverTile(q, r);
     const top = isoTopPoints(TILE_W, TILE_H);
     const centre = { x: TILE_W / 2, y: TILE_H / 2 };
-    const under: BogEdgeShape[] = [];
-    const over: BogEdgeShape[] = [];
+    const underCtx: GraphicsContext[] = [];
+    const overCtx: GraphicsContext[] = [];
     // Not gated on exploration: it follows the ground art, which draws under the fog too.
     for (const c of coords) {
-      const edges = bogEdgesOf(getTile, isRiver, c);
-      if (edges.length === 0) continue;
-      const grid = isoGridPosition(c, TILE_W, TILE_H);
-      for (const { edge, neighbour } of edges) {
-        const a = top[edge];
-        const b = top[(edge + 1) % 6];
-        // Unit normal pointing out of the hex, measured in the squashed top-face space the edge itself lives in.
-        const mid = { x: (a.x + b.x) / 2 - centre.x, y: (a.y + b.y) / 2 - centre.y };
-        const len = Math.hypot(mid.x, mid.y);
-        const shapes = bogEdgeShapes(
-          neighbour === 'forest' ? forestStyle : style,
-          { x: grid.x + a.x, y: grid.y + a.y },
-          { x: grid.x + b.x, y: grid.y + b.y },
-          { x: mid.x / len, y: mid.y / len },
-          [c.q, c.r, edge],
-          color,
-        );
-        for (const shape of shapes) (shape.under ? under : over).push(shape);
+      // Only bog hexes are cached, so the cache holds a few screens of bog, not every hex the camera has passed.
+      if (!isBogGround(worldModel.getTile(c.q, c.r))) continue;
+      const key = coordKey(c);
+      let entry = this.bogEdgeCache.get(key);
+      if (!entry) {
+        const under: BogEdgeShape[] = [];
+        const over: BogEdgeShape[] = [];
+        const grid = isoGridPosition(c, TILE_W, TILE_H);
+        for (const { edge, neighbour, gap } of bogEdgesOf(getTile, getRiver, c)) {
+          const a = top[edge];
+          const b = top[(edge + 1) % 6];
+          // Unit normal pointing out of the hex, measured in the squashed top-face space the edge itself lives in.
+          const mid = { x: (a.x + b.x) / 2 - centre.x, y: (a.y + b.y) / 2 - centre.y };
+          const len = Math.hypot(mid.x, mid.y);
+          const shapes = bogEdgeShapes(
+            neighbour === 'forest' ? forestStyle : style,
+            { x: grid.x + a.x, y: grid.y + a.y },
+            { x: grid.x + b.x, y: grid.y + b.y },
+            { x: mid.x / len, y: mid.y / len },
+            [c.q, c.r, edge],
+            color,
+            gap,
+          );
+          for (const shape of shapes) (shape.under ? under : over).push(shape);
+        }
+        // A bog hex with no bordered edges caches nulls too, so it is not recomputed on every rebuild.
+        entry = { under: this.bogEdgeContext(under), over: this.bogEdgeContext(over) };
+        this.bogEdgeCache.set(key, entry);
       }
+      if (entry.under) underCtx.push(entry.under);
+      if (entry.over) overCtx.push(entry.over);
     }
-    for (const shape of [...under, ...over]) {
+    this.syncBogEdgeGraphics(underCtx, overCtx);
+  }
+
+  private bogEdgeContext(shapes: BogEdgeShape[]): GraphicsContext | null {
+    if (shapes.length === 0) return null;
+    const ctx = new GraphicsContext();
+    for (const shape of shapes) {
       const flat = shape.points.flatMap((p) => [p.x, p.y]);
-      if (shape.fill) this.bogEdgeLayer.poly(flat).fill(shape.fill);
+      if (shape.fill) ctx.poly(flat).fill(shape.fill);
       // A rim under the moss ends flat: a round end would poke past the corner cap that covers it.
       if (shape.stroke) {
-        this.bogEdgeLayer.poly(flat, false).stroke({ ...shape.stroke, join: 'round', cap: shape.under ? 'butt' : 'round' });
+        ctx.poly(flat, false).stroke({ ...shape.stroke, join: 'round', cap: shape.under ? 'butt' : 'round' });
       }
     }
+    return ctx;
+  }
+
+  /** Show one pooled Graphics per context in each half of the layer and hide the rest. */
+  private syncBogEdgeGraphics(underCtx: GraphicsContext[], overCtx: GraphicsContext[]) {
+    const sync = (parent: Container, pool: Graphics[], contexts: GraphicsContext[]) => {
+      for (let i = 0; i < contexts.length; i++) {
+        let g = pool[i];
+        if (!g) {
+          // Handed the shared context up front, so the Graphics owns none of its own.
+          g = new Graphics(contexts[i]);
+          pool.push(g);
+          parent.addChild(g);
+        } else {
+          g.context = contexts[i];
+        }
+        g.visible = true;
+      }
+      for (let i = contexts.length; i < pool.length; i++) pool[i].visible = false;
+    };
+    sync(this.bogEdgeUnder, this.bogEdgeUnderPool, underCtx);
+    sync(this.bogEdgeOver, this.bogEdgeOverPool, overCtx);
+  }
+
+  /**
+   * Drop every cached context. Pooled Graphics only borrow a context (`Graphics.destroy()` would not touch one passed
+   * in, and they are never destroyed anyway), so they are pointed at nothing-to-show first and the contexts destroyed
+   * here, the one place they die.
+   */
+  private clearBogEdgeCache() {
+    this.syncBogEdgeGraphics([], []);
+    for (const { under, over } of this.bogEdgeCache.values()) {
+      under?.destroy();
+      over?.destroy();
+    }
+    this.bogEdgeCache.clear();
   }
 
   private rebuildBorders(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {
@@ -5731,7 +5805,7 @@ export class HexMapRenderer {
       // is the only thing that ever sets or refreshes them).
       this.syncSpriteLayer(this.terrainBase, new Map());
       this.syncSpriteLayer(this.terrainTop, new Map());
-      this.bogEdgeLayer.clear();
+      this.syncBogEdgeGraphics([], []);
       this.topAnimState.clear();
       this.blackFogLayer.setArmyVisionSources([], 0);
       this.whiteMistLayer.setArmyVisionSources([], 0);
@@ -5795,6 +5869,8 @@ export class HexMapRenderer {
     this.blackFogLayer.destroy();
     this.whiteMistLayer.destroy();
     this.waterLayer.destroy();
+    // The cached bog edge contexts are only borrowed by the pooled Graphics, so the stage teardown below won't free them.
+    this.clearBogEdgeCache();
     this.app?.destroy(false, { children: true });
     this.app = null;
   }
