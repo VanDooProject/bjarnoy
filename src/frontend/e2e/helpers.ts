@@ -495,3 +495,21 @@ export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<v
   await settlement.ring.waitForOpen();
   await expect(pointer.locator('.chip')).toContainText('fits');
 }
+
+/**
+ * A touch double tap at `p` via CDP, sent the way a finger produces it:
+ * all four touch events go out back to back. `page.touchscreen.tap` twice
+ * would wait for the page to acknowledge each event before sending the
+ * next, which on a slow runner spaces the taps seconds apart — far past
+ * the renderer's double-tap window (src/lib/map/doubleTap.ts).
+ */
+export async function doubleTap(page: Page, p: { x: number; y: number }): Promise<void> {
+  const session = await cdpSessionFor(page);
+  const point = [{ x: p.x, y: p.y, id: 0 }];
+  await Promise.all([
+    session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point }),
+    session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }),
+    session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point }),
+    session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }),
+  ]);
+}
