@@ -13,6 +13,10 @@ import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { useHudNavEntries, type HudNavEntry } from '../../composables/useHudNavEntries';
 import { useLogout } from '../../composables/useLogout';
+import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
+import { isTradePanelOpen } from '../../composables/tradePanelOpenState';
+import { useIsMobile } from '../../composables/useIsMobile';
+import { fadeChip } from '../../lib/hud/chipMotion';
 import { profileLocation } from '../../lib/profileRoute';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
@@ -32,18 +36,32 @@ import type { MessageSchema } from '../../i18n/schema';
 // Mobile HUD bar rework, phase 2 (owner clarification): the logged-in
 // avatar/account-menu leaves the phone bar on every page — Profile/Log out
 // move into MobileHudDrawer's own account section instead, unconditionally.
-// The anonymous ReturningPlayerMenu trigger is different: it only moves into
-// the drawer on a bar that also carries ResourceBar (in-game MapView), where
-// there genuinely isn't room for both — everywhere else (docs/tech-tree/
+// The anonymous ReturningPlayerMenu trigger is different: on a bar that also
+// carries ResourceBar (in-game MapView) there genuinely isn't room for both,
+// so it floats as a chip below the bar (see the `.hud-nav--with-resources`
+// phone rule) and its nudge moves into the drawer — everywhere else (docs/tech-tree/
 // showcase, the post-founding landing header) it stays inline, just shrunk
 // to a single compact line (see ReturningPlayerMenu.vue's own mobile rules)
 // so the bar's title still gets room. `hasResourceBar` is a static per-page
 // fact the caller already knows (only MapView passes a sibling
 // `<ResourceBar>` into this same bar), not something HudNav can infer on its
 // own.
-withDefaults(defineProps<{ hasDrawer?: boolean; hasResourceBar?: boolean }>(), {
+//
+// The anonymous trigger stays on screen on a phone after the nudge is
+// dismissed with "Later" (owner request), so "Name your jarl" is always one
+// tap away for a founded player who hasn't registered. On the in-game bar the
+// trigger used to move into the drawer; it now floats instead as a chip in the
+// slot right under the Trade toggle (the bar itself has no room). It is this
+// same ReturningPlayerMenu with the same rule as everywhere else (shown while
+// anonymous, gone once registered), only positioned differently. The nudge
+// itself stays in the drawer there (MobileHudDrawer.vue).
+//
+// `floating`: this nav sits in TopBar's `floating` bar (the founded landing):
+// on a phone its trigger is a chip over the bare map too.
+const props = withDefaults(defineProps<{ hasDrawer?: boolean; hasResourceBar?: boolean; floating?: boolean }>(), {
   hasDrawer: true,
   hasResourceBar: false,
+  floating: false,
 });
 
 const route = useRoute();
@@ -99,6 +117,23 @@ const unclaimedRealm = computed(
     !player.nickname,
 );
 const showProfileNudge = computed(() => unclaimedRealm.value && !player.profileNudgeDismissed);
+// The in-game phone chip sits where the HUD drawer and the open Trade panel
+// also draw — it steps aside while either is open. Phone only: on desktop the
+// trigger is inline in the bar and nothing covers it.
+const isMobile = useIsMobile();
+const chipStepsAside = computed(
+  () => props.hasResourceBar && isMobile.value && (isHudDrawerOpen.value || isTradePanelOpen.value),
+);
+// Shown while anonymous (gone once registered), except while stepping aside.
+// Every enter has a leave: the chip fades out/in (lib/hud/chipMotion.ts,
+// through the HUD motion gate) rather than popping — on registration too.
+const showReturningPlayerMenu = computed(() => !auth.isAuthenticated && !chipStepsAside.value);
+function onChipEnter(el: Element, done: () => void) {
+  void fadeChip(el, 'in').then(done, done);
+}
+function onChipLeave(el: Element, done: () => void) {
+  void fadeChip(el, 'out').then(done, done);
+}
 
 // Player logout/login gate: the authenticated avatar is now a small account
 // dropdown (Profile / Log out) rather than a direct link to /profile,
@@ -150,7 +185,13 @@ watch(() => route.fullPath, closeAccountMenu);
 </script>
 
 <template>
-  <nav class="hud-nav" :class="{ 'hud-nav--no-drawer': !hasDrawer, 'hud-nav--with-resources': hasResourceBar }">
+  <nav
+    class="hud-nav"
+    :class="{
+      'hud-nav--no-drawer': !hasDrawer,
+      'hud-nav--with-resources': hasResourceBar,
+    }"
+  >
     <button
       v-for="entry in primary"
       :key="entry.id"
@@ -210,35 +251,42 @@ watch(() => route.fullPath, closeAccountMenu);
         </button>
       </div>
     </div>
-    <ReturningPlayerMenu v-else :nudging="showProfileNudge" :unclaimed-realm="unclaimedRealm">
-      <template #trigger-badge>
-        <span v-if="unreadBadge > 0" class="badge avatar-badge" data-testid="returning-player-badge">{{ unreadBadge }}</span>
-      </template>
-      <template #entries="{ close }">
-        <!-- These entries live in the avatar menu for now and will be
-             refactored to a place of their own later, like the onboarding
-             quests were. -->
-        <div v-if="secondary.length" class="menu-entries">
-          <div class="divider" role="separator" />
-          <button
-            v-for="entry in secondary"
-            :key="entry.id"
-            type="button"
-            role="menuitem"
-            class="row row-entry"
-            :class="{ active: entry.active }"
-            :data-testid="`menu-entry-${entry.id}`"
-            @click="onMenuEntryClick(entry, close)"
-          >
-            {{ t(entry.labelKey) }}
-            <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
-          </button>
-        </div>
-      </template>
-      <template #nudge>
-        <ProfileNudge v-if="showProfileNudge" />
-      </template>
-    </ReturningPlayerMenu>
+    <Transition :css="false" @enter="onChipEnter" @leave="onChipLeave">
+      <ReturningPlayerMenu
+        v-if="showReturningPlayerMenu"
+        :nudging="showProfileNudge"
+        :unclaimed-realm="unclaimedRealm"
+        :chip="floating || hasResourceBar"
+      >
+        <template #trigger-badge>
+          <span v-if="unreadBadge > 0" class="badge avatar-badge" data-testid="returning-player-badge">{{ unreadBadge }}</span>
+        </template>
+        <template #entries="{ close }">
+          <!-- These entries live in the avatar menu for now and will be
+               refactored to a place of their own later, like the onboarding
+               quests were. -->
+          <div v-if="secondary.length" class="menu-entries">
+            <div class="divider" role="separator" />
+            <button
+              v-for="entry in secondary"
+              :key="entry.id"
+              type="button"
+              role="menuitem"
+              class="row row-entry"
+              :class="{ active: entry.active }"
+              :data-testid="`menu-entry-${entry.id}`"
+              @click="onMenuEntryClick(entry, close)"
+            >
+              {{ t(entry.labelKey) }}
+              <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
+            </button>
+          </div>
+        </template>
+        <template #nudge>
+          <ProfileNudge v-if="showProfileNudge" />
+        </template>
+      </ReturningPlayerMenu>
+    </Transition>
   </nav>
 </template>
 
@@ -296,22 +344,26 @@ watch(() => route.fullPath, closeAccountMenu);
     display: none;
   }
 }
-/* The anonymous ReturningPlayerMenu trigger only leaves the bar where
-   ResourceBar also lives in it — everywhere else it stays inline (shrunk to
-   a compact single line, see ReturningPlayerMenu.vue's own mobile rules),
-   since there's nothing else contending for that room. Its account-creation
-   nudge (ProfileNudge, in its `#nudge` slot) moves along with it into
-   MobileHudDrawer's account section in that one case. */
+/* In-game phone bar (ResourceBar shares it): there is no room in the bar for
+   the anonymous ReturningPlayerMenu trigger, so the nav leaves the bar's flow
+   and floats as a chip under the Trade toggle (TradePanel.vue's own
+   `top: 76px` toggle, ~34px tall, plus the same 8px gap its panel uses at
+   `top: 118px`), 16px from the right edge like that toggle. Out of flow, the
+   nav no longer takes any of the bar's width (its padding/divider used to
+   shove the evenly spread resource row off-centre), and with the links,
+   locale switcher and avatar already hidden above it is just the trigger —
+   or nothing at all for a registered player. The account-creation nudge
+   (ProfileNudge, in the trigger's `#nudge` slot) stays in MobileHudDrawer's
+   account section here, so its floating copy is hidden. */
 @media (max-width: 768px), (max-height: 500px) {
-  .hud-nav--with-resources:not(.hud-nav--no-drawer) .returning-player-menu {
-    display: none;
-  }
-  /* With the links, locale switcher, avatar and trigger all moved into the
-     drawer, nothing of HudNav is left to show in the in-game phone bar — but
-     its own box (padding + divider) still took ~23px on the right, which
-     shoved the evenly spread resource row off-centre to the left. Drop the
-     empty nav entirely so the row spans the whole bar. */
   .hud-nav--with-resources:not(.hud-nav--no-drawer) {
+    position: fixed;
+    top: 118px;
+    right: 16px;
+    padding-left: 0;
+    border-left: none;
+  }
+  .hud-nav--with-resources:not(.hud-nav--no-drawer) :deep(.nudge:not(.in-drawer)) {
     display: none;
   }
 }

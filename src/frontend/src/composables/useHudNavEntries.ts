@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
 import { modalLocation } from '../lib/modalRoute';
+import { showsLandingLink } from './useLandingLink';
 
 export type HudNavEntryId =
   | 'settlement'
@@ -113,14 +114,13 @@ export function useHudNavEntries(): {
         badge: 0,
         go: () => void router.push('/docs'),
       },
-      // Only a way back to the pre-founding landing flow: once a settlement is
-      // founded the landing page is not a destination any more
-      // (docs/design/ui-guidelines.md §2), and on the landing route itself
-      // the link would be a self-link.
+      // Only a way back to the pre-founding landing flow: the one rule lives
+      // in useLandingLink.ts (hidden on the landing route itself and once a
+      // settlement is founded, docs/design/ui-guidelines.md §2).
       {
         id: 'landing',
         labelKey: 'hud.nav.landing',
-        visible: !player.hasFoundedSettlement && route.name !== 'landing',
+        visible: showsLandingLink(route.name, player.hasFoundedSettlement),
         active: false,
         badge: 0,
         go: () => void router.push('/'),

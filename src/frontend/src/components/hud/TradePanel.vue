@@ -11,7 +11,7 @@
 // Reports/Alliance. `messageFor` below still knows how to render a
 // `GuildOnlyOffer` rejection in case one ever reaches here anyway (e.g. a
 // stale board row accepted just as guild membership ships).
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
@@ -20,6 +20,7 @@ import { resourceName } from '../../i18n/catalogueNames';
 import type { ResourceKind } from '../../lib/map/types';
 import { validateTradeRatio } from '../../lib/trade/tradeRatio';
 import { useWorldStore } from '../../stores/world';
+import { isTradePanelOpen } from '../../composables/tradePanelOpenState';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -40,6 +41,10 @@ function messageFor(err: unknown): string {
 const guildOnlyTooltip = computed(() => t('apiErrors.rejections.GuildOnlyOffer'));
 
 const open = ref(false);
+// HudNav.vue's in-game phone chip steps aside while this is open (see
+// tradePanelOpenState.ts).
+watch(open, (o) => { isTradePanelOpen.value = o; }, { immediate: true });
+onBeforeUnmount(() => { isTradePanelOpen.value = false; });
 const error = ref('');
 const busy = ref(false);
 
