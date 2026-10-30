@@ -112,6 +112,7 @@ import {
 import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { animationPreference } from '../perf/animationPreference';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, sharedClockPlayback } from './clipPlayback';
@@ -1334,6 +1335,9 @@ export function waypointGrabRadiusPx(pointerType: string | undefined): number {
   return pointerType === 'touch' ? WAYPOINT_GRAB_RADIUS_PX_TOUCH : WAYPOINT_GRAB_RADIUS_PX;
 }
 
+/** The parts of a pointer event `handleClick` reads — a held touch tap (see `pendingTap`) keeps just these. */
+type TapPoint = Pick<PointerEvent, 'clientX' | 'clientY' | 'pointerType'>;
+
 /**
  * Whether releasing a grabbed draft-waypoint pin counts as a tap (fires
  * `onWaypointTap`) rather than a drag (already applied hex-by-hex via
@@ -1952,6 +1956,16 @@ export class HexMapRenderer {
   // same expensive rebuild work a drag already de-prioritises.
   private wheeling = false;
   private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  // Touch double-tap-to-zoom (doubleTap.ts). A touch tap is held here for
+  // DOUBLE_TAP_MS before it reaches handleClick, so a second tap can still
+  // turn it into a zoom instead of opening the ring menu. The timer is
+  // paused while a new gesture is down (see onPointerDown) and that
+  // gesture's end decides: double tap, a separate tap, or a drag/pinch that
+  // drops it.
+  private pendingTap: { tap: Tap; click: TapPoint; timer: ReturnType<typeof setTimeout> | null } | null = null;
+  // The running double-tap zoom: `applied` is the log-zoom already handed to
+  // zoomBy, so each frame applies only the difference (see tickDoubleTapZoom).
+  private doubleTapZoom: { screen: { x: number; y: number }; startedAt: number; applied: number } | null = null;
   // Issue #16 "clicking elsewhere on the map with a ring open should close
   // it, not open a new one": beginDragFrom's synthetic drag (started to
   // dismiss a ring on backdrop mousedown, see beginDragFrom below) ends in
@@ -2417,6 +2431,7 @@ export class HexMapRenderer {
       this.scheduleCull();
     }
     this.tickCameraAnim();
+    this.tickDoubleTapZoom();
     const now = performance.now();
     // isFogActive() mirrors rebuildTerrain's/rebuildBorders' own bypass: no
     // settlement yet (settlement-mode preview) or the local player hasn't
@@ -2604,6 +2619,8 @@ export class HexMapRenderer {
     // to let the first finger keep driving the pin and drop the second.
     if (this.waypointDrag) return;
     if (this.pinch.count === 0) {
+      this.doubleTapZoom = null;
+      this.pausePendingTap();
       // Issue #93 "drag to move a placed waypoint": a pointerdown that lands
       // on a draft pin grabs *that pin* rather than starting a camera pan —
       // the two gestures are the same input, so the pin has to win the
@@ -2612,6 +2629,7 @@ export class HexMapRenderer {
       const screen = this.pointerScreen(e);
       const grabbed = this.draftWaypointAt(screen, e.pointerType);
       if (grabbed !== null && screen) {
+        this.dropPendingTap();
         this.idleDrift = false;
         const startCoordKey = coordKey(this.armyOverlay!.draftWaypoints[grabbed]);
         this.waypointDrag = {
@@ -2867,7 +2885,9 @@ export class HexMapRenderer {
     if (this.pinch.count > 0) return; // e.g. three fingers down to two — still pinching
     if (!allowClick) this.suppressNextClick = true;
     if (this.dragging && this.dragMoved < DRAG_CLICK_SLOP_PX && !this.suppressNextClick) {
-      this.handleClick(e);
+      this.handleTap(e);
+    } else {
+      this.dropPendingTap();
     }
     this.suppressNextClick = false;
     // `dragging` is true for *any* pointerdown, a stationary click included,
@@ -3060,6 +3080,7 @@ export class HexMapRenderer {
     if (this.interactionLocked) return;
     const screen = this.clientToCanvas(e.clientX, e.clientY);
     if (!screen) return;
+    this.doubleTapZoom = null;
     const factor = Math.exp(-e.deltaY * 0.001);
     this.zoomBy(screen, factor);
   };
@@ -3156,7 +3177,83 @@ export class HexMapRenderer {
     this.wheeling = false;
   }
 
-  private handleClick(e: PointerEvent) {
+  /**
+   * A gesture ended as a tap. Mouse/pen clicks, and every tap on a
+   * `lockCamera` preview (which can't zoom), go straight to handleClick. A
+   * touch tap is held for DOUBLE_TAP_MS (`pendingTap`): a second tap close
+   * by in that window zooms in around it instead, otherwise the held tap
+   * fires as a normal click.
+   */
+  private handleTap(e: PointerEvent) {
+    if (e.pointerType !== 'touch' || this.lockCamera) {
+      this.flushPendingTap();
+      this.handleClick(e);
+      return;
+    }
+    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: performance.now() };
+    if (this.pendingTap && isDoubleTap(this.pendingTap.tap, tap)) {
+      this.dropPendingTap();
+      const screen = this.clientToCanvas(e.clientX, e.clientY);
+      if (screen) this.doubleTapZoom = { screen, startedAt: performance.now(), applied: 0 };
+      return;
+    }
+    this.flushPendingTap();
+    const click: TapPoint = { clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType };
+    this.pendingTap = { tap, click, timer: null };
+    this.armPendingTap();
+  }
+
+  private armPendingTap() {
+    const pending = this.pendingTap;
+    if (!pending) return;
+    pending.timer = setTimeout(() => {
+      pending.timer = null;
+      if (this.pendingTap !== pending) return;
+      this.pendingTap = null;
+      if (this.destroyed || this.interactionLocked) return;
+      this.handleClick(pending.click);
+    }, DOUBLE_TAP_MS);
+  }
+
+  /** A new gesture started: hold the pending tap until that gesture's end decides what it was. */
+  private pausePendingTap() {
+    if (this.pendingTap?.timer != null) {
+      clearTimeout(this.pendingTap.timer);
+      this.pendingTap.timer = null;
+    }
+  }
+
+  /** Fires the held touch tap now (a new tap landed too far away or too late to pair with it). */
+  private flushPendingTap() {
+    const pending = this.pendingTap;
+    if (!pending) return;
+    this.dropPendingTap();
+    if (!this.interactionLocked) this.handleClick(pending.click);
+  }
+
+  private dropPendingTap() {
+    if (this.pendingTap?.timer != null) clearTimeout(this.pendingTap.timer);
+    this.pendingTap = null;
+  }
+
+  /**
+   * One frame of the double-tap zoom: applies this frame's share of the
+   * eased log-zoom through zoomBy, so the anchor point, clamps and the
+   * world<->settlement threshold crossing all behave exactly as for a wheel
+   * or pinch, and zoomBy's own idle timer bakes the settled view.
+   */
+  private tickDoubleTapZoom() {
+    const anim = this.doubleTapZoom;
+    if (!anim) return;
+    const elapsed = performance.now() - anim.startedAt;
+    const target = doubleTapZoomLog(elapsed);
+    const step = target - anim.applied;
+    anim.applied = target;
+    if (elapsed >= DOUBLE_TAP_ZOOM_MS) this.doubleTapZoom = null;
+    if (step > 0) this.zoomBy(anim.screen, Math.exp(step));
+  }
+
+  private handleClick(e: TapPoint) {
     const screen = this.clientToCanvas(e.clientX, e.clientY);
     if (!screen) return;
     // Touch/pen has no hover: a tap on a construction dial reveals it instead
@@ -5747,6 +5844,7 @@ export class HexMapRenderer {
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();
+    this.dropPendingTap();
     this.pinch.clear();
     this.app?.ticker.remove(this.onTick);
     this.detachFramePacing?.();
