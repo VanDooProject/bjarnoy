@@ -49,9 +49,10 @@
 - a change that depends on something not shipped yet (art in `bg_assets_hextile`, a backend
   change, ...) just waits for it: both go out together in the same release, so the code is
   written for the finished state, not for the gap in between
-- a running world stays pinned to the release tag it was started on. Something only that world
-  needs is a hotfix on a branch made from that tag, not a special case in `main` (there are no
-  releases yet, so this doesn't come up today)
+- a running world stays pinned to the release tag it was started on. Whatever it should get after
+  that (a bug fix, a security fix, a feature) is backported to a branch made from that tag and
+  shipped as a hotfix release from there, never added to `main` as a special case for that world
+  (there are no releases yet, so this doesn't come up today)
 
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
