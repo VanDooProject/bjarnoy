@@ -760,7 +760,6 @@ const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
 };
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
-    { id: 'housing', buildings: [{ type: 'hut' }] },
     {
       id: 'resource',
       buildings: [
@@ -825,7 +824,6 @@ const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.val
 // Category tints, carried into each category's own buildings so a building
 // bubble reads as belonging to the category it fanned out of.
 const CATEGORY_COLORS: Record<string, string> = {
-  housing: 'var(--gold)',
   resource: 'var(--food)',
   military: 'var(--iron)',
   defense: 'var(--stone)',

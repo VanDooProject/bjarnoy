@@ -77,12 +77,12 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // set up by SettlementView for exactly this) for that hex's exact
     // screen position — which is what SettlementPage.findHex does.
     //
-    // Grass specifically: it's the one terrain where every category's first
-    // building (Hut) has no longhouse-level gate at all, so a fresh level-1
-    // realm can always actually place it — sand/forest/mountain's own
-    // categories (Tower, Lumberjack, Quarry) are gated and would make this
-    // generic "does the click-to-build flow work" smoke test flaky on
-    // whichever terrain the scan happened to hit first.
+    // Grass specifically: it takes the Reindeer Herder, which has no
+    // longhouse-level gate at all, so a fresh level-1 realm can always
+    // actually place it — sand/forest/mountain's own options (Tower,
+    // Lumberjack, nothing at all on a mountain) are gated or empty and would
+    // make this generic "does the click-to-build flow work" smoke test flaky
+    // on whichever terrain the scan happened to hit first.
     const target = await settlement.findHex({ terrain: 'grass' });
 
     // The model, via the __demoWorld debug hook, is the deterministic
@@ -100,9 +100,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
 
     await settlement.ring.openBuildCategories();
 
-    // Grass's first category (Housing) has exactly one building — Hut — so
-    // opening the first category and clicking the first building
-    // bubble always reaches it, without needing to name it explicitly.
+    // Grass's first category is Resource, which opens with the Reindeer Herder.
     //
     // The 2a ring caps itself at two lanes, so drilling *replaces* the root
     // actions with the categories rather than orbiting outside them —
@@ -112,7 +110,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
     await settlement.ring.openFirstCategory();
 
-    const buildingBubble = settlement.ring.childBubbles.first();
+    const buildingBubble = settlement.ring.child('Reindeer Herder').first();
     await expect(buildingBubble).toBeVisible();
     await buildingBubble.click();
 
