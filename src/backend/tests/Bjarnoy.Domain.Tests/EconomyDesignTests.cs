@@ -21,7 +21,7 @@ public class EconomyDesignTests
         (BuildingType.Farm, 4), (BuildingType.PumpkinFarm, 4),
         (BuildingType.Barracks, 5),
         (BuildingType.TownSquare, 6), (BuildingType.BogOreWorks, 6),
-        (BuildingType.Palisade, 7), (BuildingType.PalisadeGate, 7),
+        (BuildingType.Palisade, 7), (BuildingType.PalisadeGate, 7), (BuildingType.Bridge, 7),
         (BuildingType.Dockyard, 8),
         (BuildingType.ArcheryRange, 9),
         (BuildingType.CartWorkshop, 10),
@@ -86,7 +86,9 @@ public class EconomyDesignTests
                 continue;
             }
 
-            Assert.True(group.Count() <= 2, $"LH {group.Key} unlocks {group.Count()} buildings");
+            // The Palisade Gate shares the Palisade's tech-tree card, so the pair counts once.
+            var cards = group.Count(l => l.Type != BuildingType.PalisadeGate);
+            Assert.True(cards <= 2, $"LH {group.Key} unlocks {cards} buildings");
         }
     }
 
@@ -148,13 +150,21 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void No_building_costs_iron()
+    public void No_building_costs_iron_but_the_guard_of_the_level_4_bridge()
     {
         foreach (var type in BuildingCatalogue.AllTypes)
         {
             for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
-                Assert.Equal(0, BuildingCatalogue.Get(type, level).Cost.Iron);
+                var iron = BuildingCatalogue.Get(type, level).Cost.Iron;
+                if (type == BuildingType.Bridge && level == 4)
+                {
+                    Assert.Equal(40, iron);
+                }
+                else
+                {
+                    Assert.Equal(0, iron);
+                }
             }
         }
     }
@@ -189,6 +199,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.ShrineOfNjord, 5)]
     [InlineData(BuildingType.Palisade, 3)]
     [InlineData(BuildingType.PalisadeGate, 3)]
+    [InlineData(BuildingType.Bridge, 4)]
     public void Each_building_has_its_own_max_level_and_no_definition_above_it(BuildingType type, int max)
     {
         Assert.Equal(max, BuildingCatalogue.MaxLevelFor(type));
