@@ -52,10 +52,6 @@
     "tapEmptyHex": "Tap an empty hex in your border",
     "foundFirst": "Found your longhouse first"
   },
-  "footer": {
-    "sea": "Kettil Sea",
-    "reservedFor": "Your plot is held for {count} minute | Your plot is held for {count} minutes"
-  },
   "banner": {
     "landfallTitle": "Landfall made.",
     "landfallBody": "Your longhouse stands. Two buildings to go.",

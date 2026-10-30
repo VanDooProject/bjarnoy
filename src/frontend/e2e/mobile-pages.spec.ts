@@ -305,8 +305,8 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
     await expectFullyInViewport(page, settlement.continueButton, 'enter-settlement button');
   });
 
-  // The landfall banner was a full-width card and the slim checklist floated
-  // 44px above the bottom edge (room for a footer that is hidden here).
+  // The landfall banner was a full-width card and the slim checklist docks
+  // near the bottom edge.
   test('the landfall banner is a compact pill and the checklist sits in the corner', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
@@ -381,9 +381,8 @@ test.describe('demo tag on a phone', { tag: '@g2' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
   // Demo mode is local development only; on a phone it is a small "Demo"
-  // tag in the bottom-left corner, not a pill competing with the HUD rows —
-  // and it must not sit on the landing page's own footer line either.
-  test('is a short tag in the bottom-left corner, clear of the landing footer', async ({ page }) => {
+  // tag in the bottom-left corner, not a pill competing with the HUD rows.
+  test('is a short tag in the bottom-left corner', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.openLanding(page);
     const tag = page.locator('.demo-badge');
@@ -391,8 +390,5 @@ test.describe('demo tag on a phone', { tag: '@g2' }, () => {
     const box = (await tag.boundingBox())!;
     expect(box.x).toBeLessThan(8);
     expect(box.y + box.height).toBeGreaterThan(PHONE.height - 8);
-    const footerText = page.locator('.footer > span').first();
-    const footerBox = (await footerText.boundingBox())!;
-    expect(box.y, 'demo tag overlaps the footer text').toBeGreaterThanOrEqual(footerBox.y + footerBox.height);
   });
 });

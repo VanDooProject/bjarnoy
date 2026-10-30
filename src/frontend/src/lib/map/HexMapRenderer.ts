@@ -38,7 +38,7 @@ import {
   markerFadeStep,
   type OcclusionCircle,
 } from './markerOcclusion';
-import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
+import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -110,8 +110,10 @@ import {
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
+import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { animationPreference } from '../perf/animationPreference';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, sharedClockPlayback } from './clipPlayback';
@@ -1334,6 +1336,9 @@ export function waypointGrabRadiusPx(pointerType: string | undefined): number {
   return pointerType === 'touch' ? WAYPOINT_GRAB_RADIUS_PX_TOUCH : WAYPOINT_GRAB_RADIUS_PX;
 }
 
+/** The parts of a pointer event `handleClick` reads — a held touch tap (see `pendingTap`) keeps just these. */
+type TapPoint = Pick<PointerEvent, 'clientX' | 'clientY' | 'pointerType'>;
+
 /**
  * Whether releasing a grabbed draft-waypoint pin counts as a tap (fires
  * `onWaypointTap`) rather than a drag (already applied hex-by-hex via
@@ -1393,6 +1398,7 @@ export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
 export type WorldLayerName =
   | 'water'
   | 'terrainBase'
+  | 'bogEdges'
   | 'waves'
   | 'terrainFlat'
   | 'rivers'
@@ -1442,8 +1448,8 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // to the scene graph there (rebuildRivers is never called for that mode
   // either, so it always stays empty).
   return mode === 'world'
-    ? ['water', 'terrainBase', 'waves', 'terrainFlat', 'rivers', ...rest]
-    : ['terrainBase', 'waves', 'terrainFlat', 'water', ...rest];
+    ? ['water', 'terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
+    : ['terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
 /**
@@ -1681,6 +1687,16 @@ export class HexMapRenderer {
    */
   private fadeIns = new Map<Sprite, { delayMs: number; durationMs: number; elapsedMs: number }>();
   private terrainFlat = new Graphics();
+  // The bog/grass edge border (bogEdge.ts): settlement mode only, the lowest thing drawn over the ground art.
+  // Two child containers, `under` then `over`: the peat rims of every edge sit under the moss of every edge. Each
+  // visible bog hex shows a pooled Graphics in each, sharing that hex's cached GraphicsContext (see rebuildBogEdges).
+  private bogEdgeLayer = new Container();
+  private bogEdgeUnder = new Container();
+  private bogEdgeOver = new Container();
+  private bogEdgeUnderPool: Graphics[] = [];
+  private bogEdgeOverPool: Graphics[] = [];
+  private bogEdgeCache = new Map<string, { under: GraphicsContext | null; over: GraphicsContext | null }>();
+  private bogEdgeCacheKey = '';
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
   // here because which view this is decides whether it draws a sea body at all
@@ -1952,6 +1968,16 @@ export class HexMapRenderer {
   // same expensive rebuild work a drag already de-prioritises.
   private wheeling = false;
   private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  // Touch double-tap-to-zoom (doubleTap.ts). A touch tap is held here for
+  // DOUBLE_TAP_MS before it reaches handleClick, so a second tap can still
+  // turn it into a zoom instead of opening the ring menu. The timer is
+  // paused while a new gesture is down (see onPointerDown) and that
+  // gesture's end decides: double tap, a separate tap, or a drag/pinch that
+  // drops it.
+  private pendingTap: { tap: Tap; click: TapPoint; timer: ReturnType<typeof setTimeout> | null } | null = null;
+  // The running double-tap zoom: `applied` is the log-zoom already handed to
+  // zoomBy, so each frame applies only the difference (see tickDoubleTapZoom).
+  private doubleTapZoom: { screen: { x: number; y: number }; startedAt: number; applied: number } | null = null;
   // Issue #16 "clicking elsewhere on the map with a ring open should close
   // it, not open a new one": beginDragFrom's synthetic drag (started to
   // dismiss a ring on backdrop mousedown, see beginDragFrom below) ends in
@@ -2003,6 +2029,7 @@ export class HexMapRenderer {
 
   constructor(options: HexMapRendererOptions) {
     this.options = options;
+    this.bogEdgeLayer.addChild(this.bogEdgeUnder, this.bogEdgeOver);
     this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
     this.idleDrift = options.mode === 'world';
     this.lockCamera = !!options.lockCamera;
@@ -2164,6 +2191,7 @@ export class HexMapRenderer {
     return {
       water: this.waterLayer.mesh,
       terrainBase: this.terrainBase.container,
+      bogEdges: this.bogEdgeLayer,
       waves: this.waveLayer,
       terrainFlat: this.terrainFlat,
       rivers: this.riverLayer,
@@ -2417,6 +2445,7 @@ export class HexMapRenderer {
       this.scheduleCull();
     }
     this.tickCameraAnim();
+    this.tickDoubleTapZoom();
     const now = performance.now();
     // isFogActive() mirrors rebuildTerrain's/rebuildBorders' own bypass: no
     // settlement yet (settlement-mode preview) or the local player hasn't
@@ -2604,6 +2633,8 @@ export class HexMapRenderer {
     // to let the first finger keep driving the pin and drop the second.
     if (this.waypointDrag) return;
     if (this.pinch.count === 0) {
+      this.doubleTapZoom = null;
+      this.pausePendingTap();
       // Issue #93 "drag to move a placed waypoint": a pointerdown that lands
       // on a draft pin grabs *that pin* rather than starting a camera pan —
       // the two gestures are the same input, so the pin has to win the
@@ -2612,6 +2643,7 @@ export class HexMapRenderer {
       const screen = this.pointerScreen(e);
       const grabbed = this.draftWaypointAt(screen, e.pointerType);
       if (grabbed !== null && screen) {
+        this.dropPendingTap();
         this.idleDrift = false;
         const startCoordKey = coordKey(this.armyOverlay!.draftWaypoints[grabbed]);
         this.waypointDrag = {
@@ -2867,7 +2899,9 @@ export class HexMapRenderer {
     if (this.pinch.count > 0) return; // e.g. three fingers down to two — still pinching
     if (!allowClick) this.suppressNextClick = true;
     if (this.dragging && this.dragMoved < DRAG_CLICK_SLOP_PX && !this.suppressNextClick) {
-      this.handleClick(e);
+      this.handleTap(e);
+    } else {
+      this.dropPendingTap();
     }
     this.suppressNextClick = false;
     // `dragging` is true for *any* pointerdown, a stationary click included,
@@ -3060,6 +3094,7 @@ export class HexMapRenderer {
     if (this.interactionLocked) return;
     const screen = this.clientToCanvas(e.clientX, e.clientY);
     if (!screen) return;
+    this.doubleTapZoom = null;
     const factor = Math.exp(-e.deltaY * 0.001);
     this.zoomBy(screen, factor);
   };
@@ -3156,7 +3191,83 @@ export class HexMapRenderer {
     this.wheeling = false;
   }
 
-  private handleClick(e: PointerEvent) {
+  /**
+   * A gesture ended as a tap. Mouse/pen clicks, and every tap on a
+   * `lockCamera` preview (which can't zoom), go straight to handleClick. A
+   * touch tap is held for DOUBLE_TAP_MS (`pendingTap`): a second tap close
+   * by in that window zooms in around it instead, otherwise the held tap
+   * fires as a normal click.
+   */
+  private handleTap(e: PointerEvent) {
+    if (e.pointerType !== 'touch' || this.lockCamera) {
+      this.flushPendingTap();
+      this.handleClick(e);
+      return;
+    }
+    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: performance.now() };
+    if (this.pendingTap && isDoubleTap(this.pendingTap.tap, tap)) {
+      this.dropPendingTap();
+      const screen = this.clientToCanvas(e.clientX, e.clientY);
+      if (screen) this.doubleTapZoom = { screen, startedAt: performance.now(), applied: 0 };
+      return;
+    }
+    this.flushPendingTap();
+    const click: TapPoint = { clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType };
+    this.pendingTap = { tap, click, timer: null };
+    this.armPendingTap();
+  }
+
+  private armPendingTap() {
+    const pending = this.pendingTap;
+    if (!pending) return;
+    pending.timer = setTimeout(() => {
+      pending.timer = null;
+      if (this.pendingTap !== pending) return;
+      this.pendingTap = null;
+      if (this.destroyed || this.interactionLocked) return;
+      this.handleClick(pending.click);
+    }, DOUBLE_TAP_MS);
+  }
+
+  /** A new gesture started: hold the pending tap until that gesture's end decides what it was. */
+  private pausePendingTap() {
+    if (this.pendingTap?.timer != null) {
+      clearTimeout(this.pendingTap.timer);
+      this.pendingTap.timer = null;
+    }
+  }
+
+  /** Fires the held touch tap now (a new tap landed too far away or too late to pair with it). */
+  private flushPendingTap() {
+    const pending = this.pendingTap;
+    if (!pending) return;
+    this.dropPendingTap();
+    if (!this.interactionLocked) this.handleClick(pending.click);
+  }
+
+  private dropPendingTap() {
+    if (this.pendingTap?.timer != null) clearTimeout(this.pendingTap.timer);
+    this.pendingTap = null;
+  }
+
+  /**
+   * One frame of the double-tap zoom: applies this frame's share of the
+   * eased log-zoom through zoomBy, so the anchor point, clamps and the
+   * world<->settlement threshold crossing all behave exactly as for a wheel
+   * or pinch, and zoomBy's own idle timer bakes the settled view.
+   */
+  private tickDoubleTapZoom() {
+    const anim = this.doubleTapZoom;
+    if (!anim) return;
+    const elapsed = performance.now() - anim.startedAt;
+    const target = doubleTapZoomLog(elapsed);
+    const step = target - anim.applied;
+    anim.applied = target;
+    if (elapsed >= DOUBLE_TAP_ZOOM_MS) this.doubleTapZoom = null;
+    if (step > 0) this.zoomBy(anim.screen, Math.exp(step));
+  }
+
+  private handleClick(e: TapPoint) {
     const screen = this.clientToCanvas(e.clientX, e.clientY);
     if (!screen) return;
     // Touch/pen has no hover: a tap on a construction dial reveals it instead
@@ -3543,6 +3654,10 @@ export class HexMapRenderer {
     } else {
       this.riverLayer.clear();
     }
+
+    phaseStart = performance.now();
+    this.rebuildBogEdges(coords);
+    fogPerfStats.bogEdgesMs = performance.now() - phaseStart;
 
     phaseStart = performance.now();
     this.rebuildBorders(coords, fogActive, deepFogOnly);
@@ -4507,6 +4622,112 @@ export class HexMapRenderer {
       if (state.overlay) state.overlay.texture = texture;
       else state.sprite.texture = texture;
     }
+  }
+
+  private rebuildBogEdges(coords: AxialCoord[]) {
+    const { worldModel, mode } = this.options;
+    if (mode !== 'settlement') {
+      this.syncBogEdgeGraphics([], []);
+      return;
+    }
+    // The geometry depends on nothing but the hex and its neighbours (bog, giant, river), so it is built once per hex
+    // and only thrown away when one of those changes (or the cache has grown past a few screens of bog).
+    const cacheKey = `${worldModel.riverRevision}|${worldModel.overlayRevision}`;
+    if (cacheKey !== this.bogEdgeCacheKey || this.bogEdgeCache.size > 4000) {
+      this.clearBogEdgeCache();
+      this.bogEdgeCacheKey = cacheKey;
+    }
+    const getTile = (q: number, r: number) => worldModel.getTile(q, r);
+    const getRiver = (q: number, r: number) => worldModel.getRiverTile(q, r);
+    const top = isoTopPoints(TILE_W, TILE_H);
+    const centre = { x: TILE_W / 2, y: TILE_H / 2 };
+    const underCtx: GraphicsContext[] = [];
+    const overCtx: GraphicsContext[] = [];
+    // Not gated on exploration: it follows the ground art, which draws under the fog too.
+    for (const c of coords) {
+      // Only bog hexes are cached, so the cache holds a few screens of bog, not every hex the camera has passed.
+      if (!isBogGround(worldModel.getTile(c.q, c.r))) continue;
+      const key = coordKey(c);
+      let entry = this.bogEdgeCache.get(key);
+      if (!entry) {
+        const under: BogEdgeShape[] = [];
+        const over: BogEdgeShape[] = [];
+        const grid = isoGridPosition(c, TILE_W, TILE_H);
+        for (const { edge, neighbour, gap, flushStart, flushEnd } of bogEdgesOf(getTile, getRiver, c)) {
+          const a = top[edge];
+          const b = top[(edge + 1) % 6];
+          // Unit normal pointing out of the hex, measured in the squashed top-face space the edge itself lives in.
+          const mid = { x: (a.x + b.x) / 2 - centre.x, y: (a.y + b.y) / 2 - centre.y };
+          const len = Math.hypot(mid.x, mid.y);
+          const shapes = bogEdgeShapes(
+            neighbour,
+            { x: grid.x + a.x, y: grid.y + a.y },
+            { x: grid.x + b.x, y: grid.y + b.y },
+            { x: mid.x / len, y: mid.y / len },
+            [c.q, c.r, edge],
+            gap,
+            flushStart,
+            flushEnd,
+          );
+          for (const shape of shapes) (shape.under ? under : over).push(shape);
+        }
+        // A bog hex with no bordered edges caches nulls too, so it is not recomputed on every rebuild.
+        entry = { under: this.bogEdgeContext(under), over: this.bogEdgeContext(over) };
+        this.bogEdgeCache.set(key, entry);
+      }
+      if (entry.under) underCtx.push(entry.under);
+      if (entry.over) overCtx.push(entry.over);
+    }
+    this.syncBogEdgeGraphics(underCtx, overCtx);
+  }
+
+  private bogEdgeContext(shapes: BogEdgeShape[]): GraphicsContext | null {
+    if (shapes.length === 0) return null;
+    const ctx = new GraphicsContext();
+    for (const shape of shapes) {
+      const flat = shape.points.flatMap((p) => [p.x, p.y]);
+      if (shape.fill) ctx.poly(flat).fill(shape.fill);
+      // A rim under the moss ends flat: a round end would poke past the corner cap that covers it.
+      if (shape.stroke) {
+        ctx.poly(flat, false).stroke({ ...shape.stroke, join: 'round', cap: shape.under ? 'butt' : 'round' });
+      }
+    }
+    return ctx;
+  }
+
+  /** Show one pooled Graphics per context in each half of the layer and hide the rest. */
+  private syncBogEdgeGraphics(underCtx: GraphicsContext[], overCtx: GraphicsContext[]) {
+    const sync = (parent: Container, pool: Graphics[], contexts: GraphicsContext[]) => {
+      for (let i = 0; i < contexts.length; i++) {
+        let g = pool[i];
+        if (!g) {
+          // Handed the shared context up front, so the Graphics owns none of its own.
+          g = new Graphics(contexts[i]);
+          pool.push(g);
+          parent.addChild(g);
+        } else {
+          g.context = contexts[i];
+        }
+        g.visible = true;
+      }
+      for (let i = contexts.length; i < pool.length; i++) pool[i].visible = false;
+    };
+    sync(this.bogEdgeUnder, this.bogEdgeUnderPool, underCtx);
+    sync(this.bogEdgeOver, this.bogEdgeOverPool, overCtx);
+  }
+
+  /**
+   * Drop every cached context. Pooled Graphics only borrow a context (`Graphics.destroy()` would not touch one passed
+   * in, and they are never destroyed anyway), so they are pointed at nothing-to-show first and the contexts destroyed
+   * here, the one place they die.
+   */
+  private clearBogEdgeCache() {
+    this.syncBogEdgeGraphics([], []);
+    for (const { under, over } of this.bogEdgeCache.values()) {
+      under?.destroy();
+      over?.destroy();
+    }
+    this.bogEdgeCache.clear();
   }
 
   private rebuildBorders(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {
@@ -5700,6 +5921,7 @@ export class HexMapRenderer {
       // is the only thing that ever sets or refreshes them).
       this.syncSpriteLayer(this.terrainBase, new Map());
       this.syncSpriteLayer(this.terrainTop, new Map());
+      this.syncBogEdgeGraphics([], []);
       this.topAnimState.clear();
       this.blackFogLayer.setArmyVisionSources([], 0);
       this.whiteMistLayer.setArmyVisionSources([], 0);
@@ -5748,6 +5970,7 @@ export class HexMapRenderer {
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();
+    this.dropPendingTap();
     this.pinch.clear();
     this.app?.ticker.remove(this.onTick);
     this.detachFramePacing?.();
@@ -5763,6 +5986,8 @@ export class HexMapRenderer {
     this.blackFogLayer.destroy();
     this.whiteMistLayer.destroy();
     this.waterLayer.destroy();
+    // The cached bog edge contexts are only borrowed by the pooled Graphics, so the stage teardown below won't free them.
+    this.clearBogEdgeCache();
     this.app?.destroy(false, { children: true });
     this.app = null;
   }
