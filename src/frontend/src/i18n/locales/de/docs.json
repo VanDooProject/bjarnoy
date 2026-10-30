@@ -35,7 +35,7 @@
       },
       "techTree": {
         "title": "Techbaum",
-        "description": "Jedes Gebäude: was seine zehn Stufen kosten, liefern und voraussetzen."
+        "description": "Jedes Gebäude: was jede Stufe kostet, liefert und voraussetzt."
       },
       "walls": {
         "title": "Mauern",
@@ -86,7 +86,7 @@
   },
   "techTree": {
     "title": "Techbaum",
-    "intro": "Alle Gebäude mit Kosten, Produktion und Voraussetzungen jeder ihrer zehn Stufen.",
+    "intro": "Alle Gebäude mit Kosten, Produktion und Voraussetzungen jeder Stufe.",
     "terrain": "Gelände:",
     "terrainCoastal": "Flaches (Küsten-)Wasser",
     "terrainAny": "Jedes bebaubare Land",
@@ -114,7 +114,7 @@
       "water": "Wasser"
     },
     "lore": {
-      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und die Zahl der Siedler im Dorf. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
+      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
@@ -122,7 +122,7 @@
       "palisadegate": "Ein Mauerfeld mit Tor. Es lässt sich nur dort setzen, wo die Mauer gerade zwischen zwei gegenüberliegenden Mauerfeldern verläuft. Die Armeen des Besitzers und seiner Freunde (dieselbe Gilde oder eine Gilde, die mit ihr im Frieden ist) passieren es zu den normalen Geländekosten. Jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Freischaltung, Voraussetzung, Stufen und Kosten sind dieselben wie bei der Palisade, beide teilen sich eine Karte im Techbaum.",
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
-      "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte, damit ein volles Lager die Produktion nie stoppt.",
+      "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte. Erreicht ein Rohstoff das Lagerlimit, stoppt seine Produktion – ein volles Lager verschenkt also Ertrag.",
       "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt.",
       "fishinghut": "Ein Steg über flachem Wasser, von dem aus du Untiefen befischst, die ein Bauernhof nie erreichen könnte. Die Hütte steht auch auf Pfählen am Halbufer eines Moorsees.",
       "pumpkinfarm": "Eine zweite Ernte für Gras: Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Sie lässt sich nur auf einer Insel mit Kürbisboden bauen (den Boden jeder Insel bestimmt das Spiel, nicht du). Das ist der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
@@ -206,7 +206,7 @@
       },
       "sand": {
         "title": "Sand",
-        "lore": "Der Strand einer Insel: der Küstenring, auf dem Siedler bei der Gründung einer Siedlung tatsächlich landen.",
+        "lore": "Der Strand einer Insel: der Landring an ihrer Küste.",
         "generation": "Der äußere Rand einer Insel, ab 82 % ihres Radius, vom Zentrum aus gemessen."
       },
       "grass": {
