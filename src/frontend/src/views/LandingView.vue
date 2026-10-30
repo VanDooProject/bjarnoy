@@ -47,10 +47,7 @@ import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { claimRadiusForLevel } from '../lib/map/shoreline';
-import {
-  HEX_TARGET_RADIUS_PX,
-  RING_BUBBLE_TARGET_RADIUS_PX,
-} from '../lib/map/guidanceArrowGeometry';
+import { HEX_TARGET_RADIUS_PX, ringBubbleAim } from '../lib/map/guidanceArrowGeometry';
 import type { Tile } from '../lib/map/types';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
@@ -562,7 +559,9 @@ function ringStepTarget(): { spot: { x: number; y: number }; label: string } | n
   if (!type) return null;
   const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
   if (!step) return null;
-  if (step.kind === 'building') return { spot: step.spot, label: t('landing.pointer.buildThis', { building: buildingName(type) }) };
+  if (step.kind === 'building') {
+    return { spot: step.spot, label: t('landing.pointer.buildThis', { building: buildingName(type) }) };
+  }
   if (step.kind === 'build') return { spot: step.spot, label: t('landing.pointer.openBuild') };
   const category = ringCategories.value.find((c) => c.id === step.id);
   return { spot: step.spot, label: t('landing.pointer.openCategory', { category: category?.label ?? '' }) };
@@ -575,17 +574,15 @@ const pointerTarget = computed(() => {
   // covering would be actively misleading.
   if (showReturningLoginGate.value) return null;
   const ringStep = ringScreen.value ? ringStepTarget() : null;
-  if (ringStep) {
+  if (ringStep && ringScreen.value) {
+    // One rule for every ring bubble: the arrow comes in from outside the ring and its tip lands inside the bubble.
+    const aim = ringBubbleAim(ringScreen.value, ringStep.spot);
     return {
       mode: 'screen' as const,
       screen: ringStep.spot,
       label: ringStep.label,
-      angle: 30,
-      // A ring bubble is a real, fixed-size target (BUB1, 52px across), not
-      // a point: without its radius the tip stops 9px from the bubble's
-      // *centre*, i.e. 17px inside it, and the shaft covers the bubble
-      // whose label it is supposed to be singling out.
-      targetRadius: RING_BUBBLE_TARGET_RADIUS_PX,
+      angle: aim.angle,
+      targetRadius: aim.targetRadius,
     };
   }
   if (!player.hasFoundedSettlement) {

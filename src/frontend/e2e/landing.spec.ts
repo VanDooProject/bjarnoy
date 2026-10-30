@@ -1,7 +1,7 @@
 import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { waitForMapReady } from './helpers';
+import { bubbleUnderPointerTip, waitForMapReady } from './helpers';
 import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
@@ -61,6 +61,12 @@ test('landing page shows the guided pointer and a step-1 checklist before foundi
   await expect(page.locator('.tray-item.current')).toContainText('Longhouse & yard');
 });
 
+for (const screen of [
+  { name: 'desktop 1280x800', viewport: { width: 1280, height: 800 }, phone: false },
+  { name: 'phone 390x844', viewport: { width: 390, height: 844 }, phone: true },
+]) {
+test.describe(`onboarding ring pointer, ${screen.name}`, () => {
+test.use(screen.phone ? { viewport: screen.viewport, hasTouch: true, isMobile: true } : { viewport: screen.viewport });
 test('onboarding build step uses the map\'s two-lane ring, and the pointer walks the player through it to the guided building', { tag: '@g3' }, async ({ page }) => {
   // The onboarding no longer has a ring of its own: it offers what the map's placement filter offers on the clicked
   // hex (Build -> categories -> buildings) and only highlights the next guided building with the pointer. Nothing is
@@ -85,23 +91,43 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   // Root: just Build (the map's rule), and the pointer on it.
   expect(await settlement.ring.labels()).toEqual(['Build']);
   await expect(settlement.guidancePointer).toContainText('Open Build');
+  // The arrow's tip is on the bubble it names, not on a neighbour.
+  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Build');
 
   // Categories of a grass hex, the same ones the map's ring shows there; the pointer moves to the right one.
-  await settlement.ring.openBuildCategories();
+  if (screen.phone) {
+    await settlement.ring.action('Build').first().tap();
+    await settlement.ring.settledLayer();
+  } else {
+    await settlement.ring.openBuildCategories();
+  }
   expect(await settlement.ring.labels()).toEqual(expect.arrayContaining(['Resource', 'Military', 'Logistics', 'Defence', 'Shrines']));
   await expect(settlement.guidancePointer).toContainText('Open Resource');
+  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Resource');
 
   // Buildings: the herder is there, nothing is dimmed, and the pointer is on the herder.
-  await settlement.ring.openCategory('Resource');
+  if (screen.phone) {
+    await settlement.ring.category('Resource').first().tap();
+    await settlement.ring.settledLayer();
+  } else {
+    await settlement.ring.openCategory('Resource');
+  }
   const herder = settlement.ring.child('Reindeer Herder').first();
   await expect(herder).toBeVisible();
   await expect(herder).toBeEnabled();
   await expect(settlement.ring.child('Lumberjack')).toHaveCount(0);
   await expect(settlement.guidancePointer).toContainText('Build the Reindeer Herder');
+  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Reindeer Herder');
   await expect(page.getByTestId('ring-note')).toHaveCount(0);
 
   const before = await settlement.countBuildings();
-  await settlement.ring.click(herder);
+  if (screen.phone) {
+    // The first tap arms the building, the second builds it.
+    await herder.tap();
+    await herder.tap();
+  } else {
+    await settlement.ring.click(herder);
+  }
   await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
   await expect(page.locator('.tray-item .sub').nth(1)).toHaveText('Placed');
 
@@ -109,6 +135,8 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   await expect(settlement.checklist).toContainText('Step 3 of 3');
   await expect(settlement.guidancePointer).toContainText('One more');
 });
+});
+}
 
 test('onboarding ring on a forest hex offers the lumberjack, and the map pointer still says where the herder goes', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);

@@ -553,3 +553,24 @@ export async function buildThroughOpenRing(settlement: SettlementPage, category:
   await ring.openCategory(category);
   await ring.click(ring.child(building).first());
 }
+
+/**
+ * The ring bubble under the guidance arrow's tip, by its accessible name or, for a building bubble, its text (null when the tip is over something else).
+ * The tip is read off the arrow's own polygon through the SVG's screen transform, so it is where the arrow really is
+ * (bob and rotation included), not a re-derivation of GuidancePointer's maths. The arrow is pointer-events: none, so
+ * `elementFromPoint` sees what a finger would hit.
+ */
+export async function bubbleUnderPointerTip(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const polygon = document.querySelector<SVGPolygonElement>('[data-testid="guidance-pointer"] svg polygon');
+    const svg = polygon?.ownerSVGElement;
+    const ctm = polygon?.getScreenCTM();
+    if (!polygon || !svg || !ctm) return null;
+    const point = svg.createSVGPoint();
+    point.x = 75;
+    point.y = 136;
+    const tip = point.matrixTransform(ctm);
+    const hit = document.elementFromPoint(tip.x, tip.y)?.closest('.ring-bubble');
+    return hit ? (hit.getAttribute('aria-label') ?? (hit.textContent ?? '').trim()) : null;
+  });
+}
