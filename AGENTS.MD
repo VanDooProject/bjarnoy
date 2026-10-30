@@ -42,6 +42,16 @@
   unverified theory that sounds plausible is worse than no theory)
 - if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
 
+# no unrequested special conditions
+- don't add special conditions, special cases or fallbacks I didn't ask for: no "only if the art is
+  already packed" checks, no "hide this until X ships" switches, no compatibility branches for
+  existing worlds. Ask me first if you think one is needed; usually it isn't
+- a change that depends on something not shipped yet (art in `bg_assets_hextile`, a backend
+  change, ...) just waits for it: both go out together in the same release, so the code is
+  written for the finished state, not for the gap in between
+- existing worlds don't get compatibility code in `main`: a running world stays pinned to the
+  release tag it was started on, and a fix for it goes on a branch made from that tag
+
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
 
