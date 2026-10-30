@@ -14,7 +14,6 @@ import { useReportsStore } from '../../stores/reports';
 import { useLogout } from '../../composables/useLogout';
 import { useLandingLink } from '../../composables/useLandingLink';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
-import { isTradePanelOpen } from '../../composables/tradePanelOpenState';
 import { useIsMobile } from '../../composables/useIsMobile';
 import { fadeChip } from '../../lib/hud/chipMotion';
 import { profileLocation } from '../../lib/profileRoute';
@@ -118,13 +117,11 @@ const unclaimedRealm = computed(
     !player.nickname,
 );
 const showProfileNudge = computed(() => unclaimedRealm.value && !player.profileNudgeDismissed);
-// The in-game phone chip sits where the HUD drawer and the open Trade panel
-// also draw — it steps aside while either is open. Phone only: on desktop the
+// The in-game phone chip sits where the HUD drawer also draws — it steps
+// aside while that is open. Phone only: on desktop the
 // trigger is inline in the bar and nothing covers it.
 const isMobile = useIsMobile();
-const chipStepsAside = computed(
-  () => props.hasResourceBar && isMobile.value && (isHudDrawerOpen.value || isTradePanelOpen.value),
-);
+const chipStepsAside = computed(() => props.hasResourceBar && isMobile.value && isHudDrawerOpen.value);
 // Shown while anonymous (gone once registered), except while stepping aside.
 // Every enter has a leave: the chip fades out/in (lib/hud/chipMotion.ts,
 // through the HUD motion gate) rather than popping — on registration too.

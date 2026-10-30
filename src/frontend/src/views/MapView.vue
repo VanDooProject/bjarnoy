@@ -13,7 +13,6 @@ import ResourceBar from '../components/hud/ResourceBar.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
-import TradePanel from '../components/hud/TradePanel.vue';
 import QuestTray from '../components/onboarding/QuestTray.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
@@ -566,7 +565,6 @@ onUnmounted(() => stageObserver?.disconnect());
 // treats a panel as an edge rather than opening underneath it:
 //   BuildQueuePanel .status-card  left:16  top:76    width:240  -> left 268
 //   ExpansionPanel  .status-card  left:16  top:340   width:240  (same column)
-//   TradePanel                    right:16 top:118   width:320  -> right -348
 //   TrainingQueuePanel            right:16 top:76    width:240
 //   ArmyPanel       .status-card  right:16 bottom:16 width:260
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
@@ -1679,7 +1677,6 @@ async function upgrade() {
         <TrainingQueuePanel />
       </template>
       <ExpansionPanel />
-      <TradePanel />
       <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
