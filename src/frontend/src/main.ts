@@ -5,12 +5,14 @@ import { DEMO_MODE } from './config';
 import { i18n, initLocale } from './i18n';
 import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './lib/map/water/waterDebug';
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
+import { installHudMotionAttribute } from './lib/perf/hudMotionAttribute';
 import { zoomTransitionTuning } from './lib/map/zoomTransition';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
 import './style.css';
 
 initLocale();
+installHudMotionAttribute();
 
 const app = createApp(App);
 app.use(createPinia());

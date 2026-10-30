@@ -771,10 +771,8 @@ onUnmounted(() => {
 .queue-drawer.is-dragging {
   transition: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .queue-drawer {
-    transition: none;
-  }
+html[data-hud-motion='reduced'] .queue-drawer {
+  transition: none;
 }
 .queue-drawer-panel {
   flex: 1;

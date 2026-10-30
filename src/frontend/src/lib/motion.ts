@@ -9,13 +9,22 @@
  * not motion at all (a colour flash).
  */
 
+import { motionPreferences } from './perf/motionPreferences';
+
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
 
 /** Longest a reduced-motion stand-in may run. */
 export const REDUCED_MAX_MS = 120;
 
-/** Whether the user asked the OS / browser for less motion. False where matchMedia is missing (jsdom). */
+/**
+ * Whether HUD motion is reduced: the player's own "Menu animations" setting
+ * wins ('on' -> full motion, 'off' -> reduced); 'auto' follows the live OS /
+ * browser `prefers-reduced-motion` query. False where matchMedia is missing
+ * (jsdom).
+ */
 export function prefersReducedMotion(): boolean {
+  if (motionPreferences.hud === 'on') return false;
+  if (motionPreferences.hud === 'off') return true;
   try {
     return typeof window !== 'undefined' && !!window.matchMedia?.(REDUCED_QUERY).matches;
   } catch {

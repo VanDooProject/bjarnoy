@@ -1360,22 +1360,20 @@ function onBackdropPointerDown(e: PointerEvent) {
       0 6px 18px rgba(0, 0, 0, 0.45);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ring-bubble,
-  .ring-hub {
-    transition: none;
-  }
-  .ring-bubble.armed {
-    animation: none;
-    box-shadow: 0 0 0 4px var(--gold);
-  }
-  /* The glow becomes a static gold ring. */
-  .ring-bubble.glow {
-    animation: none;
-    box-shadow:
-      0 0 0 2px rgba(255, 197, 92, 0.6),
-      0 6px 18px rgba(0, 0, 0, 0.45);
-  }
+html[data-hud-motion='reduced'] .ring-bubble,
+html[data-hud-motion='reduced'] .ring-hub {
+  transition: none;
+}
+html[data-hud-motion='reduced'] .ring-bubble.armed {
+  animation: none;
+  box-shadow: 0 0 0 4px var(--gold);
+}
+/* The glow becomes a static gold ring. */
+html[data-hud-motion='reduced'] .ring-bubble.glow {
+  animation: none;
+  box-shadow:
+    0 0 0 2px rgba(255, 197, 92, 0.6),
+    0 6px 18px rgba(0, 0, 0, 0.45);
 }
 .arm-badge {
   position: absolute;
