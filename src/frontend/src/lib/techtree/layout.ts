@@ -28,11 +28,12 @@ export const ANCHOR = 'longhouse';
 
 /**
  * Buildings still in the catalogue that the docs should not advertise — a
- * docs-only omission, add an entry to hide one. Currently none: the Magic
- * Tower and the Fisher Hut (merged into the Fishing Hut) are gone from the
+ * docs-only omission, add an entry to hide one. The Quarry is hidden because
+ * no new one can be built (existing quarries keep standing); the Magic Tower
+ * and the Fisher Hut (merged into the Fishing Hut) are gone from the
  * catalogue altogether.
  */
-export const HIDDEN_FROM_DOCS: readonly string[] = [];
+export const HIDDEN_FROM_DOCS: readonly string[] = ['quarry'];
 
 export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Advanced', 'Capstone'];
 
@@ -42,9 +43,8 @@ export type Slot = readonly [col: number, row: number];
  * Column is dependency depth; row is the unlock ladder (docs/design/economy.md
  * section 5), read top to bottom: rows are ordered by the Longhouse level their
  * first card unlocks at, so scrolling down the page walks the game's own
- * progression — Lumberjack, Reindeer Herder, Quarry, Clay Brickworks and
- * Storage House (LH 1), Fishing Hut (LH 2), Tower (LH 3), Bog-ore works and
- * Town Square (LH 6). Each row is one chain: a source sits level with what it feeds, so
+ * progression — Lumberjack, Reindeer Herder, Storage House and Clay
+ * Brickworks (LH 1), Fishing Hut (LH 2), Tower (LH 3) and Town Square (LH 6). Each row is one chain: a source sits level with what it feeds, so
  * most links are a single horizontal run — Lumberjack -> Sawmill -> Shrine of
  * Ullr, Reindeer Herder -> Farm -> Crop Mill -> Shrine of Freyja, Storage House -> Great
  * Storehouse, Fishing Hut -> Dockyard -> Shrine of Njörd, Tower -> Barracks ->
@@ -78,45 +78,43 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   farm: [2, 1],
   cropmill: [3, 1],
   shrineoffreyja: [4, 1],
-  // Row 2 — Quarry (LH 1), and Farm's second target, the Meadery (LH 11),
-  // one row below the Farm chain.
-  quarry: [1, 2],
+
+  // Row 2 — Storage House (LH 1) -> Great Storehouse (LH 15), and Farm's second
+  // target, the Meadery (LH 11), one row below the Farm chain. (The Quarry is
+  // hidden: no new one can be built, see HIDDEN_FROM_DOCS.)
+  storagehouse: [1, 2],
+  greatstorehouse: [2, 2],
   meadery: [3, 2],
 
-  // Row 3 — Clay Brickworks (LH 1), a plain root with nothing behind it.
+  // Row 3 — Clay Brickworks (LH 1) -> Bog-ore works (LH 3) -> Hammer Forge
+  // (LH 20): the stone and iron chain.
   claybrickworks: [1, 3],
+  bogoreworks: [2, 3],
+  hammerschmiede: [3, 3],
 
-  // Row 4 — Storage House (LH 1) -> Great Storehouse (LH 15).
-  storagehouse: [1, 4],
-  greatstorehouse: [2, 4],
+  // Row 4 — Fishing Hut (LH 2) -> Dockyard (LH 8) -> Shrine of Njörd (LH 25).
+  fishinghut: [1, 4],
+  dockyard: [2, 4],
+  shrineofnjord: [4, 4],
 
-  // Row 5 — Fishing Hut (LH 2) -> Dockyard (LH 8) -> Shrine of Njörd (LH 25).
-  fishinghut: [1, 5],
-  dockyard: [2, 5],
-  shrineofnjord: [4, 5],
-
-  // Row 6 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9).
-  tower: [1, 6],
-  barracks: [2, 6],
-  archeryrange: [3, 6],
-  // Row 7 — Tower's second target, the Palisade / Gate (LH 7, behind a level-5 Tower), one row below the Barracks chain.
-  palisade: [2, 7],
+  // Row 5 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9).
+  tower: [1, 5],
+  barracks: [2, 5],
+  archeryrange: [3, 5],
+  // Row 6 — Tower's second target, the Palisade / Gate (LH 7, behind a level-5 Tower), one row below the Barracks chain.
+  palisade: [2, 6],
   // Barracks' second target, the Weaponsmith (Smithy, LH 15), with
   // the Shrine of Thor (LH 25) behind it.
-  smithy: [3, 7],
-  shrineofthor: [4, 7],
+  smithy: [3, 6],
+  shrineofthor: [4, 6],
 
-  // Row 8 — Bog-ore works (LH 6) -> Hammer Forge (LH 20): the iron chain.
-  bogoreworks: [1, 8],
-  hammerschmiede: [2, 8],
-
-  // Row 9 — Town Square (LH 6) -> Cart Workshop (LH 10); its second target,
+  // Row 7 — Town Square (LH 6) -> Cart Workshop (LH 10); its second target,
   // the Druid Hut (LH 12), one row below.
-  townsquare: [1, 9],
-  cartworkshop: [2, 9],
-  druidhut: [2, 10],
-  // Row 10 — the Druid Hut (LH 12) -> Odin Statue (LH 25), in the Capstone column.
-  odinstatue: [4, 10],
+  townsquare: [1, 7],
+  cartworkshop: [2, 7],
+  druidhut: [2, 8],
+  // Row 8 — the Druid Hut (LH 12) -> Odin Statue (LH 25), in the Capstone column.
+  odinstatue: [4, 8],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;
