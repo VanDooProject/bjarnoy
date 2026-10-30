@@ -1036,13 +1036,15 @@ public sealed class TerrainSampler
     /// <c>variant002</c> (4, weighted: see <see cref="ForestVariantWeights"/>); mountain has four distinct shapes — Cone, Table,
     /// Saddleback, Corrie (<see cref="MountainShape"/>) — each its own
     /// composited (not base/top split) render, so <see cref="VariantAt"/>'s
-    /// index doubles as that enum's numeric value; see <see cref="MountainShapeAt"/>.
+    /// index doubles as that enum's numeric value; see <see cref="MountainShapeAt"/>. Sand has a plain image plus
+    /// <c>variant000</c>-<c>variant007</c> (9, weighted: see <see cref="SandVariantWeights"/>).
     /// </summary>
     private static readonly IReadOnlyDictionary<Terrain, int> VariantCounts = new Dictionary<Terrain, int>
     {
         [Terrain.Grass] = 4,
         [Terrain.Forest] = 4,
         [Terrain.Mountain] = 4,
+        [Terrain.Sand] = 9,
 
         // Bog: the plain moss plus variant001-008 (open mire x3, ore seep, fen, peat cuttings, birch copse, seep chain).
         // The client draws variant006 (peat cuttings) as plain moss (textures.ts RETIRED_BOG_VARIANTS); its slot stays so
@@ -1059,6 +1061,13 @@ public sealed class TerrainSampler
     /// glade), variant002 (forest tarn) — mirrors the frontend's <c>FOREST_VARIANT_WEIGHTS</c>.
     /// </summary>
     public static readonly double[] ForestVariantWeights = { 0.04, 0.84, 0.06, 0.06 };
+
+    /// <summary>
+    /// Top-variant weights for a living sand tile: index 0 is the plain sand, index N is <c>variant(N-1)</c> — 1 dunes,
+    /// 2 driftwood, 3 boulders, 4 wreck, 5 whale bones, 6 upturned boat and cairn, 7 sand castle, 8 driftwood pile —
+    /// mirrors the frontend's <c>SAND_VARIANT_WEIGHTS</c>.
+    /// </summary>
+    public static readonly double[] SandVariantWeights = { 0.45, 0.11, 0.11, 0.11, 0.02, 0.02, 0.06, 0.01, 0.11 };
 
     /// <summary>Wavelength (hexes) of the taiga/birch biome noise — mirrors <c>FOREST_BIOME_SCALE</c>.</summary>
     public const double ForestBiomeScale = 14;
@@ -1155,6 +1164,11 @@ public sealed class TerrainSampler
         if (terrain == Terrain.Forest)
         {
             return WeightedIndex(hash, ForestVariantWeights);
+        }
+
+        if (terrain == Terrain.Sand)
+        {
+            return WeightedIndex(hash, SandVariantWeights);
         }
 
         var index = (int)(hash * count);
