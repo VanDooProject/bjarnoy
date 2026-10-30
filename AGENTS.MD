@@ -156,6 +156,7 @@
   dev status notes. Put it in `DocsAdminNote` (`src/frontend/src/components/docs/DocsAdminNote.vue`); only admins see it,
   behind the docs header toggle (`useDocsAdminNotes`). Never mix such a sentence into a player paragraph — give it its own
   i18n key (e.g. `...artNote`, `...techNote`) and render it in a `DocsAdminNote` next to the player text
+- building links: the first mention in prose links (with icon and preview); the building in a table's first column always links
 - a docs page shows what the game actually draws: looks the generator never picks (e.g. the plain bog moss, retired in
   `RETIRED_BOG_VARIANTS`) don't appear in pickers either
 - example maps (`BogIsland`, `WastedIsland`, `WallExample`) go above the per-tile entries they illustrate: the whole

@@ -68,6 +68,36 @@ describe('BuildingLink', () => {
     expect(plain[0]!.find('a').exists()).toBe(false);
   });
 
+  it('always links a table-subject mention (`always`), even after an earlier mention', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/tech-tree', component: { template: '<div />' } }] });
+    const Page = defineComponent({
+      setup() {
+        provideFirstMentions();
+        return () => h('p', [h(BuildingLink, { type: 'farm' }), h(BuildingLink, { type: 'farm', always: true }), h(BuildingLink, { type: 'farm' })]);
+      },
+    });
+    const wrapper = mount(Page, { attachTo: document.body, global: { plugins: [createTestI18n({ docs: enDocs }), router] } });
+    mounted.push(wrapper);
+
+    const states = wrapper.findAll('[data-building-link]').map((e) => e.attributes('data-building-link'));
+    expect(states).toEqual(['link', 'link', 'plain']);
+  });
+
+  it('an `always` link does not consume the first mention: a later plain mention still becomes the link', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/tech-tree', component: { template: '<div />' } }] });
+    const Page = defineComponent({
+      setup() {
+        provideFirstMentions();
+        return () => h('p', [h(BuildingLink, { type: 'farm', always: true }), h(BuildingLink, { type: 'farm' }), h(BuildingLink, { type: 'farm' })]);
+      },
+    });
+    const wrapper = mount(Page, { attachTo: document.body, global: { plugins: [createTestI18n({ docs: enDocs }), router] } });
+    mounted.push(wrapper);
+
+    const states = wrapper.findAll('[data-building-link]').map((e) => e.attributes('data-building-link'));
+    expect(states).toEqual(['link', 'link', 'plain']);
+  });
+
   it('links every mention when no page provides a register', () => {
     const { wrapper } = mountPage([{ type: 'farm' }, { type: 'farm' }], false);
 

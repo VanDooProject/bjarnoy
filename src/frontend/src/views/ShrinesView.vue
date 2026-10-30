@@ -102,7 +102,7 @@ const slotRows = [
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.id" :data-god="row.id">
-              <th scope="row" class="god"><BuildingLink :type="row.type" /></th>
+              <th scope="row" class="god"><BuildingLink :type="row.type" always /></th>
               <td class="favour">{{ $t(`docs.shrines.gods.favour.${row.id}`) }}</td>
               <td v-for="cell in row.cells" :key="cell.level" class="value">
                 <template v-if="cell.favour?.kind === 'percent'">{{ $t('docs.shrines.gods.percent', { percent: cell.favour.percent }) }}</template>

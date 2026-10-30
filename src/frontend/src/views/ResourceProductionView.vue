@@ -179,7 +179,7 @@ const tocLinks = computed(() =>
           </thead>
           <tbody>
             <tr v-for="row in producerRows" :key="row.type" :data-producer="row.type">
-              <th scope="row" class="name"><BuildingLink :type="row.type" /></th>
+              <th scope="row" class="name"><BuildingLink :type="row.type" always /></th>
               <td>{{ resourceName(row.resource) }}</td>
               <td v-for="cell in row.cells" :key="cell.level" class="value">{{ n(cell.amount) }}</td>
               <td>
@@ -194,7 +194,7 @@ const tocLinks = computed(() =>
               </td>
             </tr>
             <tr data-producer="longhouse">
-              <th scope="row" class="name"><BuildingLink type="longhouse" /></th>
+              <th scope="row" class="name"><BuildingLink type="longhouse" always /></th>
               <td>{{ RESOURCES.map(resourceName).join(' / ') }}</td>
               <td v-for="cell in longhouseRow.cells" :key="cell.level" class="value">{{ cell.amounts.map((a) => n(a)).join(' / ') }}</td>
               <td>{{ standsOn('longhouse') }}</td>
@@ -226,7 +226,7 @@ const tocLinks = computed(() =>
           </thead>
           <tbody>
             <tr v-for="row in boostRows" :key="row.type" :data-boost="row.type">
-              <th scope="row" class="name"><BuildingLink :type="row.type" /></th>
+              <th scope="row" class="name"><BuildingLink :type="row.type" always /></th>
               <td>{{ row.terrains }}</td>
             </tr>
           </tbody>
@@ -256,7 +256,7 @@ const tocLinks = computed(() =>
           </thead>
           <tbody>
             <tr v-for="row in millRows" :key="row.type" :data-mill="row.type">
-              <th scope="row" class="name"><BuildingLink :type="row.type" /></th>
+              <th scope="row" class="name"><BuildingLink :type="row.type" always /></th>
               <td>
                 <template v-for="(target, i) in row.boosts" :key="target"><template v-if="i > 0">, </template><BuildingLink :type="target" /></template>
               </td>
@@ -294,7 +294,7 @@ const tocLinks = computed(() =>
           </thead>
           <tbody>
             <tr v-for="row in storageRows" :key="row.type" :data-storage="row.type">
-              <th scope="row" class="name"><BuildingLink :type="row.type" /></th>
+              <th scope="row" class="name"><BuildingLink :type="row.type" always /></th>
               <td class="value">
                 <span v-for="cell in row.cells" :key="cell.level" class="line">
                   {{ $t('docs.production.storage.cell', { level: cell.level, capacity: n(cell.capacity) }) }}

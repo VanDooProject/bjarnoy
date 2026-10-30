@@ -20,6 +20,8 @@ const props = defineProps<{
   type: string;
   /** Replaces the catalogue name, e.g. for a plural or a case ending. */
   label?: string;
+  /** A table's first-column subject: always a link, and leaves the page's first-mention claim alone. */
+  always?: boolean;
 }>();
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -27,8 +29,10 @@ const catalogue = useBuildingCatalogueStore();
 
 const owner = {};
 const mentions = useFirstMentions();
-const isFirst = mentions ? mentions.claim(props.type, owner) : true;
-onBeforeUnmount(() => mentions?.release(props.type, owner));
+const isFirst = props.always || !mentions || mentions.claim(props.type, owner);
+onBeforeUnmount(() => {
+  if (!props.always) mentions?.release(props.type, owner);
+});
 
 const name = computed(() => props.label ?? buildingName(props.type));
 const target = computed(() => ({ path: '/tech-tree', hash: `#${props.type}` }));

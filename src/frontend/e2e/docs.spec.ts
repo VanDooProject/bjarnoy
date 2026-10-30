@@ -521,6 +521,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(
       page.locator('[data-producer="lumberjack"] th [data-building-link="link"]'),
     ).toHaveCount(1);
+    // A table's first column always links, even though the Longhouse was already linked in row 1's "Unlocks at" cell.
+    await expect(
+      page.locator('[data-producer="longhouse"] th').first().locator('a[href="/tech-tree#longhouse"]'),
+    ).toHaveCount(1);
     await expect(page.getByTestId("page-art").locator(".animated-building .layer").first()).toBeVisible();
   });
 

@@ -120,7 +120,12 @@ describe('ResourceProductionView', () => {
   it('links a building only at its first mention and links the shrines page', async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.findAll('[data-building-link=link][data-type=lumberjack]')).toHaveLength(1);
+    // Table subjects (first column) always link: the producers row and the boost row, plus the page's one first-mention link.
+    expect(wrapper.findAll('th [data-building-link=link][data-type=lumberjack]')).toHaveLength(2);
+    expect(wrapper.findAll(':not(th) > [data-building-link=link][data-type=lumberjack]')).toHaveLength(1);
+    expect(wrapper.findAll('[data-building-link=plain]').length).toBeGreaterThan(0);
+    // The Longhouse row's own name links although the Longhouse was already named in row 1's "Unlocks at" cell.
+    expect(wrapper.find('[data-producer=longhouse] th [data-building-link=link]').exists()).toBe(true);
     expect(wrapper.find('a[href="/docs/shrines"]').exists()).toBe(true);
     expect(wrapper.find('a[href="/docs/land-movement"]').exists()).toBe(true);
     wrapper.unmount();
