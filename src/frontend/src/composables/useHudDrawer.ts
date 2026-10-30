@@ -265,6 +265,15 @@ export function useHudDrawer(
    */
   function onLostPointerCapture(e: PointerEvent) {
     if (pointerId === null || e.pointerId !== pointerId) return;
+    // `lostpointercapture` bubbles. A touch pointer starts out implicitly
+    // captured by whatever it went down on (a pill's `.fill`, the grip, a
+    // nav link inside the drawer), so moving the capture to the bar/drawer
+    // at arm time fires `lostpointercapture` on that child, and it bubbles
+    // up to the very listener this handler sits behind. Treating that as
+    // "our capture was lost" tore down every touch drag on its second move,
+    // so only a drawer dragged with a mouse (no implicit capture) ever
+    // opened. Only the element this gesture captured itself counts.
+    if (capturedTarget !== null && e.target !== capturedTarget) return;
     teardown();
   }
 
