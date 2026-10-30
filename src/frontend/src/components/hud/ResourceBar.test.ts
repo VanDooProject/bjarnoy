@@ -377,12 +377,12 @@ describe('ResourceBar (desktop fit)', () => {
     barWidth = 1000;
     // jsdom has no layout: widths come from what the element is.
     vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
-      if (this.hasAttribute('data-measure-desktop')) return FULL_ROW;
+      if (this.getAttribute('data-measure') === 'desktop') return FULL_ROW;
       if (this.hasAttribute('data-measure')) return COLLAPSED_ROW;
       return 0;
     });
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.classList.contains('resource-bar') && !this.hasAttribute('data-measure') && !this.hasAttribute('data-measure-desktop') ? barWidth : 0;
+      return this.classList.contains('resource-bar') && !this.hasAttribute('data-measure') ? barWidth : 0;
     });
     const world = useWorldStore();
     world.hud.resources = { wood: 4965, stone: 2310, food: 6120, iron: 780 };

@@ -506,7 +506,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
     ref="desktopMeasureRef"
     class="resource-bar resource-bar--measure"
     aria-hidden="true"
-    data-measure-desktop="true"
+    data-measure="desktop"
     inert
   >
     <div v-for="pill in pills" :key="pill.key" class="resource">

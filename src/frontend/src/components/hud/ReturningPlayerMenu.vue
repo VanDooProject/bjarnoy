@@ -132,10 +132,6 @@ watch(() => route.fullPath, close);
     </button>
     <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
       <div class="notch" />
-      <!-- Caller-provided rows at the top of the menu (HudNav: the nav
-           entries that have no room inline), same `.row` look as the rows
-           below. `close` lets a row dismiss the panel. -->
-      <slot name="entries" :close="close" />
       <button
         v-if="unclaimedRealm"
         type="button"
@@ -155,6 +151,11 @@ watch(() => route.fullPath, close);
       >
         {{ t('hud.returningPlayer.logIn') }}
       </button>
+      <!-- Caller-provided rows below this menu's own actions (HudNav: the nav
+           entries that have no room inline), same `.row` look as the rows
+           above. `close` lets a row dismiss the panel. The account actions
+           stay first: they are what this menu is for. -->
+      <slot name="entries" :close="close" />
       <div class="divider" role="separator" />
       <WorldList compact />
     </div>

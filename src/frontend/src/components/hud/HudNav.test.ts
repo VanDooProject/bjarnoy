@@ -397,7 +397,8 @@ describe('HudNav secondary entries in the avatar menu', () => {
     for (const id of ['reports', 'guild', 'docs']) expect(menu.find(`[data-testid="menu-entry-${id}"]`).exists(), id).toBe(true);
     for (const id of ['leaderboards', 'messages']) expect(menu.find(`[data-testid="menu-entry-${id}"]`).exists(), id).toBe(false);
     const rows = menu.findAll('[role="menuitem"]').map((b) => b.attributes('data-testid'));
-    expect(rows.indexOf('menu-entry-docs')).toBeLessThan(rows.indexOf('returning-player-login'));
+    // The menu's own account actions come first; the nav entries follow them.
+    expect(rows.indexOf('returning-player-login')).toBeLessThan(rows.indexOf('menu-entry-reports'));
   });
 
   it('anonymous: a row navigates and closes the menu', async () => {

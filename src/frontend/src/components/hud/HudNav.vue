@@ -219,6 +219,7 @@ watch(() => route.fullPath, closeAccountMenu);
              refactored to a place of their own later, like the onboarding
              quests were. -->
         <div v-if="secondary.length" class="menu-entries">
+          <div class="divider" role="separator" />
           <button
             v-for="entry in secondary"
             :key="entry.id"
@@ -232,7 +233,6 @@ watch(() => route.fullPath, closeAccountMenu);
             {{ t(entry.labelKey) }}
             <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
           </button>
-          <div class="divider" role="separator" />
         </div>
       </template>
       <template #nudge>
