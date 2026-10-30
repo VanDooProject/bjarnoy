@@ -15,6 +15,7 @@ import { findAtlasFrame } from '../lib/map/atlas';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import { PALISADE_PIECES, WALL_GROUNDS, usePieceStages } from '../lib/docs/palisadeDocs';
+import { WALL_SIEGE } from '../lib/docs/wallSiegeDocs';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -49,6 +50,7 @@ const tocLinks = computed(() => [
   { href: '#choosing', label: t('docs.walls.choosing.heading') },
   { href: '#where', label: t('docs.walls.where.heading') },
   { href: '#movement', label: t('docs.walls.movement.heading') },
+  { href: '#sieges', label: t('docs.walls.sieges.heading') },
   ...(adminNotes.value ? [{ href: '#not-built', label: t('docs.walls.notBuilt.heading') }] : []),
 ]);
 </script>
@@ -125,6 +127,18 @@ const tocLinks = computed(() => [
         <li>{{ $t('docs.walls.movement.rules.fleets') }}</li>
       </ul>
       <WallMovementDiagram />
+    </section>
+
+    <section id="sieges" class="block">
+      <h2>{{ $t('docs.walls.sieges.heading') }}</h2>
+      <p class="group-body">{{ $t('docs.walls.sieges.body') }}</p>
+      <ul class="rules">
+        <li>{{ $t('docs.walls.sieges.rules.who') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.target') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.level', { levels: WALL_SIEGE.levels }) }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.gone') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.rebuild') }}</li>
+      </ul>
     </section>
 
     <DocsAdminNote id="not-built" as="section" class="block">

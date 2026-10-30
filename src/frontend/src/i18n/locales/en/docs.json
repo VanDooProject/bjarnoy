@@ -739,7 +739,18 @@
     },
     "notBuilt": {
       "heading": "Not built yet",
-      "body": "Fire taking a level off a wall: a wall will lose its levels one at a time until it is gone. Nothing burns walls yet."
+      "body": "Fire taking a level off a wall: a wall will lose its levels one at a time until it is gone. Nothing burns walls yet. Sieges already do this: see the siege section above."
+    },
+    "sieges": {
+      "heading": "Sieges",
+      "body": "A wall can be breached, one level at a time. Only catapults do it, and only as part of an attack on the settlement the wall belongs to.",
+      "rules": {
+        "who": "Send an attack (or a raid) with catapults at the settlement and name the wall hex as the target when you send it. If your army wins the battle, the catapults that survived fire at that hex. One surviving catapult is enough; an army that loses the battle fires nothing.",
+        "target": "If you name no target, or the building you named is gone by the time your army arrives, the siege hits a random building of that settlement instead, a wall hex among them.",
+        "level": "A won siege takes exactly one level off a wall hex, the gate included, however many catapults survive. Most buildings lose several levels at once to a strong army; a wall is breached a level at a time. A palisade or gate has {levels} levels, so a fully built wall hex takes {levels} won sieges. A damaged wall still stops armies until its last level is gone.",
+        "gone": "At level 0 the wall hex is gone: its hex is free ground again and armies walk through it. Any build order still queued for that hex is dropped.",
+        "rebuild": "The owner can raise a wall hex that is still standing by a level again, like any building, and can build on a hex that is gone again under the usual placement rules. There is no separate repair."
+      }
     }
   }
 }

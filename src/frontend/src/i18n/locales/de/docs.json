@@ -739,7 +739,18 @@
     },
     "notBuilt": {
       "heading": "Noch nicht gebaut",
-      "body": "Feuer, das einer Mauer eine Stufe nimmt: Eine Mauer verliert ihre Stufen nacheinander, bis sie verschwunden ist. Noch brennt keine Mauer."
+      "body": "Feuer, das einer Mauer eine Stufe nimmt: Eine Mauer verliert ihre Stufen nacheinander, bis sie verschwunden ist. Noch brennt keine Mauer. Belagerungen tun das schon, siehe den Abschnitt zur Belagerung weiter oben."
+    },
+    "sieges": {
+      "heading": "Belagerung",
+      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen nur Katapulte, und nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört.",
+      "rules": {
+        "who": "Schick einen Angriff (oder einen Raubzug) mit Katapulten gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Gewinnt deine Armee die Schlacht, feuern die überlebenden Katapulte auf dieses Feld. Ein einziges überlebendes Katapult genügt. Verliert deine Armee die Schlacht, feuert nichts.",
+        "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, auch ein Mauerfeld.",
+        "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Katapulte überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
+        "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
+        "rebuild": "Ein Mauerfeld, das noch steht, kann der Besitzer wie jedes Gebäude wieder um eine Stufe ausbauen. Auf einem zerstörten Feld baut er neu und beachtet dabei die üblichen Bauregeln. Eine eigene Reparatur gibt es nicht."
+      }
     }
   }
 }
