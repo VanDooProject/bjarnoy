@@ -537,7 +537,7 @@ them so the levels match. *Implemented:*
   |---|---|---|
   | Thrall | Barracks | the Barracks' own gate (LH 5); no gate of its own (1) |
   | Spearman | Barracks | 5 (1) |
-  | Axeman | Barracks | 6 (3): opens with the first bog-ore works |
+  | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
   | Karve | Dockyard | 8 (5) |
   | Bowman | Archery Range | 9 (4) |
   | Provisioner, Settler Crew | Cart Workshop | 10 (4, 5) |
@@ -570,13 +570,13 @@ included). The profile only shifts *when* a level is reached:
 
 | LH | iron/h | reached: active | 4 check-ins | 2 check-ins |
 |---|---|---|---|---|
-| 3 (works open) | 6 (66 once the first works stands) | day 0.4 | day 2.0 | day 4.0 |
-| 5 (Barracks) | 189 | day 1.3 | day 5.4 | day 11.0 |
-| 6 | 227 | day 2.0 | day 6.5 | day 13.5 |
-| 8 | 326 | day 3.0 | day 12.2 | day 24.5 |
-| 10 | 466 | day 4.2 | day 16.2 | day 32.5 |
-| 15 | 1 139 | day 9.2 | day 25.4 | day 48.5 |
-| 20 | 2 800 | day 21.2 | day 40.6 | — (past day 60) |
+| 3 (works open) | 66 | day 0.9 | day 3.0 | day 6.0 |
+| 5 (Barracks) | 189 | day 1.6 | day 7.1 | day 14.5 |
+| 6 | 227 | day 2.0 | day 9.0 | day 18.0 |
+| 8 | 326 | day 3.1 | day 12.3 | day 25.0 |
+| 10 | 466 | day 4.2 | day 16.3 | day 33.0 |
+| 15 | 1 139 | day 9.0 | day 25.4 | day 49.0 |
+| 20 | 2 800 | day 20.2 | day 40.6 | — (past day 60) |
 
 Iron before the works (Longhouse 1 and 2) is the Longhouse trickle alone
 (2/h per level). From Longhouse 3 the works carry it, so the Barracks' first
@@ -584,8 +584,9 @@ Spearmen (LH 5) are paid from works income, and every other unit is
 affordable the moment its gate opens, because its gate opens with or after
 the works: Axeman at LH 6, Karve at LH 8, Settler Crew and Provisioner at
 LH 10, the elite units at LH 20 (income 2 800/h against a Catapult's 250).
-The iron/h column was re-run for the LH 3 unlock; the day columns still date
-from the LH 6 unlock and need a lab re-run.
+The table is the Economy lab's own default setup re-run for the LH 3 unlock
+(three Lumberjacks, Quarries and Reindeer Herders, three bog-ore works, two
+storage houses, producers up to three levels ahead, joining at 09:00, 60 days).
 
 Second-settlement timing (§6) is unchanged as long as the lab's default
 producers are used (no bog-ore works: 6.4 / 12.3 / 25.0 days for active / 4
