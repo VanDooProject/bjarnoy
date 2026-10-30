@@ -286,8 +286,13 @@ for friend and foe, a half-open end and a sealed end), the dispatch is refused w
 land route is left, and the range tint applies the same rules for the selected
 settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Not built yet.** Siege and fire take a level off a wall hex at a time until it is
-gone; nothing does yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
+**Siege.** A won siege that names a wall hex as its target takes **one level** off it,
+however many siege engines survive (`SiegeResolver.LevelsTakenFrom`, the same rule as a
+bridge): a level-3 palisade needs three won sieges to be breached, and the hex is gone at
+level 0. Any other building still loses several levels at once.
+
+**Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
+burns walls yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
 The admin building editor places a wall hex without the placement rules.
 
 ### Bridge
@@ -333,7 +338,7 @@ settlement has no friends.
 
 **Burning.** An Attack mission with catapults that names the bridge's hex as
 `TargetBuildingCoord` burns it, but a bridge burns **one level per won siege**, however
-many catapults survive (`SiegeResolver`), where any other building loses several. A
+many catapults survive (`SiegeResolver.LevelsTakenFrom`), like a wall hex, where any other building loses several. A
 guarded bridge therefore falls to the king's bridge first and opens to everyone, attackers
 included; each further siege takes another level, and a causeway burnt once is gone and
 shuts the river again.
