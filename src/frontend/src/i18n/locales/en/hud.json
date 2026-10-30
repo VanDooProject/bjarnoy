@@ -75,6 +75,7 @@
     "bridgeAccessFriend": "Your armies may cross as a friend",
     "bridgeAccessClosed": "Your armies may not cross",
     "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
+    "modifierRadiusBoostOneRing": "+{percent}% {resource} to buildings within 1 ring",
     "domainFood": "Food",
     "domainIron": "Iron",
     "domainWood": "Wood",
