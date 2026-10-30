@@ -122,7 +122,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 
 | LH | Unlocks | Also needs |
 |---|---|---|
-| 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder, Storage House | — |
+| 1 | Lumberjack, Clay Brickworks, Reindeer Herder, Storage House (the Quarry is switched off: no new one can be built, standing ones keep working) | — |
 | 2 | Fishing Hut | — |
 | 3 | Tower, Bog-ore works (iron, §8) | — |
 | 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |

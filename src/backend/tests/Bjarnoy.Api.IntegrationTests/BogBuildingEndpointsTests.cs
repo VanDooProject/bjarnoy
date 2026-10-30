@@ -127,6 +127,17 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_new_quarry_is_refused_because_new_placement_is_switched_off()
+    {
+        var (client, settlement, hexes) = await SetUpAsync();
+
+        var response = await Build(client, settlement.Id, "quarry", hexes["grass"]);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("NewPlacementDisabled", await response.RejectionAsync(Ct));
+    }
+
+    [Fact]
     public async Task The_hammerschmiede_is_placed_on_a_creek_only()
     {
         var (client, settlement, hexes) = await SetUpAsync();

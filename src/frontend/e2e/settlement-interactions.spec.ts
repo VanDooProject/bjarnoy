@@ -158,7 +158,8 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // Regression guard: sand used to fall into the same flat "other" bucket
     // as forest/mountain and offer Farm/Lumberjack/Quarry — none of which
     // the backend's AllowedTerrain would ever accept on sand (Farm is
-    // Grass-only, Lumberjack Forest-only, Quarry Mountain-only). Sand only
+    // Grass-only, Lumberjack Forest-only, Quarry Mountain-only and now
+    // closed to new placement altogether). Sand only
     // carries Tower (SandOrGrass) — shrines are Grass-only now, so they no
     // longer appear here.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);

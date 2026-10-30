@@ -346,6 +346,32 @@ public class EconomyDesignTests
     private static BuildDecision PlanTower(Settlement settlement, HexCoord coord) =>
         settlement.PlanBuild(BuildingType.Tower, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
 
+    private static BuildDecision PlanQuarry(Settlement settlement, HexCoord coord) =>
+        settlement.PlanBuild(BuildingType.Quarry, coord, Terrain.Mountain, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+
+    [Fact]
+    public void A_new_quarry_is_refused_because_new_placement_is_switched_off()
+    {
+        var decision = PlanQuarry(SettlementWith(10), new HexCoord(1, 0));
+
+        Assert.Equal(BuildRejection.NewPlacementDisabled, decision.Rejection);
+        Assert.Null(decision.Order);
+        Assert.Equal([BuildingType.Quarry], BuildingCatalogue.NewPlacementDisabled);
+    }
+
+    [Fact]
+    public void An_existing_quarry_can_still_be_upgraded()
+    {
+        var coord = new HexCoord(1, 0);
+        var settlement = SettlementWith(10);
+        settlement = settlement with { Buildings = [.. settlement.Buildings, new PlacedBuilding(coord, BuildingType.Quarry, 2)] };
+
+        var decision = PlanQuarry(settlement, coord);
+
+        Assert.True(decision.Accepted);
+        Assert.Equal(3, decision.Order!.TargetLevel);
+    }
+
     [Fact]
     public void A_new_tower_is_refused_once_the_standing_towers_reach_the_limit()
     {

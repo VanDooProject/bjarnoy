@@ -798,6 +798,7 @@ public static class SettlementEndpoints
             "A wall never branches: that hex would leave a wall hex with three or more wall neighbours.",
         BuildRejection.GateNotOnStraight =>
             "A gate only stands between two opposite wall hexes, so the wall stays straight through it.",
+        BuildRejection.NewPlacementDisabled => "That building can no longer be built; existing ones keep working.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",

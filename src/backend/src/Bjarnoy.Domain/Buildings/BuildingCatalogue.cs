@@ -135,6 +135,16 @@ public static class BuildingCatalogue
         };
 
     /// <summary>
+    /// Buildings that can no longer be placed anew while their type, art and numbers stay: the Quarry is switched off for now.
+    /// Quarries already standing (or queued) in a saved world keep producing and upgrading —
+    /// <see cref="Settlement.PlanBuild"/> only refuses a level-1 order (<see cref="BuildRejection.NewPlacementDisabled"/>).
+    /// </summary>
+    public static IReadOnlySet<BuildingType> NewPlacementDisabled { get; } = new HashSet<BuildingType>
+    {
+        BuildingType.Quarry,
+    };
+
+    /// <summary>
     /// The Longhouse level <paramref name="type"/> unlocks at (1 for the
     /// Longhouse itself and for unknown types).
     /// </summary>

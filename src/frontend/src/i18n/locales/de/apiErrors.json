@@ -17,6 +17,7 @@
     "SettlementAlreadyHasShrine": "Diese Siedlung hat bereits einen Schrein – pro Siedlung ist nur einer erlaubt, egal welches Gottes.",
     "PalisadeWouldBranch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer.",
     "GateNotOnStraight": "Ein Tor steht nur zwischen zwei gegenüberliegenden Mauerfeldern, die Mauer bleibt also gerade durch das Tor.",
+    "NewPlacementDisabled": "Dieses Gebäude kann nicht mehr neu gebaut werden; bestehende arbeiten weiter.",
     "NoFreeSlot": "Kein freier Bauplatz — Premium schaltet eine Warteschlange frei.",
     "WorldNotFound": "Diese Welt existiert nicht.",
     "IslandNotFound": "Diese Insel existiert nicht.",

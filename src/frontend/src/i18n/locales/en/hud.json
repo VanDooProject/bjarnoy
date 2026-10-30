@@ -121,6 +121,7 @@
       "openWater": "Open water",
       "giantOccupied": "Occupied by a giant landmark",
       "bogNothingHere": "Nothing can be built on this bog hex",
+      "mountainNothingHere": "Nothing can be built on a mountain for now",
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",

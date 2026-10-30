@@ -802,7 +802,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
   ],
   sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_CATEGORY],
-  mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
+  // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
+  mountain: [],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
@@ -1062,22 +1063,26 @@ const rootActions = computed<RingAction[]>(() => {
     // mirrors WorldModel.placeBuilding / the server's HexOccupiedByCamp rule.
     const blockedByCamp = !!tile.camp && !tile.buildingType && !campHexBuildable(tile.camp);
     // A bog shore, mouth or spring takes no building at all (only plain moss, a creek and a half shore do).
-    const bareBog = tile.terrain === 'bog' && categoriesFor(tile).length === 0;
+    const nothingToBuild = categoriesFor(tile).length === 0;
+    const bareBog = tile.terrain === 'bog' && nothingToBuild;
+    const bareMountain = tile.terrain === 'mountain' && nothingToBuild;
     return [
       detailsAction(tile),
       {
         id: 'build',
         label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea || blockedByGiant || blockedByCamp || bareBog,
+        disabled: !buildableSea || blockedByGiant || blockedByCamp || bareBog || bareMountain,
         hint: blockedByGiant
           ? t('hud.ringMenu.actions.giantOccupied')
           : blockedByCamp
             ? t('hud.ringMenu.actions.campOccupied')
             : bareBog
               ? t('hud.ringMenu.actions.bogNothingHere')
-              : buildableSea
-                ? undefined
-                : t('hud.ringMenu.actions.openWater'),
+              : bareMountain
+                ? t('hud.ringMenu.actions.mountainNothingHere')
+                : buildableSea
+                  ? undefined
+                  : t('hud.ringMenu.actions.openWater'),
       },
       ...huntActions(tile),
       sendArmyAction(tile),

@@ -71,12 +71,12 @@ const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // everything else visibly disabled. Enabling both regardless of terrain
 // would just reintroduce the same silent-failure bug for whichever one
 // doesn't fit the tile actually clicked.
-type OnboardingBuildType = 'reindeerherder' | 'lumberjack' | 'tower' | 'fishinghut' | 'quarry';
+type OnboardingBuildType = 'reindeerherder' | 'lumberjack' | 'tower' | 'fishinghut';
 const GUIDED_BUILD_TERRAIN: Partial<Record<OnboardingBuildType, Terrain>> = {
   reindeerherder: 'grass',
   lumberjack: 'forest',
 };
-const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['reindeerherder', 'lumberjack', 'quarry', 'tower', 'fishinghut'];
+const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['reindeerherder', 'lumberjack', 'tower', 'fishinghut'];
 
 const world = useWorldStore();
 const player = usePlayerStore();

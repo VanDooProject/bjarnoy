@@ -99,13 +99,10 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
 
   const farm = settlement.ring.action('Reindeer Herder');
   const lumberjack = settlement.ring.action('Lumberjack');
-  const quarry = settlement.ring.action('Quarry');
   await expect(farm).toBeVisible();
   await expect(lumberjack).toBeVisible();
-  await expect(quarry).toBeVisible();
   await expect(farm).toBeEnabled();
   await expect(lumberjack).toBeDisabled();
-  await expect(quarry).toBeDisabled();
 
   // Frame 3: a persistent "why it's dim" note explaining the hex, not the
   // click, plus the pointer aimed at whichever bubble actually fits.

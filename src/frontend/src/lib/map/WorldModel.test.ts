@@ -1895,6 +1895,20 @@ describe('WorldModel bog buildings', () => {
     }
   });
 
+  it('refuses a new quarry even on a mountain hex inside the realm (new placement is switched off)', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+    const free = hexesInRadius(at, 2).find((c) => {
+      const tile = model.getTile(c.q, c.r);
+      return tile.terrain === 'grass' && !tile.buildingType && !tile.giant && !tile.camp;
+    })!;
+    expect(free).toBeDefined();
+    model.getTile(free.q, free.r).terrain = 'mountain';
+    expect(model.placeBuilding(settlement.id, free, 'quarry')).toBe(false);
+    expect(model.getTile(free.q, free.r).buildingType).toBeUndefined();
+  });
+
   it('no longer builds the Clay Brickworks on grass', () => {
     const model = new WorldModel(DEMO_SEED);
     const at = model.findLandfall({ q: 0, r: 0 })!;
