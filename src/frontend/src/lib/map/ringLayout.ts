@@ -158,7 +158,13 @@ function arcPlace(
 ): Spot[] | null {
   const pitch = size + 6;
   for (const arc of arcs) {
-    const need = n > 1 ? ((n - 1) * pitch) / (arc * D2R) : 0;
+    // `spread` seats neighbours `arc / n` apart (capped the way spread caps it), so the radius
+    // has to give that angle a chord of one pitch. Sizing it for `n - 1` gaps instead left
+    // neighbours only (n-1)/n of a pitch apart: the `need` radius always failed minSep, and
+    // on a phone-narrow area (where the fixed radii are too small for any arc) every arc failed
+    // and the lane fell through to the straight column run, wider than the screen.
+    const step = (Math.min(arc, n * 52) / n) * D2R;
+    const need = n > 1 ? pitch / (2 * Math.sin(step / 2)) : 0;
     const candidates = [...radii, need].filter((r) => r >= need - 0.5).sort((a, b) => a - b);
     for (const r of candidates) {
       for (const offset of [0, 18, -18, 36, -36]) {
@@ -195,18 +201,33 @@ function columnRun(n: number, base: number, px: number, py: number, area: Rect, 
   const pad = size / 2 + 2;
   const cos = Math.cos(base * D2R);
   const sin = Math.sin(base * D2R);
-  const total = (n - 1) * pitch;
   const ox = clamp(px, area.left + pad, area.right - pad);
   const oy = clamp(py, area.top + pad, area.bottom - pad);
+  // A vertical column (displaced sideways), or a horizontal row (displaced up/down).
+  const vertical = Math.abs(cos) >= Math.abs(sin);
+  const [alongLo, alongHi] = vertical ? [area.top + pad, area.bottom - pad] : [area.left + pad, area.right - pad];
+  const [acrossLo, acrossHi] = vertical ? [area.left + pad, area.right - pad] : [area.top + pad, area.bottom - pad];
+  const alongOrigin = vertical ? oy : ox;
+  const shift = (vertical ? cos : sin) >= 0 ? offset : -offset;
+  // More bubbles than one run can hold inside the area (seven categories on a ~330px-wide
+  // phone) wrap into further runs, stacked away from the tile, instead of one run that
+  // overflows the screen edge.
+  const perRun = Math.max(1, Math.floor(Math.max(0, alongHi - alongLo) / pitch) + 1);
+  const runs = Math.ceil(n / perRun);
+  const away = shift >= 0 ? 1 : -1;
+  const first = vertical ? ox + shift : oy + shift;
+  const last = first + away * (runs - 1) * pitch;
+  const blockShift = clamp(Math.min(first, last), acrossLo, acrossHi - (runs - 1) * pitch) - Math.min(first, last);
   const raw: { x: number; y: number }[] = [];
-  if (Math.abs(cos) >= Math.abs(sin)) {
-    const x = clamp(ox + (cos >= 0 ? offset : -offset), area.left + pad, area.right - pad);
-    const y0 = clamp(oy - total / 2, area.top + pad, area.bottom - pad - total);
-    for (let i = 0; i < n; i++) raw.push({ x, y: y0 + i * pitch });
-  } else {
-    const y = clamp(oy + (sin >= 0 ? offset : -offset), area.top + pad, area.bottom - pad);
-    const x0 = clamp(ox - total / 2, area.left + pad, area.right - pad - total);
-    for (let i = 0; i < n; i++) raw.push({ x: x0 + i * pitch, y });
+  for (let run = 0; run < runs; run++) {
+    const count = Math.min(perRun, n - run * perRun);
+    const total = (count - 1) * pitch;
+    const across = runs > 1 ? first + blockShift + away * run * pitch : clamp(first, acrossLo, acrossHi);
+    const start = clamp(alongOrigin - total / 2, alongLo, alongHi - total);
+    for (let i = 0; i < count; i++) {
+      const along = start + i * pitch;
+      raw.push(vertical ? { x: across, y: along } : { x: along, y: across });
+    }
   }
   return raw.map((p) => ({ x: p.x, y: p.y, ang: Math.atan2(p.y - py, p.x - px) / D2R }));
 }
@@ -268,7 +289,8 @@ export function lane1Spots(n: number, px: number, py: number, area: Rect): Spot[
   const base = baseAngle(px, py, area);
   return (
     arcPlace(n, base, px, py, area, BUB1, [LANE1, 84, 100, 118, 140], [210, 170, 130, 100, 80, 64, 50], []) ??
-    columnPlace(n, base, px, py, area, BUB1, HUB / 2 + BUB1 / 2 + 12, [], true)!
+    // The tile is an obstacle too: a wrapped block clamped back from an edge must not land on it.
+    columnPlace(n, base, px, py, area, BUB1, HUB / 2 + BUB1 / 2 + 12, [{ x: px, y: py, r: HUB / 2 }], true)!
   );
 }
 

@@ -212,6 +212,59 @@ describe('ring layout behaviour', () => {
   });
 });
 
+// Reported on an Android phone in portrait (~412x915): the six build categories
+// plus ‹ BACK opened as ONE straight row across the screen, the last bubble
+// clipped by the right edge. The area MapView hands a portrait phone is narrow
+// (64px queue handle on the left, the docked card strip at the bottom), and two
+// things gave way: arcPlace's `need` radius was sized for n-1 gaps while spread
+// seats n, so it always failed its own spacing check and only the fixed radii
+// (too small for a narrow wedge) were left; and the column fallback was one run
+// of 7 x 58px = 404px, wider than the ~330px area.
+describe('ring layout on a portrait phone', () => {
+  const PHONES = [
+    // MapView's ringBounds: left 64, the 64px HUD bar on top (+12), the bottom dock strip (236 + 8) below.
+    { name: '412x915', w: 412, h: 915, area: { left: 64, top: 76, right: 396, bottom: 915 - 236 - 8 } },
+    { name: '390x844', w: 390, h: 844, area: { left: 64, top: 76, right: 374, bottom: 844 - 236 - 8 } },
+  ];
+  const CATEGORIES_PLUS_BACK = 7;
+
+  it('seats seven bubbles that do not fit any arc in two rows above the tile, inside the area', () => {
+    // A hex low on the screen, just above the dock: the reported "row above the hub".
+    const area = PHONES[0].area;
+    const lane1 = layoutRing({ x: 206, y: 640, area, cardArea: area, lane1Count: CATEGORIES_PLUS_BACK, lane2Count: 0, parentIndex: -1, cardAnchor: null }).lane1;
+    expect(new Set(lane1.map((s) => Math.round(s.y))).size).toBeGreaterThan(1);
+    expect(lane1.every((s) => s.y < 640)).toBe(true);
+    expect(outOfArea([{ x: 206, y: 640, r: HUB / 2 }, ...lane1.map((s) => ({ ...s, r: BUB1 / 2 }))], area)).toEqual([]);
+  });
+
+  it('seats seven bubbles on an arc when the arc only fits at a radius beyond the fixed ones', () => {
+    // 412x915, a hex near the top-left of the area: only a ~180px radius seats seven, which before was `need` and failed.
+    const area = PHONES[0].area;
+    const lane1 = layoutRing({ x: 120, y: 200, area, cardArea: area, lane1Count: CATEGORIES_PLUS_BACK, lane2Count: 0, parentIndex: -1, cardAnchor: null }).lane1;
+    const radii = lane1.map((s) => Math.hypot(s.x - 120, s.y - 200));
+    expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.5);
+  });
+
+  for (const phone of PHONES) {
+    it(`never lines the categories up in one row, nor leaves the area or overlaps, anywhere on a ${phone.name} screen`, () => {
+      const bad: string[] = [];
+      for (let x = phone.area.left; x <= phone.area.right; x += 12) {
+        for (let y = phone.area.top; y <= phone.area.bottom; y += 12) {
+          // The drilled state: categories + ‹ BACK, with a five-building category open.
+          const layout = layoutRing({ x, y, area: phone.area, cardArea: phone.area, lane1Count: CATEGORIES_PLUS_BACK, lane2Count: 5, parentIndex: 1, cardAnchor: null });
+          const ys = new Set(layout.lane1.map((s) => Math.round(s.y)));
+          const xs = new Set(layout.lane1.map((s) => Math.round(s.x)));
+          const circles = circlesOf(layout, x, y);
+          if (ys.size === 1 || xs.size === 1) bad.push(`${x},${y}: one straight line`);
+          else if (outOfArea(circles, phone.area).length) bad.push(`${x},${y}: outside the area`);
+          else if (smallestGap(circles) < 0) bad.push(`${x},${y}: overlapping`);
+        }
+      }
+      expect(bad.slice(0, 10), `${bad.length} bad placements`).toEqual([]);
+    });
+  }
+});
+
 // A root bubble (Upgrade, Details) shows its own card while hovered: it has no
 // lane2 building to anchor on, so the card docks off that bubble's lane1 spot.
 describe('ring layout root-bubble card', () => {

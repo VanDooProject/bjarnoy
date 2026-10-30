@@ -114,3 +114,51 @@ for (const layout of LAYOUTS) {
     });
   });
 }
+
+// Two phone bugs in the same ring. Reported on a 412x915 Android phone: drilled into Build on a hex low on the
+// screen, the six categories and ‹ BACK opened as one straight row wider than the screen, the last one clipped.
+// And the touch drill-downs above flaked: a tap on a category that had only just appeared (its layer still
+// fading in) was dropped, so the category never opened.
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 412, height: 915 },
+]) {
+  test.describe(`ring menu on a ${viewport.width}x${viewport.height} phone`, { tag: '@g3' }, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test('the build categories open around the hex inside the screen, not as one line across it', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      const settlement = await SettlementPage.found(page);
+      // Low on the screen, just above the docked card strip: where the categories used to line up. The realm
+      // starts centred, so drag the map up the way a player would to bring one of its hexes down there.
+      const spot = { x: viewport.width / 2, y: viewport.height - 274 };
+      const first = await settlement.findHex({ terrain: 'grass', nearest: spot });
+      const box = await settlement.canvasBox();
+      const from = { x: box.x + viewport.width / 2, y: box.y + 200 };
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(from.x + (spot.x - first.screen.x), from.y + (spot.y - first.screen.y), { steps: 8 });
+      await page.mouse.up();
+      const target = await settlement.findHex({ terrain: 'grass', nearest: spot });
+      await settlement.clickHex(target);
+      await settlement.ring.waitForOpen();
+      await settlement.ring.action('Build').first().tap();
+      await expect(settlement.ring.backBubble).toBeVisible();
+      await expect(settlement.ring.backdrop).not.toHaveAttribute('data-swapping');
+
+      const boxes = await page
+        .locator('.ring-bubble:not(.child)')
+        .evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((r) => ({ x: r.x, y: r.y, w: r.width, h: r.height })));
+      expect(boxes.length).toBeGreaterThanOrEqual(4);
+      const centres = boxes.map((b) => ({ x: Math.round(b.x + b.w / 2), y: Math.round(b.y + b.h / 2) }));
+      expect(new Set(centres.map((c) => c.y)).size, `not one row: ${JSON.stringify(centres)}`).toBeGreaterThan(1);
+      expect(new Set(centres.map((c) => c.x)).size, `not one column: ${JSON.stringify(centres)}`).toBeGreaterThan(1);
+      for (const b of boxes) {
+        expect(b.x, JSON.stringify(b)).toBeGreaterThanOrEqual(0);
+        expect(b.y, JSON.stringify(b)).toBeGreaterThanOrEqual(0);
+        expect(b.x + b.w, JSON.stringify(b)).toBeLessThanOrEqual(viewport.width);
+        expect(b.y + b.h, JSON.stringify(b)).toBeLessThanOrEqual(viewport.height);
+      }
+    });
+  });
+}
