@@ -129,7 +129,7 @@
       },
       "landMovement": {
         "title": "Bewegung an Land",
-        "description": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern."
+        "description": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse und Brücken, Berge und Mauern."
       },
       "ships": {
         "title": "Schiffe und Wasser",
@@ -802,15 +802,15 @@
         "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten.",
         "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, aber langsamer als jeden offenen Boden. Armeen nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
         "sea": "Eine Mauer, die in einem Seeende ausläuft, schließt an der Küste ab. Hört eine Mauer an Land neben offenem Meer einfach auf, ist das anders: Ihr halb offenes Ende ist dann der Weg hindurch.",
-        "natural": "Berge und breite Flüsse können Landarmeen ohnehin nicht überqueren. Reicht eine Mauer bis an einen von ihnen heran, ist sie dort also verschlossen.",
-        "rivers": "Flüsse: Ein breiter Fluss ist für Landarmeen kein Weg, daher ist eine Mauer, die an einem endet, dort verschlossen. Ein Bach ist seicht genug zum Durchwaten, und in fließendem Wasser lässt sich keine Mauer bauen. Ein Bach ist also immer ein Weg hindurch: langsam, aber offen. Eine Mauer, die an einem Bach endet, ist dort nicht verschlossen. Auf keinem von beiden kann eine Mauer stehen.",
+        "natural": "Berge können Landarmeen gar nicht überqueren, breite Flüsse nur über eine Brücke. Reicht eine Mauer bis an einen von beiden heran, ist sie dort verschlossen, mit oder ohne Brücke.",
+        "rivers": "Flüsse: Ein breiter Fluss ist für Landarmeen kein Weg, es sei denn, eine Brücke führt darüber, doch eine Mauer, die an einem endet, ist dort in jedem Fall verschlossen. Ein Bach ist seicht genug zum Durchwaten, und in fließendem Wasser lässt sich keine Mauer bauen. Ein Bach ist also immer ein Weg hindurch: langsam, aber offen. Eine Mauer, die an einem Bach endet, ist dort nicht verschlossen. Auf keinem von beiden kann eine Mauer stehen.",
         "fleets": "Mauern wirken nicht auf Flotten."
       },
       "diagram": {
         "sealedTitle": "Verschlossen",
         "sealed": "Eine Mauer, die an beiden Enden bis an Berge reicht: Hier kommt niemand durch.",
         "riverEndTitle": "Vom Fluss verschlossen",
-        "riverEnd": "Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, genau wie an einem Berg.",
+        "riverEnd": "Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, genau wie an einem Berg, auch wenn eine Brücke über den Fluss führt.",
         "halfOpenTitle": "Halb offen",
         "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jede Armee überquert ihr letztes Feld, nur langsamer. Ob Gras oder Sand, macht keinen Unterschied.",
         "streamTitle": "Bach",
@@ -1007,7 +1007,8 @@
       "pace": "Tempo",
       "food": "Nahrung",
       "road": "Unterwegs",
-      "sight": "Sicht"
+      "sight": "Sicht",
+      "bridges": "Brücken"
     },
     "cost": {
       "heading": "Was ein Feld kostet",
@@ -1023,7 +1024,8 @@
       "wideRiver": "Breiter Fluss",
       "blocked": "Nicht betretbar",
       "walls": "Ein Mauerfeld hält jede Landarmee auf, ein Tor lässt Freunde durch. Die ganzen Regeln stehen unter {walls}.",
-      "wallsLink": "Mauern"
+      "wallsLink": "Mauern",
+      "wideRiverBridge": "Nur über eine Brücke"
     },
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
@@ -1057,8 +1059,31 @@
       "heading": "Was eine Armee sieht",
       "body": "Eine marschierende Armee deckt {rings} Ringe der Karte um sich auf, dazu {bonus} weitere für jede Stufe der {odin}."
     },
-    "adminNote": {
-      "bridges": "Brücken über breite Flüsse sind geplant, aber noch nicht im Spiel."
+    "bridges": {
+      "heading": "Brücken über breite Flüsse",
+      "body": "Ein breiter Fluss ist für Landarmeen kein Weg, es sei denn, eine {bridge} führt darüber. Du baust sie auf dem Flussfeld selbst, in deinem Gebiet, ab Langhaus {longhouse} hinter einem {townsquare} der Stufe {level}. Kosten und Bauzeiten jeder Stufe stehen im Techbaum.",
+      "columns": {
+        "level": "Brückenstufe",
+        "cost": "Kosten",
+        "who": "Wer darüber darf"
+      },
+      "levels": {
+        "causeway": "Damm",
+        "footbridge": "Steg",
+        "kings": "Königsbrücke",
+        "guarded": "Wehrbrücke"
+      },
+      "groundCost": "wie das Gelände darunter",
+      "everyone": "Jede Armee, auch die des Besitzers",
+      "friends": "Die Armeen des Besitzers und seiner Freunde, also derselben Gilde oder einer Gilde im Frieden mit ihr. Jede andere Armee wird aufgehalten, als gäbe es keine Brücke.",
+      "rules": {
+        "where": "Eine Brücke passt auf ein gerades oder gebogenes Feld eines breiten Flusses, egal welches Gelände darunter liegt. Auf einer Quelle, einer Gabelung oder einer Mündung kannst du keine bauen, auf einem Bach auch nicht (den durchwaten Armeen ohnehin), und auf einer öden Insel ebenso wenig.",
+        "site": "Eine Baustelle öffnet den Fluss nicht. Erst eine fertige Brücke ab Stufe 1 zählt. Mit jeder Stufe geht die Überquerung schneller, bis die Armeen bei der Königsbrücke so schnell hinüberkommen wie über das Gelände selbst.",
+        "guarded": "Die Wehrbrücke verhält sich wie ein Mauertor: Sie lässt die Armeen ihres Besitzers und seiner Freunde durch und hält alle anderen auf.",
+        "siege": "Katapulte können eine Brücke niederbrennen, und zwar eine Stufe pro gewonnener Belagerung, egal wie viele Katapulte überleben. Eine Wehrbrücke fällt dabei zuerst zur Königsbrücke zurück und steht danach allen offen, auch den Angreifern. Ein Damm, der einmal niedergebrannt ist, ist weg, und der Fluss ist wieder dicht.",
+        "walls": "Brücken ändern nichts an Mauern: Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, ob mit oder ohne Brücke. Mehr dazu unter {walls}.",
+        "fleets": "Brücken betreffen nur Landarmeen. Schiffe bleiben unberührt."
+      }
     }
   },
   "ships": {

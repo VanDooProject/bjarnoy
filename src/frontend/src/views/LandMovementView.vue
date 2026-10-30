@@ -3,7 +3,6 @@ import { computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
-import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
@@ -12,6 +11,9 @@ import { terrainName, unitName } from '../i18n/catalogueNames';
 import { ravensRings } from '../lib/map/buildingEconomy';
 import {
   ARMY_VISION_RINGS,
+  BRIDGE_GROUND_COST,
+  BRIDGE_LEVELS,
+  BRIDGE_UNLOCK,
   GROUND_COSTS,
   STREAM_COST,
   WALL_END_COST,
@@ -54,7 +56,7 @@ const slowest = computed(() => {
 });
 
 const tocLinks = computed(() =>
-  ['cost', 'pace', 'food', 'road', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
+  ['cost', 'bridges', 'pace', 'food', 'road', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
 );
 </script>
 
@@ -92,7 +94,7 @@ const tocLinks = computed(() =>
             </tr>
             <tr data-ground="wideRiver">
               <th scope="row" class="name">{{ $t('docs.landMovement.cost.wideRiver') }}</th>
-              <td class="blocked">{{ $t('docs.landMovement.cost.blocked') }}</td>
+              <td class="blocked">{{ $t('docs.landMovement.cost.wideRiverBridge') }}</td>
             </tr>
           </tbody>
         </table>
@@ -102,6 +104,52 @@ const tocLinks = computed(() =>
           <DocsPageLink to="/docs/walls">{{ $t('docs.landMovement.cost.wallsLink') }}</DocsPageLink>
         </template>
       </i18n-t>
+    </section>
+
+    <section id="bridges" class="block">
+      <h2>{{ $t('docs.landMovement.bridges.heading') }}</h2>
+      <i18n-t keypath="docs.landMovement.bridges.body" tag="p" class="text" scope="global">
+        <template #bridge><BuildingLink type="bridge" /></template>
+        <template #longhouse>{{ BRIDGE_UNLOCK.longhouse }}</template>
+        <template #level>{{ BRIDGE_UNLOCK.townSquare }}</template>
+        <template #townsquare><BuildingLink type="townsquare" /></template>
+      </i18n-t>
+      <div class="table-scroll">
+        <table data-testid="bridge-table">
+          <thead>
+            <tr>
+              <th>{{ $t('docs.landMovement.bridges.columns.level') }}</th>
+              <th>{{ $t('docs.landMovement.bridges.columns.cost') }}</th>
+              <th>{{ $t('docs.landMovement.bridges.columns.who') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="b in BRIDGE_LEVELS" :key="b.level" :data-bridge="b.name">
+              <th scope="row" class="name">{{ b.level }}: {{ $t(`docs.landMovement.bridges.levels.${b.name}`) }}</th>
+              <td class="value">
+                <template v-if="b.cost !== null">{{ n(b.cost) }}</template>
+                <template v-else>
+                  {{ n(BRIDGE_GROUND_COST.min) }}–{{ n(BRIDGE_GROUND_COST.max) }}
+                  <span class="muted">{{ $t('docs.landMovement.bridges.groundCost') }}</span>
+                </template>
+              </td>
+              <td>{{ $t(b.everyone ? 'docs.landMovement.bridges.everyone' : 'docs.landMovement.bridges.friends') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ul class="rules">
+        <li>{{ $t('docs.landMovement.bridges.rules.where') }}</li>
+        <li>{{ $t('docs.landMovement.bridges.rules.site') }}</li>
+        <li>{{ $t('docs.landMovement.bridges.rules.guarded') }}</li>
+        <li>{{ $t('docs.landMovement.bridges.rules.siege') }}</li>
+        <i18n-t keypath="docs.landMovement.bridges.rules.walls" tag="li" scope="global">
+          <template #walls>
+            <DocsPageLink to="/docs/walls">{{ $t('docs.landMovement.cost.wallsLink') }}</DocsPageLink>
+          </template>
+        </i18n-t>
+        <li>{{ $t('docs.landMovement.bridges.rules.fleets') }}</li>
+      </ul>
     </section>
 
     <section id="pace" class="block">
@@ -181,10 +229,6 @@ const tocLinks = computed(() =>
         <template #bonus>{{ ravensRings(1) }}</template>
       </i18n-t>
     </section>
-
-    <DocsAdminNote class="block">
-      <p>{{ $t('docs.landMovement.adminNote.bridges') }}</p>
-    </DocsAdminNote>
   </DocsPageLayout>
 </template>
 

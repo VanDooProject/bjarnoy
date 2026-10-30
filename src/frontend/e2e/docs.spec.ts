@@ -633,7 +633,13 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(
       page.locator('[data-testid="pace-table"] [data-unit="spearman"]'),
     ).toContainText("15 min");
-    await expect(page.getByText("Bridges over wide rivers")).toHaveCount(0);
+    // Wide rivers: shut except over a bridge, with a table of the bridge levels and no admin note about bridges "planned".
+    await expect(page.locator('[data-ground="wideRiver"]')).toContainText("Only over a bridge");
+    await expect(page.locator('[data-bridge="causeway"]')).toContainText("6");
+    await expect(page.locator('[data-bridge="footbridge"]')).toContainText("4");
+    await expect(page.locator('[data-bridge="guarded"]')).toContainText("their friends");
+    await expect(page.locator("#bridges").getByRole("heading", { name: "Bridges over wide rivers" })).toBeVisible();
+    await expect(page.getByText("planned but not in the game")).toHaveCount(0);
   });
 
   test("ships page compares the Karve and the Longship and hides the admin note", async ({

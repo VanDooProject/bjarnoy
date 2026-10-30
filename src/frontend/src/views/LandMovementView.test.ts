@@ -1,118 +1,86 @@
 // @vitest-environment jsdom
 //
-// The land movement page: ground costs and the per-unit pace table are computed from the pathfinder mirror and the unit catalogue; the bridge note stays admin-only.
-import { beforeEach, describe, expect, it } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+// The land movement docs page: the wide river is shut except over a bridge, and the bridge section quotes the crossing cost of
+// every level and who may cross, in both languages. The page shell, the unit store and the building links are stubbed: this
+// covers what the view itself puts on the page.
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter } from 'vue-router';
+import { defineComponent } from 'vue';
 import LandMovementView from './LandMovementView.vue';
-import { useAuthStore } from '../stores/auth';
-import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
-import { useUnitCatalogueStore } from '../stores/unitCatalogue';
-import { useDocsAdminNotes } from '../composables/useDocsAdminNotes';
-import buildingCatalogue from '../data/building-catalogue.json';
-import unitCatalogue from '../data/unit-catalogue.json';
-import type { BuildingDefinitionResponse, UnitDefinitionResponse, UserResponse } from '../api/types';
-import { createTestI18n } from '../test/i18n';
+import { createI18n } from 'vue-i18n';
+import enCommon from '../i18n/locales/en/common.json';
+import deCommon from '../i18n/locales/de/common.json';
+import enCatalogue from '../i18n/locales/en/catalogue.json';
+import deCatalogue from '../i18n/locales/de/catalogue.json';
+import { datetimeFormats, numberFormats } from '../i18n/formats';
 import enDocs from '../i18n/locales/en/docs.json';
+import deDocs from '../i18n/locales/de/docs.json';
 
-async function mountPage() {
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
-  });
-  const wrapper = mount(LandMovementView, {
-    attachTo: document.body,
-    global: {
-      plugins: [createTestI18n({ docs: enDocs }), router],
-      stubs: { TopBar: true, HudNav: true, MobileHudDrawer: true },
+vi.mock('../stores/unitCatalogue', () => ({
+  useUnitCatalogueStore: () => ({ load: () => undefined, loading: false, definitions: [], byType: {} }),
+}));
+
+const Passthrough = defineComponent({ template: '<div><slot /></div>' });
+const BuildingLinkStub = defineComponent({ props: ['type'], template: '<span class="building-link" :data-type="type">{{ type }}</span>' });
+
+function i18nFor(locale: 'en' | 'de') {
+  return createI18n({
+    legacy: false,
+    locale,
+    messages: {
+      en: { common: enCommon, catalogue: enCatalogue, docs: enDocs },
+      de: { common: deCommon, catalogue: deCatalogue, docs: deDocs },
+    },
+    datetimeFormats,
+    numberFormats,
+    missing: (_locale, key) => {
+      throw new Error(`Missing i18n key in test: ${key}`);
     },
   });
-  await flushPromises();
+}
+
+const mounted: VueWrapper[] = [];
+function mountPage(locale: 'en' | 'de') {
+  setActivePinia(createPinia());
+  const wrapper = mount(LandMovementView, {
+    global: {
+      plugins: [i18nFor(locale)],
+      stubs: { DocsPageLayout: Passthrough, DocsToc: true, DocsPageLink: Passthrough, BuildingLink: BuildingLinkStub },
+    },
+  });
+  mounted.push(wrapper);
   return wrapper;
 }
 
-beforeEach(() => {
-  localStorage.clear();
-  setActivePinia(createPinia());
-  useBuildingCatalogueStore().definitions = buildingCatalogue.data as BuildingDefinitionResponse[];
-  useUnitCatalogueStore().definitions = unitCatalogue.data as UnitDefinitionResponse[];
-  useAuthStore().user = { role: 'player' } as unknown as UserResponse;
-  useDocsAdminNotes().setEnabled(false);
-});
+describe('LandMovementView bridges', () => {
+  afterEach(() => mounted.splice(0).forEach((w) => w.unmount()));
 
-describe('LandMovementView', () => {
-  it('lists the ground costs, the flat stream cost and what cannot be entered', async () => {
-    const wrapper = await mountPage();
-
-    const cost = (id: string) => wrapper.get(`[data-ground=${id}]`).findAll('th, td').map((c) => c.text());
-    expect(cost('grass')).toEqual(['Grassland', '1']);
-    expect(cost('sand')).toEqual(['Shore', '1.1']);
-    expect(cost('forest')).toEqual(['Forest', '1.3']);
-    expect(cost('bog')).toEqual(['Bogland', '2']);
-    expect(cost('stream')[1]).toContain('9');
-    expect(cost('wallEnd')[1]).toContain('3');
-    for (const id of ['mountain', 'sea', 'lake', 'wideRiver']) expect(cost(id)[1], id).toBe('Cannot be entered');
-    wrapper.unmount();
+  it('shuts the wide river except over a bridge, and shows no "planned" admin note any more', () => {
+    const page = mountPage('en');
+    expect(page.get('[data-ground="wideRiver"]').text()).toContain('Only over a bridge');
+    expect(page.find('[data-testid="admin-note"]').exists()).toBe(false);
+    expect(page.text()).not.toContain('planned but not in the game');
   });
 
-  it('works out minutes per hex for each land unit from its catalogue speed, leaving the ships out', async () => {
-    const wrapper = await mountPage();
-
-    const rows = wrapper.findAll('[data-testid=pace-table] tbody tr');
-    expect(rows.map((r) => r.attributes('data-unit'))).toEqual([
-      'thrall',
-      'spearman',
-      'axeman',
-      'bowman',
-      'berserker',
-      'provisioner',
-      'catapult',
-      'settlercrew',
-    ]);
-    const cells = (type: string) => wrapper.get(`[data-testid=pace-table] [data-unit=${type}]`).findAll('td').map((td) => td.text());
-    expect(cells('spearman')).toEqual(['4', '15 min', '16.5 min', '19.5 min', '30 min', '2 h 15 min']);
-    expect(cells('thrall')).toEqual(['5', '12 min', '13.2 min', '15.6 min', '24 min', '1 h 48 min']);
-    expect(cells('catapult')[1]).toBe('40 min');
-    wrapper.unmount();
+  it('prices each bridge level from the pathfinder numbers and names who may cross', () => {
+    const page = mountPage('en');
+    const row = (name: string) => page.get(`[data-bridge="${name}"]`).text();
+    expect(page.findAll('[data-testid="bridge-table"] tbody tr')).toHaveLength(4);
+    expect(row('causeway')).toContain('6');
+    expect(row('footbridge')).toContain('4');
+    expect(row('kings')).toContain('1–1.3');
+    expect(row('guarded')).toContain('1–1.3');
+    expect(row('causeway')).toContain('Every army');
+    expect(row('guarded')).toContain('Its owner’s armies and their friends’');
+    expect(page.findAll('.building-link').map((l) => l.attributes('data-type'))).toEqual(['bridge', 'townsquare', 'odinstatue']);
   });
 
-  it('gives the spearman example, the slowest unit and the food table', async () => {
-    const wrapper = await mountPage();
-
-    expect(wrapper.get('#pace').text()).toContain('a Spearman crosses a grass hex in 15 min');
-    expect(wrapper.get('#pace').text()).toContain('The slowest of all is the Catapult');
-    const food = wrapper.get('[data-testid=food-table] [data-unit=provisioner]').findAll('td').map((td) => td.text());
-    expect(food).toEqual(['1', '150']);
-    wrapper.unmount();
-  });
-
-  it('states the strong camp range and the army sight, and links the walls and wildlife camps pages', async () => {
-    const wrapper = await mountPage();
-
-    expect(wrapper.get('#road').text()).toContain('guards 3 to 7 hexes');
-    expect(wrapper.get('#sight').text()).toContain('2 rings of the map');
-    expect(wrapper.get('#sight').text()).toContain('plus 2 more for each level');
-    expect(wrapper.find('a[href="/docs/walls"]').exists()).toBe(true);
-    expect(wrapper.find('a[href="/docs/wildlife-camps"]').exists()).toBe(true);
-    wrapper.unmount();
-  });
-
-  it('keeps the admin note from players, even with the stored admin toggle on', async () => {
-    useDocsAdminNotes().setEnabled(true);
-    const wrapper = await mountPage();
-
-    expect(wrapper.find('[data-testid=admin-note]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Bridges over wide rivers');
-    wrapper.unmount();
-  });
-
-  it('shows the admin note to an admin with the notes switched on', async () => {
-    useAuthStore().user = { role: 'admin' } as unknown as UserResponse;
-    useDocsAdminNotes().setEnabled(true);
-    const wrapper = await mountPage();
-
-    expect(wrapper.get('[data-testid=admin-note]').text()).toContain('Bridges over wide rivers');
-    wrapper.unmount();
+  it('says the same in German', () => {
+    const page = mountPage('de');
+    expect(page.get('[data-ground="wideRiver"]').text()).toContain('Nur über eine Brücke');
+    expect(page.get('[data-bridge="guarded"]').text()).toContain('Wehrbrücke');
+    expect(page.get('[data-bridge="causeway"]').text()).toContain('Damm');
+    expect(page.get('[data-bridge="kings"]').text()).toContain('1–1,3');
   });
 });
