@@ -61,6 +61,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return 'Blocks every army';
     case 'palisadeGate':
       return 'Only its owner\'s armies pass';
+    case 'bridge':
+      return 'Opens a wide river to land armies';
   }
 }
 

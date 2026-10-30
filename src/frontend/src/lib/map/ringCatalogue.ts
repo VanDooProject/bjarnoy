@@ -99,6 +99,9 @@ export function storageHouseLock(storageHousesHeld: number, standingLevels: read
 const RIVER_SHAPES_BY_TYPE: Partial<Record<string, ReadonlySet<string>>> = {
   sawmill: new Set(['straight', 'bend', 'bend60']),
   cropmill: new Set(['straight']),
+  // The bridge's three tiles (3D_assets hextile135-137) are the straight, the 120 degree bend and the 60 degree bend; whether the
+  // hex is also a *wide* river is the bridge rules' (`WorldModel.bridgePlacement`, shown as a lock), not a shape question.
+  bridge: new Set(['straight', 'bend', 'bend60']),
 };
 
 /**
@@ -222,6 +225,8 @@ export function buildingAllowedOnHex(
     if (tile.terrain === 'bog') return tile.bog?.kind === 'bog';
     return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
   }
+  // A bridge stands on the river tile's own ground: grass, forest or sand (never mountain; BuildingCatalogue.BridgeHex).
+  if (type === 'bridge') return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
   const bogKinds = BOG_KINDS_BY_TYPE[type];
   if (bogKinds) return tile.terrain === 'bog' && tile.bog !== undefined && bogKinds.has(tile.bog.kind);
   if (isWaterOnlyBuilding(type)) {
@@ -274,4 +279,14 @@ export function palisadeLock(placement: { ok: true } | { ok: false; reason: stri
   if (placement.ok) return undefined;
   const key = ['branch', 'gateNotStraight', 'river', 'seaEnd', 'occupied'].includes(placement.reason) ? placement.reason : 'terrain';
   return i18n.global.t(`hud.ringMenu.palisadeLock.${key}`) as string;
+}
+
+/**
+ * The reason a bridge can't be placed on a river hex that otherwise takes one (a Straight, Bend or Bend60 tile; `riverBuildingAllowedHere`
+ * hides the bubble on every other hex), in the player's words, or `undefined` when it can: the river there is not a wide one, which a
+ * land army already crosses (`BuildRejection.BridgeNeedsWideRiver`), or the island is wasted.
+ */
+export function bridgeLock(placement: { ok: true } | { ok: false; reason: 'notWide' | 'wasted' }): string | undefined {
+  if (placement.ok) return undefined;
+  return i18n.global.t(`hud.ringMenu.bridgeLock.${placement.reason}`) as string;
 }

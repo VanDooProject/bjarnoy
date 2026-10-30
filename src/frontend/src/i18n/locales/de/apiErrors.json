@@ -18,6 +18,7 @@
     "PalisadeWouldBranch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer.",
     "GateNotOnStraight": "Ein Tor steht nur zwischen zwei gegenüberliegenden Mauerfeldern, die Mauer bleibt also gerade durch das Tor.",
     "NewPlacementDisabled": "Dieses Gebäude kann nicht mehr neu gebaut werden; bestehende arbeiten weiter.",
+    "BridgeNeedsWideRiver": "Eine Brücke braucht eine breite Flussquerung: einen geraden oder gebogenen breiten Fluss, keinen Bach, keine Quelle, keine Gabelung und keine Mündung.",
     "NoFreeSlot": "Kein freier Bauplatz — Premium schaltet eine Warteschlange frei.",
     "WorldNotFound": "Diese Welt existiert nicht.",
     "IslandNotFound": "Diese Insel existiert nicht.",

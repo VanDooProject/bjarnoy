@@ -668,7 +668,7 @@ export interface HoverInfo {
   subject: HoverSubject;
   // Present whenever the tile belongs to a settlement (building or claimed
   // terrain); absent for unclaimed ground.
-  owner?: { settlementName: string; ownerName: string; mine: boolean };
+  owner?: { settlementName: string; ownerName: string; mine: boolean; /** The owning account, for the friend check of a guarded bridge. */ ownerId?: string };
   // Building stats are only ever populated for the viewer's own buildings —
   // see hoverInfoFor. `premiumLocked` tells HexTooltip.vue to render a gated
   // "Pro" upsell row in their place for a building tile that belongs to
@@ -3042,7 +3042,7 @@ export class HexMapRenderer {
     const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
-    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
+    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine, ownerId: owner.ownerId } : undefined;
 
     const subject = hoverSubjectFor(tile, river);
     if (subject.kind === 'building') {
@@ -3204,7 +3204,10 @@ export class HexMapRenderer {
       this.handleClick(e);
       return;
     }
-    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: performance.now() };
+    // The event's own timestamp, not the time this handler runs: on a busy
+    // main thread both taps' events can queue up and be handled long after
+    // the finger lifted, which must not push a real double tap out of the window.
+    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: e.timeStamp };
     if (this.pendingTap && isDoubleTap(this.pendingTap.tap, tap)) {
       this.dropPendingTap();
       const screen = this.clientToCanvas(e.clientX, e.clientY);

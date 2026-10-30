@@ -151,7 +151,9 @@ public static class SiegeResolver
         }
 
         var target = buildings[index];
-        var levelAfter = Math.Max(0, target.Level - levelsDestroyed);
+        // A bridge burns one level per won siege whatever the catapults bring (docs/design/economy.md section 5): a guarded
+        // bridge falls to the king's bridge, open to everyone, before it can be burnt away.
+        var levelAfter = Math.Max(0, target.Level - (target.Type == BuildingType.Bridge ? 1 : levelsDestroyed));
 
         if (levelAfter <= 0)
         {

@@ -1085,6 +1085,14 @@ public sealed record Settlement
     /// placement rules (<see cref="Palisades.PalisadeRules.CanPlace"/>) read it, together with this settlement's own walls and queued wall
     /// orders. <see langword="null"/> means no other wall is known.
     /// </param>
+    /// <param name="isWideRiverAt">
+    /// Whether the river tile on <paramref name="coord"/> is a wide river (<c>RiverIndex.IsWide</c>: impassable to a land army). Only a
+    /// <see cref="BuildingType.Bridge"/> cares: streams are already passable, so it is refused there
+    /// (<see cref="BuildRejection.BridgeNeedsWideRiver"/>).
+    /// </param>
+    /// <param name="onWastedIsland">
+    /// Whether <paramref name="coord"/> lies on a wasted (lava) island, where no bridge is built. Only a <see cref="BuildingType.Bridge"/> cares.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -1102,7 +1110,9 @@ public sealed record Settlement
         World.IGiantIndex? giants = null,
         World.ICampIndex? camps = null,
         World.BogTileKind? bogKindAt = null,
-        Palisades.PalisadeLayout? palisades = null)
+        Palisades.PalisadeLayout? palisades = null,
+        bool isWideRiverAt = false,
+        bool onWastedIsland = false)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -1184,6 +1194,21 @@ public sealed record Settlement
             if (definition.ExcludedRiverVariants?.Contains(riverVariantAt) == true)
             {
                 return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+            }
+        }
+
+        // A bridge only spans a wide river: its shape was checked above (spring, confluence and mouth are refused as terrain), and
+        // streams are passable already. A wasted island has no bridges.
+        if (type == BuildingType.Bridge)
+        {
+            if (onWastedIsland)
+            {
+                return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+            }
+
+            if (!isWideRiverAt)
+            {
+                return BuildDecision.Rejected(BuildRejection.BridgeNeedsWideRiver);
             }
         }
 

@@ -36,7 +36,8 @@ Wood, Stone, Food, Iron.
   (§8, `bog.md`), and a **Hammer Forge** (water-powered hammer mill) on a
   bog creek boosts them later, the way the Sawmill boosts Lumberjacks. Before
   the bog-ore works, the Longhouse is the only iron source, so buildings
-  cost no iron; iron is a military resource (units, Tower).
+  cost no iron;
+  iron is a military resource (units, Tower).
 
 The **Magic Tower is removed**. The **Smithy** is renamed **Weaponsmith**
 (Waffenschmiede; its art has an anvil) so it doesn't clash with the
@@ -96,6 +97,7 @@ has 3–8 stages per building, and each level maps onto a stage
 | Great Storehouse | 10 |
 | Shrines | 5 (one per settlement) |
 | Palisade | 3 |
+| Bridge | 4 |
 
 Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 
@@ -129,6 +131,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 5 | Barracks | Tower 3 |
 | 6 | Town Square (feasts, §6) | — |
 | 7 | Palisade / Palisade Gate (one card, the wall) | Tower 5 |
+| 7 | Bridge (over a wide river) | Town Square 1 |
 | 8 | Dockyard | Fishing Hut 5 |
 | 9 | Archery Range | Barracks 5 |
 | 10 | Cart Workshop (settlers) | Town Square 3 |
@@ -286,6 +289,54 @@ settlement's owner (friends come from the guild store: `friendlyUserIds`).
 **Not built yet.** Siege and fire take a level off a wall hex at a time until it is
 gone; nothing does yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
 The admin building editor places a wall hex without the placement rules.
+
+### Bridge
+
+A bridge over a **wide river** (`BuildingType.Bridge` 32, wire id `bridge`). A wide river
+is impassable to every land army (`troop-movement-range.md` section 5); a bridge is the
+only way to open one. It unlocks at Longhouse 7 behind a level-1 Town Square, has **4
+levels** (a causeway, a footbridge, a king's bridge and a guarded bridge), and no
+production, storage or claim. Costs and times are set per level (no cost growth), wood-heavy,
+with stone from level 3 and no iron:
+
+| Level | Name | Wood | Stone | Food | Iron | Time |
+|---|---|---|---|---|---|---|
+| 1 | Causeway | 120 | 0 | 20 | 0 | 10 min |
+| 2 | Footbridge | 220 | 0 | 30 | 0 | 20 min |
+| 3 | King's bridge | 380 | 160 | 40 | 0 | 45 min |
+| 4 | Guarded bridge | 660 | 340 | 60 | 0 | 90 min |
+
+**Placement** (`Settlement.PlanBuild`, `BuildingCatalogue.BridgeHex`): on the river hex
+itself, inside the claim, when the river tile is of shape Straight, Bend or Bend60 and
+**wide** (`RiverIndex.IsWide`, the same test the pathfinder uses). Refused on a spring,
+a confluence or a mouth (`TerrainNotAllowed`), on a stream or a widening tile that is
+not wide (`BuildRejection.BridgeNeedsWideRiver`: a stream can be waded, so it needs no
+bridge), on a wasted (lava) island, outside the claim, and on an occupied hex. Any river
+art variant is allowed (the bridge swaps it for the plain channel), and so is any ground
+under the river (grass, forest or sand).
+
+**Movement** (land armies; fleets are unaffected). Only standing bridges count (level 1
+or more): a foundation leaves the river shut. The bridge's price replaces the
+impassable wide river in `HexPathfinder.LandStepCost`; streams keep their own price.
+
+| Level | Land army |
+|---|---|
+| 1 | every army, the owner's included: slower than any ground (`1.0 + CausewayCrossingCost` = 6) |
+| 2 | every army: still slower than the ground, but quicker than the causeway (`1.0 + FootbridgeCrossingCost` = 4) |
+| 3 | every army: as quickly as the ground under it (its terrain cost) |
+| 4 | the owner's armies and their friends: as quickly as the ground; everyone else is stopped as if there were no bridge |
+
+Friends of a guarded bridge are the same as for a palisade gate: the owner's guildmates
+and the members of guilds with an active peace treaty with that guild
+(`WorldBridges.IndexAsync` reads both via `WorldPalisades.FriendsAsync`). An anonymous
+settlement has no friends.
+
+**Burning.** An Attack mission with catapults that names the bridge's hex as
+`TargetBuildingCoord` burns it, but a bridge burns **one level per won siege**, however
+many catapults survive (`SiegeResolver`), where any other building loses several. A
+guarded bridge therefore falls to the king's bridge first and opens to everyone, attackers
+included; each further siege takes another level, and a causeway burnt once is gone and
+shuts the river again.
 
 ## 6. Settling and renown
 

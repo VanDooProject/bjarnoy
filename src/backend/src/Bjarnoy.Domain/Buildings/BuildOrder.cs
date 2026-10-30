@@ -153,6 +153,12 @@ public enum BuildRejection
     GateNotOnStraight,
 
     /// <summary>
+    /// A bridge was ordered on a river hex that is not a wide river (a stream, or a river tile the army already crosses): bridges are
+    /// for the impassable wide rivers only.
+    /// </summary>
+    BridgeNeedsWideRiver,
+
+    /// <summary>
     /// A new building of a type that is switched off for placement (<see cref="BuildingCatalogue.NewPlacementDisabled"/>, currently the
     /// Quarry) was ordered. Upgrading one that already stands is never refused for this reason.
     /// </summary>
