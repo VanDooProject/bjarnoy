@@ -52,7 +52,7 @@ export interface PacingParams {
   horizonDays: number;
   /**
    * Owned producers per building type. Each starts at level 1, except one whose level-1 gate is above Longhouse 1 (the
-   * bog-ore works, LH 6): those are not built yet at the start and are placed, one per count, as soon as the Longhouse,
+   * bog-ore works, LH 3): those are not built yet at the start and are placed, one per count, as soon as the Longhouse,
    * their prerequisites, a free slot and the stock allow.
    */
   producerCounts: Record<string, number>;

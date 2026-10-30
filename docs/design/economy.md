@@ -124,10 +124,10 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 |---|---|---|
 | 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder, Storage House | — |
 | 2 | Fishing Hut | — |
-| 3 | Tower | — |
+| 3 | Tower, Bog-ore works (iron, §8) | — |
 | 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |
 | 5 | Barracks | Tower 3 |
-| 6 | Town Square (feasts, §6), Bog-ore works (iron, §8) | — |
+| 6 | Town Square (feasts, §6) | — |
 | 7 | Palisade / Palisade Gate (one card, the wall) | Tower 5 |
 | 8 | Dockyard | Fishing Hut 5 |
 | 9 | Archery Range | Barracks 5 |
@@ -469,11 +469,11 @@ sources have to line up with the unit unlocks:
 
 | When | Iron source | Units it has to carry |
 |---|---|---|
-| LH 1–5 | Longhouse trickle only (2–10 iron/h) | Thrall (no iron), then the first Spearmen when the Barracks opens at LH 5 |
-| from ~LH 6 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
+| LH 1–2 | Longhouse trickle only (2–4 iron/h) | Thrall (no iron) |
+| from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler Crew, Provisioner |
 | LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
-So bog ground and the bog-ore works are needed by about LH 6, not as a
+So bog ground and the bog-ore works are needed by about LH 3, not as a
 late add-on. The unit costs and unlock levels are reworked together with
 them so the levels match. *Implemented:*
 
@@ -519,21 +519,22 @@ included). The profile only shifts *when* a level is reached:
 
 | LH | iron/h | reached: active | 4 check-ins | 2 check-ins |
 |---|---|---|---|---|
-| 5 (Barracks) | 10 | day 1.3 | day 5.4 | day 11.0 |
-| 6 (works open) | 98 (32 for the check-in profiles, whose works are still level 1) | day 2.0 | day 6.5 | day 13.5 |
+| 3 (works open) | 6 (66 once the first works stands) | day 0.4 | day 2.0 | day 4.0 |
+| 5 (Barracks) | 189 | day 1.3 | day 5.4 | day 11.0 |
+| 6 | 227 | day 2.0 | day 6.5 | day 13.5 |
 | 8 | 326 | day 3.0 | day 12.2 | day 24.5 |
 | 10 | 466 | day 4.2 | day 16.2 | day 32.5 |
 | 15 | 1 139 | day 9.2 | day 25.4 | day 48.5 |
 | 20 | 2 800 | day 21.2 | day 40.6 | — (past day 60) |
 
-Iron before the works is the Longhouse trickle alone (2/h per level: 10/h at
-LH 5), which has banked 139 iron at LH 5 for the active profile (622 and 1 256
-for the slower ones): the first three Spearmen (40 each) are affordable the
-moment the Barracks open, ten of them about 17 h later. Every other unit is
-affordable the moment its gate opens, because its gate opens with or after the
-works: Axeman at LH 6 (361 iron banked), Karve at LH 8, Settler Crew and
-Provisioner at LH 10, the elite units at LH 20 (income 2 800/h against a
-Catapult's 250).
+Iron before the works (Longhouse 1 and 2) is the Longhouse trickle alone
+(2/h per level). From Longhouse 3 the works carry it, so the Barracks' first
+Spearmen (LH 5) are paid from works income, and every other unit is
+affordable the moment its gate opens, because its gate opens with or after
+the works: Axeman at LH 6, Karve at LH 8, Settler Crew and Provisioner at
+LH 10, the elite units at LH 20 (income 2 800/h against a Catapult's 250).
+The iron/h column was re-run for the LH 3 unlock; the day columns still date
+from the LH 6 unlock and need a lab re-run.
 
 Second-settlement timing (§6) is unchanged as long as the lab's default
 producers are used (no bog-ore works: 6.4 / 12.3 / 25.0 days for active / 4

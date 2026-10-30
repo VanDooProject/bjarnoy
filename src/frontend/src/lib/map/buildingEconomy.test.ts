@@ -314,8 +314,8 @@ describe('bog buildings against the catalogue snapshot', () => {
     }
   });
 
-  it('gates the bog-ore works at longhouse 6 with no feeder and the Hammer Forge at 20 behind bog-ore works 10', () => {
-    expect(of('bogoreworks')[0]!.requiredLonghouseLevel).toBe(6);
+  it('gates the bog-ore works at longhouse 3 with no feeder and the Hammer Forge at 20 behind bog-ore works 10', () => {
+    expect(of('bogoreworks')[0]!.requiredLonghouseLevel).toBe(3);
     expect(of('bogoreworks')[0]!.prerequisites).toEqual([]);
     expect(of('hammerschmiede')[0]!.requiredLonghouseLevel).toBe(20);
     expect(of('hammerschmiede')[0]!.prerequisites).toEqual([{ type: 'bogoreworks', level: 10 }]);

@@ -113,7 +113,7 @@ public static class BuildingCatalogue
             [BuildingType.Farm] = 4,
             [BuildingType.PumpkinFarm] = 4,
             [BuildingType.Barracks] = 5,
-            [BuildingType.BogOreWorks] = 6,
+            [BuildingType.BogOreWorks] = 3,
             [BuildingType.TownSquare] = 6,
             [BuildingType.Palisade] = 7,
             [BuildingType.PalisadeGate] = 7,

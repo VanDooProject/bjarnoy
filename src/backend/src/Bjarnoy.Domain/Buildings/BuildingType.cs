@@ -187,7 +187,7 @@ public enum BuildingType
     /// <summary>
     /// Iron, on plain bog moss (<see cref="World.BogTileKind.Bog"/>: not a shore, mouth, creek or lake) — the game's iron
     /// producer (<c>docs/design/economy.md</c> section 8, <c>docs/design/bog.md</c>). Boosted by the bog, creek and
-    /// lake hexes around it and, later, by the <see cref="Hammerschmiede"/>. Unlocks at Longhouse level 6 with no feeder.
+    /// lake hexes around it and, later, by the <see cref="Hammerschmiede"/>. Unlocks at Longhouse level 3 with no feeder.
     /// </summary>
     BogOreWorks = 26,
 
