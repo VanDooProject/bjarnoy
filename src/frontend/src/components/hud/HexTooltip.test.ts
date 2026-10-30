@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import HexTooltip from './HexTooltip.vue';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
+import { buildingStatsFor } from '../../lib/map/buildingEconomy';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
@@ -74,5 +75,46 @@ describe('HexTooltip on a bridge', () => {
 
   it('shows no access line for the open levels', () => {
     expect(mountBridge(bridge(3, { mine: false, ownerId: 'u3' })).find('[data-testid="bridge-access"]').exists()).toBe(false);
+  });
+});
+
+describe('HexTooltip building stats match the backend rules', () => {
+  const building = (buildingType: 'palisadegate' | 'tower', level: number): HoverInfo =>
+    ({
+      screenX: 0,
+      screenY: 0,
+      coord: { q: 1, r: 2 },
+      subject: { kind: 'building', buildingType, level },
+      stats: buildingStatsFor(buildingType, level),
+      owner: { settlementName: 'Hvit', ownerName: 'Ulf', mine: true },
+    }) as HoverInfo;
+  const text = (info: HoverInfo) =>
+    mount(HexTooltip, { props: { info }, global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } }).text();
+
+  it('says a palisade gate opens for its owner, their guild and guilds at peace (PalisadeIndex.ForOwner)', () => {
+    const t = text(building('palisadegate', 1));
+    expect(t).toContain('guild');
+    expect(t).toContain('at peace');
+    expect(t).not.toContain('Only its owner');
+  });
+
+  it('shows a tower\'s visible radius (level + 1, FogVisionRadii.TowerVisibleRadius) and explored radius (level + 3)', () => {
+    expect(text(building('tower', 4))).toContain('Vision radius 5 (explored 7)');
+  });
+});
+
+describe('HexTooltip has no workers line', () => {
+  it('shows output but no invented "Workers" row for a farm', () => {
+    const info = {
+      screenX: 0,
+      screenY: 0,
+      coord: { q: 1, r: 2 },
+      subject: { kind: 'building', buildingType: 'farm', level: 2 },
+      stats: buildingStatsFor('farm', 2),
+      owner: { settlementName: 'Hvit', ownerName: 'Ulf', mine: true },
+    } as HoverInfo;
+    const text = mount(HexTooltip, { props: { info }, global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } }).text();
+    expect(text).toContain('Food/h');
+    expect(text).not.toContain('Workers');
   });
 });

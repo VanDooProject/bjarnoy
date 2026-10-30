@@ -11,7 +11,7 @@ export type BuildingOutput =
   | { kind: 'resourceRate'; resource: 'wood' | 'stone' | 'food' | 'iron'; amount: number }
   | { kind: 'populationCapacity'; amount: number }
   | { kind: 'storageCapacity'; amount: number }
-  | { kind: 'visionRing'; amount: number };
+  | { kind: 'visionRing'; amount: number; explored: number };
 
 export type BuildingModifier =
   | { kind: 'borderAnchor' }
@@ -38,7 +38,16 @@ export type BuildingModifier =
 export interface BuildingLevelStats {
   output?: BuildingOutput;
   modifier?: BuildingModifier;
-  workers?: { cap: number };
+}
+
+/** Mirrors `FogVisionRadii.TowerVisibleRadius`: a tower sees its level + 1 rings (line of sight). */
+export function towerVisibleRadius(level: number): number {
+  return Math.max(0, level) + 1;
+}
+
+/** Mirrors `FogVisionRadii.TowerExploredRadius`: a tower scouts (explores) its level + 3 rings (`ScoutRingHexes`). */
+export function towerExploredRadius(level: number): number {
+  return Math.max(0, level) + 3;
 }
 
 /**
@@ -48,7 +57,7 @@ export interface BuildingLevelStats {
  * `boostMultiplier` below). A building with no entry here (Farm/PumpkinFarm
  * included) gets no such bonus. Sawmill has no entry either — it has no
  * production of its own to be terrain-boosted any more, see
- * `RADIUS_BOOST_TARGET`/`radiusBoostPercent`/`radiusBoostRange` below.
+ * `RADIUS_BOOST_TARGETS`/`radiusBoostPercent`/`radiusBoostRange` below.
  */
 export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain | readonly Terrain[]>> = {
   lumberjack: 'forest',
@@ -67,17 +76,26 @@ function boostMultiplier(matchingNeighbours: number): number {
 }
 
 /**
- * Which resource (and, implicitly, which building type — Lumberjack for
- * Sawmill, Farm/PumpkinFarm for CropMill) a radius-boost producer raises the
- * output of within its range, mirroring `BuildingCatalogue.cs`'s
- * `RadiusBoostTargets`. Sawmill/CropMill have no production of their own any
- * more — this replaces it.
+ * Which resource a radius-boost building raises the output of within its
+ * range (see `RADIUS_BOOST_TARGETS` for which buildings). Sawmill/CropMill have
+ * no production of their own any more — this replaces it.
  */
 export const RADIUS_BOOST_RESOURCE: Partial<Record<BuildingKind, 'wood' | 'food' | 'iron'>> = {
   sawmill: 'wood',
   cropmill: 'food',
   // Raises the bog-ore works within range (BuildingCatalogue.RadiusBoostTargets).
   hammerschmiede: 'iron',
+};
+
+/**
+ * Which building types a radius-boost building raises, mirroring
+ * `BuildingCatalogue.cs`'s `RadiusBoostTargets`. Crop Mill grinds grain, so it
+ * boosts Farm only — Pumpkin Farm is a different crop and is not boosted.
+ */
+export const RADIUS_BOOST_TARGETS: Partial<Record<BuildingKind, readonly BuildingKind[]>> = {
+  sawmill: ['lumberjack'],
+  cropmill: ['farm'],
+  hammerschmiede: ['bogoreworks'],
 };
 
 /** The level the mills (Sawmill, Crop Mill) top out at — where their boost reaches +100%. */
@@ -264,17 +282,15 @@ export function buildingStatsFor(
     // islands (see ringCatalogue.ts's cropAllowedHere) and yields more, the
     // "more fertile" island's bonus crop.
     case 'reindeerherder':
-    case 'farm': {
-      const workersCap = level * 4;
-      return {
-        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(40, level) },
-        workers: { cap: workersCap },
-      };
-    }
+    case 'farm':
+      return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(40, level) } };
     case 'hut':
       return { output: { kind: 'populationCapacity', amount: level * 5 } };
     case 'tower':
-      return { output: { kind: 'visionRing', amount: level }, modifier: { kind: 'borderAnchor' } };
+      return {
+        output: { kind: 'visionRing', amount: towerVisibleRadius(level), explored: towerExploredRadius(level) },
+        modifier: { kind: 'borderAnchor' },
+      };
     // No production/storage of its own — trains the land combat/siege
     // roster in place of the Longhouse. No combat bonus (deferred), unlike
     // Tower, which is why this reads the same as Tower's own "no output"
@@ -309,13 +325,8 @@ export function buildingStatsFor(
     // Mirrors BuildingCatalogue.cs's GreatStorehouse(level): 2500 * (1.30^L - 1) / 0.30 per resource.
     case 'greatstorehouse':
       return { output: { kind: 'storageCapacity', amount: geometricCapacity(2500, 1.3, level) } };
-    case 'pumpkinfarm': {
-      const workersCap = level * 4;
-      return {
-        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(44, level) },
-        workers: { cap: workersCap },
-      };
-    }
+    case 'pumpkinfarm':
+      return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(44, level) } };
     case 'lumberjack': {
       const multiplier = boostMultiplier(matchingNeighbours);
       const output = producerOutput(40, level, multiplier);
@@ -411,8 +422,8 @@ export function buildingStatsFor(
     // druidhut below (see BuildingCatalogue.cs's Meadery doc comment).
     case 'meadery':
       return {};
-    // No production of its own — boosts every Farm/PumpkinFarm within range
-    // instead, same shape as Sawmill above.
+    // No production of its own — boosts every Farm (not PumpkinFarm, see
+    // RADIUS_BOOST_TARGETS) within range instead, same shape as Sawmill above.
     case 'cropmill':
       return {
         modifier: {

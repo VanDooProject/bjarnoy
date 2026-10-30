@@ -1106,7 +1106,7 @@ function formatOutput(output: BuildingOutput): string {
     case 'storageCapacity':
       return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
     case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount, explored: output.explored });
   }
 }
 function formatModifier(modifier: BuildingModifier): string {
