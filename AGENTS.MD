@@ -113,6 +113,24 @@
   ask-first + dedupe-check + own-PR flow above), it does not stand down
   just because a rerun happened to pass
 
+# orchestrating other sessions
+- when I ask you to orchestrate work (fan out, hand off, drive several
+  PRs), use the session tools (`create_session`, `send_message`,
+  `list_sessions`, `get_session`, `list_events`, ...) rather than doing
+  everything inside this one session
+- if another open PR collides with or blocks the current work (overlapping
+  files, a fix we depend on, a paused/stalled PR), offer to send its
+  session a message so it continues (rebase, finish, unblock). Ask first;
+  don't message it on your own
+- for test failures, CI/CD problems, flakes and similar side work, offer to
+  start a new session for it instead of fixing it here, so the main PR
+  stays scoped to its own change. This is the same ask-first + dedupe-check
+  flow as "unrelated/pre-existing CI failures" above, just run in its own
+  session
+- when you find new details about a bug another session is already working
+  on (repro steps, failing test names, logs, root cause), send them to that
+  session as an informational message
+
 # scheduled check-ins / send_later
 - don't poll on a fixed timer for something only I can unblock. A recurring
   `send_later`/check-in that re-reads a PR every hour is expensive: each
