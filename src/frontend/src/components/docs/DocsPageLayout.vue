@@ -17,6 +17,8 @@ import { useDocsAdminNotes } from '../../composables/useDocsAdminNotes';
 // - `breadcrumb=false` for the hub itself, which is what the others link back to.
 // - Admins get a "Show admin notes" toggle under the lede; it reveals the
 //   `DocsAdminNote` blocks (technical content hidden from players).
+// - `hero` for the hub, which renders its own h1 and lede in the body; the
+//   header then keeps only the admin toggle (the `title` still names the top bar).
 // Attributes (a `class` for the page's own scroll container hook) fall through
 // to the scrolling root.
 withDefaults(
@@ -27,8 +29,10 @@ withDefaults(
     intro?: string;
     breadcrumb?: boolean;
     wide?: boolean;
+    /** The page draws its own heading and lede (the hub's hero), so the header skips the h1 and intro. */
+    hero?: boolean;
   }>(),
-  { intro: undefined, breadcrumb: true, wide: false },
+  { intro: undefined, breadcrumb: true, wide: false, hero: false },
 );
 const { canToggle, enabled, setEnabled } = useDocsAdminNotes();
 </script>
@@ -42,10 +46,10 @@ const { canToggle, enabled, setEnabled } = useDocsAdminNotes();
       </template>
     </TopBar>
     <div class="page docs-scale" :class="{ wide }">
-      <header class="head">
+      <header class="head" :class="{ 'hero-head': hero }">
         <RouterLink v-if="breadcrumb" to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
-        <h1>{{ title }}</h1>
-        <p v-if="intro" class="intro">{{ intro }}</p>
+        <h1 v-if="!hero">{{ title }}</h1>
+        <p v-if="intro && !hero" class="intro">{{ intro }}</p>
         <slot name="status" />
         <label v-if="canToggle" class="admin-toggle" data-testid="docs-admin-toggle">
           <input
@@ -109,6 +113,10 @@ const { canToggle, enabled, setEnabled } = useDocsAdminNotes();
 .intro {
   color: var(--muted);
   line-height: 1.6;
+}
+/* The hub's own hero follows; the header holds only the admin toggle. */
+.hero-head .admin-toggle {
+  margin-top: 0;
 }
 /* The "coming soon" note a page passes in the `status` slot. */
 .head :slotted(.status) {

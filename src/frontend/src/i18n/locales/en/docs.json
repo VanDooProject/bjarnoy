@@ -7,36 +7,52 @@
   "backToDocs": "← Docs",
   "hub": {
     "title": "Docs",
-    "intro": "Reference pages for the game's rules and content.",
-    "pages": {
-      "techTree": {
-        "title": "Tech tree",
-        "description": "Every building, and what each of its ten levels costs, produces, and requires."
+    "heading": "The Bjarnøy handbook",
+    "intro": "How the islands, buildings, beasts and the endgame work. Everything here is the game's own rules and art.",
+    "artAlt": "Utgard, the giant fortress of the wasted lands",
+    "groups": {
+      "island": {
+        "title": "Your island",
+        "description": "The land and what it gives you."
       },
+      "building": {
+        "title": "Building up",
+        "description": "Buildings, their levels, and your walls."
+      },
+      "beyond": {
+        "title": "Beyond your shores",
+        "description": "Other islands, their beasts, the end of the age."
+      }
+    },
+    "pages": {
       "tiles": {
         "title": "Tiles",
-        "description": "The terrain a world is made of, how it generates, and what can be built on it."
-      },
-      "wastedLands": {
-        "title": "Wasted lands",
-        "description": "The endgame: Utgard, the islands that rise from the sea, and what they are made of."
-      },
-      "wildlifeCamps": {
-        "title": "Wildlife camps",
-        "description": "The beasts that hold the land on unclaimed islands: every camp, guarded and cleared, how far each one reaches, and what clearing it does."
+        "description": "The ground your island is made of and what you can build on it."
       },
       "bogLands": {
         "title": "Bog lands",
-        "description": "Moss ground, creeks and bog lakes, where bog iron is dug and clay is cut."
+        "description": "Moss, creeks and dark lakes. Bog iron and clay come from here."
+      },
+      "techTree": {
+        "title": "Tech tree",
+        "description": "Every building, what each of its ten levels costs, produces and needs."
       },
       "walls": {
         "title": "Walls",
-        "description": "The palisade: its six pieces, how they are chosen, where walls can stand, and who can walk through them."
+        "description": "The palisade: where it can stand and who gets through."
       },
-      "showcase": {
-        "title": "Showcase",
-        "description": "A player-first pitch for the game, plus a look under the hood for anyone curious how it's built."
+      "wildlifeCamps": {
+        "title": "Wildlife camps",
+        "description": "Wolves, boars and worse hold the unclaimed islands. Hunt them for loot."
+      },
+      "wastedLands": {
+        "title": "Wasted lands",
+        "description": "The endgame: Utgard rises from the sea and the guilds go to war."
       }
+    },
+    "footer": {
+      "lead": "New here?",
+      "link": "See the game in pictures"
     }
   },
   "status": {

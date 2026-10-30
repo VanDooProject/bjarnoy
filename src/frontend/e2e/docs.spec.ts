@@ -374,11 +374,69 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     });
   }
 
+  test.describe("docs hub", () => {
+    test("shows the three groups and six art cards, and the cards and footer link through", async ({
+      page,
+    }) => {
+      await page.goto("/docs");
+      await expect(
+        page.getByRole("heading", { level: 1, name: "The Bjarnøy handbook" }),
+      ).toBeVisible();
+      await expect(page.getByTestId("docs-hero-art").getByRole("img")).toBeVisible();
+
+      for (const name of ["Your island", "Building up", "Beyond your shores"]) {
+        await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+      }
+
+      const cards = page.locator(".groups a.card");
+      await expect(cards).toHaveCount(6);
+      for (const title of [
+        "Tiles",
+        "Bog lands",
+        "Tech tree",
+        "Walls",
+        "Wildlife camps",
+        "Wasted lands",
+      ]) {
+        await expect(
+          page.locator(".groups a.card", { hasText: title }),
+        ).toBeVisible();
+      }
+      // Every card's art is drawn from the atlas: a sprite with a background
+      // image, or the animated camp's layers.
+      const arts = page.getByTestId("docs-card-art");
+      await expect(arts).toHaveCount(6);
+      for (let i = 0; i < 6; i++) {
+        const layer = arts.nth(i).locator(".atlas-sprite, .animated-camp .layer").first();
+        await expect(layer).toBeVisible();
+        const bg = await layer.evaluate((el) => getComputedStyle(el).backgroundImage);
+        expect(bg).toContain("url(");
+      }
+
+      await page.getByRole("link", { name: /^Bog lands/ }).click();
+      await expect(page).toHaveURL(/\/docs\/bog-lands$/);
+
+      await page.goto("/docs");
+      await page.getByRole("link", { name: "See the game in pictures" }).click();
+      await expect(page).toHaveURL(/\/showcase$/);
+    });
+
+    test("does not overflow horizontally on a phone", async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/docs");
+      await expect(page.locator(".groups a.card")).toHaveCount(6);
+      const overflow = await page
+        .locator(".docs-page")
+        .evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(1);
+    });
+  });
+
   test("walls page shows the six pieces with stage and facing pickers, the example wall and the hub links to it", async ({
     page,
   }) => {
     await page.goto("/docs");
-    await page.getByRole("button", { name: /^Walls/ }).click();
+    await page.getByRole("link", { name: /^Walls/ }).click();
     await expect(page).toHaveURL(/\/docs\/walls$/);
 
     const cards = page.locator(".walls .tile");

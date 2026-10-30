@@ -7,36 +7,52 @@
   "backToDocs": "← Docs",
   "hub": {
     "title": "Docs",
-    "intro": "Nachschlageseiten zu den Regeln und Inhalten des Spiels.",
-    "pages": {
-      "techTree": {
-        "title": "Techbaum",
-        "description": "Alle Gebäude mit Kosten, Produktion und Voraussetzungen jeder ihrer zehn Stufen."
+    "heading": "Das Bjarnøy-Handbuch",
+    "intro": "Wie Inseln, Gebäude, Bestien und das Endspiel funktionieren. Alles hier sind die Regeln und die Grafiken des Spiels selbst.",
+    "artAlt": "Utgard, die Riesenfestung der Ödlande",
+    "groups": {
+      "island": {
+        "title": "Deine Insel",
+        "description": "Das Land und was es dir gibt."
       },
+      "building": {
+        "title": "Ausbauen",
+        "description": "Gebäude, ihre Stufen und deine Mauern."
+      },
+      "beyond": {
+        "title": "Jenseits deiner Küste",
+        "description": "Andere Inseln, ihre Bestien und das Ende des Zeitalters."
+      }
+    },
+    "pages": {
       "tiles": {
         "title": "Kacheln",
-        "description": "Aus welchem Gelände eine Welt besteht, wie es entsteht und was du darauf bauen kannst."
-      },
-      "wastedLands": {
-        "title": "Ödlande",
-        "description": "Das Endspiel: Utgard, die Inseln, die aus dem Meer aufsteigen, und woraus sie bestehen."
-      },
-      "wildlifeCamps": {
-        "title": "Wildtierlager",
-        "description": "Die Tiere, die unbesiedelte Inseln beherrschen. Hier siehst du jedes Lager bewacht und geräumt, wie weit es reicht und was das Räumen bewirkt."
+        "description": "Der Boden deiner Insel und was du darauf bauen kannst."
       },
       "bogLands": {
         "title": "Moorland",
-        "description": "Moosboden, Bäche und Moorseen – dort wird Raseneisenerz gegraben und Lehm gestochen."
+        "description": "Moos, Bäche und dunkle Seen. Hier findest du Raseneisenerz und Lehm."
+      },
+      "techTree": {
+        "title": "Techbaum",
+        "description": "Jedes Gebäude: was seine zehn Stufen kosten, liefern und voraussetzen."
       },
       "walls": {
         "title": "Mauern",
-        "description": "Die Palisade: ihre sechs Teile, wie das Spiel sie auswählt, wo Mauern stehen dürfen und wer hindurchkommt."
+        "description": "Die Palisade: wo sie stehen darf und wer hindurchkommt."
       },
-      "showcase": {
-        "title": "Showcase",
-        "description": "Das Spiel in Kürze für Spieler – dazu ein Blick hinter die Kulissen für alle, die wissen wollen, wie es gebaut ist."
+      "wildlifeCamps": {
+        "title": "Wildtierlager",
+        "description": "Wölfe, Eber und Schlimmeres beherrschen die freien Inseln. Jage sie und nimm dir die Beute."
+      },
+      "wastedLands": {
+        "title": "Ödlande",
+        "description": "Das Endspiel: Utgard steigt aus dem Meer, und die Gilden ziehen in den Krieg."
       }
+    },
+    "footer": {
+      "lead": "Neu hier?",
+      "link": "Das Spiel in Bildern ansehen"
     }
   },
   "status": {
