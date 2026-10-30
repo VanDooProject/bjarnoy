@@ -444,9 +444,9 @@ public sealed class ArmyService(
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-        var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
         var domain = army.ToDomain();
+        var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
         HexCoord? currentHex = null;
         if (domain.Location is ArmyLocation.Supporting supporting)
         {
@@ -521,10 +521,11 @@ public sealed class ArmyService(
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-        var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
+        var domain = army.ToDomain();
+        var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
 
         var result = Army.RetargetFounding(
-            army.ToDomain(), newTarget, now, home, sampler.TerrainAt, army.Settlement.World.SpeedFactor,
+            domain, newTarget, now, home, sampler.TerrainAt, army.Settlement.World.SpeedFactor,
             rivers.IsRiver, rivers.IsWide, walls);
         if (!result.Accepted)
         {
@@ -613,7 +614,7 @@ public sealed class ArmyService(
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-        var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
+        var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
 
         var result = Army.PlanFieldOrder(
             domain, waypoints, destination, home, now, sampler.TerrainAt, isPremium,
@@ -726,7 +727,7 @@ public sealed class ArmyService(
             var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
             var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-            var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
+            var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
 
             // An explicit provisions value is the admin's final word, so it is
             // carried into the new leg rather than being re-burned against the

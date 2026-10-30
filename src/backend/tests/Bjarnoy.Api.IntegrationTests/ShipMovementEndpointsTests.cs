@@ -78,10 +78,16 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         ForestRockiness = 2.0,
     };
 
-    private async Task<(Guid WorldId, Guid IslandId)> AddWorldAsync(GameDbContext db)
+    /// <summary>
+    /// <see cref="LandOptions"/> with 14-hex-wide islands, so the sea starts a few hexes from an island's middle. With seed 14,
+    /// (-60,-38) is grass with only grass within two hexes of it (no shoreline), and (-59,-41) -> (-58,-42) -> (-58,-43) is sea.
+    /// </summary>
+    private static WorldGenerationOptions SmallIslandOptions => LandOptions with { IslandMinWidth = 14.0, IslandMaxWidth = 14.0 };
+
+    private async Task<(Guid WorldId, Guid IslandId)> AddWorldAsync(GameDbContext db, WorldGenerationOptions? options = null)
     {
         var world = new WorldEntity { Name = $"w-{Guid.CreateVersion7():N}", MaxPlayers = 100 };
-        world.ApplyGenerationOptions(LandOptions);
+        world.ApplyGenerationOptions(options ?? LandOptions);
         db.Worlds.Add(world);
         var island = new IslandEntity { WorldId = world.Id, Name = "Island", CentreQ = 0, CentreR = 0 };
         db.Islands.Add(island);
@@ -318,5 +324,60 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             $"/api/v1/armies/{armyId}", SqliteApiFixture.StrictJson, Ct);
         Assert.NotNull(army);
         Assert.False(army!.AtHome);
+    }
+
+    [Fact]
+    public async Task A_fleet_from_an_inland_settlement_departs_from_and_is_recalled_to_its_Dockyard()
+    {
+        // Issue #450: the centre has no sea within two hexes, so a route from it can never start; the Dockyard on the
+        // coastal sea hex inside the claim is the harbour the fleet leaves from and comes back to.
+        using var client = Client();
+        var ownerId = $"owner-{Guid.CreateVersion7():N}";
+        var centre = new HexCoord(-60, -38);
+        var dock = new HexCoord(-59, -41);
+        var destination = new HexCoord(-58, -43);
+        Guid settlementId;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var (worldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
+            var settlement = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, ownerId, centre.Q, centre.R);
+            settlement.Buildings.Add(new PlacedBuildingEntity
+            {
+                SettlementId = settlement.Id,
+                Q = dock.Q,
+                R = dock.R,
+                Type = BuildingType.Dockyard,
+                Level = 1,
+            });
+            settlement.Garrison.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Karve, Count = 3 });
+            settlement.StockFood = 100_000;
+            settlement.CapacityFood = 100_000;
+            db.Settlements.Add(settlement);
+            await db.SaveChangesAsync(Ct);
+            settlementId = settlement.Id;
+        }
+
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
+        var dispatched = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlementId}/armies",
+            new DispatchArmyRequest(
+                [new UnitCountRequest("karve", 3)], null, new HexPointRequest(destination.Q, destination.R), 30),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
+        var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
+        Assert.Equal(new HexPointResponse(dock.Q, dock.R), army.Movement!.Path[0]);
+        Assert.Equal(new HexPointResponse(dock.Q, dock.R), army.Movement.ReturnPath[^1]);
+
+        // Half way out, so the recall has a leg to walk back (at the Dockyard itself it would fold home at once).
+        _factory.Time.Advance(TimeSpan.FromHours(army.Movement.CumulativeHours[^1] * 0.5));
+
+        var recalled = await client.PostAsync($"/api/v1/armies/{army.Id}/recall", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, recalled.StatusCode);
+        var recall = await recalled.ReadStrictAsync<ArmyResponse>(Ct);
+        Assert.True(recall.Movement!.IsReturning);
+        Assert.Equal(new HexPointResponse(dock.Q, dock.R), recall.Movement.Path[^1]);
     }
 }

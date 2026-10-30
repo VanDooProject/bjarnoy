@@ -474,8 +474,11 @@ public sealed record Army
             }
         }
 
-        List<HexCoord> stops = [settlement.Centre, .. waypoints, destination];
-        List<HexCoord> fullPath = [settlement.Centre];
+        // A fleet leaves from (and returns to) its settlement's harbour hex, which is the centre only when the
+        // centre itself touches the sea (see FleetAnchor); a land army always uses the centre.
+        var origin = isFleet ? FleetAnchor(settlement, terrainAt) : settlement.Centre;
+        List<HexCoord> stops = [origin, .. waypoints, destination];
+        List<HexCoord> fullPath = [origin];
 
         for (var i = 0; i < stops.Count - 1; i++)
         {
@@ -495,7 +498,7 @@ public sealed record Army
 
         var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
-        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnPath = HexPathfinder.FindPath(destination, origin, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
@@ -776,6 +779,46 @@ public sealed record Army
             Loot = plan.Loot,
         };
     }
+
+    /// <summary>
+    /// The hex a fleet departs from and returns to. A settlement's centre may be inland, and a fleet's route may only
+    /// touch land at its two endpoints with every hex in between sea, so an inland centre could never start a route.
+    /// Training ships only requires the settlement's claim to touch the shore, and a Dockyard stands on a coastal sea
+    /// hex inside that claim: so when the centre is not itself a shoreline hex (see <see cref="Shoreline.IsShoreline"/>)
+    /// the fleet uses the Dockyard nearest the centre (ties by Q, then R). A coastal centre is kept as it is, and so is
+    /// the centre when there is no Dockyard.
+    /// </summary>
+    public static HexCoord FleetAnchor(HexCoord centre, IEnumerable<PlacedBuilding> buildings, Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(buildings);
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (Shoreline.IsShoreline(centre, terrainAt))
+        {
+            return centre;
+        }
+
+        return buildings
+            .Where(b => b.Type == BuildingType.Dockyard)
+            .Select(b => b.Coord)
+            .OrderBy(c => c.DistanceTo(centre)).ThenBy(c => c.Q).ThenBy(c => c.R)
+            .Cast<HexCoord?>()
+            .FirstOrDefault() ?? centre;
+    }
+
+    /// <inheritdoc cref="FleetAnchor(HexCoord, IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain})"/>
+    public static HexCoord FleetAnchor(Settlement settlement, Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(settlement);
+        return FleetAnchor(settlement.Centre, settlement.Buildings, terrainAt);
+    }
+
+    /// <summary>
+    /// The hex this army starts from and walks back to: <see cref="FleetAnchor(HexCoord, IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain})"/>
+    /// for a fleet, the settlement <paramref name="centre"/> for a land army.
+    /// </summary>
+    public HexCoord HomeHex(HexCoord centre, IEnumerable<PlacedBuilding> buildings, Func<HexCoord, Terrain> terrainAt) =>
+        IsFleet ? FleetAnchor(centre, buildings, terrainAt) : centre;
 
     /// <summary>
     /// The hex a <see cref="ArmyMission.Hunt"/> route ends on: the camp's own hex when a land army can stand on it,
@@ -1168,11 +1211,9 @@ public sealed record Army
                 return null;
         }
 
-        // Stacks are never mixed (PlanDispatch's MixedFleetAndLandUnits
-        // rejection guarantees that at dispatch time), so "all Ship" or "no
-        // Ship" is an exhaustive, unambiguous read of which pathfinder table
-        // this army's own recall route needs.
-        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+        // Any ship makes the whole army a fleet (a sea Found convoy carries settlers on its ships), the same
+        // read IsFleet and HomeHex use, so the route table always matches the home hex.
+        var isLandUnit = !IsFleet;
 
         var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (path is null || path.Count == 0)
@@ -1235,7 +1276,7 @@ public sealed record Army
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+        var isLandUnit = !IsFleet;
 
         // No route home is not expected in practice (this army's original
         // route already crossed fromHex), but rather than throw, it is left
@@ -1332,7 +1373,7 @@ public sealed record Army
         }
 
         var movement = inTransit.Movement;
-        var isLandUnit = army.Stacks.Count == 0 || army.Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+        var isLandUnit = !army.IsFleet;
 
         if (!terrainAt(destination).IsTraversable(isLandUnit))
         {
@@ -1528,9 +1569,8 @@ public sealed record Army
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        // Same exhaustive read of the army's unit class Recall uses — stacks
-        // are never mixed (PlanDispatch guarantees it at dispatch time).
-        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+        // Same read of the army's unit class Recall uses: any ship makes it a fleet (see IsFleet).
+        var isLandUnit = !IsFleet;
 
         if (!terrainAt(coord).IsTraversable(isLandUnit))
         {
