@@ -1,38 +1,58 @@
 {
   "back": "← Back",
+  "adminNotes": {
+    "toggle": "Show admin notes",
+    "label": "Admin note"
+  },
   "backToDocs": "← Docs",
   "hub": {
     "title": "Docs",
-    "intro": "Reference pages for the game's rules and content.",
-    "pages": {
-      "techTree": {
-        "title": "Tech tree",
-        "description": "Every building, and what each of its ten levels costs, produces, and requires."
+    "heading": "The Bjarnøy handbook",
+    "intro": "How the islands, buildings, beasts and the endgame work. Everything here is the game's own rules and art.",
+    "artAlt": "Utgard, the giant fortress of the wasted lands",
+    "groups": {
+      "island": {
+        "title": "Your island",
+        "description": "The land and what it gives you."
       },
+      "building": {
+        "title": "Building up",
+        "description": "Buildings, their levels, and your walls."
+      },
+      "beyond": {
+        "title": "Beyond your shores",
+        "description": "Other islands, their beasts, the end of the age."
+      }
+    },
+    "pages": {
       "tiles": {
         "title": "Tiles",
-        "description": "The terrain a world is made of, how it generates, and what can be built on it."
-      },
-      "wastedLands": {
-        "title": "Wasted lands",
-        "description": "The endgame: Utgard, the islands that rise from the sea, and what they are made of."
-      },
-      "wildlifeCamps": {
-        "title": "Wildlife camps",
-        "description": "The beasts that hold the land on unclaimed islands: every camp, guarded and cleared, how far each one reaches, and what clearing it does."
+        "description": "The ground your island is made of and what you can build on it."
       },
       "bogLands": {
         "title": "Bog lands",
-        "description": "Moss ground, creeks and bog lakes, where bog iron is dug and clay is cut."
+        "description": "Moss, creeks and dark lakes. Bog iron and clay come from here."
+      },
+      "techTree": {
+        "title": "Tech tree",
+        "description": "Every building, what each level costs, produces and needs."
       },
       "walls": {
         "title": "Walls",
-        "description": "The palisade: its six pieces, how they are chosen, where walls can stand, and who can walk through them."
+        "description": "The palisade: where it can stand and who gets through."
       },
-      "showcase": {
-        "title": "Showcase",
-        "description": "A player-first pitch for the game, plus a look under the hood for anyone curious how it's built."
+      "wildlifeCamps": {
+        "title": "Wildlife camps",
+        "description": "Wolves, boars and worse hold the unclaimed islands. Hunt them for loot."
+      },
+      "wastedLands": {
+        "title": "Wasted lands",
+        "description": "The endgame: Utgard rises from the sea and the guilds go to war."
       }
+    },
+    "footer": {
+      "lead": "New here?",
+      "link": "See the game in pictures"
     }
   },
   "status": {
@@ -67,7 +87,7 @@
   },
   "techTree": {
     "title": "Tech tree",
-    "intro": "Every building, and what each of its ten levels costs, produces, and requires.",
+    "intro": "Every building, and what each of its levels costs, produces, and requires.",
     "terrain": "Terrain:",
     "terrainCoastal": "Shallow (coastal) water",
     "terrainAny": "Any buildable land",
@@ -95,7 +115,7 @@
       "water": "Water"
     },
     "lore": {
-      "longhouse": "The heart of the settlement. Its level sets claim radius, build slots and how many settlers call the village home — every settlement starts with one, standing on grass.",
+      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass.",
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
@@ -104,14 +124,14 @@
       "bridge": "Opens a wide river to land armies. A causeway first, then a footbridge, the king's bridge, and a guarded bridge with forts that only you and your friends may cross. Attackers burn a guarded bridge down a level at a time.",
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
-      "storagehouse": "Extra room for the harvest on grass, so a full warehouse never stalls production.",
+      "storagehouse": "Extra room for the harvest, on grass. A resource stops being produced once it reaches the storage limit, so a full store wastes output.",
       "tower": "A watch built on grass or sand at the border, pushing the claimed ground further out.",
       "fishinghut": "A dock over shallow water, fishing the shallows a farm never could. It also stands on stilts on the half shore of a bog lake.",
       "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player) — the bonus crop a \"more fertile\" island unlocks.",
-      "shrineofthor": "Raised to Thor on grass — its favour boosts Wood and Stone production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
+      "shrineofthor": "Raised to Thor on grass, behind a level-5 Smithy — the war god's favour raises the attack of your land units (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineofullr": "Raised to Ullr on grass — its favour boosts Wood production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
-      "shrineofnjord": "Raised to Njörd on grass — its favour boosts storage capacity rather than any resource's production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
+      "shrineofnjord": "Raised to Njörd on coastal water, behind a level-10 Dockyard — the sea god's favour raises the attack of your ships (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "archeryrange": "Trains the land army's ranged specialists on grass or sand — bowmen, and once a Barracks-trained berserker line stands, catapults — in place of the longhouse.",
       "dockyard": "Trains ships on shallow (coastal) water, in place of the longhouse.",
       "greatstorehouse": "A late-game storage tier on grass, needing both the longhouse and this settlement's own storage house at level 15.",
@@ -125,7 +145,7 @@
       "cartworkshop": "Builds the settlement's carts on grass behind a Town Square — trains provisioners and settler crews in place of the longhouse. No storage of its own.",
       "claybrickworks": "Digs and fires clay on bog moss — a pit, a drying rack and a kiln turning red earth into stone where no mountain stands.",
       "bogoreworks": "The iron producer, on plain bog moss (not a shore, creek or lake): from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake hex next to it adds 10% to its output, up to +50%. Unlocks at longhouse 6.",
-      "hammerschmiede": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works. No iron of its own: it raises every bog-ore works within its level's range instead (a wider range and a bigger boost at higher levels). It is drawn as the river hammer mill until its own art exists."
+      "hammerschmiede": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works. No iron of its own: it raises every bog-ore works within its level's range instead (a wider range and a bigger boost at higher levels)."
     },
     "table": {
       "level": "Level",
@@ -200,7 +220,7 @@
       },
       "sand": {
         "title": "Sand",
-        "lore": "An island's beach — the coastal ring settlers actually land on when founding a settlement.",
+        "lore": "An island's beach: the ring of land along its coast.",
         "generation": "The outer edge of an island: beyond 82% of its radius from centre."
       },
       "grass": {
@@ -242,12 +262,13 @@
     },
     "utgard": {
       "heading": "Utgard, the Outyard",
-      "body": "A giant tile: one fortress over seven hexes, a basalt crag with a curtain wall, round towers and a central keep, lit from within by rune-fire and wrapped in mist. The whole crag is cut into seven pieces, so each piece sorts on the map with the hex it stands on, like any other tile.",
+      "body": "A giant tile: one fortress over seven hexes, a basalt crag with a curtain wall, round towers and a central keep, lit from within by rune-fire and wrapped in mist.",
+      "techNote": "The whole crag is cut into seven pieces, so each piece sorts on the map with the hex it stands on, like any other tile.",
       "camera": "Camera"
     },
     "volcano": {
       "heading": "The fire-mountain",
-      "body": "The second giant of the Wasted Lands: a mountain that never cooled. Lava runs down its flanks, the crater bubbles and smoke rises from it without end. Like Utgard it covers seven hexes, and it is animated."
+      "body": "The second giant of the Wasted Lands: a mountain that never cooled. Lava runs down its flanks, the crater bubbles and smoke rises from it without end. Like Utgard, it covers seven hexes."
     },
     "defences": {
       "heading": "Utgard's defences",
@@ -462,7 +483,8 @@
       },
       "walrushaulout": {
         "name": "Walrus haul-out",
-        "guards": "Walrus bulls with long tusks on the shore, one rearing up to fight, among the bones of their kills. Drawn with the seal art until its own is ready."
+        "guards": "Walrus bulls with long tusks on the shore, one rearing up to fight, among the bones of their kills.",
+        "artNote": "Drawn with the seal art until its own is ready."
       },
       "boarwallow": {
         "name": "Boar wallow",
@@ -521,9 +543,8 @@
     },
     "ground": {
       "heading": "Bog ground",
-      "body": "Plain moss, with decorated looks mixed across a bog region the way the wasteland mixes its looks. The ore seep and the seep chain are where bog iron shows at the surface.",
+      "body": "Moss ground in several looks, mixed across a bog. The ore seep and the seep chain are where bog iron shows at the surface.",
       "looks": {
-        "plain": "Plain moss",
         "mire1": "Open mire 1",
         "mire2": "Open mire 2",
         "mire3": "Open mire 3",
@@ -535,7 +556,7 @@
     },
     "water": {
       "heading": "Creeks and bog lakes",
-      "body": "Creeks have a river's profile, so they join rivers without a seam; lakes are open water with shore tiles around them. All of them are water tiles.",
+      "body": "Creeks flow into rivers; lakes are open water with shore tiles around them. All of them are water tiles.",
       "shape": "Tile",
       "shapes": {
         "creek": {
@@ -585,7 +606,8 @@
       },
       "hammerschmiede": {
         "name": "Hammer Forge",
-        "body": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works: it raises every bog-ore works within its range. It shows the river hammer mill until it gets art of its own."
+        "body": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works: it raises every bog-ore works within its range.",
+        "artNote": "Shown with the river hammer mill's art until it gets art of its own."
       },
       "claybrickworks": {
         "name": "Clay Brickworks",
@@ -717,7 +739,18 @@
     },
     "notBuilt": {
       "heading": "Not built yet",
-      "body": "Fire taking a level off a wall: a wall will lose its levels one at a time until it is gone. Nothing burns walls yet."
+      "body": "Fire taking a level off a wall: a wall will lose its levels one at a time until it is gone. Nothing burns walls yet. Sieges already do this: see the siege section above."
+    },
+    "sieges": {
+      "heading": "Sieges",
+      "body": "A wall can be breached, one level at a time. Only catapults do it, and only as part of an attack on the settlement the wall belongs to.",
+      "rules": {
+        "who": "Send an attack (or a raid) with catapults at the settlement and name the wall hex as the target when you send it. If your army wins the battle, the catapults that survived fire at that hex. One surviving catapult is enough; an army that loses the battle fires nothing.",
+        "target": "If you name no target, or the building you named is gone by the time your army arrives, the siege hits a random building of that settlement instead, a wall hex among them.",
+        "level": "A won siege takes exactly one level off a wall hex, the gate included, however many catapults survive. Most buildings lose several levels at once to a strong army; a wall is breached a level at a time. A palisade or gate has {levels} levels, so a fully built wall hex takes {levels} won sieges. A damaged wall still stops armies until its last level is gone.",
+        "gone": "At level 0 the wall hex is gone: its hex is free ground again and armies walk through it. Any build order still queued for that hex is dropped.",
+        "rebuild": "The owner can raise a wall hex that is still standing by a level again, like any building, and can build on a hex that is gone again under the usual placement rules. There is no separate repair."
+      }
     }
   }
 }

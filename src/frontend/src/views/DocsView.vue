@@ -1,87 +1,237 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
+import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
+import AtlasSprite from '../components/AtlasSprite.vue';
+import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 
-const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 interface DocPage {
+  id: 'tiles' | 'bogLands' | 'techTree' | 'walls' | 'wildlifeCamps' | 'wastedLands';
   to: string;
-  titleKey: string;
-  descriptionKey: string;
+  /** A `showcase` atlas frame, or `camp:<family>` for an animated wildlife camp. */
+  art: string;
+}
+interface DocGroup {
+  id: 'island' | 'building' | 'beyond';
+  pages: DocPage[];
 }
 
-// The list a future doc page (e.g. resources, world generation) joins —
-// see docs/tech/backend.md for the pattern this follows on the API side.
-const PAGES: DocPage[] = [
-  { to: '/tech-tree', titleKey: 'docs.hub.pages.techTree.title', descriptionKey: 'docs.hub.pages.techTree.description' },
-  { to: '/docs/tiles', titleKey: 'docs.hub.pages.tiles.title', descriptionKey: 'docs.hub.pages.tiles.description' },
+// The groups a future doc page joins. The routes guard the showcase manifests
+// (router/index.ts), so the art below resolves synchronously at setup.
+const GROUPS: DocGroup[] = [
   {
-    to: '/docs/wasted-lands',
-    titleKey: 'docs.hub.pages.wastedLands.title',
-    descriptionKey: 'docs.hub.pages.wastedLands.description',
+    id: 'island',
+    pages: [
+      { id: 'tiles', to: '/docs/tiles', art: 'foresttile_SE_variant001' },
+      { id: 'bogLands', to: '/docs/bog-lands', art: 'bog_SE_variant004' },
+    ],
   },
   {
-    to: '/docs/wildlife-camps',
-    titleKey: 'docs.hub.pages.wildlifeCamps.title',
-    descriptionKey: 'docs.hub.pages.wildlifeCamps.description',
+    id: 'building',
+    pages: [
+      { id: 'techTree', to: '/tech-tree', art: 'druidhut_SE_level006' },
+      { id: 'walls', to: '/docs/walls', art: 'palisade_gate180_SE_level002' },
+    ],
   },
-  { to: '/docs/bog-lands', titleKey: 'docs.hub.pages.bogLands.title', descriptionKey: 'docs.hub.pages.bogLands.description' },
-  { to: '/docs/walls', titleKey: 'docs.hub.pages.walls.title', descriptionKey: 'docs.hub.pages.walls.description' },
-  { to: '/showcase', titleKey: 'docs.hub.pages.showcase.title', descriptionKey: 'docs.hub.pages.showcase.description' },
+  {
+    id: 'beyond',
+    pages: [
+      { id: 'wildlifeCamps', to: '/docs/wildlife-camps', art: 'camp:boarwallow' },
+      { id: 'wastedLands', to: '/docs/wasted-lands', art: 'jotunwatchtower_SE_level002' },
+    ],
+  },
 ];
+
+const utgard = computed(() => findAtlasFrame('showcase', 'giantutgard_SE_level000'));
+// AtlasSprite keeps the frame's aspect ratio, so a width of min(100%, box
+// height x ratio) contain-fits it into a box of the given size.
+function fit(frame: AtlasFrameRect, boxHeight: number) {
+  return { width: `min(100%, ${(boxHeight * frame.frame.w) / frame.frame.h}px)` };
+}
+function frameOf(art: string) {
+  return art.startsWith('camp:') ? undefined : findAtlasFrame('showcase', art);
+}
 </script>
 
 <template>
-  <DocsPageLayout
-    class="docs"
-    :title="$t('docs.hub.title')"
-    caption="DOCS"
-    :intro="$t('docs.hub.intro')"
-    :breadcrumb="false"
-  >
-    <div class="pages">
-      <button v-for="page in PAGES" :key="page.to" class="page-card" @click="router.push(page.to)">
-        <span class="page-title">{{ t(page.titleKey) }}</span>
-        <span class="page-description">{{ t(page.descriptionKey) }}</span>
-      </button>
+  <DocsPageLayout class="docs" :title="$t('docs.hub.title')" caption="DOCS" :breadcrumb="false" hero>
+    <section class="hero">
+      <div class="hero-text">
+        <h1>{{ t('docs.hub.heading') }}</h1>
+        <p class="lede">{{ t('docs.hub.intro') }}</p>
+      </div>
+      <div class="hero-art" data-testid="docs-hero-art">
+        <AtlasSprite v-if="utgard" :frame="utgard" :aria-label="t('docs.hub.artAlt')" :style="fit(utgard, 250)" class="utgard" />
+      </div>
+    </section>
+
+    <div class="groups">
+      <section v-for="group in GROUPS" :key="group.id" class="group" :data-group="group.id">
+        <h2>{{ t(`docs.hub.groups.${group.id}.title`) }}</h2>
+        <p class="group-desc">{{ t(`docs.hub.groups.${group.id}.description`) }}</p>
+        <RouterLink v-for="page in group.pages" :key="page.id" :to="page.to" class="card" :data-page="page.id">
+          <span class="art" data-testid="docs-card-art" aria-hidden="true">
+            <AnimatedCamp v-if="page.art.startsWith('camp:')" :family="page.art.slice(5)" orientation="SE" />
+            <AtlasSprite v-else-if="frameOf(page.art)" :frame="frameOf(page.art)!" :style="fit(frameOf(page.art)!, 84)" />
+          </span>
+          <span class="text">
+            <span class="title">{{ t(`docs.hub.pages.${page.id}.title`) }}</span>
+            <span class="desc">{{ t(`docs.hub.pages.${page.id}.description`) }}</span>
+          </span>
+        </RouterLink>
+      </section>
     </div>
+
+    <p class="footer">
+      {{ t('docs.hub.footer.lead') }}
+      <RouterLink to="/showcase">{{ t('docs.hub.footer.link') }}</RouterLink>
+    </p>
   </DocsPageLayout>
 </template>
 
 <style scoped>
-.pages {
+.hero {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
-  margin-top: 24px;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 28px 32px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 75% 60%, rgba(79, 209, 197, 0.12), transparent 60%),
+    linear-gradient(180deg, #0e161c, #0b1116);
 }
-.page-card {
+.hero h1 {
+  margin: 0 0 12px;
+  font-size: 34px;
+  font-weight: 700;
+}
+.lede {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.hero-art {
+  width: 300px;
+  height: 250px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.utgard {
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55));
+}
+.groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 24px;
+  margin-top: 28px;
+}
+.group {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 18px 20px;
+  gap: 14px;
+}
+.group h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.group-desc {
+  margin: -8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 12px 10px;
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   background: var(--panel, #1c1710);
   color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  font-family: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
 }
-.page-card:hover {
-  border-color: var(--gold);
+.art {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.5));
+  transition: transform 0.15s;
 }
-.page-title {
-  font-size: 17px;
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.title {
+  font-size: 16px;
   font-weight: 700;
 }
-.page-description {
+.desc {
   font-size: 13px;
   color: var(--muted);
-  line-height: 1.5;
+  line-height: 1.45;
+}
+.card:hover,
+.card:focus-visible {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+.card:hover .art,
+.card:focus-visible .art {
+  transform: translateY(-4px) scale(1.05);
+}
+.card:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.footer {
+  margin: 32px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 14px;
+  color: var(--muted);
+}
+.footer a {
+  color: var(--gold);
+}
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 22px 20px;
+  }
+  .hero-art {
+    width: 100%;
+    height: 220px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .art {
+    transition: none;
+  }
+  .card:hover,
+  .card:focus-visible,
+  .card:hover .art,
+  .card:focus-visible .art {
+    transform: none;
+  }
 }
 </style>

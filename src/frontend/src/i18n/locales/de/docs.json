@@ -1,44 +1,64 @@
 {
   "back": "← Zurück",
+  "adminNotes": {
+    "toggle": "Admin-Hinweise anzeigen",
+    "label": "Admin-Hinweis"
+  },
   "backToDocs": "← Docs",
   "hub": {
     "title": "Docs",
-    "intro": "Referenzseiten für die Regeln und Inhalte des Spiels.",
-    "pages": {
-      "techTree": {
-        "title": "Techbaum",
-        "description": "Jedes Gebäude und was jede seiner zehn Stufen kostet, produziert und benötigt."
+    "heading": "Das Bjarnøy-Handbuch",
+    "intro": "Wie Inseln, Gebäude, Bestien und das Endspiel funktionieren. Alles hier sind die Regeln und die Grafiken des Spiels selbst.",
+    "artAlt": "Utgard, die Riesenfestung der Ödlande",
+    "groups": {
+      "island": {
+        "title": "Deine Insel",
+        "description": "Das Land und was es dir gibt."
       },
+      "building": {
+        "title": "Ausbauen",
+        "description": "Gebäude, ihre Stufen und deine Mauern."
+      },
+      "beyond": {
+        "title": "Jenseits deiner Küste",
+        "description": "Andere Inseln, ihre Bestien und das Ende des Zeitalters."
+      }
+    },
+    "pages": {
       "tiles": {
         "title": "Kacheln",
-        "description": "Das Gelände, aus dem eine Welt besteht, wie es entsteht und was darauf gebaut werden kann."
-      },
-      "wastedLands": {
-        "title": "Ödlande",
-        "description": "Das Endspiel: Utgard, die Inseln, die aus dem Meer steigen, und woraus sie bestehen."
-      },
-      "wildlifeCamps": {
-        "title": "Wildtierlager",
-        "description": "Die Tiere, die das Land auf unbesiedelten Inseln halten: jedes Lager, bewacht und geräumt, wie weit es reicht und was das Räumen bewirkt."
+        "description": "Der Boden deiner Insel und was du darauf bauen kannst."
       },
       "bogLands": {
         "title": "Moorland",
-        "description": "Moosboden, Bäche und Moorseen, wo Raseneisenerz gegraben und Lehm gestochen wird."
+        "description": "Moos, Bäche und dunkle Seen. Hier findest du Raseneisenerz und Lehm."
+      },
+      "techTree": {
+        "title": "Techbaum",
+        "description": "Jedes Gebäude: was jede Stufe kostet, liefert und voraussetzt."
       },
       "walls": {
         "title": "Mauern",
-        "description": "Die Palisade: ihre sechs Teile, wie sie gewählt werden, wo Mauern stehen können und wer hindurchgehen darf."
+        "description": "Die Palisade: wo sie stehen darf und wer hindurchkommt."
       },
-      "showcase": {
-        "title": "Showcase",
-        "description": "Ein spielerfokussiertes Pitch für das Spiel, plus ein Blick unter die Haube für alle, die wissen wollen, wie es gebaut ist."
+      "wildlifeCamps": {
+        "title": "Wildtierlager",
+        "description": "Wölfe, Eber und Schlimmeres beherrschen die freien Inseln. Jage sie und nimm dir die Beute."
+      },
+      "wastedLands": {
+        "title": "Ödlande",
+        "description": "Das Endspiel: Utgard steigt aus dem Meer, und die Gilden ziehen in den Krieg."
       }
+    },
+    "footer": {
+      "lead": "Neu hier?",
+      "link": "Das Spiel in Bildern ansehen"
     }
   },
   "status": {
     "loading": "Lädt…",
-    "fallback": "Zeigt gebündelte Referenzdaten{snapshot} — keine Live-Backend-Daten.",
-    "fallbackSnapshot": " (Momentaufnahme vom {date})",
+    "fallback": "Zeigt gebündelte Referenzdaten{snapshot}, keine Live-Daten vom Backend.",
+    "fallbackSnapshot": " (Stand: {date})",
     "toc": "Inhaltsverzeichnis"
   },
   "buildingTypes": {
@@ -67,14 +87,14 @@
   },
   "techTree": {
     "title": "Techbaum",
-    "intro": "Jedes Gebäude und was jede seiner zehn Stufen kostet, produziert und benötigt.",
+    "intro": "Alle Gebäude mit Kosten, Produktion und Voraussetzungen jeder Stufe.",
     "terrain": "Gelände:",
     "terrainCoastal": "Flaches (Küsten-)Wasser",
     "terrainAny": "Jedes bebaubare Land",
-    "needsFirst": "Benötigt zuerst: {prerequisites}",
+    "needsFirst": "Vorher nötig: {prerequisites}",
     "graphEyebrow": "Docs · Techbaum",
     "imageSize": {
-      "toggle": "Klicken, um dieses Bild zu vergrößern"
+      "toggle": "Zum Vergrößern anklicken"
     },
     "artVariant": "Aussehen:",
     "sawmillVariants": {
@@ -95,37 +115,37 @@
       "water": "Wasser"
     },
     "lore": {
-      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und wie viele Siedler im Dorf leben — jede Siedlung beginnt mit einem, stehend auf Gras.",
-      "lumberjack": "Fällt Holz auf bewaldetem Grund — das Holz hinter jeder Wand und jedem Dach.",
-      "quarry": "Bricht Stein aus einem Bergkamm — die Knochen jeder Festung.",
-      "odinstatue": "Odins Statue auf Gras, ab Langhaus 25 hinter einer Druidenhütte der Stufe 10. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (10 % auf Stufe 5). Raben: Ihr Gebiet, ihre Türme und ihre Heere sehen pro Stufe 2 Ringe weiter (10 auf Stufe 5). Zählt als der eine Schrein der Siedlung.",
-      "palisade": "Ein Feld der Siedlungsmauer, auf Gras, Wald oder Sand im eigenen Gebiet, ab Langhaus 7 hinter einem Turm der Stufe 5 (Palisade und Tor teilen sich eine Karte im Technologiebaum). Mauern verzweigen sich nie: Kein Feld darf drei Nachbarn der Mauer haben. Welches Teil gezeichnet wird, Gerade, Kurve oder Ende, richtet sich nach den Nachbarfeldern der Mauer. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers; ein einzelnes Mauerende (ein Nachbar) ist nur halb offen und jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, das Meer bleibt. Eine gewonnene Belagerung, die ein Mauerfeld als Ziel hat, nimmt ihm eine Stufe, egal wie viele Katapulte übrig sind; Feuer wird das später auch tun.",
-      "palisadegate": "Ein Mauerfeld mit Tor, nur wo die Mauer zwischen zwei gegenüberliegenden Mauerfeldern gerade verläuft. Die Armeen des Besitzers und ihrer Freunde (dieselbe Gilde oder eine Gilde im Frieden mit ihr) passieren es so schnell wie den Boden darunter; jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Gleiche Freischaltung, Voraussetzung, Stufen und Kosten wie die Palisade, auf einer Karte im Technologiebaum.",
-      "bridge": "Öffnet einen breiten Fluss für Landarmeen. Erst ein Damm, dann ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder.",
-      "reindeerherder": "Eine Hirtenhütte und ein Rentiergehege auf offenem Grasland — das erste Nahrungsgebäude der Siedlung, von Anfang an verfügbar.",
-      "farm": "Zieht Nahrung auf offenem Grasland und hält den Tisch des Langhauses gefüllt. Auf jeder Insel baubar, unabhängig vom Boden, ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 (er und die Kürbisfarm teilen sich eine Karte im Technologiebaum).",
-      "storagehouse": "Zusätzlicher Platz für die Ernte auf Gras, damit ein volles Lager die Produktion nie stoppt.",
-      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter hinausschiebt.",
-      "fishinghut": "Ein Steg über flachem Wasser, der die Untiefen befischt, die ein Bauernhof nie erreichen könnte. Steht auch auf Pfählen am Halbufer eines Moorsees.",
-      "pumpkinfarm": "Eine zweite Ernte für Gras — Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Nur auf einer Kürbisboden-Insel baubar (das Spiel bestimmt den Boden jeder Insel, nicht der Spieler) — der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
-      "shrineofthor": "Für Thor errichtet auf Gras — seine Gunst steigert die Holz- und Steinproduktion. Eine Siedlung hat nur einen Schrein insgesamt, egal welches Gottes, und jeder Gott hat höchstens einen Schrein pro Insel.",
-      "shrineoffreyja": "Für Freyja errichtet auf Gras — ihre Gunst steigert die Nahrungsproduktion. Eine Siedlung hat nur einen Schrein insgesamt, egal welches Gottes, und jeder Gott hat höchstens einen Schrein pro Insel.",
-      "shrineofullr": "Für Ullr errichtet auf Gras — seine Gunst steigert die Holzproduktion. Eine Siedlung hat nur einen Schrein insgesamt, egal welches Gottes, und jeder Gott hat höchstens einen Schrein pro Insel.",
-      "shrineofnjord": "Für Njörd errichtet auf Gras — seine Gunst steigert die Lagerkapazität statt einer Ressourcenproduktion. Eine Siedlung hat nur einen Schrein insgesamt, egal welches Gottes, und jeder Gott hat höchstens einen Schrein pro Insel.",
-      "archeryrange": "Bildet die Fernkämpfer der Landarmee aus — Bogenschützen und, sobald eine in der Kaserne ausgebildete Berserker-Linie steht, Katapulte — auf Gras oder Sand, anstelle des Langhauses.",
-      "dockyard": "Bildet Schiffe auf flachem (Küsten-)Wasser aus, anstelle des Langhauses.",
-      "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras, die sowohl das Langhaus als auch das eigene Lagerhaus dieser Siedlung auf Stufe 15 benötigt.",
-      "barracks": "Bildet die Kernlinie der Landarmee aus — Thralls, Speerkämpfer, Axtkämpfer und Berserker — auf Gras oder Sand an der Grenze, anstelle des Langhauses. Der Schießplatz bildet den Rest des Truppenspektrums aus (Bogenschützen, Katapulte); beide bilden nie dieselbe Einheit aus.",
-      "sawmill": "Verarbeitet Holz direkt auf einer geraden, sanft gebogenen oder eng gebogenen Flusskachel — ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Kein eigenes Holz: stattdessen steigert es jeden Holzfäller im Umkreis seiner Stufe (mit steigender Stufe wachsen Reichweite und Bonus).",
-      "meadery": "Hält Bienen auf Gras hinter einem Bauernhof der Stufe 5 — Bienenkörbe, eine Honigpresse und ein Metkeller. Noch ohne eigene Wirkung: der Met ist für einen künftigen Moralbonus gedacht.",
-      "townsquare": "Der eigene Marktplatz des Dorfes auf Gras — noch ohne eigene Wirkung, aber eine künftige Voraussetzung oder ein künftiger Bonus.",
-      "cropmill": "Mahlt das Getreide eines bis Stufe 10 ausgebauten Bauernhofs auf einer geraden Flusskachel — ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Keine eigene Nahrung: stattdessen steigert sie jeden Bauernhof im Umkreis ihrer Stufe (mit steigender Stufe wachsen Reichweite und Bonus) — nicht die Kürbisfarm, eine andere Feldfrucht, die eine Mühle nicht mahlt.",
-      "smithy": "Die Schmiede der Siedlung, mit Amboss, auf Gras oder Sand hinter einer Kaserne der Stufe 10 — der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: hier sollen einmal Truppen aufgewertet werden, eine Mechanik, die noch kommt.",
-      "druidhut": "Ein Rundhaus mit Grasdach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen — noch ohne eigene Wirkung, aber für eine künftige Gunst- oder Runenmechanik gedacht.",
-      "cartworkshop": "Baut die Karren der Siedlung auf Gras hinter einem Dorfplatz — bildet Furiere und Siedlertrupps anstelle des Langhauses aus. Keine eigene Lagerkapazität.",
-      "claybrickworks": "Gräbt und brennt Ton auf Moorboden — eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
-      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben in den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %. Ab Langhaus 6.",
-      "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Kein eigenes Eisen: Es steigert stattdessen jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus). Bis es eigene Grafik bekommt, wird das Hammerwerk vom Fluss gezeigt."
+      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
+      "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
+      "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
+      "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
+      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Gewinnt ein Angreifer eine Belagerung, die ein Mauerfeld zum Ziel hat, nimmt sie ihm eine Stufe, egal wie viele Katapulte übrig sind. Feuer wird das später auch tun.",
+      "palisadegate": "Ein Mauerfeld mit Tor. Es lässt sich nur dort setzen, wo die Mauer gerade zwischen zwei gegenüberliegenden Mauerfeldern verläuft. Die Armeen des Besitzers und seiner Freunde (dieselbe Gilde oder eine Gilde, die mit ihr im Frieden ist) passieren es so schnell wie den Boden darunter. Jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Freischaltung, Voraussetzung, Stufen und Kosten sind dieselben wie bei der Palisade, beide teilen sich eine Karte im Techbaum.",
+      "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
+      "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
+      "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte. Erreicht ein Rohstoff das Lagerlimit, stoppt seine Produktion – ein volles Lager verschenkt also Ertrag.",
+      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt.",
+      "fishinghut": "Ein Steg über flachem Wasser, von dem aus du Untiefen befischst, die ein Bauernhof nie erreichen könnte. Die Hütte steht auch auf Pfählen am Halbufer eines Moorsees.",
+      "pumpkinfarm": "Eine zweite Ernte für Gras: Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Sie lässt sich nur auf einer Insel mit Kürbisboden bauen (den Boden jeder Insel bestimmt das Spiel, nicht du). Das ist der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
+      "shrineofthor": "Für Thor auf Gras errichtet, hinter einer Waffenschmiede der Stufe 5. Die Gunst des Kriegsgottes stärkt den Angriff deiner Landeinheiten (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
+      "shrineoffreyja": "Für Freyja auf Gras errichtet. Ihre Gunst steigert die Nahrungsproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
+      "shrineofullr": "Für Ullr auf Gras errichtet. Seine Gunst steigert die Holzproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
+      "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einer Werft der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
+      "archeryrange": "Bildet auf Gras oder Sand die Fernkämpfer der Landarmee aus: Bogenschützen und, sobald eine in der Kaserne ausgebildete Berserker-Linie steht, Katapulte. Sie übernimmt das anstelle des Langhauses.",
+      "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus, anstelle des Langhauses.",
+      "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Sie setzt voraus, dass sowohl das Langhaus als auch das Lagerhaus dieser Siedlung auf Stufe 15 stehen.",
+      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker – anstelle des Langhauses. Den Rest des Truppenspektrums (Bogenschützen, Katapulte) bildet der Schießplatz aus. Beide bilden nie dieselbe Einheit aus.",
+      "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
+      "meadery": "Züchtet Bienen auf Gras hinter einem Bauernhof der Stufe 5 – Bienenkörbe, eine Honigpresse und ein Metkeller. Sie hat noch keine eigene Wirkung, der Met ist für einen künftigen Moralbonus gedacht.",
+      "townsquare": "Der eigene Marktplatz des Dorfes auf Gras. Er hat noch keine eigene Wirkung, ist aber als künftige Voraussetzung oder künftiger Bonus vorgesehen.",
+      "cropmill": "Mahlt auf einem geraden Flussfeld das Getreide eines Bauernhofs, der bis Stufe 10 ausgebaut ist – ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Sie erzeugt keine eigene Nahrung, sondern steigert jeden Bauernhof im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus. Die Kürbisfarm profitiert nicht davon: Kürbisse sind eine andere Feldfrucht, die eine Mühle nicht mahlt.",
+      "smithy": "Die Schmiede der Siedlung mit Amboss, auf Gras oder Sand hinter einer Kaserne der Stufe 10. Sie ist der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: Hier sollen später einmal Truppen aufgewertet werden, die Mechanik dafür kommt noch.",
+      "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
+      "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedlertrupps aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
+      "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
+      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %. Ab Langhaus 6 verfügbar.",
+      "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
+      "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder."
     },
     "table": {
       "level": "Stufe",
@@ -146,12 +166,12 @@
   },
   "tiles": {
     "title": "Kacheln",
-    "intro": "Das Gelände, aus dem eine Welt besteht, wie es entsteht und was darauf gebaut werden kann.",
+    "intro": "Aus welchem Gelände eine Welt besteht, wie es entsteht und was du darauf bauen kannst.",
     "generation": "Entstehung:",
     "buildings": "Gebäude:",
     "none": "keine",
     "riverVariants": "Form:",
-    "riverSawmillNote": "Die Sägemühle ist das einzige Gebäude, das direkt auf einer Flusskachel steht — nur auf einer geraden oder gebogenen.",
+    "riverSawmillNote": "Die Sägemühle ist das einzige Gebäude, das direkt auf einem Flussfeld steht – und nur auf einem geraden oder gebogenen.",
     "riverLookLabel": "Aussehen:",
     "riverLooks": {
       "plain": "Schlicht",
@@ -190,76 +210,77 @@
     "entries": {
       "sea": {
         "title": "Meer",
-        "lore": "Offenes Wasser. Nichts steht darauf, und hier wächst oder wird nichts abgebaut — es trennt nur Inseln voneinander.",
-        "generation": "Jede Kachel außerhalb des Radius einer Insel."
+        "lore": "Offenes Wasser. Darauf steht nichts, und hier wird nichts angebaut oder abgebaut – es trennt nur die Inseln voneinander.",
+        "generation": "Jedes Feld außerhalb des Radius einer Insel."
       },
       "coastalWater": {
         "title": "Küstenwasser",
-        "lore": "Darunter noch schlichtes Meer — dasselbe Gelände wie das offene Wasser dahinter — aber nah genug am Ufer für einen Steg.",
-        "generation": "Eine Meereskachel mit mindestens einem Landnachbarn: der Ring, der jede Insel umschließt."
+        "lore": "Darunter ist es schlichtes Meer, dasselbe Gelände wie das offene Wasser dahinter – aber nah genug am Ufer für einen Steg.",
+        "generation": "Ein Meeresfeld mit mindestens einem Nachbarn an Land: der Ring, der jede Insel umschließt."
       },
       "sand": {
         "title": "Sand",
-        "lore": "Der Strand einer Insel — der Küstenring, auf dem Siedler bei der Gründung einer Siedlung tatsächlich landen.",
-        "generation": "Der äußere Rand einer Insel: jenseits von 82 % ihres Radius vom Zentrum aus."
+        "lore": "Der Strand einer Insel: der Landring an ihrer Küste.",
+        "generation": "Der äußere Rand einer Insel, ab 82 % ihres Radius, vom Zentrum aus gemessen."
       },
       "grass": {
         "title": "Gras",
-        "lore": "Offenes Flachland — der Großteil einer Siedlung wird hier gebaut.",
-        "generation": "Flachland, zu glatt für Wald und zu weit vom Zentrum entfernt für Gebirge."
+        "lore": "Offenes Flachland. Hier entsteht der Großteil einer Siedlung.",
+        "generation": "Flachland, das zu glatt für Wald und zu weit vom Zentrum für Gebirge ist."
       },
       "forest": {
         "title": "Wald",
-        "lore": "Flachland, das felsig genug geworden ist, um Bäume statt offenem Gras wachsen zu lassen.",
-        "generation": "Felsigkeit über dem Waldschwellenwert, aber nicht steil genug für Gebirge."
+        "lore": "Flachland, das felsig genug geworden ist, dass statt offenem Gras Bäume wachsen.",
+        "generation": "Die Felsigkeit liegt über dem Waldschwellenwert, ist aber nicht steil genug für Gebirge."
       },
       "mountain": {
         "title": "Gebirge",
-        "lore": "Der felsigste Grund, den eine Insel hat.",
-        "generation": "Auf das Innere einer Insel beschränkt (innerhalb von 40 % ihres Radius), damit sich an der Küste nie Grate bilden."
+        "lore": "Der felsigste Boden einer Insel.",
+        "generation": "Beschränkt sich auf das Innere einer Insel (innerhalb von 40 % ihres Radius), damit sich an der Küste nie Grate bilden."
       },
       "river": {
         "title": "Fluss",
-        "lore": "Wasser, das sich durch das Land selbst gräbt, von einer Bergquelle hinunter zum Meer — die Kachel eines Flusses ersetzt vollständig das Landgelände, über das er fließt.",
-        "generation": "Verläuft bergab von einer Quelle auf einem geeigneten Gebirgscluster (2+ verbundene Gebirgskacheln) bis zur Küste und mäandert dabei; zwei sich kreuzende Flüsse verschmelzen zu einem Zusammenfluss, alles unter 2 Kacheln Länge wird verworfen."
+        "lore": "Wasser, das sich selbst einen Weg durch das Land gräbt, von einer Bergquelle hinunter zum Meer. Die Grafik eines Flussfelds ersetzt das Landgelände, über das er fließt, vollständig.",
+        "generation": "Der Fluss verläuft von einer Quelle auf einem geeigneten Gebirgscluster (mindestens 2 zusammenhängende Gebirgsfelder) bergab bis zur Küste und mäandert dabei. Kreuzen sich zwei Flüsse, verschmelzen sie zu einem Zusammenfluss. Alles, was kürzer als 2 Felder ist, wird verworfen."
       }
     }
   },
   "impressum": {
     "title": "Impressum",
-    "body": "Bjarnøy ist ein Hobbyprojekt für die VanDooProject-Community. Diese Platzhalterseite existiert, damit die echte Landingpage etwas hat, worauf sie verlinken kann — ersetze sie durch dein tatsächliches Impressum (Betreiber, Kontaktadresse und alle Angaben, die deine Rechtsordnung verlangt), bevor du live gehst."
+    "body": "Bjarnøy ist ein Hobbyprojekt für die VanDooProject-Community. Diese Platzhalterseite gibt es nur, damit die echte Landingpage etwas hat, worauf sie verlinken kann. Ersetze sie vor dem Livegang durch dein tatsächliches Impressum (Betreiber, Kontaktadresse und alle weiteren Pflichtangaben, die in deinem Land gelten)."
   },
   "wastedLands": {
     "title": "Die Ödlande",
-    "intro": "Wo die Welt endet. Die Ödlande sind das Endspiel einer Welt: Inseln, die aus dem Meer steigen, wenn die Riesen erwachen, die Festung in ihrer Mitte und der letzte Krieg der Jarle von Bjarnøy.",
+    "intro": "Hier endet die Welt. Die Ödlande sind das Endspiel einer Welt: Inseln steigen aus dem Meer, wenn die Riesen erwachen, in ihrer Mitte erhebt sich eine Festung, und die Jarle von Bjarnøy führen ihren letzten Krieg.",
     "lore": {
       "heading": "Am Rand des langen Winters",
-      "p1": "Die Skalden sagen, das Meer um Bjarnøy war nie leer. Hinter den letzten Schären, wo die Seekarten enden, liegt Útgarðr, der Außenhof, die Heimat der Jötnar, der Riesen, die vor Göttern und Menschen hier waren. Solange die Inseln jung sind, schlafen die Riesen, und die Jarle kämpfen untereinander um Holz, Stein und Ruhm.",
-      "p2": "Doch jedes Zeitalter wird alt. Wenn die Hallen voll sind und auf jeder Insel Runensteine stehen, erwachen die Riesen. Hinter den kartierten Inseln beginnt das Meer zu kochen, und neues Land steigt daraus auf: Inseln, die nie grün waren. Auf jeder raucht ein Feuerberg, und auf der größten steht Utgard, eine schwarze Zitadelle, deren Fenster in kaltem Runenfeuer brennen.",
-      "p3": "Dort ist nie etwas Lebendiges gewachsen. Der Boden ist Asche und Schlacke, die Wälder sind gebleichte Stümpfe mit abgebrochenen Kronen, und die Flüsse führen Feuer. Die Strände sind schwarzer Sand, und das Meer ringsum ist kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten, um zu sehen, was aufgestiegen war. Auf den Graten bewachen Jötun-Wachtürme die Zugänge, und Utgards Mauern ziehen sich vom Fels bis ans Ufer.",
-      "p4": "Kein einzelner Jarl bricht Utgard. Seine Mauern sind für eine Belagerung gebaut, die eine Generation dauert, und die Riesen werden stärker, während die Jarle streiten. Nur Gilden, die als ein Heer segeln, können den Außenhof stürmen. Wer sein Tor niederwirft, beendet das Zeitalter, und sein Name wird als letzter eingeritzt, bevor die Welt von vorn beginnt.",
-      "caption": "So soll sich das Endspiel anfühlen, ein Regelwerk ist das nicht. Die Mechanik wird noch entworfen und kann sich ändern."
+      "p1": "Die Skalden erzählen, das Meer um Bjarnøy sei nie leer gewesen. Hinter den letzten Schären, wo die Seekarten enden, liegt Útgarðr, der Außenhof, die Heimat der Jötnar. Die Riesen waren schon vor Göttern und Menschen da. Solange die Inseln jung sind, schlafen sie, und die Jarle kämpfen untereinander um Holz, Stein und Ruhm.",
+      "p2": "Doch jedes Zeitalter wird alt. Sind die Hallen voll und stehen auf jeder Insel Runensteine, erwachen die Riesen. Weit hinter den kartierten Inseln beginnt das Meer zu kochen, und neues Land steigt daraus auf: Inseln, die nie grün waren. Auf jeder raucht ein Feuerberg, und auf der größten ragt Utgard auf, eine schwarze Zitadelle, deren Fenster in kaltem Runenfeuer brennen.",
+      "p3": "Dort ist nie etwas Lebendiges gewachsen. Der Boden besteht aus Asche und Schlacke, die Wälder sind gebleichte Stümpfe mit abgebrochenen Kronen, und die Flüsse führen Feuer. Die Strände sind schwarzer Sand, und das Meer ringsum schimmert kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten, um zu sehen, was da aufgestiegen war. Auf den Graten bewachen Jötun-Wachtürme die Zugänge, und Utgards Mauern ziehen sich vom Fels bis ans Ufer.",
+      "p4": "Kein einzelner Jarl bezwingt Utgard. Seine Mauern sind für eine Belagerung gebaut, die eine Generation dauert, und die Riesen werden stärker, während die Jarle streiten. Nur Gilden, die als ein Heer segeln, können den Außenhof stürmen. Wer sein Tor niederwirft, beendet das Zeitalter. Sein Name wird als letzter eingeritzt, bevor die Welt von vorn beginnt.",
+      "caption": "So soll sich das Endspiel anfühlen. Ein Regelwerk ist das nicht: Die Mechanik wird noch entworfen und kann sich ändern."
     },
     "utgard": {
       "heading": "Utgard, der Außenhof",
-      "body": "Ein Riesenfeld: eine Festung über sieben Hexfelder, ein Basaltfels mit Ringmauer, Rundtürmen und einem Bergfried in der Mitte, von innen in Runenfeuer getaucht und in Nebel gehüllt. Der Fels ist in sieben Stücke geschnitten, damit jedes Stück auf der Karte mit seinem Hexfeld sortiert wird wie jedes andere Feld.",
+      "body": "Ein Riesenfeld: eine Festung, die sich über sieben Hexfelder erstreckt. Ein Basaltfels mit Ringmauer, Rundtürmen und einem Bergfried in der Mitte, von innen in Runenfeuer getaucht und in Nebel gehüllt.",
+      "techNote": "Der Fels ist in sieben Stücke geschnitten, damit jedes Stück auf der Karte zusammen mit seinem Feld sortiert wird wie jedes andere Feld auch.",
       "camera": "Kamera"
     },
     "volcano": {
       "heading": "Der Feuerberg",
-      "body": "Der zweite Riese der Ödlande: ein Berg, der nie erkaltet ist. Lava rinnt über seine Flanken, der Krater brodelt, und Rauch steigt ohne Ende auf. Wie Utgard bedeckt er sieben Hexfelder, und er ist animiert."
+      "body": "Der zweite Riese der Ödlande: ein Berg, der nie erkaltet ist. Lava rinnt über seine Flanken, der Krater brodelt, und unaufhörlich steigt Rauch auf. Wie Utgard bedeckt er sieben Hexfelder."
     },
     "defences": {
       "heading": "Utgards Wehranlagen",
-      "body": "Die Riesen lassen ihre Inseln nicht offen. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinab ans Wasser.",
+      "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinunter zum Wasser.",
       "level": "Stufe",
       "watchtower": {
         "heading": "Jötun-Wachturm",
-        "body": "Utgards Antwort auf die Türme der Jarle: ein Rundturm aus dunklem, geschichtetem Stein mit runenhellen Schießscharten. Er wächst in drei Stufen, vom Gerüst bis zur gekrönten Spitze, auf der das Runenfeuer offen brennt."
+        "body": "Utgards Antwort auf die Türme der Jarle: ein Rundturm aus dunklem, lagenweise gemauertem Stein mit runenhell leuchtenden Schießscharten. Er wächst in drei Stufen, vom Gerüst bis zur gekrönten Spitze, auf der das Runenfeuer offen brennt."
       },
       "walls": {
         "heading": "Utgards Mauern",
-        "body": "Zinnenbewehrte Ringmauern aus Stücken, die Kante an Kante passen: gerade Abschnitte, ein Tor, flache und enge Biegungen, Enden, die an einem Turm abschließen, und Enden, die dort abbrechen, wo sie aufs Meer treffen.",
+        "body": "Zinnenbewehrte Ringmauern aus Stücken, die Kante an Kante zusammenpassen: gerade Abschnitte, ein Tor, flache und enge Biegungen, Enden, die an einem Turm abschließen, und Enden, die dort abbrechen, wo die Mauer aufs Meer trifft.",
         "piece": "Stück"
       },
       "pieces": {
@@ -274,22 +295,22 @@
     "endgame": {
       "heading": "So läuft das Endspiel",
       "status": "Geplant: Diese Regeln werden Schritt für Schritt gebaut und sind noch nicht alle im Spiel.",
-      "body": "Wenn der Endboss erwacht, erscheinen die verwüsteten Inseln. Gilden zermürben die Jötnar gemeinsam, halten ihre Türme mit Armeen, brechen Utgards Mauern mit Belagerungsgerät und stürmen die Festung. Die Armee, die Utgard leert, beendet das Zeitalter.",
+      "body": "Wenn der Endboss erwacht, tauchen die verwüsteten Inseln auf. Gilden zermürben gemeinsam die Jötnar, besetzen deren Türme mit Armeen, brechen Utgards Mauern mit Belagerungsgerät und stürmen die Festung. Die Armee, die Utgard leert, beendet das Zeitalter.",
       "rules": {
-        "fullBattles": "Jeder Kampf im Endspiel ist eine volle Schlacht: Der Verlierer verliert alles, der Sieger einen Anteil, der umso größer ist, je knapper der Kampf war. Eine Raubzug-Grenze gibt es hier nicht.",
-        "towers": "Jede verwüstete Insel mit Utgard trägt drei bis sechs über die Insel verteilte Jötun-Wachtürme und Utgard selbst, jeweils mit einer Jötunn-Besatzung.",
-        "assault": "Schick eine Armee zum Sturm auf einen Wachturm oder auf Utgard. Getötete Jötnar bleiben tot; die Besatzung wächst nur langsam nach, so kann eine Gilde sie über mehrere Angriffe zermürben.",
-        "grace": "Ein Wachturm ohne Jötnar ist eingenommen: Er wird still und bleibt 1 Stunde leer, dann wächst die Besatzung wieder nach.",
-        "holding": "Eine Armee, die auf einem Ort steht, hält ihn. Jede Stunde kommen die nachgewachsenen Jötnar heraus und kämpfen in einer vollen Schlacht gegen sie. Solange die Armee gewinnt, bleibt der Ort unten.",
-        "loot": "Eine haltende Armee nimmt jede Stunde Beute (300 an einem Wachturm, 1.000 an Utgard: 40 % Eisen, 30 % Nahrung, 30 % Stein), bis ihre Tragkraft voll ist. Was sie nicht tragen kann, geht verloren.",
-        "aggression": "Orte mit Jötnar überfallen Armeen, die in ihre Wachreichweite kommen, und brennen Spielertürme darin nieder, wenn keine Armee sie verteidigt. Nach einem Kampf ist ein Ort 1 Stunde ruhig.",
-        "walls": "Utgard steht in einem oder zwei Mauerringen, wenn die Insel Platz hat: der innere Ring auf Stufe 2, der äußere auf Stufe 1. Sie halten Landarmeen auf, und ihre Tore öffnen sich nie für Spieler.",
-        "breaching": "Mauern bricht man mit der Belagerung: Bring Katapulte oder Rammböcke mit, zieh neben ein Mauerfeld und schlag zu. Auf Stufe 0 ist die Mauer durchbrochen und Armeen kommen durch.",
-        "wallPace": "Eine Utgardmauer verliert höchstens eine Stufe am Tag und repariert eine Stufe am Tag, solange keine Armee auf ihr oder neben ihr steht. Der innere Ring braucht zwei Schläge im Abstand eines Tages, mit einer Armee daneben dazwischen.",
-        "ram": "Der Rammbock ist ein zweites Belagerungsgerät: dieselbe Belagerungskraft wie das Katapult, viel zäher, aber langsamer.",
-        "gateRule": "Utgard kann nur gestürmt werden, solange jeder Wachturm seiner Insel eingenommen ist. Halte Armeen auf den Türmen, sonst wachsen sie nach und Utgards Tor bleibt zu.",
-        "winning": "Die Armee, die Utgard ohne Jötnar zurücklässt, gewinnt das Zeitalter. Der Spieler, der es niederwarf, wird als Eroberer verzeichnet, und jedes Mitglied seiner Gilde erhält den Gildensieg.",
-        "ageEnd": "Je nach Welt endet dann das Zeitalter und die Welt wird schreibgeschützt, oder das Spiel geht weiter und der Sieger wird verkündet."
+        "fullBattles": "Jeder Kampf im Endspiel ist eine volle Schlacht: Der Verlierer verliert alles, der Sieger einen Anteil – je knapper der Kampf, desto größer. Eine Raubzug-Grenze gibt es hier nicht.",
+        "towers": "Jede verwüstete Insel mit Utgard trägt drei bis sechs Jötun-Wachtürme, die über die Insel verteilt stehen, und dazu Utgard selbst. Jeder dieser Orte hat eine Jötunn-Besatzung.",
+        "assault": "Schick eine Armee, um einen Wachturm oder Utgard zu stürmen. Getötete Jötnar bleiben tot, die Besatzung wächst nur langsam nach. So kann eine Gilde sie über mehrere Angriffe zermürben.",
+        "grace": "Ein Wachturm ohne Jötnar gilt als eingenommen. Er wird still und bleibt 1 Stunde leer, dann wächst die Besatzung wieder nach.",
+        "holding": "Eine Armee, die auf einem Ort steht, besetzt ihn. Jede Stunde kommen die nachgewachsenen Jötnar heraus und kämpfen in einer vollen Schlacht gegen sie. Solange die Armee gewinnt, bleibt der Ort unten.",
+        "loot": "Eine besetzende Armee erhält jede Stunde Beute (300 an einem Wachturm, 1.000 an Utgard: 40 % Eisen, 30 % Nahrung, 30 % Stein), bis ihre Tragkraft voll ist. Was sie nicht tragen kann, geht verloren.",
+        "aggression": "Orte mit Jötnar überfallen Armeen, die in ihre Wachreichweite kommen, und brennen Spielertürme dort nieder, sofern keine Armee sie verteidigt. Nach einem Kampf ist ein Ort 1 Stunde lang ruhig.",
+        "walls": "Utgard steht, wenn die Insel genug Platz hat, hinter einem oder zwei Mauerringen: Der innere hat Stufe 2, der äußere Stufe 1. Sie halten Landarmeen auf, und ihre Tore öffnen sich nie für Spieler.",
+        "breaching": "Mauern brichst du mit der Belagerung: Bring Katapulte oder Rammböcke mit, zieh neben ein Mauerfeld und schlag zu. Auf Stufe 0 ist die Mauer durchbrochen, und Armeen kommen hindurch.",
+        "wallPace": "Eine Utgardmauer verliert höchstens eine Stufe pro Tag und wird um eine Stufe pro Tag repariert, solange keine Armee auf oder neben ihr steht. Für den inneren Ring brauchst du zwei Schläge im Abstand eines Tages, und dazwischen muss eine Armee neben ihm bleiben.",
+        "ram": "Der Rammbock ist ein zweites Belagerungsgerät: Er hat dieselbe Belagerungskraft wie das Katapult, ist aber viel zäher und dafür langsamer.",
+        "gateRule": "Utgard lässt sich nur stürmen, solange jeder Wachturm auf seiner Insel eingenommen ist. Halte Armeen auf den Türmen, sonst wachsen die Besatzungen nach, und Utgards Tor bleibt zu.",
+        "winning": "Die Armee, die Utgard ohne Jötnar zurücklässt, gewinnt das Zeitalter. Der Spieler, der es niedergeworfen hat, wird als Eroberer verzeichnet, und jedes Mitglied seiner Gilde erhält den Gildensieg.",
+        "ageEnd": "Je nach Welt endet damit das Zeitalter und die Welt wird schreibgeschützt, oder das Spiel läuft weiter und der Sieger wird bekannt gegeben."
       },
       "tiers": {
         "heading": "Jötnar",
@@ -313,12 +334,12 @@
     },
     "island": {
       "heading": "Lebendig und öde, nebeneinander",
-      "body": "Öde Inseln sind von Anfang an öde: Sie steigen so aus dem Meer, wie sie sind, und keine lebendige Insel kippt je. Diese erfundene Insel ist nur ein Spielzeug, um die beiden Feldsätze zu vergleichen. Zieh den Regler, um ihre lebendigen Felder Ring um Ring von der Mitte aus gegen ihre öden Gegenstücke zu tauschen.",
+      "body": "Öde Inseln sind von Anfang an öde: Sie steigen so aus dem Meer, wie sie sind, und keine lebendige Insel kippt je um. Diese erfundene Insel ist nur eine Spielerei, an der du die beiden Feldsätze vergleichen kannst. Mit dem Regler tauschst du ihre lebendigen Felder Ring um Ring von der Mitte aus gegen ihre öden Gegenstücke.",
       "blight": "Öde",
       "play": "Abspielen",
       "rotateLeft": "Nach links drehen",
       "rotateRight": "Nach rechts drehen",
-      "hoverHint": "Zeig auf ein Hexfeld, um zu sehen, was es ist.",
+      "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "stages": {
         "s0": "Alles lebendig",
         "s1": "Mitte getauscht",
@@ -333,7 +354,7 @@
     },
     "pairs": {
       "heading": "Lebendig und öde",
-      "body": "Jedes öde Feld hat ein lebendiges Gegenstück derselben Form, damit Flüsse, Küsten und Bergfüße auf beiden Arten von Inseln gleich zusammenpassen.",
+      "body": "Zu jedem öden Feld gibt es ein lebendiges Gegenstück derselben Form. So passen Flüsse, Küsten und Bergfüße auf beiden Inselarten gleich zusammen.",
       "living": "Lebendig",
       "wasted": "Öde",
       "looks": "Varianten"
@@ -342,12 +363,12 @@
       "grass": {
         "living": "Grasland",
         "wasted": "Ödland",
-        "lore": "Aschefleckiger Basalt. Darauf liegen Geröll, Obsidiansplitter, ein runenhell leuchtender Spalt, ein Netz aus Lavarissen oder ein rauchender Schlot."
+        "lore": "Aschefleckiger Basalt. Mal liegt Geröll darauf, mal Obsidiansplitter. Es gibt auch Felder mit einem runenhell leuchtenden Spalt, einem Netz aus Lavarissen oder einem rauchenden Schlot."
       },
       "forest": {
         "living": "Wald",
         "wasted": "Toter Wald",
-        "lore": "Wo jeder Baum stand, steht jetzt ein Stumpf. Sie sind gebleicht, grau oder verkohlt, und ein Drittel ist abgebrochen."
+        "lore": "Wo einst jeder Baum stand, ragt jetzt ein Stumpf. Die Stümpfe sind gebleicht, grau oder verkohlt, und ein Drittel ist abgebrochen."
       },
       "sand": {
         "living": "Sand",
@@ -362,7 +383,7 @@
       "river": {
         "living": "Fluss",
         "wasted": "Lavastrom",
-        "lore": "Dasselbe Bett wie ein Fluss, nur fließt darin Feuer statt Wasser. Wo einer entspringt, quillt Lava aus einem eigenen kleinen Kegel."
+        "lore": "Dasselbe Bett wie bei einem Fluss, nur dass darin Feuer statt Wasser fließt. Wo einer entspringt, quillt Lava aus einem eigenen kleinen Kegel."
       },
       "sea": {
         "living": "Meer",
@@ -384,28 +405,28 @@
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",
-    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres halten sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber ein starkes Lager brennt jeden Turm in seiner Nähe nieder, den keine Armee bewacht. Auf einer großen Insel räumst du die Lager, die im Weg sind, und baust dort, wo das Land frei ist.",
-    "status": "Die Lager leben: Du kannst sie jagen, sie wachsen nach, und starke Lager wehren sich. Die Regeln unten sind die, nach denen das Spiel läuft; die Moorlager (Elchmoor, Biberburg, Kranichtanz) stehen auf freiem Moosboden.",
+    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres beherrschen sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber ein starkes Lager brennt jeden Turm in seiner Nähe nieder, den keine Armee bewacht. Auf einer großen Insel räumst du deshalb die Lager, die dir im Weg sind, und baust dort, wo das Land frei ist.",
+    "status": "Die Lager leben: Du kannst sie jagen, sie wachsen nach, und starke Lager wehren sich. Die Regeln unten sind genau die, nach denen das Spiel läuft. Die Moorlager (Elchmoor, Biberburg, Kranichtanz) stehen auf einfachem Moorboden.",
     "rules": {
       "heading": "Wie ein Lager funktioniert",
-      "towers": "Ein bewachtes Lager hält das Land um sich herum. Starke Lager greifen an: Ein Turm in der Reichweite eines aggressiven starken Lagers wird niedergebrannt, wenn keine deiner Armeen ihn bewacht. Das Spiel warnt dich, wenn du einen setzt. Außerhalb der Reichweite kann auf der Insel gebaut werden.",
-      "range": "Wie weit ein Lager reicht, hängt von seiner Stufe ab, die beim Erscheinen des Lagers zufällig ausgewürfelt wird. Ein starkes Lager kann einen weiten Landstrich halten, ein schwaches nur die nächsten Felder.",
-      "bigIslands": "Eine kleine Insel kann ganz von einem Lager gehalten werden. Auf einer großen Insel kannst du nur die Lager räumen, die im Weg sind, und dort Türme bauen, wo das Land dann frei ist.",
-      "states": "Ein Lager hat zwei Zustände: bewacht, mit seinen Tieren, und geräumt (leer). Ein angeschlagenes Lager wächst nach und gilt weiter als bewacht.",
-      "building": "Sobald ein Lager geräumt ist, kannst du auf seinem Feld bauen (nicht bei Fenrirs Brut), und das Gebäude entfernt das Lager, solange es steht.",
-      "respawn": "Ein geräumtes Lager füllt sich nur auf, solange sein Feld außerhalb jedes Reichs liegt. Ein leeres Lager innerhalb eines Reichs bleibt leer; ist das Gebäude darauf weg und das Feld außerhalb jedes Reichs, kommt das Lager zurück.",
-      "neverBuilt": "Der Adlerhorst auf seiner Brandungssäule und Fenrirs Brut in den Ödlanden werden nie bebaut: Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück.",
-      "hunting": "Jagd: Schicke Landeinheiten mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere gekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
+      "towers": "Ein bewachtes Lager beansprucht das Land um sich herum. Starke Lager sind angriffslustig: Steht einer deiner Türme in ihrer Reichweite und keine deiner Armeen bewacht ihn, brennen sie ihn nieder. Willst du dort trotzdem einen Turm bauen, warnt dich das Spiel vorher. Außerhalb ihrer Reichweite kannst du auf der Insel frei bauen.",
+      "range": "Wie weit ein Lager reicht, hängt von seiner Stufe ab, die beim Erscheinen des Lagers zufällig ausgewürfelt wird. Ein starkes Lager kann einen weiten Landstrich beanspruchen, ein schwaches nur die nächsten Felder.",
+      "bigIslands": "Eine kleine Insel kann ein einzelnes Lager komplett beherrschen. Auf einer großen Insel räumst du nur die Lager, die dir im Weg sind, und baust Türme dort, wo das Land dann frei ist.",
+      "states": "Ein Lager hat zwei Zustände: bewacht (mit seinen Tieren) und geräumt (leer). Ein angeschlagenes Lager wächst nach und gilt weiterhin als bewacht.",
+      "building": "Sobald ein Lager geräumt ist, kannst du auf seinem Feld bauen (nur bei Fenrirs Brut nicht). Solange das Gebäude steht, bleibt das Lager entfernt.",
+      "respawn": "Ein geräumtes Lager füllt sich nur wieder auf, solange sein Feld außerhalb jedes Reichs liegt. Ein leeres Lager innerhalb eines Reichs bleibt leer. Steht das Gebäude darauf nicht mehr und liegt das Feld außerhalb jedes Reichs, kehrt das Lager zurück.",
+      "neverBuilt": "Auf dem Adlerhorst auf seiner Brandungssäule und auf Fenrirs Brut in den Ödlanden wird nie gebaut. Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück.",
+      "hunting": "Jagd: Schick Landeinheiten mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
       "regrowth": "Nachwuchs: Ein angeschlagenes Lager bekommt seine Tiere gleichmäßig über 4 Stunden (schwache Lager) oder 8 Stunden (starke Lager) zurück.",
-      "calm": "Ruhe: Nach jedem Kampf ist ein Lager 24 Stunden lang ruhig. Es wächst nach, greift aber nicht an.",
-      "leveling": "Aufstieg: Jede 10. Räumung eines Lagers, durch einen beliebigen Spieler, hebt seine Stufe um 1, bis höchstens 100. Sie sinkt nie wieder. Die Reichweite bleibt wie ausgewürfelt, ein abgefarmtes Lager wird also stärker, beansprucht aber nicht mehr Land.",
-      "ambush": "Hinterhalt: Ein starkes Lager, das nicht ruhig ist und noch Alttiere oder Alphas hat, überfällt Armeen, die in seine Reichweite kommen. Geschlagene Armeen ziehen sich nach Hause zurück; in jedem Fall ist das Lager danach 24 Stunden ruhig.",
-      "leftover": "Restbeute: Was deine Armee nicht tragen kann, bleibt für den nächsten Jäger im Lager. Eine Jagd auf ein kaum nachgewachsenes Lager bringt wenig, und eine Jagd auf ein leeres Lager sammelt nur die Restbeute ein."
+      "calm": "Ruhe: Nach jedem Kampf ist ein Lager 24 Stunden lang ruhig. Es wächst weiter nach, greift aber nicht an.",
+      "leveling": "Aufstieg: Jede 10. Räumung eines Lagers, egal durch welchen Spieler, hebt seine Stufe um 1, höchstens bis 100. Die Stufe sinkt nie wieder. Die Reichweite bleibt, wie sie ausgewürfelt wurde: Ein abgefarmtes Lager wird also stärker, beansprucht aber nicht mehr Land.",
+      "ambush": "Hinterhalt: Ein starkes Lager, das nicht ruhig ist und noch Alttiere oder Alphas hat, überfällt Armeen, die in seine Reichweite kommen. Geschlagene Armeen ziehen sich nach Hause zurück. In jedem Fall ist das Lager danach 24 Stunden ruhig.",
+      "leftover": "Restbeute: Was deine Armee nicht tragen kann, bleibt im Lager für den nächsten Jäger liegen. Eine Jagd auf ein kaum nachgewachsenes Lager bringt wenig, und bei einem leeren Lager sammelst du nur die Restbeute ein."
     },
     "camps": {
       "heading": "Die Lager",
-      "body": "Jede Bodenart hat ihre eigenen Lager, ein starkes und manchmal ein schwaches. Filtere sie nach Stärke oder Boden, schalte ein Lager zwischen bewacht und geräumt um und dreh es in die sechs Richtungen, in die eine Kachel schauen kann.",
-      "rotations": "Ein bewachtes Lager hat nur Grafik für die Richtungen, aus denen seine Tiere am besten zu sehen sind; die anderen sind ausgegraut, und auf der Karte wird das Lager in eine dieser Richtungen gedreht. Ein geräumtes Lager kann in jede Richtung schauen."
+      "body": "Jede Bodenart hat ihre eigenen Lager: ein starkes und manchmal ein schwaches. Du kannst sie nach Stärke oder Boden filtern, ein Lager zwischen bewacht und geräumt umschalten und es in die sechs Richtungen drehen, in die ein Feld blicken kann.",
+      "rotations": "Ein bewachtes Lager hat nur für die Richtungen eine Grafik, aus denen man seine Tiere am besten sieht. Die anderen Richtungen sind ausgegraut, und auf der Karte wird das Lager in eine der verfügbaren gedreht. Ein geräumtes Lager kann in jede Richtung blicken."
     },
     "state": {
       "all": "Alle Lager",
@@ -417,14 +438,14 @@
       "label": "Stärke",
       "strong": "Stark",
       "weak": "Schwach",
-      "help": "Starke Lager würfeln hohe Stufen und halten einen weiten Landstrich; kein neuer Spieler landet in ihrer Nähe. Schwache Lager würfeln niedrig und halten nur ihre nächsten Felder: die ersten, sicheren Kämpfe eines neuen Spielers."
+      "help": "Starke Lager würfeln hohe Stufen aus und beanspruchen einen weiten Landstrich. In ihrer Nähe landet kein neuer Spieler. Schwache Lager würfeln niedrige Stufen und beanspruchen nur ihre nächsten Felder: die ersten, sicheren Kämpfe eines neuen Spielers."
     },
     "filters": {
       "all": "Alle",
       "ground": "Boden",
       "none": "Kein Lager passt zu diesen Filtern."
     },
-    "range": "Bewacht {min} bis {max} Felder um sich, je nach Stufe (1 bis {levels}).",
+    "range": "Bewacht {min} bis {max} Felder um sich herum, je nach Stufe (1 bis {levels}).",
     "loot": {
       "label": "Beute",
       "food": "Nahrung",
@@ -433,11 +454,11 @@
       "iron": "Eisen",
       "more": "{kind} ++",
       "moreHint": "Davon gibt es hier mehr als bei anderen Lagern",
-      "note": "Ein geräumtes Lager bringt Beute. Jedes Lager gibt Nahrung von der Jagd, ein starkes Lager zusätzlich Eisen aus der Ausrüstung früherer Siedler, die sein Rudel gefressen hat; manche Lager geben dazu, was ihr Boden hergibt, und ++ markiert den größten Anteil eines Lagers (doppeltes Gewicht). Der Vorrat wächst mit der Stufe des Lagers, langsamer als seine Besatzung, eine frühe Räumung lohnt sich also weit mehr, als sie kostet.",
+      "note": "Ein geräumtes Lager bringt Beute. Jedes Lager gibt Nahrung aus der Jagd, ein starkes zusätzlich Eisen aus der Ausrüstung früherer Siedler, die sein Rudel gefressen hat. Manche Lager geben außerdem, was ihr Boden hergibt, und ++ markiert den größten Anteil eines Lagers (doppeltes Gewicht). Der Vorrat wächst mit der Stufe des Lagers, aber langsamer als seine Besatzung. Eine frühe Räumung lohnt sich deshalb weit mehr, als sie kostet.",
       "atLevel": "Auf Stufe {level}"
     },
     "camera": "Richtung",
-    "notKept": "Bewachte Grafik gibt es nur für die Richtungen, aus denen die Tiere am besten zu sehen sind",
+    "notKept": "Für bewachte Lager gibt es nur Grafiken für die Richtungen, aus denen man die Tiere am besten sieht",
     "grounds": {
       "grass": "Gras",
       "sand": "Sand",
@@ -454,7 +475,7 @@
       },
       "bearrapids": {
         "name": "Bärenstromschnelle",
-        "guards": "Ein Bär fischt von einem Felsen im Fluss, ein Bär mit Jungem am Nordufer, ein weiteres Junges am anderen Ufer."
+        "guards": "Ein Bär fischt von einem Felsen im Fluss, ein weiterer Bär mit Jungem steht am Nordufer, ein zweites Junges am anderen Ufer."
       },
       "sealhaulout": {
         "name": "Robbenbank",
@@ -462,7 +483,8 @@
       },
       "walrushaulout": {
         "name": "Walross-Liegeplatz",
-        "guards": "Walrossbullen mit langen Stoßzähnen am Ufer, einer richtet sich zum Kampf auf, zwischen den Knochen ihrer Beute. Bis zur eigenen Grafik mit der Robben-Grafik gezeichnet."
+        "guards": "Walrossbullen mit langen Stoßzähnen am Ufer, zwischen den Knochen ihrer Beute. Einer richtet sich zum Kampf auf.",
+        "artNote": "Bis die eigene Grafik fertig ist, wird die Robben-Grafik verwendet."
       },
       "boarwallow": {
         "name": "Wildschweinsuhle",
@@ -508,22 +530,21 @@
   },
   "bogLands": {
     "title": "Moorland",
-    "intro": "Nasser Moosboden (altnordisch mýrr), durchzogen von trägen Bächen und dunklen Seen. Rostfarbene Quellen zeigen das Raseneisenerz, das hier gegraben wird, und an den Seeufern wird Lehm gestochen. Moore gehören zu den lebendigen Landen und grenzen an einer Feldkante an Gras.",
-    "status": "Moore gibt es jetzt in Welten: einen See mit einem Fluss, der hindurchfließt, auf den meisten großen Inseln, und einen See mit Moorring dort, wo eine Insel eine Meeresbucht umschließt. Die Moorgebäude sind da: Raseneisenerz-Grube und Lehmziegelei auf einfachem Moorboden, die Fischerhütte am Halbufer eines Sees und die Hammerschmiede an einem Bach (mit der Grafik des Flusswerks, bis sie eine eigene hat).",
+    "intro": "Nasser Moosboden (altnordisch mýrr), durchzogen von trägen Bächen und dunklen Seen. An rostfarbenen Quellen erkennst du das Raseneisenerz, das hier gegraben wird, und an den Seeufern wird Lehm gestochen. Moore zählen zum lebendigen Land und stoßen an einer Feldkante an Gras.",
+    "status": "Moore gibt es jetzt in den Welten: Auf den meisten großen Inseln liegt ein See, den ein Fluss durchfließt, und wo eine Insel eine Meeresbucht umschließt, entsteht ein See mit Moorring. Die Moorgebäude sind dabei: Raseneisenerz-Grube und Ziegelei auf einfachem Moorboden, die Fischerhütte am Halbufer eines Sees und die Hammerschmiede an einem Bach (mit der Grafik des Flusswerks, bis sie eine eigene hat).",
     "looks": "Aussehen",
     "camera": "Richtung",
     "stage": "Stufe",
     "example": {
       "heading": "Beispielkarte",
-      "body": "Eine kleine Insel, die das Spiel selbst erzeugt hat: Moor, Bach und See sind genau so gezeichnet wie in einer Welt. Zeig auf ein Hexfeld, um zu sehen, was es ist.",
-      "hoverHint": "Zeig auf ein Hexfeld, um zu sehen, was es ist.",
+      "body": "Eine kleine Insel, die das Spiel selbst erzeugt hat. Moor, Bach und See sind genau so gezeichnet wie in einer echten Welt. Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "river": "Fluss"
     },
     "ground": {
       "heading": "Moorboden",
-      "body": "Schlichtes Moos, dazu geschmückte Varianten, die sich über eine Moorgegend mischen wie im Ödland. Die Erzquelle und die Quellkette zeigen, wo Raseneisenerz an die Oberfläche tritt.",
+      "body": "Moosboden in mehreren Varianten, bunt über das Moor verteilt. Erzquelle und Quellkette zeigen, wo das Raseneisenerz an die Oberfläche tritt.",
       "looks": {
-        "plain": "Schlichtes Moos",
         "mire1": "Offenes Moor 1",
         "mire2": "Offenes Moor 2",
         "mire3": "Offenes Moor 3",
@@ -535,32 +556,32 @@
     },
     "water": {
       "heading": "Bäche und Moorseen",
-      "body": "Bäche haben das Profil eines Flusses und gehen nahtlos in Flüsse über; Seen sind offenes Wasser mit Uferkacheln ringsum. Alle sind Wasserkacheln.",
+      "body": "Bäche münden in Flüsse. Seen sind offenes Wasser mit Uferfeldern ringsum. Alle gehören zu den Wasserfeldern.",
       "shape": "Kachel",
       "shapes": {
         "creek": {
           "name": "Bach",
-          "body": "Ein gerader Bach. Seine Varianten bringen Seggenufer oder ein Schilfbett."
+          "body": "Ein gerader Bach. Seine Varianten haben Seggenufer oder ein Schilfbett."
         },
         "creekBend": {
           "name": "Bachbiegung",
-          "body": "Ein Bach, der um 120° abbiegt. Bäche biegen nie schärfer ab und verzweigen sich nie."
+          "body": "Ein Bach, der um 120° abbiegt. Schärfer biegen Bäche nie ab, und verzweigen tun sie sich auch nicht."
         },
         "spring": {
           "name": "Quelle",
-          "body": "Wo ein Bach entspringt: ein runder, aufwallender Tümpel mit einem Ring heller Steine."
+          "body": "Dort, wo ein Bach entspringt: ein runder, aufwallender Tümpel, umgeben von einem Ring heller Steine."
         },
         "lake": {
           "name": "See",
-          "body": "Offenes Wasser. Seine Varianten bringen eine kleine Insel, eine schwimmende Moosdecke, eine Schilfinsel oder eine Fischreuse."
+          "body": "Offenes Wasser. Seine Varianten haben eine kleine Insel, eine schwimmende Moosdecke, eine Schilfinsel oder eine Fischreuse."
         },
         "inlet": {
           "name": "Bucht",
-          "body": "Ein Ufer mit einer Wasserkante; eine Variante hat eine Lehmbank."
+          "body": "Ein Ufer mit einer Wasserkante. Eine Variante hat eine Lehmbank."
         },
         "shore": {
           "name": "Ufer",
-          "body": "Ein Ufer mit zwei Wasserkanten; eine Variante hat eine Lehmbank."
+          "body": "Ein Ufer mit zwei Wasserkanten. Eine Variante hat eine Lehmbank."
         },
         "half": {
           "name": "Halbes Ufer",
@@ -568,7 +589,7 @@
         },
         "mouth": {
           "name": "Bachmündung",
-          "body": "Wo ein Bach in einen See mündet, gegenüber der Wasserkante der Bucht."
+          "body": "Dort, wo ein Bach in einen See mündet. Er trifft auf die Kante gegenüber der Wasserkante der Bucht."
         }
       }
     },
@@ -577,46 +598,47 @@
       "body": "Vier Gebäude gehören zum Moor. Blättere durch die Stufen, die jedes beim Ausbau durchläuft.",
       "bogoreworks": {
         "name": "Raseneisenerz-Grube",
-        "body": "Der Eisenproduzent auf einfachem Moorboden: von ein paar Gruben in den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute."
+        "body": "Der Eisenproduzent auf einfachem Moorboden: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute."
       },
       "fisherhut": {
         "name": "Fischerhütte (See)",
-        "body": "Die Fischerhütte auf Pfählen über einem Moorseeufer (Halbufer). Dasselbe Gebäude wie an der Küste, mit eigener Grafik; sie zählt die Seefelder um sich, wie die Küstenhütte das Meer zählt."
+        "body": "Die Fischerhütte steht auf Pfählen über einem Moorseeufer (Halbufer). Sie ist dasselbe Gebäude wie an der Küste, nur mit eigener Grafik, und zählt die Seefelder um sich herum, so wie die Küstenhütte das Meer zählt."
       },
       "hammerschmiede": {
         "name": "Hammerschmiede",
-        "body": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10: Es steigert jede Raseneisenerz-Grube in seiner Reichweite. Bis es eigene Grafik bekommt, wird das Hammerwerk vom Fluss gezeigt."
+        "body": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es steigert jede Raseneisenerz-Grube in seiner Reichweite.",
+        "artNote": "Bis es eine eigene Grafik bekommt, wird es mit der Grafik des Flusshammerwerks gezeigt."
       },
       "claybrickworks": {
-        "name": "Lehmziegelei",
-        "body": "Lehm aus dem Moor, zu Ziegeln gebrannt: die erste Steinquelle eines neuen Spielers. Sie steht auf einfachem Moorboden statt auf Gras."
+        "name": "Ziegelei",
+        "body": "Lehm aus dem Moor, zu Ziegeln gebrannt: die erste Steinquelle eines neuen Spielers. Die Ziegelei steht statt auf Gras auf einfachem Moorboden."
       }
     },
     "rules": {
       "heading": "Wie Moore angelegt sind",
-      "body": "Die Moorkacheln passen nur auf bestimmte Weise zusammen, daher folgt die Karte ein paar Regeln:",
-      "waterEdges": "Eine Moorkachel grenzt an höchstens drei Wasserkacheln, und diese liegen nebeneinander.",
-      "lakesApart": "Getrennte Seen liegen mindestens zwei Kacheln auseinander.",
-      "creeks": "Bäche verlaufen gerade oder biegen um 120° ab und enden in einer Quelle oder einer Seemündung.",
-      "mouth": "Ein Bach trifft einen See nur an einer Mündung.",
+      "body": "Die Moorfelder passen nur auf bestimmte Weise zusammen. Deshalb folgt die Karte ein paar Regeln:",
+      "waterEdges": "Ein Moorfeld grenzt an höchstens drei Wasserfelder, und diese liegen nebeneinander.",
+      "lakesApart": "Getrennte Seen liegen mindestens zwei Felder auseinander.",
+      "creeks": "Bäche verlaufen gerade oder biegen um 120° ab. Sie enden in einer Quelle oder an einer Seemündung.",
+      "mouth": "Ein Bach trifft nur an einer Mündung auf einen See.",
       "weir": "Die Fischreuse gibt es nur in der Nähe einer Seefischerhütte.",
-      "boats": "Boote erscheinen auf einem See nur dort, wo eine Seefischerhütte oder eine Raseneisenerz-Grube am Ufer steht, und nicht bei jedem Gebäude: Jedes hat eine Chance von 50 %, ein kleiner See trägt höchstens ein Boot, ein großer eines je zwölf Wasserkacheln, und Boote und Reusen halten drei Kacheln Abstand.",
-      "landing": "Jeder Landeplatz, der einem neuen Spieler angeboten wird, hat Moor in Reichweite, denn Lehmziegelei und Raseneisenerz-Grube brauchen es beide.",
-      "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal fließt ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
-      "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Ring aus Moor, und die Flüsse in der Nähe münden in ihn."
+      "boats": "Boote erscheinen auf einem See nur dort, wo eine Seefischerhütte oder eine Raseneisenerz-Grube am Ufer steht, und auch dann nicht bei jedem Gebäude: Jedes hat eine Chance von 50 %. Ein kleiner See trägt höchstens ein Boot, ein großer eines je zwölf Wasserfelder. Boote und Reusen halten drei Felder Abstand zueinander.",
+      "landing": "Von jedem Landeplatz, der einem neuen Spieler angeboten wird, ist Moor in Reichweite, denn Ziegelei und Raseneisenerz-Grube brauchen es beide.",
+      "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal mündet ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
+      "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Moorring, und die Flüsse in der Nähe münden in ihn."
     }
   },
   "animations": {
     "play": "Animationen abspielen",
     "paused": {
-      "reducedMotion": "Animationen sind angehalten, weil dein Gerät reduzierte Bewegung wünscht.",
+      "reducedMotion": "Animationen sind angehalten, weil dein Gerät reduzierte Bewegung verlangt.",
       "saveData": "Animationen sind angehalten, weil dein Browser Daten spart.",
       "off": "Animationen sind auf diesem Gerät ausgeschaltet."
     }
   },
   "walls": {
     "title": "Mauern",
-    "intro": "Die Palisade ist die Erd-und-Holz-Mauer der Wikingerzeit, und vor allem eine Bewegungssperre: Sie hält Landheere auf, keine Boote. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 40 Holz und 10 Stein.",
+    "intro": "Die Palisade ist die Mauer aus Erde und Holz der Wikingerzeit und vor allem eine Bewegungssperre: Sie hält Landarmeen auf, Boote aber nicht. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 40 Holz und 10 Stein.",
     "stage": "Stufe",
     "camera": "Blickrichtung",
     "stages": {
@@ -625,14 +647,14 @@
     },
     "pieces": {
       "heading": "Die sechs Teile",
-      "body": "Eine Mauer wird Feld für Feld gebaut, und jedes Feld zeichnet eines von sechs Teilen. Jedes Teil gibt es in sechs Drehungen und in jeder Stufe, die die Grafik hat, von der Baustelle bis zur fertigen Mauer. Hier ist jedes so gezeichnet, wie es die Karte zeichnet: der Boden, darauf das Teil.",
+      "body": "Eine Mauer entsteht Feld für Feld, und jedes Feld zeigt eines von sechs Teilen. Jedes Teil gibt es in sechs Drehungen und in allen Stufen, für die es Grafiken gibt, von der Baustelle bis zur fertigen Mauer. Hier ist jedes so gezeichnet wie auf der Karte: erst der Boden, darauf das Teil.",
       "straight": {
         "name": "Gerade",
-        "body": "Der Lauf der Mauer: Sie verbindet zwei gegenüberliegende Nachbarn."
+        "body": "Der Verlauf der Mauer: Sie verbindet zwei gegenüberliegende Nachbarn."
       },
       "bend60": {
         "name": "60°-Knick",
-        "body": "Die enge Kurve zwischen zwei benachbarten Nachbarn. Sie kommt nur in einem Dreieck aus drei Mauerfeldern vor, denn ein viertes Feld würde die Mauer verzweigen."
+        "body": "Die enge Kurve zwischen zwei Nachbarn, die selbst nebeneinander liegen. Sie kommt nur in einem Dreieck aus drei Mauerfeldern vor, denn ein viertes Feld würde die Mauer verzweigen."
       },
       "bend120": {
         "name": "120°-Knick",
@@ -640,33 +662,33 @@
       },
       "gate": {
         "name": "Tor",
-        "body": "Eine Gerade mit einem Tor in der Mitte. Es lässt die Heere seines Besitzers und seiner Freunde durch und sonst niemanden."
+        "body": "Eine Gerade mit einem Tor in der Mitte. Es lässt die Armeen seines Besitzers und seiner Freunde durch, sonst niemanden."
       },
       "end": {
         "name": "Landende",
-        "body": "Das letzte Feld einer Mauer an Land, mit nur einem Mauernachbarn. Es ist halb offen: Jedes Heer kann es gegen einen Aufschlag überqueren."
+        "body": "Das letzte Feld einer Mauer an Land, mit nur einem Mauernachbarn. Es ist halb offen: Jede Armee kann es gegen einen Aufschlag überqueren."
       },
       "seaEnd": {
         "name": "Seeende",
-        "body": "Dort, wo eine Mauer ins Wasser ausläuft: Es steht auf Küstenwasser, berührt genau ein Mauerfeld an Land und hat einen eigenen Wasserboden."
+        "body": "Hier läuft eine Mauer ins Wasser aus. Das Feld steht auf Küstenwasser, berührt genau ein Mauerfeld an Land und hat einen eigenen Wasserboden."
       }
     },
     "choosing": {
       "heading": "Wie die Teile gewählt werden",
-      "body": "Du entscheidest nur, wo ein Mauerfeld steht. Das Spiel wählt Teil und Drehung nach den Mauerfeldern ringsum und wählt neu, wenn ein Nachbar dazukommt oder wegfällt: Ein Ende wird zur Geraden, sobald die Mauer darüber hinauswächst.",
+      "body": "Du entscheidest nur, wo ein Mauerfeld stehen soll. Teil und Drehung wählt das Spiel anhand der umliegenden Mauerfelder, und es wählt neu, sobald ein Nachbar dazukommt oder wegfällt. Aus einem Ende wird so eine Gerade, sobald die Mauer darüber hinauswächst.",
       "rules": {
         "fork": "Mauern verzweigen sich nie: Kein Feld darf drei oder mehr Mauernachbarn haben.",
-        "gate": "Ein Tor passt nur auf eine Gerade, mit einem Mauerfeld auf zwei gegenüberliegenden Seiten, und das muss auch nach jedem späteren Bauen so bleiben.",
+        "gate": "Ein Tor passt nur auf eine Gerade, die auf zwei gegenüberliegenden Seiten ein Mauerfeld hat. Das muss auch nach jedem späteren Bauen so bleiben.",
         "sea": "Ein Seeende berührt genau ein Mauerfeld an Land und kann nie ein Tor sein."
       },
-      "example": "Ein Beispiel: eine Mauer, die an Land endet, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und ins Meer ausläuft. Das Spiel hat jedes Teil und seine Drehung allein aus den Feldern ermittelt."
+      "example": "Ein Beispiel: eine Mauer, die an Land beginnt, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und im Meer ausläuft. Teil und Drehung jedes Feldes hat das Spiel allein aus der Lage der Felder ermittelt."
     },
     "example": {
       "alt": "Eine Beispielmauer aus {count} Feldern auf Gras, die im Meer endet."
     },
     "where": {
       "heading": "Wo Mauern stehen können",
-      "body": "Auf Gras, Wald, Sand und einfachem Moorboden, innerhalb deines Gebiets. Die Mauer behält den Boden, auf dem sie steht: Im Wald werden die Bäume gerodet, und der Waldboden bleibt. Auf Flüssen, Bächen, Bergen, Moorwasser und Seen kann man keine Mauer bauen. Das Seeende ist die Ausnahme: Es steht auf Küstenwasser.",
+      "body": "Mauern stehen auf Gras, Wald, Sand und einfachem Moorboden, innerhalb deines Gebiets. Die Mauer behält den Boden, auf dem sie steht: Im Wald werden die Bäume gerodet, der Waldboden bleibt. Auf Flüssen, Bächen, Bergen, Moorwasser und Seen kannst du keine Mauer bauen. Die Ausnahme ist das Seeende, das auf Küstenwasser steht.",
       "grounds": {
         "grass": "Gras",
         "forest": "Waldboden",
@@ -676,30 +698,29 @@
     },
     "movement": {
       "heading": "Bewegung",
-      "body": "Mauern betreffen Landheere. Flotten sind nicht betroffen.",
+      "body": "Mauern wirken nur auf Landarmeen. Flotten sind nicht betroffen.",
       "rules": {
-        "block": "Ein Mauerfeld sperrt jedes Landheer, auch dein eigenes. Nur fertige Felder zählen: Eine Baustelle sperrt nicht.",
-        "gate": "Ein Tor lässt die Heere seines Besitzers sowie die seiner Gilde und von Gilden im Frieden mit ihr so schnell wie den Boden darunter durch. Alle anderen werden aufgehalten.",
-        "end": "Ein Landende ist halb offen: Jedes Heer kann es überqueren, aber langsamer als jeden offenen Boden, Heere nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes Mauerfeld.",
-        "sea": "Eine Mauer, die in einem Seeende endet, schließt an der Küste ab. Eine Mauer, die an Land neben offenem Meer einfach aufhört, tut das nicht: Ihr halb offenes Ende ist der Weg hindurch.",
-        "natural": "Berge und breite Flüsse können Landheere ohnehin nicht überqueren, eine Mauer, die bis an einen von ihnen reicht, ist dort also verschlossen.",
-        "rivers": "Flüsse: Ein breiter Fluss ist für Landheere kein Weg, eine Mauer, die an einem endet, ist dort also verschlossen. Ein Bach ist seicht genug zum Durchwaten, und in fließendem Wasser lässt sich keine Mauer bauen, ein Bach ist also immer ein Weg hindurch: langsam, aber offen. Eine Mauer, die an einem Bach endet, ist dort nicht verschlossen. Auf keinem von beiden kann eine Mauer stehen.",
-        "fleets": "Flotten werden von Mauern nicht betroffen."
+        "block": "Ein Mauerfeld sperrt jede Landarmee, auch deine eigene. Es zählen nur fertige Felder: Eine Baustelle sperrt nicht.",
+        "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten.",
+        "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, aber langsamer als jeden offenen Boden. Armeen nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
+        "sea": "Eine Mauer, die in einem Seeende ausläuft, schließt an der Küste ab. Hört eine Mauer an Land neben offenem Meer einfach auf, ist das anders: Ihr halb offenes Ende ist dann der Weg hindurch.",
+        "natural": "Berge und breite Flüsse können Landarmeen ohnehin nicht überqueren. Reicht eine Mauer bis an einen von ihnen heran, ist sie dort also verschlossen.",
+        "rivers": "Flüsse: Ein breiter Fluss ist für Landarmeen kein Weg, daher ist eine Mauer, die an einem endet, dort verschlossen. Ein Bach ist seicht genug zum Durchwaten, und in fließendem Wasser lässt sich keine Mauer bauen. Ein Bach ist also immer ein Weg hindurch: langsam, aber offen. Eine Mauer, die an einem Bach endet, ist dort nicht verschlossen. Auf keinem von beiden kann eine Mauer stehen.",
+        "fleets": "Mauern wirken nicht auf Flotten."
       },
       "diagram": {
         "sealedTitle": "Verschlossen",
-        "sealed": "Eine Mauer, die an beiden Enden bis an Berge reicht: kein Durchkommen.",
+        "sealed": "Eine Mauer, die an beiden Enden bis an Berge reicht: Hier kommt niemand durch.",
         "riverEndTitle": "Vom Fluss verschlossen",
         "riverEnd": "Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, genau wie an einem Berg.",
         "halfOpenTitle": "Halb offen",
-        "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jedes Heer überquert ihr letztes Feld, nur langsamer. Gras oder Sand macht keinen Unterschied.",
+        "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jede Armee überquert ihr letztes Feld, nur langsamer. Ob Gras oder Sand, macht keinen Unterschied.",
         "streamTitle": "Bach",
-        "stream": "In einem Bach lässt sich keine Mauer bauen, und jedes Heer kann ihn durchwaten, noch langsamer als am Mauerende vorbei. Ein Bach ist also immer eine Lücke in der Mauer, und das Ende daneben bleibt halb offen.",
+        "stream": "In einem Bach lässt sich keine Mauer bauen, und jede Armee kann ihn durchwaten, noch langsamer als am Mauerende vorbei. Ein Bach ist also immer eine Lücke in der Mauer, und das Ende daneben bleibt halb offen.",
         "seaEndTitle": "Seeende",
-        "seaEnd": "Die Linie läuft auf einem Seeende ins Wasser aus: an der Küste verschlossen.",
-        "slower": "langsamer",
+        "seaEnd": "Die Linie läuft an einem Seeende ins Wasser aus: Die Küste ist verschlossen.",
         "gateTitle": "Tor",
-        "gate": "Ein Tor ist eine Lücke zwischen zwei Pfosten. Es öffnet sich für seinen Besitzer und dessen Freunde: dieselbe Gilde oder Gilden im Frieden.",
+        "gate": "Ein Tor ist eine Lücke zwischen zwei Pfosten. Es öffnet sich für seinen Besitzer und dessen Freunde, also für dieselbe Gilde oder Gilden im Frieden.",
         "legend": {
           "wall": "Mauer (eine Linie entlang ihrer Felder)",
           "gate": "Tor (Lücke zwischen zwei Pfosten)",
@@ -709,15 +730,27 @@
           "mountain": "Berg",
           "river": "Breiter Fluss",
           "stream": "Bach",
-          "army": "Heer",
+          "army": "Armee",
           "pass": "Kommt durch",
           "blocked": "Aufgehalten"
-        }
+        },
+        "slower": "langsamer"
       }
     },
     "notBuilt": {
       "heading": "Noch nicht gebaut",
-      "body": "Feuer, das einer Mauer eine Stufe nimmt: Eine Mauer verliert ihre Stufen nacheinander, bis sie weg ist. Noch brennt keine Mauer."
+      "body": "Feuer, das einer Mauer eine Stufe nimmt: Eine Mauer verliert ihre Stufen nacheinander, bis sie verschwunden ist. Noch brennt keine Mauer. Belagerungen tun das schon, siehe den Abschnitt zur Belagerung weiter oben."
+    },
+    "sieges": {
+      "heading": "Belagerung",
+      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen nur Katapulte, und nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört.",
+      "rules": {
+        "who": "Schick einen Angriff (oder einen Raubzug) mit Katapulten gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Gewinnt deine Armee die Schlacht, feuern die überlebenden Katapulte auf dieses Feld. Ein einziges überlebendes Katapult genügt. Verliert deine Armee die Schlacht, feuert nichts.",
+        "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, auch ein Mauerfeld.",
+        "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Katapulte überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
+        "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
+        "rebuild": "Ein Mauerfeld, das noch steht, kann der Besitzer wie jedes Gebäude wieder um eine Stufe ausbauen. Auf einem zerstörten Feld baut er neu und beachtet dabei die üblichen Bauregeln. Eine eigene Reparatur gibt es nicht."
+      }
     }
   }
 }

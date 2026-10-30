@@ -2,6 +2,7 @@
 import TopBar from '../hud/TopBar.vue';
 import HudNav from '../hud/HudNav.vue';
 import MobileHudDrawer from '../hud/MobileHudDrawer.vue';
+import { useDocsAdminNotes } from '../../composables/useDocsAdminNotes';
 
 // The shell every docs page shares: docked top bar with the HUD nav and the
 // mobile drawer, the breadcrumb back to the hub, the page title and its lede,
@@ -14,6 +15,10 @@ import MobileHudDrawer from '../hud/MobileHudDrawer.vue';
 //   grows to 1440px while the lede and the body keep their 90ch width, so all
 //   of them start at the same left edge.
 // - `breadcrumb=false` for the hub itself, which is what the others link back to.
+// - Admins get a "Show admin notes" toggle under the lede; it reveals the
+//   `DocsAdminNote` blocks (technical content hidden from players).
+// - `hero` for the hub, which renders its own h1 and lede in the body; the
+//   header then keeps only the admin toggle (the `title` still names the top bar).
 // Attributes (a `class` for the page's own scroll container hook) fall through
 // to the scrolling root.
 withDefaults(
@@ -24,9 +29,12 @@ withDefaults(
     intro?: string;
     breadcrumb?: boolean;
     wide?: boolean;
+    /** The page draws its own heading and lede (the hub's hero), so the header skips the h1 and intro. */
+    hero?: boolean;
   }>(),
-  { intro: undefined, breadcrumb: true, wide: false },
+  { intro: undefined, breadcrumb: true, wide: false, hero: false },
 );
+const { canToggle, enabled, setEnabled } = useDocsAdminNotes();
 </script>
 
 <template>
@@ -38,11 +46,19 @@ withDefaults(
       </template>
     </TopBar>
     <div class="page docs-scale" :class="{ wide }">
-      <header class="head">
+      <header class="head" :class="{ 'hero-head': hero }">
         <RouterLink v-if="breadcrumb" to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
-        <h1>{{ title }}</h1>
-        <p v-if="intro" class="intro">{{ intro }}</p>
+        <h1 v-if="!hero">{{ title }}</h1>
+        <p v-if="intro && !hero" class="intro">{{ intro }}</p>
         <slot name="status" />
+        <label v-if="canToggle" class="admin-toggle" data-testid="docs-admin-toggle">
+          <input
+            type="checkbox"
+            :checked="enabled"
+            @change="setEnabled(($event.target as HTMLInputElement).checked)"
+          />
+          {{ $t('docs.adminNotes.toggle') }}
+        </label>
       </header>
       <div v-if="$slots.wide" class="wide-slot">
         <slot name="wide" />
@@ -98,11 +114,31 @@ withDefaults(
   color: var(--muted);
   line-height: 1.6;
 }
+/* The hub's own hero follows; the header holds only the admin toggle. */
+.hero-head .admin-toggle {
+  margin-top: 0;
+}
 /* The "coming soon" note a page passes in the `status` slot. */
 .head :slotted(.status) {
   font-size: 13px;
   border-left: 3px solid var(--gold);
   padding-left: 12px;
   color: var(--muted);
+}
+/* Admin-only switch for the technical notes. */
+.admin-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 3px 10px;
+  border: 1px dashed color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.admin-toggle:hover {
+  color: var(--gold);
 }
 </style>

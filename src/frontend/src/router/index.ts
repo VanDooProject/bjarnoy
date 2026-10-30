@@ -138,6 +138,8 @@ export const router = createRouter({
       path: '/docs',
       name: 'docs',
       component: () => import('../views/DocsView.vue'),
+      // Draws showcase art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
     },
     {
       // Public marketing/portfolio page — lives inside the game app (not a
