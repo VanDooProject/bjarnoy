@@ -1,50 +1,30 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
+import AnimatedBuildingSprite from '../components/AnimatedBuildingSprite.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import { buildingLayers } from '../lib/map/buildingArt';
+import { useAnimationClock } from '../composables/useAnimationClock';
+import { DOCS_GROUPS } from '../lib/docs/docsPages';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const GROUPS = DOCS_GROUPS;
 
-interface DocPage {
-  id: 'tiles' | 'bogLands' | 'techTree' | 'walls' | 'wildlifeCamps' | 'wastedLands';
-  to: string;
-  /** A `showcase` atlas frame, or `camp:<family>` for an animated wildlife camp. */
-  art: string;
+// The page scrolls inside its own container, where the browser's hash scrolling does not reach: `/docs#group-island`
+// (the breadcrumb's group menu) scrolls to that group's section here, on arrival and when the hash changes.
+const route = useRoute();
+async function scrollToHash() {
+  await nextTick();
+  const id = route.hash.slice(1);
+  if (id) document.getElementById(id)?.scrollIntoView({ block: 'start' });
 }
-interface DocGroup {
-  id: 'island' | 'building' | 'beyond';
-  pages: DocPage[];
-}
-
-// The groups a future doc page joins. The routes guard the showcase manifests
-// (router/index.ts), so the art below resolves synchronously at setup.
-const GROUPS: DocGroup[] = [
-  {
-    id: 'island',
-    pages: [
-      { id: 'tiles', to: '/docs/tiles', art: 'foresttile_SE_variant001' },
-      { id: 'bogLands', to: '/docs/bog-lands', art: 'bog_SE_variant004' },
-    ],
-  },
-  {
-    id: 'building',
-    pages: [
-      { id: 'techTree', to: '/tech-tree', art: 'druidhut_SE_level006' },
-      { id: 'walls', to: '/docs/walls', art: 'palisade_gate180_SE_level002' },
-    ],
-  },
-  {
-    id: 'beyond',
-    pages: [
-      { id: 'wildlifeCamps', to: '/docs/wildlife-camps', art: 'camp:boarwallow' },
-      { id: 'wastedLands', to: '/docs/wasted-lands', art: 'jotunwatchtower_SE_level002' },
-    ],
-  },
-];
+onMounted(scrollToHash);
+watch(() => route.hash, scrollToHash);
 
 const utgard = computed(() => findAtlasFrame('showcase', 'giantutgard_SE_level000'));
 // AtlasSprite keeps the frame's aspect ratio, so a width of min(100%, box
@@ -53,7 +33,24 @@ function fit(frame: AtlasFrameRect, boxHeight: number) {
   return { width: `min(100%, ${(boxHeight * frame.frame.w) / frame.frame.h}px)` };
 }
 function frameOf(art: string) {
-  return art.startsWith('camp:') ? undefined : findAtlasFrame('showcase', art);
+  return art.startsWith('camp:') || art.startsWith('anim:') ? undefined : findAtlasFrame('showcase', art);
+}
+
+// A building card plays its `buildings-anim` clip on the docs clock, which holds
+// still under reduced motion, Save-Data or "animations off" (useAnimationClock.ts).
+const now = useAnimationClock();
+function animatedOf(art: string) {
+  if (!art.startsWith('anim:')) return undefined;
+  const [, family, level] = art.split(':');
+  const layers = buildingLayers(family!, Number(level));
+  const canvas = layers.base?.sourceSize ?? layers.top?.sourceSize;
+  if (!layers.clip || !canvas) return undefined;
+  return { layers, style: { width: `min(100%, ${(84 * canvas.w) / canvas.h}px)` } };
+}
+/** The still showcase frame of an `anim:` card, for as long as its clip is not there. */
+function stillOf(art: string) {
+  const [, family, level] = art.split(':');
+  return findAtlasFrame('showcase', `${family}_SE_level${String(level).padStart(3, '0')}`);
 }
 </script>
 
@@ -70,17 +67,24 @@ function frameOf(art: string) {
     </section>
 
     <div class="groups">
-      <section v-for="group in GROUPS" :key="group.id" class="group" :data-group="group.id">
-        <h2>{{ t(`docs.hub.groups.${group.id}.title`) }}</h2>
-        <p class="group-desc">{{ t(`docs.hub.groups.${group.id}.description`) }}</p>
+      <section v-for="group in GROUPS" :id="`group-${group.id}`" :key="group.id" class="group" :data-group="group.id">
+        <h2>{{ t(group.titleKey) }}</h2>
+        <p class="group-desc">{{ t(group.descriptionKey) }}</p>
         <RouterLink v-for="page in group.pages" :key="page.id" :to="page.to" class="card" :data-page="page.id">
           <span class="art" data-testid="docs-card-art" aria-hidden="true">
             <AnimatedCamp v-if="page.art.startsWith('camp:')" :family="page.art.slice(5)" orientation="SE" />
+            <AnimatedBuildingSprite
+              v-else-if="animatedOf(page.art)"
+              :layers="animatedOf(page.art)!.layers"
+              :elapsed-ms="now"
+              :style="animatedOf(page.art)!.style"
+            />
+            <AtlasSprite v-else-if="page.art.startsWith('anim:') && stillOf(page.art)" :frame="stillOf(page.art)!" :style="fit(stillOf(page.art)!, 84)" />
             <AtlasSprite v-else-if="frameOf(page.art)" :frame="frameOf(page.art)!" :style="fit(frameOf(page.art)!, 84)" />
           </span>
           <span class="text">
-            <span class="title">{{ t(`docs.hub.pages.${page.id}.title`) }}</span>
-            <span class="desc">{{ t(`docs.hub.pages.${page.id}.description`) }}</span>
+            <span class="title">{{ t(page.titleKey) }}</span>
+            <span class="desc">{{ t(page.descriptionKey) }}</span>
           </span>
         </RouterLink>
       </section>
@@ -128,11 +132,19 @@ function frameOf(art: string) {
 }
 .groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
   margin-top: 28px;
 }
+/* Four groups of 2-4 cards: one column on a phone, two from a tablet up (the page column is only 90ch wide). */
+@media (min-width: 700px) {
+  .groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px 28px;
+  }
+}
 .group {
+  scroll-margin-top: 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;

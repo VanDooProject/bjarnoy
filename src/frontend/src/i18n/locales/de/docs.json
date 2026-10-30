@@ -4,7 +4,77 @@
     "toggle": "Admin-Hinweise anzeigen",
     "label": "Admin-Hinweis"
   },
-  "backToDocs": "← Docs",
+  "nav": {
+    "breadcrumb": "Brotkrumennavigation",
+    "docs": "Docs",
+    "groups": "Bereiche der Docs",
+    "groupsMenu": "{group}, Bereich wechseln",
+    "pagesIn": "Seiten in „{group}“",
+    "pagesMenu": "{page}, Seiten in „{group}“",
+    "pager": "Vorherige und nächste Seite",
+    "previous": "← Zurück",
+    "next": "Weiter →"
+  },
+  "related": {
+    "heading": "Weiterlesen",
+    "reasons": {
+      "shrines": {
+        "techTree": "Kosten und Bauzeiten jeder Schreinstufe.",
+        "production": "Freyja und Ullr steigern Nahrung und Holz.",
+        "landMovement": "Odins Statue lässt reisende Armeen weiter sehen."
+      },
+      "production": {
+        "techTree": "Kosten und Stufen jedes Produzenten.",
+        "shrines": "Freyja und Ullr erhöhen Nahrung und Holz.",
+        "bogLands": "Lehm und Raseneisenerz kommen aus dem Moor."
+      },
+      "techTree": {
+        "production": "Was jeder Produzent liefert und wie Mühlen es steigern.",
+        "shrines": "Was dir der Schrein jedes Gottes bringt.",
+        "walls": "Die Palisade braucht einen Turm auf Stufe 5."
+      },
+      "tiles": {
+        "bogLands": "Die Moorfelder im Einzelnen.",
+        "production": "Was die Gebäude auf dem jeweiligen Boden erzeugen.",
+        "landMovement": "Was jedes Feld eine Armee beim Überqueren kostet."
+      },
+      "bogLands": {
+        "tiles": "Alle übrigen Bodenarten.",
+        "production": "Wie Lehm und Raseneisenerz gewonnen werden.",
+        "wildlifeCamps": "Die Moorlager stehen auf schlichtem Moorboden."
+      },
+      "walls": {
+        "landMovement": "Wie Armeen eine Mauer überwinden – oder nicht.",
+        "techTree": "Palisade und Tor: Freischaltung, Stufen und Kosten.",
+        "wastedLands": "Utgards eigene Mauern riegeln das Land der Riesen ab."
+      },
+      "founding": {
+        "landMovement": "Wie schnell Siedlertrupps jedes Feld überqueren.",
+        "wildlifeCamps": "Starke Lager können Trupps unterwegs überfallen.",
+        "bogLands": "Landeplätze brauchen Moor in Reichweite für Lehm und Eisen."
+      },
+      "landMovement": {
+        "walls": "Ein Mauerfeld hält jede Landarmee auf.",
+        "wildlifeCamps": "Starke Lager überfallen Armeen, die ihnen zu nahe kommen.",
+        "founding": "Siedlertrupps ziehen über dieselben Böden."
+      },
+      "ships": {
+        "shrines": "Njörds Schrein lässt deine Schiffe härter zuschlagen.",
+        "walls": "Mauern halten keine Flotten auf.",
+        "wildlifeCamps": "Wildtierlager überfallen nie eine Flotte."
+      },
+      "wildlifeCamps": {
+        "landMovement": "Lager überfallen Armeen unterwegs.",
+        "bogLands": "Die Moorlager stehen auf schlichtem Moorboden.",
+        "wastedLands": "Fenrirs Brut und die Jötnar beherrschen die Ödlande."
+      },
+      "wastedLands": {
+        "wildlifeCamps": "Auch das Ödland hat eigene Lager.",
+        "walls": "Deine eigenen Mauern, aus Holz gebaut.",
+        "landMovement": "Wie Armeen das Land bis dorthin durchqueren."
+      }
+    }
+  },
   "hub": {
     "title": "Docs",
     "heading": "Das Bjarnøy-Handbuch",
@@ -18,6 +88,10 @@
       "building": {
         "title": "Ausbauen",
         "description": "Gebäude, ihre Stufen und deine Mauern."
+      },
+      "move": {
+        "title": "Unterwegs",
+        "description": "Neue Siedlungen, Armeen und Flotten."
       },
       "beyond": {
         "title": "Jenseits deiner Küste",
@@ -37,9 +111,29 @@
         "title": "Techbaum",
         "description": "Jedes Gebäude: was jede Stufe kostet, liefert und voraussetzt."
       },
+      "production": {
+        "title": "Rohstoffproduktion",
+        "description": "Woher Holz, Stein, Nahrung und Eisen kommen und wie Mühlen sie steigern."
+      },
+      "shrines": {
+        "title": "Schreine",
+        "description": "Die Gunst der Götter: was jeder Schrein bringt und die Ein-Schrein-Regel."
+      },
       "walls": {
         "title": "Mauern",
         "description": "Die Palisade: wo sie stehen darf und wer hindurchkommt."
+      },
+      "founding": {
+        "title": "Siedlungen gründen",
+        "description": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann."
+      },
+      "landMovement": {
+        "title": "Bewegung an Land",
+        "description": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse und Brücken, Berge und Mauern."
+      },
+      "ships": {
+        "title": "Schiffe und Wasser",
+        "description": "Schiffe aus der Werft, Flotten auf See und was Mauern nicht aufhalten."
       },
       "wildlifeCamps": {
         "title": "Wildtierlager",
@@ -84,6 +178,10 @@
     "palisadegate": "Palisaden-Tor",
     "bridge": "Brücke",
     "reindeerherder": "Rentierhirte"
+  },
+  "buildingLink": {
+    "levels": "Stufen 1–{max}",
+    "cta": "Kosten und Stufen im Techbaum →"
   },
   "techTree": {
     "title": "Techbaum",
@@ -143,7 +241,7 @@
       "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
       "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedlertrupps aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
-      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %. Ab Langhaus 6 verfügbar.",
+      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
       "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
       "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder."
     },
@@ -704,15 +802,15 @@
         "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten.",
         "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, aber langsamer als jeden offenen Boden. Armeen nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
         "sea": "Eine Mauer, die in einem Seeende ausläuft, schließt an der Küste ab. Hört eine Mauer an Land neben offenem Meer einfach auf, ist das anders: Ihr halb offenes Ende ist dann der Weg hindurch.",
-        "natural": "Berge und breite Flüsse können Landarmeen ohnehin nicht überqueren. Reicht eine Mauer bis an einen von ihnen heran, ist sie dort also verschlossen.",
-        "rivers": "Flüsse: Ein breiter Fluss ist für Landarmeen kein Weg, daher ist eine Mauer, die an einem endet, dort verschlossen. Ein Bach ist seicht genug zum Durchwaten, und in fließendem Wasser lässt sich keine Mauer bauen. Ein Bach ist also immer ein Weg hindurch: langsam, aber offen. Eine Mauer, die an einem Bach endet, ist dort nicht verschlossen. Auf keinem von beiden kann eine Mauer stehen.",
+        "natural": "Berge können Landarmeen gar nicht überqueren, breite Flüsse nur über eine Brücke. Reicht eine Mauer bis an einen von beiden heran, ist sie dort verschlossen, mit oder ohne Brücke.",
+        "rivers": "Flüsse: Ein breiter Fluss ist für Landarmeen kein Weg, es sei denn, eine Brücke führt darüber, doch eine Mauer, die an einem endet, ist dort in jedem Fall verschlossen. Ein Bach ist seicht genug zum Durchwaten, und in fließendem Wasser lässt sich keine Mauer bauen. Ein Bach ist also immer ein Weg hindurch: langsam, aber offen. Eine Mauer, die an einem Bach endet, ist dort nicht verschlossen. Auf keinem von beiden kann eine Mauer stehen.",
         "fleets": "Mauern wirken nicht auf Flotten."
       },
       "diagram": {
         "sealedTitle": "Verschlossen",
         "sealed": "Eine Mauer, die an beiden Enden bis an Berge reicht: Hier kommt niemand durch.",
         "riverEndTitle": "Vom Fluss verschlossen",
-        "riverEnd": "Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, genau wie an einem Berg.",
+        "riverEnd": "Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, genau wie an einem Berg, auch wenn eine Brücke über den Fluss führt.",
         "halfOpenTitle": "Halb offen",
         "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jede Armee überquert ihr letztes Feld, nur langsamer. Ob Gras oder Sand, macht keinen Unterschied.",
         "streamTitle": "Bach",
@@ -751,6 +849,338 @@
         "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
         "rebuild": "Ein Mauerfeld, das noch steht, kann der Besitzer wie jedes Gebäude wieder um eine Stufe ausbauen. Auf einem zerstörten Feld baut er neu und beachtet dabei die üblichen Bauregeln. Eine eigene Reparatur gibt es nicht."
       }
+    }
+  },
+  "production": {
+    "title": "Rohstoffproduktion",
+    "intro": "Woher Holz, Stein, Nahrung und Eisen kommen und wie Mühlen sie steigern.",
+    "toc": {
+      "producers": "Produzenten",
+      "boost": "Nachbarbonus",
+      "mills": "Mühlen",
+      "storage": "Lager",
+      "upkeep": "Unterhalt und Schreine"
+    },
+    "producers": {
+      "heading": "Produzenten",
+      "growth": "Die Leistung eines Produzenten wächst mit jeder Stufe um 20 %: Jede Stufe liefert das 1,2-Fache der vorigen.",
+      "columns": {
+        "building": "Gebäude",
+        "makes": "Liefert",
+        "level": "Stufe {n}",
+        "standsOn": "Steht auf",
+        "unlock": "Freigeschaltet ab"
+      },
+      "perHour": "Alle Angaben gelten pro Stunde und ohne Bonus von Nachbarfeldern, Mühlen oder Schreinen.",
+      "longhouseUnlock": "Von Anfang an",
+      "notes": {
+        "pumpkinfarm": "Nur auf einer Insel mit Kürbisboden",
+        "fishinghut": "oder am halben Ufer eines Moorsees",
+        "claybrickworks": "Nur auf reinem Moorboden",
+        "bogoreworks": "Nur auf reinem Moorboden, nicht an Ufer, Bach oder See"
+      },
+      "longhouse": "Das Langhaus ist die Ausnahme: Es liefert mit jeder Stufe dieselbe feste Menge dazu ({amounts} pro Stunde: Holz / Stein / Nahrung / Eisen), statt um 20 % zu wachsen.",
+      "soil": "Jede Insel hat Weizen- oder Kürbisboden, etwa die Hälfte von jedem. Eine {pumpkin} passt nur auf Kürbisboden und bringt auf Stufe 1 {pumpkinRate} Nahrung, wo ein {farm} {farmRate} bringt. Ein {farm} kannst du auf jeder Insel bauen."
+    },
+    "boost": {
+      "heading": "Nachbarbonus",
+      "body": "Jedes der sechs Felder um einen Produzenten, das passt, bringt ihm {per} % mehr, höchstens aber {max} % (bei fünf passenden Feldern). Was passt, hängt vom Gebäude ab.",
+      "boostedBy": "Gesteigert durch",
+      "none": "{herder}, {farm}, {pumpkin} und {brickworks} bekommen keinen Nachbarbonus."
+    },
+    "mills": {
+      "heading": "Mühlen",
+      "body": "Eine Mühle liefert selbst nichts. Sie steigert jedes Gebäude ihrer Art in Reichweite um 5 % pro Stufe: auf Stufe 10 um 50 %, auf Stufe {max} um 100 %. Ihre Reichweite beginnt bei einem Ring, den sechs Feldern um sie herum, und wächst alle vier Stufen um einen Ring. Mehrere Mühlen addieren sich.",
+      "columns": {
+        "mill": "Mühle",
+        "raises": "Steigert",
+        "standsOn": "Steht auf"
+      },
+      "stands": {
+        "river": "Fluss (gerade, Kurve oder enge Kurve)",
+        "straightRiver": "Gerader Fluss",
+        "bogCreek": "Moorbach"
+      },
+      "cell": "{percent} % · {n} Ring | {percent} % · {n} Ringe",
+      "notPumpkin": "Die {crop} steigert nur Bauernhöfe. Eine {pumpkin} geht leer aus."
+    },
+    "storage": {
+      "heading": "Lager",
+      "body": "Jeder Rohstoff wächst nur bis zu deiner Lagergrenze, was darüber liegt, geht verloren. Ohne Lagergebäude liegt die Grenze bei {base} pro Rohstoff. Diese Gebäude heben sie an.",
+      "capacity": "Fasst zusätzlich, pro Rohstoff",
+      "cell": "Stufe {level}: {capacity}",
+      "levelCap": "Ein {storehouse} oder ein {great} darf nicht höher ausgebaut sein als dein {longhouse}.",
+      "moreHeading": "Weitere Lagerhäuser",
+      "moreBody": "Du kannst mehr als ein Lagerhaus bauen, aber jedes weitere verlangt mehr von den vorhandenen.",
+      "step": {
+        "which": "Lagerhaus",
+        "needs": "Voraussetzung",
+        "nth": "Nr. {n}",
+        "later": "Nr. {n} und jedes weitere",
+        "needsCell": "{count} Lagerhaus auf Stufe {level} | {count} Lagerhäuser auf Stufe {level}"
+      },
+      "overCap": "Kosten über deiner Lagergrenze kannst du nie bezahlen, egal wie lange du wartest. Baue also Lager aus, bevor du etwas aufwertest, das mehr kostet, als du fassen kannst."
+    },
+    "upkeep": {
+      "heading": "Unterhalt und Schreine",
+      "body": "Truppen essen jede Stunde Nahrung. Geht dir die Nahrung aus, verhungern Einheiten, zuerst die mit dem höchsten Unterhalt, bis deine Nahrungsbilanz nicht mehr negativ ist. Armeen unterwegs haben eigene Nahrungsregeln: siehe {movement}.",
+      "movementLink": "Bewegung an Land",
+      "shrines": "Zwei Schreine steigern die Produktion: {freyja} die Nahrung, {ullr} das Holz. Was die Götter sonst noch geben, steht unter {shrines}.",
+      "shrinesLink": "Schreine"
+    },
+    "adminNote": {
+      "tooltips": "Die Produktionswerte in Tooltips und im Baumenü enthalten den Nachbarbonus, aber keine Mühlen und Schreine. Die Tabellen auf dieser Seite zeigen die Grundwerte."
+    }
+  },
+  "founding": {
+    "title": "Siedlungen gründen",
+    "intro": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann.",
+    "toc": {
+      "first": "Erste Siedlung",
+      "more": "Weitere Siedlungen",
+      "renown": "Ruhm und Preis",
+      "where": "Wo",
+      "new": "Eine neue Siedlung"
+    },
+    "first": {
+      "heading": "Deine erste Siedlung",
+      "body": "Deine erste Siedlung suchst du dir aus ein paar Startplätzen aus, die das Spiel dir anbietet. Jeder liegt auf Grasland nahe am Wald, abseits des Meeres, mit Moor in Reichweite für Ton und Eisen und weit weg von starken Wildtierlagern und Riesen."
+    },
+    "more": {
+      "heading": "Weitere Siedlungen",
+      "body": "Neue Siedlungen gründen {count} Siedlertrupps, die gemeinsam losziehen. Du bildest sie in der {workshop} aus. Sie braucht ein {longhouse} auf Stufe {level} und einen {square} auf Stufe {squareLevel}.",
+      "crew": {
+        "defense": "Verteidigung",
+        "speed": "Tempo",
+        "food": "Trägt Nahrung",
+        "upkeep": "Unterhalt pro Stunde",
+        "time": "Ausbildungszeit",
+        "longhouse": "Langhaus-Stufe",
+        "minutes": "{n} Min."
+      },
+      "provisions": "Jeder Trupp trägt {food} Nahrung, alle drei zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
+      "ambush": "Unterwegs können starke Wildtierlager deine Trupps überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
+      "campsLink": "Wildtierlager",
+      "movementLink": "Bewegung an Land"
+    },
+    "renown": {
+      "heading": "Ruhm und Preis",
+      "body": "Jede Siedlung nach der ersten kostet Ruhm und Trupps. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird, und ebenso der Preis ihrer Trupps.",
+      "columns": {
+        "next": "Du gründest",
+        "renown": "Nötiger Ruhm",
+        "perCrew": "Kosten pro Trupp",
+        "total": "Kosten für {count} Trupps"
+      },
+      "nth": "Siedlung Nr. {n}",
+      "order": "Die Kosten sind {resources}.",
+      "when": "Der Ruhm wird geprüft, wenn die Trupps aufbrechen.",
+      "feasts": "Ein Fest auf dem {square} bringt zusätzlich Ruhm. Es dauert {hours} Stunden, kostet gleich viel Holz, Stein und Nahrung und wird mit der Stufe des Platzes größer.",
+      "feast": {
+        "level": "Stufe des Dorfplatzes",
+        "cost": "Kosten (je Holz, Stein, Nahrung)",
+        "renown": "Ruhm"
+      }
+    },
+    "where": {
+      "heading": "Wo eine Siedlung landen kann",
+      "land": "Auf jedem Landfeld, das deine Trupps erreichen können, nur nicht auf einem Riesen.",
+      "spacing": "Mindestens {hexes} Felder jenseits der Gebietsgrenze jeder Siedlung der Welt, egal ob deiner eigenen oder der anderer Spieler.",
+      "twice": "Das wird beim Aufbruch geprüft und noch einmal bei der Ankunft.",
+      "taken": "Hat inzwischen jemand anderes den Platz besetzt, warten die Trupps dort. Du kannst sie weiterschicken oder zurückrufen, und sie kehren von allein heim, wenn ihnen die Nahrung ausgeht."
+    },
+    "new": {
+      "heading": "Eine neue Siedlung",
+      "body": "Sie startet mit einem {longhouse} auf Stufe 1. Es beansprucht {claim1} Felder, ab Stufe 2 sind es {claim2}. Das Lager enthält je {stock} Holz, Stein und Nahrung, aber kein Eisen.",
+      "garrison": "Alle Einheiten, die mit den Trupps gezogen sind, bleiben als Besatzung dort, nur die Trupps selbst nicht."
+    },
+    "adminNote": {
+      "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447).",
+      "provisions": "Das Expansionspanel schlägt standardmäßig 200 Proviant vor, drei Trupps tragen aber nur {carried}."
+    }
+  },
+  "landMovement": {
+    "title": "Bewegung an Land",
+    "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
+    "toc": {
+      "cost": "Geländekosten",
+      "pace": "Tempo",
+      "food": "Nahrung",
+      "road": "Unterwegs",
+      "sight": "Sicht",
+      "bridges": "Brücken"
+    },
+    "cost": {
+      "heading": "Was ein Feld kostet",
+      "body": "Jedes Feld, das eine Armee betritt, hat Kosten, die vom Gelände abhängen. Die Armee braucht für das Feld die Kosten geteilt durch ihr Tempo in Stunden. Ein Feld mit Kosten 2 dauert also doppelt so lang wie Gras.",
+      "columns": {
+        "ground": "Gelände",
+        "cost": "Kosten"
+      },
+      "stream": "Bach",
+      "streamNote": "pauschal, egal über welchem Gelände",
+      "wallEnd": "Offenes Mauerende",
+      "wallEndNote": "statt des Geländes",
+      "wideRiver": "Breiter Fluss",
+      "blocked": "Nicht betretbar",
+      "walls": "Ein Mauerfeld hält jede Landarmee auf, ein Tor lässt Freunde durch. Die ganzen Regeln stehen unter {walls}.",
+      "wallsLink": "Mauern",
+      "wideRiverBridge": "Nur über eine Brücke"
+    },
+    "pace": {
+      "heading": "Wie schnell Armeen ziehen",
+      "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit.",
+      "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
+      "columns": {
+        "unit": "Einheit",
+        "speed": "Tempo (Felder pro Stunde)"
+      },
+      "note": "Zeit pro Feld bei der normalen Weltgeschwindigkeit. In einer schnelleren Welt werden alle Zeiten kürzer.",
+      "slowest": "Am langsamsten ist der {unit}."
+    },
+    "food": {
+      "heading": "Nahrung unterwegs",
+      "upkeep": "Eine Armee isst ab dem Aufbruch jede Stunde den Unterhalt ihrer Einheiten an Nahrung.",
+      "carry": "Mehr Nahrung, als ihre Einheiten tragen, kann sie nicht mitnehmen. Den Proviant für den ganzen Weg lädst du also vor dem Aufbruch.",
+      "turnBack": "Wird die Nahrung knapp, kehrt eine marschierende Armee um.",
+      "columns": {
+        "upkeep": "Isst pro Stunde",
+        "carries": "Trägt (Nahrung)"
+      }
+    },
+    "road": {
+      "heading": "Unterwegs",
+      "camps": "Kommt eine Armee in die Reichweite eines starken Wildtierlagers, wird sie überfallen, außer das Lager ist ruhig. Ein starkes Lager bewacht {min} bis {max} Felder um sich (2 plus seine Stufe). Mehr dazu unter {link}.",
+      "campsLink": "Wildtierlager",
+      "enemies": "Feindliche Armeen, die sich auf der Straße treffen, kämpfen eine Feldschlacht. Armeen desselben Besitzers oder derselben Gilde kämpfen nie gegeneinander.",
+      "orders": "Jeder Befehl hat ein Ziel gratis. Wegpunkte unterwegs sind eine Premium-Funktion."
+    },
+    "sight": {
+      "heading": "Was eine Armee sieht",
+      "body": "Eine marschierende Armee deckt {rings} Ringe der Karte um sich auf, dazu {bonus} weitere für jede Stufe der {odin}."
+    },
+    "bridges": {
+      "heading": "Brücken über breite Flüsse",
+      "body": "Ein breiter Fluss ist für Landarmeen kein Weg, es sei denn, eine {bridge} führt darüber. Du baust sie auf dem Flussfeld selbst, in deinem Gebiet, ab Langhaus {longhouse} hinter einem {townsquare} der Stufe {level}. Kosten und Bauzeiten jeder Stufe stehen im Techbaum.",
+      "columns": {
+        "level": "Brückenstufe",
+        "cost": "Kosten",
+        "who": "Wer darüber darf"
+      },
+      "levels": {
+        "causeway": "Damm",
+        "footbridge": "Steg",
+        "kings": "Königsbrücke",
+        "guarded": "Wehrbrücke"
+      },
+      "groundCost": "wie das Gelände darunter",
+      "everyone": "Jede Armee, auch die des Besitzers",
+      "friends": "Die Armeen des Besitzers und seiner Freunde, also derselben Gilde oder einer Gilde im Frieden mit ihr. Jede andere Armee wird aufgehalten, als gäbe es keine Brücke.",
+      "rules": {
+        "where": "Eine Brücke passt auf ein gerades oder gebogenes Feld eines breiten Flusses, egal welches Gelände darunter liegt. Auf einer Quelle, einer Gabelung oder einer Mündung kannst du keine bauen, auf einem Bach auch nicht (den durchwaten Armeen ohnehin), und auf einer öden Insel ebenso wenig.",
+        "site": "Eine Baustelle öffnet den Fluss nicht. Erst eine fertige Brücke ab Stufe 1 zählt. Mit jeder Stufe geht die Überquerung schneller, bis die Armeen bei der Königsbrücke so schnell hinüberkommen wie über das Gelände selbst.",
+        "guarded": "Die Wehrbrücke verhält sich wie ein Mauertor: Sie lässt die Armeen ihres Besitzers und seiner Freunde durch und hält alle anderen auf.",
+        "siege": "Katapulte können eine Brücke niederbrennen, und zwar eine Stufe pro gewonnener Belagerung, egal wie viele Katapulte überleben. Eine Wehrbrücke fällt dabei zuerst zur Königsbrücke zurück und steht danach allen offen, auch den Angreifern. Ein Damm, der einmal niedergebrannt ist, ist weg, und der Fluss ist wieder dicht.",
+        "walls": "Brücken ändern nichts an Mauern: Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, ob mit oder ohne Brücke. Mehr dazu unter {walls}.",
+        "fleets": "Brücken betreffen nur Landarmeen. Schiffe bleiben unberührt."
+      }
+    }
+  },
+  "ships": {
+    "title": "Schiffe und Wasser",
+    "intro": "Schiffe aus der Werft, Flotten auf See und was Mauern nicht aufhalten.",
+    "dockyard": {
+      "heading": "Die Werft",
+      "body": "Schiffe bildest du in der {dockyard} aus. Sie braucht ein {longhouse} auf Stufe {level} und eine {hut} auf Stufe {hutLevel}.",
+      "shore": "Sie steht im flachen Küstenwasser. Schiffe bauen kann deshalb nur eine Siedlung, die Küste beansprucht."
+    },
+    "table": {
+      "heading": "Die Schiffe",
+      "rows": {
+        "attack": "Angriff",
+        "defense": "Verteidigung",
+        "speed": "Tempo (Felder pro Stunde)",
+        "perHex": "Zeit pro Seefeld",
+        "loot": "Beutekapazität",
+        "food": "Nahrungskapazität",
+        "upkeep": "Unterhalt pro Stunde",
+        "cost": "Kosten ({resources})",
+        "time": "Ausbildungszeit",
+        "needs": "Voraussetzung"
+      },
+      "minutes": "{n} Min."
+    },
+    "sailing": {
+      "heading": "Auf See",
+      "sea": "Schiffe fahren nur auf dem Meer. Küstenwasser und offene See kosten gleich viel, Moorseen sind für sie gesperrt.",
+      "troops": "Schiffe tragen Beute, aber keine Landtruppen.",
+      "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen. Katapulte kann sie nicht mitnehmen.",
+      "walls": "{walls} halten Flotten nicht auf.",
+      "wallsLink": "Mauern",
+      "camps": "Wildtierlager überfallen nie eine Flotte (siehe {camps}).",
+      "campsLink": "Wildtierlager"
+    },
+    "battles": {
+      "heading": "Kämpfe",
+      "same": "Flotten kämpfen nach denselben Regeln wie Armeen an Land: Angriff gegen Verteidigung, bei Gleichstand gewinnt der Verteidiger.",
+      "tower": "Ein {tower} der verteidigenden Siedlung gibt pro Stufe {percent} % Verteidigung dazu.",
+      "njord": "Der {shrine} steigert den Angriff deiner Schiffe auf Stufe 1 um {low} %, bis Stufe 5 um {high} %. Mehr unter {shrines}.",
+      "shrinesLink": "Schreine"
+    },
+    "adminNote": {
+      "route": "Bekannter Fehler (Issue #450): Der Weg einer Flotte beginnt in der Mitte der Siedlung, und die liegt bei einer Startsiedlung nie am Meer. Flotten können deshalb eine erste Siedlung nicht verlassen und keine Siedlung angreifen, deren Mitte im Landesinneren liegt. Diese Seite beschreibt das gewollte Verhalten: Flotten legen an der Werft ab.",
+      "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedlertrupp, ein Langschiff {longship}) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
+    }
+  },
+  "shrines": {
+    "title": "Schreine",
+    "intro": "Ein Schrein sichert dir die Gunst eines Gottes: einen dauerhaften Bonus für die ganze Siedlung. Pro Siedlung bekommst du nur einen Schrein, die Wahl zählt also.",
+    "rules": {
+      "heading": "Die Regeln",
+      "oneShrine": "Eine Siedlung kann insgesamt nur einen Schrein haben, gleich für welchen Gott. Auch die Odin-Statue zählt als Schrein.",
+      "oneGod": "Jeder Gott hat auf einer Insel höchstens einen Schrein, egal welche Siedlung ihn zuerst baut.",
+      "needs": "Jeder Schrein braucht ein {longhouse} der Stufe {level} und das Gebäude, das in der Tabelle unten bei seinem Gott steht. Du kannst ihn bis Stufe {max} ausbauen."
+    },
+    "gods": {
+      "heading": "Was jeder Gott gibt",
+      "columns": {
+        "god": "Gott",
+        "favour": "Gunst",
+        "level": "Stufe {n}",
+        "needs": "Voraussetzung",
+        "standsOn": "Steht auf"
+      },
+      "favour": {
+        "thor": "Deine Landeinheiten greifen stärker an.",
+        "freyja": "Deine Siedlung erzeugt mehr Nahrung.",
+        "ullr": "Deine Siedlung erzeugt mehr Holz.",
+        "njord": "Deine Schiffe greifen stärker an.",
+        "odin": "Jeder Bau ist früher fertig, und du siehst weiter."
+      },
+      "percent": "+{percent} %",
+      "odinTime": "−{percent} % Bauzeit",
+      "odinRings": "+{rings} Sichtringe",
+      "costs": "Kosten und Bauzeiten jeder Stufe findest du im {link}.",
+      "costsLink": "Techbaum"
+    },
+    "runes": {
+      "wip": "In Arbeit",
+      "heading": "Runen",
+      "body": "Die Stufe eines Schreins schaltet Runenplätze frei. Jede eingesetzte Rune gibt ihren eigenen Bonus zusätzlich zur Gunst des Gottes.",
+      "slots": {
+        "level": "Schreinstufe",
+        "count": "Runenplätze"
+      },
+      "table": {
+        "rune": "Rune",
+        "gives": "Wirkung"
+      },
+      "effects": {
+        "production": "Alle Rohstoffproduktion",
+        "food": "Nahrungsproduktion",
+        "storage": "Lagerkapazität"
+      },
+      "cap": "Schreine und Runen addieren sich, aber jede Art von Bonus endet bei +{percent} %."
     }
   }
 }

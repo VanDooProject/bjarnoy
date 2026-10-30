@@ -168,12 +168,16 @@
   dev status notes. Put it in `DocsAdminNote` (`src/frontend/src/components/docs/DocsAdminNote.vue`); only admins see it,
   behind the docs header toggle (`useDocsAdminNotes`). Never mix such a sentence into a player paragraph — give it its own
   i18n key (e.g. `...artNote`, `...techNote`) and render it in a `DocsAdminNote` next to the player text
+- building links: the first mention in prose links (with icon and preview); the building in a table's first column always links
 - a docs page shows what the game actually draws: looks the generator never picks (e.g. the plain bog moss, retired in
   `RETIRED_BOG_VARIANTS`) don't appear in pickers either
 - example maps (`BogIsland`, `WastedIsland`, `WallExample`) go above the per-tile entries they illustrate: the whole
   first, then the pieces
-- a new page joins the hub list in `src/frontend/src/views/DocsView.vue` and the routes in `src/frontend/src/router/index.ts`,
-  and gets en + de text in `src/frontend/src/i18n/locales/{en,de}/docs.json`
+- a new page joins the shared page list `src/frontend/src/lib/docs/docsPages.ts` (hub group and order, art, header art
+  style, related pages with a reason each; hub, breadcrumb, previous/next and the Related footer all read it) and the
+  routes in `src/frontend/src/router/index.ts`, and gets en + de text in `src/frontend/src/i18n/locales/{en,de}/docs.json`
+- page art: no big picture on top of a page; the header shows the page's art as a small icon beside the title (pages
+  about one tile or building) or a faded backdrop (the others; phones always use the icon)
 
 # German text (de locale)
 - write German the way a native speaker writes a game's help pages — not a translation of the English sentence. Restructure

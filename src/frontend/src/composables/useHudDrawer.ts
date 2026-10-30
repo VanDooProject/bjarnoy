@@ -265,6 +265,15 @@ export function useHudDrawer(
    */
   function onLostPointerCapture(e: PointerEvent) {
     if (pointerId === null || e.pointerId !== pointerId) return;
+    // `lostpointercapture` bubbles. A touch pointer starts out implicitly
+    // captured by whatever it went down on (a pill's `.fill`, the grip, a
+    // nav link inside the drawer), so moving the capture to the bar/drawer
+    // at arm time fires `lostpointercapture` on that child, and it bubbles
+    // up to the very listener this handler sits behind. Treating that as
+    // "our capture was lost" tore down every touch drag on its second move,
+    // so only a drawer dragged with a mouse (no implicit capture) ever
+    // opened. Only the element this gesture captured itself counts.
+    if (capturedTarget !== null && e.target !== capturedTarget) return;
     teardown();
   }
 
@@ -279,6 +288,23 @@ export function useHudDrawer(
   }
   function close() {
     isOpen.value = false;
+  }
+
+  /**
+   * Bound (non-passive) to `touchmove` on the same elements as the pointer
+   * handlers. Once a drag is armed, its touch moves are canceled so the
+   * browser drops the gesture's scroll/fling recognition outright. Without
+   * this, `touch-action: none` alone still let Chromium start a fling at
+   * `touchend` (its fling controller sees the fling before the touch-action
+   * filter throws its scroll updates away), invisible on screen but "active"
+   * for a few hundred ms — and Chromium deliberately swallows the next tap
+   * that cancels an active fling, so a link tapped right after flicking the
+   * drawer open did nothing. Moves before the 8px intent threshold are left
+   * alone: canceling those would also cancel the tap of a slightly jittery
+   * finger.
+   */
+  function onTouchMove(e: TouchEvent) {
+    if (armed && e.cancelable) e.preventDefault();
   }
 
   /** Call from a capture-phase click handler; returns true if this click should be swallowed. */
@@ -298,6 +324,7 @@ export function useHudDrawer(
     onPointerUp,
     onPointerCancel,
     onLostPointerCapture,
+    onTouchMove,
     cancelDrag,
     toggle,
     close,
