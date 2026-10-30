@@ -224,8 +224,14 @@ watch(
     drawerObserver?.disconnect();
     if (!el || typeof ResizeObserver === 'undefined') return;
     drawerObserver = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect) drawerHeight.value = rect.height;
+      // Border-box, not `contentRect`: `.hud-drawer-content` is padded
+      // (12px top/bottom + the bottom safe-area inset), and `contentRect`
+      // excludes padding, which sized the drawer that much too short and
+      // cut off its last row (same mistake as the bar's Finding #16 below).
+      const entry = entries[0];
+      if (!entry) return;
+      drawerHeight.value = entry.borderBoxSize?.[0]?.blockSize
+        ?? entry.target.getBoundingClientRect().height;
     });
     drawerObserver.observe(el);
   },
@@ -600,8 +606,8 @@ const backdropStyle = computed(() => {
          touch (driven in JS from useHudDrawer's own gesture — see
          `drawerScrollRef`/onBarPointerMove above and its own comment on
          `scrollEl`). Not the ResizeObserver's own target — that stays on
-         `.hud-drawer-content` so its contentRect keeps reporting the
-         content's natural (unclipped) height, not this wrapper's capped one. -->
+         `.hud-drawer-content` so its border-box keeps reporting the
+         content's natural (unclipped) height, padding included, not this wrapper's capped one. -->
     <div ref="drawerScrollRef" class="hud-drawer-scroll">
       <div
         :id="drawerContentId"

@@ -447,6 +447,31 @@ test.describe('mobile HUD bar', () => {
     await expect(page).toHaveURL('/profile');
   });
 
+  // Regression: the drawer's resting height used to come from the content
+  // element's `contentRect` (padding excluded), so it opened ~24px + the
+  // bottom inset short and its last row ("Log out") was cut off until scrolled.
+  test('opened drawer shows its last row fully, without scrolling', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    await page.locator('.hud-grip').click();
+    const drawer = page.locator('.hud-drawer');
+    const logout = page.locator('[data-testid="drawer-account-logout"]');
+    await expect(logout).toBeVisible();
+    await expect.poll(() => drawer.evaluate((el) => el.getAnimations().length)).toBe(0);
+
+    const drawerBox = (await drawer.boundingBox())!;
+    const logoutBox = (await logout.boundingBox())!;
+    expect(logoutBox.y + logoutBox.height).toBeLessThanOrEqual(drawerBox.y + drawerBox.height);
+
+    const { scrollHeight, clientHeight, scrollTop } = await page
+      .locator('.hud-drawer-scroll')
+      .evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, scrollTop: el.scrollTop }));
+    expect(scrollTop).toBe(0);
+    expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
+  });
+
   // The anonymous trigger has no room in the bar itself: it floats as a chip
   // below it, and steps aside while the drawer is
   // open. Its entries (log in, world list) live only on that chip, not in
