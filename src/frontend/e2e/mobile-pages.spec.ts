@@ -70,15 +70,42 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
   // A long single word used to split mid-word inside its bubble
   // ("Watchtowe" / "r"), and the hub's "GRASSLAND"/"LONGHOUSE" ran past the
   // round edge; the label size now shrinks to fit the longest word.
-  test('no bubble splits a word across lines or runs past its own edge', async ({ page }) => {
+  // `wideFont`: a face much wider than the UI font (as a fallback or a late-loading web font can be) - the labels are
+  // sized against what the browser really lays out, so no word may split whichever font it is.
+  for (const wideFont of [false, true]) {
+  test(`no bubble splits a word across lines or runs past its own edge${wideFont ? ' (with a much wider font)' : ''}`, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    if (wideFont) {
+      await page.addInitScript(() => {
+        document.addEventListener('DOMContentLoaded', () => {
+          const style = document.createElement('style');
+          style.textContent = '.ring-backdrop * { font-family: "DejaVu Sans Mono", monospace !important; }';
+          document.head.appendChild(style);
+        });
+      });
+    }
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
     await openRingOnGuidedHex(settlement);
-    // the long single word the bug was found on must be on screen, or the check below proves nothing
+    // The onboarding ring is the map's: Build, then a category, then its buildings. Check every layer.
+    const broken: string[] = [];
+    broken.push(...(await brokenLabels(page)));
+    await settlement.ring.action('Build').first().tap();
+    await settlement.ring.settledLayer();
+    broken.push(...(await brokenLabels(page)));
+    await settlement.ring.category('Military').first().tap();
+    await settlement.ring.settledLayer();
+    // the long single word the bug was found on must be on screen, or the check proves nothing
     await expect(settlement.ring.bubbles.filter({ hasText: 'Watchtower' })).toBeVisible();
+    broken.push(...(await brokenLabels(page)));
+    expect(broken).toEqual([]);
+  });
+  }
+});
 
-    const broken = await page.locator('.ring-hub, .ring-bubble').evaluateAll((els) =>
+/** Words that split across lines or run past their own bubble, for every bubble on screen. */
+async function brokenLabels(page: Page): Promise<string[]> {
+    return page.locator('.ring-hub, .ring-bubble').evaluateAll((els) =>
       els.flatMap((el) => {
         const box = el.getBoundingClientRect();
         const problems: string[] = [];
@@ -99,9 +126,7 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
         return problems;
       }),
     );
-    expect(broken).toEqual([]);
-  });
-});
+}
 
 test.describe('touch wording on a phone', { tag: '@g2' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
@@ -109,7 +134,6 @@ test.describe('touch wording on a phone', { tag: '@g2' }, () => {
   // The onboarding told a phone player to "Click this plot" / "Click an
   // empty hex"; a touch screen gets "Tap" instead.
   test('the onboarding says tap, not click, on a touch screen', async ({ page }) => {
-    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
     await expect(settlement.guidancePointer).toContainText('Tap this plot');
     await expect(settlement.checklist).toContainText('Tap your plot to place it');

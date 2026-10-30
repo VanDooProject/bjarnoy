@@ -22,20 +22,15 @@
     "orderFailed": "Der Auftrag wurde nicht übermittelt — versuche ein anderes Feld.",
     "plotTaken": "Dieses Grundstück wurde gerade vergeben — hier ist ein anderes."
   },
-  "ring": {
-    "finishGuidedFirst": "Schließe zuerst die geführten Gebäude ab",
-    "needsTerrain": "Passt nur auf {terrain}",
-    "dimNoteTitle": "Warum es ausgegraut ist",
-    "dimNoteBody": "{otherBuilding} benötigt {otherTerrain}. Dieses Feld ist {hexTerrain}, daher passt hier {fitBuilding}.",
-    "neitherFitsBody": "Kein geführtes Gebäude passt auf {hexTerrain}. Versuche stattdessen ein Gras- oder Waldfeld."
-  },
   "pointer": {
     "clickThisPlot": "Klicke dieses Grundstück an",
     "tapThisPlot": "Tippe dieses Grundstück an",
     "anyGlowingPlot": "Jedes leuchtende Grundstück",
     "nowBuildHere": "Jetzt hier bauen",
     "oneMore": "Noch eins — {terrain}",
-    "thisOneFits": "Das hier passt zu {terrain}"
+    "openBuild": "Öffne Bauen",
+    "openCategory": "Öffne {category}",
+    "buildThis": "Baue: {building}"
   },
   "foundHere": {
     "namedRealm": "{nickname}s Reich",

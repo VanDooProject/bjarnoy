@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import enCatalogue from '../../i18n/locales/en/catalogue.json';
+import deCatalogue from '../../i18n/locales/de/catalogue.json';
 import {
   bubbleLabelFontPx,
+  shrinkToFit,
+  estimateWordEm,
   BUB1,
   BUB2,
   CARD_H,
@@ -418,6 +422,13 @@ describe('bubbleLabelFontPx', () => {
     expect(size).toBeGreaterThan(6.5);
   });
 
+  it('fits the longest English label (Weaponsmith) into a building bubble at the floor instead of splitting it', () => {
+    // 6.5px was too big for it on a 320px phone: measured 44px of text in a 42px bubble, so it split mid-word.
+    const size = bubbleLabelFontPx('Weaponsmith', BUB2, 8.4);
+    expect(size).toBeGreaterThanOrEqual(6);
+    expect(size * (estimateWordEm('Weaponsmith') + 11 * 0.02)).toBeLessThanOrEqual(BUB2 - 6);
+  });
+
   it('accounts for uppercase and letter spacing (the hub label)', () => {
     const upper = bubbleLabelFontPx('Longhouse', HUB, 10.5, { uppercase: true, letterSpacingEm: 0.06 });
     const lower = bubbleLabelFontPx('Longhouse', HUB, 10.5);
@@ -433,6 +444,38 @@ describe('bubbleLabelFontPx', () => {
   });
 
   it('never goes below the readable floor', () => {
-    expect(bubbleLabelFontPx('Holzfällerhüttenerweiterung', BUB2, 9)).toBe(6.5);
+    expect(bubbleLabelFontPx('Holzfällerhüttenerweiterung', BUB2, 9)).toBe(6);
+  });
+});
+
+// The bug that survived a fixed px floor: a browser whose font is wider than the estimate split "Watchtower" mid-word.
+// shrinkToFit sizes against the real width at each size, so it holds for any font.
+describe('shrinkToFit', () => {
+  const wordsOf = (catalogue: { buildings: Record<string, string> }) => [
+    ...new Set(Object.values(catalogue.buildings).flatMap((name) => name.split(/\s+/).filter(Boolean))),
+  ];
+  // The estimate with the bubble's 0.02em tracking, optionally `wider` (1.15 = a font 15% wider than the guess).
+  const font = (wider: number) => (word: string, px: number) => wider * (estimateWordEm(word) + [...word].length * 0.02) * px;
+
+  // Every word fits, even with a 15% wider font, except where it cannot at any readable size: the longest German
+  // compounds (Waffenschmiede, Raseneisenerz-Grube) are wider than the bubble at the 5px floor, so they stop there.
+  for (const [language, catalogue, wider] of [['English', enCatalogue, 1.15], ['German', deCatalogue, 1.15]] as const) {
+    for (const [lane, diameter, base] of [['inner', BUB1, 8.2], ['outer', BUB2, 8.4]] as const) {
+      it(`no ${language} building word is wider than the ${lane} bubble (font ${Math.round((wider - 1) * 100)}% wider)`, () => {
+        const words = wordsOf(catalogue);
+        expect(words.length).toBeGreaterThan(30);
+        const available = diameter - 6;
+        for (const word of words) {
+          const px = shrinkToFit([word], available, base, font(wider));
+          if (language === 'English') expect(font(wider)(word, px), `${word} at ${px}px`).toBeLessThanOrEqual(available);
+          else expect(font(wider)(word, px) <= available || px === 5, `${word} at ${px}px`).toBe(true);
+        }
+      });
+    }
+  }
+
+  it('leaves a label that already fits alone, and never goes below the floor', () => {
+    expect(shrinkToFit(['Farm'], BUB2 - 6, 9.4, font(1.15))).toBe(9.4);
+    expect(shrinkToFit(['Holzfällerhüttenerweiterung'], BUB2 - 6, 9, font(1.15))).toBe(5);
   });
 });

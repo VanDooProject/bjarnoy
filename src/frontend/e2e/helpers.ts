@@ -249,7 +249,7 @@ export async function placeGuidedBuildings(page: Page): Promise<void> {
   // specific nearby hex by pixel offset unreliable. __demoWorld is the same
   // test/debug hook main.ts documents for exactly this kind of "drive
   // WorldModel directly" case. placeBuilding itself doesn't enforce
-  // terrain (only the ring UI does — see LandingView's GUIDED_BUILD_TERRAIN),
+  // terrain (only the ring's placement filter does, see useBuildRing),
   // so any nearby empty hex works for either type.
   await page.evaluate(() => {
     const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
@@ -476,7 +476,7 @@ export async function layoutOverflow(page: Page): Promise<{ pageScrollsSideways:
  * aiming at (design handoff "2a" frame 2, right after landfall — the pointer
  * follows the camera via `useMapAnchor`, which writes the hex's screen point
  * into `--anchor-x`/`--anchor-y` on `[data-testid="guidance-pointer"]`) and
- * waits for frame 3's "This one fits {terrain}" chip, the case the chip's
+ * waits for the pointer's first in-ring step ("Open Build", aimed at the Build hub), the case the chip's
  * placement bug was found on. Reads the anchor vars rather than re-deriving
  * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
  * (camera + arrowTipOffset) is exactly where the click needs to land.
@@ -512,7 +512,7 @@ export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<v
   const box = await settlement.canvasBox();
   await settlement.page.mouse.click(box.x + x, box.y + y);
   await settlement.ring.waitForOpen();
-  await expect(pointer.locator('.chip')).toContainText('fits');
+  await expect(pointer.locator('.chip')).toContainText('Open Build');
 }
 
 /**
@@ -531,4 +531,50 @@ export async function doubleTap(page: Page, p: { x: number; y: number }): Promis
     session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point }),
     session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }),
   ]);
+}
+
+/**
+ * Builds `building` through the onboarding's ring on the already-clicked hex, the way a player does: Build hub, then
+ * the category, then the building (the ring is the map's own, see useBuildRing). A phone taps (the first tap on a
+ * building arms it and docks its card, the second commits); desktop clicks with the real pointer.
+ */
+export async function buildThroughOpenRing(settlement: SettlementPage, category: string, building: string): Promise<void> {
+  const ring = settlement.ring;
+  await ring.waitForOpen();
+  const phone = (settlement.page.viewportSize()?.width ?? 1280) <= 768;
+  if (phone) {
+    await ring.action('Build').first().tap();
+    await ring.settledLayer();
+    await ring.category(category).first().tap();
+    await ring.settledLayer();
+    const bubble = ring.child(building).first();
+    await expect(bubble).toBeVisible();
+    await bubble.tap();
+    await bubble.tap();
+    return;
+  }
+  await ring.openBuildCategories();
+  await ring.openCategory(category);
+  await ring.click(ring.child(building).first());
+}
+
+/**
+ * The ring bubble under the guidance arrow's tip, by its accessible name or, for a building bubble, its text (null when the tip is over something else).
+ * The tip is read off the arrow's own polygon through the SVG's screen transform, so it is where the arrow really is
+ * (bob and rotation included), not a re-derivation of GuidancePointer's maths. The arrow is pointer-events: none, so
+ * `elementFromPoint` sees what a finger would hit.
+ */
+export async function bubbleUnderPointerTip(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const polygon = document.querySelector<SVGPolygonElement>('[data-testid="guidance-pointer"] svg polygon');
+    const svg = polygon?.ownerSVGElement;
+    const ctm = polygon?.getScreenCTM();
+    if (!polygon || !svg || !ctm) return null;
+    const point = svg.createSVGPoint();
+    point.x = 75;
+    point.y = 136;
+    const tip = point.matrixTransform(ctm);
+    const hit = document.elementFromPoint(tip.x, tip.y)?.closest('.ring-bubble');
+    return hit ? (hit.getAttribute('aria-label') ?? (hit.textContent ?? '').trim()) : null;
+  });
 }

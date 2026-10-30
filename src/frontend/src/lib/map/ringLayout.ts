@@ -59,7 +59,7 @@ export const CARD_W = 200;
  */
 export const CARD_H = 240;
 /**
- * The onboarding ring's "why it's dim" note (design handoff "2a", frame 3)
+ * The ring's error note (a rejected build's message)
  * — a short muted explanation, not the full building-detail card, so it
  * gets its own (much smaller) footprint rather than reusing CARD_W/CARD_H:
  * a 200x222 clearance box around a ~186x60 note would push it needlessly
@@ -439,7 +439,7 @@ export interface RingLayoutResult {
   /** Dashed line from the hub to a lane displaced away from the tile. */
   leader: { x: number; y: number; len: number; deg: number } | null;
   card: { x: number; y: number } | null;
-  /** The flat-ring "why it's dim" note's position, or null when not requested/applicable. */
+  /** The error note's position, or null when not requested/applicable. */
   note: { x: number; y: number } | null;
   mode: string;
   /**
@@ -553,7 +553,7 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
   if (!card && lane1CardAnchor !== null && lane1CardAnchor !== undefined && lane1[lane1CardAnchor]) {
     card = cardSpot(x, y, lane1[lane1CardAnchor].ang, cardArea, everything());
   }
-  // The note (the flat onboarding ring's "why it's dim", or a rejected
+  // The note (a rejected
   // build's message) has no bubble to anchor on, so it docks clear of the
   // ring wherever there's room — unless a card is already up.
   if (wantsNote && !card) note = cardSpot(x, y, base, cardArea, everything(), NOTE_W, NOTE_H);
@@ -677,7 +677,7 @@ export function bubbleLabelFontPx(
   {
     uppercase = false,
     letterSpacingEm = 0.02,
-    minPx = 6.5,
+    minPx = 6,
     // The bubble's own 2px side padding, plus a little for the round edge.
     availablePx = diameter - 6,
     wordEm = estimateWordEm,
@@ -688,4 +688,28 @@ export function bubbleLabelFontPx(
   const widestEm = Math.max(...words.map((word) => wordEm(word) + [...word].length * letterSpacingEm));
   const fitting = availablePx / widestEm;
   return Math.floor(Math.max(minPx, Math.min(basePx, fitting)) * 10) / 10;
+}
+
+/**
+ * Shrinks `startPx` until the widest of `words` fits `availablePx`, using `widthAt(word, px)` - the real width of
+ * that word at that font size, however the caller measures it (the DOM at the bubble's own font in RingMenu). The
+ * estimate in `bubbleLabelFontPx` is only a first guess; a font that is wider than the guess (a fallback face, a web
+ * font that loaded late, another browser's hinting) is caught here, so no word ever splits mid-word. Glyph widths
+ * scale with the size, so a few proportional steps settle it; it stops at `minPx`.
+ */
+export function shrinkToFit(
+  words: readonly string[],
+  availablePx: number,
+  startPx: number,
+  widthAt: (word: string, px: number) => number,
+  minPx = 5,
+): number {
+  let px = startPx;
+  for (let step = 0; step < 6 && px > minPx; step++) {
+    const widest = Math.max(0, ...words.map((word) => widthAt(word, px)));
+    if (widest <= availablePx) break;
+    // Strictly smaller each time (the 0.1 floor-rounding), so it always ends.
+    px = Math.max(minPx, Math.min(px - 0.1, Math.floor(((px * availablePx) / widest) * 10) / 10));
+  }
+  return px;
 }

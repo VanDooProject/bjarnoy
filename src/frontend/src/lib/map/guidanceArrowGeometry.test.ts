@@ -4,9 +4,13 @@ import {
   HEX_TARGET_RADIUS_PX,
   RING_BUBBLE_TARGET_RADIUS_PX,
   arrowTipOffset,
+  arrowTipPoint,
+  ARROW_BOB_PX,
+  ringBubbleAim,
   rotatedTipVector,
   tipStandoffFor,
 } from './guidanceArrowGeometry';
+import { BUB1, BUB2, HUB, layoutRing } from './ringLayout';
 
 /**
  * landing-page-defects.md L2: without `arrowTipOffset`, the arrow's tip lands
@@ -115,4 +119,71 @@ describe('tipStandoffFor', () => {
       RING_BUBBLE_TARGET_RADIUS_PX + ARROW_TIP_GAP_PX,
     );
   });
+});
+
+// The pointer at a ring bubble must single that bubble out: the tip inside its circle, the arrow arriving from outside
+// the ring, and never inside a neighbour. Real ring layouts for the two screens the onboarding is checked on.
+describe('ringBubbleAim on real ring layouts', () => {
+  interface Screen {
+    name: string;
+    hub: { x: number; y: number };
+    area: { left: number; top: number; right: number; bottom: number };
+    card: { left: number; top: number; right: number; bottom: number };
+  }
+  const SCREENS: Screen[] = [
+    // 390x844 phone, card docked to the bottom strip (ringDock.ts): the ring keeps clear of it.
+    { name: '390x844', hub: { x: 140, y: 405 }, area: { left: 16, top: 12, right: 374, bottom: 844 - 236 - 8 }, card: { left: 16, top: 12, right: 374, bottom: 828 } },
+    { name: '1280x800', hub: { x: 555, y: 375 }, area: { left: 16, top: 76, right: 1264, bottom: 784 }, card: { left: 16, top: 76, right: 1264, bottom: 784 } },
+  ];
+  // Grass hex: root (just Build), categories (5 + back), and the Resource category's 4 buildings.
+  const STEPS = [
+    { name: 'Build hub', lane1: 1, lane2: 0, target: { lane: 1 as const, index: 0 } },
+    { name: 'a category', lane1: 6, lane2: 0, target: { lane: 1 as const, index: 0 } },
+    { name: 'a building', lane1: 6, lane2: 4, target: { lane: 2 as const, index: 0 } },
+    { name: 'a later building', lane1: 6, lane2: 4, target: { lane: 2 as const, index: 3 } },
+  ];
+
+  const inside = (p: { x: number; y: number }, c: { x: number; y: number; r: number }) => Math.hypot(p.x - c.x, p.y - c.y) < c.r;
+
+  for (const screen of SCREENS) {
+    for (const step of STEPS) {
+      it(`${screen.name}: the tip lands inside ${step.name} and inside no other bubble`, () => {
+        const layout = layoutRing({
+          x: screen.hub.x,
+          y: screen.hub.y,
+          area: screen.area,
+          cardArea: screen.card,
+          lane1Count: step.lane1,
+          lane2Count: step.lane2,
+          parentIndex: step.lane2 > 0 ? 0 : -1,
+          cardAnchor: null,
+        });
+        const r1 = (layout.collapsed ? 7 : BUB1 / 2);
+        const circles = [
+          { id: 'hub', x: screen.hub.x, y: screen.hub.y, r: HUB / 2 },
+          ...layout.lane1.map((spot, i) => ({ id: `l1-${i}`, ...spot, r: r1 })),
+          ...layout.lane2.slice(0, step.lane2).map((spot, i) => ({ id: `l2-${i}`, ...spot, r: BUB2 / 2 })),
+        ];
+        const targetId = `l${step.target.lane}-${step.target.index}`;
+        const target = circles.find((c) => c.id === targetId)!;
+        // A lone Build bubble can sit on the hub itself (a cramped phone ring): then there is no separate hub to hit.
+        if (Math.hypot(target.x - screen.hub.x, target.y - screen.hub.y) < 1) circles.shift();
+        const aim = ringBubbleAim(screen.hub, target);
+        const tip = arrowTipPoint(target, aim.angle, aim.targetRadius);
+        expect(inside(tip, target), 'tip inside the target bubble').toBe(true);
+        // ...and still inside at the top of the arrow's bob, when it has slid back along the shaft.
+        const rad = (aim.angle * Math.PI) / 180;
+        const bobbed = { x: tip.x + Math.sin(rad) * ARROW_BOB_PX, y: tip.y - Math.cos(rad) * ARROW_BOB_PX };
+        expect(inside(bobbed, target), 'tip inside the target bubble at the top of the bob').toBe(true);
+        for (const other of circles.filter((c) => c.id !== targetId)) {
+          expect(inside(tip, other), `tip not inside ${other.id}`).toBe(false);
+        }
+        // The arrow's tail runs away from the ring's hub: the hub side of the target stays clear.
+        const tail = { x: target.x + Math.sin((aim.angle * Math.PI) / 180) * 40, y: target.y - Math.cos((aim.angle * Math.PI) / 180) * 40 };
+        for (const other of circles.filter((c) => c.id !== targetId)) {
+          expect(inside(tail, other), `arrow body not over ${other.id}`).toBe(false);
+        }
+      });
+    }
+  }
 });
