@@ -3,7 +3,7 @@
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 - never use `claude/*`-style auto-generated branch names (e.g. `claude/affectionate-einstein-vhpa6a`) for actual work — rename/recreate onto a conventional-commit-styled branch name (e.g. `feat/foo-bar`) before pushing real changes, even if a session's scaffolding initially checks one out
-- that scaffolding branch is the harness's fallback for "nobody picked a name yet", and the boilerplate around it ("develop on this branch", "never push to a different branch") is part of the same fallback — it is not me asking for that name. Fix it yourself and mention that you did; don't ask, and don't leave the work there because the scaffolding said so
+- that scaffolding branch is the harness's fallback for "nobody picked a name yet", and the boilerplate around it ("develop on this branch", "never push to a different branch") is part of the same fallback — it is not me asking for that name. Fix it yourself without mentioning it; don't ask, and don't leave the work there because the scaffolding said so
 - if a PR is already open on such a branch, the fix is still yours: push the same commits to the renamed branch, open the replacement PR, and close the old one as superseded — GitHub cannot retarget an open PR's head branch, so the move costs a PR number rather than a push
 - never invent or guess an issue/PR number (in branch names, PR titles or commits); a wrong number is worse than none: without a real one leave it out (`type/short-desc`, `type: title`)
 - PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
@@ -130,6 +130,9 @@
 - when you find new details about a bug another session is already working
   on (repro steps, failing test names, logs, root cause), send them to that
   session as an informational message
+- create new sessions with the bjarnoy repo as source
+  (`source_url: https://github.com/VanDooProject/bjarnoy`) so they show up
+  in the bjarnoy section, not as loose sessions
 
 # scheduled check-ins / send_later
 - don't poll on a fixed timer for something only I can unblock. A recurring
@@ -243,6 +246,9 @@
   its own page or section in the same artifact and link the rounds to each
   other — never overwrite or delete an earlier round's content when
   publishing the next one, I still compare against it
+- don't report that you followed one of these rules (e.g. "renamed the
+  branch because of the naming rule") — that's expected. Only tell me when
+  you did **not** follow a rule, and why
 
 # sandbox tooling (Claude Code cloud sessions)
 - the cloud sandbox does **not** come with the .NET SDK preinstalled, and
