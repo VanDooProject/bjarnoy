@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { bogEdgeShapes, bogEdgesOf, isBogGround, bogEdgeNeighbour, BOG_EDGE_STYLES } from './bogEdge';
-import type { BogTile, Terrain, Tile } from './types';
+import {
+  bogEdgeShapes,
+  bogEdgesOf,
+  isBogGround,
+  bogEdgeNeighbour,
+  BOG_EDGE_STYLES,
+  RIVER_EDGE_GAP,
+  STREAM_EDGE_GAP,
+} from './bogEdge';
+import type { BogTile, RiverTile, Terrain, Tile } from './types';
 
 function tile(q: number, r: number, terrain: Terrain, bog?: BogTile['kind']): Tile {
   const t = { q, r, terrain } as Tile;
@@ -25,7 +33,7 @@ function world(centre: Tile, around: Terrain[]): (q: number, r: number) => Tile 
     return tile(q, r, i >= 0 ? around[i] : 'sea');
   };
 }
-const noRiver = () => false;
+const noRiver = () => undefined;
 const origin = { q: 0, r: 0 };
 
 describe('bogEdgesOf', () => {
@@ -45,17 +53,32 @@ describe('bogEdgesOf', () => {
     expect(bogEdgesOf(world(tile(0, 0, 'grass'), grass), noRiver, origin)).toEqual([]);
   });
 
-  it('leaves the edge to a river hex alone, though the river runs on grass terrain', () => {
+  // The river hex sits east of the bog (direction 0, polygon edge 3), so it reaches the bog towards its own west.
+  const get = world(tile(0, 0, 'bog', 'bog'), Array(6).fill('grass'));
+  const riverEast = (river: Partial<RiverTile>) => (q: number, r: number) =>
+    q === 1 && r === 0 ? ({ q, r, shape: 'straight', inDirections: [], outDirection: null, ...river } as RiverTile) : undefined;
+  const eastEdge = (getRiver: ReturnType<typeof riverEast>) => bogEdgesOf(get, getRiver, origin).find((e) => e.edge === 3);
+
+  it('leaves the river water on a shared edge bare, but borders its banks', () => {
     // Regression: river hexes are `terrain: 'grass'` with their water in the river art, so the moss lobes and rim
-    // used to be drawn out over the river.
-    const get = world(tile(0, 0, 'bog', 'bog'), Array(6).fill('grass'));
-    const isRiver = (q: number, r: number) => q === 1 && r === 0;
-    expect(bogEdgesOf(get, isRiver, origin).map((e) => e.edge)).not.toContain(3);
-    expect(bogEdgesOf(get, isRiver, origin)).toHaveLength(5);
+    // used to be drawn out over the river where it flows into the bog.
+    expect(eastEdge(riverEast({ inDirections: ['E'], outDirection: 'W' }))?.gap).toEqual(RIVER_EDGE_GAP);
+    expect(eastEdge(riverEast({ inDirections: ['W'], outDirection: 'E', width: 'stream' }))?.gap).toEqual(STREAM_EDGE_GAP);
+  });
+
+  it('borders a river hex edge the water does not cross like any grass edge', () => {
+    expect(eastEdge(riverEast({ inDirections: ['NE'], outDirection: 'SW' }))).toEqual({ edge: 3, neighbour: 'grass' });
+  });
+
+  it('takes the stream width on the stream arm of a mixed river tile', () => {
+    expect(eastEdge(riverEast({ inDirections: ['W'], outDirection: 'E', width: 'widen' }))?.gap).toEqual(STREAM_EDGE_GAP);
+    expect(eastEdge(riverEast({ inDirections: ['E'], outDirection: 'W', width: 'widen' }))?.gap).toEqual(RIVER_EDGE_GAP);
+    expect(eastEdge(riverEast({ inDirections: ['W', 'NE'], outDirection: 'E', width: 'riverstream' }))?.gap).toEqual(STREAM_EDGE_GAP);
+    expect(eastEdge(riverEast({ inDirections: ['NE', 'W'], outDirection: 'E', width: 'riverstream' }))?.gap).toEqual(RIVER_EDGE_GAP);
   });
 
   it('does not treat a bog hex as grass even when its terrain reads grass', () => {
-    expect(bogEdgeNeighbour(tile(0, 0, 'grass', 'creek'), false)).toBeNull();
+    expect(bogEdgeNeighbour(tile(0, 0, 'grass', 'creek'))).toBeNull();
     expect(isBogGround(tile(0, 0, 'grass', 'creek'))).toBe(true);
   });
 });
@@ -91,6 +114,17 @@ describe('bogEdgeShapes', () => {
     const shapes = bogEdgeShapes('lobesRim', a, b, out, [1, 1, 1]);
     expect(shapes.some((s) => s.under && s.stroke)).toBe(true);
     expect(shapes.filter((s) => !s.under).every((s) => s.fill && !s.stroke)).toBe(true);
+  });
+
+  it('leaves the water gap bare in every style, and tapers the moss to nothing at the water', () => {
+    for (const style of BOG_EDGE_STYLES) {
+      for (const shape of bogEdgeShapes(style, a, b, out, [3, 3, 3], undefined, RIVER_EDGE_GAP)) {
+        for (const p of shape.points) expect(p.x <= 17.001 || p.x >= 82.999, `${style} at ${p.x}`).toBe(true);
+      }
+    }
+    const lobe = bogEdgeShapes('lobes', a, b, out, [3, 3, 3], undefined, RIVER_EDGE_GAP).find((s) => s.points.length > 15)!;
+    const atWater = lobe.points.find((p) => Math.abs(p.x - 17) < 1e-6 && p.y >= 0)!;
+    expect(atWater.y).toBeCloseTo(0, 6);
   });
 
   it('draws the straight border exactly on the hex edge, in the given colour', () => {
