@@ -111,10 +111,12 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   hammerschmiede: [2, 8],
 
   // Row 9 — Town Square (LH 6) -> Cart Workshop (LH 10); its second target,
-  // the Druid Hut (LH 12), one row below.
+  // the Druid Hut (LH 12), one row below, and its third the Bridge (row 11).
   townsquare: [1, 9],
   cartworkshop: [2, 9],
   druidhut: [2, 10],
+  // Row 11 — Town Square's third target, the Bridge (LH 7, behind a level-1 Town Square), one row below the Druid Hut.
+  bridge: [2, 11],
   // Row 10 — the Druid Hut (LH 12) -> Odin Statue (LH 25), in the Capstone column.
   odinstatue: [4, 10],
 };

@@ -34,3 +34,45 @@ describe('HexTooltip', () => {
     wrapper.unmount();
   });
 });
+
+describe('HexTooltip on a bridge', () => {
+  const bridge = (level: number, owner: { mine: boolean; ownerId?: string }): HoverInfo =>
+    ({
+      screenX: 0,
+      screenY: 0,
+      coord: { q: 1, r: 2 },
+      subject: { kind: 'building', buildingType: 'bridge', level },
+      owner: { settlementName: 'Hvit', ownerName: 'Ulf', ...owner },
+      premiumLocked: !owner.mine,
+    }) as HoverInfo;
+  const mountBridge = (info: HoverInfo, friendOwners?: ReadonlySet<string>) =>
+    mount(HexTooltip, { props: { info, friendOwners }, global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } });
+
+  it.each([
+    [0, 'Building site'],
+    [1, 'Causeway'],
+    [2, 'Footbridge'],
+    [3, "King's bridge"],
+    [4, 'Guarded bridge'],
+  ])('says in words what a level %i bridge does to a crossing army, to a stranger too', (level, name) => {
+    const text = mountBridge(bridge(level, { mine: false, ownerId: 'u2' })).get('[data-testid="bridge-crossing"]').text();
+    expect(text.startsWith(name)).toBe(true);
+    expect(text).not.toMatch(/\d+(\.\d+)? ?(cost|h\b)/);
+  });
+
+  it('keeps the ordinary stats row off a bridge it already describes', () => {
+    const wrapper = mountBridge({ ...bridge(2, { mine: true, ownerId: 'u1' }), stats: { modifier: { kind: 'bridge', level: 2 } } });
+    expect(wrapper.findAll('dd').filter((dd) => dd.text().startsWith('Footbridge'))).toHaveLength(1);
+  });
+
+  it('tells a guarded bridge\'s owner, a friend and a stranger whether their armies may cross', () => {
+    const friends = new Set(['u2']);
+    expect(mountBridge(bridge(4, { mine: true, ownerId: 'u1' }), friends).get('[data-testid="bridge-access"]').text()).toBe('Your armies may cross');
+    expect(mountBridge(bridge(4, { mine: false, ownerId: 'u2' }), friends).get('[data-testid="bridge-access"]').text()).toBe('Your armies may cross as a friend');
+    expect(mountBridge(bridge(4, { mine: false, ownerId: 'u3' }), friends).get('[data-testid="bridge-access"]').text()).toBe('Your armies may not cross');
+  });
+
+  it('shows no access line for the open levels', () => {
+    expect(mountBridge(bridge(3, { mine: false, ownerId: 'u3' })).find('[data-testid="bridge-access"]').exists()).toBe(false);
+  });
+});

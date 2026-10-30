@@ -67,6 +67,15 @@
     "modifierOdinFavour": "-{percent}% Bauzeit, +{rings} Ringe Sichtweite",
     "modifierPalisadeWall": "Hält jede Landarmee auf (ein einzelnes Ende ist halb offen)",
     "modifierPalisadeGate": "Nur die Armeen des Besitzers passieren",
+    "crossing": "Überquerung",
+    "bridgeLevel0": "Baustelle: der Fluss bleibt für Armeen noch gesperrt",
+    "bridgeLevel1": "Damm: Armeen kommen viel langsamer hinüber als über Land, aber schneller als durch einen Bach zu waten",
+    "bridgeLevel2": "Steg: Armeen kommen langsamer hinüber als über Land, aber schneller als über den Damm",
+    "bridgeLevel3": "Königsbrücke: Armeen kommen so schnell hinüber wie über den Boden selbst",
+    "bridgeLevel4": "Wehrbrücke: Armeen kommen so schnell hinüber wie über den Boden, aber nur die des Besitzers und seiner Freunde",
+    "bridgeAccessOwner": "Deine Armeen dürfen hinüber",
+    "bridgeAccessFriend": "Deine Armeen dürfen als Freund hinüber",
+    "bridgeAccessClosed": "Deine Armeen dürfen nicht hinüber",
     "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
     "domainFood": "Nahrung",
     "domainIron": "Eisen",
@@ -86,6 +95,10 @@
       "seaEnd": "Das Seeende braucht genau eine Landmauer daneben",
       "occupied": "Hier steht schon eine Mauer",
       "terrain": "Auf diesem Gelände kann keine Mauer stehen"
+    },
+    "bridgeLock": {
+      "notWide": "Dieser Fluss ist nicht breit: Armeen waten ohnehin hindurch",
+      "wasted": "Keine Brücke auf einer verwüsteten Insel"
     },
     "back": "Zurück",
     "backButton": "‹ ZURÜCK",
