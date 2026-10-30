@@ -666,7 +666,7 @@ export interface HoverInfo {
   subject: HoverSubject;
   // Present whenever the tile belongs to a settlement (building or claimed
   // terrain); absent for unclaimed ground.
-  owner?: { settlementName: string; ownerName: string; mine: boolean };
+  owner?: { settlementName: string; ownerName: string; mine: boolean; /** The owning account, for the friend check of a guarded bridge. */ ownerId?: string };
   // Building stats are only ever populated for the viewer's own buildings —
   // see hoverInfoFor. `premiumLocked` tells HexTooltip.vue to render a gated
   // "Pro" upsell row in their place for a building tile that belongs to
@@ -3008,7 +3008,7 @@ export class HexMapRenderer {
     const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
-    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
+    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine, ownerId: owner.ownerId } : undefined;
 
     const subject = hoverSubjectFor(tile, river);
     if (subject.kind === 'building') {
@@ -3945,7 +3945,7 @@ export class HexMapRenderer {
       // art family *and* orientation from the river tile itself, not
       // tile.orientation's random per-hex hash, so the channel lines up
       // with the neighbouring river tiles' own art.
-      const riverArt = river && tile.buildingType ? riverBuildingArtFor(tile.buildingType, river) : undefined;
+      const riverArt = river && tile.buildingType ? riverBuildingArtFor(tile.buildingType, river, textures) : undefined;
       if (riverArt) {
         baseEntries.set(key, { texture: baseTextureFor(textures, tile, riverArt), coord: c });
         const topTexture = topTextureFor(textures, tile, riverArt);
@@ -3964,7 +3964,8 @@ export class HexMapRenderer {
         const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
         // Only straight/bend/bend60 (and never a wasted/lava tile — see
         // riverTexturesFor) actually draw a variant.
-        const riverVariant = river.wasted ? 'plain' : worldModel.riverVariantAt(c, river.shape);
+        // A bridge is built on the plain channel of its crossing (it swaps a meander, island or loop for it), also while its own art is missing.
+        const riverVariant = river.wasted || tile.buildingType === 'bridge' ? 'plain' : worldModel.riverVariantAt(c, river.shape);
         const riverTextures = riverTexturesFor(textures, river, seaDirection, springShape, riverVariant);
         baseEntries.set(key, { texture: riverTextures.base, coord: c });
         topEntries.set(key, { texture: riverTextures.top, coord: c });

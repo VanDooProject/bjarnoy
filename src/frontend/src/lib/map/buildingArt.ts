@@ -69,8 +69,9 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // The wall set (3D_assets docs/wall-tiles.md): the preview shows the straight and the straight with its gate.
   palisade: 'palisade_straight180',
   palisadegate: 'palisade_gate180',
+  // The river bridge (3D_assets hextile135_riverbridge): the preview shows the straight crossing (undefined until the atlas has it).
+  bridge: 'riverbridge',
 };
-
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
