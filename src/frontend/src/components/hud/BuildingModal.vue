@@ -280,6 +280,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierPalisadeWall');
     case 'palisadeGate':
       return t('hud.hoverTooltip.modifierPalisadeGate');
+    case 'bridge':
+      return t(`hud.hoverTooltip.bridgeLevel${modifier.level}`);
   }
 }
 

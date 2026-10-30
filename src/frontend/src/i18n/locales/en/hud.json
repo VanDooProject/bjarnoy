@@ -67,6 +67,15 @@
     "modifierOdinFavour": "-{percent}% build time, +{rings} rings of vision",
     "modifierPalisadeWall": "Blocks every land army (a lone end is half open)",
     "modifierPalisadeGate": "Only its owner's armies pass",
+    "crossing": "Crossing",
+    "bridgeLevel0": "Building site: the river is still closed to armies",
+    "bridgeLevel1": "Causeway: armies cross much slower than over land, but quicker than wading a stream",
+    "bridgeLevel2": "Footbridge: armies cross slower than over land, but quicker than over a causeway",
+    "bridgeLevel3": "King's bridge: armies cross as quickly as over the ground itself",
+    "bridgeLevel4": "Guarded bridge: armies cross as quickly as over the ground, but only its owner's and their friends'",
+    "bridgeAccessOwner": "Your armies may cross",
+    "bridgeAccessFriend": "Your armies may cross as a friend",
+    "bridgeAccessClosed": "Your armies may not cross",
     "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
     "domainFood": "Food",
     "domainIron": "Iron",
@@ -86,6 +95,10 @@
       "seaEnd": "The sea end needs exactly one land wall beside it",
       "occupied": "A wall already stands here",
       "terrain": "A wall can't stand on this terrain"
+    },
+    "bridgeLock": {
+      "notWide": "This river is no wide river: armies already wade across it",
+      "wasted": "No bridge on a wasted island"
     },
     "back": "Back",
     "backButton": "‹ BACK",
