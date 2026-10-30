@@ -2130,24 +2130,6 @@ describe('river bridge art', () => {
   const bridgeTile = (overrides: Partial<Tile> = {}): Tile =>
     ({ q: 0, r: 0, terrain: 'grass', buildingType: 'bridge', buildingLevel: 2, orientation: 'SE', ownerId: 's1', ...overrides }) as Tile;
 
-  function emptyTextures(): TileTextures {
-    const none = Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, []]));
-    return {
-      base: {},
-      baseIndexed: {},
-      top: {},
-      animTop: {},
-      coastalBase: none,
-      wastedCoastalBase: none,
-      riverBase: {} as TileTextures['riverBase'],
-      riverTop: {} as TileTextures['riverTop'],
-      lavaRiverBase: {},
-      lavaRiverTop: {},
-      giants: {},
-      giantAnims: {},
-    } as unknown as TileTextures;
-  }
-
   /** A `buildings-static` stand-in with `levels` art levels of one bridge family: a top and a base frame per level and camera. */
   function bridgeAtlas(family: string, levels: number): LoadedAtlas {
     const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
@@ -2193,29 +2175,10 @@ describe('river bridge art', () => {
     expect(textureKeyFor(bridgeTile())).toBe('riverbridge');
   });
 
-  describe('while the atlas has no bridge frames', () => {
-    it('hands back no art, so the hex draws its plain river', () => {
-      const textures = emptyTextures();
-      for (const river of [riverTile('straight', 'W', null), riverTile('bend', 'NW', 'SW'), riverTile('bend60', 'NE', 'NW')]) {
-        expect(riverBuildingArtFor('bridge', river, textures)).toBeUndefined();
-      }
-    });
-
-    it('hands back no art for the shapes whose family is missing, and art for the ones that are loaded', () => {
-      const textures = buildTileTextures([bridgeAtlas('riverbridge_bend', 5)]);
-      expect(riverBuildingArtFor('bridge', riverTile('straight', 'W', null), textures)).toBeUndefined();
-      expect(riverBuildingArtFor('bridge', riverTile('bend', 'NW', 'SW'), textures)?.key).toBe('riverbridgebend');
-    });
-
-    it('still draws the Sawmill without consulting the atlas, as before', () => {
-      expect(riverBuildingArtFor('sawmill', riverTile('straight', 'W', null), emptyTextures())?.key).toBe('sawmillriver');
-    });
-  });
-
-  describe('once the atlas has the frames', () => {
+  describe('the art by level', () => {
     const river = riverTile('straight', 'W', null);
     const textures = buildTileTextures([bridgeAtlas('riverbridge', 5)]);
-    const art = riverBuildingArtFor('bridge', river, textures)!;
+    const art = riverBuildingArtFor('bridge', river)!;
 
     it('resolves the bridge art for the river tile', () => {
       expect(art.key).toBe('riverbridge');

@@ -106,7 +106,7 @@ export type TextureKey =
   | 'sawmillbend'
   | 'sawmillbend60'
   // The river bridge (3D_assets hextile135-137), one family per river shape it spans: like the Sawmill's keys these are texture-lookup keys
-  // (a bridge's wire type stays 'bridge'). The vendored atlas predates them: `riverBuildingArtFor` draws the plain river until it has frames.
+  // (a bridge's wire type stays 'bridge').
   | 'riverbridge'
   | 'riverbridgebend'
   | 'riverbridgebend60'
@@ -1681,11 +1681,6 @@ function artKeyFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Tex
   return key;
 }
 
-/** True when `key` has any art at all: a top frame in some orientation, or a base. */
-function hasBuildingFrames(textures: TileTextures, key: TextureKey): boolean {
-  return hasFrames(textures, key) || textures.base[key] !== undefined || textures.baseIndexed[key] !== undefined;
-}
-
 /** True when `key` has a top frame in any orientation. */
 function hasFrames(textures: TileTextures, key: TextureKey): boolean {
   const top = textures.top[key];
@@ -2125,7 +2120,7 @@ function oppositeOf(direction: TileOrientation): TileOrientation {
  * there in the first place — this only defends the render path against a
  * stale/malformed tile).
  */
-export function riverBuildingArtFor(buildingType: string, river: RiverTile, textures?: TileTextures): RiverArt | undefined {
+export function riverBuildingArtFor(buildingType: string, river: RiverTile): RiverArt | undefined {
   // Gated on the river tile's own wire shape, not the art-resolved shape
   // riverArtFor returns below: a Mouth tile's art always resolves to
   // 'straight' or 'bend' (mouthOrientationOf), but Mouth itself is never a
@@ -2146,11 +2141,10 @@ export function riverBuildingArtFor(buildingType: string, river: RiverTile, text
   }
   const { shape, orientation } = riverArtFor(river, null);
   if (buildingType === 'bridge') {
-    const key = shape === 'straight' ? 'riverbridge' : shape === 'bend' ? 'riverbridgebend' : shape === 'bend60' ? 'riverbridgebend60' : undefined;
-    // The vendored atlas has no bridge frames yet: with `textures` at hand a family without any is no art at all, so the caller draws the
-    // hex's plain river instead of a bare terrain texture (which is what a missing key would resolve to). Flips to the bridge the moment its frames load.
-    if (!key || (textures && !hasBuildingFrames(textures, key))) return undefined;
-    return { key, orientation };
+    if (shape === 'straight') return { key: 'riverbridge', orientation };
+    if (shape === 'bend') return { key: 'riverbridgebend', orientation };
+    if (shape === 'bend60') return { key: 'riverbridgebend60', orientation };
+    return undefined;
   }
   if (buildingType === 'sawmill') {
     if (shape === 'straight') return { key: 'sawmillriver', orientation };

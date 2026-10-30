@@ -4060,7 +4060,7 @@ export class HexMapRenderer {
       // art family *and* orientation from the river tile itself, not
       // tile.orientation's random per-hex hash, so the channel lines up
       // with the neighbouring river tiles' own art.
-      const riverArt = river && tile.buildingType ? riverBuildingArtFor(tile.buildingType, river, textures) : undefined;
+      const riverArt = river && tile.buildingType ? riverBuildingArtFor(tile.buildingType, river) : undefined;
       if (riverArt) {
         baseEntries.set(key, { texture: baseTextureFor(textures, tile, riverArt), coord: c });
         const topTexture = topTextureFor(textures, tile, riverArt);
@@ -4079,8 +4079,7 @@ export class HexMapRenderer {
         const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
         // Only straight/bend/bend60 (and never a wasted/lava tile — see
         // riverTexturesFor) actually draw a variant.
-        // A bridge is built on the plain channel of its crossing (it swaps a meander, island or loop for it), also while its own art is missing.
-        const riverVariant = river.wasted || tile.buildingType === 'bridge' ? 'plain' : worldModel.riverVariantAt(c, river.shape);
+        const riverVariant = river.wasted ? 'plain' : worldModel.riverVariantAt(c, river.shape);
         const riverTextures = riverTexturesFor(textures, river, seaDirection, springShape, riverVariant);
         baseEntries.set(key, { texture: riverTextures.base, coord: c });
         topEntries.set(key, { texture: riverTextures.top, coord: c });
