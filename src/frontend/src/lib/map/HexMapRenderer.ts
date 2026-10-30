@@ -1906,6 +1906,12 @@ export class HexMapRenderer {
    * `syncAnimationAtlases` only loads/unloads each one once per toggle.
    */
   private animationsEnabled = false;
+  // Water / fog motion (the player's per-device "Water motion" / "Fog drift"
+  // settings, wired by useHexMapRenderer). Off means frozen in place, not
+  // hidden. Default on so a bare renderer (tests, landing preview) animates
+  // as it always has.
+  private waterMotion = true;
+  private fogMotion = true;
   private animCoreReady = false;
   private wastedAnimReady = false;
   /**
@@ -2427,8 +2433,8 @@ export class HexMapRenderer {
     };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed);
     this.drawRangeOverlay();
     this.drawHighlight();
   };
@@ -3367,6 +3373,17 @@ export class HexMapRenderer {
    * reveal the same way `maybeLoadWastedPack` does — rather than duplicating
    * those readiness checks here.
    */
+  /** Freezes (false) or resumes (true) the water: shader clocks and the world map's wave squiggles. */
+  setWaterMotion(enabled: boolean) {
+    this.waterMotion = enabled;
+    this.waterLayer.setFrozen(!enabled);
+  }
+
+  /** Freezes (false) or resumes (true) the drift of the fog and mist layers. */
+  setFogMotion(enabled: boolean) {
+    this.fogMotion = enabled;
+  }
+
   setAnimationsEnabled(enabled: boolean) {
     if (this.animationsEnabled === enabled) return;
     this.animationsEnabled = enabled;
@@ -4178,7 +4195,8 @@ export class HexMapRenderer {
       return;
     }
     const alpha = WAVE_ALPHA * fade;
-    const now = Date.now();
+    // Frozen water holds the squiggles at a fixed phase instead of Date.now().
+    const now = this.waterMotion ? Date.now() : 0;
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
       const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;

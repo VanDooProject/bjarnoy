@@ -27,12 +27,23 @@ export interface MapLayers {
   fog?: boolean;
 }
 
+/** The player's per-device motion settings (Profile > Graphics). Omitted is 'auto', i.e. follows the emulated OS reduced-motion preference. */
+export interface MapMotion {
+  /** "Water motion": waves, shore surge, caustics. */
+  water?: 'auto' | 'on' | 'off';
+  /** "Fog drift": moving fog and mist edges. */
+  fog?: 'auto' | 'on' | 'off';
+  /** "Menu animations": radial menu, resource ticks, hints, drawers. */
+  hud?: 'auto' | 'on' | 'off';
+}
+
 export const test = base.extend<{
   forbidConsoleErrors: void;
   pinnedLocale: void;
   adminAuth: AdminAuthFixture;
   antialias: 'on' | 'off';
   mapLayers: MapLayers;
+  mapMotion: MapMotion;
   graphicsSettings: void;
 }>({
   /**
@@ -66,11 +77,27 @@ export const test = base.extend<{
    */
   mapLayers: [{ water: true }, { option: true }],
 
+  /**
+   * The player's water / fog / HUD motion settings (lib/perf/motionPreferences.ts),
+   * seeded through their own localStorage keys before the app loads, the way a
+   * player sets them in Profile > Graphics. The suite emulates the OS's
+   * reduced-motion preference (playwright.config.ts), which 'auto' follows, so
+   * water and fog are frozen by default; a spec that asserts they *move*
+   * opts in with `test.use({ mapMotion: { water: 'on', fog: 'on' } })`.
+   */
+  mapMotion: [{}, { option: true }],
+
   graphicsSettings: [
-    async ({ page, antialias, mapLayers }, use) => {
+    async ({ page, antialias, mapLayers, mapMotion }, use) => {
       await page.addInitScript((value) => {
         window.localStorage.setItem('bjarnoy.antialias', value);
       }, antialias);
+      await page.addInitScript((motion) => {
+        for (const key of ['water', 'fog', 'hud'] as const) {
+          const value = motion[key];
+          if (value) window.localStorage.setItem(`bjarnoy.motion.${key}`, value);
+        }
+      }, mapMotion);
       if (mapLayers.water === false) {
         await page.addInitScript(() => {
           // main.ts assigns the flags object once at startup (demo builds);

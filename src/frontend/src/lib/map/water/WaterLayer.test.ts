@@ -316,6 +316,24 @@ describe('WaterLayer', () => {
     expect(u.uWaveTime).toBeCloseTo(4, 6);
   });
 
+  it('holds both clocks while frozen and resumes without a jump when thawed', () => {
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    const u = uniformsOf(layer);
+    layer.tick(1000);
+    layer.tick(2000);
+    expect(u.uTime).toBeCloseTo(1, 6);
+
+    layer.setFrozen(true);
+    layer.tick(5000);
+    layer.tick(9000);
+    expect(u.uTime).toBeCloseTo(1, 6);
+    expect(u.uWaveTime).toBeCloseTo(waterDebugTuning.waveSpeed, 6);
+
+    layer.setFrozen(false);
+    layer.tick(9500);
+    expect(u.uTime).toBeCloseTo(1.5, 6);
+  });
+
   it('places the quad on exactly the world rect its mask was baked over', () => {
     const layer = new WaterLayer('world', TILE_W, TILE_H);
     const mask = maskOver(-400, -250, 600, 350);
