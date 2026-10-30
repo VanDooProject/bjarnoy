@@ -342,27 +342,6 @@ const joinBlockedMessage = computed(() => {
   return t('landing.joinBlocked.notAcceptingPlayers');
 });
 
-// landing-page-defects.md L3: the footer's reservation countdown — mirrors
-// the mockup's "Your plot is held for N minutes" (docs/design/img/
-// but_building_on_map.png), sourced from `plotSuggestion.reservedUntil`
-// (PlotReservationService.GetOrRefreshAsync), which `world.ts` already
-// fetches/stores but nothing read until now. Deliberately NOT the mockup's
-// hardcoded "20 minutes" — this codebase's real
-// `PlotReservationOptions.ReservationTtl` is 3 minutes. Rounds up so a
-// reservation with, say, 61 seconds left still reads "2 minutes" instead of
-// under-selling it as "1", and returns null once the TTL has actually
-// lapsed rather than showing a zero/negative count — the next preview poll
-// (`refreshPreview`, every `PREVIEW_POLL_MS`) either renews `reservedUntil`
-// or drops `reserved` server-side, at which point this just goes back to
-// null on its own.
-const reservedMinutesRemaining = computed<number | null>(() => {
-  const suggestion = world.plotSuggestion;
-  if (!suggestion?.reserved || !suggestion.reservedUntil) return null;
-  const msRemaining = new Date(suggestion.reservedUntil).getTime() - Date.now();
-  const minutes = Math.ceil(msRemaining / 60_000);
-  return minutes > 0 ? minutes : null;
-});
-
 // Guided checklist (design handoff "2a"): derived purely from what's
 // actually standing rather than a fixed step order — see
 // onboardingGuidance.ts's own doc comment. This is also now the single
@@ -1026,8 +1005,7 @@ watch(
            count entirely per the plan's preferred fix and restored the
            mockup's own sub-line instead (docs/design/img/
            but_building_on_map.png: "No account · Nothing to install ·
-           Leaves in one click"), moved out of `.footer` below, which now
-           carries the mockup's own footer content instead. -->
+           Leaves in one click"), moved out of the removed footer. -->
       <p class="signup-facts">
         <span class="plot-count-dot" />
         <span>{{ t('landing.hero.noAccount') }}</span>
@@ -1072,17 +1050,6 @@ watch(
       :has-founded="player.hasFoundedSettlement"
     />
 
-    <div class="footer">
-      <span>{{ t('landing.footer.sea') }}</span>
-      <!-- L3: "No account"/"Nothing to install" moved up into the hero
-           sub-line above (see that block's own comment) — this side now
-           carries the mockup's reservation countdown instead, pushed to
-           the far right the same way the mockup's footer does. -->
-      <span v-if="reservedMinutesRemaining !== null" class="footer-reservation">
-        {{ t('landing.footer.reservedFor', { count: reservedMinutesRemaining }) }}
-      </span>
-    </div>
-
     <template v-if="player.hasFoundedSettlement">
       <QueueDrawer v-if="isMobile" v-model:open="queueDrawerOpen" @select="onQueueSelect" />
       <BuildQueuePanel v-else @select="onQueueSelect" />
@@ -1112,7 +1079,7 @@ watch(
   height: 100vh;
   /* Mobile-readiness audit (finding f): mobile Safari's `100vh` includes the
      area the address-bar/toolbar chrome covers, which is taller than what's
-     actually visible — hiding the bottom UI (checklist/footer) below the
+     actually visible — hiding the bottom UI (checklist) below the
      fold. `100dvh` (the *dynamic* viewport height, which tracks the chrome)
      fixes it; kept as a fallback line right after `100vh` so browsers
      without `dvh` support keep today's behaviour exactly. */
@@ -1173,32 +1140,12 @@ h1 {
   content: '|';
   color: var(--muted-2);
 }
-.footer {
-  position: absolute;
-  left: 44px;
-  right: 44px;
-  bottom: 0;
-  height: 70px;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 30px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 13px;
-  color: var(--muted-2);
-  pointer-events: none;
-}
-.footer-reservation {
-  margin-left: auto;
-}
-
 /* Mobile-readiness audit findings e/g: the hero's fixed `left: 56px` /
-   `top: 30%` / `max-width: 520px` column and the 70px-tall footer were both
+   `top: 30%` / `max-width: 520px` column was
    sized for the desktop side-by-side layout (hero column next to the
    preview island). On a narrow screen there's no side-by-side room — the
    hero has to span full-width below the mobile header instead of a fixed
-   left offset, and the footer has to shrink so it doesn't fight the
-   checklist tray for the same strip of screen at the bottom. */
+   left offset. */
 @media (max-width: 768px), (max-height: 500px) {
   .hero {
     left: 20px;
@@ -1237,21 +1184,10 @@ h1 {
     flex-wrap: nowrap;
     white-space: nowrap;
   }
-  .footer {
-    left: 16px;
-    right: 16px;
-    height: 40px;
-    font-size: 12px;
-    gap: 12px;
-    /* Lifts the line clear of the "Demo" tag in the bottom-left corner. */
-    padding-bottom: 10px;
-    box-sizing: border-box;
-  }
   /* The checklist tray (OnboardingChecklist's root, which carries this
-     view's scope attribute) docks right above the footer rather than on
-     top of it, so the sea name / reservation countdown stays readable. */
+     view's scope attribute) docks at the bottom edge. */
   .landing > .tray {
-    bottom: calc(44px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
+    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
 }
 /* The facts line stays on one row on phones; below 360px the third fact
@@ -1262,19 +1198,8 @@ h1 {
   }
 }
 /* Short-landscape phones (finding b/g companion): the checklist tray is
-   docked bottom-right there (OnboardingChecklist.vue) and the footer would
-   still collide with it along the bottom edge — the checklist carries the
-   more important state, so the footer steps aside entirely rather than
-   fighting for the same strip. */
+   docked bottom-right there (OnboardingChecklist.vue). */
 @media (max-height: 500px) {
-  .footer {
-    display: none;
-  }
-  /* The footer the phone rules reserve 44px for is hidden here, so the
-     checklist docks in the corner itself. */
-  .landing > .tray {
-    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
-  }
   /* Short landscape phones get the same minimal founding hero, kept to a
      narrow left column so it stays clear of the island on the right. */
   .hero--founding {
