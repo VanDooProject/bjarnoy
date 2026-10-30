@@ -42,13 +42,12 @@ beforeEach(() => {
 });
 
 describe('ResourceProductionView', () => {
-  it('lists the eight producers and the Longhouse with their level 1 and level 10 output', async () => {
+  it('lists the producers a player can still place (no Quarry) and the Longhouse with their level 1 and level 10 output', async () => {
     const wrapper = await mountPage();
 
     const rows = wrapper.findAll('[data-testid=producers-table] tbody tr');
     expect(rows.map((r) => r.attributes('data-producer'))).toEqual([
       'lumberjack',
-      'quarry',
       'reindeerherder',
       'farm',
       'pumpkinfarm',
@@ -78,13 +77,12 @@ describe('ResourceProductionView', () => {
     wrapper.unmount();
   });
 
-  it('shows the neighbour boost with its cap and the four buildings it applies to', async () => {
+  it('shows the neighbour boost with its cap and the buildings it applies to, without the disabled Quarry', async () => {
     const wrapper = await mountPage();
 
     expect(wrapper.get('#boost').text()).toContain('adds 10% to its output, up to 50%');
     expect(wrapper.findAll('[data-testid=boost-table] tbody tr').map((r) => r.attributes('data-boost'))).toEqual([
       'lumberjack',
-      'quarry',
       'fishinghut',
       'bogoreworks',
     ]);

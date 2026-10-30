@@ -74,6 +74,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(lastSection).toBeInViewport();
 
     expect(await view.noHorizontalOverflow()).toBe(true);
+
+    // New quarries can no longer be placed, so mountain ground lists no buildings to build.
+    await expect(lastSection).not.toContainText("Quarry");
   });
 
   test("wasted lands page scrolls to reveal content below the fold", async ({
@@ -599,7 +602,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   }) => {
     await page.goto("/docs/production");
     await expectPlayerPage(page, "Resource production", "producers-table");
-    await expect(page.locator('[data-testid="producers-table"] tbody tr')).toHaveCount(9);
+    // Seven producers a player can still place (no Quarry) plus the Longhouse.
+    await expect(page.locator('[data-testid="producers-table"] tbody tr')).toHaveCount(8);
+    await expect(page.locator('[data-producer="quarry"]')).toHaveCount(0);
     await expect(page.locator('[data-producer="lumberjack"]')).toContainText("206");
     await expect(page.locator('[data-mill="cropmill"]')).toContainText("Straight river");
     // The first mention of a building is the link, and that is its row in the first table.
