@@ -133,6 +133,8 @@
 - create new sessions with the bjarnoy repo as source
   (`source_url: https://github.com/VanDooProject/bjarnoy`) so they show up
   in the bjarnoy section, not as loose sessions
+- prefix the title of every session you create with `[AI] ` (e.g.
+  `[AI] fix flaky WorldEndpointsTests`)
 
 # scheduled check-ins / send_later
 - don't poll on a fixed timer for something only I can unblock. A recurring
