@@ -33,9 +33,12 @@ the change made stale. Don't defer it to a later cleanup.
 
 ## 4. Safe areas and viewport edges
 
-- Floating chrome and popovers respect `env(safe-area-inset-*)` and keep a 16px side gutter at phone width.
-- Popovers/nudges anchored to a trigger are clamped to the viewport; nothing is cut off by the status bar or
-  the screen edge. Check at 360×740 and 390×844 with a simulated top inset.
+- Floating chrome keeps the 16px HUD gutter from every viewport edge at phone width — the top edge included,
+  so the gap above a floating chip equals the gap beside it. Nothing sits flush against an edge.
+- No safe-area special-casing: the app doesn't opt into `viewport-fit=cover`, so the browser never draws the
+  page under a status bar and `env(safe-area-inset-*)` is always 0. Only add safe-area terms if the app ever
+  opts into `viewport-fit=cover`.
+- Popovers/nudges anchored to a trigger stay fully on screen; check at 360×740 and 390×844.
 
 ## 5. Everything that appears also leaves animated
 
@@ -67,7 +70,7 @@ the change made stale. Don't defer it to a later cleanup.
 - [ ] No button left that can only fail; moved actions removed from their old place (handler, i18n, tests).
 - [ ] Nav entries match the player's state; the rule lives in one place.
 - [ ] No chrome without information on phones; reserved space for removed chrome is gone.
-- [ ] Safe areas and 16px gutters respected; popovers fully on-screen at 360×740 and 390×844.
+- [ ] 16px HUD gutter from every viewport edge (top included); popovers fully on-screen at 360×740 and 390×844.
 - [ ] Every enter has a leave, including data-driven unmounts; motion goes through the motion setting.
 - [ ] Shared components share their mount/animation/gesture code across views.
 - [ ] Gestures tested with real touch input on a mobile viewport.
