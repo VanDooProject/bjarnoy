@@ -3,6 +3,7 @@ import TopBar from '../hud/TopBar.vue';
 import HudNav from '../hud/HudNav.vue';
 import MobileHudDrawer from '../hud/MobileHudDrawer.vue';
 import { useDocsAdminNotes } from '../../composables/useDocsAdminNotes';
+import { provideFirstMentions } from '../../composables/useFirstMentions';
 
 // The shell every docs page shares: docked top bar with the HUD nav and the
 // mobile drawer, the breadcrumb back to the hub, the page title and its lede,
@@ -19,6 +20,7 @@ import { useDocsAdminNotes } from '../../composables/useDocsAdminNotes';
 //   `DocsAdminNote` blocks (technical content hidden from players).
 // - `hero` for the hub, which renders its own h1 and lede in the body; the
 //   header then keeps only the admin toggle (the `title` still names the top bar).
+// - Provides the page's first-mention register for BuildingLink.
 // Attributes (a `class` for the page's own scroll container hook) fall through
 // to the scrolling root.
 withDefaults(
@@ -35,6 +37,8 @@ withDefaults(
   { intro: undefined, breadcrumb: true, wide: false, hero: false },
 );
 const { canToggle, enabled, setEnabled } = useDocsAdminNotes();
+// Only a building's first mention on the page is a link (BuildingLink.vue).
+provideFirstMentions();
 </script>
 
 <template>

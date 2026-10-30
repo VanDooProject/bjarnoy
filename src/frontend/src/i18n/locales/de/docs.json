@@ -19,6 +19,10 @@
         "title": "Ausbauen",
         "description": "Gebäude, ihre Stufen und deine Mauern."
       },
+      "move": {
+        "title": "Unterwegs",
+        "description": "Neue Siedlungen, Armeen und Flotten."
+      },
       "beyond": {
         "title": "Jenseits deiner Küste",
         "description": "Andere Inseln, ihre Bestien und das Ende des Zeitalters."
@@ -37,9 +41,29 @@
         "title": "Techbaum",
         "description": "Jedes Gebäude: was seine zehn Stufen kosten, liefern und voraussetzen."
       },
+      "production": {
+        "title": "Rohstoffproduktion",
+        "description": "Woher Holz, Stein, Nahrung und Eisen kommen und wie Mühlen sie steigern."
+      },
+      "shrines": {
+        "title": "Schreine",
+        "description": "Die Gunst der Götter: was jeder Schrein bringt und die Ein-Schrein-Regel."
+      },
       "walls": {
         "title": "Mauern",
         "description": "Die Palisade: wo sie stehen darf und wer hindurchkommt."
+      },
+      "founding": {
+        "title": "Siedlungen gründen",
+        "description": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann."
+      },
+      "landMovement": {
+        "title": "Bewegung an Land",
+        "description": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern."
+      },
+      "ships": {
+        "title": "Schiffe und Wasser",
+        "description": "Schiffe aus der Werft, Flotten auf See und was Mauern nicht aufhalten."
       },
       "wildlifeCamps": {
         "title": "Wildtierlager",
@@ -83,6 +107,10 @@
     "palisade": "Palisade",
     "palisadegate": "Palisaden-Tor",
     "reindeerherder": "Rentierhirte"
+  },
+  "buildingLink": {
+    "levels": "Stufen 1–{max}",
+    "cta": "Kosten und Stufen im Techbaum →"
   },
   "techTree": {
     "title": "Techbaum",
@@ -725,6 +753,77 @@
     "notBuilt": {
       "heading": "Noch nicht gebaut",
       "body": "Belagerung und Feuer, die einer Mauer Stufen nehmen: Eine Mauer soll ihre Stufen nacheinander verlieren, bis sie verschwunden ist. Bisher passiert das noch nicht."
+    }
+  },
+  "production": {
+    "title": "Rohstoffproduktion",
+    "intro": "Woher Holz, Stein, Nahrung und Eisen kommen und wie Mühlen sie steigern.",
+    "placeholder": "Diese Seite wird noch geschrieben."
+  },
+  "founding": {
+    "title": "Siedlungen gründen",
+    "intro": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann.",
+    "placeholder": "Diese Seite wird noch geschrieben."
+  },
+  "landMovement": {
+    "title": "Bewegung an Land",
+    "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
+    "placeholder": "Diese Seite wird noch geschrieben."
+  },
+  "ships": {
+    "title": "Schiffe und Wasser",
+    "intro": "Schiffe aus der Werft, Flotten auf See und was Mauern nicht aufhalten.",
+    "placeholder": "Diese Seite wird noch geschrieben."
+  },
+  "shrines": {
+    "title": "Schreine",
+    "intro": "Ein Schrein sichert dir die Gunst eines Gottes: einen dauerhaften Bonus für die ganze Siedlung. Pro Siedlung bekommst du nur einen Schrein, die Wahl zählt also.",
+    "rules": {
+      "heading": "Die Regeln",
+      "oneShrine": "Eine Siedlung kann insgesamt nur einen Schrein haben, gleich für welchen Gott. Auch die Odin-Statue zählt als Schrein.",
+      "oneGod": "Jeder Gott hat auf einer Insel höchstens einen Schrein, egal welche Siedlung ihn zuerst baut.",
+      "needs": "Jeder Schrein braucht ein {longhouse} der Stufe {level} und das Gebäude, das in der Tabelle unten bei seinem Gott steht. Du kannst ihn bis Stufe {max} ausbauen."
+    },
+    "gods": {
+      "heading": "Was jeder Gott gibt",
+      "columns": {
+        "god": "Gott",
+        "favour": "Gunst",
+        "level": "Stufe {n}",
+        "needs": "Voraussetzung",
+        "standsOn": "Steht auf"
+      },
+      "favour": {
+        "thor": "Deine Landeinheiten greifen stärker an.",
+        "freyja": "Deine Siedlung erzeugt mehr Nahrung.",
+        "ullr": "Deine Siedlung erzeugt mehr Holz.",
+        "njord": "Deine Schiffe greifen stärker an.",
+        "odin": "Jeder Bau ist früher fertig, und du siehst weiter."
+      },
+      "percent": "+{percent} %",
+      "odinTime": "−{percent} % Bauzeit",
+      "odinRings": "+{rings} Sichtringe",
+      "costs": "Kosten und Bauzeiten jeder Stufe findest du im {link}.",
+      "costsLink": "Techbaum"
+    },
+    "runes": {
+      "wip": "In Arbeit",
+      "heading": "Runen",
+      "body": "Die Stufe eines Schreins schaltet Runenplätze frei. Jede eingesetzte Rune gibt ihren eigenen Bonus zusätzlich zur Gunst des Gottes.",
+      "slots": {
+        "level": "Schreinstufe",
+        "count": "Runenplätze"
+      },
+      "table": {
+        "rune": "Rune",
+        "gives": "Wirkung"
+      },
+      "effects": {
+        "production": "Alle Rohstoffproduktion",
+        "food": "Nahrungsproduktion",
+        "storage": "Lagerkapazität"
+      },
+      "cap": "Schreine und Runen addieren sich, aber jede Art von Bonus endet bei +{percent} %."
     }
   }
 }

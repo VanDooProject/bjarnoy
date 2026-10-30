@@ -4,19 +4,36 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
+import AnimatedBuildingSprite from '../components/AnimatedBuildingSprite.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import { buildingLayers } from '../lib/map/buildingArt';
+import { useAnimationClock } from '../composables/useAnimationClock';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 interface DocPage {
-  id: 'tiles' | 'bogLands' | 'techTree' | 'walls' | 'wildlifeCamps' | 'wastedLands';
+  id:
+    | 'tiles'
+    | 'bogLands'
+    | 'techTree'
+    | 'production'
+    | 'shrines'
+    | 'walls'
+    | 'founding'
+    | 'landMovement'
+    | 'ships'
+    | 'wildlifeCamps'
+    | 'wastedLands';
   to: string;
-  /** A `showcase` atlas frame, or `camp:<family>` for an animated wildlife camp. */
+  /**
+   * A `showcase` atlas frame, `camp:<family>` for an animated wildlife camp, or
+   * `anim:<family>:<level>` for a building with a `buildings-anim` clip playing.
+   */
   art: string;
 }
 interface DocGroup {
-  id: 'island' | 'building' | 'beyond';
+  id: 'island' | 'building' | 'move' | 'beyond';
   pages: DocPage[];
 }
 
@@ -34,7 +51,18 @@ const GROUPS: DocGroup[] = [
     id: 'building',
     pages: [
       { id: 'techTree', to: '/tech-tree', art: 'druidhut_SE_level006' },
+      { id: 'production', to: '/docs/production', art: 'anim:reindeerherder:4' },
+      // The Shrine of Thor's art family is `torshrine` (buildingArt.ts); its last level is 3.
+      { id: 'shrines', to: '/docs/shrines', art: 'torshrine_SE_level003' },
       { id: 'walls', to: '/docs/walls', art: 'palisade_gate180_SE_level002' },
+    ],
+  },
+  {
+    id: 'move',
+    pages: [
+      { id: 'founding', to: '/docs/founding', art: 'cartworkshop_SE_level004' },
+      { id: 'landMovement', to: '/docs/land-movement', art: 'riverbridge_SE_level004' },
+      { id: 'ships', to: '/docs/ships', art: 'dockyard_SE_level007' },
     ],
   },
   {
@@ -53,7 +81,24 @@ function fit(frame: AtlasFrameRect, boxHeight: number) {
   return { width: `min(100%, ${(boxHeight * frame.frame.w) / frame.frame.h}px)` };
 }
 function frameOf(art: string) {
-  return art.startsWith('camp:') ? undefined : findAtlasFrame('showcase', art);
+  return art.startsWith('camp:') || art.startsWith('anim:') ? undefined : findAtlasFrame('showcase', art);
+}
+
+// A building card plays its `buildings-anim` clip on the docs clock, which holds
+// still under reduced motion, Save-Data or "animations off" (useAnimationClock.ts).
+const now = useAnimationClock();
+function animatedOf(art: string) {
+  if (!art.startsWith('anim:')) return undefined;
+  const [, family, level] = art.split(':');
+  const layers = buildingLayers(family!, Number(level));
+  const canvas = layers.base?.sourceSize ?? layers.top?.sourceSize;
+  if (!layers.clip || !canvas) return undefined;
+  return { layers, style: { width: `min(100%, ${(84 * canvas.w) / canvas.h}px)` } };
+}
+/** The still showcase frame of an `anim:` card, for as long as its clip is not there. */
+function stillOf(art: string) {
+  const [, family, level] = art.split(':');
+  return findAtlasFrame('showcase', `${family}_SE_level${String(level).padStart(3, '0')}`);
 }
 </script>
 
@@ -76,6 +121,13 @@ function frameOf(art: string) {
         <RouterLink v-for="page in group.pages" :key="page.id" :to="page.to" class="card" :data-page="page.id">
           <span class="art" data-testid="docs-card-art" aria-hidden="true">
             <AnimatedCamp v-if="page.art.startsWith('camp:')" :family="page.art.slice(5)" orientation="SE" />
+            <AnimatedBuildingSprite
+              v-else-if="animatedOf(page.art)"
+              :layers="animatedOf(page.art)!.layers"
+              :elapsed-ms="now"
+              :style="animatedOf(page.art)!.style"
+            />
+            <AtlasSprite v-else-if="page.art.startsWith('anim:') && stillOf(page.art)" :frame="stillOf(page.art)!" :style="fit(stillOf(page.art)!, 84)" />
             <AtlasSprite v-else-if="frameOf(page.art)" :frame="frameOf(page.art)!" :style="fit(frameOf(page.art)!, 84)" />
           </span>
           <span class="text">
@@ -128,9 +180,16 @@ function frameOf(art: string) {
 }
 .groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
   margin-top: 28px;
+}
+/* Four groups of 2-4 cards: one column on a phone, two from a tablet up (the page column is only 90ch wide). */
+@media (min-width: 700px) {
+  .groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px 28px;
+  }
 }
 .group {
   display: flex;

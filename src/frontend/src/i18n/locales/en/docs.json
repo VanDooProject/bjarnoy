@@ -19,6 +19,10 @@
         "title": "Building up",
         "description": "Buildings, their levels, and your walls."
       },
+      "move": {
+        "title": "On the move",
+        "description": "New settlements, armies and fleets."
+      },
       "beyond": {
         "title": "Beyond your shores",
         "description": "Other islands, their beasts, the end of the age."
@@ -37,9 +41,29 @@
         "title": "Tech tree",
         "description": "Every building, what each of its ten levels costs, produces and needs."
       },
+      "production": {
+        "title": "Resource production",
+        "description": "Where wood, stone, food and iron come from, and how mills raise them."
+      },
+      "shrines": {
+        "title": "Shrines",
+        "description": "The gods' favour: what each shrine gives and the one-shrine rule."
+      },
       "walls": {
         "title": "Walls",
         "description": "The palisade: where it can stand and who gets through."
+      },
+      "founding": {
+        "title": "Founding settlements",
+        "description": "Settler troops from the cart workshop, and where a new settlement can land."
+      },
+      "landMovement": {
+        "title": "Land movement",
+        "description": "How armies cross the land: ground costs, rivers, mountains and walls."
+      },
+      "ships": {
+        "title": "Ships and water",
+        "description": "Ships from the dockyard, fleets at sea, and what walls cannot stop."
       },
       "wildlifeCamps": {
         "title": "Wildlife camps",
@@ -83,6 +107,10 @@
     "palisade": "Palisade",
     "palisadegate": "Palisade gate",
     "reindeerherder": "Reindeer herder"
+  },
+  "buildingLink": {
+    "levels": "levels 1–{max}",
+    "cta": "Costs and levels in the tech tree →"
   },
   "techTree": {
     "title": "Tech tree",
@@ -725,6 +753,77 @@
     "notBuilt": {
       "heading": "Not built yet",
       "body": "Siege and fire taking a level off a wall: a wall will lose its levels one at a time until it is gone. Nothing does this yet."
+    }
+  },
+  "production": {
+    "title": "Resource production",
+    "intro": "Where wood, stone, food and iron come from, and how mills raise them.",
+    "placeholder": "This page is still being written."
+  },
+  "founding": {
+    "title": "Founding settlements",
+    "intro": "Settler troops from the cart workshop, and where a new settlement can land.",
+    "placeholder": "This page is still being written."
+  },
+  "landMovement": {
+    "title": "Land movement",
+    "intro": "How armies cross the land: ground costs, rivers, mountains and walls.",
+    "placeholder": "This page is still being written."
+  },
+  "ships": {
+    "title": "Ships and water",
+    "intro": "Ships from the dockyard, fleets at sea, and what walls cannot stop.",
+    "placeholder": "This page is still being written."
+  },
+  "shrines": {
+    "title": "Shrines",
+    "intro": "A shrine wins you a god's favour: a lasting bonus for the whole settlement. You get one shrine per settlement, so the choice matters.",
+    "rules": {
+      "heading": "The rules",
+      "oneShrine": "A settlement can hold one shrine in total, of any god. Odin's statue counts as a shrine.",
+      "oneGod": "Each god can have only one shrine on an island, whichever settlement raises it first.",
+      "needs": "Every shrine needs a {longhouse} of level {level} and the building listed for its god in the table below. A shrine can be raised to level {max}."
+    },
+    "gods": {
+      "heading": "What each god gives",
+      "columns": {
+        "god": "God",
+        "favour": "Favour",
+        "level": "Level {n}",
+        "needs": "Needs",
+        "standsOn": "Stands on"
+      },
+      "favour": {
+        "thor": "Your land units attack harder.",
+        "freyja": "Your settlement produces more food.",
+        "ullr": "Your settlement produces more wood.",
+        "njord": "Your ships attack harder.",
+        "odin": "Every build finishes sooner, and you see farther."
+      },
+      "percent": "+{percent}%",
+      "odinTime": "−{percent}% build time",
+      "odinRings": "+{rings} vision rings",
+      "costs": "Costs and build times of every level are in the {link}.",
+      "costsLink": "tech tree"
+    },
+    "runes": {
+      "wip": "Work in progress",
+      "heading": "Runes",
+      "body": "A shrine's level opens rune slots. Each slotted rune adds its own bonus on top of the god's favour.",
+      "slots": {
+        "level": "Shrine level",
+        "count": "Rune slots"
+      },
+      "table": {
+        "rune": "Rune",
+        "gives": "Gives"
+      },
+      "effects": {
+        "production": "All resource production",
+        "food": "Food production",
+        "storage": "Storage capacity"
+      },
+      "cap": "Shrines and runes add up, but any one kind of bonus stops at +{percent}%."
     }
   }
 }

@@ -188,6 +188,41 @@ export const router = createRouter({
       beforeEnter: () => awaitShowcaseManifests(),
     },
     {
+      path: '/docs/production',
+      name: 'production-docs',
+      component: () => import('../views/ResourceProductionView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/shrines',
+      name: 'shrines-docs',
+      component: () => import('../views/ShrinesView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/founding',
+      name: 'founding-docs',
+      component: () => import('../views/FoundingView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/land-movement',
+      name: 'land-movement-docs',
+      component: () => import('../views/LandMovementView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/ships',
+      name: 'ships-docs',
+      component: () => import('../views/ShipsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
       path: '/docs/walls',
       name: 'walls-docs',
       component: () => import('../views/WallsView.vue'),

@@ -360,6 +360,11 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     "/docs/wasted-lands",
     "/docs/wildlife-camps",
     "/docs/bog-lands",
+    "/docs/shrines",
+    "/docs/production",
+    "/docs/founding",
+    "/docs/land-movement",
+    "/docs/ships",
   ]) {
     test(`${path} shows its breadcrumb back to the docs hub`, async ({
       page,
@@ -375,7 +380,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   }
 
   test.describe("docs hub", () => {
-    test("shows the three groups and six art cards, and the cards and footer link through", async ({
+    test("shows the four groups and eleven art cards, and the cards and footer link through", async ({
       page,
     }) => {
       await page.goto("/docs");
@@ -384,30 +389,53 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       ).toBeVisible();
       await expect(page.getByTestId("docs-hero-art").getByRole("img")).toBeVisible();
 
-      for (const name of ["Your island", "Building up", "Beyond your shores"]) {
+      for (const name of [
+        "Your island",
+        "Building up",
+        "On the move",
+        "Beyond your shores",
+      ]) {
         await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+      }
+      await expect(page.locator(".groups .group")).toHaveCount(4);
+      await expect(page.locator(".groups .group a.card")).toHaveCount(11);
+      for (const [group, count] of [
+        ["island", 2],
+        ["building", 4],
+        ["move", 3],
+        ["beyond", 2],
+      ] as const) {
+        await expect(page.locator(`.group[data-group=${group}] a.card`)).toHaveCount(count);
       }
 
       const cards = page.locator(".groups a.card");
-      await expect(cards).toHaveCount(6);
+      await expect(cards).toHaveCount(11);
       for (const title of [
         "Tiles",
         "Bog lands",
         "Tech tree",
+        "Resource production",
+        "Shrines",
         "Walls",
+        "Founding settlements",
+        "Land movement",
+        "Ships and water",
         "Wildlife camps",
         "Wasted lands",
       ]) {
         await expect(
-          page.locator(".groups a.card", { hasText: title }),
+          page.locator(".groups a.card .title", { hasText: new RegExp(`^${title}$`) }),
         ).toBeVisible();
       }
       // Every card's art is drawn from the atlas: a sprite with a background
       // image, or the animated camp's layers.
       const arts = page.getByTestId("docs-card-art");
-      await expect(arts).toHaveCount(6);
-      for (let i = 0; i < 6; i++) {
-        const layer = arts.nth(i).locator(".atlas-sprite, .animated-camp .layer").first();
+      await expect(arts).toHaveCount(11);
+      for (let i = 0; i < 11; i++) {
+        const layer = arts
+          .nth(i)
+          .locator(".atlas-sprite, .animated-camp .layer, .animated-building .layer")
+          .first();
         await expect(layer).toBeVisible();
         const bg = await layer.evaluate((el) => getComputedStyle(el).backgroundImage);
         expect(bg).toContain("url(");
@@ -424,12 +452,45 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     test("does not overflow horizontally on a phone", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/docs");
-      await expect(page.locator(".groups a.card")).toHaveCount(6);
+      await expect(page.locator(".groups a.card")).toHaveCount(11);
       const overflow = await page
         .locator(".docs-page")
         .evaluate((el) => el.scrollWidth - el.clientWidth);
       expect(overflow).toBeLessThanOrEqual(1);
     });
+  });
+
+  test("shrines page lists the five gods, hides the runes from players and its building links preview and lead to the tech tree", async ({
+    page,
+  }) => {
+    await page.goto("/docs/shrines");
+    await expect(page.getByRole("heading", { level: 1, name: "Shrines" })).toBeVisible();
+
+    const rows = page.locator('[data-testid="gods-table"] tbody tr');
+    await expect(rows).toHaveCount(5);
+    await expect(rows.nth(0)).toContainText("Shrine of Thor");
+    await expect(rows.nth(0)).toContainText("+22%");
+    await expect(rows.nth(4)).toContainText("Odin Statue");
+
+    // Players see neither the runes nor the toggle that would reveal them.
+    await expect(page.getByTestId("admin-note")).toHaveCount(0);
+    await expect(page.getByTestId("docs-admin-toggle")).toHaveCount(0);
+    await expect(page.getByText("Work in progress")).toHaveCount(0);
+
+    // Keyboard focus opens the preview card; Escape closes it.
+    const link = rows.nth(0).locator("th.god a.link");
+    await link.focus();
+    const tip = page.getByRole("tooltip");
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText("Shrine of Thor");
+    await expect(tip).toContainText("levels 1–5");
+    await expect(tip).toContainText("Costs and levels in the tech tree");
+    await page.keyboard.press("Escape");
+    await expect(tip).toHaveCount(0);
+
+    await link.click();
+    await expect(page).toHaveURL(/\/tech-tree#shrineofthor$/);
+    await expect(page.locator("#shrineofthor")).toBeInViewport();
   });
 
   test("walls page shows the six pieces with stage and facing pickers, the example wall and the hub links to it", async ({
