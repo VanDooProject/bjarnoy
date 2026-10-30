@@ -758,22 +758,258 @@
   "production": {
     "title": "Resource production",
     "intro": "Where wood, stone, food and iron come from, and how mills raise them.",
-    "placeholder": "This page is still being written."
+    "toc": {
+      "producers": "Producers",
+      "boost": "Neighbour boost",
+      "mills": "Mills",
+      "storage": "Storage",
+      "upkeep": "Upkeep and shrines"
+    },
+    "producers": {
+      "heading": "Producers",
+      "growth": "A producer's output grows by 20% with every level: each level makes 1.2 times what the one before made.",
+      "columns": {
+        "building": "Building",
+        "makes": "Makes",
+        "level": "Level {n}",
+        "standsOn": "Stands on",
+        "unlock": "Unlocks at"
+      },
+      "perHour": "All figures are per hour, before any boost from neighbours, mills or shrines.",
+      "longhouseUnlock": "From the start",
+      "notes": {
+        "pumpkinfarm": "Only on an island with pumpkin soil",
+        "fishinghut": "or on the half shore of a bog lake",
+        "claybrickworks": "Plain bog moss only",
+        "bogoreworks": "Plain bog moss only, not shore, creek or lake"
+      },
+      "longhouse": "The Longhouse is the exception: it adds the same fixed amount every level ({amounts} an hour: wood / stone / food / iron) instead of growing by 20%.",
+      "soil": "Every island has either wheat or pumpkin soil, about half of them each. A {pumpkin} fits only pumpkin soil and makes {pumpkinRate} food at level 1 where a {farm} makes {farmRate}; a {farm} fits any island."
+    },
+    "boost": {
+      "heading": "Neighbour boost",
+      "body": "Each of the six hexes around a producer that matches adds {per}% to its output, up to {max}% (five matching hexes). What counts as matching depends on the building.",
+      "boostedBy": "Boosted by",
+      "none": "The {herder}, {farm}, {pumpkin} and {brickworks} get no neighbour boost."
+    },
+    "mills": {
+      "heading": "Mills",
+      "body": "A mill makes nothing itself. It raises every building of its kind within reach by 5% per level: 50% at level 10 and 100% at level {max}. Its reach starts at one ring, the six hexes around it, and grows by one ring every four levels. Several mills add up.",
+      "columns": {
+        "mill": "Mill",
+        "raises": "Raises",
+        "standsOn": "Stands on"
+      },
+      "stands": {
+        "river": "River (straight, bend or sharp bend)",
+        "straightRiver": "Straight river",
+        "bogCreek": "Bog creek"
+      },
+      "cell": "{percent}% · {n} ring | {percent}% · {n} rings",
+      "notPumpkin": "The {crop} raises Farms only; a {pumpkin} gets nothing from it."
+    },
+    "storage": {
+      "heading": "Storage",
+      "body": "Each resource stops growing at your storage limit, and nothing above it is kept. With no storage building the limit is {base} of each resource. These buildings raise it.",
+      "capacity": "Adds, per resource",
+      "cell": "Level {level}: {capacity}",
+      "levelCap": "A {storehouse} or {great} cannot be higher than your {longhouse}.",
+      "moreHeading": "More storehouses",
+      "moreBody": "You can build more than one Storehouse, but each extra one asks for more of the ones you already have.",
+      "step": {
+        "which": "Storehouse",
+        "needs": "Needs",
+        "nth": "No. {n}",
+        "later": "No. {n} and every one after",
+        "needsCell": "{count} storehouse at level {level} | {count} storehouses at level {level}"
+      },
+      "overCap": "A cost above your storage limit can never be paid, however long you wait. Build storage before an upgrade that costs more than you can hold."
+    },
+    "upkeep": {
+      "heading": "Upkeep and shrines",
+      "body": "Troops eat food every hour. When your food runs out, units starve, the ones that cost the most to feed first, until your food income is no longer negative. Armies on the road have their own food rules: see {movement}.",
+      "movementLink": "Land movement",
+      "shrines": "Two shrines raise production: {freyja} adds to food, {ullr} to wood. See {shrines} for everything the gods give.",
+      "shrinesLink": "Shrines"
+    },
+    "adminNote": {
+      "tooltips": "The production figures in tooltips and the build menu include the neighbour boost but not mills or shrines. The tables on this page show the base figures."
+    }
   },
   "founding": {
     "title": "Founding settlements",
     "intro": "Settler troops from the cart workshop, and where a new settlement can land.",
-    "placeholder": "This page is still being written."
+    "toc": {
+      "first": "First settlement",
+      "more": "More settlements",
+      "renown": "Renown and price",
+      "where": "Where",
+      "new": "A new settlement"
+    },
+    "first": {
+      "heading": "Your first settlement",
+      "body": "You pick your first settlement from a few starting spots the game offers you. Each one is on grassland near forest, away from the sea, with bog within reach for clay and iron, and clear of strong wildlife camps and giants."
+    },
+    "more": {
+      "heading": "More settlements",
+      "body": "Further settlements are founded by {count} Settler crews marching together. You train them at the {workshop}, which needs a {longhouse} of level {level} and a {square} of level {squareLevel}.",
+      "crew": {
+        "defense": "Defence",
+        "speed": "Speed",
+        "food": "Carries food",
+        "upkeep": "Upkeep per hour",
+        "time": "Training time",
+        "longhouse": "Longhouse level",
+        "minutes": "{n} min"
+      },
+      "provisions": "Each crew carries {food} food, {total} for all three. Load enough for the way there and back.",
+      "ambush": "On the way, overland crews can be ambushed by strong wildlife camps (see {camps}). How fast they cross each ground is on the {movement} page.",
+      "campsLink": "Wildlife camps",
+      "movementLink": "Land movement"
+    },
+    "renown": {
+      "heading": "Renown and price",
+      "body": "Every settlement after the first has a price in renown and in crews. Your buildings earn renown in all your settlements together: 1 per building level per hour, and it never decays. Each settlement you hold doubles the renown asked for the next one and the price of its crews.",
+      "columns": {
+        "next": "You found",
+        "renown": "Renown needed",
+        "perCrew": "Cost per crew",
+        "total": "Cost of {count} crews"
+      },
+      "nth": "Settlement no. {n}",
+      "order": "Costs are {resources}.",
+      "when": "The renown is checked when the crews set out.",
+      "feasts": "A feast at the {square} earns renown on top of that. It runs {hours} hours, costs the same amount of wood, stone and food, and grows with the square's level.",
+      "feast": {
+        "level": "Town Square level",
+        "cost": "Cost (each of wood, stone, food)",
+        "renown": "Renown gained"
+      }
+    },
+    "where": {
+      "heading": "Where a settlement can land",
+      "land": "On any land hex your crews can reach, except a giant's.",
+      "spacing": "At least {hexes} hexes beyond the claim border of every settlement in the world, yours and other players'.",
+      "twice": "This is checked when the crews set out and again when they arrive.",
+      "taken": "If someone else took the spot meanwhile, the crews wait there. You can send them on or recall them, and they head home on their own when their food runs low."
+    },
+    "new": {
+      "heading": "A new settlement",
+      "body": "It starts with a level 1 {longhouse}. Its claim reaches {claim1} hexes, {claim2} from level 2, and its stores hold {stock} each of wood, stone and food, and no iron.",
+      "garrison": "Every unit that travelled with the crews, other than the crews themselves, stays as its garrison."
+    },
+    "adminNote": {
+      "sea": "Founding by sea exists in the rules but has no interface yet (issue #447).",
+      "provisions": "The expansion panel proposes 200 provisions by default, but three crews carry only {carried}."
+    }
   },
   "landMovement": {
     "title": "Land movement",
     "intro": "How armies cross the land: ground costs, rivers, mountains and walls.",
-    "placeholder": "This page is still being written."
+    "toc": {
+      "cost": "Ground costs",
+      "pace": "Pace",
+      "food": "Food",
+      "road": "On the road",
+      "sight": "Sight"
+    },
+    "cost": {
+      "heading": "What a hex costs",
+      "body": "Every hex an army enters has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass.",
+      "columns": {
+        "ground": "Ground",
+        "cost": "Cost"
+      },
+      "stream": "Stream",
+      "streamNote": "flat, whatever ground it runs over",
+      "wallEnd": "Open end of a wall",
+      "wallEndNote": "instead of the ground",
+      "wideRiver": "Wide river",
+      "blocked": "Cannot be entered",
+      "walls": "A wall hex stops every land army, and a gate lets friends through. See {walls} for the full rules.",
+      "wallsLink": "Walls"
+    },
+    "pace": {
+      "heading": "How fast armies move",
+      "body": "Speed is counted in hexes per hour on grass. An army marches at the speed of its slowest unit.",
+      "example": "Example: a {unit} crosses a grass hex in {minutes}.",
+      "columns": {
+        "unit": "Unit",
+        "speed": "Speed (hexes per hour)"
+      },
+      "note": "Time per hex at the default world speed. A faster world shortens every time.",
+      "slowest": "The slowest of all is the {unit}."
+    },
+    "food": {
+      "heading": "Food on the march",
+      "upkeep": "An army eats its units' upkeep in food every hour from the moment it sets out.",
+      "carry": "It can carry only as much food as its units can, so you load the provisions for the whole trip before it leaves.",
+      "turnBack": "An army on a move turns back when its food runs low.",
+      "columns": {
+        "upkeep": "Eats per hour",
+        "carries": "Carries (food)"
+      }
+    },
+    "road": {
+      "heading": "On the road",
+      "camps": "An army that comes within reach of a strong wildlife camp is ambushed, unless the camp is calm. A strong camp guards {min} to {max} hexes around it (2 plus its level). See {link}.",
+      "campsLink": "Wildlife camps",
+      "enemies": "Hostile armies that meet on the road fight a field battle. Armies of the same owner or guild never fight each other.",
+      "orders": "Every order has one destination for free. Waypoints along the way are a premium feature."
+    },
+    "sight": {
+      "heading": "What an army sees",
+      "body": "A travelling army uncovers {rings} rings of the map around it, plus {bonus} more for each level of the {odin}."
+    },
+    "adminNote": {
+      "bridges": "Bridges over wide rivers are planned but not in the game yet."
+    }
   },
   "ships": {
     "title": "Ships and water",
     "intro": "Ships from the dockyard, fleets at sea, and what walls cannot stop.",
-    "placeholder": "This page is still being written."
+    "dockyard": {
+      "heading": "The dockyard",
+      "body": "Ships are trained at the {dockyard}, which needs a {longhouse} of level {level} and a {hut} of level {hutLevel}.",
+      "shore": "It stands on shallow (coastal) water, so only a settlement that holds shoreline can train ships."
+    },
+    "table": {
+      "heading": "The ships",
+      "rows": {
+        "attack": "Attack",
+        "defense": "Defence",
+        "speed": "Speed (hexes per hour)",
+        "perHex": "Time per sea hex",
+        "loot": "Loot capacity",
+        "food": "Food capacity",
+        "upkeep": "Upkeep per hour",
+        "cost": "Cost ({resources})",
+        "time": "Training time",
+        "needs": "Needs"
+      },
+      "minutes": "{n} min"
+    },
+    "sailing": {
+      "heading": "At sea",
+      "sea": "Ships sail on the sea only. Coastal and open water cost the same, and bog lakes are closed to them.",
+      "troops": "Ships carry loot, not land troops.",
+      "targets": "A fleet can attack, raid or support settlements that hold shoreline. It cannot take catapults along.",
+      "walls": "{walls} do not stop fleets.",
+      "wallsLink": "Walls",
+      "camps": "Wildlife camps never ambush a fleet (see {camps}).",
+      "campsLink": "Wildlife camps"
+    },
+    "battles": {
+      "heading": "Battles",
+      "same": "Fleets fight by the same rules as armies on land: attack against defence, and a tie goes to the defender.",
+      "tower": "A defending settlement's {tower} adds {percent}% defence per level.",
+      "njord": "The {shrine} raises your ships' attack by {low}% at level 1, up to {high}% at level 5. See {shrines}.",
+      "shrinesLink": "Shrines"
+    },
+    "adminNote": {
+      "route": "Known bug (issue #450): a fleet's route starts at the settlement centre, which is never next to the sea for a starting settlement, so fleets cannot leave a first settlement, and cannot attack a settlement whose centre is inland. This page describes the intended behaviour: fleets leave from the Dockyard.",
+      "sea": "Founding by sea (a Karve carries {karve} Settler crew, a Longship {longship}) exists in the rules but has no interface yet (issue #447)."
+    }
   },
   "shrines": {
     "title": "Shrines",

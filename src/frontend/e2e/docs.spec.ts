@@ -493,6 +493,69 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.locator("#shrineofthor")).toBeInViewport();
   });
 
+  /**
+   * A reference page for players: its main table is there, no admin note or toggle shows for the demo player, and on a
+   * phone the page does not scroll sideways (wide tables scroll inside their own box).
+   */
+  async function expectPlayerPage(page: Page, h1: string, table: string) {
+    await expect(page.getByRole("heading", { level: 1, name: h1 })).toBeVisible();
+    await expect(page.locator(`[data-testid="${table}"] tbody tr`).first()).toBeVisible();
+    await expect(page.getByTestId("admin-note")).toHaveCount(0);
+    await expect(page.getByTestId("docs-admin-toggle")).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const overflow = await page
+      .locator(".docs-page")
+      .evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+  }
+
+  test("production page lists the producers and mills from the catalogue and hides the admin note", async ({
+    page,
+  }) => {
+    await page.goto("/docs/production");
+    await expectPlayerPage(page, "Resource production", "producers-table");
+    await expect(page.locator('[data-testid="producers-table"] tbody tr')).toHaveCount(9);
+    await expect(page.locator('[data-producer="lumberjack"]')).toContainText("206");
+    await expect(page.locator('[data-mill="cropmill"]')).toContainText("Straight river");
+    // The first mention of a building is the link, and that is its row in the first table.
+    await expect(
+      page.locator('[data-producer="lumberjack"] th [data-building-link="link"]'),
+    ).toHaveCount(1);
+    await expect(page.getByTestId("page-art").locator(".animated-building .layer").first()).toBeVisible();
+  });
+
+  test("founding page prices the next settlements and hides the admin note", async ({
+    page,
+  }) => {
+    await page.goto("/docs/founding");
+    await expectPlayerPage(page, "Founding settlements", "price-table");
+    await expect(page.locator('[data-settlement="2"]')).toContainText("55,000");
+    await expect(page.locator('[data-settlement="3"]')).toContainText("400 / 300 / 200 / 200");
+    await expect(page.getByText("issue #447")).toHaveCount(0);
+  });
+
+  test("land movement page tabulates ground costs and minutes per hex and hides the admin note", async ({
+    page,
+  }) => {
+    await page.goto("/docs/land-movement");
+    await expectPlayerPage(page, "Land movement", "ground-table");
+    await expect(page.locator('[data-ground="bog"]')).toContainText("2");
+    await expect(
+      page.locator('[data-testid="pace-table"] [data-unit="spearman"]'),
+    ).toContainText("15 min");
+    await expect(page.getByText("Bridges over wide rivers")).toHaveCount(0);
+  });
+
+  test("ships page compares the Karve and the Longship and hides the admin note", async ({
+    page,
+  }) => {
+    await page.goto("/docs/ships");
+    await expectPlayerPage(page, "Ships and water", "ships-table");
+    await expect(page.locator('[data-row="attack"]')).toContainText("60");
+    await expect(page.locator('[data-row="needs"]')).toContainText("Karve");
+    await expect(page.getByText("Under investigation")).toHaveCount(0);
+  });
+
   test("walls page shows the six pieces with stage and facing pickers, the example wall and the hub links to it", async ({
     page,
   }) => {

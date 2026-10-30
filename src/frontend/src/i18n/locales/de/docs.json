@@ -758,22 +758,258 @@
   "production": {
     "title": "Rohstoffproduktion",
     "intro": "Woher Holz, Stein, Nahrung und Eisen kommen und wie Mühlen sie steigern.",
-    "placeholder": "Diese Seite wird noch geschrieben."
+    "toc": {
+      "producers": "Produzenten",
+      "boost": "Nachbarbonus",
+      "mills": "Mühlen",
+      "storage": "Lager",
+      "upkeep": "Unterhalt und Schreine"
+    },
+    "producers": {
+      "heading": "Produzenten",
+      "growth": "Die Leistung eines Produzenten wächst mit jeder Stufe um 20 %: Jede Stufe liefert das 1,2-Fache der vorigen.",
+      "columns": {
+        "building": "Gebäude",
+        "makes": "Liefert",
+        "level": "Stufe {n}",
+        "standsOn": "Steht auf",
+        "unlock": "Freigeschaltet ab"
+      },
+      "perHour": "Alle Angaben gelten pro Stunde und ohne Bonus von Nachbarfeldern, Mühlen oder Schreinen.",
+      "longhouseUnlock": "Von Anfang an",
+      "notes": {
+        "pumpkinfarm": "Nur auf einer Insel mit Kürbisboden",
+        "fishinghut": "oder am halben Ufer eines Moorsees",
+        "claybrickworks": "Nur auf reinem Moorboden",
+        "bogoreworks": "Nur auf reinem Moorboden, nicht an Ufer, Bach oder See"
+      },
+      "longhouse": "Das Langhaus ist die Ausnahme: Es liefert mit jeder Stufe dieselbe feste Menge dazu ({amounts} pro Stunde: Holz / Stein / Nahrung / Eisen), statt um 20 % zu wachsen.",
+      "soil": "Jede Insel hat Weizen- oder Kürbisboden, etwa die Hälfte von jedem. Eine {pumpkin} passt nur auf Kürbisboden und bringt auf Stufe 1 {pumpkinRate} Nahrung, wo ein {farm} {farmRate} bringt. Ein {farm} kannst du auf jeder Insel bauen."
+    },
+    "boost": {
+      "heading": "Nachbarbonus",
+      "body": "Jedes der sechs Felder um einen Produzenten, das passt, bringt ihm {per} % mehr, höchstens aber {max} % (bei fünf passenden Feldern). Was passt, hängt vom Gebäude ab.",
+      "boostedBy": "Gesteigert durch",
+      "none": "{herder}, {farm}, {pumpkin} und {brickworks} bekommen keinen Nachbarbonus."
+    },
+    "mills": {
+      "heading": "Mühlen",
+      "body": "Eine Mühle liefert selbst nichts. Sie steigert jedes Gebäude ihrer Art in Reichweite um 5 % pro Stufe: auf Stufe 10 um 50 %, auf Stufe {max} um 100 %. Ihre Reichweite beginnt bei einem Ring, den sechs Feldern um sie herum, und wächst alle vier Stufen um einen Ring. Mehrere Mühlen addieren sich.",
+      "columns": {
+        "mill": "Mühle",
+        "raises": "Steigert",
+        "standsOn": "Steht auf"
+      },
+      "stands": {
+        "river": "Fluss (gerade, Kurve oder enge Kurve)",
+        "straightRiver": "Gerader Fluss",
+        "bogCreek": "Moorbach"
+      },
+      "cell": "{percent} % · {n} Ring | {percent} % · {n} Ringe",
+      "notPumpkin": "Die {crop} steigert nur Bauernhöfe. Eine {pumpkin} geht leer aus."
+    },
+    "storage": {
+      "heading": "Lager",
+      "body": "Jeder Rohstoff wächst nur bis zu deiner Lagergrenze, was darüber liegt, geht verloren. Ohne Lagergebäude liegt die Grenze bei {base} pro Rohstoff. Diese Gebäude heben sie an.",
+      "capacity": "Fasst zusätzlich, pro Rohstoff",
+      "cell": "Stufe {level}: {capacity}",
+      "levelCap": "Ein {storehouse} oder ein {great} darf nicht höher ausgebaut sein als dein {longhouse}.",
+      "moreHeading": "Weitere Lagerhäuser",
+      "moreBody": "Du kannst mehr als ein Lagerhaus bauen, aber jedes weitere verlangt mehr von den vorhandenen.",
+      "step": {
+        "which": "Lagerhaus",
+        "needs": "Voraussetzung",
+        "nth": "Nr. {n}",
+        "later": "Nr. {n} und jedes weitere",
+        "needsCell": "{count} Lagerhaus auf Stufe {level} | {count} Lagerhäuser auf Stufe {level}"
+      },
+      "overCap": "Kosten über deiner Lagergrenze kannst du nie bezahlen, egal wie lange du wartest. Baue also Lager aus, bevor du etwas aufwertest, das mehr kostet, als du fassen kannst."
+    },
+    "upkeep": {
+      "heading": "Unterhalt und Schreine",
+      "body": "Truppen essen jede Stunde Nahrung. Geht dir die Nahrung aus, verhungern Einheiten, zuerst die mit dem höchsten Unterhalt, bis deine Nahrungsbilanz nicht mehr negativ ist. Armeen unterwegs haben eigene Nahrungsregeln: siehe {movement}.",
+      "movementLink": "Bewegung an Land",
+      "shrines": "Zwei Schreine steigern die Produktion: {freyja} die Nahrung, {ullr} das Holz. Was die Götter sonst noch geben, steht unter {shrines}.",
+      "shrinesLink": "Schreine"
+    },
+    "adminNote": {
+      "tooltips": "Die Produktionswerte in Tooltips und im Baumenü enthalten den Nachbarbonus, aber keine Mühlen und Schreine. Die Tabellen auf dieser Seite zeigen die Grundwerte."
+    }
   },
   "founding": {
     "title": "Siedlungen gründen",
     "intro": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann.",
-    "placeholder": "Diese Seite wird noch geschrieben."
+    "toc": {
+      "first": "Erste Siedlung",
+      "more": "Weitere Siedlungen",
+      "renown": "Ruhm und Preis",
+      "where": "Wo",
+      "new": "Eine neue Siedlung"
+    },
+    "first": {
+      "heading": "Deine erste Siedlung",
+      "body": "Deine erste Siedlung suchst du dir aus ein paar Startplätzen aus, die das Spiel dir anbietet. Jeder liegt auf Grasland nahe am Wald, abseits des Meeres, mit Moor in Reichweite für Ton und Eisen und weit weg von starken Wildtierlagern und Riesen."
+    },
+    "more": {
+      "heading": "Weitere Siedlungen",
+      "body": "Neue Siedlungen gründen {count} Siedlertrupps, die gemeinsam losziehen. Du bildest sie in der {workshop} aus. Sie braucht ein {longhouse} auf Stufe {level} und einen {square} auf Stufe {squareLevel}.",
+      "crew": {
+        "defense": "Verteidigung",
+        "speed": "Tempo",
+        "food": "Trägt Nahrung",
+        "upkeep": "Unterhalt pro Stunde",
+        "time": "Ausbildungszeit",
+        "longhouse": "Langhaus-Stufe",
+        "minutes": "{n} Min."
+      },
+      "provisions": "Jeder Trupp trägt {food} Nahrung, alle drei zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
+      "ambush": "Unterwegs können starke Wildtierlager deine Trupps überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
+      "campsLink": "Wildtierlager",
+      "movementLink": "Bewegung an Land"
+    },
+    "renown": {
+      "heading": "Ruhm und Preis",
+      "body": "Jede Siedlung nach der ersten kostet Ruhm und Trupps. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird, und ebenso der Preis ihrer Trupps.",
+      "columns": {
+        "next": "Du gründest",
+        "renown": "Nötiger Ruhm",
+        "perCrew": "Kosten pro Trupp",
+        "total": "Kosten für {count} Trupps"
+      },
+      "nth": "Siedlung Nr. {n}",
+      "order": "Die Kosten sind {resources}.",
+      "when": "Der Ruhm wird geprüft, wenn die Trupps aufbrechen.",
+      "feasts": "Ein Fest auf dem {square} bringt zusätzlich Ruhm. Es dauert {hours} Stunden, kostet gleich viel Holz, Stein und Nahrung und wird mit der Stufe des Platzes größer.",
+      "feast": {
+        "level": "Stufe des Dorfplatzes",
+        "cost": "Kosten (je Holz, Stein, Nahrung)",
+        "renown": "Ruhm"
+      }
+    },
+    "where": {
+      "heading": "Wo eine Siedlung landen kann",
+      "land": "Auf jedem Landfeld, das deine Trupps erreichen können, nur nicht auf einem Riesen.",
+      "spacing": "Mindestens {hexes} Felder jenseits der Gebietsgrenze jeder Siedlung der Welt, egal ob deiner eigenen oder der anderer Spieler.",
+      "twice": "Das wird beim Aufbruch geprüft und noch einmal bei der Ankunft.",
+      "taken": "Hat inzwischen jemand anderes den Platz besetzt, warten die Trupps dort. Du kannst sie weiterschicken oder zurückrufen, und sie kehren von allein heim, wenn ihnen die Nahrung ausgeht."
+    },
+    "new": {
+      "heading": "Eine neue Siedlung",
+      "body": "Sie startet mit einem {longhouse} auf Stufe 1. Es beansprucht {claim1} Felder, ab Stufe 2 sind es {claim2}. Das Lager enthält je {stock} Holz, Stein und Nahrung, aber kein Eisen.",
+      "garrison": "Alle Einheiten, die mit den Trupps gezogen sind, bleiben als Besatzung dort, nur die Trupps selbst nicht."
+    },
+    "adminNote": {
+      "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447).",
+      "provisions": "Das Expansionspanel schlägt standardmäßig 200 Proviant vor, drei Trupps tragen aber nur {carried}."
+    }
   },
   "landMovement": {
     "title": "Bewegung an Land",
     "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
-    "placeholder": "Diese Seite wird noch geschrieben."
+    "toc": {
+      "cost": "Geländekosten",
+      "pace": "Tempo",
+      "food": "Nahrung",
+      "road": "Unterwegs",
+      "sight": "Sicht"
+    },
+    "cost": {
+      "heading": "Was ein Feld kostet",
+      "body": "Jedes Feld, das eine Armee betritt, hat Kosten, die vom Gelände abhängen. Die Armee braucht für das Feld die Kosten geteilt durch ihr Tempo in Stunden. Ein Feld mit Kosten 2 dauert also doppelt so lang wie Gras.",
+      "columns": {
+        "ground": "Gelände",
+        "cost": "Kosten"
+      },
+      "stream": "Bach",
+      "streamNote": "pauschal, egal über welchem Gelände",
+      "wallEnd": "Offenes Mauerende",
+      "wallEndNote": "statt des Geländes",
+      "wideRiver": "Breiter Fluss",
+      "blocked": "Nicht betretbar",
+      "walls": "Ein Mauerfeld hält jede Landarmee auf, ein Tor lässt Freunde durch. Die ganzen Regeln stehen unter {walls}.",
+      "wallsLink": "Mauern"
+    },
+    "pace": {
+      "heading": "Wie schnell Armeen ziehen",
+      "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit.",
+      "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
+      "columns": {
+        "unit": "Einheit",
+        "speed": "Tempo (Felder pro Stunde)"
+      },
+      "note": "Zeit pro Feld bei der normalen Weltgeschwindigkeit. In einer schnelleren Welt werden alle Zeiten kürzer.",
+      "slowest": "Am langsamsten ist der {unit}."
+    },
+    "food": {
+      "heading": "Nahrung unterwegs",
+      "upkeep": "Eine Armee isst ab dem Aufbruch jede Stunde den Unterhalt ihrer Einheiten an Nahrung.",
+      "carry": "Mehr Nahrung, als ihre Einheiten tragen, kann sie nicht mitnehmen. Den Proviant für den ganzen Weg lädst du also vor dem Aufbruch.",
+      "turnBack": "Wird die Nahrung knapp, kehrt eine marschierende Armee um.",
+      "columns": {
+        "upkeep": "Isst pro Stunde",
+        "carries": "Trägt (Nahrung)"
+      }
+    },
+    "road": {
+      "heading": "Unterwegs",
+      "camps": "Kommt eine Armee in die Reichweite eines starken Wildtierlagers, wird sie überfallen, außer das Lager ist ruhig. Ein starkes Lager bewacht {min} bis {max} Felder um sich (2 plus seine Stufe). Mehr dazu unter {link}.",
+      "campsLink": "Wildtierlager",
+      "enemies": "Feindliche Armeen, die sich auf der Straße treffen, kämpfen eine Feldschlacht. Armeen desselben Besitzers oder derselben Gilde kämpfen nie gegeneinander.",
+      "orders": "Jeder Befehl hat ein Ziel gratis. Wegpunkte unterwegs sind eine Premium-Funktion."
+    },
+    "sight": {
+      "heading": "Was eine Armee sieht",
+      "body": "Eine marschierende Armee deckt {rings} Ringe der Karte um sich auf, dazu {bonus} weitere für jede Stufe der {odin}."
+    },
+    "adminNote": {
+      "bridges": "Brücken über breite Flüsse sind geplant, aber noch nicht im Spiel."
+    }
   },
   "ships": {
     "title": "Schiffe und Wasser",
     "intro": "Schiffe aus der Werft, Flotten auf See und was Mauern nicht aufhalten.",
-    "placeholder": "Diese Seite wird noch geschrieben."
+    "dockyard": {
+      "heading": "Die Werft",
+      "body": "Schiffe bildest du in der {dockyard} aus. Sie braucht ein {longhouse} auf Stufe {level} und eine {hut} auf Stufe {hutLevel}.",
+      "shore": "Sie steht im flachen Küstenwasser. Schiffe bauen kann deshalb nur eine Siedlung, die Küste beansprucht."
+    },
+    "table": {
+      "heading": "Die Schiffe",
+      "rows": {
+        "attack": "Angriff",
+        "defense": "Verteidigung",
+        "speed": "Tempo (Felder pro Stunde)",
+        "perHex": "Zeit pro Seefeld",
+        "loot": "Beutekapazität",
+        "food": "Nahrungskapazität",
+        "upkeep": "Unterhalt pro Stunde",
+        "cost": "Kosten ({resources})",
+        "time": "Ausbildungszeit",
+        "needs": "Voraussetzung"
+      },
+      "minutes": "{n} Min."
+    },
+    "sailing": {
+      "heading": "Auf See",
+      "sea": "Schiffe fahren nur auf dem Meer. Küstenwasser und offene See kosten gleich viel, Moorseen sind für sie gesperrt.",
+      "troops": "Schiffe tragen Beute, aber keine Landtruppen.",
+      "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen. Katapulte kann sie nicht mitnehmen.",
+      "walls": "{walls} halten Flotten nicht auf.",
+      "wallsLink": "Mauern",
+      "camps": "Wildtierlager überfallen nie eine Flotte (siehe {camps}).",
+      "campsLink": "Wildtierlager"
+    },
+    "battles": {
+      "heading": "Kämpfe",
+      "same": "Flotten kämpfen nach denselben Regeln wie Armeen an Land: Angriff gegen Verteidigung, bei Gleichstand gewinnt der Verteidiger.",
+      "tower": "Ein {tower} der verteidigenden Siedlung gibt pro Stufe {percent} % Verteidigung dazu.",
+      "njord": "Der {shrine} steigert den Angriff deiner Schiffe auf Stufe 1 um {low} %, bis Stufe 5 um {high} %. Mehr unter {shrines}.",
+      "shrinesLink": "Schreine"
+    },
+    "adminNote": {
+      "route": "Bekannter Fehler (Issue #450): Der Weg einer Flotte beginnt in der Mitte der Siedlung, und die liegt bei einer Startsiedlung nie am Meer. Flotten können deshalb eine erste Siedlung nicht verlassen und keine Siedlung angreifen, deren Mitte im Landesinneren liegt. Diese Seite beschreibt das gewollte Verhalten: Flotten legen an der Werft ab.",
+      "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedlertrupp, ein Langschiff {longship}) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
+    }
   },
   "shrines": {
     "title": "Schreine",
