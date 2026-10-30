@@ -151,6 +151,12 @@ public enum BuildRejection
     /// stands between two opposite wall hexes.
     /// </summary>
     GateNotOnStraight,
+
+    /// <summary>
+    /// A bridge was ordered on a river hex that is not a wide river (a stream, or a river tile the army already crosses): bridges are
+    /// for the impassable wide rivers only.
+    /// </summary>
+    BridgeNeedsWideRiver,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

@@ -2149,6 +2149,100 @@ describe('WorldModel palisade and gate', () => {
   });
 });
 
+describe('WorldModel bridge', () => {
+  /** A settlement and one free owned grass hex to put a river on. */
+  function bridgeSetting() {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
+    return { model, settlement, grass };
+  }
+  const river = (at: AxialCoord, shape: RiverTile['shape'], width: RiverTile['width'], inDirections: RiverTile['inDirections'], outDirection: RiverTile['outDirection']): RiverTile => ({
+    q: at.q, r: at.r, shape, width, inDirections, outDirection,
+  });
+
+  it.each(['straight', 'bend', 'bend60'] as const)('places a bridge on a wide %s river hex', (shape) => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, shape, 'river', ['W'], shape === 'straight' ? 'E' : 'SE')]);
+
+    expect(model.bridgePlacement(grass)).toEqual({ ok: true });
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(true);
+    expect(model.getTile(grass.q, grass.r).buildingType).toBe('bridge');
+  });
+
+  it('refuses a bridge on a river hex that is not wide (a river that has only just begun)', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, 'straight', 'river', [], 'E')]);
+
+    expect(model.bridgePlacement(grass)).toEqual({ ok: false, reason: 'notWide' });
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+    expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
+  });
+
+  it('refuses a bridge on a stream, whatever its shape', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, 'straight', 'stream', ['W'], 'E')]);
+
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+  });
+
+  it.each(['spring', 'confluence', 'mouth'] as const)('refuses a bridge on a %s river tile', (shape) => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, shape, 'river', ['W', 'NW'], 'E')]);
+
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+  });
+
+  it('refuses a bridge on dry land with no river', () => {
+    const { model, settlement, grass } = bridgeSetting();
+
+    expect(model.bridgePlacement(grass)).toEqual({ ok: false, reason: 'notWide' });
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+  });
+
+  it('refuses a bridge on a wasted island', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, 'straight', 'river', ['W'], 'E')]);
+    model.getTile(grass.q, grass.r).wasted = true;
+
+    expect(model.bridgePlacement(grass)).toEqual({ ok: false, reason: 'wasted' });
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+  });
+
+  it('hands the pathfinder only standing bridges (a level-0 foundation does not open the river), each with its level and owner', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    const second = neighbors(grass)[0]!;
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [
+        { q: grass.q, r: grass.r, type: 'bridge', level: 3 },
+        { q: second.q, r: second.r, type: 'bridge', level: 0 },
+      ],
+    });
+
+    expect(model.getTile(second.q, second.r).buildingType).toBe('bridge');
+    expect(model.getTile(second.q, second.r).buildingLevel).toBe(0);
+    const standing = model.standingBridges();
+    expect([...standing.keys()]).toEqual([`${grass.q},${grass.r}`]);
+    expect(standing.get(`${grass.q},${grass.r}`)).toEqual({ level: 3, owner: settlement.ownerId });
+  });
+
+  it('forgets a bridge that is razed', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, 'straight', 'river', ['W'], 'E')]);
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(true);
+    expect(model.standingBridges().size).toBe(1);
+
+    expect(model.razeBuilding(settlement.id, grass)).toBe(true);
+
+    expect(model.standingBridges().size).toBe(0);
+  });
+});
+
 // The renderer caches each bog hex's edge geometry, which depends on its neighbours, and throws the cache away when
 // this revision moves (HexMapRenderer.rebuildBogEdges) — so it must move whenever bog or giant hexes arrive.
 describe('overlayRevision', () => {
