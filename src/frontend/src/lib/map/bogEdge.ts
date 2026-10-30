@@ -21,6 +21,12 @@ export const BOG_PEAT = 0x5e4a34;
  * more saturated than the moss, which is why moss pushed out over it reads as the wrong colour.
  */
 export const FOREST_GROUND = 0x52822a;
+/**
+ * The peat rim around moss pushed onto grass: half of the stroke shows outside the moss, so 1.5 world units of a
+ * half-transparent brown — about as strong as the plain colour step of the forest side.
+ */
+const RIM_WIDTH = 3;
+const RIM_ALPHA = 0.55;
 
 /** Bog ground: the plain moss and every bog shore/creek hex (their outer edges are moss too). Not the open lake. */
 export function isBogGround(tile: Tile): boolean {
@@ -70,12 +76,15 @@ export function riverGapOn(river: RiverTile, towards: (typeof TILE_ORIENTATIONS)
 
 /**
  * A bordered edge of a bog hex: its top-face polygon edge (`[edge, edge + 1]` into `isoTopPoints`), what it faces,
- * and the stretch of it a river's water takes up, which stays bare.
+ * the stretch of it a river's water takes up, which stays bare, and whether its start / end corner is where the
+ * border switches between grass and forest (`flushStart` / `flushEnd`, see `bogEdgeShapes`).
  */
 export interface BogEdge {
   edge: number;
   neighbour: BogEdgeNeighbour;
   gap?: readonly [number, number];
+  flushStart?: boolean;
+  flushEnd?: boolean;
 }
 
 /** The edges of bog hex `c` that get a border. */
@@ -85,16 +94,30 @@ export function bogEdgesOf(
   c: AxialCoord,
 ): BogEdge[] {
   if (!isBogGround(getTile(c.q, c.r))) return [];
+  const across = DIRS.map((d) => getTile(c.q + d.q, c.r + d.r));
+  // What the border continues as past a corner of polygon edge `edge` (facing `neighbour`), going round through the
+  // polygon edge `next`: along this hex's own edge `next` when that faces non-bog ground, otherwise along the edge
+  // between the bog hex there and the same `neighbour`, which is the same kind.
+  const continuesAs = (next: number, neighbour: BogEdgeNeighbour) => {
+    const tile = across[EDGE_FOR_DIR[next]];
+    return isBogGround(tile) ? neighbour : bogEdgeNeighbour(tile);
+  };
   const edges: BogEdge[] = [];
   DIRS.forEach((d, i) => {
     const q = c.q + d.q;
     const r = c.r + d.r;
-    const neighbour = bogEdgeNeighbour(getTile(q, r));
+    const neighbour = bogEdgeNeighbour(across[i]);
     if (!neighbour) return;
+    const edge = EDGE_FOR_DIR[i];
+    const found: BogEdge = { edge, neighbour };
     // A river hex is grass terrain with its water in the art: border its banks, not the water.
     const river = getRiver(q, r);
     const gap = river ? riverGapOn(river, TILE_ORIENTATIONS[(i + 3) % 6]) : null;
-    edges.push(gap ? { edge: EDGE_FOR_DIR[i], neighbour, gap } : { edge: EDGE_FOR_DIR[i], neighbour });
+    if (gap) found.gap = gap;
+    const other = neighbour === 'grass' ? 'forest' : 'grass';
+    if (continuesAs((edge + 5) % 6, neighbour) === other) found.flushStart = true;
+    if (continuesAs((edge + 1) % 6, neighbour) === other) found.flushEnd = true;
+    edges.push(found);
   });
   return edges;
 }
@@ -145,8 +168,10 @@ function wobble(t: number, phases: Phases, start = CORNER_REACH, end = CORNER_RE
 
 /**
  * The shapes for one bog edge from `a` to `b` (world units), facing `neighbour`. `outward` is the unit normal pointing
- * out of the bog, `seed` keys the wobble, `gap` is the stretch of the edge a river's water takes up, left bare. Pure,
- * so the shapes are testable without Pixi.
+ * out of the bog, `seed` keys the wobble, `gap` is the stretch of the edge a river's water takes up, left bare.
+ * `flushStart` / `flushEnd` mark a corner where the border switches between grass (reaching out) and forest (reaching
+ * in): both sides taper to the hex corner itself there, without a cap, so the two outlines meet in one point. Pure, so
+ * the shapes are testable without Pixi.
  */
 export function bogEdgeShapes(
   neighbour: BogEdgeNeighbour,
@@ -155,15 +180,20 @@ export function bogEdgeShapes(
   outward: Point,
   seed: [number, number, number],
   gap?: readonly [number, number],
+  flushStart = false,
+  flushEnd = false,
 ): BogEdgeShape[] {
   const shapes = (from: Point, to: Point, rangeSeed: [number, number, number], startCorner: boolean, endCorner: boolean) =>
     neighbour === 'grass'
       ? lobeShapes(from, to, outward, rangeSeed, startCorner, endCorner, BOG_MOSS, true)
       : lobeShapes(from, to, { x: -outward.x, y: -outward.y }, rangeSeed, startCorner, endCorner, FOREST_GROUND, false);
-  if (!gap) return shapes(a, b, seed, true, true);
+  if (!gap) return shapes(a, b, seed, !flushStart, !flushEnd);
   const lerp = (t: number): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
   // Two banks, each running from its corner to the water.
-  return [...shapes(a, lerp(gap[0]), seed, true, false), ...shapes(lerp(gap[1]), b, [seed[0], seed[1], seed[2] + 6], false, true)];
+  return [
+    ...shapes(a, lerp(gap[0]), seed, !flushStart, false),
+    ...shapes(lerp(gap[1]), b, [seed[0], seed[1], seed[2] + 6], false, !flushEnd),
+  ];
 }
 
 /**
@@ -203,9 +233,13 @@ function lobeShapes(
   // cap at each corner, with all the moss on top, so only the outer half shows and it follows the outline of the
   // whole bog instead of each edge's own shape.
   return [
-    { under: true, points: outer, stroke: { color: 0x000000, alpha: 0.12, width: 9 } },
-    { under: true, points: outer, stroke: { color: BOG_PEAT, alpha: 1, width: 5 } },
-    ...corners.map((p) => ({ under: true, points: fan(p, capR + 2.5, normal), fill: { color: BOG_PEAT, alpha: 1 } })),
+    { under: true, points: outer, stroke: { color: 0x000000, alpha: 0.06, width: 6 } },
+    { under: true, points: outer, stroke: { color: BOG_PEAT, alpha: RIM_ALPHA, width: RIM_WIDTH } },
+    ...corners.map((p) => ({
+      under: true,
+      points: fan(p, capR + RIM_WIDTH / 2, normal),
+      fill: { color: BOG_PEAT, alpha: RIM_ALPHA },
+    })),
     ...caps,
     lobe,
   ];

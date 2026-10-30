@@ -77,6 +77,24 @@ describe('bogEdgesOf', () => {
     expect(eastEdge(riverEast({ inDirections: ['NE', 'W'], outDirection: 'E', width: 'riverstream' }))?.gap).toEqual(RIVER_EDGE_GAP);
   });
 
+  it('marks the corner where the border switches between grass and forest as flush, on both edges', () => {
+    // E (polygon edge 3) faces grass, NE (polygon edge 2) faces forest: they share the corner between polygon edges 2
+    // and 3, i.e. the end of edge 2 and the start of edge 3. The other corners keep their caps.
+    const mixed = world(tile(0, 0, 'bog', 'bog'), ['grass', 'forest', 'sea', 'sea', 'sea', 'sea']);
+    const edges = bogEdgesOf(mixed, noRiver, origin);
+    expect(edges.find((e) => e.edge === 3)).toMatchObject({ neighbour: 'grass', flushStart: true });
+    expect(edges.find((e) => e.edge === 3)?.flushEnd).toBeUndefined();
+    expect(edges.find((e) => e.edge === 2)).toMatchObject({ neighbour: 'forest', flushEnd: true });
+    expect(edges.find((e) => e.edge === 2)?.flushStart).toBeUndefined();
+  });
+
+  it('marks the switch corner flush when the border carries on along a neighbouring bog hex', () => {
+    // E faces grass, NE is bog: past the shared corner the border runs between that bog hex and the same grass hex,
+    // so it stays grass and the corner is not flush.
+    const sameKind = world(tile(0, 0, 'bog', 'bog'), ['grass', 'bog', 'sea', 'sea', 'sea', 'sea']);
+    expect(bogEdgesOf(sameKind, noRiver, origin)).toEqual([{ edge: 3, neighbour: 'grass' }]);
+  });
+
   it('does not treat a bog hex as grass even when its terrain reads grass', () => {
     expect(bogEdgeNeighbour(tile(0, 0, 'grass', 'creek'))).toBeNull();
     expect(isBogGround(tile(0, 0, 'grass', 'creek'))).toBe(true);
@@ -123,6 +141,21 @@ describe('bogEdgeShapes', () => {
     const shapes = bogEdgeShapes('grass', a, b, out, [1, 1, 1]);
     expect(shapes.some((s) => s.under && s.stroke)).toBe(true);
     expect(shapes.filter((s) => !s.under).every((s) => s.fill && !s.stroke)).toBe(true);
+  });
+
+  it('runs both sides of a grass/forest switch corner into the hex corner itself, with no cap', () => {
+    // Regression: the grass rim ended a corner cap's reach outside the corner and the forest lobes a cap's reach
+    // inside it, so the two outlines missed each other.
+    for (const n of NEIGHBOURS_KINDS) {
+      const shapes = bogEdgeShapes(n, a, b, out, [2, 2, 2], undefined, false, true);
+      const outline = shapes.find((s) => s.points.length > 15)!.points;
+      const end = outline[18];
+      expect(end.x).toBeCloseTo(100, 6);
+      expect(end.y).toBeCloseTo(0, 6);
+      // A cap is a fan centred on its corner; the flush end gets none.
+      expect(shapes.some((s) => s.points[0] === b)).toBe(false);
+      expect(shapes.some((s) => s.points[0] === a)).toBe(true);
+    }
   });
 
   it('leaves the water gap bare, and tapers the moss to nothing at the water', () => {

@@ -4537,7 +4537,7 @@ export class HexMapRenderer {
         const under: BogEdgeShape[] = [];
         const over: BogEdgeShape[] = [];
         const grid = isoGridPosition(c, TILE_W, TILE_H);
-        for (const { edge, neighbour, gap } of bogEdgesOf(getTile, getRiver, c)) {
+        for (const { edge, neighbour, gap, flushStart, flushEnd } of bogEdgesOf(getTile, getRiver, c)) {
           const a = top[edge];
           const b = top[(edge + 1) % 6];
           // Unit normal pointing out of the hex, measured in the squashed top-face space the edge itself lives in.
@@ -4550,6 +4550,8 @@ export class HexMapRenderer {
             { x: mid.x / len, y: mid.y / len },
             [c.q, c.r, edge],
             gap,
+            flushStart,
+            flushEnd,
           );
           for (const shape of shapes) (shape.under ? under : over).push(shape);
         }
