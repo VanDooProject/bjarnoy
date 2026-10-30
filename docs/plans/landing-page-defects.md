@@ -146,6 +146,8 @@ visible, and the ones that are visible are the only ones a player can reach.
   world/season on the left and the reservation state on the right ("Your plot
   is held for N minutes", from `plotSuggestion.reservedUntil`, which the store
   already carries and nothing reads today).
+  *Update: the landing footer (sea name + reservation countdown) was later
+  removed entirely, so only the hero sub-line part of this fix remains.*
 - **(if the count is wanted)** Count only plots that are actually drawn *and*
   clickable: filter `nearbyStartCoords` to those within the preview crop
   before rendering both the count and the highlights, and reword the copy to

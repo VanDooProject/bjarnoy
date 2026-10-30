@@ -243,7 +243,7 @@ export function floodFillLandmass(
  * Good for |q|, |r| < 32768 — about 2000 times the radius of any world the
  * generator places islands in, and far past what a player could pan to.
  */
-function terrainKey(q: number, r: number): number {
+export function terrainKey(q: number, r: number): number {
   return ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
 }
 
@@ -313,8 +313,22 @@ export class WorldModel {
   private islandFootprintCache = new Map<string, AxialCoord[]>();
   /** previewIslandTiles()'s cache, keyed by `previewCenter` — see there for why this needs to exist at all. */
   private previewIslandTilesCache = new Map<string, AxialCoord[]>();
+  /** `previewIslandFlood`'s cache — null for a centre whose flood fill hit its bound. */
+  private previewIslandFloodCache = new Map<string, AxialCoord[] | null>();
   /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
   private riverTiles = new Map<string, RiverTile>();
+  /**
+   * Bumped whenever the river set changes (`setRiverTiles`, `addRiverTiles`).
+   * The renderer records it when it bakes the water mask — whose no-foam field
+   * depends on where the river mouths are — and rebakes when it has moved,
+   * the same way it does for `isWastedRevealed`.
+   */
+  riverRevision = 0;
+  /**
+   * Bumped whenever bog or giant hexes are added or replaced (`addBogTiles`, `setBogTiles`, `tagGiantHex`). The
+   * renderer keys its cached bog edge geometry on it (`rebuildBogEdges`): a hex's edges depend on its neighbours.
+   */
+  overlayRevision = 0;
   /** The island bogland known so far (live mode: every island at once; demo mode: island by island), by coordinate — see `setBogTiles`. */
   private bogByHex = new Map<string, BogTile>();
   /** The lake decorations (fish weir, boats) the buildings on the shores ask for, by coordinate — see `lakeProps.ts` and `recomputeLakeProps`. */
@@ -413,6 +427,7 @@ export class WorldModel {
    */
   setRiverTiles(tiles: RiverTile[]) {
     this.riverTiles = new Map(tiles.map((t) => [coordKey(t), t]));
+    this.riverRevision++;
   }
 
   /**
@@ -428,6 +443,7 @@ export class WorldModel {
     for (const tile of tiles) {
       this.riverTiles.set(coordKey(tile), tile);
     }
+    this.riverRevision++;
   }
 
   getRiverTile(q: number, r: number): RiverTile | undefined {
@@ -444,6 +460,7 @@ export class WorldModel {
     for (const tile of this.bogByHex.values()) this.terrain.delete(terrainKey(tile.q, tile.r));
     for (const tile of this.bogByHex.values()) this.tiles.delete(coordKey(tile));
     this.bogByHex = new Map();
+    this.overlayRevision++;
     this.addBogTiles(tiles);
     this.lakePropsDirty = true;
   }
@@ -455,6 +472,7 @@ export class WorldModel {
    */
   private addBogTiles(tiles: BogTile[]) {
     if (tiles.length === 0) return;
+    this.overlayRevision++;
     const world = { seed: this.seed, generation: this.generation };
     for (const bog of tiles) {
       const key = coordKey(bog);
@@ -466,6 +484,7 @@ export class WorldModel {
     }
     this.islandFootprintCache.clear();
     this.previewIslandTilesCache.clear();
+    this.previewIslandFloodCache.clear();
     this.lakePropsDirty = true;
   }
 
@@ -512,6 +531,7 @@ export class WorldModel {
   private decorateBogTile(tile: Tile, bog: BogTile, world: WorldSeed) {
     const terrain: Terrain = bog.kind === 'lake' ? 'lake' : 'bog';
     tile.terrain = terrain;
+    delete tile.forestKind;
     tile.bog = bog;
     tile.isCoastalWater = false;
     tile.orientation = defaultOrientation(tile.q, tile.r, world);
@@ -641,16 +661,23 @@ export class WorldModel {
     const cached = this.previewIslandTilesCache.get(key);
     if (cached) return cached;
 
-    const tiles =
-      floodFillLandmass(center, (c) => this.isLandOrLake(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS) ??
-      this.previewIslandFallback(center);
+    const tiles = this.previewIslandFlood(center) ?? this.previewIslandFallback(center, PREVIEW_ISLAND_RADIUS);
     this.previewIslandTilesCache.set(key, tiles);
     return tiles;
   }
 
-  /** The pre-L5 rule, kept only as `previewIslandTiles`'s safety-bound fallback (see there). */
-  private previewIslandFallback(center: AxialCoord): AxialCoord[] {
-    return hexesInRadius(center, PREVIEW_ISLAND_RADIUS).filter((c) => this.isLandOrLake(c.q, c.r));
+  /** The flood fill behind `previewIslandTiles`, or null when it hit `PREVIEW_ISLAND_FLOOD_MAX_RADIUS`; cached per centre, the null included. */
+  private previewIslandFlood(center: AxialCoord): AxialCoord[] | null {
+    const key = coordKey(center);
+    if (this.previewIslandFloodCache.has(key)) return this.previewIslandFloodCache.get(key)!;
+    const tiles = floodFillLandmass(center, (c) => this.isLandOrLake(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS);
+    this.previewIslandFloodCache.set(key, tiles);
+    return tiles;
+  }
+
+  /** The pre-L5 rule (land within `radius`, no membership check), kept only as the safety-bound fallback (see `previewIslandTiles`). */
+  private previewIslandFallback(center: AxialCoord, radius: number): AxialCoord[] {
+    return hexesInRadius(center, radius).filter((c) => this.isLandOrLake(c.q, c.r));
   }
 
   /**
@@ -674,8 +701,14 @@ export class WorldModel {
    * doesn't check membership, so a foreign island within the same radius
    * shows up too. Only the intersection gets both right.
    */
-  previewCropTiles(center: AxialCoord): AxialCoord[] {
-    return this.previewIslandTiles(center).filter((c) => hexDistance(center, c) <= PREVIEW_ISLAND_RADIUS);
+  previewCropTiles(center: AxialCoord, radius = PREVIEW_ISLAND_RADIUS): AxialCoord[] {
+    // The cached flood fill is radius-independent (membership only, bounded by PREVIEW_ISLAND_FLOOD_MAX_RADIUS), so a wider crop never sees a truncated set.
+    // When the flood fill hit its bound (an island reaching more than PREVIEW_ISLAND_FLOOD_MAX_RADIUS from `center`), the
+    // fallback disc must be this crop's own radius: `previewIslandTiles`' fallback is the landing radius, which would shrink a
+    // wider crop (the showcase frame's SHOWCASE_RENDER_RADIUS) to the landing page's few hexes.
+    const flood = this.previewIslandFlood(center);
+    if (!flood) return this.previewIslandFallback(center, radius);
+    return flood.filter((c) => hexDistance(center, c) <= radius);
   }
 
   /**
@@ -752,6 +785,7 @@ export class WorldModel {
     }
     this.islandFootprintCache.clear();
     this.previewIslandTilesCache.clear();
+    this.previewIslandFloodCache.clear();
   }
 
   isWastedRevealed(): boolean {
@@ -811,6 +845,7 @@ export class WorldModel {
       if (this.wastedRevealed) {
         if (this.isWastedLandAt(q, r)) {
           tile.wasted = true;
+          delete tile.forestKind; // wasted forest stays deadforest
           tile.variant = wastedVariantAt(q, r, { seed: this.seed, generation: this.generation }, tile.terrain);
         } else if (tile.terrain === 'sea' && tile.isCoastalWater) {
           // Coastal water bordering wasted land also renders as wasted
@@ -962,8 +997,26 @@ export class WorldModel {
     return keys;
   }
 
-  /** Everything an island's picture is made of: land and the bog lakes among it (not the sea). */
-  private isLandOrLake(q: number, r: number): boolean {
+  /**
+   * Packed keys (`terrainKey`) of every river-mouth hex, for the water-mask
+   * bake: the worker cannot derive rivers from the seed, so — like
+   * `buildingHexKeys` — the few of them cross as a list, and the sea's
+   * shoreline foam is suppressed around each.
+   */
+  riverMouthHexKeys(): number[] {
+    const keys: number[] = [];
+    for (const tile of this.riverTiles.values()) {
+      if (tile.shape === 'mouth') keys.push(terrainKey(tile.q, tile.r));
+    }
+    return keys;
+  }
+
+  /**
+   * Everything an island's picture is made of: land and the bog lakes among it (not the sea).
+   * Also what the water mask calls land: a bog lake is drawn by its own art, never by the sea's
+   * water shader, so the shader (foam included) must stop at the sea's coast.
+   */
+  isLandOrLake(q: number, r: number): boolean {
     return this.isLand(q, r) || this.terrainOf(q, r) === 'lake';
   }
 
@@ -975,7 +1028,7 @@ export class WorldModel {
 
   /**
    * Whether `at` would satisfy the backend's own start-position rule
-   * (`WorldGenerator.FindStartPositions`): a Grass hex with at least one
+   * (`WorldGenerator.FindStartPositions`): a Grass hex off any river with at least one
    * Forest and two Grass neighbours, no sea within two hexes, and plain bog within `BOG_REACH`. Demo mode
    * has no backend to ask for a real start position — `findLandfall` uses
    * this to steer clear of a coastal sliver of sand or a lone tile at an
@@ -985,6 +1038,9 @@ export class WorldModel {
   private isGoodStartCandidate(at: AxialCoord): boolean {
     const tile = this.getTile(at.q, at.r);
     if (tile.terrain !== 'grass') return false;
+    // Never on a river hex (narrow or wide) — `WorldGenerator.FindStartPositions` skips them: a settlement in a river is
+    // wrong, and on a wide one a land army has no way home.
+    if (this.getRiverTile(at.q, at.r)) return false;
 
     let forest = 0;
     let grass = 0;
@@ -1603,6 +1659,20 @@ export class WorldModel {
     return levels;
   }
 
+  /**
+   * The highest level of each building type this settlement has standing (a
+   * level-0 foundation counts as 0) — what a building's `prerequisites` are
+   * judged against, like `Settlement.HighestLevelOf` on the server.
+   */
+  highestBuildingLevels(settlementId: string): Record<string, number> {
+    const levels: Record<string, number> = {};
+    for (const tile of this.storedTiles()) {
+      if (tile.ownerId !== settlementId || !tile.buildingType) continue;
+      levels[tile.buildingType] = Math.max(levels[tile.buildingType] ?? 0, tile.buildingLevel ?? 1);
+    }
+    return levels;
+  }
+
   /** Bumped whenever a building appears, vanishes or levels, so the cached wall index below is rebuilt. */
   protected wallRevision = 0;
 
@@ -2081,9 +2151,11 @@ export class WorldModel {
     orientation: TileOrientation,
     part: GiantPart,
   ) {
+    this.overlayRevision++;
     const tile = this.getTile(coord.q, coord.r);
     if (tile.terrain === 'forest') {
       tile.terrain = 'grass';
+      delete tile.forestKind;
       // Keep the pure terrain cache (`terrainOf`/`isLand`, see its own doc
       // comment) in step with the materialised `Tile` it was sampled from —
       // both are land either way, but leaving it stale as `forest` would

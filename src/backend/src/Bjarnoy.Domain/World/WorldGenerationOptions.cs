@@ -119,7 +119,8 @@ public sealed record WorldGenerationOptions
 
     /// <summary>
     /// Fraction of an island's radius, measured from its centre, beyond which
-    /// land becomes beach. The coastal ring the settlers land on.
+    /// land becomes beach, as long as open sea is within <see cref="TerrainSampler.BeachSeaRadius"/>
+    /// hexes. The coastal ring the settlers land on.
     /// </summary>
     public double BeachThreshold { get; init; } = 0.9;
 
@@ -197,6 +198,18 @@ public sealed record WorldGenerationOptions
 
     /// <summary>Drainage cost of a 120 degree turn (a Bend60 tile).</summary>
     public double SharpBendCost { get; init; } = 1.0;
+
+    /// <summary>Extra drainage cost of stepping from a non-mountain tile onto a mountain tile (leaving a range is free): rivers rarely climb back into a second range.</summary>
+    public double MountainEntryCost { get; init; } = 15.0;
+
+    /// <summary>Drainage cost a river's step pays for not heading where its current meander stretch wants (half that when 60 degrees off): larger arcs wider; 0 turns meandering off.</summary>
+    public double MeanderSteer { get; init; } = 16.0;
+
+    /// <summary>Fewest steps of one meander stretch, which bends one way before the river swings to the other side.</summary>
+    public int MeanderMinStretch { get; init; } = 8;
+
+    /// <summary>Most steps of one meander stretch.</summary>
+    public int MeanderMaxStretch { get; init; } = 16;
 
     /// <summary>
     /// How much longer (in drainage cost) a tributary's way via a drawable junction with an earlier river may be than
@@ -339,6 +352,10 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(MountainCost);
         ArgumentOutOfRangeException.ThrowIfNegative(BendCost);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(MountainEntryCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(MeanderSteer);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MeanderMinStretch, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MeanderMaxStretch, MeanderMinStretch);
         ArgumentOutOfRangeException.ThrowIfNegative(MergeSlack);
         ArgumentOutOfRangeException.ThrowIfNegative(MergeReach);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverStreamBonus);

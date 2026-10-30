@@ -11,7 +11,7 @@
 // order is queued, the soonest order's remaining time, and a thin progress
 // bar for that soonest order — see soonest()/buildHandleRow/
 // trainingHandleRow below.
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
@@ -24,6 +24,9 @@ import {
   useTrainingOrders,
 } from '../../composables/useQueueOrders';
 import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
+import { confirmedBuild } from '../../composables/buildFeedback';
+import { motionEnabled } from '../../lib/motion';
+import { peek, popCount, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
 import axeIconUrl from '../../assets/icons/axe.svg?url';
 import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
@@ -329,6 +332,28 @@ function onHandleClick(event: MouseEvent) {
   if (event.detail === 0) toggle();
 }
 
+// P2 + P4: after a confirmed build, with the drawer collapsed, a peek panel
+// slides out from behind the handle with the new order ("Farm → 1",
+// "3:00 · queued"), stays 1.5 s and slides back. Only once it has retracted
+// does the handle's count chip pop and the handle give one gold pulse. The
+// drawer itself stays closed; with it open (or under reduced motion) nothing
+// plays — the handle's own count and times still update.
+const handleEl = ref<HTMLElement | null>(null);
+const peekEl = ref<HTMLElement | null>(null);
+const peekOrder = ref<{ name: string; level: number; time: string | null } | null>(null);
+watch(confirmedBuild, async (event) => {
+  if (!event || open.value || !motionEnabled() || peekOrder.value) return;
+  peekOrder.value = { name: event.name, level: event.level, time: event.time };
+  await nextTick();
+  if (peekEl.value) await peek(peekEl.value);
+  peekOrder.value = null;
+  await nextTick();
+  if (open.value || !handleEl.value) return;
+  const chip = handleEl.value.querySelector('.queue-drawer-handle-count');
+  if (chip) void popCount(chip);
+  void pulseHandle(handleEl.value);
+});
+
 function selectBuildOrder(coord: { q: number; r: number }) {
   close();
   emit('select', coord);
@@ -353,9 +378,24 @@ onUnmounted(() => {
   // canvas interaction lock keyed off it — stuck at true.
   open.value = false;
 });
+
+// The column slides out to its docked edge when the last order finishes (and
+// back in when the queue refills) instead of vanishing; the force-close watch
+// above has already closed it, so nothing can be left open behind the exit.
+function onDrawerEnter(el: Element, done: () => void) {
+  const drawer = el.querySelector('.queue-drawer');
+  if (!drawer) return done();
+  void slideDrawer(drawer, 'in').then(done, done);
+}
+function onDrawerLeave(el: Element, done: () => void) {
+  const drawer = el.querySelector('.queue-drawer');
+  if (!drawer) return done();
+  void slideDrawer(drawer, 'out').then(done, done);
+}
 </script>
 
 <template>
+  <Transition :css="false" @enter="onDrawerEnter" @leave="onDrawerLeave">
   <div v-if="hasAnything">
     <div v-if="open" class="queue-drawer-backdrop" @pointerdown.self="close" />
     <div class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
@@ -481,7 +521,15 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div v-if="peekOrder" ref="peekEl" class="queue-drawer-peek" role="status" data-testid="queue-peek">
+        <b class="queue-drawer-peek-title">{{ t('hud.buildQueue.orderName', { name: peekOrder.name, level: peekOrder.level }) }}</b>
+        <span class="queue-drawer-peek-sub">{{
+          peekOrder.time ? t('hud.queueDrawer.peekQueued', { time: peekOrder.time }) : t('hud.queueDrawer.peekQueuedNoTime')
+        }}</span>
+      </div>
+
       <button
+        ref="handleEl"
         type="button"
         class="queue-drawer-handle"
         :aria-expanded="open"
@@ -511,6 +559,7 @@ onUnmounted(() => {
       </button>
     </div>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -738,10 +787,8 @@ onUnmounted(() => {
 .queue-drawer.is-dragging {
   transition: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .queue-drawer {
-    transition: none;
-  }
+html[data-hud-motion='reduced'] .queue-drawer {
+  transition: none;
 }
 .queue-drawer-panel {
   flex: 1;
@@ -800,6 +847,35 @@ onUnmounted(() => {
   cursor: grab;
   touch-action: none;
   pointer-events: auto;
+}
+/* P2: the new-order peek, beside the collapsed handle and painted behind it so it slides out from under. */
+.queue-drawer-peek {
+  position: absolute;
+  z-index: -1;
+  left: 100%;
+  top: 50%;
+  height: 46px;
+  margin-top: -23px;
+  padding: 0 12px 0 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  white-space: nowrap;
+  background: var(--panel-bg);
+  border: 1px solid rgba(255, 197, 92, 0.5);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  pointer-events: none;
+}
+.queue-drawer-peek-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.queue-drawer-peek-sub {
+  font-size: 11px;
+  color: var(--gold);
 }
 .queue-drawer-handle:focus-visible {
   outline: 2px solid var(--gold);

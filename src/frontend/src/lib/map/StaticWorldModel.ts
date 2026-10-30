@@ -16,7 +16,7 @@
 // settlement registered on it already answers "nothing here" (empty lists,
 // `undefined`, `false`) without needing its own override.
 import { coordKey, type AxialCoord } from '../hex/coords';
-import { WorldModel } from './WorldModel';
+import { WorldModel, terrainKey } from './WorldModel';
 import type { RiverTile, Terrain, Tile } from './types';
 
 export class StaticWorldModel extends WorldModel {
@@ -94,7 +94,7 @@ export class StaticWorldModel extends WorldModel {
    * `settlementCameraOrigin`'s locked-preview branch fits the camera to, so
    * the whole island (not a radius-cropped slice of it) ends up on screen.
    */
-  override previewCropTiles(center: AxialCoord): AxialCoord[] {
+  override previewCropTiles(center: AxialCoord, _radius?: number): AxialCoord[] {
     return this.previewIslandTiles(center);
   }
 
@@ -106,11 +106,21 @@ export class StaticWorldModel extends WorldModel {
   /** The river tiles of the fixed layout, if it has any (the Bog Lands docs island does; the wasted one has none) — drawn by the renderer through `getRiverTile` like a generated island's. */
   setRivers(rivers: RiverTile[]): void {
     this.staticRivers = new Map(rivers.map((r) => [coordKey(r), r]));
+    this.riverRevision++;
   }
 
   /** Only the rivers handed to `setRivers` — a path otherwise depends on generating a whole procedural island (see `WorldModel.getRiverTile`'s own doc comment), so every other lookup is a plain miss. */
   override getRiverTile(q: number, r: number): RiverTile | undefined {
     return this.staticRivers.get(coordKey({ q, r }));
+  }
+
+  /** Mouths among the rivers handed to `setRivers`, packed like `WorldModel.riverMouthHexKeys` (which would walk the parent's empty map here). */
+  override riverMouthHexKeys(): number[] {
+    const keys: number[] = [];
+    for (const tile of this.staticRivers.values()) {
+      if (tile.shape === 'mouth') keys.push(terrainKey(tile.q, tile.r));
+    }
+    return keys;
   }
 
   /** No buildings on the docs island — used only by the water-mask bake (`WaterLayer`), itself moot since the docs preview always suppresses the water shader (`HexMapRenderer.rebuildAll`'s `waterSuppressed`). */

@@ -122,7 +122,7 @@ public sealed class PlotReservationService(
             && !_store.IsBlockedByOtherOwner(worldId, candidate, ownerId, ReservationSpacing);
 
         bool IsStartPosition(Guid islandId, HexCoord candidate) =>
-            islands.Any(i => i.Id == islandId && i.StartPositions.Any(p => p.Q == candidate.Q && p.R == candidate.R));
+            islands.Any(i => i.Id == islandId && i.FoundableStartPositions().Any(p => p.Q == candidate.Q && p.R == candidate.R));
 
         (Guid IslandId, HexCoord Plot)? pin = null;
 
@@ -178,7 +178,7 @@ public sealed class PlotReservationService(
         // across the whole island — highlighted hexes the locked preview
         // never draws. Order by hex distance from `plot` instead, so the
         // `.Take` below keeps the ones actually inside that crop.
-        var alternatives = island.StartPositions
+        var alternatives = island.FoundableStartPositions()
             .Select(p => new HexCoord(p.Q, p.R))
             .Where(c => c != plot && IsValid(islandId, c))
             .OrderBy(c => c.DistanceTo(plot))
@@ -240,7 +240,7 @@ public sealed class PlotReservationService(
 
         foreach (var entry in ordered)
         {
-            foreach (var position in entry.Island.StartPositions)
+            foreach (var position in entry.Island.FoundableStartPositions())
             {
                 var candidate = new HexCoord(position.Q, position.R);
                 if (isValid(entry.Island.Id, candidate))

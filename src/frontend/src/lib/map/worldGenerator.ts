@@ -5,7 +5,7 @@
 // the whole map — memory is bounded by hexes actually visited.
 import { axialToOddQ, hexDistance, hexRing, oddQToAxial, neighbors } from '../hex/coords';
 import { TILE_ORIENTATIONS } from './types';
-import type { IslandLabel, RiverTileShape, Terrain, Tile, TileOrientation } from './types';
+import type { ForestKind, IslandLabel, RiverTileShape, Terrain, Tile, TileOrientation } from './types';
 
 /**
  * Deterministic 2D hash in `[0, 1)` — the ECMAScript-integer-coercion-exact
@@ -817,7 +817,7 @@ export function wastedTerrainAt(q: number, r: number, world: WorldSeed): Terrain
   // island's coast.
   if (neighbors({ q, r }).some((n) => isLand(n.q, n.r, world))) return 'sea';
 
-  if (island.t > gen.beachThreshold) return 'sand';
+  if (island.t > gen.beachThreshold && seesSea(q, r, world, true)) return 'sand';
   const rockiness = valueNoise(q, r, world.seed + 2, 2.5);
   if (island.t < gen.mountainThreshold && rockiness > gen.mountainRockiness) return 'mountain';
   return rockiness > gen.forestRockiness ? 'forest' : 'grass';
@@ -912,11 +912,38 @@ function nearestLandWithin(from: { q: number; r: number }, maxRadius: number, wo
   return null;
 }
 
+/**
+ * How close (in hex steps) open sea must be for a hex past `beachThreshold` to be sand —
+ * mirrors the backend's `TerrainSampler.BeachSeaRadius`. The depth alone is not enough: the
+ * domain warp and the shoreline noise make interior "saddles" where the depth climbs close to 1
+ * without the coast opening there, which put beach bands deep inland. 2 keeps the usual 1-2 hex
+ * wide beach of a real coast whole (1 halves it).
+ */
+export const BEACH_SEA_RADIUS = 2;
+
+// Axial offsets of the hexes within BEACH_SEA_RADIUS (the centre left out), nearest ring first
+// so a real beach finds its sea after a step or two.
+const BEACH_SEA_OFFSETS: { q: number; r: number }[] = [];
+for (let k = 1; k <= BEACH_SEA_RADIUS; k++) BEACH_SEA_OFFSETS.push(...hexRing({ q: 0, r: 0 }, k));
+
+/**
+ * Whether the island shape leaves sea within `BEACH_SEA_RADIUS` of `(q, r)` — mirrors
+ * `TerrainSampler.SeesSea`. Only the shape's own land test (`closestIsland`) is asked, never
+ * `terrainAt`, so this cannot recurse into the sand rule. A wasted hex asks the wasted shape.
+ */
+function seesSea(q: number, r: number, world: WorldSeed, wasted: boolean): boolean {
+  for (const o of BEACH_SEA_OFFSETS) {
+    const { col, row } = axialToOddQ({ q: q + o.q, r: r + o.r });
+    if (!closestIsland(col, row, world, wasted)) return true;
+  }
+  return false;
+}
+
 export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
   const { col, row } = axialToOddQ({ q, r });
   const island = closestIsland(col, row, world, false);
   if (!island) return 'sea';
-  if (island.t > world.generation.beachThreshold) return 'sand';
+  if (island.t > world.generation.beachThreshold && seesSea(q, r, world, false)) return 'sand';
   if (island.t < world.generation.mountainThreshold && mountainField(q, r, world.seed) > world.generation.mountainRockiness) {
     return 'mountain';
   }
@@ -1037,7 +1064,7 @@ export function orientationAt(q: number, r: number, world: WorldSeed): TileOrien
  */
 const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
   grass: 4,
-  forest: 3,
+  forest: 4,
   mountain: 4,
   // Bog: the plain moss plus variant001-008; lake: the plain water plus variant001-003 (islet, moss mat, reed
   // island — the fish weir and the two boats are placed by the buildings that use them, never rolled). Mirrors
@@ -1072,6 +1099,51 @@ const WASTED_VARIANT_WEIGHTS: Partial<Record<Terrain, number[]>> = {
   sand: [0.6, 0.4],
 };
 
+/**
+ * Top-variant weights for a living forest: plain (an open clearing), variant000 (the full forest),
+ * variant001 (fairy-ring glade) and variant002 (forest tarn). The full forest dominates; the other three
+ * are rare accents. Mirrors `TerrainSampler.ForestVariantWeights`.
+ */
+export const FOREST_VARIANT_WEIGHTS = [0.04, 0.84, 0.06, 0.06];
+
+/**
+ * Top-variant weights for a living sand tile: index 0 is the plain sand, index N is `variant(N-1)` — 1 dunes, 2 driftwood,
+ * 3 boulders, 4 wreck, 5 whale bones, 6 upturned boat and cairn, 7 sand castle, 8 driftwood pile. The plain look is the
+ * common one, the wreck, whale bones and sand castle are rare accents. A variant whose art is not packed yet falls back
+ * to the plain frame (textures.ts `pickIndexedEntry`). Mirrors `TerrainSampler.SandVariantWeights`.
+ */
+export const SAND_VARIANT_WEIGHTS = [0.45, 0.11, 0.11, 0.11, 0.02, 0.02, 0.06, 0.01, 0.11];
+
+/** Wavelength (hexes) of the taiga/birch biome noise — mirrors `TerrainSampler.ForestBiomeScale`. */
+export const FOREST_BIOME_SCALE = 14;
+/** Seed offset of the biome noise (`kind = n >= 0.5 ? taiga : birch`). */
+export const FOREST_BIOME_SALT = 137;
+/** Seed offset of the per-hex roll that turns a forest hex into mixed wood. */
+export const FOREST_MIXED_SALT = 139;
+/** Chance of mixed wood away from a biome boundary. */
+export const FOREST_MIXED_BASE_CHANCE = 0.2;
+/** Extra mixed-wood chance exactly on the boundary (`n = 0.5`), fading linearly to 0 at `FOREST_MIXED_BAND`. */
+export const FOREST_MIXED_BOUNDARY_BONUS = 0.4;
+/** Half-width of the noise band around 0.5 in which the mixed-wood chance is raised. */
+export const FOREST_MIXED_BAND = 0.06;
+
+/**
+ * Which wood a living forest hex at `(q, r)` is: large regions of taiga or birch (a coarse value
+ * noise thresholded at 0.5), with mixed wood sprinkled into both, more densely on the boundary.
+ * Only meaningful for a `forest` hex; mirrors `TerrainSampler.ForestKindAt`.
+ */
+export function forestKindAt(q: number, r: number, seed: number): ForestKind {
+  const n = valueNoise(q, r, seed + FOREST_BIOME_SALT, FOREST_BIOME_SCALE);
+  const p = FOREST_MIXED_BASE_CHANCE + FOREST_MIXED_BOUNDARY_BONUS * Math.max(0, 1 - Math.abs(n - 0.5) / FOREST_MIXED_BAND);
+  if (hash2(q, r, seed + FOREST_MIXED_SALT) < p) return 'mixed';
+  return n >= 0.5 ? 'taiga' : 'birch';
+}
+
+/** The variant index of a living forest hex for the uniform roll `h`. */
+function forestVariantIndex(h: number): number {
+  return weightedIndex(h, FOREST_VARIANT_WEIGHTS);
+}
+
 const WASTED_VARIANT_SALT = 1_000_003;
 
 /** The top-variant index a revealed wasted-island tile of `terrain` shows at `(q, r)` — see `WASTED_VARIANT_WEIGHTS`. */
@@ -1105,7 +1177,10 @@ function weightedIndex(h: number, weights: number[]): number {
 export function variantAt(q: number, r: number, world: WorldSeed): number {
   const h = hash2(q, r, world.seed + 31);
   if (isCoastalWater(q, r, world)) return weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
-  const count = VARIANT_COUNTS[terrainAt(q, r, world)] ?? 1;
+  const terrain = terrainAt(q, r, world);
+  if (terrain === 'forest') return forestVariantIndex(h);
+  if (terrain === 'sand') return weightedIndex(h, SAND_VARIANT_WEIGHTS);
+  const count = VARIANT_COUNTS[terrain] ?? 1;
   if (count <= 1) return 0;
   const index = Math.floor(h * count);
   return index >= count ? count - 1 : index;
@@ -1117,6 +1192,8 @@ export function variantAt(q: number, r: number, world: WorldSeed): number {
  * cannot answer for them.
  */
 export function variantForTerrain(q: number, r: number, world: WorldSeed, terrain: Terrain): number {
+  if (terrain === 'forest') return forestVariantIndex(hash2(q, r, world.seed + 31));
+  if (terrain === 'sand') return weightedIndex(hash2(q, r, world.seed + 31), SAND_VARIANT_WEIGHTS);
   const count = VARIANT_COUNTS[terrain] ?? 1;
   if (count <= 1) return 0;
   const index = Math.floor(hash2(q, r, world.seed + 31) * count);
@@ -1276,12 +1353,16 @@ export function generateTile(q: number, r: number, world: WorldSeed, sample?: Te
   let variant: number;
   if (coastal) {
     variant = weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
+  } else if (terrain === 'forest') {
+    variant = forestVariantIndex(h);
+  } else if (terrain === 'sand') {
+    variant = weightedIndex(h, SAND_VARIANT_WEIGHTS);
   } else {
     const count = VARIANT_COUNTS[terrain] ?? 1;
     variant = count <= 1 ? 0 : Math.min(count - 1, Math.floor(h * count));
   }
 
-  return {
+  const tile: Tile = {
     q,
     r,
     terrain,
@@ -1289,4 +1370,7 @@ export function generateTile(q: number, r: number, world: WorldSeed, sample?: Te
     orientation: coastal ? coastalOrientationFrom(landMask) : defaultOrientation(q, r, world),
     variant,
   };
+  // Living forest only: WorldModel drops it again if the hex turns out to be wasted land.
+  if (terrain === 'forest') tile.forestKind = forestKindAt(q, r, world.seed);
+  return tile;
 }

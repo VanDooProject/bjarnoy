@@ -81,7 +81,16 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   await expect(farm).toBeEnabled();
   const buildingsBeforeFarm = await settlement.countBuildings();
   await farm.click();
-  await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(buildingsBeforeFarm);
+  // Read once, not `expect.poll(..., { timeout: 5_000 })`: in demo mode the
+  // bubble's click handler places the building synchronously
+  // (LandingView.vue's onRingSelect -> WorldModel.placeBuilding), so the
+  // count is final by the time `click()` resolves - there is nothing to wait
+  // for. A poll only added a wall-clock limit on one `page.evaluate` round
+  // trip, and on a starved runner a single round trip takes 2-8 s (measured
+  // with the page's main thread idle: the time goes to the processes around
+  // it, not to the app). The farm was placed in every failed run; the poll's
+  // first read just never got back inside 5 s.
+  expect(await settlement.countBuildings()).toBe(buildingsBeforeFarm + 1);
 
   // --- Guided build 2: Lumberjack on a forest hex, via the ring menu -----
   // LandingView.vue's GUIDED_BUILD_TERRAIN maps Lumberjack -> forest, the
@@ -95,9 +104,8 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   await expect(lumberjack).toBeEnabled();
   const buildingsBeforeLumberjack = await settlement.countBuildings();
   await lumberjack.click();
-  await expect
-    .poll(() => settlement.countBuildings(), { timeout: 5_000 })
-    .toBeGreaterThan(buildingsBeforeLumberjack);
+  // Synchronous placement, as for the farm above.
+  expect(await settlement.countBuildings()).toBe(buildingsBeforeLumberjack + 1);
 
   // --- Completion hand-off -------------------------------------------------
   await expect(settlement.checklist).toHaveCount(0);

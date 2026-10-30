@@ -92,24 +92,16 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     const before = await settlement.countBuildings();
 
     // Issue #16: a hex click no longer opens BuildingModal directly — it
-    // opens a RingMenu of contextual actions; hovering its "Build" bubble
-    // drills into a category ring, and hovering a category bubble drills
-    // into that category's building-type ring (see SettlementView's
-    // onRingHover — only the root "build" action and a category's own
-    // bubbles advance the ring on hover; everything else, including the
-    // final building choice, needs a real click). Drilling via hover here
-    // (not the click-based path onRingSelect also supports) matches
-    // ring-menu.spec.ts's own drill-down coverage — the interaction path
-    // that suite already exercises and keeps green, rather than a second,
-    // untried one: a click-based version of this same test was flaky here,
-    // repeatedly racing the ring bubble getting detached and re-mounted
-    // mid-click on a loaded run, something hover-then-click rides out fine.
+    // opens a RingMenu of contextual actions. Navigation is click-only
+    // (clicking "Build" opens the categories, clicking a category opens its
+    // buildings; hover only previews a building's card), and the final
+    // building choice is a click on the bubble itself.
     await settlement.clickHex(target);
 
     await settlement.ring.openBuildCategories();
 
     // Grass's first category (Housing) has exactly one building — Hut — so
-    // hovering the first category bubble and clicking the first building
+    // opening the first category and clicking the first building
     // bubble always reaches it, without needing to name it explicitly.
     //
     // The 2a ring caps itself at two lanes, so drilling *replaces* the root
@@ -172,7 +164,11 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
 
-    const target = await settlement.findHex({ terrain: 'sand' });
+    // Sand only lies on the shore, and a start position keeps two hexes from the sea: a tower (unlocked at longhouse 3,
+    // BuildingCatalogue.cs UnlockLevels) pushes the realm onto the beach.
+    await settlement.setSettlementLevel(3);
+    const reach = await settlement.standTowerTowardCoast();
+    const target = await settlement.findHex({ terrain: 'sand', reach });
 
     await settlement.clickHex(target);
 

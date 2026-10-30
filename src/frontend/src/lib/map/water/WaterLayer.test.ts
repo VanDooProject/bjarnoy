@@ -31,6 +31,7 @@ function maskOver(minX: number, minY: number, maxX: number, maxY: number): Water
     height: region.height,
     region,
     taint: new Uint8Array(region.width * region.height),
+    noFoam: new Uint8Array(region.width * region.height),
   };
 }
 
@@ -313,6 +314,24 @@ describe('WaterLayer', () => {
     // 2s elapsed on the second tick (the first establishes the baseline).
     expect(u.uTime).toBeCloseTo(2, 6);
     expect(u.uWaveTime).toBeCloseTo(4, 6);
+  });
+
+  it('holds both clocks while frozen and resumes without a jump when thawed', () => {
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    const u = uniformsOf(layer);
+    layer.tick(1000);
+    layer.tick(2000);
+    expect(u.uTime).toBeCloseTo(1, 6);
+
+    layer.setFrozen(true);
+    layer.tick(5000);
+    layer.tick(9000);
+    expect(u.uTime).toBeCloseTo(1, 6);
+    expect(u.uWaveTime).toBeCloseTo(waterDebugTuning.waveSpeed, 6);
+
+    layer.setFrozen(false);
+    layer.tick(9500);
+    expect(u.uTime).toBeCloseTo(1.5, 6);
   });
 
   it('places the quad on exactly the world rect its mask was baked over', () => {

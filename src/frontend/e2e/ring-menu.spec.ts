@@ -3,9 +3,12 @@ import { distanceFrom, loginTestUser, rectsOf } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage, type ScreenPoint } from './pages';
 
+// DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
+test.use({ mapLayers: { water: false } });
+
 /**
  * Issue #16 "ring menu": covers bugs reported after the initial pass —
- * (1) drilling into a category/building level via hover used to leave the
+ * (1) drilling into a category/building level used to leave the
  * previous level's tooltip/DOM in a state that could obscure or fail to
  * show the newly opened bubbles, (2) the map underneath kept reacting to
  * hover/wheel/click while a ring was open, since the renderer's own
@@ -27,7 +30,7 @@ import { SettlementPage, type ScreenPoint } from './pages';
 // runner-load variance instead of diluting it — see
 // docs/ci/e2e-sharding.md for the CI run that motivated this split.
 test.describe('ring menu drill-down', () => {
-  test('hovering into build categories, then a category into its buildings, keeps the menu two lanes deep', { tag: '@g1' }, async ({ page }) => {
+  test('clicking into build categories, then a category into its buildings, keeps the menu two lanes deep', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { x: cx, y: cy } = await settlement.canvasCentre();
@@ -65,15 +68,23 @@ test.describe('ring menu drill-down', () => {
         continue;
       }
 
+      // Hovering is only a preview: it must not open the categories. Going
+      // deeper takes a click, the same as going back already did.
       await settlement.ring.hover(buildBubble);
+      await page.waitForTimeout(250);
+      // The labels are read in one round trip per poll attempt (see ring.labels()): a toHaveCount per
+      // label cost a canvas-frame wait each, and this test asserted 19 of them.
+      await expect.poll(() => settlement.ring.labels()).toContain('Details');
+      await expect(settlement.ring.backBubble).toHaveCount(0);
+      await settlement.ring.press();
       await page.waitForTimeout(250);
 
       // The inner lane is now the categories plus the reserved ‹ BACK slot —
       // the root actions it replaced are gone, which is the whole point of
       // capping the menu at two lanes.
-      await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
       const backBubble = settlement.ring.backBubble;
       await expect(backBubble).toHaveCount(1);
+      expect(await settlement.ring.labels()).not.toContain('Details');
 
       // Lanes are distinguishable by class rather than by excluding labels:
       // `.back` is the reserved back slot, `.child` the outer lane.
@@ -99,14 +110,15 @@ test.describe('ring menu drill-down', () => {
       const categoryDist = distanceFrom(firstCategoryRect, cx + dx, cy + dy);
       await settlement.ring.hover(categoryBubbles.first());
       await page.waitForTimeout(250);
+      await expect(settlement.ring.childBubbles).toHaveCount(0);
+      await settlement.ring.press();
+      await page.waitForTimeout(250);
 
       // Drilling into a category fans its buildings out on a second lane
       // *beside* the category, which stays exactly where it was — so the
       // player can see what they came through without the menu growing a
       // third orbit.
-      for (const label of categoryTexts) {
-        await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(1);
-      }
+      await expect.poll(() => settlement.ring.labels()).toEqual(expect.arrayContaining(categoryTexts));
       await expect(backBubble).toHaveCount(1);
       const buildingBubbles = settlement.ring.childBubbles;
       await expect(buildingBubbles.first()).toBeVisible();
@@ -120,14 +132,11 @@ test.describe('ring menu drill-down', () => {
       await expect(settlement.tooltip).toBeHidden();
 
       // ‹ BACK goes up exactly one level, back to the categories.
-      await backBubble.click();
+      await settlement.ring.click(backBubble);
       await page.waitForTimeout(250);
-      for (const label of categoryTexts) {
-        await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(1);
-      }
-      for (const rect of buildingRects) {
-        await expect(page.getByRole('button', { name: rect.text, exact: true })).toHaveCount(0);
-      }
+      await expect.poll(() => settlement.ring.labels()).toEqual(expect.arrayContaining(categoryTexts));
+      const labelsAfterBack = await settlement.ring.labels();
+      for (const rect of buildingRects) expect(labelsAfterBack).not.toContain(rect.text);
 
       drilled = true;
       break;
@@ -167,42 +176,65 @@ test.describe('ring menu drill-down', () => {
     const barracks = settlement.ring.child('Barracks').first();
     await settlement.ring.hover(barracks);
 
-    const card = settlement.ring.card;
-    await expect(card).toBeVisible();
-    // Cost, time and the gate all come from the building catalogue, so these
-    // are the backend's own numbers: 130 wood / 110 stone, 7:00, longhouse 5.
-    await expect(card).toContainText('130');
-    await expect(card).toContainText('110');
-    await expect(card).toContainText('7:00');
-    await expect(card).toContainText('REQUIRES LONGHOUSE 5');
-    await expect(barracks).toHaveClass(/locked/);
+    // One in-page read per poll attempt rather than eight separate locator assertions: on this
+    // app's canvas views every Playwright round trip waits out a frame (see ring.settledCentre),
+    // and these eight made up a tenth of the test's time. The card is purely informational: no
+    // BUILD button, locked or not. Cost, time and the gate all come from the building catalogue,
+    // so these are the backend's own numbers: 130 wood / 110 stone, 7:00, longhouse 5.
+    const readCard = () =>
+      barracks.evaluate((bubble) => {
+        const card = document.querySelector('.ring-card');
+        const text = card?.textContent ?? '';
+        const box = card?.getBoundingClientRect();
+        return {
+          cardShown: !!box && box.width > 0 && box.height > 0,
+          cost130: text.includes('130'),
+          cost110: text.includes('110'),
+          buildTime: text.includes('7:00'),
+          gate: text.includes('REQUIRES LONGHOUSE 5'),
+          bubbleLocked: bubble.classList.contains('locked'),
+          lockBadges: bubble.querySelectorAll('.ring-badge.locked').length,
+          cardButtons: card?.querySelectorAll('button').length ?? -1,
+        };
+      });
+    await expect
+      .poll(readCard)
+      .toEqual({
+        cardShown: true,
+        cost130: true,
+        cost110: true,
+        buildTime: true,
+        gate: true,
+        bubbleLocked: true,
+        lockBadges: 1,
+        cardButtons: 0,
+      });
 
-    await barracks.click({ force: true });
+    await settlement.ring.press();
     await page.waitForTimeout(300);
     expect(await countBuildings()).toBe(before);
 
-    // Building is a click on the bubble itself; the card's button is only a
-    // second way to do the same thing. The card is an informational read-out
+    // Building is a click on the bubble itself. The card is an informational read-out
     // docked next to the ring, so it must stay click-through — otherwise it
     // swallows clicks aimed at whichever bubble it happens to dock beside.
-    const cardBox = (await card.boundingBox())!;
-    const underCard = await page.evaluate(
-      ({ x, y }) => document.elementFromPoint(x, y)?.className ?? null,
-      { x: cardBox.x + cardBox.width / 2, y: cardBox.y + 20 },
-    );
+    const underCard = await page.evaluate(() => {
+      const box = document.querySelector('.ring-card')!.getBoundingClientRect();
+      return document.elementFromPoint(box.x + box.width / 2, box.y + 20)?.className ?? null;
+    });
     expect(underCard).not.toContain('ring-card');
 
     const watchtower = settlement.ring.child('Watchtower').first();
     await settlement.ring.hover(watchtower);
-    await watchtower.click();
+    await settlement.ring.press();
     await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 
-  test('the root Upgrade bubble is disabled with a reason when the settlement cannot afford it', { tag: '@g1' }, async ({ page }) => {
+  test('the root Upgrade bubble waits (clock badge, no click) with the missing resources on its card when the settlement cannot afford it', { tag: '@g1' }, async ({ page }) => {
     // Regression: Upgrade used to carry no cost information at all — it
     // looked exactly as clickable as when affordable, and demo mode would
-    // bump the level for free regardless. Same disabled+hint convention as
-    // Raze/Train/the sea-tile Build action, not a new affordance.
+    // bump the level for free regardless. Now it is a "waiting" bubble (a
+    // temporary shortage, clock badge) and hovering it shows the next
+    // level's card with what is missing.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
 
@@ -217,13 +249,25 @@ test.describe('ring menu drill-down', () => {
 
     const upgradeBubble = settlement.ring.action('Upgrade').first();
     await expect(upgradeBubble).toBeVisible();
-    await expect(upgradeBubble).toHaveClass(/disabled/);
-    await expect(upgradeBubble).toHaveAttribute('title', 'Needs 161 Wood, 134 Stone, 81 Food');
+    await expect(upgradeBubble).toHaveClass(/is-waiting/);
+    await expect(upgradeBubble.locator('.ring-badge.waiting')).toHaveCount(1);
+
+    // Hovering shows the card even though the bubble is not clickable.
+    await expect(settlement.ring.card).toHaveCount(0);
+    await settlement.ring.hover(upgradeBubble);
+    const card = settlement.ring.card;
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Upgrade to level 2');
+    await expect(card).toContainText('161');
+    await expect(card).toContainText('NOT ENOUGH RESOURCES');
+    // Stock keeps ticking up from zero, so the shortfall shrinks while the test runs.
+    await expect(card).toContainText(/Need \d+ Wood · \d+ Stone · \d+ Food/);
+    await expect(card.locator('button')).toHaveCount(0);
 
     const levelBefore = await buildingLevel();
-    await upgradeBubble.click({ force: true });
+    await settlement.ring.press();
     await page.waitForTimeout(300);
-    expect(await buildingLevel(), 'a disabled Upgrade bubble must not upgrade anything').toBe(levelBefore);
+    expect(await buildingLevel(), 'a waiting Upgrade bubble must not upgrade anything').toBe(levelBefore);
 
     // Grant plenty and reopen: the same bubble is now a plain, enabled one.
     await page.keyboard.press('Escape');
@@ -232,8 +276,9 @@ test.describe('ring menu drill-down', () => {
 
     const upgradeBubble2 = settlement.ring.action('Upgrade').first();
     await expect(upgradeBubble2).toBeVisible();
-    await expect(upgradeBubble2).not.toHaveClass(/disabled/);
-    await upgradeBubble2.click();
+    await expect(upgradeBubble2).not.toHaveClass(/is-waiting/);
+    await expect(upgradeBubble2.locator('.ring-badge')).toHaveCount(0);
+    await settlement.ring.click(upgradeBubble2);
     await expect.poll(buildingLevel, { timeout: 5_000 }).toBe(levelBefore + 1);
   });
 
@@ -336,6 +381,177 @@ test.describe('ring menu drill-down', () => {
 
     await page.keyboard.press('Escape');
     await expect(settlement.ring.bubbles).toHaveCount(0);
+  });
+});
+
+test.describe('ring menu availability', () => {
+  /** Opens Build → the first category that has `building`, leaving the pointer off every bubble. */
+  async function openCategoryOf(settlement: SettlementPage, category: string) {
+    await settlement.ring.openBuildCategories();
+    await settlement.ring.openCategory(category);
+  }
+
+  test('with no available stock a building bubble waits (clock badge), explains what is missing and cannot be built', { tag: '@g2' }, async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const target = await settlement.findHex({ terrain: 'grass' });
+    const before = await settlement.countBuildings();
+
+    await settlement.setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
+    await settlement.clickHex(target);
+    await openCategoryOf(settlement, 'Resource');
+
+    const herder = settlement.ring.child('Reindeer Herder').first();
+    await expect(herder).toHaveClass(/waiting/);
+    await expect(herder).not.toHaveClass(/locked/);
+    await expect(herder.locator('.ring-badge.waiting')).toHaveCount(1);
+
+    await settlement.ring.hover(herder);
+    const card = settlement.ring.card;
+    await expect(card).toContainText('NOT ENOUGH RESOURCES');
+    await expect(card).toContainText(/Need \d+ Wood/);
+    await expect(card.locator('button')).toHaveCount(0);
+    await expect(card.locator('b.short').first()).toBeVisible();
+
+    await settlement.ring.press();
+    await page.waitForTimeout(300);
+    expect(await settlement.countBuildings(), 'a waiting bubble must not build').toBe(before);
+    await expect(settlement.ring.bubbles.first()).toBeVisible();
+  });
+
+  test('with every build slot taken a building bubble waits too, and the card says how many slots are free', { tag: '@g2' }, async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const target = await settlement.findHex({ terrain: 'grass' });
+    const before = await settlement.countBuildings();
+
+    await settlement.setResources({ wood: 99_999, stone: 99_999, food: 99_999, iron: 99_999 });
+    await page.evaluate(() => {
+      const world = (window as unknown as {
+        __demoWorld: () => { hud: { construction: { slots: number; slotsUsed: number } } };
+      }).__demoWorld();
+      world.hud.construction.slotsUsed = world.hud.construction.slots;
+    });
+    await settlement.clickHex(target);
+    await openCategoryOf(settlement, 'Resource');
+
+    const herder = settlement.ring.child('Reindeer Herder').first();
+    await expect(herder).toHaveClass(/waiting/);
+    await expect(herder.locator('.ring-badge.waiting')).toHaveCount(1);
+
+    await settlement.ring.hover(herder);
+    const card = settlement.ring.card;
+    await expect(card).toContainText('NO FREE BUILD SLOT');
+    await expect(card.getByTestId('ring-card-slots')).toHaveText('1 · 0 of 2 free');
+    await expect(card.getByTestId('ring-card-status')).toContainText('Needs 1 build slot · 0 of 2 free');
+
+    await settlement.ring.press();
+    await page.waitForTimeout(300);
+    expect(await settlement.countBuildings(), 'a full-slots bubble must not build').toBe(before);
+  });
+
+  test('a building above the longhouse level shows a lock badge and the requirement, and is not clickable', { tag: '@g2' }, async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const target = await settlement.findHex({ terrain: 'grass' });
+    const before = await settlement.countBuildings();
+
+    await settlement.clickHex(target);
+    await openCategoryOf(settlement, 'Military');
+
+    // Barracks unlock at longhouse 5; a fresh realm is at 1.
+    const barracks = settlement.ring.child('Barracks').first();
+    await expect(barracks).toHaveClass(/locked/);
+    await expect(barracks.locator('.ring-badge.locked')).toHaveCount(1);
+    await expect(barracks.locator('.ring-badge.waiting')).toHaveCount(0);
+
+    await settlement.ring.hover(barracks);
+    await expect(settlement.ring.card.getByTestId('ring-card-status')).toContainText('Requires longhouse 5');
+    await settlement.ring.press();
+    await page.waitForTimeout(300);
+    expect(await settlement.countBuildings()).toBe(before);
+  });
+
+  test('a ready building has no status footer and builds on a click of the bubble', { tag: '@g2' }, async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const target = await settlement.findHex({ terrain: 'grass' });
+    const before = await settlement.countBuildings();
+
+    await settlement.setResources({ wood: 99_999, stone: 99_999, food: 99_999, iron: 99_999 });
+    await settlement.clickHex(target);
+    await openCategoryOf(settlement, 'Resource');
+
+    const herder = settlement.ring.child('Reindeer Herder').first();
+    await settlement.ring.hover(herder);
+    const card = settlement.ring.card;
+    await expect(card).toContainText('BUILDABLE HERE');
+    await expect(card.getByTestId('ring-card-slots')).toHaveText('1 · 2 of 2 free');
+    await expect(card.getByTestId('ring-card-status')).toHaveCount(0);
+    await expect(card).not.toContainText(/click to build/i);
+
+    await settlement.ring.press();
+    await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBe(before + 1);
+  });
+
+  test('a rejected build keeps the ring open and shows why', { tag: '@g2' }, async ({ page }) => {
+    // A race the UI cannot see in time: the hex gets built on after the ring
+    // offered it. The model refuses the placement; the ring must say so
+    // rather than swallowing the rejection.
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const target = await settlement.findHex({ terrain: 'grass' });
+
+    await settlement.setResources({ wood: 99_999, stone: 99_999, food: 99_999, iron: 99_999 });
+    await settlement.clickHex(target);
+    await openCategoryOf(settlement, 'Resource');
+    const herder = settlement.ring.child('Reindeer Herder').first();
+    await settlement.ring.hover(herder);
+
+    await page.evaluate((hex) => {
+      const world = (window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+      }).__demoWorld();
+      world.model.placeBuilding(world.selectedSettlementId, hex, 'farm');
+    }, target.hex);
+    const before = await settlement.countBuildings();
+
+    await settlement.ring.press();
+    await expect(page.getByTestId('ring-error')).toHaveText('Could not queue that build.');
+    await expect(settlement.ring.bubbles.first()).toBeVisible();
+    expect(await settlement.countBuildings()).toBe(before);
+  });
+
+  test('hovering Details previews the tile, and Details still opens on click', { tag: '@g2' }, async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const longhouse = await settlement.centreHex();
+
+    await settlement.clickHex(longhouse);
+    const details = settlement.ring.action('Details').first();
+    await settlement.ring.hover(details);
+    const card = settlement.ring.card;
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Longhouse');
+    await expect(card).toContainText('LEVEL 1');
+    await expect(card.locator('button')).toHaveCount(0);
+
+    await settlement.ring.press();
+    await expect(settlement.ring.bubbles).toHaveCount(0);
+  });
+
+  test('a disabled root action shows the ban look and its reason in a chip on hover', { tag: '@g2' }, async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const longhouse = await settlement.centreHex();
+
+    await settlement.clickHex(longhouse);
+    const raze = settlement.ring.action('Raze').first();
+    await expect(raze).toHaveClass(/disabled/);
+    await expect(raze.locator('.ring-badge.ban')).toHaveCount(1);
+    await expect(page.getByTestId('ring-hint')).toHaveCount(0);
+    await settlement.ring.hover(raze);
+    await expect(page.getByTestId('ring-hint')).toHaveText("Can't raze the longhouse");
   });
 });
 

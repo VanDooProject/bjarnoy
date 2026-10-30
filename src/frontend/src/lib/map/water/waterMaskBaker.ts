@@ -19,13 +19,21 @@ export interface AsyncBakeInput {
   buildingHexes?: number[];
   /** See `BakeRequest.wastedRevealed`. */
   wastedRevealed?: boolean;
+  /** River-mouth hexes whose surroundings carry no foam — see `BakeRequest.noFoamHexes`. */
+  noFoamHexes?: number[];
+  /**
+   * `WorldModel.riverRevision` the request was made under. Not sent to the
+   * worker; carried through `pending` to the callback like `wastedRevealed`,
+   * so the renderer can tell a mask baked from stale rivers.
+   */
+  riverRevision?: number;
 }
 
 export class WaterMaskBaker {
   private worker: Worker | null = null;
   /** Bumped per request, so a response can be matched against the request still outstanding. */
   private nextId = 1;
-  private onDone: ((mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean) => void) | null =
+  private onDone: ((mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean, riverRevision: number) => void) | null =
     null;
   /**
    * The one request still outstanding, with the region and reveal state it
@@ -41,9 +49,11 @@ export class WaterMaskBaker {
    * what it was baked with, and the reveal flag could in principle flip while
    * this exact request is still in flight.
    */
-  private pending: { id: number; region: WaterMaskRegion; wastedRevealed: boolean } | null = null;
+  private pending: { id: number; region: WaterMaskRegion; wastedRevealed: boolean; riverRevision: number } | null = null;
 
-  constructor(handle: (mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean) => void) {
+  constructor(
+    handle: (mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean, riverRevision: number) => void,
+  ) {
     this.onDone = handle;
     this.worker = createWorker();
     if (this.worker) {
@@ -75,7 +85,12 @@ export class WaterMaskBaker {
   bake(input: AsyncBakeInput, terrain: TerrainLookup): WaterMask | null {
     if (!this.worker) return bakeWaterMask(input.region, input.tileWidth, input.tileHeight, terrain);
     const id = this.nextId++;
-    this.pending = { id, region: input.region, wastedRevealed: input.wastedRevealed ?? false };
+    this.pending = {
+      id,
+      region: input.region,
+      wastedRevealed: input.wastedRevealed ?? false,
+      riverRevision: input.riverRevision ?? 0,
+    };
     const request: BakeRequest = {
       id,
       region: input.region,
@@ -85,6 +100,7 @@ export class WaterMaskBaker {
       generation: input.generation,
       buildingHexes: input.buildingHexes,
       wastedRevealed: input.wastedRevealed,
+      noFoamHexes: input.noFoamHexes,
     };
     this.worker.postMessage(request);
     return null;
@@ -113,10 +129,11 @@ export class WaterMaskBaker {
     this.pending = null;
     if (!this.onDone) return;
     this.onDone(
-      { data: response.data, width: response.width, height: response.height, region: pending.region, taint: response.taint },
+      { data: response.data, width: response.width, height: response.height, region: pending.region, taint: response.taint, noFoam: response.noFoam },
       pending.region,
       response.bakeMs,
       pending.wastedRevealed,
+      pending.riverRevision,
     );
   }
 }

@@ -239,11 +239,9 @@ watch(() => route.fullPath, close);
   border-radius: 8px;
   animation: avatar-glow 1.5s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .trigger.is-nudging {
-    animation: none;
-    box-shadow: 0 0 0 3px rgba(255, 197, 92, 0.3), 0 0 18px 4px rgba(255, 197, 92, 0.35);
-  }
+html[data-hud-motion='reduced'] .trigger.is-nudging {
+  animation: none;
+  box-shadow: 0 0 0 3px rgba(255, 197, 92, 0.3), 0 0 18px 4px rgba(255, 197, 92, 0.35);
 }
 .nudge-dot {
   position: absolute;

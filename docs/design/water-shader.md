@@ -975,6 +975,7 @@ distance also reads this:
 ```
 sampler2D uWaterMask
 sampler2D uWaterTaint              taint field (§4.4c), single channel
+sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
 vec3  uTaintShallowColor, uTaintDeepColor, uTaintFoamColor
 float uTime, uWaveTime            base clock; wave clock, scaled by waveSpeed
 float uSeaBody, uMidWaterWaves, uShorelineFoam, uCaustics   0/1

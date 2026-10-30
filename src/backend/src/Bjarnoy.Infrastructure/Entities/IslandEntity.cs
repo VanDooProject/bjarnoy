@@ -36,6 +36,26 @@ public class IslandEntity
     public List<HexPoint> StartPositions { get; set; } = [];
 
     /// <summary>
+    /// <see cref="StartPositions"/> minus any that stands on a river hex. Worlds generated before start positions
+    /// avoided rivers still store such plots (a Longhouse on a wide river leaves a land army with no way home, so
+    /// every land dispatch fails); a filter here, rather than a migration, keeps them from ever being handed out or
+    /// founded on. Order is preserved.
+    /// </summary>
+    public List<HexPoint> FoundableStartPositions() => WithoutRiverHexes(StartPositions, RiverTiles);
+
+    /// <summary>The <paramref name="startPositions"/> not standing on any of <paramref name="riverTiles"/>, in order.</summary>
+    public static List<HexPoint> WithoutRiverHexes(List<HexPoint> startPositions, IReadOnlyCollection<RiverTileRecord> riverTiles)
+    {
+        if (riverTiles.Count == 0)
+        {
+            return startPositions;
+        }
+
+        var rivers = riverTiles.Select(t => (t.Q, t.R)).ToHashSet();
+        return [.. startPositions.Where(p => !rivers.Contains((p.Q, p.R)))];
+    }
+
+    /// <summary>
     /// This island's rivers, one entry per river tile — see
     /// <c>Bjarnoy.Domain.World.RiverGenerator</c>.
     /// </summary>

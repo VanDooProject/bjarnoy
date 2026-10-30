@@ -3,9 +3,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -103,10 +105,11 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// A grass/sand/forest hex 4-6 hexes from the settlement whose six neighbours are all plain land
-    /// too, so a river ring around it is the only thing that can wall it in.
+    /// A river-free grass/sand/forest hex 4-6 hexes from the settlement, reachable from it in at most 10
+    /// steps, whose six neighbours are all plain land too, so a river ring around it is the only thing
+    /// that can wall it in.
     /// </summary>
-    private static async Task<TileCoordinate> FindWalkableTargetAsync(HttpClient client, Guid worldId, SettlementResponse settlement)
+    private async Task<TileCoordinate> FindWalkableTargetAsync(HttpClient client, Guid worldId, SettlementResponse settlement)
     {
         const int Window = 12;
         var chunk = await client.GetFromJsonAsync<TileChunkResponse>(
@@ -116,17 +119,27 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
         var terrain = chunk!.Tiles.ToDictionary(t => new HexCoord(t.Q, t.R), t => t.Terrain);
         var start = new HexCoord(settlement.Q, settlement.R);
 
-        bool Plain(HexCoord c) => terrain.TryGetValue(c, out var t) && t is "grass" or "sand" or "forest";
+        // Reachable, not just plain: the island's rivers are generated, and a wide one between the settlement and an otherwise plain hex
+        // makes the control dispatch below fail for a reason that has nothing to do with the ring. So the target is checked with the
+        // server's own sampler, river index and pathfinder.
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var worldEntity = await db.Worlds.SingleAsync(w => w.Id == worldId, Ct);
+        var sampler = await WorldTerrain.SamplerAsync(db, worldEntity, Ct);
+        var rivers = await WorldRivers.IndexAsync(db, worldId, Ct);
 
-        foreach (var candidate in terrain.Keys.OrderBy(c => c.DistanceTo(start)))
+        bool Plain(HexCoord c) => terrain.TryGetValue(c, out var t) && t is "grass" or "sand" or "forest" && !rivers.IsRiver(c);
+
+        foreach (var candidate in terrain.Keys.OrderBy(c => c.DistanceTo(start)).ThenBy(c => c.Q).ThenBy(c => c.R))
         {
             var distance = candidate.DistanceTo(start);
-            if (distance is >= 4 and <= 6 && Plain(candidate) && candidate.Neighbours().All(Plain))
+            if (distance is >= 4 and <= 6 && Plain(candidate) && candidate.Neighbours().All(Plain) &&
+                HexPathfinder.FindPath(start, candidate, sampler.TerrainAt, true, rivers.IsRiver, rivers.IsWide) is { Count: <= 10 })
             {
                 return new TileCoordinate(candidate.Q, candidate.R);
             }
         }
 
-        throw new InvalidOperationException("No fully-land target hex found near the settlement; widen the search or change the seed.");
+        throw new InvalidOperationException("No fully-land, reachable target hex found near the settlement; widen the search or change the seed.");
     }
 }

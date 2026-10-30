@@ -304,6 +304,9 @@ export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
 export type Resources = Record<ResourceKind, number>;
 
+/** A forest hex's biome - see `Tile.forestKind`. */
+export type ForestKind = 'taiga' | 'birch' | 'mixed';
+
 export interface Tile {
   q: number;
   r: number;
@@ -318,6 +321,11 @@ export interface Tile {
    * see `textures.ts`'s wasted family mapping.
    */
   wasted?: boolean;
+  /**
+   * Which forest biome a (non-wasted) forest hex belongs to: `taiga` and `birch` cover large regions of an island,
+   * `mixed` is sprinkled into both. Picks the forest art family in `textures.ts`; undefined on every other terrain.
+   */
+  forestKind?: ForestKind;
   /** Which art-pack rotation to render this hex with. */
   orientation?: TileOrientation;
   /** Which numbered variant of this terrain's tile art to use. */

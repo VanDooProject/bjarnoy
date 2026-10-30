@@ -12,7 +12,7 @@ const VALLEY_RADIUS = 6; // 127 hexes
 /** A world seed for which the island's one outer-rim spring leaves the valley alone (checked by the first test). */
 const SEED = 6;
 /** One where the nearest reachable hex across the ring is a river tile, so the stream joins it. */
-const JOINING_SEED = 12;
+const JOINING_SEED = 89;
 
 function disc(radius: number): AxialCoord[] {
   const out: AxialCoord[] = [];

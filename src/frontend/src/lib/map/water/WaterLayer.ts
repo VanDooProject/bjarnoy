@@ -317,6 +317,15 @@ function placeholderTaintTexture(): Texture {
   return sharedPlaceholderTaintTexture;
 }
 
+let sharedPlaceholderNoFoamTexture: Texture | null = null;
+/** A 1x1 "foam everywhere" (field = 0) texture, for the same reason `placeholderTexture` exists — a frame drawn before the first bake gets ordinary foam. */
+function placeholderNoFoamTexture(): Texture {
+  sharedPlaceholderNoFoamTexture ??= new Texture({
+    source: new BufferImageSource({ resource: new Uint8Array([0]), width: 1, height: 1, format: 'r8unorm' }),
+  });
+  return sharedPlaceholderNoFoamTexture;
+}
+
 export class WaterLayer {
   readonly mesh: Mesh<MeshGeometry, Shader>;
   private readonly uniforms: UniformGroup;
@@ -331,6 +340,9 @@ export class WaterLayer {
   // Same pair, for the taint field — see setMask's taint half.
   private taintTexture: Texture | null = null;
   private retiredTaintTexture: Texture | null = null;
+  // ...and for the river-mouth no-foam field (WaterMask.noFoam).
+  private noFoamTexture: Texture | null = null;
+  private retiredNoFoamTexture: Texture | null = null;
   private hasMask = false;
   // The shader's own clock, accumulated rather than read off performance.now()
   // — same rationale as FogMaskLayer.tick's: the wave-speed slider changes the
@@ -340,6 +352,10 @@ export class WaterLayer {
   private clock = 0;
   // The waves' own clock, advanced at `waveSpeed` times the rate of `clock`.
   private waveClock = 0;
+  // Frozen: the clocks stop advancing, so the surface holds its last frame
+  // in place (still drawn, still reacting to camera/debug flags) instead of
+  // being hidden. See `setFrozen`.
+  private frozen = false;
   private suppressed = false;
 
   constructor(mode: WaterMode, tileWidth: number, tileHeight: number) {
@@ -436,6 +452,7 @@ export class WaterLayer {
           waterUniforms: this.uniforms,
           uWaterMask: placeholderTexture().source,
           uWaterTaint: placeholderTaintTexture().source,
+          uWaterNoFoam: placeholderNoFoamTexture().source,
         },
       }),
     });
@@ -520,6 +537,28 @@ export class WaterLayer {
       this.mesh.shader!.resources.uWaterTaint = this.taintTexture.source;
     }
 
+    if (this.noFoamTexture && this.noFoamTexture.width === mask.width && this.noFoamTexture.height === mask.height) {
+      const source = this.noFoamTexture.source as BufferImageSource;
+      source.resource = mask.noFoam;
+      source.update();
+    } else {
+      this.retiredNoFoamTexture?.destroy(true);
+      this.retiredNoFoamTexture = this.noFoamTexture;
+      this.noFoamTexture = new Texture({
+        source: new BufferImageSource({
+          resource: mask.noFoam,
+          width: mask.width,
+          height: mask.height,
+          // Same treatment as the taint field: a continuous ramp sampled with
+          // the main mask's UVs, single channel, nothing to premultiply.
+          scaleMode: 'linear',
+          addressMode: 'clamp-to-edge',
+          format: 'r8unorm',
+        }),
+      });
+      this.mesh.shader!.resources.uWaterNoFoam = this.noFoamTexture.source;
+    }
+
     const { minX, minY, maxX, maxY } = mask.region.rect;
     const positions = this.geometry.getBuffer('aPosition');
     positions.data.set([minX, minY, maxX, minY, maxX, maxY, minX, maxY]);
@@ -537,11 +576,18 @@ export class WaterLayer {
     this.suppressed = suppressed;
   }
 
-  /** Syncs the debug flags onto uniforms and advances the animation clock. Once a frame. */
+  /** Freezes (or resumes) the water's motion: the layer keeps drawing, its animation clocks just stop. */
+  setFrozen(frozen: boolean): void {
+    this.frozen = frozen;
+  }
+
+  /** Syncs the debug flags onto uniforms and advances the animation clock (unless frozen). Once a frame. */
   tick(nowMs: number): void {
     const sinceLast = this.lastTickAtMs === null ? 0 : nowMs - this.lastTickAtMs;
     this.lastTickAtMs = nowMs;
-    const elapsed = sinceLast / 1000;
+    // lastTickAtMs keeps tracking while frozen so thawing resumes smoothly
+    // instead of jumping by the whole frozen interval.
+    const elapsed = this.frozen ? 0 : sinceLast / 1000;
     this.clock += elapsed;
     this.waveClock += elapsed * waterDebugTuning.waveSpeed;
 
@@ -625,6 +671,8 @@ export class WaterLayer {
     this.texture?.destroy(true);
     this.retiredTaintTexture?.destroy(true);
     this.taintTexture?.destroy(true);
+    this.retiredNoFoamTexture?.destroy(true);
+    this.noFoamTexture?.destroy(true);
     this.mesh.destroy();
   }
 }

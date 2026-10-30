@@ -317,4 +317,59 @@ describe('useHudDrawer', () => {
       expect(withScroll.currentOffset()).toBe(withoutScroll.currentOffset());
     });
   });
+
+  describe('grabbing the drawer mid-animation (liveOffset)', () => {
+    it('without liveOffset, a gesture seeds from the resting target as before', () => {
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(472));
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(10, 10));
+      expect(drawer.currentOffset()).toBe(10);
+    });
+
+    it('mid-close grab (isOpen false, rendered 200 of 472): the drag continues from the rendered height', () => {
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(472), undefined, () => 200);
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(10, 10));
+      expect(drawer.dragging.value).toBe(true);
+      expect(drawer.currentOffset()).toBe(210);
+    });
+
+    it('mid-open grab (isOpen true, rendered 220 of 472): the drag continues from the rendered height, scroll priority still applies', () => {
+      const el = { scrollTop: 0, scrollHeight: 900, clientHeight: 300 } as HTMLElement;
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(472), () => el, () => 220);
+      drawer.toggle();
+      drawer.onPointerDown(fakeEvent(300, 0));
+      drawer.onPointerMove(fakeEvent(290, 10)); // 10px up, absorbed by scrolling content
+      expect(el.scrollTop).toBe(10);
+      expect(drawer.currentOffset()).toBe(220);
+    });
+
+    it('mid-open grab without scroll priority: an upward drag closes from 220, not 472', () => {
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(472), undefined, () => 220);
+      drawer.toggle();
+      drawer.onPointerDown(fakeEvent(300, 0));
+      drawer.onPointerMove(fakeEvent(290, 10));
+      expect(drawer.currentOffset()).toBe(210);
+    });
+
+    it('mid-close grab does not route the gesture into the content scroller', () => {
+      const el = { scrollTop: 0, scrollHeight: 900, clientHeight: 300 } as HTMLElement;
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(472), () => el, () => 200);
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(-10, 10));
+      expect(el.scrollTop).toBe(0);
+      expect(drawer.currentOffset()).toBe(190);
+    });
+
+    it('ignores an unknown or non-finite live height and clamps to the drawer', () => {
+      const a = useHudDrawer(ref<HudBarPosition>('top'), ref(472), undefined, () => null);
+      a.onPointerDown(fakeEvent(0, 0));
+      a.onPointerMove(fakeEvent(10, 10));
+      expect(a.currentOffset()).toBe(10);
+      const b = useHudDrawer(ref<HudBarPosition>('top'), ref(472), undefined, () => 9999);
+      b.onPointerDown(fakeEvent(0, 0));
+      b.onPointerMove(fakeEvent(-10, 10));
+      expect(b.currentOffset()).toBe(462);
+    });
+  });
 });
