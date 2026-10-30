@@ -5332,6 +5332,27 @@ export class HexMapRenderer {
   }
 
   /**
+   * Slides the map so everything drawn on it moves (dx, dy) screen px: eased over `durationMs`, or
+   * at once when that is 0. The ring menu uses it to bring a tile near an edge to where its ring
+   * fits as a circle (MapView's onHexClick). False when the camera cannot move (a locked camera).
+   */
+  panScreenBy(dx: number, dy: number, durationMs = 0): boolean {
+    if (!this.app || this.lockCamera) return false;
+    if (dx === 0 && dy === 0) return true;
+    const to = { ...this.camera, x: this.camera.x - dx / this.camera.zoom, y: this.camera.y - dy / this.camera.zoom };
+    this.cameraTouched = true;
+    if (durationMs > 0) {
+      this.animateCameraTo(to, durationMs);
+    } else {
+      this.cameraAnim = null;
+      this.camera = to;
+      this.applyCameraTransform();
+      this.rebuildAll();
+    }
+    return true;
+  }
+
+  /**
    * Resolves once the renderer has drawn a frame after this call (at once if it is not mounted). Two animation frames are no
    * guarantee of one: the render loop is paced when its frames are expensive (see `framePacing.ts`), so a spec that has to
    * look at what was drawn - a screenshot after `forceRebuild` - waits for this instead of counting `requestAnimationFrame`s.

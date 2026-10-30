@@ -7,10 +7,13 @@ import {
   CARD_W,
   DOT,
   HUB,
+  LANE1_MAX,
   layoutRing,
   NOTE_H,
   NOTE_W,
   placementMode,
+  ringRoomFor,
+  ringShapes,
   type Rect,
   type RingLayoutResult,
 } from './ringLayout';
@@ -215,53 +218,97 @@ describe('ring layout behaviour', () => {
 // Reported on an Android phone in portrait (~412x915): the six build categories
 // plus ‹ BACK opened as ONE straight row across the screen, the last bubble
 // clipped by the right edge. The area MapView hands a portrait phone is narrow
-// (64px queue handle on the left, the docked card strip at the bottom), and two
-// things gave way: arcPlace's `need` radius was sized for n-1 gaps while spread
-// seats n, so it always failed its own spacing check and only the fixed radii
-// (too small for a narrow wedge) were left; and the column fallback was one run
-// of 7 x 58px = 404px, wider than the ~330px area.
-describe('ring layout on a portrait phone', () => {
+// (64px queue handle on the left, the docked card strip at the bottom).
+// arcPlace's `need` radius was sized for n-1 gaps while spread seats n, so it
+// always failed its own spacing check, and with the fixed radii too small for a
+// narrow wedge the lane fell through to a straight row of 7 x 58px = 404px.
+// The ring is a circle round its tile, always: an arc of one circle when that
+// fits here, and where nothing does, MapView pans the tile to the spot
+// `ringRoomFor` finds.
+describe('ring layout on a phone', () => {
+  // MapView's ringBounds on a portrait phone: left 64, the 64px HUD bar on top (+12), the bottom dock strip (236 + 8) below.
   const PHONES = [
-    // MapView's ringBounds: left 64, the 64px HUD bar on top (+12), the bottom dock strip (236 + 8) below.
-    { name: '412x915', w: 412, h: 915, area: { left: 64, top: 76, right: 396, bottom: 915 - 236 - 8 } },
-    { name: '390x844', w: 390, h: 844, area: { left: 64, top: 76, right: 374, bottom: 844 - 236 - 8 } },
-  ];
-  const CATEGORIES_PLUS_BACK = 7;
+    { name: '360x740', w: 360, h: 740 },
+    { name: '390x844', w: 390, h: 844 },
+    { name: '412x915', w: 412, h: 915 },
+  ].map((p) => ({ ...p, area: { left: 64, top: 76, right: p.w - 16, bottom: p.h - 236 - 8 } }));
+  // Root actions, then six categories (+ ‹ BACK) holding 3, 5, 4, 4, 3 and 2 buildings.
+  const SHAPES = ringShapes(4, [3, 5, 4, 4, 3, 2]);
 
-  it('seats seven bubbles that do not fit any arc in two rows above the tile, inside the area', () => {
-    // A hex low on the screen, just above the dock: the reported "row above the hub".
-    const area = PHONES[0].area;
-    const lane1 = layoutRing({ x: 206, y: 640, area, cardArea: area, lane1Count: CATEGORIES_PLUS_BACK, lane2Count: 0, parentIndex: -1, cardAnchor: null }).lane1;
-    expect(new Set(lane1.map((s) => Math.round(s.y))).size).toBeGreaterThan(1);
-    expect(lane1.every((s) => s.y < 640)).toBe(true);
-    expect(outOfArea([{ x: 206, y: 640, r: HUB / 2 }, ...lane1.map((s) => ({ ...s, r: BUB1 / 2 }))], area)).toEqual([]);
+  const radiusSpread = (spots: { x: number; y: number }[], x: number, y: number) => {
+    const radii = spots.map((s) => Math.hypot(s.x - x, s.y - y));
+    return Math.max(...radii) - Math.min(...radii);
+  };
+
+  it('lists the root ring, the categories and each category opened as the shapes to make room for', () => {
+    expect(ringShapes(3, [2, 0, 4])).toEqual([
+      { lane1Count: 3, lane2Count: 0, parentIndex: -1 },
+      { lane1Count: 4, lane2Count: 0, parentIndex: -1 },
+      { lane1Count: 4, lane2Count: 2, parentIndex: 0 },
+      { lane1Count: 4, lane2Count: 4, parentIndex: 2 },
+    ]);
+    expect(ringShapes(3, [])).toEqual([{ lane1Count: 3, lane2Count: 0, parentIndex: -1 }]);
+  });
+
+  it('says it does not fit wherever the inner lane is not an arc of one circle round the tile, so the map moves the tile', () => {
+    const { area } = PHONES[2];
+    // Includes the reported spot (206, 640: low on the screen, just above the dock) and spots off the area entirely.
+    for (let x = 0; x <= 412; x += 24) {
+      for (let y = 0; y <= 915; y += 24) {
+        const layout = layoutRing({ x, y, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null });
+        if (layout.fits) expect(radiusSpread(layout.lane1, x, y), `${x},${y}`).toBeLessThan(0.5);
+        if (layout.fits) expect(Math.hypot(layout.lane1[0].x - x, layout.lane1[0].y - y), `${x},${y}`).toBeLessThanOrEqual(LANE1_MAX + 0.5);
+      }
+    }
+    expect(layoutRing({ x: 206, y: 640, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null }).fits).toBe(false);
   });
 
   it('seats seven bubbles on an arc when the arc only fits at a radius beyond the fixed ones', () => {
-    // 412x915, a hex near the top-left of the area: only a ~180px radius seats seven, which before was `need` and failed.
-    const area = PHONES[0].area;
-    const lane1 = layoutRing({ x: 120, y: 200, area, cardArea: area, lane1Count: CATEGORIES_PLUS_BACK, lane2Count: 0, parentIndex: -1, cardAnchor: null }).lane1;
-    const radii = lane1.map((s) => Math.hypot(s.x - 120, s.y - 200));
-    expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.5);
+    // 412x915, a hex in the upper left of the area: before, the only radius big enough was `need`, which always failed.
+    const { area } = PHONES[2];
+    const layout = layoutRing({ x: 160, y: 200, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null });
+    expect(layout.fits).toBe(true);
+    expect(radiusSpread(layout.lane1, 160, 200)).toBeLessThan(0.5);
+  });
+
+  it('leaves a tile whose ring already fits where it is', () => {
+    const { area } = PHONES[2];
+    expect(ringRoomFor(230, 360, () => area, SHAPES)).toEqual({ x: 230, y: 360 });
+  });
+
+  it('moves the reported tile (low on the screen, above the dock) up to where its ring fits', () => {
+    const { area } = PHONES[2];
+    expect(layoutRing({ x: 206, y: 640, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null }).fits).toBe(false);
+    const room = ringRoomFor(206, 640, () => area, SHAPES)!;
+    expect(room).not.toBeNull();
+    expect(room.y).toBeLessThan(640);
+    expect(Math.hypot(room.x - 206, room.y - 640)).toBeLessThan(140);
   });
 
   for (const phone of PHONES) {
-    it(`never lines the categories up in one row, nor leaves the area or overlaps, anywhere on a ${phone.name} screen`, () => {
+    it(`opens every shape of the ring as circles, inside the area and clear of each other, from any tile on a ${phone.name} screen`, () => {
       const bad: string[] = [];
-      for (let x = phone.area.left; x <= phone.area.right; x += 12) {
-        for (let y = phone.area.top; y <= phone.area.bottom; y += 12) {
-          // The drilled state: categories + ‹ BACK, with a five-building category open.
-          const layout = layoutRing({ x, y, area: phone.area, cardArea: phone.area, lane1Count: CATEGORIES_PLUS_BACK, lane2Count: 5, parentIndex: 1, cardAnchor: null });
-          const ys = new Set(layout.lane1.map((s) => Math.round(s.y)));
-          const xs = new Set(layout.lane1.map((s) => Math.round(s.x)));
-          const circles = circlesOf(layout, x, y);
-          if (ys.size === 1 || xs.size === 1) bad.push(`${x},${y}: one straight line`);
-          else if (outOfArea(circles, phone.area).length) bad.push(`${x},${y}: outside the area`);
-          else if (smallestGap(circles) < 0) bad.push(`${x},${y}: overlapping`);
+      for (let x = 0; x <= phone.w; x += 56) {
+        for (let y = 0; y <= phone.h; y += 56) {
+          const room = ringRoomFor(x, y, () => phone.area, SHAPES);
+          if (!room) {
+            bad.push(`${x},${y}: no room anywhere`);
+            continue;
+          }
+          for (const shape of SHAPES) {
+            const layout = layoutRing({ x: room.x, y: room.y, area: phone.area, cardArea: phone.area, ...shape, cardAnchor: null });
+            const circles = circlesOf(layout, room.x, room.y);
+            const where = `${x},${y} -> ${room.x},${room.y} ${JSON.stringify(shape)}`;
+            if (!layout.fits) bad.push(`${where}: does not fit`);
+            else if (radiusSpread(layout.lane1, room.x, room.y) >= 0.5) bad.push(`${where}: inner lane not on a circle`);
+            else if (layout.lane2.length && radiusSpread(layout.lane2, room.x, room.y) >= 0.5) bad.push(`${where}: buildings not on a circle`);
+            else if (outOfArea(circles, phone.area).length) bad.push(`${where}: outside the area`);
+            else if (smallestGap(circles) < 0) bad.push(`${where}: overlapping`);
+          }
         }
       }
       expect(bad.slice(0, 10), `${bad.length} bad placements`).toEqual([]);
-    });
+    }, 30_000); // a few hundred tile spots, each searched for room: seconds of pure layout maths, not waiting
   }
 });
 
