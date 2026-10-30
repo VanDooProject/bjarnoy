@@ -101,15 +101,15 @@ describe('buildingLayersForType', () => {
   });
 });
 
-// Backs the tiles docs page's sand look picker: it offers exactly the looks
-// the pack carries, so a missing look has to come back null rather than
-// falling back to the plain tile (which would list it as a duplicate).
+// Backs the tiles docs page's sand look picker: a look resolves to its own
+// frame, and a missing one fails loudly instead of quietly showing the plain
+// tile in its place.
 describe('terrainVariantArt', () => {
   it('resolves a decorated look the pack ships', () => {
-    expect(terrainVariantArt('grasstile', 0)).not.toBeNull();
+    expect(terrainVariantArt('grasstile', 0)).toBeDefined();
   });
 
-  it('returns null for a look the pack does not ship', () => {
-    expect(terrainVariantArt('grasstile', 99)).toBeNull();
+  it('throws for a look the pack does not ship', () => {
+    expect(() => terrainVariantArt('grasstile', 99)).toThrow();
   });
 });

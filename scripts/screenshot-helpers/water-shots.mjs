@@ -12,6 +12,7 @@
 import { chromium } from '../../src/frontend/node_modules/playwright-core/index.mjs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { loginDemoPlayer } from './util.mjs';
 
 const outDir = process.argv[2] || '.';
 const baseUrl = process.argv[3] || 'http://localhost:5183';
@@ -40,6 +41,8 @@ const setFlags = (page, water = {}, fog = {}) =>
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+// The world map stops click HudNav's "World map" button, which needs a player session.
+await loginDemoPlayer(page);
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e.message)));
 page.on('console', (m) => {
@@ -115,6 +118,14 @@ await page.evaluate(() => {
 
 await page.getByRole('button', { name: /world map/i }).first().click();
 await page.waitForTimeout(2500);
+// The world map keeps the camera where the close-up shots left it, out on open
+// water; bring it back to the home settlement so the shots have a coastline.
+await page.evaluate(() => {
+  const store = window.__demoWorld();
+  const home = store.model.getSettlement(store.selectedSettlementId);
+  window.__settlementRenderer().panTo({ q: home.q, r: home.r });
+});
+await page.waitForTimeout(1500);
 await setFlags(page, {}, { maskUnknown: false, maskOutOfSight: false });
 // Shipped: the Graphics squiggles on their own layer above the mesh, with the
 // shader supplying the sea body and a crisp foam rim under them.

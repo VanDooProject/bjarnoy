@@ -94,9 +94,8 @@ const mountainVariant = ref<MountainVariant>('plain');
 const mountainVariantArt = computed<ArtRef>(() => terrainArtByFamily(MOUNTAIN_FAMILY[mountainVariant.value]));
 
 // The sand tile's decorated looks (VanDooProject/3d_assets'
-// scripts/build_sandtile.py, variant000-007). Only the looks the vendored
-// pack actually carries are offered, so the picker stays hidden until the
-// rendered looks are packed and appears by itself once they are.
+// scripts/build_sandtile.py, variant000-007), picked the same way as
+// Mountain's landforms.
 const SAND_LOOKS = [
   { id: 'plain', variant: null },
   { id: 'dunes', variant: 0 },
@@ -108,16 +107,12 @@ const SAND_LOOKS = [
   { id: 'boat', variant: 5 },
   { id: 'sandCastle', variant: 6 },
 ] as const;
-const sandLook = ref<string>('plain');
-const sandLooks = computed(() =>
-  SAND_LOOKS.flatMap((look) => {
-    const art = look.variant === null ? terrainArt('sand') : terrainVariantArt('sandtile', look.variant);
-    return art ? [{ id: look.id, art }] : [];
-  }),
-);
-const sandLookArt = computed<ArtRef>(
-  () => (sandLooks.value.find((look) => look.id === sandLook.value) ?? sandLooks.value[0]!).art,
-);
+type SandLook = (typeof SAND_LOOKS)[number]['id'];
+const sandLook = ref<SandLook>('plain');
+const sandLookArt = computed<ArtRef>(() => {
+  const look = SAND_LOOKS.find((l) => l.id === sandLook.value)!;
+  return look.variant === null ? terrainArt('sand') : terrainVariantArt('sandtile', look.variant);
+});
 
 // id doubles as the anchor/ToC key; terrain is the wire name a building's
 // AllowedTerrain lists (see BuildingCatalogue.cs) — null for the rows that
@@ -281,12 +276,11 @@ const buildingsByTile = computed(() => {
           @update:model-value="mountainVariant = $event"
         />
 
-        <!-- Sand's decorated looks (dunes, driftwood, a wreck, ...) — only
-             shown once the pack carries more than the plain tile. -->
+        <!-- Same idea for Sand's decorated looks (dunes, driftwood, a wreck, ...). -->
         <DocsPicker
-          v-if="tile.sand && sandLooks.length > 1"
+          v-if="tile.sand"
           :label="$t('docs.tiles.sandLookLabel')"
-          :options="sandLooks.map((look) => ({ value: look.id, label: t(`docs.tiles.sandLooks.${look.id}`) }))"
+          :options="SAND_LOOKS.map((look) => ({ value: look.id, label: t(`docs.tiles.sandLooks.${look.id}`) }))"
           :model-value="sandLook"
           @update:model-value="sandLook = $event"
         />
