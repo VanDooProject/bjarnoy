@@ -30,9 +30,15 @@ import type { MessageSchema } from '../../i18n/schema';
 // CTA, so it stays reachable after that nudge is dismissed with "Later"),
 // with logging into an existing realm demoted to the sub-line and the
 // second row of the panel.
-withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean }>(), {
+//
+// `chip`: on a phone, the trigger floats over the bare map rather than
+// sitting on a dark bar (the founded landing's floating header, and the
+// in-game bar's chip under the Trade toggle — see HudNav.vue), so it gets a
+// background of its own, the same chip look as the settlement bubble.
+withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean; chip?: boolean }>(), {
   nudging: false,
   unclaimedRealm: false,
+  chip: false,
 });
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -101,7 +107,7 @@ watch(() => route.fullPath, close);
     <button
       type="button"
       class="trigger"
-      :class="{ 'is-nudging': nudging }"
+      :class="{ 'is-nudging': nudging, 'trigger--chip': chip }"
       aria-haspopup="menu"
       :aria-expanded="open"
       data-testid="returning-player-trigger"
@@ -347,6 +353,10 @@ html[data-hud-motion='reduced'] .trigger.is-nudging {
   }
   .trigger-main.trigger-main--short {
     display: inline-block;
+  }
+  .trigger.trigger--chip {
+    background: rgba(6, 12, 16, 0.94);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
   }
 }
 .trigger-main--short {
