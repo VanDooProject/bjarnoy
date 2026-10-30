@@ -2,7 +2,7 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { enterSettlementAfterOnboarding, waitForMapReady } from './helpers';
+import { buildThroughOpenRing, enterSettlementAfterOnboarding, waitForMapReady } from './helpers';
 
 /**
  * The full onboarding happy path, driven through the real UI end to end:
@@ -76,14 +76,11 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   // --- Guided build 1: Reindeer Herder on a grass hex, via the real ring menu -------
   const grassHex = await settlement.findHex({ terrain: 'grass' });
   await settlement.clickHex(grassHex);
-  const farm = settlement.ring.action('Reindeer Herder');
-  await expect(farm).toBeVisible();
-  await expect(farm).toBeEnabled();
   const buildingsBeforeFarm = await settlement.countBuildings();
-  await farm.click();
+  await buildThroughOpenRing(settlement, 'Resource', 'Reindeer Herder');
   // Read once, not `expect.poll(..., { timeout: 5_000 })`: in demo mode the
   // bubble's click handler places the building synchronously
-  // (LandingView.vue's onRingSelect -> WorldModel.placeBuilding), so the
+  // (LandingView.vue's onRingSelect -> useBuildRing's placeBuildingDemo), so the
   // count is final by the time `click()` resolves - there is nothing to wait
   // for. A poll only added a wall-clock limit on one `page.evaluate` round
   // trip, and on a starved runner a single round trip takes 2-8 s (measured
@@ -93,17 +90,12 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   expect(await settlement.countBuildings()).toBe(buildingsBeforeFarm + 1);
 
   // --- Guided build 2: Lumberjack on a forest hex, via the ring menu -----
-  // LandingView.vue's GUIDED_BUILD_TERRAIN maps Lumberjack -> forest, the
-  // same way Reindeer Herder requires grass — only the tile-matching action is
-  // enabled (see landing.spec.ts's ring-gating test for that regression
-  // coverage). This spec just needs a forest hex to actually place it on.
+  // The ring is the map's own: a forest hex offers the Lumberjack (landing.spec.ts covers what each hex offers).
+  // This spec just needs a forest hex to actually place it on.
   const forestHex = await settlement.findHex({ terrain: 'forest' });
   await settlement.clickHex(forestHex);
-  const lumberjack = settlement.ring.action('Lumberjack');
-  await expect(lumberjack).toBeVisible();
-  await expect(lumberjack).toBeEnabled();
   const buildingsBeforeLumberjack = await settlement.countBuildings();
-  await lumberjack.click();
+  await buildThroughOpenRing(settlement, 'Resource', 'Lumberjack');
   // Synchronous placement, as for the farm above.
   expect(await settlement.countBuildings()).toBe(buildingsBeforeLumberjack + 1);
 

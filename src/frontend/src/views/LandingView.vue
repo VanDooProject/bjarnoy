@@ -26,17 +26,20 @@ import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
 import ResourceTicker, { type ResourceTick } from '../components/onboarding/ResourceTicker.vue';
 import OnboardingBanner from '../components/onboarding/OnboardingBanner.vue';
 import ReturningLoginPanel from '../components/onboarding/ReturningLoginPanel.vue';
+import { useBuildRing, categoriesFor, type BuildableType } from '../composables/useBuildRing';
+import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
   findGuidedTarget,
+  guidedRingStep,
   nextGuidedType,
-  ringNoteReason,
   snapToOfferedPlot,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
 import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { AlreadyFoundedError, useWorldStore } from '../stores/world';
+import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { usePlayerStore } from '../stores/player';
 import { isHudDrawerPending } from '../composables/hudDrawerPendingState';
 import { useAuthStore } from '../stores/auth';
@@ -48,7 +51,7 @@ import {
   HEX_TARGET_RADIUS_PX,
   RING_BUBBLE_TARGET_RADIUS_PX,
 } from '../lib/map/guidanceArrowGeometry';
-import type { Terrain, Tile } from '../lib/map/types';
+import type { Tile } from '../lib/map/types';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -59,25 +62,6 @@ import { HUD_COMPACT_QUERY, TOUCH_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
-
-// Issue: the onboarding build step used to pop BuildingModal — a single
-// "Build here" button with no type picker, hardcoded to 'reindeerherder' (live) or
-// 'hut' (demo). Reindeer Herder requires grass (BuildingCatalogue), so a click on any
-// forest/mountain tile in the fresh border silently failed (TerrainNotAllowed,
-// only console.error'd) with the modal just sitting there — "can't actually
-// select the correct building". Ring menu, same as SettlementView's, fixes
-// that: a flat ring (no nested categories — this is the "simplified" version)
-// with only the guided type matching the *clicked tile's own terrain*
-// enabled (Reindeer Herder needs grass, Lumberjack needs forest — BuildingCatalogue),
-// everything else visibly disabled. Enabling both regardless of terrain
-// would just reintroduce the same silent-failure bug for whichever one
-// doesn't fit the tile actually clicked.
-type OnboardingBuildType = 'reindeerherder' | 'lumberjack' | 'tower' | 'fishinghut';
-const GUIDED_BUILD_TERRAIN: Partial<Record<OnboardingBuildType, Terrain>> = {
-  reindeerherder: 'grass',
-  lumberjack: 'forest',
-};
-const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['reindeerherder', 'lumberjack', 'tower', 'fishinghut'];
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -279,6 +263,8 @@ const {
 });
 
 onMounted(loadLanding);
+// The ring's costs, build times and prerequisites come from the building catalogue, like on the map.
+onMounted(() => void useBuildingCatalogueStore().load());
 
 // A founded player's canvas exists as soon as the settlement is restored, but
 // the fog quads stay opaque until the mask arrives — say so instead of showing
@@ -386,16 +372,15 @@ function onContinueToSettlement() {
   router.push('/settlement');
 }
 
-// Ring menu state for the onboarding build step — mirrors SettlementView's
-// own ringScreen/selectedCoord, but flat (one ring, no build-categories /
-// build-buildings drill-down): onboarding only ever offers a handful of
-// types, so there's no need for that hierarchy here.
+// Ring menu state for the onboarding build step: the same two-lane ring the settlement map shows (Build ->
+// categories -> buildings), fed by the same useBuildRing model, so it offers exactly what the map offers on the hex.
 const ringScreen = ref<{ x: number; y: number } | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
-const ringTerrain = ref<Terrain | null>(null);
-// Design handoff "2a" frame 3: each lane1 bubble's screen spot, keyed by
-// action id — from RingMenu's own `layout` emit, so the pointer aims at
-// exactly where the bubble is actually drawn.
+const ringTile = ref<Tile | null>(null);
+const ringError = ref<string | null>(null);
+const { categories: ringCategories, canBuildHere, offersBuilding, placeBuildingDemo } = useBuildRing(ringTile, ringCoord);
+// Every ring bubble's screen spot (the Build hub, categories, buildings), keyed by id - from RingMenu's own
+// `layout` emit, so the pointer aims at exactly where the bubble is actually drawn.
 const ringLaneSpots = ref<Record<string, { x: number; y: number }>>({});
 
 const isMobile = useIsMobile();
@@ -459,58 +444,46 @@ watch(isHudDrawerOpen, (open) => {
   if (open) queueDrawerOpen.value = false;
 });
 
+// Root of the ring: Build, offered only on a hex that takes something (the map's rule; no dead button).
 const ringActions = computed<RingAction[]>(() =>
-  ONBOARDING_BUILD_RING.map((type) => {
-    const requiredTerrain = GUIDED_BUILD_TERRAIN[type];
-    const guided = requiredTerrain !== undefined;
-    const fitsTile = guided && requiredTerrain === ringTerrain.value;
-    return {
-      id: type,
-      label: buildingName(type),
-      disabled: !fitsTile,
-      hint: !guided
-        ? t('landing.ring.finishGuidedFirst')
-        : !fitsTile
-          ? t('landing.ring.needsTerrain', { terrain: terrainName(requiredTerrain) })
-          : undefined,
-    };
-  }),
+  canBuildHere.value ? [{ id: 'build', label: t('hud.ringMenu.actions.build') }] : [],
 );
 
-// The 2a ring's hub names the tile the menu is anchored to; onboarding has no
-// building on it yet, so it's the bare terrain plus the hex coordinate.
-const ringTerrainLabel = computed(() => (ringTerrain.value ? terrainName(ringTerrain.value) : ''));
-const ringCoordLabel = computed(() => (ringCoord.value ? `HEX ${ringCoord.value.q}, ${ringCoord.value.r}` : ''));
+// The hub names the tile the menu is anchored to: its bare terrain plus the hex coordinate.
+const ringTerrainLabel = computed(() => (ringTile.value ? terrainName(ringTile.value.terrain) : ''));
+const ringCoordLabel = computed(() =>
+  ringCoord.value ? t('hud.ringMenu.hexCoord', { q: ringCoord.value.q, r: ringCoord.value.r }) : '',
+);
 
-// Design handoff "2a": a persistent "why it's dim" note instead of a
-// hover-only tooltip that reads as an error. ringNoteReason (pure, tested)
-// decides which guided type fits this hex's terrain; this just translates
-// that into copy.
-const ringNote = computed(() => {
-  const terrain = ringTerrain.value;
-  if (!terrain) return null;
-  const reason = ringNoteReason(terrain);
-  if (reason.kind === 'neitherFits') {
-    return {
-      title: t('landing.ring.dimNoteTitle'),
-      body: t('landing.ring.neitherFitsBody', { hexTerrain: terrainName(terrain) }),
-    };
-  }
-  return {
-    title: t('landing.ring.dimNoteTitle'),
-    body: t('landing.ring.dimNoteBody', {
-      otherBuilding: buildingName(reason.dim),
-      otherTerrain: terrainName(GUIDED_TERRAIN_FOR[reason.dim]),
-      hexTerrain: terrainName(terrain),
-      fitBuilding: buildingName(reason.fit),
-    }),
-  };
-});
+// Same phone docking and bounds rules as the map's ring (lib/map/ringDock.ts), measured against the window.
+const ringDock = computed(() =>
+  ringScreen.value
+    ? ringDockFor({
+        compact: isCompactHudLanding.value,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        x: ringScreen.value.x,
+      })
+    : null,
+);
+const ringBounds = computed(() =>
+  boundsClearOfDock(
+    {
+      left: 16,
+      top: hudInsetTopPxLanding.value + 12,
+      right: window.innerWidth - 16,
+      bottom: window.innerHeight - (hudInsetBottomPxLanding.value + 16),
+    },
+    ringDock.value,
+    { width: window.innerWidth, height: window.innerHeight, insetBottom: hudInsetBottomPxLanding.value },
+  ),
+);
 
 function closeRing() {
   ringScreen.value = null;
   ringCoord.value = null;
-  ringTerrain.value = null;
+  ringTile.value = null;
+  ringError.value = null;
 }
 
 function showInvalidClickMessage(message: string) {
@@ -568,7 +541,7 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
 // Frame 2: the landfall banner is the moment right after founding, before
 // the player has even opened the ring for the first guided building — gone
 // the instant they do (the ring/note/pointer take over telling the story),
-// so it never overlaps the "why it's dim" note or the completion banner.
+// so it never overlaps the completion banner.
 const showLandfallBanner = computed(
   () => player.hasFoundedSettlement && world.hud.placedBuildingTypes.length <= 1 && !ringScreen.value,
 );
@@ -583,26 +556,30 @@ const showLandfallBanner = computed(
 // and "Click this plot" over an empty canvas point at nothing.
 const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') !== 'terrain');
 
+/** The open ring's next guided step, with its label; null when the next guided building isn't offered on this hex. */
+function ringStepTarget(): { spot: { x: number; y: number }; label: string } | null {
+  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  if (!type) return null;
+  const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
+  if (!step) return null;
+  if (step.kind === 'building') return { spot: step.spot, label: t('landing.pointer.buildThis', { building: buildingName(type) }) };
+  if (step.kind === 'build') return { spot: step.spot, label: t('landing.pointer.openBuild') };
+  const category = ringCategories.value.find((c) => c.id === step.id);
+  return { spot: step.spot, label: t('landing.pointer.openCategory', { category: category?.label ?? '' }) };
+}
+
 const pointerTarget = computed(() => {
   if (joinBlocked.value) return null;
   // Player logout/login gate: ReturningLoginPanel replaces the founding
   // hero, so "click this plot" guidance pointing at a plot the gate is
   // covering would be actively misleading.
   if (showReturningLoginGate.value) return null;
-  if (ringScreen.value) {
-    // Frame 3: "This one fits {terrain}" — aimed at whichever guided
-    // building's bubble is actually enabled for this hex's terrain. No
-    // pointer at all for the (rare) hex that fits neither (sand, mountain);
-    // there's nothing correct to point at.
-    if (!ringTerrain.value) return null;
-    const reason = ringNoteReason(ringTerrain.value);
-    if (reason.kind !== 'oneFits') return null;
-    const spot = ringLaneSpots.value[reason.fit];
-    if (!spot) return null;
+  const ringStep = ringScreen.value ? ringStepTarget() : null;
+  if (ringStep) {
     return {
       mode: 'screen' as const,
-      screen: spot,
-      label: t('landing.pointer.thisOneFits', { terrain: terrainName(GUIDED_TERRAIN_FOR[reason.fit]) }),
+      screen: ringStep.spot,
+      label: ringStep.label,
       angle: 30,
       // A ring bubble is a real, fixed-size target (BUB1, 52px across), not
       // a point: without its radius the tip stops 9px from the bubble's
@@ -678,7 +655,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // full settlement view's job once onboarding hands off to it), so any
   // other click (the longhouse, a rival's tile, open water) just closes
   // whatever ring is open rather than opening some other UI for it.
-  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea' && tile.terrain !== 'lake') {
+  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && categoriesFor(tile).length > 0) {
     if (!withinBuildableRange(coord)) {
       showInvalidClickMessage(t('landing.invalidClick.beyondClaim'));
       closeRing();
@@ -686,7 +663,8 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     }
     ringCoord.value = coord;
     ringScreen.value = screen;
-    ringTerrain.value = tile.terrain;
+    ringTile.value = tile;
+    ringError.value = null;
     return;
   }
   closeRing();
@@ -716,24 +694,29 @@ function onResourceTickExpire(id: number) {
   resourceTicks.value = resourceTicks.value.filter((tick) => tick.id !== id);
 }
 
-async function onRingSelect(type: string) {
+// Choosing a building goes through the same place/queue path as the map's ring (useBuildRing's demo placement,
+// the world store's optimistic queue); only the onboarding extras (resource tick, checklist) live here.
+async function onRingSelect(id: string) {
   const coord = ringCoord.value;
-  if (!world.selectedSettlementId || !coord) return;
+  if (!world.selectedSettlementId || !coord || !offersBuilding(id)) return;
+  const type = id as BuildableType;
+  const cost = ringCategories.value.flatMap((c) => c.buildings).find((b) => b.id === type)?.cost;
   if (DEMO_MODE) {
-    world.model.placeBuilding(world.selectedSettlementId, coord, type as OnboardingBuildType);
+    if (!placeBuildingDemo(type, coord)) {
+      // No optimistic phase in the demo: the ring stays open with the reason in it, like the map's.
+      ringError.value = t('hud.ringMenu.errors.couldNotQueueBuild');
+      return;
+    }
     canvasRef.value?.renderer?.forceRebuild();
-    world.syncHud();
     closeRing();
     if (type === 'reindeerherder' || type === 'lumberjack') fireResourceTick(type, coord);
     return;
   }
-  // Always close, win or lose — matching SettlementView's own onRingSelect
-  // (see its `buildType` call). A failed order used to leave the ring open
-  // with only a console.error, which is the "ring fails to close" bug: the
-  // player had no way to tell the click did anything at all.
+  // Always close, win or lose - matching the map's ring. A failed order used to leave the ring open
+  // with only a console.error, which is the "ring fails to close" bug.
   closeRing();
   try {
-    await world.queueBuildLive(type, coord);
+    await world.queueBuildOptimistic(type, coord, cost);
     if (type === 'reindeerherder' || type === 'lumberjack') fireResourceTick(type, coord);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
@@ -1059,17 +1042,19 @@ watch(
       <QueueDrawer v-if="isMobile" v-model:open="queueDrawerOpen" @select="onQueueSelect" />
       <BuildQueuePanel v-else @select="onQueueSelect" />
     </template>
-    <!-- Flat: no `categories`, so the ring stays one lane deep — onboarding
-         offers a handful of types, not a hierarchy. -->
     <RingMenuHost>
     <RingMenu
       v-if="ringScreen"
       :x="ringScreen.x"
       :y="ringScreen.y"
       :actions="ringActions"
+      :categories="ringCategories"
       :terrain-label="ringTerrainLabel"
       :coord-label="ringCoordLabel"
-      :note="ringNote"
+      :bounds="ringBounds"
+      :stock="world.hud.available"
+      :error="ringError"
+      :dock="ringDock"
       @select="onRingSelect"
       @close="closeRing"
       @outside-pointer-down="closeRing"

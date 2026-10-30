@@ -59,7 +59,7 @@ export const CARD_W = 200;
  */
 export const CARD_H = 240;
 /**
- * The onboarding ring's "why it's dim" note (design handoff "2a", frame 3)
+ * The ring's error note (a rejected build's message)
  * — a short muted explanation, not the full building-detail card, so it
  * gets its own (much smaller) footprint rather than reusing CARD_W/CARD_H:
  * a 200x222 clearance box around a ~186x60 note would push it needlessly
@@ -439,7 +439,7 @@ export interface RingLayoutResult {
   /** Dashed line from the hub to a lane displaced away from the tile. */
   leader: { x: number; y: number; len: number; deg: number } | null;
   card: { x: number; y: number } | null;
-  /** The flat-ring "why it's dim" note's position, or null when not requested/applicable. */
+  /** The error note's position, or null when not requested/applicable. */
   note: { x: number; y: number } | null;
   mode: string;
   /**
@@ -553,7 +553,7 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
   if (!card && lane1CardAnchor !== null && lane1CardAnchor !== undefined && lane1[lane1CardAnchor]) {
     card = cardSpot(x, y, lane1[lane1CardAnchor].ang, cardArea, everything());
   }
-  // The note (the flat onboarding ring's "why it's dim", or a rejected
+  // The note (a rejected
   // build's message) has no bubble to anchor on, so it docks clear of the
   // ring wherever there's room — unless a card is already up.
   if (wantsNote && !card) note = cardSpot(x, y, base, cardArea, everything(), NOTE_W, NOTE_H);

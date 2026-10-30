@@ -124,7 +124,7 @@ const props = withDefaults(
     y: number;
     /** Root actions. The action with id `build` is the gateway to `categories`. */
     actions: RingAction[];
-    /** Build categories; empty for a flat, one-level ring (LandingView's onboarding). */
+    /** Build categories (the map's and the onboarding's ring both use them). */
     categories?: RingCategory[];
     /** Hub line 1 at root level, e.g. "Grassland". */
     terrainLabel?: string;
@@ -165,15 +165,6 @@ const props = withDefaults(
      * of floating it beside the ring. Null keeps the floating desktop card.
      */
     dock?: RingDock | null;
-    /**
-     * Design handoff "2a": a persistent, muted explanation shown beside a
-     * flat ring (no `categories`) — e.g. why the one disabled guided
-     * building doesn't fit this hex. Explains the *hex*, not the click, so
-     * it reads as information rather than an error. Ignored once the ring
-     * has categories: a drilled-in ring shows its own per-building detail
-     * card instead.
-     */
-    note?: { title: string; body: string } | null;
   }>(),
   {
     categories: () => [],
@@ -184,7 +175,6 @@ const props = withDefaults(
     stock: undefined,
     error: null,
     dock: null,
-    note: null,
   },
 );
 
@@ -197,9 +187,8 @@ const emit = defineEmits<{
   // back so the caller can turn that one gesture straight into a map drag —
   // a plain `close` on click only fires on release, too late for that.
   outsidePointerDown: [event: PointerEvent];
-  // Design handoff "2a": the screen spot of every current lane1 bubble, by
-  // action id — GuidancePointer.vue aims at the enabled guided building's
-  // spot for the onboarding ring (frame 3, "This one fits {terrain}").
+  // The screen spot of every current bubble (both lanes), by action, category or
+  // building id — GuidancePointer.vue aims at the guided next step through them.
   layout: [spots: Record<string, { x: number; y: number }>];
   // The circle the open ring covers on screen (hub to the far edge of the
   // farthest bubble, outer lane included); re-emitted as the buildings lane
@@ -348,7 +337,7 @@ const layout = computed(() =>
     // A docked card lives at a screen edge, so the ring doesn't make room for it.
     cardAnchor: props.dock ? null : hoveredIndex.value,
     lane1CardAnchor: props.dock ? null : hoveredLane1Index.value,
-    wantsNote: !!props.note || !!props.error,
+    wantsNote: !!props.error,
   }),
 );
 
@@ -373,19 +362,6 @@ const lane1 = computed(() =>
 /** ‹ BACK owns the reserved last slot, and stays full size even when the rest collapse to dots. */
 const backSpot = computed(() => (atRoot.value ? null : (layout.value.lane1[props.categories.length] ?? null)));
 
-// Re-emitted whenever a bubble's placement actually changes (opening,
-// re-anchoring, an edge-case reflow) — not a one-off at mount, since the
-// caller's pointer needs to track the same spot the bubble is drawn at.
-watch(
-  lane1,
-  (entries) => {
-    const spots: Record<string, { x: number; y: number }> = {};
-    for (const entry of entries) spots[entry.item.id] = { x: entry.x, y: entry.y };
-    emit('layout', spots);
-  },
-  { immediate: true },
-);
-
 const lane2 = computed(() => {
   const category = activeCategory.value;
   const parent = category ? layout.value.lane1[props.categories.indexOf(category)] : null;
@@ -399,6 +375,22 @@ const lane2 = computed(() => {
     color: category.color,
   }));
 });
+
+// Re-emitted whenever a bubble's placement actually changes (opening,
+// re-anchoring, an edge-case reflow) — not a one-off at mount, since the
+// caller's pointer needs to track the same spot the bubble is drawn at.
+// Covers both lanes (category and building ids never collide), so a pointer can
+// follow the player from the Build hub through a category to a building.
+watch(
+  [lane1, lane2],
+  ([inner, outer]) => {
+    const spots: Record<string, { x: number; y: number }> = {};
+    for (const entry of inner) spots[entry.item.id] = { x: entry.x, y: entry.y };
+    for (const entry of outer) spots[entry.building.id] = { x: entry.x, y: entry.y };
+    emit('layout', spots);
+  },
+  { immediate: true },
+);
 
 const footprint = computed(() => {
   const backIndex = atRoot.value ? -1 : props.categories.length;
@@ -829,7 +821,6 @@ function onBackdropPointerDown(e: PointerEvent) {
         disabled: entry.ban,
         'is-locked': entry.state === 'locked',
         'is-waiting': entry.state === 'waiting',
-        soft: !!note,
         armed: armed === entry.item.id,
         dot: layout.collapsed,
       }"
@@ -978,16 +969,6 @@ function onBackdropPointerDown(e: PointerEvent) {
     >
       <div class="note-body">{{ error }}</div>
     </div>
-
-    <div
-      v-if="note && !error && lane2.length === 0 && layout.note"
-      class="ring-note"
-      data-testid="ring-note"
-      :style="{ left: `${layout.note.x}px`, top: `${layout.note.y}px`, width: `${NOTE_W}px` }"
-    >
-      <div class="note-title">{{ note.title }}</div>
-      <div class="note-body">{{ note.body }}</div>
-    </div>
   </div>
 </template>
 
@@ -1129,11 +1110,6 @@ function onBackdropPointerDown(e: PointerEvent) {
   border: 1.5px dashed rgba(226, 112, 95, 0.55);
   color: var(--text);
   background: rgba(8, 18, 26, 0.9);
-}
-/* The onboarding ring's "why it's dim" design keeps its soft, dimmed look. */
-.ring-bubble.disabled.soft {
-  opacity: 0.4;
-  border: 1px solid color-mix(in oklab, var(--tint) 50%, transparent);
 }
 .ring-bubble.is-locked {
   cursor: not-allowed;
