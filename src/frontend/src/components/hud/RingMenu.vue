@@ -734,7 +734,9 @@ function onBackdropPointerDown(e: PointerEvent) {
 </script>
 
 <template>
-  <div ref="rootEl" class="ring-backdrop" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
+  <!-- `data-swapping`: a layer change is mid-flight (old layer leaving, new one arriving), so the bubbles on screen
+       are not yet the final set. -->
+  <div ref="rootEl" class="ring-backdrop" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
     <div
       v-if="layout.showLane1Track"
       class="ring-track"
