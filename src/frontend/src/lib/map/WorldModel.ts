@@ -322,6 +322,11 @@ export class WorldModel {
    * the same way it does for `isWastedRevealed`.
    */
   riverRevision = 0;
+  /**
+   * Bumped whenever bog or giant hexes are added or replaced (`addBogTiles`, `setBogTiles`, `tagGiantHex`). The
+   * renderer keys its cached bog edge geometry on it (`rebuildBogEdges`): a hex's edges depend on its neighbours.
+   */
+  overlayRevision = 0;
   /** The island bogland known so far (live mode: every island at once; demo mode: island by island), by coordinate — see `setBogTiles`. */
   private bogByHex = new Map<string, BogTile>();
   /** The lake decorations (fish weir, boats) the buildings on the shores ask for, by coordinate — see `lakeProps.ts` and `recomputeLakeProps`. */
@@ -451,6 +456,7 @@ export class WorldModel {
     for (const tile of this.bogByHex.values()) this.terrain.delete(terrainKey(tile.q, tile.r));
     for (const tile of this.bogByHex.values()) this.tiles.delete(coordKey(tile));
     this.bogByHex = new Map();
+    this.overlayRevision++;
     this.addBogTiles(tiles);
     this.lakePropsDirty = true;
   }
@@ -462,6 +468,7 @@ export class WorldModel {
    */
   private addBogTiles(tiles: BogTile[]) {
     if (tiles.length === 0) return;
+    this.overlayRevision++;
     const world = { seed: this.seed, generation: this.generation };
     for (const bog of tiles) {
       const key = coordKey(bog);
@@ -2080,6 +2087,7 @@ export class WorldModel {
     orientation: TileOrientation,
     part: GiantPart,
   ) {
+    this.overlayRevision++;
     const tile = this.getTile(coord.q, coord.r);
     if (tile.terrain === 'forest') {
       tile.terrain = 'grass';

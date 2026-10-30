@@ -23,6 +23,7 @@ import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
 import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
+import RingMenuHost from '../components/hud/RingMenuHost.vue';
 import RingMenu, { type RingAction, type RingBuilding, type RingCard, type RingCategory, type RingInfo } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
@@ -74,7 +75,6 @@ import {
   type RingAvailability,
 } from '../lib/map/ringAvailability';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
-import { retractRing } from '../lib/map/ringMotion';
 import type { ResourceKind, Resources, Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
@@ -650,18 +650,8 @@ watch(isHudDrawerOpen, (open) => {
   if (open) queueDrawerOpen.value = false;
 });
 
-// X3: closing the ring (Escape, an outside click, the context menu, a build)
-// does not unmount it at once: <Transition> holds the DOM while the bubbles
-// are pulled into the hub and the hub fades (or, after a confirmed build, the
-// chosen bubble drops onto the hex). `retractRing` makes the leaving ring
-// click-through first, so a map drag started on it still begins immediately.
-function onRingLeave(el: Element, done: () => void) {
-  const finish = () => {
-    clearRingFootprint();
-    done();
-  };
-  retractRing(el as HTMLElement).then(finish, finish);
-}
+// X3: closing the ring does not unmount it at once; RingMenuHost holds the DOM
+// for the retract animation and tells us when it is done (`retracted`).
 
 // A mousedown on the ring's own backdrop (not a bubble) closes the ring and
 // hands back the same PointerEvent so the map can start dragging from it
@@ -1488,7 +1478,7 @@ async function onRingSelect(id: string) {
 
 // W3 optimistic build + X2 drop. Choosing a building in the ring closes the
 // ring at once (the chosen bubble drops onto the hex, the rest retract, see
-// RingMenu's `data-dropping` and `onRingLeave`) instead of waiting for the
+// RingMenu's `data-dropping` and `RingMenuHost`) instead of waiting for the
 // server: the hex gets a "…" construction dial through a pending queue entry
 // (`world.queueBuildOptimistic`), and only a refusal undoes it — the dial
 // shakes and fades and a chip under the hex carries the server's message. The
@@ -1573,51 +1563,6 @@ function closeTrainModal() {
 
 function describeActionError(err: unknown, fallback: string): string {
   return apiErrorMessage(err, fallback);
-}
-
-// Demo mode places the chosen building instantly; live mode queues that
-// same type against the backend's real catalogue (BuildingCatalogue.cs) —
-// "hut" is demo-only (BuildingModal's default when there's no picker; the
-// backend has no matching catalogue entry) and is expected to be rejected
-// server-side if ever picked in live mode, same as any other invalid
-// placement (wrong terrain, insufficient longhouse level, ...).
-/** Whether the placement/queue attempt actually went through. */
-async function buildType(type: BuildableType): Promise<boolean> {
-  if (!world.selectedSettlementId || !selectedCoord.value) return false;
-  actionError.value = null;
-  if (DEMO_MODE) {
-    const placed = world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
-    if (placed) canvasRef.value?.renderer?.forceRebuild();
-    else actionError.value = t('hud.ringMenu.errors.couldNotQueueBuild');
-    return placed;
-  }
-  modalBusy.value = true;
-  actionError.value = null;
-  try {
-    await world.queueBuildLive(type, selectedCoord.value);
-    return true;
-  } catch (err) {
-    console.error('Failed to queue building against the backend', err);
-    // Surface the rejection's detail — NoFreeSlot's premium hint included
-    // (issue #158) — rather than leaving the player to guess why nothing
-    // happened.
-    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild'));
-    return false;
-  } finally {
-    modalBusy.value = false;
-  }
-}
-
-// BuildingModal's own "Build here" button (opened via the ring's
-// Details/Info action on an empty tile) has no category/type picker of its
-// own, so it keeps the previous default of a hut.
-async function build() {
-  await buildType('hut');
-  // Only dismiss the modal on success — a rejection (e.g. NoFreeSlot) needs
-  // to stay visible via actionError rather than being closed out from under
-  // the player before they can read it.
-  if (actionError.value) return;
-  closeModal();
 }
 
 async function upgrade() {
@@ -1706,7 +1651,7 @@ async function upgrade() {
       <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
-      <Transition :css="false" @leave="onRingLeave">
+      <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
           :x="ringScreen.x"
@@ -1725,7 +1670,7 @@ async function upgrade() {
           @outside-pointer-down="onRingOutsidePointerDown"
           @footprint="onRingFootprint"
         />
-      </Transition>
+      </RingMenuHost>
       <BuildingModal
         v-if="selectedTile && !ringScreen && !trainModalOpen"
         :tile="selectedTile"
@@ -1734,7 +1679,6 @@ async function upgrade() {
         :busy="modalBusy"
         :error="actionError"
         @close="closeModal"
-        @build="build"
         @upgrade="upgrade"
       />
       <TrainingModal
@@ -1755,7 +1699,7 @@ async function upgrade() {
            mode-agnostic. -->
       <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       <ArmyPanel v-if="!isMobile" />
-      <Transition :css="false" @leave="onRingLeave">
+      <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
           :x="ringScreen.x"
@@ -1774,7 +1718,7 @@ async function upgrade() {
           @outside-pointer-down="onRingOutsidePointerDown"
           @footprint="onRingFootprint"
         />
-      </Transition>
+      </RingMenuHost>
     </template>
     <BuildRefusalChip
       v-if="buildRefusal"

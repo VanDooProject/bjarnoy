@@ -114,3 +114,24 @@ export function pulseHandle(handle: Element): Promise<void> {
     { duration: HANDLE_PULSE_MS },
   );
 }
+
+export const DRAWER_SLIDE_MS = 220;
+
+/**
+ * The phone drawer column (its handle docks to the left edge) appears or goes
+ * away as the queue fills / empties: it slides in from, or back out to, the
+ * edge instead of popping. `drawer` is the fixed `.queue-drawer` element;
+ * its own transform (closed offset, or a drag) is the other end of the slide.
+ */
+export function slideDrawer(drawer: Element, direction: 'in' | 'out'): Promise<void> {
+  if (!motionEnabled()) return Promise.resolve();
+  const resting = getComputedStyle(drawer).transform;
+  const here = !resting || resting === 'none' ? 'none' : resting;
+  const away = { transform: 'translateX(-100%)', opacity: 0 };
+  const rest = { transform: here, opacity: 1 };
+  return animate(drawer, direction === 'out' ? [rest, away] : [away, rest], {
+    duration: DRAWER_SLIDE_MS,
+    easing: direction === 'out' ? 'ease-in' : 'cubic-bezier(.2,.9,.3,1.1)',
+    fill: 'both',
+  });
+}

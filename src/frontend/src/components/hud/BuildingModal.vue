@@ -19,7 +19,6 @@ import { useWorldStore } from '../../stores/world';
 import {
   buildingStatsAt,
   buildingUpgradeCost,
-  type BuildingKind,
   type BuildingOutput,
   type BuildingModifier,
   SHRINE_BUILDING_TYPES,
@@ -43,7 +42,7 @@ const props = defineProps<{
   /** Why the last build/upgrade attempt was rejected by the backend, or null once dismissed by a fresh attempt. */
   error?: string | null;
 }>();
-const emit = defineEmits<{ close: []; build: []; upgrade: [] }>();
+const emit = defineEmits<{ close: []; upgrade: [] }>();
 
 // Issue #53: shrine slots by level, mirroring ShrineCatalogue.Slots.cs.
 function shrineSlotsFor(level: number): number {
@@ -299,12 +298,14 @@ const currentStats = computed(() =>
     : undefined,
 );
 
-// "hut" is the fixed default a fresh build here places (see
-// SettlementView.vue's build()); an existing building instead costs its own
-// next level.
-const upgradeType = computed<BuildingKind>(() => props.tile.buildingType ?? 'hut');
+// Only an existing building has an action here (upgrade); a fresh build
+// is placed from the ring menu, so an empty tile has no cost to show.
 const upgradeLevel = computed(() => level.value + 1);
-const upgradeCost = computed<ResourceLine>(() => buildingUpgradeCost(upgradeType.value, upgradeLevel.value));
+const upgradeCost = computed<ResourceLine>(() =>
+  props.tile.buildingType
+    ? buildingUpgradeCost(props.tile.buildingType, upgradeLevel.value)
+    : { wood: 0, stone: 0, food: 0, iron: 0 },
+);
 
 const costLine = computed(() =>
   (Object.keys(upgradeCost.value) as (keyof ResourceLine)[])
@@ -350,9 +351,7 @@ const actionLabel = computed(() => {
   if (props.busy) return t('hud.buildingModal.queuing');
   if (noSlotNoQueue.value) return t('hud.buildingModal.noFreeSlotPremium');
   if (noFreeSlot.value) return t('hud.buildingModal.queueBuild');
-  return props.tile.buildingType
-    ? t('hud.buildingModal.upgradeToLevel', { level: level.value + 1 })
-    : t('hud.buildingModal.buildHere');
+  return t('hud.buildingModal.upgradeToLevel', { level: level.value + 1 });
 });
 </script>
 
@@ -482,10 +481,8 @@ const actionLabel = computed(() => {
         <div v-if="mine && buildable && waitingOrderHere" class="actions">
           <p class="desc queued-note">{{ t('hud.buildingModal.queuedNote') }}</p>
         </div>
-        <div v-else-if="mine && buildable" class="actions">
-          <div class="cost">
-            {{ tile.buildingType ? t('hud.buildingModal.upgradeCost') : t('hud.buildingModal.buildCost') }}: {{ costLine }}
-          </div>
+        <div v-else-if="mine && buildable && tile.buildingType" class="actions">
+          <div class="cost">{{ t('hud.buildingModal.upgradeCost') }}: {{ costLine }}</div>
           <p v-if="!canAfford" class="desc afford-note">
             {{ t('hud.buildingModal.notEnoughResources') }}
           </p>
@@ -494,14 +491,10 @@ const actionLabel = computed(() => {
           </i18n-t>
           <p v-if="error" class="desc afford-note">{{ error }}</p>
           <button
-            v-if="tile.buildingType"
             class="primary"
             :disabled="busy || !canAfford || noSlotNoQueue"
             @click="emit('upgrade')"
           >
-            {{ actionLabel }}
-          </button>
-          <button v-else class="primary" :disabled="busy || !canAfford || noSlotNoQueue" @click="emit('build')">
             {{ actionLabel }}
           </button>
         </div>

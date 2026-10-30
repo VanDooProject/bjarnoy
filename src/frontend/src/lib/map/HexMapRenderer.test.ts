@@ -129,11 +129,20 @@ describe('worldLayerOrder', () => {
     // strokes) — settlement mode draws rivers as sprite tile art baked into
     // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
     // 'rivers' to its own order.
-    const expectedLength = { world: 10, settlement: 9 } as const;
+    const expectedLength = { world: 11, settlement: 10 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);
       expect(order).toHaveLength(expectedLength[mode]);
+    }
+  });
+
+  it('draws the bog/grass edge right over the ground art, under everything else in settlement mode', () => {
+    // bogEdge.ts: the border only touches the ground, so the water mesh, realm
+    // borders, hover outline and every topping (reeds, trees, buildings) draw over it.
+    expect(indexIn('settlement', 'bogEdges')).toBe(indexIn('settlement', 'terrainBase') + 1);
+    for (const above of ['water', 'borders', 'hover', 'terrainTop']) {
+      expect(indexIn('settlement', 'bogEdges')).toBeLessThan(indexIn('settlement', above));
     }
   });
 

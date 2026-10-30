@@ -2148,3 +2148,26 @@ describe('WorldModel palisade and gate', () => {
     expect(model.standingPalisadeWalls().size).toBe(1);
   });
 });
+
+// The renderer caches each bog hex's edge geometry, which depends on its neighbours, and throws the cache away when
+// this revision moves (HexMapRenderer.rebuildBogEdges) — so it must move whenever bog or giant hexes arrive.
+describe('overlayRevision', () => {
+  const bog: BogTile = { q: 3, r: 4, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] };
+
+  it('moves when live bog tiles arrive or are replaced', () => {
+    const model = new WorldModel();
+    const before = model.overlayRevision;
+    model.setBogTiles([bog]);
+    const afterFirst = model.overlayRevision;
+    expect(afterFirst).toBeGreaterThan(before);
+    model.setBogTiles([]);
+    expect(model.overlayRevision).toBeGreaterThan(afterFirst);
+  });
+
+  it('moves when a giant is placed', () => {
+    const model = new WorldModel();
+    const before = model.overlayRevision;
+    model.setGiants([{ family: 'giantmountain', anchor: { q: 10, r: 10 }, orientation: 'SE' }]);
+    expect(model.overlayRevision).toBeGreaterThan(before);
+  });
+});
