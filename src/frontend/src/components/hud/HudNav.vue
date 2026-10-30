@@ -11,7 +11,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
-import { useHudNavEntries } from '../../composables/useHudNavEntries';
+import { useHudNavEntries, type HudNavEntry } from '../../composables/useHudNavEntries';
 import { useLogout } from '../../composables/useLogout';
 import { profileLocation } from '../../lib/profileRoute';
 import { DEMO_MODE } from '../../config';
@@ -52,7 +52,7 @@ const auth = useAuthStore();
 const player = usePlayerStore();
 const reports = useReportsStore();
 const { logout } = useLogout();
-const { entries } = useHudNavEntries();
+const { primary, secondary } = useHudNavEntries();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #40 phase 3: a lightweight "new reports" badge. HudNav is mounted
@@ -114,6 +114,12 @@ function toggleAccountMenu() {
 function closeAccountMenu() {
   accountMenuOpen.value = false;
 }
+// The Reports unread count stays visible on the closed menu's trigger.
+const unreadBadge = computed(() => secondary.value.find((e) => e.id === 'reports')?.badge ?? 0);
+function onMenuEntryClick(entry: HudNavEntry, close: () => void) {
+  close();
+  entry.go();
+}
 function goToProfile() {
   closeAccountMenu();
   router.push(profileLocation(router));
@@ -146,14 +152,13 @@ watch(() => route.fullPath, closeAccountMenu);
 <template>
   <nav class="hud-nav" :class="{ 'hud-nav--no-drawer': !hasDrawer, 'hud-nav--with-resources': hasResourceBar }">
     <button
-      v-for="entry in entries"
+      v-for="entry in primary"
       :key="entry.id"
       class="link"
-      :class="{ active: entry.active, 'reports-link': entry.id === 'reports' }"
+      :class="{ active: entry.active }"
       @click="entry.go()"
     >
       {{ t(entry.labelKey) }}
-      <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
     </button>
     <LocaleSwitcher />
     <!-- Logged in, the avatar opens a small account dropdown — Profile
@@ -174,9 +179,29 @@ watch(() => route.fullPath, closeAccountMenu);
         @click="toggleAccountMenu"
       >
         {{ initials }}
+        <span v-if="unreadBadge > 0" class="badge avatar-badge" data-testid="account-menu-badge">{{ unreadBadge }}</span>
       </button>
       <div v-if="accountMenuOpen" class="panel menu account-panel" role="menu" data-testid="account-menu">
         <div class="notch" />
+        <!-- These entries live in the avatar menu for now and will be
+             refactored to a place of their own later, like the onboarding
+             quests were. -->
+        <div v-if="secondary.length" class="menu-entries">
+          <button
+            v-for="entry in secondary"
+            :key="entry.id"
+            type="button"
+            role="menuitem"
+            class="row row-entry"
+            :class="{ active: entry.active }"
+            :data-testid="`menu-entry-${entry.id}`"
+            @click="onMenuEntryClick(entry, closeAccountMenu)"
+          >
+            {{ t(entry.labelKey) }}
+            <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
+          </button>
+          <div class="divider" role="separator" />
+        </div>
         <button type="button" role="menuitem" class="row" data-testid="account-menu-profile" @click="goToProfile">
           {{ t('hud.accountMenu.profile') }}
         </button>
@@ -186,6 +211,30 @@ watch(() => route.fullPath, closeAccountMenu);
       </div>
     </div>
     <ReturningPlayerMenu v-else :nudging="showProfileNudge" :unclaimed-realm="unclaimedRealm">
+      <template #trigger-badge>
+        <span v-if="unreadBadge > 0" class="badge avatar-badge" data-testid="returning-player-badge">{{ unreadBadge }}</span>
+      </template>
+      <template #entries="{ close }">
+        <!-- These entries live in the avatar menu for now and will be
+             refactored to a place of their own later, like the onboarding
+             quests were. -->
+        <div v-if="secondary.length" class="menu-entries">
+          <button
+            v-for="entry in secondary"
+            :key="entry.id"
+            type="button"
+            role="menuitem"
+            class="row row-entry"
+            :class="{ active: entry.active }"
+            :data-testid="`menu-entry-${entry.id}`"
+            @click="onMenuEntryClick(entry, close)"
+          >
+            {{ t(entry.labelKey) }}
+            <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
+          </button>
+          <div class="divider" role="separator" />
+        </div>
+      </template>
       <template #nudge>
         <ProfileNudge v-if="showProfileNudge" />
       </template>
@@ -224,18 +273,6 @@ watch(() => route.fullPath, closeAccountMenu);
   opacity: 0.4;
   cursor: not-allowed;
 }
-/* Finding #15: this must be declared *before* the `@media` block below, not
-   after it — both this and the media query's `.link { display: none }` are
-   a single class selector (equal specificity), so whichever is later in the
-   stylesheet wins the cascade. Declared afterward (as it used to be), this
-   unconditional `inline-flex` always beat the media query's `none` even at
-   phone widths, keeping "Reports" visibly inline instead of collapsing into
-   the drawer with every other link. */
-.reports-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
 /* Mobile HUD bar rework: these same destinations are duplicated into the
    pull-down drawer (components/hud/MobileHudDrawer.vue), which is the only
    thing that fits in the compact bar's own width — the inline links here
@@ -245,7 +282,8 @@ watch(() => route.fullPath, closeAccountMenu);
    so this only ever collapses the links where a drawer actually exists to
    reach them from — see the `hasDrawer` prop's own comment above. */
 @media (max-width: 768px), (max-height: 500px) {
-  .hud-nav:not(.hud-nav--no-drawer) .link {
+  .hud-nav:not(.hud-nav--no-drawer) .link,
+  .hud-nav:not(.hud-nav--no-drawer) .menu-entries {
     display: none;
   }
 }
@@ -291,6 +329,14 @@ watch(() => route.fullPath, closeAccountMenu);
   font-weight: 800;
   letter-spacing: 0;
   text-transform: none;
+}
+/* The unread-reports count on the closed menu's trigger (avatar circle or
+   returning-player button): a corner badge, same look as the row's. */
+.avatar-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  pointer-events: none;
 }
 .avatar-button {
   border: none;
@@ -363,5 +409,25 @@ watch(() => route.fullPath, closeAccountMenu);
 .row:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--gold);
+}
+.menu-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.row-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.row-entry.active {
+  color: var(--gold);
+}
+.divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--panel-border);
+  flex: none;
 }
 </style>

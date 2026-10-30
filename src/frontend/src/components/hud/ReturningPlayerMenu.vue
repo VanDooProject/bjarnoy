@@ -127,9 +127,15 @@ watch(() => route.fullPath, close);
            LandingView.vue's `.signup-facts-sep`. -->
       <span class="caret" aria-hidden="true"></span>
       <span v-if="nudging" class="nudge-dot" aria-hidden="true" />
+      <!-- Caller-provided corner badge (HudNav: the unread reports count). -->
+      <slot name="trigger-badge" />
     </button>
     <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
       <div class="notch" />
+      <!-- Caller-provided rows at the top of the menu (HudNav: the nav
+           entries that have no room inline), same `.row` look as the rows
+           below. `close` lets a row dismiss the panel. -->
+      <slot name="entries" :close="close" />
       <button
         v-if="unclaimedRealm"
         type="button"

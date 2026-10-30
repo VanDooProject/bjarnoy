@@ -90,6 +90,21 @@ export async function gotoWorldMap(page: Page): Promise<void> {
 }
 
 /**
+ * Clicks a secondary HUD destination (Leaderboards, Messages, Reports,
+ * Alliance, Docs, Landing) on a desktop-width bar: those entries live in the
+ * avatar's dropdown — the account menu when logged in, the returning-player
+ * menu otherwise — not inline in `.hud-nav`. `label` is the visible row text
+ * (a Reports row may carry an unread count after it). One helper so no spec
+ * has to know where the entries live; phone specs use the drawer instead.
+ */
+export async function clickHudMenuEntry(page: Page, label: string): Promise<void> {
+  const account = page.getByTestId('account-menu-trigger');
+  const trigger = (await account.isVisible()) ? account : page.getByTestId('returning-player-trigger');
+  await trigger.click();
+  await page.locator('.hud-nav [role="menuitem"]', { hasText: label }).click();
+}
+
+/**
  * Clicks the landing page's starter plot and waits for the store to actually
  * hold a settlement. Assumes the landing page is already mounted
  * (`waitForMapReady`). Split out of `foundSettlement` so specs that stop at
