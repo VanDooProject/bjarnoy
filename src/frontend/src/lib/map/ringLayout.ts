@@ -155,19 +155,30 @@ function arcPlace(
   radii: number[],
   arcs: number[],
   avoid: Circle[],
+  maxRadius = Infinity,
 ): Spot[] | null {
   const pitch = size + 6;
   for (const arc of arcs) {
-    const need = n > 1 ? ((n - 1) * pitch) / (arc * D2R) : 0;
-    const candidates = [...radii, need].filter((r) => r >= need - 0.5).sort((a, b) => a - b);
+    // `spread` seats neighbours `arc / n` apart (capped the way spread caps it), so the radius
+    // has to give that angle a chord of one pitch. Sizing it for `n - 1` gaps instead left
+    // neighbours only (n-1)/n of a pitch apart: the `need` radius always failed minSep, and
+    // on a phone-narrow area (where the fixed radii are too small for any arc) every arc failed
+    // and the lane fell through to a straight row, wider than the screen.
+    const step = (Math.min(arc, n * 52) / n) * D2R;
+    const need = n > 1 ? pitch / (2 * Math.sin(step / 2)) : 0;
+    const candidates = [...radii, need].filter((r) => r >= need - 0.5 && r <= maxRadius).sort((a, b) => a - b);
     for (const r of candidates) {
       for (const offset of [0, 18, -18, 36, -36]) {
-        const spots = spread(n, base + offset, arc).map((a) => {
+        // Built one bubble at a time so a spot off the area rejects the candidate at once: ringRoomFor
+        // tries this at hundreds of tile spots per tap.
+        const spots: Spot[] = [];
+        for (const a of spread(n, base + offset, arc)) {
           const [x, y] = pt(px, py, a, r);
-          return { x, y, ang: a };
-        });
+          if (!fits(x, y, size / 2 + 4, area)) break;
+          spots.push({ x, y, ang: a });
+        }
         if (
-          spots.every((s) => fits(s.x, s.y, size / 2 + 4, area)) &&
+          spots.length === n &&
           minSep(spots) >= size + 2 &&
           clearance(spots, size, avoid) >= 4
         ) {
@@ -256,18 +267,54 @@ function columnPlace(
   return allowBest ? best : null;
 }
 
-/** The inner lane: an even circle when there's room, an arc or column when there isn't. */
+/** Farthest the inner lane may orbit the tile: past this it stops reading as the tile's own ring. */
+export const LANE1_MAX = 140;
+
+/** `n` bubbles evenly round the whole tile, the first straight up. */
+function fullCircle(n: number, px: number, py: number, r: number): Spot[] {
+  return Array.from({ length: n }, (_, i) => {
+    const ang = -90 + (360 * i) / n;
+    const [x, y] = pt(px, py, ang, r);
+    return { x, y, ang };
+  });
+}
+
+/**
+ * The inner lane on a circle round the tile, or null when no circle or arc of it fits `area` here.
+ *
+ * An even circle when there's room; near an edge an arc opening toward the free space, widest
+ * first, then narrower ones further out; and when even the narrowest wedge would need a radius
+ * past LANE1_MAX (a phone-narrow area), wider arcs reaching round the tile, up to the full circle.
+ * Always an arc of one circle centred on the tile - never a row or a column.
+ */
+export function lane1Arc(n: number, px: number, py: number, area: Rect): Spot[] | null {
+  if (!isCramped(px, py, area)) return fullCircle(n, px, py, LANE1);
+  const base = baseAngle(px, py, area);
+  return arcPlace(
+    n,
+    base,
+    px,
+    py,
+    area,
+    BUB1,
+    [LANE1, 84, 100, 118, LANE1_MAX],
+    [210, 170, 130, 100, 80, 64, 50, 240, 270, 300, 330, 360],
+    [],
+    LANE1_MAX,
+  );
+}
+
+/**
+ * The inner lane. Where no arc round the tile fits (`layoutRing(...).fits` is then false), a
+ * caller that can move the map moves the tile first - MapView does, via `ringRoomFor` - so what
+ * follows is only for one that cannot: an arc further out, then a column clear of the edge.
+ */
 export function lane1Spots(n: number, px: number, py: number, area: Rect): Spot[] {
-  if (!isCramped(px, py, area)) {
-    return Array.from({ length: n }, (_, i) => {
-      const ang = -90 + (360 * i) / n;
-      const [x, y] = pt(px, py, ang, LANE1);
-      return { x, y, ang };
-    });
-  }
+  const arc = lane1Arc(n, px, py, area);
+  if (arc) return arc;
   const base = baseAngle(px, py, area);
   return (
-    arcPlace(n, base, px, py, area, BUB1, [LANE1, 84, 100, 118, 140], [210, 170, 130, 100, 80, 64, 50], []) ??
+    arcPlace(n, base, px, py, area, BUB1, [LANE1, 84, 100, 118, LANE1_MAX], [210, 170, 130, 100, 80, 64, 50], []) ??
     columnPlace(n, base, px, py, area, BUB1, HUB / 2 + BUB1 / 2 + 12, [], true)!
   );
 }
@@ -395,6 +442,12 @@ export interface RingLayoutResult {
   /** The flat-ring "why it's dim" note's position, or null when not requested/applicable. */
   note: { x: number; y: number } | null;
   mode: string;
+  /**
+   * Both lanes sit on arcs round the tile, at full size, inside `area`: false when the inner lane
+   * fell back to an unchecked circle, or the buildings to a column or a collapsed inner lane.
+   * `ringRoomFor` finds where the tile has to be for this to hold.
+   */
+  fits: boolean;
 }
 
 function nearest(px: number, py: number, spots: { x: number; y: number }[]) {
@@ -411,7 +464,9 @@ function nearest(px: number, py: number, spots: { x: number; y: number }[]) {
 export function layoutRing(input: RingLayoutInput): RingLayoutResult {
   const { x, y, area, cardArea, lane1Count, lane2Count, parentIndex, cardAnchor, lane1CardAnchor, wantsNote } = input;
   const base = baseAngle(x, y, area);
-  const lane1 = lane1Spots(lane1Count, x, y, area);
+  const arc1 = lane1Arc(lane1Count, x, y, area);
+  const lane1 = arc1 ?? lane1Spots(lane1Count, x, y, area);
+  let lane2Fits = true;
 
   const lane1Near = nearest(x, y, lane1);
   const showLane1Track = lane1Near.d <= LANE1 + BUB1;
@@ -442,12 +497,18 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
     const parentAngle = lane1[parentIndex].ang;
     // The reserved back slot is in here too: children must clear it as well.
     const laneCircles = (r: number) => lane1.map((s) => ({ x: s.x, y: s.y, r }));
-    const place = (avoid: Circle[]) =>
+    const arcs = (avoid: Circle[]) =>
       arcPlace(lane2Count, parentAngle, x, y, area, BUB2, [LANE2, 140, 162], [90, 68, 50], avoid) ??
-      arcPlace(lane2Count, base, x, y, area, BUB2, [LANE2, 140, 162, 184], [120, 90, 68], avoid) ??
-      columnPlace(lane2Count, base, x, y, area, BUB2, HUB / 2 + BUB1 + BUB2 / 2 + 22, avoid);
+      arcPlace(lane2Count, base, x, y, area, BUB2, [LANE2, 140, 162, 184], [120, 90, 68], avoid);
+    const place = (avoid: Circle[]) =>
+      arcs(avoid) ?? columnPlace(lane2Count, base, x, y, area, BUB2, HUB / 2 + BUB1 + BUB2 / 2 + 22, avoid);
 
-    let spots = place([hub, ...laneCircles(BUB1 / 2)]);
+    const full = [hub, ...laneCircles(BUB1 / 2)];
+    let spots = arcs(full);
+    if (!spots) {
+      lane2Fits = false;
+      spots = place(full);
+    }
     if (!spots) {
       // Nowhere for two full lanes (a tile deep under a HUD panel): collapse
       // the inner lane to dots rather than drawing both lanes on top of each
@@ -507,7 +568,87 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
     card,
     note,
     mode: placementMode(x, y, area),
+    fits: arc1 !== null && lane2Fits && !collapsed,
   };
+}
+
+/** One state a tile's ring can be in: its root actions, or the categories with one of them open. */
+export interface RingShape {
+  lane1Count: number;
+  lane2Count: number;
+  parentIndex: number;
+}
+
+/**
+ * The shapes a tile's ring can take: the root actions, the categories (plus ‹ BACK) with nothing
+ * open, and each category open - so a tile moved to fit them stays fit however deep the player drills.
+ */
+export function ringShapes(rootCount: number, categoryBuildingCounts: number[]): RingShape[] {
+  const shapes: RingShape[] = [{ lane1Count: rootCount, lane2Count: 0, parentIndex: -1 }];
+  if (categoryBuildingCounts.length) {
+    const lane1Count = categoryBuildingCounts.length + 1;
+    shapes.push({ lane1Count, lane2Count: 0, parentIndex: -1 });
+    categoryBuildingCounts.forEach((count, i) => {
+      if (count > 0) shapes.push({ lane1Count, lane2Count: count, parentIndex: i });
+    });
+  }
+  return shapes;
+}
+
+/**
+ * Where the tile has to sit on screen for every one of its ring's `shapes` to fit as arcs round
+ * it (`layoutRing(...).fits`): the tile's own spot when it already does, otherwise the nearest
+ * spot on a `stepPx` grid over the area that does - so the caller can pan the map that far
+ * instead of the ring deforming into rows. `areaAt` gives the ring's area with the tile at a
+ * given x (a landscape phone docks the card on the side away from the tile). Null when no spot
+ * inside the area fits at all.
+ */
+export function ringRoomFor(
+  x: number,
+  y: number,
+  areaAt: (x: number, y: number) => Rect,
+  shapes: RingShape[],
+  stepPx = 12,
+): { x: number; y: number } | null {
+  // The inner lane is what rules most spots out, and checking it alone is cheap: those shapes first.
+  const ordered = [...shapes].sort((p, q) => p.lane2Count - q.lane2Count || q.lane1Count - p.lane1Count);
+  const fitsAt = (px: number, py: number) => {
+    const area = areaAt(px, py);
+    if (px < area.left || px > area.right || py < area.top || py > area.bottom) return false;
+    return ordered.every((s) =>
+      s.lane2Count === 0
+        ? lane1Arc(s.lane1Count, px, py, area) !== null
+        : layoutRing({ x: px, y: py, area, cardArea: area, ...s, cardAnchor: null }).fits,
+    );
+  };
+  if (fitsAt(x, y)) return { x, y };
+  const a = areaAt(x, y);
+  const nearestFirst = (spots: { x: number; y: number }[]) => {
+    const seen = new Set<string>();
+    return spots
+      .filter((s) => !seen.has(`${s.x},${s.y}`) && !!seen.add(`${s.x},${s.y}`))
+      .map((s) => ({ ...s, d: Math.hypot(s.x - x, s.y - y) }))
+      .sort((p, q) => p.d - q.d);
+  };
+  // Where a ring fits is, near enough, the area shrunk by some margin on each axis (a full circle
+  // needs about LANE1 + BUB1 clear all round; an arc less toward its open side). So first the
+  // tile clamped into the area shrunk by each pair of margins - a couple of hundred spots at most,
+  // nearest first - and only if none of those fits, every spot of the area on a `stepPx` grid.
+  const halfW = (a.right - a.left) / 2;
+  const halfH = (a.bottom - a.top) / 2;
+  const clamped: { x: number; y: number }[] = [];
+  for (let mx = 0; mx <= halfW; mx += stepPx) {
+    for (let my = 0; my <= halfH; my += stepPx) {
+      clamped.push({ x: clamp(x, a.left + mx, a.right - mx), y: clamp(y, a.top + my, a.bottom - my) });
+    }
+  }
+  for (const s of nearestFirst(clamped)) if (fitsAt(s.x, s.y)) return { x: s.x, y: s.y };
+  const grid: { x: number; y: number }[] = [];
+  for (let px = a.left; px <= a.right; px += stepPx) {
+    for (let py = a.top; py <= a.bottom; py += stepPx) grid.push({ x: px, y: py });
+  }
+  for (const s of nearestFirst(grid)) if (fitsAt(s.x, s.y)) return { x: s.x, y: s.y };
+  return null;
 }
 
 /** Width of `word` in em (at a 1px font size), letter spacing not included. */

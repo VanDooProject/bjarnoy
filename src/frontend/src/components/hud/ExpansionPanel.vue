@@ -23,6 +23,7 @@ import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
+import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
 
 const world = useWorldStore();
@@ -46,7 +47,26 @@ const foundingConvoys = computed(() => convoys.value.filter((a) => a.mission ===
 // Founding-dispatch form.
 const destQ = ref(0);
 const destR = ref(0);
-const provisions = ref(200);
+// The founding convoy is always 3 settler crews (`SETTLER_CREWS_PER_CONVOY`);
+// the backend rejects provisions above their combined `foodCarryCapacity`
+// (`ProvisionsExceedCarryCapacity`), so the form defaults to and is capped at
+// that total, read from the unit catalogue rather than hard-coded.
+const SETTLER_CREWS_PER_CONVOY = 3;
+const unitCatalogue = useUnitCatalogueStore();
+const maxProvisions = computed(
+  () => (unitCatalogue.byType['settlercrew']?.foodCarryCapacity ?? 0) * SETTLER_CREWS_PER_CONVOY,
+);
+const provisionsInput = ref<number | null>(null);
+const provisions = computed(() =>
+  Math.min(Math.max(provisionsInput.value ?? maxProvisions.value, 0), maxProvisions.value),
+);
+function onProvisionsInput(e: Event) {
+  const el = e.target as HTMLInputElement;
+  const raw = el.valueAsNumber;
+  if (Number.isNaN(raw)) return;
+  provisionsInput.value = Math.min(Math.max(raw, 0), maxProvisions.value);
+  if (provisionsInput.value !== raw) el.value = String(provisionsInput.value);
+}
 const retargetFor = ref<string | null>(null);
 
 async function refresh() {
@@ -68,6 +88,7 @@ async function refresh() {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
+  void unitCatalogue.load();
   refresh();
   timer = setInterval(refresh, 5000);
 });
@@ -208,8 +229,15 @@ watch(visible, (isVisible) => {
         <input v-model.number="destR" type="number" aria-label="Target R" />
       </div>
       <div class="expansion-form-row">
-        <label>{{ t('hud.expansionPanel.provisions') }}</label>
-        <input v-model.number="provisions" type="number" min="0" aria-label="Provisions" />
+        <label>{{ t('hud.expansionPanel.provisions', { max: maxProvisions }) }}</label>
+        <input
+          :value="provisions"
+          type="number"
+          min="0"
+          :max="maxProvisions"
+          aria-label="Provisions"
+          @input="onProvisionsInput"
+        />
       </div>
       <button type="button" class="expansion-button" :disabled="busy" @click="dispatchFounding">
         {{ t('hud.expansionPanel.foundHere') }}

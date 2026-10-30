@@ -76,6 +76,8 @@ import {
   type RingAvailability,
 } from '../lib/map/ringAvailability';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
+import { ringRoomFor, ringShapes } from '../lib/map/ringLayout';
+import { motionEnabled } from '../lib/motion';
 import type { ResourceKind, Resources, Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
@@ -577,29 +579,30 @@ onUnmounted(() => stageObserver?.disconnect());
 // Phone layout: the ring's detail card docks to a screen edge instead of
 // floating beside the ring — a bottom strip in portrait, a side panel away
 // from the tapped hex in landscape (lib/map/ringDock.ts).
-const ringDock = computed(() =>
-  ringScreen.value
-    ? ringDockFor({
-        compact: isMobile.value,
-        width: stage.value.w,
-        height: stage.value.h,
-        x: ringScreen.value.x,
-        insetLeft: hudInsetLeftPx.value,
-      })
-    : null,
-);
-const ringBounds = computed(() =>
-  boundsClearOfDock(
+function ringDockAt(x: number) {
+  return ringDockFor({
+    compact: isMobile.value,
+    width: stage.value.w,
+    height: stage.value.h,
+    x,
+    insetLeft: hudInsetLeftPx.value,
+  });
+}
+/** The ring's area with the tile at screen x (the landscape dock goes on the side away from it). */
+function ringBoundsAt(x: number) {
+  return boundsClearOfDock(
     {
       left: isMobile.value ? 64 : 268, // 48px handle + 16px gap
       top: hudInsetTopPx.value + 12,
       right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 348),
       bottom: stage.value.h - (hudInsetBottomPx.value + 16),
     },
-    ringDock.value,
+    ringDockAt(x),
     { width: stage.value.w, height: stage.value.h, insetLeft: hudInsetLeftPx.value, insetBottom: hudInsetBottomPx.value },
-  ),
-);
+  );
+}
+const ringDock = computed(() => (ringScreen.value ? ringDockAt(ringScreen.value.x) : null));
+const ringBounds = computed(() => ringBoundsAt(ringScreen.value?.x ?? stage.value.w / 2));
 // The card gets its own, roomier area on purpose. What `ringBounds` leaves
 // over once every panel is reserved is about 308x404 at 1280x720 — too small
 // to hold the 200x222 card anywhere clear of the ring, so the card would end
@@ -668,7 +671,6 @@ function onRingOutsidePointerDown(e: PointerEvent) {
 }
 
 type BuildableType =
-  | 'hut'
   | 'reindeerherder'
   | 'farm'
   | 'tower'
@@ -755,7 +757,6 @@ const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
 };
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
-    { id: 'housing', buildings: [{ type: 'hut' }] },
     {
       id: 'resource',
       buildings: [
@@ -797,7 +798,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
   ],
   sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_CATEGORY],
-  mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
+  // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
+  mountain: [],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
@@ -819,7 +821,6 @@ const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.val
 // Category tints, carried into each category's own buildings so a building
 // bubble reads as belonging to the category it fanned out of.
 const CATEGORY_COLORS: Record<string, string> = {
-  housing: 'var(--gold)',
   resource: 'var(--food)',
   military: 'var(--iron)',
   defense: 'var(--stone)',
@@ -1046,34 +1047,32 @@ const rootActions = computed<RingAction[]>(() => {
     return actions;
   }
   if (isMineTile.value) {
-    const buildableSea = (tile.terrain !== 'sea' && tile.terrain !== 'lake') || tile.isCoastalWater;
     // A giant hex is never buildable, claimed or not — its own art fully
     // occupies the ground there (mirrors WorldModel.placeBuilding's own
-    // `tile.giant` refusal). Checked ahead of the open-water hint since a
-    // giant is always land, so `buildableSea` alone would otherwise show
-    // "Build" as available on it.
+    // `tile.giant` refusal).
     const blockedByGiant = !!tile.giant;
     // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood) —
     // mirrors WorldModel.placeBuilding / the server's HexOccupiedByCamp rule.
     const blockedByCamp = !!tile.camp && !tile.buildingType && !campHexBuildable(tile.camp);
-    // A bog shore, mouth or spring takes no building at all (only plain moss, a creek and a half shore do).
-    const bareBog = tile.terrain === 'bog' && categoriesFor(tile).length === 0;
+    // A hex that offers no category at all (bog shore, mouth or spring, a mountain while quarries are off, a lake, open water)
+    // has no Build action — nothing in the ring that could only fail (docs/design/ui-guidelines.md, rule 1).
+    const canBuildHere = categoriesFor(tile).length > 0;
     return [
       detailsAction(tile),
-      {
-        id: 'build',
-        label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea || blockedByGiant || blockedByCamp || bareBog,
-        hint: blockedByGiant
-          ? t('hud.ringMenu.actions.giantOccupied')
-          : blockedByCamp
-            ? t('hud.ringMenu.actions.campOccupied')
-            : bareBog
-              ? t('hud.ringMenu.actions.bogNothingHere')
-              : buildableSea
-                ? undefined
-                : t('hud.ringMenu.actions.openWater'),
-      },
+      ...(canBuildHere
+        ? [
+            {
+              id: 'build',
+              label: t('hud.ringMenu.actions.build'),
+              disabled: blockedByGiant || blockedByCamp,
+              hint: blockedByGiant
+                ? t('hud.ringMenu.actions.giantOccupied')
+                : blockedByCamp
+                  ? t('hud.ringMenu.actions.campOccupied')
+                  : undefined,
+            },
+          ]
+        : []),
       ...huntActions(tile),
       sendArmyAction(tile),
     ];
@@ -1103,7 +1102,7 @@ function formatOutput(output: BuildingOutput): string {
     case 'storageCapacity':
       return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
     case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount, explored: output.explored });
   }
 }
 function formatModifier(modifier: BuildingModifier): string {
@@ -1387,8 +1386,29 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
-  ringScreen.value = screen;
+  ringScreen.value = roomForRing(screen);
   actionError.value = null;
+}
+
+/** How long the map slides to make room for a ring (instant under reduced motion). */
+const RING_ROOM_PAN_MS = 220;
+/**
+ * The ring always opens as a circle round its tile. Near an edge (or the phone's docked card)
+ * where no circle fits - with every category it can drill into open in turn - the map slides
+ * the tile to the nearest spot where one does, and the ring opens there, rather than the ring
+ * deforming. Returns where the ring opens.
+ */
+function roomForRing(screen: { x: number; y: number }): { x: number; y: number } {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer) return screen;
+  const shapes = ringShapes(
+    rootActions.value.length,
+    ringCategories.value.map((c) => c.buildings.length),
+  );
+  const target = ringRoomFor(screen.x, screen.y, (x) => ringBoundsAt(x), shapes);
+  if (!target || (target.x === screen.x && target.y === screen.y)) return screen;
+  const moved = renderer.panScreenBy(target.x - screen.x, target.y - screen.y, motionEnabled() ? RING_ROOM_PAN_MS : 0);
+  return moved ? target : screen;
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex

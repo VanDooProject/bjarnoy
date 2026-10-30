@@ -82,7 +82,7 @@ export function nextGuidedType(placedTypes: readonly Tile['buildingType'][]): Gu
 /**
  * The terrain each guided building needs — kept here (rather than only in
  * LandingView.vue's own GUIDED_BUILD_TERRAIN, which also covers the ring's
- * cosmetic-disabled types like quarry/tower) since it's a small, stable
+ * cosmetic-disabled tower) since it's a small, stable
  * domain fact both the ring and the map pointer need to agree on.
  */
 export const GUIDED_BUILD_TERRAIN: Record<GuidedBuildType, Terrain> = {

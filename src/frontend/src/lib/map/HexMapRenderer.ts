@@ -620,9 +620,9 @@ export interface ArmyOverlayFrame {
 /**
  * What the settlement view's hover tooltip needs, plus screen position to
  * anchor it. Issue #16 "better hover" wants a richer card for buildings
- * (title + level, an output rate, a modifier line, worker count, "click to
- * open") like the mockup's "Crop farm LEVEL 2 / Output +72 food/h /
- * Workers 8/8 / CLICK TO OPEN". None of that is
+ * (title + level, an output rate, a modifier line, "click to open") like
+ * the mockup's "Crop farm LEVEL 2 / Output +72 food/h / CLICK TO OPEN"
+ * (its "Workers 8/8" line was dropped: the backend has no workers). None of that is
  * tracked per-building anywhere (the backend/WorldModel only know a
  * settlement's *aggregate* rates, not a single building's own output) so
  * `stats` below is derived deterministically from the building's
@@ -3077,8 +3077,8 @@ export class HexMapRenderer {
    * See the HoverInfo doc comment: building stats aren't tracked
    * per-building anywhere, so these are derived deterministically from the
    * building's own type/level/neighbours purely so the hover card has
-   * something concrete to show, matching the mockup's "Output +240 food/h /
-   * Workers 8/8" for a farm. The formulas themselves live in
+   * something concrete to show, matching the mockup's "Output +240 food/h"
+   * for a farm. The formulas themselves live in
    * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
   private buildingStats(tile: Tile, level: number): BuildingLevelStats | undefined {
@@ -5332,6 +5332,27 @@ export class HexMapRenderer {
     this.camera = { ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
     this.applyCameraTransform();
     this.rebuildAll();
+  }
+
+  /**
+   * Slides the map so everything drawn on it moves (dx, dy) screen px: eased over `durationMs`, or
+   * at once when that is 0. The ring menu uses it to bring a tile near an edge to where its ring
+   * fits as a circle (MapView's onHexClick). False when the camera cannot move (a locked camera).
+   */
+  panScreenBy(dx: number, dy: number, durationMs = 0): boolean {
+    if (!this.app || this.lockCamera) return false;
+    if (dx === 0 && dy === 0) return true;
+    const to = { ...this.camera, x: this.camera.x - dx / this.camera.zoom, y: this.camera.y - dy / this.camera.zoom };
+    this.cameraTouched = true;
+    if (durationMs > 0) {
+      this.animateCameraTo(to, durationMs);
+    } else {
+      this.cameraAnim = null;
+      this.camera = to;
+      this.applyCameraTransform();
+      this.rebuildAll();
+    }
+    return true;
   }
 
   /**

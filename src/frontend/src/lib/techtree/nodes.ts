@@ -31,7 +31,7 @@ function formatOutput(output: BuildingOutput): string {
     case 'storageCapacity':
       return `+${output.amount} storage capacity`;
     case 'visionRing':
-      return `Vision +${output.amount} ring`;
+      return `Vision radius ${output.amount} (explored ${output.explored})`;
   }
 }
 

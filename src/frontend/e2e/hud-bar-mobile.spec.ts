@@ -32,9 +32,9 @@ import { SettlementPage } from './pages';
 test.use({ mapLayers: { water: false } });
 
 /**
- * ResourceBar.vue mounts a second, hidden `.resource-bar` alongside the real
- * one purely to measure whether full notation would fit (`data-measure` on
- * its root) — off-screen (`position: fixed`, far outside the viewport) and
+ * ResourceBar.vue mounts hidden `.resource-bar` clones alongside the real
+ * one purely to measure whether a row would fit (`data-measure` on their
+ * roots: the collapsed phone row, and on desktop the full desktop row) — off-screen (`position: fixed`, far outside the viewport) and
  * `aria-hidden`/`inert`, but still real DOM sharing the same classes, so
  * every locator below that means "the pills the player actually sees" has
  * to exclude it explicitly or it silently doubles counts and pulls
@@ -447,14 +447,27 @@ test.describe('mobile HUD bar', () => {
     await expect(page).toHaveURL('/profile');
   });
 
-  test('drawer account section: anonymous shows the log-in entry (the trigger itself stays out of this bar)', async ({ page }) => {
+  // The anonymous trigger has no room in the bar itself: it floats as a chip
+  // below it (under the Trade toggle), and steps aside while the drawer is
+  // open. Its entries (log in, world list) live only on that chip, not in
+  // the drawer too.
+  test('anonymous: the trigger floats below the bar, and the drawer does not repeat its entries', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page); // anonymous — no loginTestUser
 
-    await expect(page.locator('.hud-bar .returning-player-menu')).toBeHidden();
+    const trigger = page.getByTestId('returning-player-trigger');
+    await expect(trigger).toBeVisible();
+    const [triggerBox, barBox] = [await trigger.boundingBox(), await page.locator('header.hud-bar').boundingBox()];
+    expect(triggerBox!.y, 'the trigger sits in the bar').toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
     await page.locator('.hud-grip').click();
-    await expect(page.locator('[data-testid="drawer-account-login"]')).toBeVisible();
-    await expect(page.locator('[data-testid="drawer-account-worlds"]')).toBeVisible();
+    await expect(trigger).toBeHidden();
+    await expect(page.locator('.hud-drawer .drawer-links .link').first()).toBeVisible();
+    await expect(page.locator('.hud-drawer [data-testid^="drawer-account-"]')).toHaveCount(0);
+
+    await page.locator('.hud-grip').click();
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(page.getByTestId('returning-player-login')).toBeVisible();
   });
 });
 
@@ -743,7 +756,10 @@ test('demo badge never overlaps the settlement bubble on a phone settlement view
 // A bottom-docked bar used to sit on top of the landing page's onboarding
 // completion banner on a real phone-height screen (390x664, iPhone 13), so
 // "Enter your settlement" couldn't be tapped and onboarding couldn't finish
-// — the landing overlays only ever cleared a *top* bar.
+// — the landing overlays only ever cleared a *top* bar. The founded landing's
+// phone bar now floats as top chips regardless of that preference (TopBar's
+// `floating`), so the bar can't sit at the bottom there at all any more; this
+// keeps guarding that the CTA stays uncovered and tappable with it set.
 test('bottom docking never covers the onboarding completion banner', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await page.setViewportSize({ width: 390, height: 664 });
@@ -756,7 +772,9 @@ test('bottom docking never covers the onboarding completion banner', async ({ pa
   const cta = page.getByTestId('onboarding-continue');
   await expect(cta).toBeVisible();
   const [ctaBox, barBox] = [await cta.boundingBox(), await page.locator('header.hud-bar').boundingBox()];
-  expect(ctaBox!.y + ctaBox!.height, 'completion CTA overlaps the bottom-docked bar').toBeLessThanOrEqual(barBox!.y);
+  const overlaps =
+    ctaBox!.y < barBox!.y + barBox!.height && barBox!.y < ctaBox!.y + ctaBox!.height;
+  expect(overlaps, 'completion CTA overlaps the HUD bar').toBe(false);
   await cta.click();
   await expect(page).toHaveURL(/\/settlement$/);
 });

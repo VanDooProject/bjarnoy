@@ -72,12 +72,12 @@ const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // everything else visibly disabled. Enabling both regardless of terrain
 // would just reintroduce the same silent-failure bug for whichever one
 // doesn't fit the tile actually clicked.
-type OnboardingBuildType = 'reindeerherder' | 'lumberjack' | 'tower' | 'fishinghut' | 'quarry';
+type OnboardingBuildType = 'reindeerherder' | 'lumberjack' | 'tower' | 'fishinghut';
 const GUIDED_BUILD_TERRAIN: Partial<Record<OnboardingBuildType, Terrain>> = {
   reindeerherder: 'grass',
   lumberjack: 'forest',
 };
-const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['reindeerherder', 'lumberjack', 'quarry', 'tower', 'fishinghut'];
+const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['reindeerherder', 'lumberjack', 'tower', 'fishinghut'];
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -950,8 +950,12 @@ watch(
          TopBar's own onBeforeUnmount, which clears every singleton it owns
          (the settlement bubble, the HUD drawer's open state, its own
          measured height) rather than leaving any of them stuck mid-tutorial. -->
-    <TopBar v-if="player.hasFoundedSettlement && !hideBarForTutorial">
-      <HudNav />
+    <!-- `floating`: on a phone this bar would be a full-width band holding
+         nothing but HudNav's "Name your jarl" trigger, which hugged the very
+         top edge (its nudge glow/dot clipped there). It floats as chips
+         instead — see TopBar.vue's `floating` prop. -->
+    <TopBar v-if="player.hasFoundedSettlement && !hideBarForTutorial" floating>
+      <HudNav floating />
       <template #drawer="{ close }">
         <MobileHudDrawer @close="close" />
       </template>

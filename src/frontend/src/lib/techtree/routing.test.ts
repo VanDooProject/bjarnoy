@@ -273,10 +273,10 @@ describe('crossesCard', () => {
 
     // The gap below the row's cards.
     expect(crossesCard(TECH_TREE_LAYOUT, rowY(row) + CARD_H + 4, 0, 2000)).toBe(false);
-    // Clay Brickworks (row 3, column 1) has nothing behind it: columns 2-4 of
-    // its row are empty cells a run can pass straight through.
-    const [, clayRow] = TECH_TREE_LAYOUT.claybrickworks!;
-    expect(crossesCard(TECH_TREE_LAYOUT, rowMid(clayRow), columnX(2), columnX(4) + CARD_W)).toBe(false);
+    // The Cart Workshop (column 2) ends the Town Square's row: columns 3-4 of
+    // it are empty cells a run can pass straight through.
+    const [, squareRow] = TECH_TREE_LAYOUT.townsquare!;
+    expect(crossesCard(TECH_TREE_LAYOUT, rowMid(squareRow), columnX(3), columnX(4) + CARD_W)).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage } from './pages';
-import { waitForMapReady } from './helpers';
+import { clickHudMenuEntry, waitForMapReady } from './helpers';
 import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 
 // docs/design/zoom-transition.md: a wheel/pinch zoom crossing a threshold
@@ -145,7 +145,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     // down, not just sit hidden (see useHexMapRenderer's onBeforeUnmount).
     // Docs, not a modal route (reports/leaderboards/guild/profile): those
     // open over the map and deliberately keep it mounted underneath.
-    await clickNav(page, 'Docs');
+    await clickHudMenuEntry(page, 'Docs');
     await expect(page).toHaveURL(/\/docs/);
     await page.waitForTimeout(300);
     await expect(page.locator('canvas')).toHaveCount(0);

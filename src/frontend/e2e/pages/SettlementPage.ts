@@ -45,6 +45,12 @@ export interface HexQuery {
    * spec gets back — is unchanged.
    */
   reach?: number;
+  /**
+   * Of the matching hexes, the one drawn closest to this canvas point rather
+   * than the first in scan order — for a spec that needs the ring opened at a
+   * particular part of the screen (e.g. low on a phone, above the docked card).
+   */
+  nearest?: ScreenPoint;
 }
 
 /**
@@ -189,6 +195,8 @@ export class SettlementPage {
       const world = win.__demoWorld();
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       const radius = q.reach ?? world.model.borderRadius(settlement);
+      const renderer = win.__settlementRenderer();
+      let best: { hex: { q: number; r: number }; screen: { x: number; y: number }; d: number } | null = null;
       for (let dq = -radius; dq <= radius; dq++) {
         for (let dr = -radius; dr <= radius; dr++) {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
@@ -199,13 +207,25 @@ export class SettlementPage {
           if (q.terrain !== undefined && tile.terrain !== q.terrain) continue;
           if (q.notTerrain !== undefined && tile.terrain === q.notTerrain) continue;
           if (q.coastalWater && !tile.isCoastalWater) continue;
+          if (q.nearest) {
+            const screen = renderer.hexCenterScreen(at);
+            const d = Math.hypot(screen.x - q.nearest.x, screen.y - q.nearest.y);
+            if (!best || d < best.d) best = { hex: at, screen, d };
+            continue;
+          }
           if (q.withRiver) {
             world.model.setRiverTiles([
               { q: at.q, r: at.r, shape: 'straight', inDirections: [], outDirection: null },
             ]);
           }
-          return { hex: at, screen: win.__settlementRenderer().hexCenterScreen(at) };
+          return { hex: at, screen: renderer.hexCenterScreen(at) };
         }
+      }
+      if (best) {
+        if (q.withRiver) {
+          world.model.setRiverTiles([{ q: best.hex.q, r: best.hex.r, shape: 'straight', inDirections: [], outDirection: null }]);
+        }
+        return { hex: best.hex, screen: best.screen };
       }
       throw new Error(
         `no empty, owned hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
