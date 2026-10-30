@@ -17,17 +17,18 @@
 // (same "second, mobile-only surface" reasoning as the nav links above).
 // Logged in, Profile/Log out land here unconditionally — the avatar leaves
 // every phone bar, not just this one (HudNav.vue's own comment). Anonymous,
-// the login/world-list entry points only land here on a `hasResourceBar` bar
-// (in-game MapView): everywhere else ReturningPlayerMenu's own trigger stays
-// inline in the bar instead (see HudNav.vue's `hasResourceBar` comment), so
-// duplicating it here too would just be the same thing twice.
+// there are no account entries here: ReturningPlayerMenu's own trigger is on
+// screen on every phone bar (inline, or as a floating chip on the in-game bar
+// — see HudNav.vue) and carries "Name your jarl" / "Log in" / the world list,
+// so listing them here too would be the same actions twice. Only the
+// account-creation nudge lands here on a `hasResourceBar` bar, where it has
+// no room to float.
 import { computed, onBeforeUnmount, watch } from 'vue';
-import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
-import { useWorldStore } from '../../stores/world';
 import { useLogout } from '../../composables/useLogout';
 import { useLandingLink } from '../../composables/useLandingLink';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
@@ -45,7 +46,6 @@ const router = useRouter();
 const auth = useAuthStore();
 const player = usePlayerStore();
 const reports = useReportsStore();
-const world = useWorldStore();
 const { logout } = useLogout();
 const showLandingLink = useLandingLink();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -67,19 +67,6 @@ function goToProfile() {
 async function onLogoutClick() {
   emit('close');
   await logout();
-}
-
-// Same login-target linkage as ReturningPlayerMenu.vue's own `loginTarget` —
-// see that file's comment.
-const loginTarget = computed<RouteLocationRaw>(() => {
-  if (!world.worldId) return '/login';
-  const query: Record<string, string> = { worldId: world.worldId };
-  if (world.worldName) query.worldName = world.worldName;
-  return { path: '/login', query };
-});
-function goToLogin() {
-  router.push(loginTarget.value);
-  emit('close');
 }
 
 // Same gate as HudNav.vue's own `showProfileNudge` — duplicated rather than
@@ -150,12 +137,10 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
       <LocaleSwitcher in-drawer />
     </div>
     <!-- Account section: Profile/Log out land here unconditionally (the
-         avatar leaves every phone bar); the anonymous login/world-list entry
-         points only land here on a `hasResourceBar` bar, where
-         ReturningPlayerMenu's own trigger has no room in the bar (it floats
-         as a chip under the Trade toggle instead, see HudNav.vue, and steps
-         aside while this drawer is open) — see this file's own top-of-file
-         comment. -->
+         avatar leaves every phone bar). Anonymous, only the account-creation
+         nudge lands here, on a `hasResourceBar` bar — "Name your jarl",
+         "Log in" and the world list are on the floating chip instead (see
+         this file's own top-of-file comment). -->
     <div class="drawer-account">
       <template v-if="auth.isAuthenticated">
         <button type="button" class="link" data-testid="drawer-account-profile" @click="goToProfile">
@@ -165,27 +150,7 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
           {{ t('hud.accountMenu.logout') }}
         </button>
       </template>
-      <template v-else-if="hasResourceBar">
-        <!-- Same "Name your jarl" entry ReturningPlayerMenu leads with for an
-             unclaimed realm; once the nudge below is dismissed this is the
-             drawer's only way back to /register. -->
-        <button
-          v-if="unclaimedRealm && !showProfileNudge"
-          type="button"
-          class="link"
-          data-testid="drawer-account-name-jarl"
-          @click="go('/register')"
-        >
-          {{ t('hud.returningPlayer.nameJarlTrigger') }}
-        </button>
-        <button type="button" class="link" data-testid="drawer-account-login" @click="goToLogin">
-          {{ t('hud.returningPlayer.logIn') }}
-        </button>
-        <button type="button" class="link" data-testid="drawer-account-worlds" @click="go('/worlds')">
-          {{ t('worlds.title') }}
-        </button>
-        <ProfileNudge v-if="showProfileNudge" in-drawer />
-      </template>
+      <ProfileNudge v-else-if="showProfileNudge" in-drawer />
     </div>
   </nav>
 </template>
