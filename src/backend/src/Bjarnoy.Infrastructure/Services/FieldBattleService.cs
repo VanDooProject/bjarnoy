@@ -136,7 +136,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
         var bog = await WorldTerrain.OverlayAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
-        var walls = await WorldPalisades.IndexAsync(
+        var walls = await WorldBridges.RouteIndexAsync(
             _dbContext, worldId, new TerrainSampler(army.Settlement!.World!.ToGenerationOptions()).WithBogOverlay(bog).TerrainAt,
             rivers.IsWide, cancellationToken).ConfigureAwait(false);
         Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls);
@@ -217,7 +217,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         ArmyEntity armyA, Army domainA, Movement movementA,
         ArmyEntity armyB, Army domainB, Movement movementB,
         HexCoord hex, DateTimeOffset at, IGiantIndex giants, IReadOnlyDictionary<HexCoord, Terrain> bog,
-        RiverIndex rivers, PalisadeIndex walls)
+        RiverIndex rivers, LandRouteIndex walls)
     {
         var claimA = FieldBattleResolver.ClaimAt(
             hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), ToPlacedBuildings(armyA.Settlement.Buildings), giants);
@@ -278,7 +278,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         SettlementEntity? loserSettlement,
         Army domain, HexCoord hex, DateTimeOffset at,
         IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTakenFromThisSide,
-        IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers, PalisadeIndex walls)
+        IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers, LandRouteIndex walls)
     {
         var loserSampler = new TerrainSampler(loserSettlement!.World!.ToGenerationOptions()).WithBogOverlay(bog);
         var home = new HexCoord(loserSettlement.CentreQ, loserSettlement.CentreR);

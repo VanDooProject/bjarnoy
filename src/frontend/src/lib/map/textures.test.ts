@@ -2239,3 +2239,74 @@ describe('biome forest art', () => {
     });
   });
 });
+
+// The river bridge (3D_assets hextile135-137): three crossing families picked by the river tile's shape, oriented by the river like the
+// Sawmill's, and drawn as the hex's plain river (never a bare terrain texture) while the atlas has no frames for them yet.
+describe('river bridge art', () => {
+  const fakeTexture = (name: string) => ({ label: name }) as unknown as Texture;
+  const bridgeTile = (overrides: Partial<Tile> = {}): Tile =>
+    ({ q: 0, r: 0, terrain: 'grass', buildingType: 'bridge', buildingLevel: 2, orientation: 'SE', ownerId: 's1', ...overrides }) as Tile;
+
+  /** A `buildings-static` stand-in with `levels` art levels of one bridge family: a top and a base frame per level and camera. */
+  function bridgeAtlas(family: string, levels: number): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    for (const camera of TILE_ORIENTATIONS) {
+      for (let l = 0; l < levels; l++) {
+        const name = `${family}_${camera}_level${String(l).padStart(3, '0')}`;
+        atlas.textures[name] = fakeTexture(name);
+        atlas.frameMeta[name] = { family, layer: 'top' };
+        atlas.textures[`${name}_base`] = fakeTexture(`${name}_base`);
+        atlas.frameMeta[`${name}_base`] = { family, layer: 'base' };
+      }
+    }
+    return atlas;
+  }
+
+  it('ships the three crossings under the atlas family names the art is rendered as', () => {
+    expect(KEY_FAMILY.riverbridge).toBe('riverbridge');
+    expect(KEY_FAMILY.riverbridgebend).toBe('riverbridge_bend');
+    expect(KEY_FAMILY.riverbridgebend60).toBe('riverbridge_bend60');
+  });
+
+  it('picks the family by the river tile shape and the camera by the river, like the Sawmill', () => {
+    const cases = [
+      [riverTile('straight', 'W', null), 'riverbridge'],
+      [riverTile('bend', 'NW', 'SW'), 'riverbridgebend'],
+      [riverTile('bend60', 'NE', 'NW'), 'riverbridgebend60'],
+    ] as const;
+    for (const [river, key] of cases) {
+      expect(riverBuildingArtFor('bridge', river)).toEqual({ key, orientation: riverArtFor(river, null).orientation });
+      // The Sawmill stands on the same three shapes, on the same camera.
+      expect(riverBuildingArtFor('bridge', river)!.orientation).toBe(riverBuildingArtFor('sawmill', river)!.orientation);
+    }
+  });
+
+  it('draws no bridge art on a spring, a fork, a mouth or a stream', () => {
+    for (const shape of ['spring', 'confluence', 'mouth'] as const) {
+      expect(riverBuildingArtFor('bridge', riverTile(shape, 'W', 'E'))).toBeUndefined();
+    }
+    expect(riverBuildingArtFor('bridge', { ...riverTile('straight', 'W', null), width: 'stream' })).toBeUndefined();
+  });
+
+  it('keys a bridge tile to the straight family when no river tile is at hand', () => {
+    expect(textureKeyFor(bridgeTile())).toBe('riverbridge');
+  });
+
+  describe('the art by level', () => {
+    const river = riverTile('straight', 'W', null);
+    const textures = buildTileTextures([bridgeAtlas('riverbridge', 5)]);
+    const art = riverBuildingArtFor('bridge', river)!;
+
+    it('resolves the bridge art for the river tile', () => {
+      expect(art.key).toBe('riverbridge');
+    });
+
+    it('shows level000 (the building site) while level 1 is under construction, then each level in turn', () => {
+      for (let level = 0; level <= 4; level++) {
+        const tile = bridgeTile({ buildingLevel: level });
+        expect(topTextureFor(textures, tile, art)).toBe(textures.top.riverbridge![art.orientation][level]);
+        expect(baseTextureFor(textures, tile, art)).toBe(textures.baseIndexed.riverbridge![art.orientation][level]);
+      }
+    });
+  });
+});

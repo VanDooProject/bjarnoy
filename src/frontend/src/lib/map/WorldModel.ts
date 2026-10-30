@@ -15,6 +15,7 @@ import {
 import { buildingAllowedOnHex, cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
+import type { StandingBridges } from './bridgeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
@@ -43,7 +44,7 @@ import {
   type WorldGenerationConstants,
   type WorldSeed,
 } from './worldGenerator';
-import { generateRiversWithBogs } from './riverGenerator';
+import { generateRiversWithBogs, isWideRiverTile } from './riverGenerator';
 import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps, type LakeProp, type LakePropBuilding } from './lakeProps';
 import {
@@ -1580,6 +1581,7 @@ export class WorldModel {
       'hammerschmiede',
       'palisade',
       'palisadegate',
+      'bridge',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1720,6 +1722,36 @@ export class WorldModel {
     return standing;
   }
 
+  private bridgeCache: { revision: number; bridges: StandingBridges } | null = null;
+
+  /**
+   * The standing bridges (level 1 or more; a foundation does not open the river) as the movement rules take them, each with its owner
+   * (the account that holds the settlement the hex belongs to, like `standingPalisadeWalls`). Same shape as the backend's `BridgeIndex`.
+   */
+  standingBridges(): StandingBridges {
+    if (this.bridgeCache?.revision === this.wallRevision) return this.bridgeCache.bridges;
+    const bridges = new Map<string, { level: number; owner: string }>();
+    for (const tile of this.storedTiles()) {
+      if (tile.buildingType !== 'bridge' || (tile.buildingLevel ?? 1) < 1) continue;
+      const owner = tile.ownerId ? (this.settlements.get(tile.ownerId)?.ownerId ?? tile.ownerId) : '';
+      bridges.set(coordKey(tile), { level: tile.buildingLevel ?? 1, owner });
+    }
+    this.bridgeCache = { revision: this.wallRevision, bridges };
+    return bridges;
+  }
+
+  /**
+   * Whether a bridge may stand on the river hex `at`, beyond what `riverBuildingAllowedHere` and `buildingAllowedOnHex` already say
+   * (shape and ground): the tile has to be a wide river (`isWideRiverTile`, the twin of the backend's `RiverIndex.IsWide`), since a
+   * stream is crossed anyway (`BuildRejection.BridgeNeedsWideRiver`), and the island must not be wasted.
+   */
+  bridgePlacement(at: AxialCoord): { ok: true } | { ok: false; reason: 'notWide' | 'wasted' } {
+    if (this.getTile(at.q, at.r).wasted) return { ok: false, reason: 'wasted' };
+    const river = this.getRiverTile(at.q, at.r);
+    if (!river || !isWideRiverTile(river, (c) => this.getRiverTile(c.q, c.r))) return { ok: false, reason: 'notWide' };
+    return { ok: true };
+  }
+
   /**
    * Whether a palisade (or `gate`) hex may be placed at `at`: `canPlacePalisade` (palisadeTiles.ts, the twin of the backend's
    * `PalisadeRules.CanPlace`) over the walls known here plus `queued` ones (live mode: wall orders not yet standing, which the server
@@ -1817,6 +1849,8 @@ export class WorldModel {
     // A wall hex must keep every wall hex drawable (matches BuildRejection.PalisadeWouldBranch/GateNotOnStraight and the terrain
     // refusals): no branch, a gate only on a straight, no river, the sea end on exactly one land wall.
     if ((type === 'palisade' || type === 'palisadegate') && !this.palisadePlacement(at, type === 'palisadegate').ok) return false;
+    // A bridge only spans a wide river on ground that is not wasted (matches BuildRejection.BridgeNeedsWideRiver / TerrainNotAllowed).
+    if (type === 'bridge' && !this.bridgePlacement(at).ok) return false;
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;

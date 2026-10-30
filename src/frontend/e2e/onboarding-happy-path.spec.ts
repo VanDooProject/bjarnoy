@@ -317,12 +317,19 @@ for (const size of SCREEN_SIZES) {
 
       // --- "Name your jarl" leads, "Log in" follows -------------------------
       if (size.phone) {
-        // The in-game phone bar has no room for the trigger; its entries
-        // live in the drawer's account section instead (MobileHudDrawer.vue).
-        const entries = page.locator('.hud-drawer .drawer-account button');
-        await expect(entries.nth(0)).toHaveAttribute('data-testid', 'drawer-account-name-jarl');
-        await expect(entries.nth(1)).toHaveAttribute('data-testid', 'drawer-account-login');
-        await entries.nth(0).click();
+        // The in-game phone bar has no room for the trigger: it floats as a
+        // chip under the bar (HudNav.vue), stepping aside while the drawer is
+        // open, and the drawer no longer repeats its entries.
+        await expect(page.locator('.hud-drawer [data-testid^="drawer-account-"]')).toHaveCount(0);
+        await page.locator('.hud-grip').click();
+        const trigger = page.getByTestId('returning-player-trigger');
+        await expect(trigger).toBeVisible();
+        await expect(trigger).toContainText('Name your jarl');
+        await trigger.click();
+        const rows = page.getByTestId('returning-player-menu').getByRole('menuitem');
+        await expect(rows.nth(0)).toHaveAttribute('data-testid', 'returning-player-name-jarl');
+        await expect(rows.nth(1)).toHaveAttribute('data-testid', 'returning-player-login');
+        await rows.nth(0).click();
       } else {
         const trigger = page.getByTestId('returning-player-trigger');
         await expect(trigger).toContainText('Name your jarl');

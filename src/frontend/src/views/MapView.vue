@@ -63,6 +63,7 @@ import {
   isWallBuilding,
   longhouseLock,
   palisadeLock,
+  bridgeLock,
   riverBuildingAllowedHere,
   shrineLimitLock,
   storageHouseLock,
@@ -75,6 +76,8 @@ import {
   type RingAvailability,
 } from '../lib/map/ringAvailability';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
+import { ringRoomFor, ringShapes } from '../lib/map/ringLayout';
+import { motionEnabled } from '../lib/motion';
 import type { ResourceKind, Resources, Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
@@ -576,29 +579,30 @@ onUnmounted(() => stageObserver?.disconnect());
 // Phone layout: the ring's detail card docks to a screen edge instead of
 // floating beside the ring — a bottom strip in portrait, a side panel away
 // from the tapped hex in landscape (lib/map/ringDock.ts).
-const ringDock = computed(() =>
-  ringScreen.value
-    ? ringDockFor({
-        compact: isMobile.value,
-        width: stage.value.w,
-        height: stage.value.h,
-        x: ringScreen.value.x,
-        insetLeft: hudInsetLeftPx.value,
-      })
-    : null,
-);
-const ringBounds = computed(() =>
-  boundsClearOfDock(
+function ringDockAt(x: number) {
+  return ringDockFor({
+    compact: isMobile.value,
+    width: stage.value.w,
+    height: stage.value.h,
+    x,
+    insetLeft: hudInsetLeftPx.value,
+  });
+}
+/** The ring's area with the tile at screen x (the landscape dock goes on the side away from it). */
+function ringBoundsAt(x: number) {
+  return boundsClearOfDock(
     {
       left: isMobile.value ? 64 : 268, // 48px handle + 16px gap
       top: hudInsetTopPx.value + 12,
       right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 348),
       bottom: stage.value.h - (hudInsetBottomPx.value + 16),
     },
-    ringDock.value,
+    ringDockAt(x),
     { width: stage.value.w, height: stage.value.h, insetLeft: hudInsetLeftPx.value, insetBottom: hudInsetBottomPx.value },
-  ),
-);
+  );
+}
+const ringDock = computed(() => (ringScreen.value ? ringDockAt(ringScreen.value.x) : null));
+const ringBounds = computed(() => ringBoundsAt(ringScreen.value?.x ?? stage.value.w / 2));
 // The card gets its own, roomier area on purpose. What `ringBounds` leaves
 // over once every panel is reserved is about 308x404 at 1280x720 — too small
 // to hold the 200x222 card anywhere clear of the ring, so the card would end
@@ -697,7 +701,8 @@ type BuildableType =
   | 'bogoreworks'
   | 'hammerschmiede'
   | 'palisade'
-  | 'palisadegate';
+  | 'palisadegate'
+  | 'bridge';
 
 interface BuildCategory {
   id: string;
@@ -734,9 +739,12 @@ const WATER_CATEGORY: BuildCategory = {
 // The wall (docs/design/economy.md section 5): a palisade hex, or a gate on a hex that is a straight, on grass, forest, sand or plain bog moss. A wall
 // also ends on a coastal-water hex (BuildingDefinition.AlsoOnCoastalWater), the sea end, which is never a gate. Whether this particular hex
 // takes one is the wall rules' (WorldModel.palisadePlacement), shown as a lock on the bubble.
+// The bridge (same section) (`bridge`) sits in this category too: it stands on a river hex's own ground, so it is listed on every grass, forest and sand hex and
+// filtered back out per hex unless that hex is a straight or bending river (riverBuildingAllowedHere); a river that is not wide shows it
+// locked (WorldModel.bridgePlacement).
 const DEFENSE_CATEGORY: BuildCategory = {
   id: 'defense',
-  buildings: [{ type: 'palisade' }, { type: 'palisadegate' }],
+  buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
 };
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
@@ -1098,7 +1106,7 @@ function formatOutput(output: BuildingOutput): string {
     case 'storageCapacity':
       return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
     case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount, explored: output.explored });
   }
 }
 function formatModifier(modifier: BuildingModifier): string {
@@ -1149,6 +1157,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierPalisadeWall');
     case 'palisadeGate':
       return t('hud.hoverTooltip.modifierPalisadeGate');
+    case 'bridge':
+      return t(`hud.hoverTooltip.bridgeLevel${modifier.level}`);
   }
 }
 
@@ -1292,6 +1302,7 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord, levels: Record<
     SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined,
     type === 'storagehouse' ? storageHouseLockFor() : undefined,
     isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
+    type === 'bridge' ? bridgeLock(world.model.bridgePlacement(coord)) : undefined,
     ...prerequisiteLocks(definition?.prerequisites, levels),
   ].filter((lock): lock is string => !!lock);
   return {
@@ -1379,8 +1390,29 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
-  ringScreen.value = screen;
+  ringScreen.value = roomForRing(screen);
   actionError.value = null;
+}
+
+/** How long the map slides to make room for a ring (instant under reduced motion). */
+const RING_ROOM_PAN_MS = 220;
+/**
+ * The ring always opens as a circle round its tile. Near an edge (or the phone's docked card)
+ * where no circle fits - with every category it can drill into open in turn - the map slides
+ * the tile to the nearest spot where one does, and the ring opens there, rather than the ring
+ * deforming. Returns where the ring opens.
+ */
+function roomForRing(screen: { x: number; y: number }): { x: number; y: number } {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer) return screen;
+  const shapes = ringShapes(
+    rootActions.value.length,
+    ringCategories.value.map((c) => c.buildings.length),
+  );
+  const target = ringRoomFor(screen.x, screen.y, (x) => ringBoundsAt(x), shapes);
+  if (!target || (target.x === screen.x && target.y === screen.y)) return screen;
+  const moved = renderer.panScreenBy(target.x - screen.x, target.y - screen.y, motionEnabled() ? RING_ROOM_PAN_MS : 0);
+  return moved ? target : screen;
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
@@ -1650,7 +1682,7 @@ async function upgrade() {
       <TradePanel />
       <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
-      <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
+      <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"

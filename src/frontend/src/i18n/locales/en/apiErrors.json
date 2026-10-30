@@ -17,6 +17,7 @@
     "SettlementAlreadyHasShrine": "This settlement already has a shrine — a settlement can raise only one, of any god.",
     "PalisadeWouldBranch": "A wall never branches: that hex would have three wall neighbours.",
     "GateNotOnStraight": "A gate only stands between two opposite wall hexes, so the wall stays straight through it.",
+    "BridgeNeedsWideRiver": "A bridge needs a wide river crossing: a straight or bending wide river, not a stream, spring, fork or mouth.",
     "NoFreeSlot": "No free construction slot — Premium unlocks a waiting queue.",
     "WorldNotFound": "That world doesn't exist.",
     "IslandNotFound": "That island doesn't exist.",

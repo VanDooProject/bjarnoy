@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { coordKey, type AxialCoord } from '../../src/frontend/src/lib/hex/coords';
 import { findPath, hoursFrom, pathCost, reachableRange, type PathContext } from '../../src/frontend/src/lib/map/hexPath';
+import { bridgeRestrictions, type StandingBridges } from '../../src/frontend/src/lib/map/bridgeMovement';
 import { palisadeRestrictions, type PalisadeWalls } from '../../src/frontend/src/lib/map/palisadeMovement';
 import { isWideRiverTile } from '../../src/frontend/src/lib/map/riverGenerator';
 import type { RiverTile, Terrain } from '../../src/frontend/src/lib/map/types';
@@ -53,6 +54,26 @@ wallStrip(100, -3, 2, true, 'mountainAtTip');
 const OWNER = 'owner-a';
 const wallMap: PalisadeWalls = new Map(walls.map((w) => [coordKey(w), { gate: w.gate ?? false, owner: OWNER }]));
 
+
+// Bridges: five one-hex corridors, each a wide river hex (straight, river width, fed from the west) between two grass hexes on each side,
+// everything else sea; the endpoints are (q0+1, 0) and (q0+3, 0). The bridge stands on the river hex (q0+2, 0): 110 a level-1 causeway,
+// 120 a level-2 footbridge, 130 a level-3 king's bridge over forest (priced as the forest), 140 a level-4 guarded bridge over sand (priced as
+// the sand, for its owner and friends only), 150 a level-0 foundation (opens nothing).
+const bridges: { q: number; r: number; level: number }[] = [];
+const bridgeCorridor = (q0: number, level: number, under: Terrain) => {
+  for (const q of [q0, q0 + 1, q0 + 3, q0 + 4]) put(q, 0, 'grass');
+  put(q0 + 2, 0, under);
+  bridges.push({ q: q0 + 2, r: 0, level });
+};
+bridgeCorridor(110, 1, 'grass');
+bridgeCorridor(120, 2, 'grass');
+bridgeCorridor(130, 3, 'forest');
+bridgeCorridor(140, 4, 'sand');
+bridgeCorridor(150, 0, 'grass');
+// Bridges belong to the same owner as the walls; a "friend" army belongs to another owner whose friends include it.
+const FRIEND = 'owner-friend';
+const bridgeMap: StandingBridges = new Map(bridges.filter((b) => b.level >= 1).map((b) => [coordKey(b), { level: b.level, owner: OWNER }]));
+
 const tile = (q: number, r: number, shape: RiverTile['shape'], width: RiverTile['width'], inDirections: RiverTile['inDirections'], outDirection: RiverTile['outDirection']): RiverTile => ({
   q, r, shape, width, inDirections, outDirection,
 });
@@ -65,6 +86,8 @@ const riverTiles: RiverTile[] = [
   tile(61, -1, 'straight', 'river', [], 'SE'),
   tile(60, 1, 'spring', 'stream', [], 'NE'),
   tile(61, 0, 'confluence', 'riverstream', ['NW', 'SW'], 'E'),
+  // The bridge corridors' wide river hexes.
+  ...bridges.map((b) => tile(b.q, b.r, 'straight', 'river', ['W'], 'E')),
 ];
 
 const riverByKey = new Map(riverTiles.map((t) => [coordKey(t), t]));
@@ -74,23 +97,32 @@ const isWideRiver = (c: AxialCoord) => {
   const t = riverAt(c);
   return t !== undefined && isWideRiverTile(t, riverAt);
 };
-/** The context for an army: `friendly` is the wall owner's, anything else an enemy's. */
-const contextFor = (army: 'friendly' | 'enemy'): PathContext => ({
-  terrainAt,
-  isRiver: (c) => riverByKey.has(coordKey(c)),
-  isWideRiver,
-  rules: { land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0 }, riverCrossingCost: 8.0 },
-  hexesPerHour: 1,
-  restrictions: palisadeRestrictions(wallMap, terrainAt, isWideRiver, army === 'friendly' ? OWNER : 'someone-else'),
-});
+const RULES = { land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0 }, riverCrossingCost: 8.0 };
+/** The context for an army: `friendly` is the wall and bridge owner's, `friend` a friend of that owner, anything else an enemy's. */
+const contextFor = (army: 'friendly' | 'friend' | 'enemy'): PathContext => {
+  const walker = army === 'friendly' ? OWNER : army === 'friend' ? FRIEND : 'someone-else';
+  // A friend's guild is at peace with the owner's: the owner is among its friends (and the wall owner's gates open for it too).
+  const friends = new Set(army === 'friend' ? [OWNER] : []);
+  return {
+    terrainAt,
+    isRiver: (c) => riverByKey.has(coordKey(c)),
+    isWideRiver,
+    rules: RULES,
+    hexesPerHour: 1,
+    restrictions: {
+      ...palisadeRestrictions(wallMap, terrainAt, isWideRiver, walker, friends),
+      ...bridgeRestrictions(bridgeMap, terrainAt, RULES, walker, friends),
+    },
+  };
+};
 
 interface CaseInput {
   name: string;
   comment: string;
   from: AxialCoord;
   to: AxialCoord;
-  /** Whose army walks: the wall owner's (default) or an enemy's. Only matters where a wall stands. */
-  army?: 'friendly' | 'enemy';
+  /** Whose army walks: the wall and bridge owner's (default), a friend of that owner's, or an enemy's. Only matters where a wall or bridge stands. */
+  army?: 'friendly' | 'friend' | 'enemy';
 }
 const caseInputs: CaseInput[] = [
   {
@@ -177,6 +209,61 @@ const caseInputs: CaseInput[] = [
     to: { q: 105, r: 0 },
     army: 'enemy',
   },
+  {
+    name: 'bridge_level_1_causeway_crosses_a_wide_river_at_6',
+    comment: 'A level-1 bridge (causeway) on the wide river hex between the endpoints and no way round: the river opens for the owner\'s army at 1.0 + 5.0 = 6.0 (HexPathfinder.CausewayCrossingCost), slower than any ground.',
+    from: { q: 111, r: 0 },
+    to: { q: 113, r: 0 },
+  },
+  {
+    name: 'bridge_level_1_causeway_costs_a_stranger_the_same',
+    comment: 'The same causeway for an enemy army: levels 1 to 3 are open to everyone, at the same price.',
+    from: { q: 111, r: 0 },
+    to: { q: 113, r: 0 },
+    army: 'enemy',
+  },
+  {
+    name: 'bridge_level_2_footbridge_crosses_a_wide_river_at_4',
+    comment: 'A level-2 bridge (footbridge): 1.0 + 3.0 = 4.0 (HexPathfinder.FootbridgeCrossingCost), quicker than the causeway.',
+    from: { q: 121, r: 0 },
+    to: { q: 123, r: 0 },
+    army: 'enemy',
+  },
+  {
+    name: 'bridge_level_3_kings_bridge_costs_the_terrain_under_it',
+    comment: 'A level-3 bridge (king\'s bridge) over forest: the river is as quick to cross as the ground beneath it (forest, 1.3), for an enemy too.',
+    from: { q: 131, r: 0 },
+    to: { q: 133, r: 0 },
+    army: 'enemy',
+  },
+  {
+    name: 'bridge_level_4_guarded_bridge_lets_the_owner_over',
+    comment: 'A level-4 bridge (guarded) over sand: its owner\'s army crosses at the sand\'s own cost (1.1).',
+    from: { q: 141, r: 0 },
+    to: { q: 143, r: 0 },
+    army: 'friendly',
+  },
+  {
+    name: 'bridge_level_4_guarded_bridge_lets_a_friend_over',
+    comment: 'The same guarded bridge for an army of a friend of the owner (same guild, or a guild at peace): the same 1.1.',
+    from: { q: 141, r: 0 },
+    to: { q: 143, r: 0 },
+    army: 'friend',
+  },
+  {
+    name: 'bridge_level_4_guarded_bridge_stops_a_stranger',
+    comment: 'The same guarded bridge for anyone else: the river stays shut, so there is no route.',
+    from: { q: 141, r: 0 },
+    to: { q: 143, r: 0 },
+    army: 'enemy',
+  },
+  {
+    name: 'bridge_foundation_opens_nothing',
+    comment: 'A level-0 bridge (a foundation) is not a bridge yet: the wide river stays shut for its owner too, so there is no route.',
+    from: { q: 151, r: 0 },
+    to: { q: 153, r: 0 },
+    army: 'friendly',
+  },
 ];
 
 const findPathCases = caseInputs.map((raw) => {
@@ -211,10 +298,11 @@ const reachableRangeCases = rangeInputs.map((c) => {
 
 const doc = {
   _comment:
-    "Issue #159 part B's anti-drift guard, updated for the movement rules (wide rivers and mountains impassable to land armies, a stream - any river tile that is not wide - walkable at a flat 1.0 + RiverCrossingCost = 9.0 whatever terrain it runs over). HexPathfinderGoldenTests.cs (backend) and hexPath.golden.test.ts (frontend) both compute against this fixture using each side's OWN production cost tables and wide-river rule (RiverArms.cs / riverArms.ts, from the full river tiles below), then assert the frozen results. Either side's cost model drifting from the other turns its own suite red, instead of the client's range tint quietly disagreeing with what the server actually paths over. Generated by scripts/regen-goldens/river-pathing-golden.ts from the frontend pathfinder; never hand-edit. walls are the standing palisade hexes (an army with case.army 'friendly' belongs to the wall owner, 'enemy' to anyone else; the default is friendly): every wall hex blocks, a gate passes only its owner's armies, a land end with one wall neighbour that touches no mountain or wide river is half open at a flat 3.0 (HexPathfinder.HalfOpenEndCost / HALF_OPEN_END_COST). terrain omits sea - any (q, r) not listed is sea (impassable to a land unit). A case with expectedPath null has no route. hexesPerHour/speedFactor are always 1.0 in these cases so every hour figure below is a plain sum of step costs.",
+    "Issue #159 part B's anti-drift guard, updated for the movement rules (wide rivers and mountains impassable to land armies, a stream - any river tile that is not wide - walkable at a flat 1.0 + RiverCrossingCost = 9.0 whatever terrain it runs over). HexPathfinderGoldenTests.cs (backend) and hexPath.golden.test.ts (frontend) both compute against this fixture using each side's OWN production cost tables and wide-river rule (RiverArms.cs / riverArms.ts, from the full river tiles below), then assert the frozen results. Either side's cost model drifting from the other turns its own suite red, instead of the client's range tint quietly disagreeing with what the server actually paths over. Generated by scripts/regen-goldens/river-pathing-golden.ts from the frontend pathfinder; never hand-edit. walls are the standing palisade hexes (an army with case.army 'friendly' belongs to the wall owner, 'enemy' to anyone else; the default is friendly): every wall hex blocks, a gate passes only its owner's armies, a land end with one wall neighbour that touches no mountain or wide river is half open at a flat 3.0 (HexPathfinder.HalfOpenEndCost / HALF_OPEN_END_COST). bridges are the bridge hexes (a level-0 foundation opens nothing; the bridges and the walls share one owner, an army with case.army 'friend' belongs to another owner who is that owner's friend): levels 1 and 2 cost 1.0 + 5.0 and 1.0 + 3.0 for every army, level 3 the land terrain's own cost, level 4 the terrain's cost for the owner and friends only (HexPathfinder.CausewayCrossingCost / FootbridgeCrossingCost, BridgeIndex.cs; bridgeMovement.ts). terrain omits sea - any (q, r) not listed is sea (impassable to a land unit). A case with expectedPath null has no route. hexesPerHour/speedFactor are always 1.0 in these cases so every hour figure below is a plain sum of step costs.",
   terrain,
   riverTiles,
   walls: walls.map((w) => ({ q: w.q, r: w.r, gate: w.gate ?? false, owner: OWNER })),
+  bridges: bridges.map((b) => ({ q: b.q, r: b.r, level: b.level, owner: OWNER })),
   findPathCases,
   reachableRangeCases,
 };

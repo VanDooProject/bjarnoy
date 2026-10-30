@@ -31,7 +31,7 @@ function formatOutput(output: BuildingOutput): string {
     case 'storageCapacity':
       return `+${output.amount} storage capacity`;
     case 'visionRing':
-      return `Vision +${output.amount} ring`;
+      return `Vision radius ${output.amount} (explored ${output.explored})`;
   }
 }
 
@@ -61,6 +61,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return 'Blocks every army';
     case 'palisadeGate':
       return 'Only its owner\'s armies pass';
+    case 'bridge':
+      return 'Opens a wide river to land armies';
   }
 }
 

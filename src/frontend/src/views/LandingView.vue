@@ -950,8 +950,12 @@ watch(
          TopBar's own onBeforeUnmount, which clears every singleton it owns
          (the settlement bubble, the HUD drawer's open state, its own
          measured height) rather than leaving any of them stuck mid-tutorial. -->
-    <TopBar v-if="player.hasFoundedSettlement && !hideBarForTutorial">
-      <HudNav />
+    <!-- `floating`: on a phone this bar would be a full-width band holding
+         nothing but HudNav's "Name your jarl" trigger, which hugged the very
+         top edge (its nudge glow/dot clipped there). It floats as chips
+         instead — see TopBar.vue's `floating` prop. -->
+    <TopBar v-if="player.hasFoundedSettlement && !hideBarForTutorial" floating>
+      <HudNav floating />
       <template #drawer="{ close }">
         <MobileHudDrawer @close="close" />
       </template>

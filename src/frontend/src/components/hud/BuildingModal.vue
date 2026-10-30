@@ -228,7 +228,7 @@ function formatOutput(output: BuildingOutput): string {
     case 'storageCapacity':
       return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
     case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount, explored: output.explored });
   }
 }
 
@@ -280,10 +280,12 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierPalisadeWall');
     case 'palisadeGate':
       return t('hud.hoverTooltip.modifierPalisadeGate');
+    case 'bridge':
+      return t(`hud.hoverTooltip.bridgeLevel${modifier.level}`);
   }
 }
 
-// The existing building's current-level output/modifier/workers — undefined
+// The existing building's current-level output/modifier — undefined
 // (and hidden) for an empty tile, since there's nothing standing yet.
 const buildingStats = computed(() =>
   props.tile.buildingType ? buildingStatsAt(props.tile.buildingType, level.value, props.tile, getTile) : undefined,
@@ -293,7 +295,6 @@ const currentStats = computed(() =>
     ? {
         output: buildingStats.value.output ? formatOutput(buildingStats.value.output) : undefined,
         modifier: buildingStats.value.modifier ? formatModifier(buildingStats.value.modifier) : undefined,
-        workers: buildingStats.value.workers ? t('hud.hoverTooltip.workersValue', { cap: buildingStats.value.workers.cap }) : undefined,
       }
     : undefined,
 );
@@ -381,7 +382,7 @@ const actionLabel = computed(() => {
           {{ tile.buildingType ? t('hud.buildingModal.descUpgrade') : t('hud.buildingModal.descBuildEmpty') }}
         </p>
 
-        <dl v-if="currentStats && (currentStats.output || currentStats.modifier || currentStats.workers)" class="stats">
+        <dl v-if="currentStats && (currentStats.output || currentStats.modifier)" class="stats">
           <template v-if="currentStats.output">
             <dt>{{ t('hud.hoverTooltip.output') }}</dt>
             <dd>{{ currentStats.output }}</dd>
@@ -389,10 +390,6 @@ const actionLabel = computed(() => {
           <template v-if="currentStats.modifier">
             <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>
             <dd>{{ currentStats.modifier }}</dd>
-          </template>
-          <template v-if="currentStats.workers">
-            <dt>{{ t('hud.hoverTooltip.workers') }}</dt>
-            <dd>{{ currentStats.workers }}</dd>
           </template>
         </dl>
 
