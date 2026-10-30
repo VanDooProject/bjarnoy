@@ -144,24 +144,40 @@ public sealed class BridgeMovementTests
     }
 
     [Fact]
-    public void A_sieged_guarded_bridge_loses_its_levels_and_the_river_shuts_again()
+    public void A_sieged_guarded_bridge_burns_one_level_and_opens_to_everyone()
     {
         var terrain = Strip();
         List<PlacedBuilding> buildings = [new(new HexCoord(0, 0), BuildingType.Longhouse, 7), new(Span, BuildingType.Bridge, 4)];
 
-        // One catapult is 40 siege power: floor(sqrt(20)) = 4 levels, the whole guarded bridge.
-        var outcome = SiegeResolver.Resolve([new UnitStack(UnitType.Catapult, 1)], buildings, requestedTargetCoord: Span, seed: 1);
+        // Ten catapults would take a building down many levels; a bridge only ever burns one per siege.
+        var outcome = SiegeResolver.Resolve([new UnitStack(UnitType.Catapult, 10)], buildings, requestedTargetCoord: Span, seed: 1);
 
         Assert.True(outcome.Applied);
         Assert.Equal(BuildingType.Bridge, outcome.TargetType);
         Assert.Equal(4, outcome.LevelBefore);
-        Assert.DoesNotContain(outcome.UpdatedBuildings!, b => b.Type == BuildingType.Bridge);
+        Assert.Equal(3, outcome.LevelAfter);
+        Assert.Contains(outcome.UpdatedBuildings!, b => b.Type == BuildingType.Bridge && b.Level == 3);
+
+        var before = Index(terrain, 4);
+        Assert.Null(Route(terrain, before, Stranger));
 
         var after = new BridgeIndex(
             outcome.UpdatedBuildings!.Where(b => b.Type == BuildingType.Bridge).Select(b => new StandingBridge(b.Coord, b.Level, Owner)),
             h => terrain.GetValueOrDefault(h, Terrain.Sea));
-        Assert.Null(Route(terrain, after, Owner));
-        Assert.Null(Route(terrain, after, Stranger));
+        Assert.NotNull(Route(terrain, after, Stranger));
+    }
+
+    [Fact]
+    public void A_level_1_bridge_burnt_once_is_gone_and_the_river_shuts_again()
+    {
+        var terrain = Strip();
+        List<PlacedBuilding> buildings = [new(new HexCoord(0, 0), BuildingType.Longhouse, 7), new(Span, BuildingType.Bridge, 1)];
+
+        var outcome = SiegeResolver.Resolve([new UnitStack(UnitType.Catapult, 1)], buildings, requestedTargetCoord: Span, seed: 1);
+
+        Assert.Equal(0, outcome.LevelAfter);
+        Assert.DoesNotContain(outcome.UpdatedBuildings!, b => b.Type == BuildingType.Bridge);
+        Assert.Null(Route(terrain, new BridgeIndex([], h => terrain.GetValueOrDefault(h, Terrain.Sea)), Owner));
     }
 
     [Fact]

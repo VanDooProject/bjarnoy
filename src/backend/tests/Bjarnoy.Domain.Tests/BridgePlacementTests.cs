@@ -58,7 +58,7 @@ public sealed class BridgePlacementTests
             (1, new(Wood: 120, Stone: 0, Food: 20, Iron: 0), TimeSpan.FromMinutes(10)),
             (2, new(Wood: 220, Stone: 0, Food: 30, Iron: 0), TimeSpan.FromMinutes(20)),
             (3, new(Wood: 380, Stone: 160, Food: 40, Iron: 0), TimeSpan.FromMinutes(45)),
-            (4, new(Wood: 600, Stone: 300, Food: 60, Iron: 40), TimeSpan.FromMinutes(90)),
+            (4, new(Wood: 660, Stone: 340, Food: 60, Iron: 0), TimeSpan.FromMinutes(90)),
         ];
         foreach (var (level, cost, time) in expected)
         {

@@ -36,7 +36,7 @@ Wood, Stone, Food, Iron.
   (§8, `bog.md`), and a **Hammer Forge** (water-powered hammer mill) on a
   bog creek boosts them later, the way the Sawmill boosts Lumberjacks. Before
   the bog-ore works, the Longhouse is the only iron source, so buildings
-  cost no iron (the one exception is the guard of the level-4 Bridge, 40 iron);
+  cost no iron;
   iron is a military resource (units, Tower).
 
 The **Magic Tower is removed**. The **Smithy** is renamed **Weaponsmith**
@@ -297,14 +297,14 @@ is impassable to every land army (`troop-movement-range.md` section 5); a bridge
 only way to open one. It unlocks at Longhouse 7 behind a level-1 Town Square, has **4
 levels** (a causeway, a footbridge, a king's bridge and a guarded bridge), and no
 production, storage or claim. Costs and times are set per level (no cost growth), wood-heavy,
-with stone from level 3 and iron only for the guard:
+with stone from level 3 and no iron:
 
 | Level | Name | Wood | Stone | Food | Iron | Time |
 |---|---|---|---|---|---|---|
 | 1 | Causeway | 120 | 0 | 20 | 0 | 10 min |
 | 2 | Footbridge | 220 | 0 | 30 | 0 | 20 min |
 | 3 | King's bridge | 380 | 160 | 40 | 0 | 45 min |
-| 4 | Guarded bridge | 600 | 300 | 60 | 40 | 90 min |
+| 4 | Guarded bridge | 660 | 340 | 60 | 0 | 90 min |
 
 **Placement** (`Settlement.PlanBuild`, `BuildingCatalogue.BridgeHex`): on the river hex
 itself, inside the claim, when the river tile is of shape Straight, Bend or Bend60 and
@@ -331,12 +331,12 @@ and the members of guilds with an active peace treaty with that guild
 (`WorldBridges.IndexAsync` reads both via `WorldPalisades.FriendsAsync`). An anonymous
 settlement has no friends.
 
-**Burning.** There is no bridge-specific combat code. An Attack mission with catapults
-that names the bridge's hex as `TargetBuildingCoord` takes levels off it like any
-building (`SiegeResolver`), and the river shuts again as the level drops: a guarded
-bridge brought down to level 3 opens to everyone, one brought to level 0 is gone. One
-catapult already takes four levels, so a guarded bridge needs real siege strength to
-survive as a lower level rather than vanish.
+**Burning.** An Attack mission with catapults that names the bridge's hex as
+`TargetBuildingCoord` burns it, but a bridge burns **one level per won siege**, however
+many catapults survive (`SiegeResolver`), where any other building loses several. A
+guarded bridge therefore falls to the king's bridge first and opens to everyone, attackers
+included; each further siege takes another level, and a causeway burnt once is gone and
+shuts the river again.
 
 ## 6. Settling and renown
 
@@ -513,7 +513,7 @@ The art for this is the **bog set** in `VanDooProject/3D_assets`
 A furnace alone creates no ore, so bog ore is the only real source, and the
 Longhouse gives a small trickle (+2 iron/h per level).
 
-**Iron is an indirect gate for the army.** Buildings cost no iron (but the level-4 Bridge's guard). Every
+**Iron is an indirect gate for the army.** Buildings cost no iron. Every
 unit costs iron except the cheap first unit (Thrall), so how fast you can
 raise troops depends on your iron income. For that to work, the iron
 sources have to line up with the unit unlocks:

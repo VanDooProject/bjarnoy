@@ -808,14 +808,14 @@ public static class BuildingCatalogue
 
     /// <summary>
     /// Wood, stone, food, iron and build minutes of each bridge level, spelled out per level (no cost growth): wood-heavy, stone from
-    /// level 3, iron only for the guard at level 4 (<c>docs/design/economy.md</c> section 5).
+    /// level 3, no iron (<c>docs/design/economy.md</c> section 5).
     /// </summary>
     private static readonly (ResourceAmounts Cost, TimeSpan Duration)[] BridgeLevels =
     [
         (new ResourceAmounts(Wood: 120, Stone: 0, Food: 20, Iron: 0), TimeSpan.FromMinutes(10)),
         (new ResourceAmounts(Wood: 220, Stone: 0, Food: 30, Iron: 0), TimeSpan.FromMinutes(20)),
         (new ResourceAmounts(Wood: 380, Stone: 160, Food: 40, Iron: 0), TimeSpan.FromMinutes(45)),
-        (new ResourceAmounts(Wood: 600, Stone: 300, Food: 60, Iron: 40), TimeSpan.FromMinutes(90)),
+        (new ResourceAmounts(Wood: 660, Stone: 340, Food: 60, Iron: 0), TimeSpan.FromMinutes(90)),
     ];
 
     /// <summary>

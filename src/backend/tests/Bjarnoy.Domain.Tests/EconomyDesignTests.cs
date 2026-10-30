@@ -150,21 +150,13 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void No_building_costs_iron_but_the_guard_of_the_level_4_bridge()
+    public void No_building_costs_iron()
     {
         foreach (var type in BuildingCatalogue.AllTypes)
         {
             for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
-                var iron = BuildingCatalogue.Get(type, level).Cost.Iron;
-                if (type == BuildingType.Bridge && level == 4)
-                {
-                    Assert.Equal(40, iron);
-                }
-                else
-                {
-                    Assert.Equal(0, iron);
-                }
+                Assert.Equal(0, BuildingCatalogue.Get(type, level).Cost.Iron);
             }
         }
     }

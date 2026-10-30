@@ -17558,10 +17558,10 @@
       "type": "bridge",
       "level": 4,
       "cost": {
-        "wood": 600,
-        "stone": 300,
+        "wood": 660,
+        "stone": 340,
         "food": 60,
-        "iron": 40
+        "iron": 0
       },
       "buildSeconds": 5400,
       "productionPerHour": {
