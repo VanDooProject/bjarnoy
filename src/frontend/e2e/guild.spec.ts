@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { clickHudMenuEntry } from './helpers';
 import { SettlementPage } from './pages';
 
 test('the Alliance nav link opens the guild view as a modal over the map', { tag: '@g2' }, async ({ page }) => {
@@ -9,7 +10,7 @@ test('the Alliance nav link opens the guild view as a modal over the map', { tag
   // same way the in-game nav actually becomes reachable for a real player.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await SettlementPage.found(page);
-  await page.getByRole('button', { name: 'Alliance' }).click();
+  await clickHudMenuEntry(page, 'Alliance');
   await expect(page).toHaveURL(/\/guild$/);
 
   // Owner decision: guild opens as a modal over whatever page was showing

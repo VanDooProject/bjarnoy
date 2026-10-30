@@ -133,6 +133,8 @@ watch(() => route.fullPath, close);
            LandingView.vue's `.signup-facts-sep`. -->
       <span class="caret" aria-hidden="true"></span>
       <span v-if="nudging" class="nudge-dot" aria-hidden="true" />
+      <!-- Caller-provided corner badge (HudNav: the unread reports count). -->
+      <slot name="trigger-badge" />
     </button>
     <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
       <div class="notch" />
@@ -155,6 +157,11 @@ watch(() => route.fullPath, close);
       >
         {{ t('hud.returningPlayer.logIn') }}
       </button>
+      <!-- Caller-provided rows below this menu's own actions (HudNav: the nav
+           entries that have no room inline), same `.row` look as the rows
+           above. `close` lets a row dismiss the panel. The account actions
+           stay first: they are what this menu is for. -->
+      <slot name="entries" :close="close" />
       <div class="divider" role="separator" />
       <WorldList compact />
     </div>

@@ -13,6 +13,7 @@ import { isTradePanelOpen } from '../../composables/tradePanelOpenState';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
+import { useReportsStore } from '../../stores/reports';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enOnboarding from '../../i18n/locales/en/onboarding.json';
@@ -42,7 +43,7 @@ async function mountHudNav(path = '/') {
   await router.push(path);
   await router.isReady();
   return mount(HudNav, {
-    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })] },
+    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true } },
   });
 }
 
@@ -53,7 +54,7 @@ async function mountHudNavWithRouter(path = '/settlement') {
   await router.push(path);
   await router.isReady();
   const wrapper = mount(HudNav, {
-    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })] },
+    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true } },
   });
   return { wrapper, router };
 }
@@ -156,11 +157,12 @@ describe('HudNav auth gating', () => {
     expect(wrapper.text()).not.toContain('Leaderboards');
   });
 
-  it('shows Leaderboards once authenticated', async () => {
+  it('shows Leaderboards once authenticated, in the account menu', async () => {
     const auth = useAuthStore();
     authenticate(auth);
     const wrapper = await mountHudNav();
-    expect(wrapper.text()).toContain('Leaderboards');
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    expect(wrapper.find('[data-testid="account-menu"] [data-testid="menu-entry-leaderboards"]').exists()).toBe(true);
   });
 
   it('hides World map when neither authenticated nor founded', async () => {
@@ -317,9 +319,10 @@ describe('HudNav link visibility', () => {
     expect(wrapper.text()).not.toContain('Landing');
   });
 
-  it('shows the Landing link on any other route for a player who has not founded yet', async () => {
+  it('shows the Landing link on any other route while no settlement is founded', async () => {
     const wrapper = await mountHudNav('/docs');
-    expect(wrapper.text()).toContain('Landing');
+    await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+    expect(wrapper.find('[data-testid="menu-entry-landing"]').exists()).toBe(true);
   });
 
   // Phone screenshot: a founded player was still offered "Landing", which
@@ -329,6 +332,10 @@ describe('HudNav link visibility', () => {
     player.hasFoundedSettlement = true;
     for (const path of ['/settlement', '/docs', '/']) {
       const wrapper = await mountHudNav(path);
+      // Landing is an avatar-menu row now: open the menu, so a broken rule
+      // can't hide behind the closed panel.
+      await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+      expect(wrapper.find('[data-testid="menu-entry-landing"]').exists()).toBe(false);
       expect(wrapper.text()).not.toContain('Landing');
       wrapper.unmount();
     }
@@ -444,5 +451,89 @@ describe('HudNav unclaimed-realm trigger label', () => {
     player.nickname = 'Ragnar';
     const wrapper = await mountHudNav();
     expect(wrapper.find('[data-testid="returning-player-trigger"]').text()).not.toContain('Name your jarl');
+  });
+});
+
+
+// The secondary destinations (Leaderboards, Messages, Reports, Alliance, Docs)
+// have no room inline next to the resource pills: they live in the avatar
+// menu at every desktop width, and only Settlement / World map stay inline.
+describe('HudNav secondary entries in the avatar menu', () => {
+  const secondaryIds = ['leaderboards', 'messages', 'reports', 'guild', 'docs'];
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  function inlineLinkTexts(wrapper: Awaited<ReturnType<typeof mountHudNav>>) {
+    return wrapper.findAll('.hud-nav > .link').map((b) => b.text());
+  }
+
+  it('logged in: only Settlement and World map stay inline, the rest are rows of the account menu', async () => {
+    authenticate(useAuthStore());
+    usePlayerStore().hasFoundedSettlement = true;
+    const wrapper = await mountHudNav('/settlement');
+    expect(inlineLinkTexts(wrapper)).toEqual(['Settlement', 'World map']);
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    const menu = wrapper.find('[data-testid="account-menu"]');
+    for (const id of secondaryIds) expect(menu.find(`[data-testid="menu-entry-${id}"]`).exists(), id).toBe(true);
+    // Above Profile / Log out.
+    const rows = menu.findAll('[role="menuitem"]').map((b) => b.attributes('data-testid'));
+    expect(rows.indexOf('menu-entry-docs')).toBeLessThan(rows.indexOf('account-menu-profile'));
+  });
+
+  it('logged in: a row navigates and closes the menu', async () => {
+    authenticate(useAuthStore());
+    usePlayerStore().hasFoundedSettlement = true;
+    const { wrapper, router } = await mountHudNavWithRouter('/settlement');
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    await wrapper.find('[data-testid="menu-entry-docs"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.name).toBe('docs');
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+  });
+
+  it('anonymous: Reports, Alliance and Docs are rows of the returning-player menu, not inline', async () => {
+    const wrapper = await mountHudNav('/docs');
+    expect(inlineLinkTexts(wrapper)).toEqual([]);
+    await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+    const menu = wrapper.find('[data-testid="returning-player-menu"]');
+    for (const id of ['reports', 'guild', 'docs']) expect(menu.find(`[data-testid="menu-entry-${id}"]`).exists(), id).toBe(true);
+    for (const id of ['leaderboards', 'messages']) expect(menu.find(`[data-testid="menu-entry-${id}"]`).exists(), id).toBe(false);
+    const rows = menu.findAll('[role="menuitem"]').map((b) => b.attributes('data-testid'));
+    // The menu's own account actions come first; the nav entries follow them.
+    expect(rows.indexOf('returning-player-login')).toBeLessThan(rows.indexOf('menu-entry-reports'));
+  });
+
+  it('anonymous: a row navigates and closes the menu', async () => {
+    const { wrapper, router } = await mountHudNavWithRouter('/');
+    await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+    await wrapper.find('[data-testid="menu-entry-guild"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.name).toBe('guild');
+    expect(wrapper.find('[data-testid="returning-player-menu"]').exists()).toBe(false);
+  });
+
+  it('shows the unread reports count on the avatar and on the Reports row', async () => {
+    authenticate(useAuthStore());
+    const reports = useReportsStore();
+    reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z' }, { id: 'r2', occurredAt: '2026-01-02T00:00:00Z' }] as never;
+    reports.lastSeenAt = null;
+    const wrapper = await mountHudNav('/settlement');
+    expect(wrapper.find('[data-testid="account-menu-trigger"] .badge').text()).toBe('2');
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    expect(wrapper.find('[data-testid="menu-entry-reports"] .badge').text()).toBe('2');
+  });
+
+  it('shows the unread reports count on the returning-player trigger too, and no badge at zero', async () => {
+    const reports = useReportsStore();
+    reports.lastSeenAt = null;
+    const wrapper = await mountHudNav('/docs');
+    expect(wrapper.find('[data-testid="returning-player-badge"]').exists()).toBe(false);
+    reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z' }] as never;
+    await flushPromises();
+    expect(wrapper.find('[data-testid="returning-player-trigger"] .badge').text()).toBe('1');
   });
 });

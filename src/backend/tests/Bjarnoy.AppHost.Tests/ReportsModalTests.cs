@@ -252,7 +252,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
 
-        // --- Desktop: HudNav's "Reports" button opens the modal over the settlement view ---
+        // --- Desktop: the Reports row in the avatar menu opens the modal over the settlement view ---
         var desktopContext = await browser.NewContextAsync();
         var desktopPage = await desktopContext.NewPageAsync();
         var desktopConsoleErrors = desktopPage.CollectConsoleErrors();
@@ -263,7 +263,15 @@ public class ReportsModalTests(AppHostFixture fixture)
         var canvas = desktopPage.Locator("canvas");
         await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
 
-        var reportsLink = desktopPage.Locator(".hud-nav button.reports-link");
+        // Reports sits in the avatar menu (HudNav), not inline in the bar. This
+        // player is a local, account-less one (BuildLoginInitScript), so the
+        // avatar spot is the returning-player trigger; an account would show
+        // the account-menu trigger instead. Same rule as e2e's clickHudMenuEntry.
+        var accountMenuTrigger = desktopPage.Locator(
+            "[data-testid=\"account-menu-trigger\"], [data-testid=\"returning-player-trigger\"]");
+        await Assertions.Expect(accountMenuTrigger).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await accountMenuTrigger.ClickAsync();
+        var reportsLink = desktopPage.Locator("[data-testid=\"menu-entry-reports\"]");
         await Assertions.Expect(reportsLink).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await reportsLink.ClickAsync();
 

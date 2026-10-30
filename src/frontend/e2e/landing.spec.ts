@@ -284,11 +284,17 @@ test('founding a settlement swaps the pre-founding header for the real in-game n
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
-  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toBeVisible();
+  // Reports/Alliance live in the returning-player menu, not inline.
+  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Leaderboards', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
+  await page.getByTestId('returning-player-trigger').click();
+  const menu = page.getByTestId('returning-player-menu');
+  await expect(menu.getByRole('menuitem', { name: 'Reports', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Alliance', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Leaderboards', exact: true })).toHaveCount(0);
+  // Founded: the landing page is no destination any more.
+  await expect(menu.getByRole('menuitem', { name: 'Landing', exact: true })).toHaveCount(0);
 });
 
 // Mobile tutorial focus (owner decision): the header-hiding and
