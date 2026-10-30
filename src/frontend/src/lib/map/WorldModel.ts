@@ -12,7 +12,7 @@ import {
   ravensRings,
   wisdomBuildTimeFactor,
 } from './buildingEconomy';
-import { buildingAllowedOnHex, cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
+import { buildingAllowedOnHex, cropAllowedHere, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
@@ -1801,6 +1801,8 @@ export class WorldModel {
     // shore, and nothing stands on a lake or on bog it has no business on (matches BuildingDefinition.AllowsHex).
     if (!type || !buildingAllowedOnHex(type, tile)) return false;
     if (tile.buildingType) return false;
+    // A type switched off for placement (the Quarry) is never placed anew (matches BuildRejection.NewPlacementDisabled).
+    if (newPlacementDisabled(type)) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes (and, for the Sawmill, only some variants — see
     // ringCatalogue.ts's EXCLUDED_VARIANTS_BY_TYPE) have a matching river-

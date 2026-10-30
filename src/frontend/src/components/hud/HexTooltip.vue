@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Issue #16 "better hover": "hover on tiles should have more info and
 // square edges" — matches the mockup's "Crop farm LEVEL 2 / Output +72
-// food/h / Workers 8/8 / CLICK TO OPEN" card. `info.stats` is optional —
+// food/h / CLICK TO OPEN" card (the mockup's "Workers 8/8" line is gone: the backend has no workers). `info.stats` is optional —
 // non-building tiles just render title/subtitle/stat as before. See
 // HoverInfo's doc comment in HexMapRenderer.ts for how those numbers are
 // derived; this component is the only place they're formatted/translated,
@@ -108,7 +108,7 @@ function formatOutput(output: BuildingOutput): string {
     case 'storageCapacity':
       return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
     case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount, explored: output.explored });
   }
 }
 
@@ -184,9 +184,6 @@ const outputText = computed(() => (props.info.stats?.output ? formatOutput(props
 const modifierText = computed(() =>
   props.info.stats?.modifier && props.info.stats.modifier.kind !== 'bridge' ? formatModifier(props.info.stats.modifier) : undefined,
 );
-const workersText = computed(() =>
-  props.info.stats?.workers ? t('hud.hoverTooltip.workersValue', { cap: props.info.stats.workers.cap }) : undefined,
-);
 </script>
 
 <template>
@@ -201,7 +198,7 @@ const workersText = computed(() =>
     <ul v-if="campLines.length" class="camp-lines" data-testid="camp-lines">
       <li v-for="line in campLines" :key="line">{{ line }}</li>
     </ul>
-    <dl v-if="outputText || modifierText || workersText || bridgeText" class="stats">
+    <dl v-if="outputText || modifierText || bridgeText" class="stats">
       <template v-if="outputText">
         <dt>{{ t('hud.hoverTooltip.output') }}</dt>
         <dd>{{ outputText }}</dd>
@@ -217,10 +214,6 @@ const workersText = computed(() =>
       <template v-if="bridgeAccessText">
         <dt />
         <dd data-testid="bridge-access">{{ bridgeAccessText }}</dd>
-      </template>
-      <template v-if="workersText">
-        <dt>{{ t('hud.hoverTooltip.workers') }}</dt>
-        <dd>{{ workersText }}</dd>
       </template>
     </dl>
     <div v-if="info.premiumLocked" class="premium-gate">

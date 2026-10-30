@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { ScrollableView } from "./pages";
 
@@ -12,6 +13,20 @@ import { ScrollableView } from "./pages";
  * back to the bundled `data/building-catalogue.json` snapshot with no
  * backend, which is exactly what `npm run test:e2e` runs against.
  */
+
+/**
+ * The wasted-lands island toy is an admin note: hidden from players, shown to
+ * an admin who has switched "Show admin notes" on (stored in localStorage).
+ */
+async function asAdminWithNotes(
+  page: Page,
+  adminAuth: { login: () => Promise<void> },
+) {
+  await adminAuth.login();
+  await page.addInitScript(() => {
+    window.localStorage.setItem("docs.adminNotes", "1");
+  });
+}
 
 test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   test("tech tree page scrolls to reveal content below the fold", async ({
@@ -65,13 +80,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     page,
   }) => {
     await page.goto("/docs/wasted-lands");
-    // The turning island mounts a real HexMapRenderer (useHexMapRenderer
-    // sets data-map-ready once it's drawn its first frame) — wait for that
-    // before measuring the page, same as the other two specs wait on their
-    // own first async-loaded content.
-    await page
-      .locator('.wasted-island .map-host[data-map-ready="true"]')
-      .waitFor();
+    // The turning island is an admin note, so a player's page starts at the
+    // pairs; wait for its first art before measuring the page.
+    await page.locator(".wasted-lands .atlas-sprite").first().waitFor();
 
     const view = new ScrollableView(page, ".wasted-lands");
     const { scrollHeight, clientHeight } = await view.metrics();
@@ -104,7 +115,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
 
   test("wasted lands island slider shows the all-living stage", async ({
     page,
+    adminAuth,
   }) => {
+    await asAdminWithNotes(page, adminAuth);
     await page.goto("/docs/wasted-lands");
     const mapHost = page.locator(
       '.wasted-island .map-host[data-map-ready="true"]',
@@ -139,9 +152,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   // box's full width while max-height squeezed it, stretching it sideways.
   test("wasted lands art keeps each frame aspect ratio", async ({ page }) => {
     await page.goto("/docs/wasted-lands");
-    await page
-      .locator('.wasted-island .map-host[data-map-ready="true"]')
-      .waitFor();
+    await page.locator(".wasted-lands .atlas-sprite").first().waitFor();
 
     const sprites = page.locator(".wasted-lands .atlas-sprite");
     expect(await sprites.count()).toBeGreaterThan(0);
@@ -297,14 +308,31 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     page,
   }) => {
     await page.goto("/docs/bog-lands");
+    // Players see no admin notes and no toggle to reveal them.
+    await expect(page.getByTestId("admin-note")).toHaveCount(0);
+    await expect(page.getByTestId("docs-admin-toggle")).toHaveCount(0);
     const view = new ScrollableView(page, ".bog-lands");
-    const lastSection = page.locator("#map-rules");
+    const lastSection = page.locator("#claybrickworks");
     await lastSection.waitFor();
     const { scrollHeight, clientHeight } = await view.metrics();
     expect(scrollHeight).toBeGreaterThan(clientHeight);
     await view.wheel(100_000);
     await expect(lastSection).toBeInViewport();
     expect(await view.noHorizontalOverflow()).toBe(true);
+
+    // The example island comes first, above the separate tiles.
+    expect(
+      await page.evaluate(() => {
+        const map = document.querySelector("#example-map")!;
+        const ground = document.querySelector("#ground")!;
+        return Boolean(map.compareDocumentPosition(ground) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }),
+    ).toBe(true);
+
+    // Bog ground never draws the plain moss, so the docs only offer its decorated looks.
+    const ground = page.locator("#ground");
+    await expect(ground.locator(".variant-button", { hasText: "Open mire 1" })).toBeVisible();
+    await expect(ground.locator(".variant-button", { hasText: "Plain moss" })).toHaveCount(0);
 
     // Ground + eight water shapes + four buildings, each its own entry with a thumbnail.
     await expect(
@@ -346,11 +374,69 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     });
   }
 
+  test.describe("docs hub", () => {
+    test("shows the three groups and six art cards, and the cards and footer link through", async ({
+      page,
+    }) => {
+      await page.goto("/docs");
+      await expect(
+        page.getByRole("heading", { level: 1, name: "The Bjarnøy handbook" }),
+      ).toBeVisible();
+      await expect(page.getByTestId("docs-hero-art").getByRole("img")).toBeVisible();
+
+      for (const name of ["Your island", "Building up", "Beyond your shores"]) {
+        await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+      }
+
+      const cards = page.locator(".groups a.card");
+      await expect(cards).toHaveCount(6);
+      for (const title of [
+        "Tiles",
+        "Bog lands",
+        "Tech tree",
+        "Walls",
+        "Wildlife camps",
+        "Wasted lands",
+      ]) {
+        await expect(
+          page.locator(".groups a.card", { hasText: title }),
+        ).toBeVisible();
+      }
+      // Every card's art is drawn from the atlas: a sprite with a background
+      // image, or the animated camp's layers.
+      const arts = page.getByTestId("docs-card-art");
+      await expect(arts).toHaveCount(6);
+      for (let i = 0; i < 6; i++) {
+        const layer = arts.nth(i).locator(".atlas-sprite, .animated-camp .layer").first();
+        await expect(layer).toBeVisible();
+        const bg = await layer.evaluate((el) => getComputedStyle(el).backgroundImage);
+        expect(bg).toContain("url(");
+      }
+
+      await page.getByRole("link", { name: /^Bog lands/ }).click();
+      await expect(page).toHaveURL(/\/docs\/bog-lands$/);
+
+      await page.goto("/docs");
+      await page.getByRole("link", { name: "See the game in pictures" }).click();
+      await expect(page).toHaveURL(/\/showcase$/);
+    });
+
+    test("does not overflow horizontally on a phone", async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/docs");
+      await expect(page.locator(".groups a.card")).toHaveCount(6);
+      const overflow = await page
+        .locator(".docs-page")
+        .evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(1);
+    });
+  });
+
   test("walls page shows the six pieces with stage and facing pickers, the example wall and the hub links to it", async ({
     page,
   }) => {
     await page.goto("/docs");
-    await page.getByRole("button", { name: /^Walls/ }).click();
+    await page.getByRole("link", { name: /^Walls/ }).click();
     await expect(page).toHaveURL(/\/docs\/walls$/);
 
     const cards = page.locator(".walls .tile");
@@ -397,6 +483,15 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
+    // Sieges are player content now: catapults take one level per won siege, three levels per wall hex.
+    const sieges = page.locator("#sieges");
+    await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
+    await expect(sieges.locator("li")).toHaveCount(5);
+    await expect(sieges).toContainText("exactly one level");
+    await expect(sieges).toContainText("3 levels");
+    // The note on what is still not built (fire) stays admin-only.
+    await expect(page.locator("#not-built")).toHaveCount(0);
+
     await page.locator(".docs-page .breadcrumb").click();
     await expect(page).toHaveURL(/\/docs$/);
   });
@@ -442,7 +537,11 @@ test.describe(
       for (const { path, island, caption, probes } of islands) {
         test(`${path} names the hovered hex at ${width}px wide`, async ({
           page,
+          adminAuth,
         }) => {
+          // The wasted-lands island is an admin note; the bog island is not.
+          if (path === "/docs/wasted-lands")
+            await asAdminWithNotes(page, adminAuth);
           await page.setViewportSize({ width, height: 1080 });
           await page.goto(path);
           const mapHost = page.locator(

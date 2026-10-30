@@ -5,6 +5,7 @@ import type { MessageSchema } from "../i18n/schema";
 import DocsPageLayout from "../components/docs/DocsPageLayout.vue";
 import AtlasSprite from "../components/AtlasSprite.vue";
 import WastedIsland from "../components/docs/WastedIsland.vue";
+import DocsAdminNote from "../components/docs/DocsAdminNote.vue";
 import AnimatedGiant from "../components/docs/AnimatedGiant.vue";
 import AnimationPausedNote from "../components/docs/AnimationPausedNote.vue";
 import { findAtlasFrame, type AtlasFrameRect } from "../lib/map/atlas";
@@ -264,6 +265,7 @@ function defensePower(garrison: readonly number[]): number {
       <div class="giant-card">
         <h2>{{ $t("docs.wastedLands.utgard.heading") }}</h2>
         <p>{{ $t("docs.wastedLands.utgard.body") }}</p>
+        <DocsAdminNote>{{ $t("docs.wastedLands.utgard.techNote") }}</DocsAdminNote>
         <div class="giant-box">
           <AnimatedGiant
             v-if="utgardHasAnim"
@@ -464,11 +466,11 @@ function defensePower(garrison: readonly number[]): number {
       </table>
     </section>
 
-    <section id="island" class="island-section">
+    <DocsAdminNote id="island" as="section" class="island-section">
       <h2>{{ $t("docs.wastedLands.island.heading") }}</h2>
       <p>{{ $t("docs.wastedLands.island.body") }}</p>
       <WastedIsland />
-    </section>
+    </DocsAdminNote>
 
     <section id="pairs" class="pairs-section">
       <h2>{{ $t("docs.wastedLands.pairs.heading") }}</h2>

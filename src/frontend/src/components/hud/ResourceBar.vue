@@ -6,7 +6,8 @@
 // pill also carries a cap (`WorldModel.storageCapForDisplay`) and a fill-progress
 // underline, matching the reference's "4,965 / 12,000" + green bar.
 //
-// Mobile HUD bar rework: below HUD_COMPACT_QUERY there simply isn't room for
+// Mobile HUD bar rework: below HUD_COMPACT_QUERY (and, on desktop, whenever the
+// full row doesn't fit beside the nav, see `desktopCollapsed`) there simply isn't room for
 // the stacked value/rate/fill layout, so each pill collapses to one line
 // that tap-cycles through stock -> rate -> max capacity (see `stage`/
 // `cycle` below) — a single shared stage, not one per pill, so tapping any
@@ -64,6 +65,17 @@ const isRail = computed(() => isCompact.value && isHudRail.value);
 const isTall = useMediaQuery(HUD_RAIL_TALL_QUERY);
 const railTwoLine = computed(() => isRail.value && isTall.value);
 const isExpanded = computed(() => isCompact.value && isHudDrawerOpen.value && !isRail.value);
+
+// Desktop: the bar takes the room left beside the nav, and when the full
+// desktop row (stacked value / rate / fill per pill) doesn't fit it, it
+// renders the very same collapsed pills the phone uses (one line per pill,
+// tap cycles stock -> rate -> cap, short "k"/"M" notation once even those
+// don't fit) instead of running out under the realm name. Decided by
+// `updateFit` below against the hidden full desktop row, never against what
+// is on screen.
+const desktopCollapsed = ref(false);
+/** Whether the collapsed one-line pills are showing (always on a phone, on desktop only when the full row doesn't fit). */
+const collapsed = computed(() => isCompact.value || desktopCollapsed.value);
 
 // Issue #158: each pill's fill track gains a dim reserved segment — the
 // stock is not split into two bars, `reserved` is a *portion* of `value`
@@ -130,7 +142,7 @@ const population = computed(() => world.hud.population);
 
 // --- Number formatting (full by default, short only once measured to not fit) ---
 
-/** Whether the phone row is currently showing short "k"/"M" notation instead of full grouped numbers. Always false on desktop. */
+/** Whether the collapsed row is currently showing short "k"/"M" notation instead of full grouped numbers. Only ever true while the collapsed pills show. */
 const useShortNotation = ref(false);
 
 /**
@@ -252,6 +264,8 @@ function stageText(value: number, rate: number, cap: number, forceFull = false):
 // tested by hand.
 const barRef = ref<HTMLElement | null>(null);
 const measureRef = ref<HTMLElement | null>(null);
+/** Desktop only: hidden clone of the full desktop row (full notation), what `desktopCollapsed` is judged against. */
+const desktopMeasureRef = ref<HTMLElement | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
 /** Smallest evenly spread gap short notation may leave before the font steps down a size. */
@@ -262,9 +276,25 @@ const RAIL_SHORT_FROM = 100_000;
 
 async function updateFit(): Promise<void> {
   if (!isCompact.value) {
-    useShortNotation.value = false;
-    useTightFont.value = false;
-    return;
+    // Desktop: does the full row fit the room beside the nav? Always judged
+    // against the hidden desktop clone, never the row on screen, so the
+    // decision cannot flip-flop at the boundary. When it doesn't fit, the
+    // collapsed pills take over and the short-notation step below applies.
+    if (!desktopMeasureRef.value) await nextTick();
+    const desktopBar = barRef.value;
+    const desktopMeasure = desktopMeasureRef.value;
+    if (!desktopBar || !desktopMeasure) return;
+    const fits = desktopMeasure.scrollWidth <= desktopBar.clientWidth;
+    desktopCollapsed.value = !fits;
+    if (fits) {
+      useShortNotation.value = false;
+      useTightFont.value = false;
+      return;
+    }
+    // Let the collapsed markup and its measuring clone render first.
+    await nextTick();
+  } else {
+    desktopCollapsed.value = false;
   }
   if (isRail.value) {
     // No row to measure: the rail is a fixed-width column, so only the size
@@ -318,14 +348,14 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
     class="resource-bar"
     :class="{
       disabled: props.ringOpen,
-      compact: isCompact && !isExpanded,
+      compact: collapsed && !isExpanded,
       expanded: isExpanded,
       'tight-font': useTightFont,
       'resource-bar--rail': isRail,
       'resource-bar--rail-2': railTwoLine,
     }"
   >
-    <template v-if="!isCompact || isExpanded">
+    <template v-if="!collapsed || isExpanded">
       <div v-for="pill in pills" :key="pill.key" class="resource" :data-res="pill.key">
         <span class="hex-icon" :style="{ background: pill.color }" />
         <div class="numbers">
@@ -419,9 +449,10 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
   <!-- Hidden fit-measurement clone (see `updateFit` above) — same shape as
        the visible row above, always in full notation, never wrapped, laid
        out off-screen via `position: fixed` so it can't affect `.hud-bar-right`'s
-       real layout or be seen/hit-tested. Exists only on phones. -->
+       real layout or be seen/hit-tested. Exists wherever the collapsed pills
+       can show (phones, and desktop once the full row stopped fitting). -->
   <div
-    v-if="isCompact && !isRail"
+    v-if="collapsed && !isRail"
     ref="measureRef"
     class="resource-bar resource-bar--measure"
     :class="{ compact: !isExpanded, expanded: isExpanded }"
@@ -466,6 +497,38 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
       </div>
     </template>
   </div>
+
+  <!-- Desktop twin of the clone above: the full desktop row, always in full
+       notation, deciding whether the room beside the nav is enough for it
+       (`desktopCollapsed`). -->
+  <div
+    v-if="!isCompact"
+    ref="desktopMeasureRef"
+    class="resource-bar resource-bar--measure"
+    aria-hidden="true"
+    data-measure="desktop"
+    inert
+  >
+    <div v-for="pill in pills" :key="pill.key" class="resource">
+      <span class="hex-icon" :style="{ background: pill.color }" />
+      <div class="numbers">
+        <span class="value">
+          {{ fmt(pill.value, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap, true) }) }}</span>
+          <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved, true) }) }}</span>
+        </span>
+        <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(pill.rate, true) }) }}</span>
+        <span class="fill-track" />
+      </div>
+    </div>
+    <div v-if="population.max > 0" class="resource population">
+      <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+      <div class="numbers">
+        <span class="value">{{ fmt(population.current, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(population.max, true) }) }}</span></span>
+        <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(population.rate, true) }) }}</span>
+        <span class="fill-track" />
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -473,7 +536,12 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
   display: flex;
   align-items: center;
   gap: 22px;
-  flex: none;
+  /* Takes the room left beside the nav (the fit check in the script above
+     compares the full desktop row against exactly this width); the pills sit
+     at its right end, next to the nav, as when everything fits. */
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
   transition: opacity 0.15s ease;
 }
 .resource-bar.disabled {

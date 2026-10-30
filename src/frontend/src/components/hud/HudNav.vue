@@ -11,13 +11,12 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
+import { useHudNavEntries, type HudNavEntry } from '../../composables/useHudNavEntries';
 import { useLogout } from '../../composables/useLogout';
-import { useLandingLink } from '../../composables/useLandingLink';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { useIsMobile } from '../../composables/useIsMobile';
 import { fadeChip } from '../../lib/hud/chipMotion';
 import { profileLocation } from '../../lib/profileRoute';
-import { modalLocation } from '../../lib/modalRoute';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -70,7 +69,7 @@ const auth = useAuthStore();
 const player = usePlayerStore();
 const reports = useReportsStore();
 const { logout } = useLogout();
-const showLandingLink = useLandingLink();
+const { primary, secondary } = useHudNavEntries();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #40 phase 3: a lightweight "new reports" badge. HudNav is mounted
@@ -147,6 +146,12 @@ function toggleAccountMenu() {
 function closeAccountMenu() {
   accountMenuOpen.value = false;
 }
+// The Reports unread count stays visible on the closed menu's trigger.
+const unreadBadge = computed(() => secondary.value.find((e) => e.id === 'reports')?.badge ?? 0);
+function onMenuEntryClick(entry: HudNavEntry, close: () => void) {
+  close();
+  entry.go();
+}
 function goToProfile() {
   closeAccountMenu();
   router.push(profileLocation(router));
@@ -185,73 +190,13 @@ watch(() => route.fullPath, closeAccountMenu);
     }"
   >
     <button
-      v-if="player.hasFoundedSettlement"
+      v-for="entry in primary"
+      :key="entry.id"
       class="link"
-      :class="{ active: route.name === 'settlement' }"
-      @click="router.push('/settlement')"
+      :class="{ active: entry.active }"
+      @click="entry.go()"
     >
-      {{ t('hud.nav.settlement') }}
-    </button>
-    <!-- landing-page-defects.md L1: the router guard (router/index.ts) bounces
-         `/world` straight back to `/` while `player.hasFoundedSettlement` is
-         false, so this link is a dead click on every pre-founding route this
-         nav gets mounted on (the landing page's post-founding half included,
-         for the brief window before founding flips it true) — hide it rather
-         than offer a click that silently does nothing. Layered onto that:
-         an anonymous visitor has no settlement of their own to view here
-         either (returning-player nav work), so the auth check on top of the
-         existing founded-settlement one keeps this hidden for them too. -->
-    <button
-      v-if="auth.isAuthenticated && player.hasFoundedSettlement"
-      class="link"
-      :class="{ active: route.name === 'world' }"
-      @click="router.push('/world')"
-    >
-      {{ t('hud.nav.worldMap') }}
-    </button>
-    <button
-      v-if="auth.isAuthenticated"
-      class="link"
-      :class="{ active: route.name === 'leaderboards' }"
-      @click="router.push(modalLocation(router, '/leaderboards'))"
-    >
-      {{ t('hud.nav.leaderboards') }}
-    </button>
-    <button
-      v-if="auth.isAuthenticated"
-      class="link"
-      :class="{ active: ['messages', 'conversation'].includes(String(route.name)) }"
-      @click="router.push('/messages')"
-    >
-      {{ t('hud.nav.messages') }}
-    </button>
-    <button
-      class="link reports-link"
-      :class="{ active: String(route.name).startsWith('report') }"
-      @click="router.push(modalLocation(router, '/reports'))"
-    >
-      {{ t('hud.nav.reports') }}
-      <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
-    </button>
-    <button
-      class="link"
-      :class="{ active: route.name === 'guild' }"
-      @click="router.push(modalLocation(router, '/guild'))"
-    >
-      {{ t('hud.nav.alliance') }}
-    </button>
-    <button
-      class="link"
-      :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }"
-      @click="router.push('/docs')"
-    >
-      {{ t('hud.nav.docs') }}
-    </button>
-    <!-- Hidden on the landing route itself (landing-page-defects.md L1) and
-         for good once the player has founded — see
-         composables/useLandingLink.ts, shared with MobileHudDrawer.vue. -->
-    <button v-if="showLandingLink" class="link" @click="router.push('/')">
-      {{ t('hud.nav.landing') }}
+      {{ t(entry.labelKey) }}
     </button>
     <LocaleSwitcher />
     <!-- Logged in, the avatar opens a small account dropdown — Profile
@@ -272,9 +217,29 @@ watch(() => route.fullPath, closeAccountMenu);
         @click="toggleAccountMenu"
       >
         {{ initials }}
+        <span v-if="unreadBadge > 0" class="badge avatar-badge" data-testid="account-menu-badge">{{ unreadBadge }}</span>
       </button>
       <div v-if="accountMenuOpen" class="panel menu account-panel" role="menu" data-testid="account-menu">
         <div class="notch" />
+        <!-- These entries live in the avatar menu for now and will be
+             refactored to a place of their own later, like the onboarding
+             quests were. -->
+        <div v-if="secondary.length" class="menu-entries">
+          <button
+            v-for="entry in secondary"
+            :key="entry.id"
+            type="button"
+            role="menuitem"
+            class="row row-entry"
+            :class="{ active: entry.active }"
+            :data-testid="`menu-entry-${entry.id}`"
+            @click="onMenuEntryClick(entry, closeAccountMenu)"
+          >
+            {{ t(entry.labelKey) }}
+            <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
+          </button>
+          <div class="divider" role="separator" />
+        </div>
         <button type="button" role="menuitem" class="row" data-testid="account-menu-profile" @click="goToProfile">
           {{ t('hud.accountMenu.profile') }}
         </button>
@@ -290,6 +255,30 @@ watch(() => route.fullPath, closeAccountMenu);
         :unclaimed-realm="unclaimedRealm"
         :chip="floating || hasResourceBar"
       >
+        <template #trigger-badge>
+          <span v-if="unreadBadge > 0" class="badge avatar-badge" data-testid="returning-player-badge">{{ unreadBadge }}</span>
+        </template>
+        <template #entries="{ close }">
+          <!-- These entries live in the avatar menu for now and will be
+               refactored to a place of their own later, like the onboarding
+               quests were. -->
+          <div v-if="secondary.length" class="menu-entries">
+            <div class="divider" role="separator" />
+            <button
+              v-for="entry in secondary"
+              :key="entry.id"
+              type="button"
+              role="menuitem"
+              class="row row-entry"
+              :class="{ active: entry.active }"
+              :data-testid="`menu-entry-${entry.id}`"
+              @click="onMenuEntryClick(entry, close)"
+            >
+              {{ t(entry.labelKey) }}
+              <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
+            </button>
+          </div>
+        </template>
         <template #nudge>
           <ProfileNudge v-if="showProfileNudge" />
         </template>
@@ -329,18 +318,6 @@ watch(() => route.fullPath, closeAccountMenu);
   opacity: 0.4;
   cursor: not-allowed;
 }
-/* Finding #15: this must be declared *before* the `@media` block below, not
-   after it — both this and the media query's `.link { display: none }` are
-   a single class selector (equal specificity), so whichever is later in the
-   stylesheet wins the cascade. Declared afterward (as it used to be), this
-   unconditional `inline-flex` always beat the media query's `none` even at
-   phone widths, keeping "Reports" visibly inline instead of collapsing into
-   the drawer with every other link. */
-.reports-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
 /* Mobile HUD bar rework: these same destinations are duplicated into the
    pull-down drawer (components/hud/MobileHudDrawer.vue), which is the only
    thing that fits in the compact bar's own width — the inline links here
@@ -350,7 +327,8 @@ watch(() => route.fullPath, closeAccountMenu);
    so this only ever collapses the links where a drawer actually exists to
    reach them from — see the `hasDrawer` prop's own comment above. */
 @media (max-width: 768px), (max-height: 500px) {
-  .hud-nav:not(.hud-nav--no-drawer) .link {
+  .hud-nav:not(.hud-nav--no-drawer) .link,
+  .hud-nav:not(.hud-nav--no-drawer) .menu-entries {
     display: none;
   }
 }
@@ -402,6 +380,14 @@ watch(() => route.fullPath, closeAccountMenu);
   font-weight: 800;
   letter-spacing: 0;
   text-transform: none;
+}
+/* The unread-reports count on the closed menu's trigger (avatar circle or
+   returning-player button): a corner badge, same look as the row's. */
+.avatar-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  pointer-events: none;
 }
 .avatar-button {
   border: none;
@@ -474,5 +460,25 @@ watch(() => route.fullPath, closeAccountMenu);
 .row:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--gold);
+}
+.menu-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.row-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.row-entry.active {
+  color: var(--gold);
+}
+.divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--panel-border);
+  flex: none;
 }
 </style>
