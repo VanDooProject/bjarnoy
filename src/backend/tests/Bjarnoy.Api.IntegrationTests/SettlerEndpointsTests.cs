@@ -503,7 +503,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
                 // 5 Settlers carry at most 5 * 40 = 200 food
                 // (FoodCarryCapacity) — a higher request is rejected before
                 // Found-specific validation is ever reached.
-                new HexPointRequest(target.Q, target.R), 120, "found"),
+                new HexPointRequest(target.Q, target.R), 200, "found"),
             Ct);
 
         Assert.True(dispatch.IsSuccessStatusCode, $"dispatch was refused: {await dispatch.Content.ReadAsStringAsync(Ct)}");
