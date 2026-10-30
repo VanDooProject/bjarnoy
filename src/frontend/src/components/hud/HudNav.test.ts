@@ -6,8 +6,11 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HudNav from './HudNav.vue';
+import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
+import { isTradePanelOpen } from '../../composables/tradePanelOpenState';
+import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
 import { createTestI18n } from '../../test/i18n';
@@ -241,6 +244,52 @@ describe('HudNav "Name your jarl" trigger', () => {
     foundAndOnboarded(usePlayerStore());
     const wrapper = await mountWith({}, '/docs');
     expect(wrapper.get('[data-testid="returning-player-trigger"]').classes()).not.toContain('trigger--chip');
+  });
+
+  describe('stepping aside on a phone', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      isHudDrawerOpen.value = false;
+      isTradePanelOpen.value = false;
+    });
+
+    function stubPhone(phone: boolean) {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockImplementation((query: string) => ({
+          matches: phone && query === HUD_COMPACT_QUERY,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        })),
+      );
+    }
+
+    for (const [what, open] of [
+      ['the HUD drawer', () => (isHudDrawerOpen.value = true)],
+      ['the Trade panel', () => (isTradePanelOpen.value = true)],
+    ] as const) {
+      it(`leaves the in-game chip while ${what} is open and comes back after`, async () => {
+        stubPhone(true);
+        foundAndOnboarded(usePlayerStore());
+        const wrapper = await mountWith({ hasResourceBar: true });
+        open();
+        await flushPromises();
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
+        isHudDrawerOpen.value = false;
+        isTradePanelOpen.value = false;
+        await flushPromises();
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(true);
+      });
+    }
+
+    it('keeps the inline trigger on desktop while the Trade panel is open', async () => {
+      stubPhone(false);
+      foundAndOnboarded(usePlayerStore());
+      const wrapper = await mountWith({ hasResourceBar: true });
+      isTradePanelOpen.value = true;
+      await flushPromises();
+      expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(true);
+    });
   });
 });
 

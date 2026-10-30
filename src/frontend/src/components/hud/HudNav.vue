@@ -15,6 +15,8 @@ import { useLogout } from '../../composables/useLogout';
 import { useLandingLink } from '../../composables/useLandingLink';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { isTradePanelOpen } from '../../composables/tradePanelOpenState';
+import { useIsMobile } from '../../composables/useIsMobile';
+import { fadeChip } from '../../lib/hud/chipMotion';
 import { profileLocation } from '../../lib/profileRoute';
 import { modalLocation } from '../../lib/modalRoute';
 import { DEMO_MODE } from '../../config';
@@ -117,9 +119,22 @@ const unclaimedRealm = computed(
 );
 const showProfileNudge = computed(() => unclaimedRealm.value && !player.profileNudgeDismissed);
 // The in-game phone chip sits where the HUD drawer and the open Trade panel
-// also draw — it steps aside while either is open (the drawer carries the same
-// account entries anyway). Only applied under the phone media query (CSS).
-const chipStepsAside = computed(() => props.hasResourceBar && (isHudDrawerOpen.value || isTradePanelOpen.value));
+// also draw — it steps aside while either is open. Phone only: on desktop the
+// trigger is inline in the bar and nothing covers it.
+const isMobile = useIsMobile();
+const chipStepsAside = computed(
+  () => props.hasResourceBar && isMobile.value && (isHudDrawerOpen.value || isTradePanelOpen.value),
+);
+// Shown while anonymous (gone once registered), except while stepping aside.
+// Every enter has a leave: the chip fades out/in (lib/hud/chipMotion.ts,
+// through the HUD motion gate) rather than popping — on registration too.
+const showReturningPlayerMenu = computed(() => !auth.isAuthenticated && !chipStepsAside.value);
+function onChipEnter(el: Element, done: () => void) {
+  void fadeChip(el, 'in').then(done, done);
+}
+function onChipLeave(el: Element, done: () => void) {
+  void fadeChip(el, 'out').then(done, done);
+}
 
 // Player logout/login gate: the authenticated avatar is now a small account
 // dropdown (Profile / Log out) rather than a direct link to /profile,
@@ -170,7 +185,6 @@ watch(() => route.fullPath, closeAccountMenu);
     :class="{
       'hud-nav--no-drawer': !hasDrawer,
       'hud-nav--with-resources': hasResourceBar,
-      'hud-nav--chip-aside': chipStepsAside,
     }"
   >
     <button
@@ -272,16 +286,18 @@ watch(() => route.fullPath, closeAccountMenu);
         </button>
       </div>
     </div>
-    <ReturningPlayerMenu
-      v-else
-      :nudging="showProfileNudge"
-      :unclaimed-realm="unclaimedRealm"
-      :chip="floating || hasResourceBar"
-    >
-      <template #nudge>
-        <ProfileNudge v-if="showProfileNudge" />
-      </template>
-    </ReturningPlayerMenu>
+    <Transition :css="false" @enter="onChipEnter" @leave="onChipLeave">
+      <ReturningPlayerMenu
+        v-if="showReturningPlayerMenu"
+        :nudging="showProfileNudge"
+        :unclaimed-realm="unclaimedRealm"
+        :chip="floating || hasResourceBar"
+      >
+        <template #nudge>
+          <ProfileNudge v-if="showProfileNudge" />
+        </template>
+      </ReturningPlayerMenu>
+    </Transition>
   </nav>
 </template>
 
@@ -370,9 +386,6 @@ watch(() => route.fullPath, closeAccountMenu);
     border-left: none;
   }
   .hud-nav--with-resources:not(.hud-nav--no-drawer) :deep(.nudge:not(.in-drawer)) {
-    display: none;
-  }
-  .hud-nav--with-resources.hud-nav--chip-aside:not(.hud-nav--no-drawer) {
     display: none;
   }
 }
