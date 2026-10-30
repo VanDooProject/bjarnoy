@@ -99,7 +99,7 @@
       "lumberjack": "Fällt Holz auf bewaldetem Grund — das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm — die Knochen jeder Festung.",
       "odinstatue": "Odins Statue auf Gras, ab Langhaus 25 hinter einer Druidenhütte der Stufe 10. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (10 % auf Stufe 5). Raben: Ihr Gebiet, ihre Türme und ihre Heere sehen pro Stufe 2 Ringe weiter (10 auf Stufe 5). Zählt als der eine Schrein der Siedlung.",
-      "palisade": "Ein Feld der Siedlungsmauer, auf Gras, Wald oder Sand im eigenen Gebiet, ab Langhaus 7 hinter einem Turm der Stufe 5 (Palisade und Tor teilen sich eine Karte im Technologiebaum). Mauern verzweigen sich nie: Kein Feld darf drei Nachbarn der Mauer haben. Welches Teil gezeichnet wird, Gerade, Kurve oder Ende, richtet sich nach den Nachbarfeldern der Mauer. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers; ein einzelnes Mauerende (ein Nachbar) ist nur halb offen und jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, das Meer bleibt. Feuer und Belagerung nehmen ihr später Stufen.",
+      "palisade": "Ein Feld der Siedlungsmauer, auf Gras, Wald oder Sand im eigenen Gebiet, ab Langhaus 7 hinter einem Turm der Stufe 5 (Palisade und Tor teilen sich eine Karte im Technologiebaum). Mauern verzweigen sich nie: Kein Feld darf drei Nachbarn der Mauer haben. Welches Teil gezeichnet wird, Gerade, Kurve oder Ende, richtet sich nach den Nachbarfeldern der Mauer. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers; ein einzelnes Mauerende (ein Nachbar) ist nur halb offen und jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, das Meer bleibt. Eine gewonnene Belagerung, die ein Mauerfeld als Ziel hat, nimmt ihm eine Stufe, egal wie viele Katapulte übrig sind; Feuer wird das später auch tun.",
       "palisadegate": "Ein Mauerfeld mit Tor, nur wo die Mauer zwischen zwei gegenüberliegenden Mauerfeldern gerade verläuft. Die Armeen des Besitzers und ihrer Freunde (dieselbe Gilde oder eine Gilde im Frieden mit ihr) passieren es so schnell wie den Boden darunter; jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Gleiche Freischaltung, Voraussetzung, Stufen und Kosten wie die Palisade, auf einer Karte im Technologiebaum.",
       "bridge": "Öffnet einen breiten Fluss für Landarmeen. Erst ein Damm, dann ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder.",
       "reindeerherder": "Eine Hirtenhütte und ein Rentiergehege auf offenem Grasland — das erste Nahrungsgebäude der Siedlung, von Anfang an verfügbar.",
@@ -717,7 +717,7 @@
     },
     "notBuilt": {
       "heading": "Noch nicht gebaut",
-      "body": "Belagerung und Feuer, die einer Mauer eine Stufe nehmen: Eine Mauer verliert ihre Stufen nacheinander, bis sie weg ist. Noch tut das nichts."
+      "body": "Feuer, das einer Mauer eine Stufe nimmt: Eine Mauer verliert ihre Stufen nacheinander, bis sie weg ist. Noch brennt keine Mauer."
     }
   }
 }
