@@ -130,12 +130,14 @@ A route whose origin or destination is itself impassable (a mountain, a wall, se
 rather than silently blaming the wall; pick endpoints on walkable land.
 
 The shipped scenarios are pinned to the legacy island density (the `generation` line above: the island-density change
-keeps legacy settings byte-identical), so their walls and routes stay on the terrain they were laid out on. The shipped
+keeps legacy settings byte-identical), so their walls and routes stay on the terrain they were laid out on. A change to
+the terrain rule itself still moves them (the shore-only sand rule turned inland sand into grass and let bogs grow there):
+re-lay the affected walls and routes on the new terrain, as `a` (route B) and `f` (four wall groups) were then, and as `a` (route A), `c`, `d`, `d2` (their wall's river end) and `e` (the whole wall) were when rivers began to meander. The shipped
 scenarios, all on seed 11 at radius 1000 (g on seeds 1 and 5):
 
 | file | shows |
 | --- | --- |
-| `a-wide-river-vs-stream` | route A across a wide river walks 37 steps upstream to where it starts as a stream (cost 52.0, was 15.7); route B across a stream goes straight over at +8, same as before |
+| `a-wide-river-vs-stream` | route A across a wide river walks 24 steps round to where it starts as a stream (cost 36.2, was 11.1); route B across a stream goes straight over at +8, same as before |
 | `b-mountains-block` | mountains impassable: the route round a horseshoe ridge is 25 steps instead of 8 |
 | `c-sea-end-seals` | wall from a wide river to the sea, ending in `palisade_end_coast`, with a gate: the enemy has no route in, the friendly army walks through the gate |
 | `d-land-end-at-coast` | the same wall with a plain land end: the enemy walks over the half-open end at a penalty (see below) |
@@ -173,7 +175,7 @@ and counts how many mountain hexes touch the sea, sand, a wide river or a lake. 
 (`g-cutoff-worst`, `g-cutoff-typical`) tints that land magenta.
 
 Findings: mountains are generated only in an island's core (`terrainAt` in `worldGenerator.ts`: `island.t < mountainThreshold`
-0.4 and the ridge field above `mountainRockiness`; sand needs `island.t > beachThreshold` 0.9, the coast rim), so a band of
+0.4 and the ridge field above `mountainRockiness`; sand needs `island.t > beachThreshold` 0.9 and open sea within `BEACH_SEA_RADIUS` 2 hexes, the coast rim), so a band of
 grass or forest always separates them from the sea: 2 of 164,836 mountain hexes touch it. Mountains do touch rivers (10.7 %
 any river, since springs rise on them; 0.8 % a wide one) and never a lake. Cut-off land is mostly a valley closed in by mountains
 alone. **Streams are walkable at a flat 9.0 (1.0 + 8) whatever terrain they run over** (`PathRestrictions.streamsIgnoreTerrain`,

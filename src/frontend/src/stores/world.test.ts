@@ -33,6 +33,7 @@ const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
 const getWorldCamps = vi.fn();
+const queueBuild = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -88,6 +89,7 @@ async function loadStoreModule(demoMode: boolean) {
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
       dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
       getWorldCamps: (...args: unknown[]) => getWorldCamps(...args),
+      queueBuild: (...args: unknown[]) => queueBuild(...args),
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -1992,5 +1994,152 @@ describe('useWorldStore refreshCampStates', () => {
     demo.worldId = 'world-1';
     await demo.refreshCampStates();
     expect(getWorldCamps).not.toHaveBeenCalled();
+  });
+});
+
+describe('useWorldStore queueBuildOptimistic (W3)', () => {
+  function settlementResponse(overrides: { wood?: number; queue?: unknown[] } = {}) {
+    return {
+      id: 'settlement-1',
+      longhouseLevel: 1,
+      resources: {
+        stock: { wood: overrides.wood ?? 500, stone: 300, food: 200, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+        reserved: { wood: 0, stone: 0, food: 0, iron: 0 },
+      },
+      construction: { slots: 2, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
+      buildings: [],
+      queue: overrides.queue ?? [],
+      garrison: [],
+      trainingQueue: [],
+    };
+  }
+  const realOrder = {
+    id: 'order-1', q: 3, r: -2, building: 'lumberjack', targetLevel: 1, state: 'building', slotCost: 1,
+    completesAtGameTime: 'x', completesInSeconds: 120, totalSeconds: 120,
+  };
+
+  async function setup() {
+    const store = await loadStoreModule(false);
+    store.model.registerSettlement({
+      id: 'settlement-1', ownerId: 'player-1', ownerName: 'Astrid', name: 'Realm', q: 0, r: 0, level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 }, rates: { wood: 0, stone: 0, food: 0, iron: 0 }, foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+    getSettlement.mockReset().mockResolvedValue(settlementResponse());
+    await store.refreshLiveSettlement(); // stock: wood 500
+    queueBuild.mockReset();
+    return store;
+  }
+  const at = { q: 3, r: -2 };
+
+  it('puts a pending "…" order on the hex before the request resolves', async () => {
+    const store = await setup();
+    let release!: () => void;
+    queueBuild.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+    const { constructionDialsFromQueue } = await import('../lib/map/constructionDial');
+
+    const done = store.queueBuildOptimistic('lumberjack', at);
+    expect(store.hud.queue).toHaveLength(1);
+    expect(store.hud.queue[0]).toMatchObject({ q: 3, r: -2, building: 'lumberjack', state: 'waiting', completesInSeconds: null });
+    // The dial for it has no timing, which the renderer draws as "…".
+    expect(constructionDialsFromQueue(store.hud.queue, Date.now())).toEqual([{ coord: at, startMs: null, endMs: null }]);
+
+    getSettlement.mockResolvedValue(settlementResponse({ queue: [realOrder] }));
+    release();
+    await done;
+  });
+
+  it('replaces the pending entry with the real order once confirmed', async () => {
+    const store = await setup();
+    queueBuild.mockResolvedValue(undefined);
+    getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [realOrder] }));
+
+    await store.queueBuildOptimistic('lumberjack', at, { wood: 100 });
+
+    expect(queueBuild).toHaveBeenCalledWith('settlement-1', { building: 'lumberjack', q: 3, r: -2 }, undefined);
+    expect(store.hud.queue.map((o) => o.id)).toEqual(['order-1']);
+  });
+
+  it('records the confirmed spend, only for resources whose stock really dropped', async () => {
+    const store = await setup();
+    queueBuild.mockResolvedValue(undefined);
+    getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [realOrder] }));
+
+    await store.queueBuildOptimistic('lumberjack', at, { wood: 100, stone: 50 });
+
+    // Stone stayed at 300 (a reserved waiting order spends nothing yet).
+    expect(store.hud.lastSpend?.cost).toEqual({ wood: 100 });
+  });
+
+  it('does not record a spend without a cost, or when nothing dropped', async () => {
+    const store = await setup();
+    queueBuild.mockResolvedValue(undefined);
+    getSettlement.mockResolvedValue(settlementResponse({ queue: [realOrder] }));
+    await store.queueBuildOptimistic('lumberjack', at);
+    await store.queueBuildOptimistic('lumberjack', at, { wood: 100 });
+    expect(store.hud.lastSpend).toBeNull();
+  });
+
+  it('removes the pending entry and rethrows on a refusal, without a spend or a refresh', async () => {
+    const store = await setup();
+    const refusal = new Error('No free construction slot.');
+    queueBuild.mockRejectedValue(refusal);
+    getSettlement.mockClear();
+
+    await expect(store.queueBuildOptimistic('lumberjack', at, { wood: 100 })).rejects.toBe(refusal);
+
+    expect(store.hud.queue).toEqual([]);
+    expect(store.hud.lastSpend).toBeNull();
+    expect(store.hud.resources.wood).toBe(500);
+    expect(getSettlement).not.toHaveBeenCalled();
+  });
+
+  it('keeps the pending entry when a poll refresh lands while the request is still in flight', async () => {
+    const store = await setup();
+    let release!: () => void;
+    queueBuild.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+    const done = store.queueBuildOptimistic('lumberjack', at);
+    await store.refreshLiveSettlement(); // the poll, answering before the build was accepted
+    expect(store.hud.queue.map((o) => o.building)).toEqual(['lumberjack']);
+    expect(store.hud.queue[0].id.startsWith('pending:')).toBe(true);
+
+    getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [realOrder] }));
+    release();
+    await done;
+    expect(store.hud.queue.map((o) => o.id)).toEqual(['order-1']);
+  });
+
+  it('removes the pending entry on a refusal even if a poll happened meanwhile', async () => {
+    const store = await setup();
+    let reject!: (e: Error) => void;
+    queueBuild.mockReturnValue(new Promise<void>((_, r) => (reject = r)));
+    const done = store.queueBuildOptimistic('lumberjack', at);
+    await store.refreshLiveSettlement();
+    reject(new Error('nope'));
+    await expect(done).rejects.toThrow('nope');
+    expect(store.hud.queue).toEqual([]);
+  });
+
+  it('treats the build as confirmed when only the follow-up refresh fails', async () => {
+    const store = await setup();
+    queueBuild.mockResolvedValue(undefined);
+    getSettlement.mockRejectedValue(new Error('network error'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(store.queueBuildOptimistic('lumberjack', at)).resolves.toBeUndefined();
+    expect(store.hud.queue).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it('recordSpend ignores an empty cost', async () => {
+    const store = await setup();
+    store.recordSpend({});
+    store.recordSpend({ wood: 0 });
+    expect(store.hud.lastSpend).toBeNull();
+    store.recordSpend({ wood: 30 });
+    expect(store.hud.lastSpend?.cost).toEqual({ wood: 30 });
   });
 });

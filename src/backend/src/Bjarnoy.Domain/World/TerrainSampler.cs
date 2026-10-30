@@ -743,7 +743,7 @@ public sealed class TerrainSampler
             return Terrain.Sea;
         }
 
-        if (depth > _options.BeachThreshold)
+        if (depth > _options.BeachThreshold && SeesSea(coord, wasted: false))
         {
             return Terrain.Sand;
         }
@@ -756,6 +756,36 @@ public sealed class TerrainSampler
         return ValueNoise.Sample(coord.Q, coord.R, _options.Seed + 2, ForestPatchScale) > _options.ForestRockiness
             ? Terrain.Forest
             : Terrain.Grass;
+    }
+
+    /// <summary>
+    /// How close (in hex steps) open sea must be for a hex past <see cref="WorldGenerationOptions.BeachThreshold"/> to be
+    /// sand — mirrors the frontend's <c>BEACH_SEA_RADIUS</c>. The depth alone is not enough: the domain warp and the
+    /// shoreline noise make interior "saddles" where the depth climbs close to 1 without the coast opening there, which
+    /// put beach bands deep inland. 2 keeps the usual 1-2 hex wide beach of a real coast whole (1 halves it).
+    /// </summary>
+    public const int BeachSeaRadius = 2;
+
+    // The hexes within BeachSeaRadius of the origin (the origin left out), nearest ring first so a real beach
+    // finds its sea after a step or two.
+    private static readonly HexCoord[] BeachSeaOffsets = HexCoord.Origin.WithinRadius(BeachSeaRadius)
+        .Where(c => c != HexCoord.Origin)
+        .OrderBy(c => HexCoord.Distance(HexCoord.Origin, c))
+        .ToArray();
+
+    // Whether the island shape leaves sea within BeachSeaRadius of the hex. Only the shape's own land test (the depth)
+    // is asked, never TerrainAt, so this cannot recurse into the sand rule. A wasted hex asks the wasted shape.
+    private bool SeesSea(HexCoord coord, bool wasted)
+    {
+        foreach (var offset in BeachSeaOffsets)
+        {
+            if (DepthAt(coord + offset, wasted) is null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Wavelength (hexes) of the forest/grass patch noise — mirrors the frontend's <c>FOREST_PATCH_SCALE</c>.</summary>
@@ -819,7 +849,7 @@ public sealed class TerrainSampler
             }
         }
 
-        if (depth > _options.BeachThreshold)
+        if (depth > _options.BeachThreshold && SeesSea(coord, wasted: true))
         {
             return Terrain.Sand;
         }
@@ -1003,24 +1033,76 @@ public sealed class TerrainSampler
     /// Per-terrain variant count the tile art pack actually has, everything else
     /// falling back to 1. Grass has a plain top image plus <c>variant000</c>-
     /// <c>variant002</c> (4); forest has a plain image plus <c>variant000</c>-
-    /// <c>variant001</c> (3); mountain has four distinct shapes — Cone, Table,
+    /// <c>variant002</c> (4, weighted: see <see cref="ForestVariantWeights"/>); mountain has four distinct shapes — Cone, Table,
     /// Saddleback, Corrie (<see cref="MountainShape"/>) — each its own
     /// composited (not base/top split) render, so <see cref="VariantAt"/>'s
-    /// index doubles as that enum's numeric value; see <see cref="MountainShapeAt"/>.
+    /// index doubles as that enum's numeric value; see <see cref="MountainShapeAt"/>. Sand has a plain image plus
+    /// <c>variant000</c>-<c>variant007</c> (9, weighted: see <see cref="SandVariantWeights"/>).
     /// </summary>
     private static readonly IReadOnlyDictionary<Terrain, int> VariantCounts = new Dictionary<Terrain, int>
     {
         [Terrain.Grass] = 4,
-        [Terrain.Forest] = 3,
+        [Terrain.Forest] = 4,
         [Terrain.Mountain] = 4,
+        [Terrain.Sand] = 9,
 
         // Bog: the plain moss plus variant001-008 (open mire x3, ore seep, fen, peat cuttings, birch copse, seep chain).
+        // The client draws variant006 (peat cuttings) as plain moss (textures.ts RETIRED_BOG_VARIANTS); its slot stays so
+        // the other looks keep theirs.
         [Terrain.Bog] = 9,
 
         // Lake: the plain water plus variant001-003 (islet, moss mat, reed island). variant004 (fish weir), 005 (ore boat)
         // and 006 (fishing boat) are placed by the buildings that use them, never rolled here.
         [Terrain.Lake] = 4,
     };
+
+    /// <summary>
+    /// Top-variant weights for a living forest: plain (open clearing), variant000 (full forest), variant001 (fairy-ring
+    /// glade), variant002 (forest tarn) — mirrors the frontend's <c>FOREST_VARIANT_WEIGHTS</c>.
+    /// </summary>
+    public static readonly double[] ForestVariantWeights = { 0.04, 0.84, 0.06, 0.06 };
+
+    /// <summary>
+    /// Top-variant weights for a living sand tile: index 0 is the plain sand, index N is <c>variant(N-1)</c> — 1 dunes,
+    /// 2 driftwood, 3 boulders, 4 wreck, 5 whale bones, 6 upturned boat and cairn, 7 sand castle, 8 driftwood pile —
+    /// mirrors the frontend's <c>SAND_VARIANT_WEIGHTS</c>.
+    /// </summary>
+    public static readonly double[] SandVariantWeights = { 0.45, 0.11, 0.11, 0.11, 0.02, 0.02, 0.06, 0.01, 0.11 };
+
+    /// <summary>Wavelength (hexes) of the taiga/birch biome noise — mirrors <c>FOREST_BIOME_SCALE</c>.</summary>
+    public const double ForestBiomeScale = 14;
+
+    /// <summary>Seed offset of the biome noise — mirrors <c>FOREST_BIOME_SALT</c>.</summary>
+    public const int ForestBiomeSalt = 137;
+
+    /// <summary>Seed offset of the per-hex mixed-wood roll — mirrors <c>FOREST_MIXED_SALT</c>.</summary>
+    public const int ForestMixedSalt = 139;
+
+    /// <summary>Chance of mixed wood away from a biome boundary — mirrors <c>FOREST_MIXED_BASE_CHANCE</c>.</summary>
+    public const double ForestMixedBaseChance = 0.2;
+
+    /// <summary>Extra mixed-wood chance exactly on the boundary — mirrors <c>FOREST_MIXED_BOUNDARY_BONUS</c>.</summary>
+    public const double ForestMixedBoundaryBonus = 0.4;
+
+    /// <summary>Half-width of the noise band around 0.5 with a raised mixed-wood chance — mirrors <c>FOREST_MIXED_BAND</c>.</summary>
+    public const double ForestMixedBand = 0.06;
+
+    /// <summary>
+    /// Which wood a living forest hex is: large taiga or birch regions (coarse value noise thresholded at 0.5) with
+    /// mixed wood sprinkled into both, denser on the boundary. Only meaningful for a Forest hex that is not wasted
+    /// (wasted forests stay dead forest); mirrors the frontend's <c>forestKindAt</c>.
+    /// </summary>
+    public ForestKind ForestKindAt(HexCoord coord)
+    {
+        var n = ValueNoise.Sample(coord.Q, coord.R, _options.Seed + ForestBiomeSalt, ForestBiomeScale);
+        var p = ForestMixedBaseChance + ForestMixedBoundaryBonus * Math.Max(0, 1 - Math.Abs(n - 0.5) / ForestMixedBand);
+        if (ValueNoise.Hash2(coord.Q, coord.R, _options.Seed + ForestMixedSalt) < p)
+        {
+            return ForestKind.Mixed;
+        }
+
+        return n >= 0.5 ? ForestKind.Taiga : ForestKind.Birch;
+    }
 
     /// <summary>
     /// Which of the four mountain shapes (<see cref="MountainShape"/>) a hex
@@ -1079,6 +1161,16 @@ public sealed class TerrainSampler
         }
 
         var hash = ValueNoise.Hash2(coord.Q, coord.R, _options.Seed + 31);
+        if (terrain == Terrain.Forest)
+        {
+            return WeightedIndex(hash, ForestVariantWeights);
+        }
+
+        if (terrain == Terrain.Sand)
+        {
+            return WeightedIndex(hash, SandVariantWeights);
+        }
+
         var index = (int)(hash * count);
         return index >= count ? count - 1 : index;
     }

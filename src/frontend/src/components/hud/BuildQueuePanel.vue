@@ -14,11 +14,14 @@
 // card (this issue's other two status-box examples; their *content* is
 // illustrative, not built here) could reuse the same classes with a
 // different accent color, without wiring their data yet.
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useWorldStore } from '../../stores/world';
 import { useBuildOrders } from '../../composables/useQueueOrders';
+import { confirmedBuild, coordKey, heldBuildRows, releaseBuildRow } from '../../composables/buildFeedback';
+import { motionEnabled } from '../../lib/motion';
+import { bumpCount, flyToken, slideInCard, slideInRow } from '../../lib/hud/queueMotion';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -41,6 +44,48 @@ async function cancel(orderId: string) {
 
 const orders = useBuildOrders();
 
+// Q1 + Q5: after a confirmed build a gold token flies from the hex's dial into
+// the new row, which then slides in while the slot count bumps; if the card
+// was hidden (no orders yet) it first slides in from the left. Until then the
+// new row (and, when it is the only one, the whole card) is held back —
+// MapView holds it when the optimistic build starts, because the real order
+// arrives with the refresh a moment before the confirmation is announced.
+const cardEl = ref<HTMLElement | null>(null);
+/** The card was told to show itself (the confirmation is playing) although every row is still held. */
+const revealed = ref(false);
+const isHeld = (coord: { q: number; r: number }) => heldBuildRows.value.includes(coordKey(coord));
+const cardHeld = computed(() => orders.value.length > 0 && !revealed.value && orders.value.every((o) => isHeld(o.coord)));
+
+watch(confirmedBuild, async (event) => {
+  if (!event) return;
+  // Reduced motion (or no animation support): no flight, the row and count just appear.
+  if (!motionEnabled()) {
+    releaseBuildRow(event.coord);
+    return;
+  }
+  const cardWasHidden = cardHeld.value;
+  revealed.value = true;
+  await nextTick();
+  const card = cardEl.value;
+  const row = card?.querySelector<HTMLElement>(`[data-coord="${coordKey(event.coord)}"]`);
+  if (!card || !row) {
+    releaseBuildRow(event.coord);
+    revealed.value = false;
+    return;
+  }
+  if (cardWasHidden) await slideInCard(card);
+  if (event.from) {
+    const rect = row.getBoundingClientRect();
+    await flyToken(event.from, { x: rect.left + 20, y: rect.top + 12 });
+  }
+  releaseBuildRow(event.coord);
+  await nextTick();
+  void slideInRow(row);
+  const count = card.querySelector('.status-card-count');
+  if (count) void bumpCount(count);
+  if (heldBuildRows.value.length === 0) revealed.value = false;
+});
+
 // Issue #158: a footer note when any queued order is a waiting one — its
 // cost sits reserved (still in `hud.resources`, still counted against the
 // storage cap) but unspendable elsewhere. Reads `hud.reserved` — the sum of
@@ -52,12 +97,18 @@ const reservedTotal = computed(() => {
 </script>
 
 <template>
-  <div v-if="orders.length" class="status-card">
+  <div v-if="orders.length" ref="cardEl" class="status-card" :class="{ 'is-held': cardHeld }">
     <div class="status-card-header">
       <span class="status-card-title">{{ t('hud.buildQueue.title') }}</span>
       <span class="status-card-count">{{ t('hud.buildQueue.slots', { used: world.hud.construction.slotsUsed, total: world.hud.construction.slots }) }}</span>
     </div>
-    <div v-for="o in orders" :key="o.key" class="status-row" :class="{ 'is-waiting': o.waiting }">
+    <div
+      v-for="o in orders"
+      :key="o.key"
+      class="status-row"
+      :class="{ 'is-waiting': o.waiting, 'is-held': isHeld(o.coord) }"
+      :data-coord="coordKey(o.coord)"
+    >
       <button type="button" class="status-row-click" @click="emit('select', o.coord)">
         <div class="status-row-top">
           <span class="status-row-name">{{ o.name }}</span>
@@ -112,6 +163,11 @@ const reservedTotal = computed(() => {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: 0;
+}
+/* The first build's card, until its confirmation reveals it (Q5). */
+.status-card.is-held,
+.status-row.is-held {
+  visibility: hidden;
 }
 .status-card-header {
   display: flex;

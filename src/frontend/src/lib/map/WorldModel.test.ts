@@ -611,6 +611,32 @@ function riverTile(at: AxialCoord, shape: RiverTile['shape']): RiverTile {
   return { q: at.q, r: at.r, shape, inDirections: [], outDirection: null };
 }
 
+describe('WorldModel.riverMouthHexKeys / riverRevision', () => {
+  it('lists exactly the mouth tiles, of any width, and nothing else', () => {
+    const model = new WorldModel(20260825);
+    model.setRiverTiles([
+      riverTile({ q: 1, r: 2 }, 'mouth'),
+      { ...riverTile({ q: 3, r: 4 }, 'mouth'), width: 'stream' },
+      riverTile({ q: 5, r: 6 }, 'straight'),
+      riverTile({ q: 7, r: 8 }, 'bend'),
+    ]);
+    // Same packing as buildingHexKeys (and the bake worker's hexKey).
+    const key = (q: number, r: number) => ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
+    expect(model.riverMouthHexKeys().sort()).toEqual([key(1, 2), key(3, 4)].sort());
+  });
+
+  it('bumps riverRevision whenever the river set is replaced', () => {
+    const model = new WorldModel(20260825);
+    const before = model.riverRevision;
+    model.setRiverTiles([riverTile({ q: 1, r: 2 }, 'mouth')]);
+    expect(model.riverRevision).toBeGreaterThan(before);
+    const after = model.riverRevision;
+    model.setRiverTiles([]);
+    expect(model.riverRevision).toBeGreaterThan(after);
+    expect(model.riverMouthHexKeys()).toEqual([]);
+  });
+});
+
 // Which art family/orientation a Sawmill/Crop Mill renders with is
 // textures.ts's riverBuildingArtFor now (a pure function, unit-tested there
 // against real in/out directions) — WorldModel no longer has its own
@@ -926,6 +952,16 @@ describe('WorldModel.previewIslandTiles', () => {
 // it's meaningful (an island that is both foreign *and* oversized), since
 // either bug alone can hide the other if only one is checked.
 describe('WorldModel.previewCropTiles', () => {
+  it('keeps the requested radius when the flood fill hits its safety bound, rather than the landing radius', () => {
+    // A centre on an island that reaches past PREVIEW_ISLAND_FLOOD_MAX_RADIUS: the showcase frame's
+    // 34-hex crop used to come back as the landing page's 7-hex disc.
+    const model = new WorldModel(1);
+    model.isLand = () => true;
+    const center = { q: 0, r: 0 };
+    expect(model.previewCropTiles(center, 34)).toHaveLength(hexesInRadius(center, 34).length);
+    expect(model.previewCropTiles(center)).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+  });
+
   it('excludes a foreign island within PREVIEW_ISLAND_RADIUS — the L5 property', () => {
     const model = new WorldModel(1);
     const center: AxialCoord = { q: 0, r: 0 };
@@ -960,6 +996,18 @@ describe('WorldModel.previewCropTiles', () => {
     // deliberately small framing (docs/design/img/but_building_on_map.png)
     // rather than "however big the connected landmass actually is".
     expect(tiles).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+  });
+
+  it('takes an optional wider radius, served from the same cached landmass without truncation', () => {
+    const model = new WorldModel(1);
+    const center: AxialCoord = { q: 0, r: 0 };
+    // A finite island (an unbroken one would hit the flood-fill bound and fall back to the narrow radius).
+    model.isLand = (q: number, r: number) => hexDistance(center, { q, r }) <= 30;
+    const wide = 11;
+    expect(PREVIEW_ISLAND_FLOOD_MAX_RADIUS).toBeGreaterThan(wide);
+    // Narrow first, so a radius-keyed cache would hand the wide call a truncated set.
+    expect(model.previewCropTiles(center)).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+    expect(model.previewCropTiles(center, wide)).toHaveLength(hexesInRadius(center, wide).length);
   });
 
   it('both at once: a foreign, also-oversized island neither leaks in nor gets the crop drawn past its own radius', () => {
@@ -2160,5 +2208,28 @@ describe('WorldModel.applyRivalWalls', () => {
 
     expect(model.getTile(own.q, own.r)).toMatchObject({ buildingType: 'palisade', ownerId: settlement.id });
     expect(model.rivalWallOwner(own.q, own.r)).toBeUndefined();
+  });
+});
+
+// The renderer caches each bog hex's edge geometry, which depends on its neighbours, and throws the cache away when
+// this revision moves (HexMapRenderer.rebuildBogEdges) — so it must move whenever bog or giant hexes arrive.
+describe('overlayRevision', () => {
+  const bog: BogTile = { q: 3, r: 4, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] };
+
+  it('moves when live bog tiles arrive or are replaced', () => {
+    const model = new WorldModel();
+    const before = model.overlayRevision;
+    model.setBogTiles([bog]);
+    const afterFirst = model.overlayRevision;
+    expect(afterFirst).toBeGreaterThan(before);
+    model.setBogTiles([]);
+    expect(model.overlayRevision).toBeGreaterThan(afterFirst);
+  });
+
+  it('moves when a giant is placed', () => {
+    const model = new WorldModel();
+    const before = model.overlayRevision;
+    model.setGiants([{ family: 'giantmountain', anchor: { q: 10, r: 10 }, orientation: 'SE' }]);
+    expect(model.overlayRevision).toBeGreaterThan(before);
   });
 });

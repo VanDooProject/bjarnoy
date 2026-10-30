@@ -27,6 +27,8 @@ test('building a sawmill from the ring menu places it without a rendering error'
   // off the building catalogue and shows a locked bubble below it, so level
   // the longhouse up first, same approach shrine-build.spec.ts uses.
   await settlement.setSettlementLevel(20);
+  // ...and its prerequisite, a level-10 lumberjack (BuildingCatalogue.cs Prerequisites).
+  await settlement.standBuildings([{ type: 'lumberjack', level: 10 }]);
 
   // Same grass-hex search as shrine-build.spec.ts — Sawmill lives in the
   // "Resource" category alongside Farm/PumpkinFarm. Since it's built

@@ -118,9 +118,12 @@ describe('placeCamps', () => {
   });
 
   it('rolls levels low: strong u^3 (~59/15/11/9/7 %), weak u^2 (~45/19/14/12/11 %)', () => {
-    // Grass pooled over the wolf dens (strong), sand over the seal colonies (weak).
+    // Grass pooled over the wolf dens (strong), sand over the seal colonies (weak). The level roll
+    // does not depend on the island's size, so each sample is one camp on an 8x8 islet (64 tiles, just
+    // over MinCampIslandTiles: one camp, strong or weak by hash) - a 100x100 block bought its ~24 camps
+    // per seed with a 10,000-tile farthest-point placement and took ~10 s alone.
     const tally = (ground: 'grass' | 'sand', family: string, seeds: number) => {
-      const { tiles, terrainOf } = block(100, () => ground);
+      const { tiles, terrainOf } = block(8, () => ground);
       const counts = [0, 0, 0, 0, 0, 0];
       for (let seed = 0; seed < seeds; seed++) {
         for (const p of placeCamps(tiles, terrainOf, [], [], seed, 1)) if (p.family === family) counts[p.level]!++;
@@ -128,18 +131,17 @@ describe('placeCamps', () => {
       const total = counts.reduce((a, b) => a + b, 0);
       return { total, share: counts.slice(1).map((c) => c / total) };
     };
-    const strong = tally('grass', 'wolfden', 200);
-    const weak = tally('sand', 'sealhaulout', 400);
+    const strong = tally('grass', 'wolfden', 2500);
+    const weak = tally('sand', 'sealhaulout', 2500);
     const expectedStrong = [0.585, 0.152, 0.106, 0.085, 0.072];
     const expectedWeak = [0.447, 0.185, 0.143, 0.119, 0.106];
     expect(strong.total).toBeGreaterThan(1000);
-    expect(weak.total).toBeGreaterThan(500);
+    expect(weak.total).toBeGreaterThan(1000);
     for (let i = 0; i < 5; i++) {
       expect(Math.abs(strong.share[i]! - expectedStrong[i]!)).toBeLessThan(0.05);
-      expect(Math.abs(weak.share[i]! - expectedWeak[i]!)).toBeLessThan(0.07);
+      expect(Math.abs(weak.share[i]! - expectedWeak[i]!)).toBeLessThan(0.05);
     }
-    // 600 placements on a 100x100 block: ~3.5 s alone, more under the full suite's parallel load.
-  }, 30_000);
+  });
 
   it('keeps off giant footprints and every river tile that is not a straight one', () => {
     const { tiles, terrainOf } = block(40, () => 'grass');

@@ -42,6 +42,18 @@
   unverified theory that sounds plausible is worse than no theory)
 - if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
 
+# no unrequested special conditions
+- don't add special conditions, special cases or fallbacks I didn't ask for: no "only if the art is
+  already packed" checks, no "hide this until X ships" switches, no special cases for existing
+  worlds. Ask me first if you think one is needed; usually it isn't
+- a change that depends on something not shipped yet (art in `bg_assets_hextile`, a backend
+  change, ...) just waits for it: both go out together in the same release, so the code is
+  written for the finished state, not for the gap in between
+- a running world stays pinned to the release tag it was started on. Whatever it should get after
+  that (a bug fix, a security fix, a feature) is backported to a branch made from that tag and
+  shipped as a hotfix release from there, never added to `main` as a special case for that world
+  (there are no releases yet, so this doesn't come up today)
+
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
 
@@ -137,6 +149,38 @@
   work, lower default cost) so the *same* code is fast everywhere, rather
   than detecting the test/CI environment and skipping expensive work only
   there.
+- the one allowed exception is an **explicit, per-spec** opt-out that flips a
+  switch a real user or developer can flip too, set from the spec's side, with
+  no app code knowing it is under test: `test.use({ mapLayers: { water: false, fog: false } })`
+  (the water/fog debug switches) and the suite's `antialias: 'off'` (the player's
+  "Smooth edges" setting), both in `src/frontend/e2e/fixtures.ts`. Water/fog
+  opt-out only for specs whose assertions are DOM/game state; never for
+  water/fog/shore specs or anything that judges map pixels as an image
+  (`src/frontend/src/test/e2eWaterOptOut.test.ts` enforces this; a spec that plays
+  real motion needs a recorded user approval there). It doesn't
+  replace fixing real perf problems for slow devices.
+
+# code reuse
+- never implement the same behaviour twice or differently in two places
+  (e.g. a component's mount + open/close animation wired one way in
+  `MapView.vue` and another way in `LandingView.vue`). Put it in one
+  shared place (the component itself, a wrapper component or a
+  composable) that every caller uses
+- a fix for something that's used in more than one place goes into that
+  shared place, not into each caller; if you find two diverging copies
+  while working, unify them in your change or open a task for it
+
+# UI changes
+- every UI change follows `docs/design/ui-guidelines.md` (no leftover
+  actions, no links back into finished flows, no chrome without
+  information on phones, safe areas, every enter has a leave, one
+  implementation per behaviour, real-touch gestures)
+- apply it in the same PR as the change: when a flow changes, check the
+  surfaces around it for what the change made stale (old buttons, links,
+  reserved space, copy) and remove it right away — don't leave it for a
+  later cleanup pass
+- when a change reveals a new kind of recurring UI leftover, add the rule
+  to `docs/design/ui-guidelines.md`
 
 # interaction between u (AI) and user (me)
 
@@ -147,6 +191,11 @@
 - ask questions if anything is unclear or you need more context
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
+- artifacts that go through rounds (UX reviews, design options, motion
+  demos, ...) keep every earlier round viewable: publish the new round as
+  its own page or section in the same artifact and link the rounds to each
+  other — never overwrite or delete an earlier round's content when
+  publishing the next one, I still compare against it
 
 # sandbox tooling (Claude Code cloud sessions)
 - the cloud sandbox does **not** come with the .NET SDK preinstalled, and

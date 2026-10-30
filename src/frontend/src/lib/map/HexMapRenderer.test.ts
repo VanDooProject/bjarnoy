@@ -4,11 +4,14 @@ import {
   clampAnimationDeltaMs,
   fadeAlphaAt,
   hoverSubjectFor,
+  isIslandNearViewport,
   isWaypointTap,
   landfallBurstFrames,
   loadProgressFraction,
   plotRippleFrames,
+  previewDrawRadius,
   previewFitZoom,
+  confineCamera,
   previewIslandBounds,
   READY_LOAD_STATE,
   startTextureLoad,
@@ -18,7 +21,9 @@ import {
   type MapLoadState,
   type TextureLoadDeps,
   clientToCanvasPoint,
+  waterMaskTerrainFor,
 } from './HexMapRenderer';
+import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
 import type { TileTextures } from './textures';
@@ -124,11 +129,20 @@ describe('worldLayerOrder', () => {
     // strokes) — settlement mode draws rivers as sprite tile art baked into
     // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
     // 'rivers' to its own order.
-    const expectedLength = { world: 10, settlement: 9 } as const;
+    const expectedLength = { world: 11, settlement: 10 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);
       expect(order).toHaveLength(expectedLength[mode]);
+    }
+  });
+
+  it('draws the bog/grass edge right over the ground art, under everything else in settlement mode', () => {
+    // bogEdge.ts: the border only touches the ground, so the water mesh, realm
+    // borders, hover outline and every topping (reeds, trees, buildings) draw over it.
+    expect(indexIn('settlement', 'bogEdges')).toBe(indexIn('settlement', 'terrainBase') + 1);
+    for (const above of ['water', 'borders', 'hover', 'terrainTop']) {
+      expect(indexIn('settlement', 'bogEdges')).toBeLessThan(indexIn('settlement', above));
     }
   });
 
@@ -247,6 +261,18 @@ describe('previewIslandBounds', () => {
 // contract change here is the fix, not incidental — the tests below were
 // updated to match rather than left calling a signature that no longer
 // exists.
+describe('previewDrawRadius', () => {
+  it('defaults to the fit radius, so the landing page and docs islands are unchanged', () => {
+    expect(previewDrawRadius({})).toBe(PREVIEW_ISLAND_RADIUS);
+    expect(previewDrawRadius({ previewRadius: 13 })).toBe(13);
+  });
+
+  it('draws a wider radius than the camera fits, but never a narrower one', () => {
+    expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 34 })).toBe(34);
+    expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 5 })).toBe(13);
+  });
+});
+
 describe('previewFitZoom', () => {
   // A regular hexagonal blob of tile centres, all land — stands in for "some
   // symmetric island of the given radius" wherever a test only cares about
@@ -878,5 +904,91 @@ describe('clientToCanvasPoint', () => {
   it('falls back to 1:1 for a canvas with no layout size', () => {
     const rect = { left: 10, top: 10, width: 0, height: 0 };
     expect(clientToCanvasPoint({ x: 30, y: 40 }, rect, { width: 0, height: 0 })).toEqual({ x: 20, y: 30 });
+  });
+});
+
+describe('waterMaskTerrainFor', () => {
+  // A bog lake beside moss, both well inland. The lake is water to the game, but the water mask
+  // must call it land: it is drawn by its own art, and the sea's shader (shore foam above all)
+  // used to ring every lake in white on the inline bake path.
+  const world = new StaticWorldModel([
+    { q: 0, r: 0, terrain: 'lake' },
+    { q: 1, r: 0, terrain: 'bog' },
+  ]);
+
+  it.each(['settlement', 'world'] as const)('counts a bog lake as land in %s mode', (mode) => {
+    const terrain = waterMaskTerrainFor(world, mode);
+    expect(world.isLand(0, 0)).toBe(false);
+    expect(terrain.isLand(0, 0)).toBe(true);
+    expect(terrain.isLand(1, 0)).toBe(true);
+  });
+
+  it.each(['settlement', 'world'] as const)('still counts the sea as water in %s mode', (mode) => {
+    expect(waterMaskTerrainFor(world, mode).isLand(5, 5)).toBe(false);
+  });
+
+  it.each(['settlement', 'world'] as const)('answers noFoam for a river mouth only, in %s mode', (mode) => {
+    const rivers = new StaticWorldModel([
+      { q: 0, r: 0, terrain: 'grass' },
+      { q: 1, r: 0, terrain: 'grass' },
+    ]);
+    rivers.setRivers([
+      { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null },
+      { q: 1, r: 0, shape: 'straight', inDirections: ['NE'], outDirection: 'SW' },
+    ]);
+    const terrain = waterMaskTerrainFor(rivers, mode);
+    expect(terrain.noFoam!(0, 0)).toBe(true);
+    expect(terrain.noFoam!(1, 0)).toBe(false);
+    expect(terrain.noFoam!(5, 5)).toBe(false);
+    // The worker is handed the same hexes as a list.
+    expect(rivers.riverMouthHexKeys()).toHaveLength(1);
+  });
+});
+
+describe('isIslandNearViewport', () => {
+  const viewport = { width: 1000, height: 600 };
+
+  it('keeps an island centred on screen', () => {
+    expect(isIslandNearViewport({ x: 500, y: 300 }, viewport, 100)).toBe(true);
+  });
+
+  it('keeps an island whose centre is off screen but within its reach of the edge', () => {
+    expect(isIslandNearViewport({ x: -90, y: 300 }, viewport, 100)).toBe(true);
+    expect(isIslandNearViewport({ x: 500, y: 690 }, viewport, 100)).toBe(true);
+  });
+
+  it('culls an island further than its reach past any edge', () => {
+    expect(isIslandNearViewport({ x: -101, y: 300 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 1101, y: 300 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 500, y: -101 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 500, y: 701 }, viewport, 100)).toBe(false);
+  });
+
+  it('culls nothing before the viewport has a size', () => {
+    expect(isIslandNearViewport({ x: 99999, y: 99999 }, { width: 0, height: 0 }, 100)).toBe(true);
+  });
+});
+
+describe('confineCamera', () => {
+  const bounds = { minX: -100, maxX: 100, minY: -50, maxY: 50 };
+
+  it('keeps a camera that is inside the bounds and above the minimum zoom untouched', () => {
+    expect(confineCamera({ x: 10, y: -20, zoom: 1.5 }, bounds, 0.5)).toEqual({ x: 10, y: -20, zoom: 1.5 });
+  });
+
+  it('pulls a centre outside the bounds back to the nearest edge, per axis', () => {
+    expect(confineCamera({ x: 900, y: 0, zoom: 1 }, bounds, 0.5)).toEqual({ x: 100, y: 0, zoom: 1 });
+    expect(confineCamera({ x: -900, y: 400, zoom: 1 }, bounds, 0.5)).toEqual({ x: -100, y: 50, zoom: 1 });
+  });
+
+  it('raises a zoom below the minimum and keeps one above it', () => {
+    expect(confineCamera({ x: 0, y: 0, zoom: 0.1 }, bounds, 0.5).zoom).toBe(0.5);
+    expect(confineCamera({ x: 0, y: 0, zoom: 3 }, bounds, 0.5).zoom).toBe(3);
+  });
+
+  it('does not mutate the input camera', () => {
+    const camera = { x: 900, y: 900, zoom: 0.1 };
+    confineCamera(camera, bounds, 0.5);
+    expect(camera).toEqual({ x: 900, y: 900, zoom: 0.1 });
   });
 });

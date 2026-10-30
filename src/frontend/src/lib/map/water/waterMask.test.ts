@@ -8,6 +8,8 @@ import {
   groundSquash,
   hasWaterProp,
   hexMitreDistance,
+  NO_FOAM_INNER_TILES,
+  NO_FOAM_REACH_TILES,
   propMute,
   PROP_MUTE_FADE_TILES,
   taintFade,
@@ -700,5 +702,62 @@ describe("the mask's taint field", () => {
     // ...and the wasted hex really did taint something, so the assertion above
     // isn't passing because nothing happened.
     expect(withWaste.taint.some((v) => v > 0)).toBe(true);
+  });
+});
+
+describe("the mask's no-foam field", () => {
+  /** Land at `q <= 0` with the coastal land hex (0, 0) a river mouth: its east edge is the shore, water beyond. */
+  const mouthCoast: TerrainLookup = { isLand: (q) => q <= 0, noFoam: (q, r) => q === 0 && r === 0 };
+
+  /** The field at a world point. */
+  function noFoamAtWorld(mask: ReturnType<typeof bakeWaterMask>, r: WaterMaskRegion, x: number, y: number): number {
+    return mask.noFoam[
+      Math.floor((y - r.rect.minY) / r.texelWorldSize) * mask.width + Math.floor((x - r.rect.minX) / r.texelWorldSize)
+    ];
+  }
+
+  it('is all zero when the lookup carries no noFoam', () => {
+    const mask = bakeWaterMask(region(), TILE_W, TILE_H, verticalCoast(0));
+    expect(mask.noFoam).toHaveLength(mask.width * mask.height);
+    expect(mask.noFoam.every((v) => v === 0)).toBe(true);
+  });
+
+  it('leaves the four mask channels and the taint untouched', () => {
+    const r = region();
+    const plain = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
+    const withMouth = bakeWaterMask(r, TILE_W, TILE_H, mouthCoast);
+    expect(withMouth.data).toEqual(plain.data);
+    expect(withMouth.taint).toEqual(plain.taint);
+    expect(withMouth.noFoam.some((v) => v > 0)).toBe(true);
+  });
+
+  it('is full on the mouth hex and on the water just off its coast, and zero well beyond the reach and along a far stretch of coast', () => {
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, mouthCoast);
+    const hex = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const centre = { x: hex.x + TILE_W / 2, y: hex.y + TILE_H / 2 };
+    // The hex's east tip is the coast on this row; the field is measured out of the hex's texels.
+    const tipX = centre.x + TILE_W / 2;
+
+    expect(noFoamAtWorld(mask, r, centre.x, centre.y)).toBe(255);
+    // Foam reaches at most ~0.44 tiles off the coast; inside INNER it must be fully gone.
+    expect(noFoamAtWorld(mask, r, tipX + TILE_W * (NO_FOAM_INNER_TILES - 0.1), centre.y)).toBe(255);
+    // Past REACH it is gone again, so foam resumes beyond the mouth.
+    expect(noFoamAtWorld(mask, r, tipX + TILE_W * (NO_FOAM_REACH_TILES + 0.2), centre.y)).toBe(0);
+    // Same shore, several hexes up the coast: no mouth there, so no suppression.
+    expect(noFoamAtWorld(mask, r, centre.x + TILE_W * 0.3, centre.y + TILE_H * 3)).toBe(0);
+  });
+
+  it('fades monotonically between INNER and REACH', () => {
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, mouthCoast);
+    const hex = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const tipX = hex.x + TILE_W;
+    const ramp: number[] = [];
+    for (let t = NO_FOAM_INNER_TILES; t <= NO_FOAM_REACH_TILES; t += 0.05) {
+      ramp.push(noFoamAtWorld(mask, r, tipX + TILE_W * t, hex.y + TILE_H / 2));
+    }
+    expect(ramp.some((v) => v > 0 && v < 255)).toBe(true);
+    for (let i = 1; i < ramp.length; i++) expect(ramp[i]).toBeLessThanOrEqual(ramp[i - 1]);
   });
 });

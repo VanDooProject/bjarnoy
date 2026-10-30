@@ -87,3 +87,13 @@ export function advanceClipFrame(
   state.frame = frame;
   return frame;
 }
+
+/**
+ * The playback state a clip starts in on the shared global clock (`TileAnimClip.sharedClock`: the biome forests' wind
+ * sway): `playedMs` is the clock's current time, not 0, so every tile of the family shows frame floor(t * fps) mod
+ * frameCount at the same moment whenever it was spawned, and the gust wave is continuous across tiles. The caller then advances
+ * every state by the same per-tick delta (`advanceClipFrame`), which keeps them in lockstep.
+ */
+export function sharedClockPlayback(clip: ClipTiming, clockMs: number): { playedMs: number; frame: number } {
+  return { playedMs: clockMs, frame: clipFrameIndex(clip, clockMs) };
+}

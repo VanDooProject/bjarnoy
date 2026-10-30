@@ -44,6 +44,27 @@ export async function waitForMapReady(page: Page): Promise<void> {
 }
 
 /**
+ * Waits until the settlement renderer (`window.__settlementRenderer`) has run
+ * `frames` more frames of its render loop than when this was called.
+ *
+ * For a spec that changes something and then looks at the canvas: the loop is
+ * paced on a device whose frames are expensive (framePacing.ts) and can drop
+ * to about a frame a second on a busy software-rendered runner, so a fixed
+ * `waitForTimeout` can end before the change was drawn at all, and a
+ * `requestAnimationFrame` wait counts browser frames the paced loop skips.
+ * Two frames by default: the one that may already be under way when the
+ * change landed, and one that started after it.
+ */
+export async function waitForRenderedFrames(page: Page, frames = 2): Promise<void> {
+  const read = () =>
+    page.evaluate(
+      () => (window as unknown as { __settlementRenderer: () => { renderedFrames: number } }).__settlementRenderer().renderedFrames,
+    );
+  const start = await read();
+  await expect.poll(read, { message: `the map never drew ${frames} more frames`, intervals: [100] }).toBeGreaterThanOrEqual(start + frames);
+}
+
+/**
  * Navigates to the world map and waits for its renderer to be ready.
  *
  * Real client-side navigation (the HudNav "World map" button), not
@@ -111,10 +132,24 @@ export async function claimLandfall(page: Page): Promise<void> {
 
   // Founding is async (even in demo mode, it's a Vue reactive update away) —
   // wait for the store to actually have a selected settlement before poking
-  // it directly, rather than racing the click above.
+  // it directly, rather than racing the click above. Then wait out the
+  // founding camera transition too (HexMapRenderer.animateCameraTo, 1.4 s):
+  // until it lands, every hex's `hexCenterScreen` is still sliding toward the
+  // settlement framing, so a spec that reads a hex's screen point right after
+  // this returns (`SettlementPage.findHex`) and clicks it later hits whatever
+  // hex has moved under that point by then — under load the ring then never
+  // opened, because the stale point had become sea or the longhouse.
+  // `previewCenter` is cleared by the same `updateOptions` call that starts
+  // the ease, so "no preview and not animating" is the settled camera.
   await page.waitForFunction(
-    () => !!(window as unknown as { __demoWorld?: () => { selectedSettlementId: string | null } }).__demoWorld?.()
-      ?.selectedSettlementId,
+    () => {
+      const win = window as unknown as {
+        __demoWorld?: () => { selectedSettlementId: string | null };
+        __settlementRenderer?: () => { previewCenter?: unknown; cameraAnimating: boolean } | undefined;
+      };
+      const renderer = win.__settlementRenderer?.();
+      return !!win.__demoWorld?.()?.selectedSettlementId && !!renderer && !renderer.previewCenter && !renderer.cameraAnimating;
+    },
     undefined,
     { timeout: 15_000 },
   );
@@ -433,12 +468,28 @@ export async function layoutOverflow(page: Page): Promise<{ pageScrollsSideways:
  */
 export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
   const pointer = settlement.guidancePointer;
+  const anchor = async (): Promise<string> => {
+    const style = (await pointer.getAttribute('style')) ?? '';
+    const x = style.match(/--anchor-x: (-?[\d.]+)px/)?.[1];
+    const y = style.match(/--anchor-y: (-?[\d.]+)px/)?.[1];
+    return x !== undefined && y !== undefined ? `${x},${y}` : '';
+  };
+  // The anchor follows the camera, which is still easing toward the new settlement right after landfall: a click on
+  // the first anchor it reports can land on the hex the guided one is about to slide away from. Wait until two reads
+  // a moment apart agree, so the click lands where the pointer comes to rest.
+  let previous = '';
   await expect
-    .poll(async () => (await pointer.getAttribute('style')) ?? '', { message: 'guidance pointer never got an anchor point' })
-    .toMatch(/--anchor-x: -?\d/);
-  const style = (await pointer.getAttribute('style'))!;
-  const x = Number(style.match(/--anchor-x: (-?[\d.]+)px/)![1]);
-  const y = Number(style.match(/--anchor-y: (-?[\d.]+)px/)![1]);
+    .poll(
+      async () => {
+        const now = await anchor();
+        const settled = now !== '' && now === previous;
+        previous = now;
+        return settled;
+      },
+      { message: 'guidance pointer never came to rest on an anchor point', intervals: [250] },
+    )
+    .toBe(true);
+  const [x, y] = previous.split(',').map(Number) as [number, number];
   const box = await settlement.canvasBox();
   await settlement.page.mouse.click(box.x + x, box.y + y);
   await settlement.ring.waitForOpen();

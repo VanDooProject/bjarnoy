@@ -161,6 +161,95 @@ public class TileFeatureTests
     }
 
     [Fact]
+    public void Forest_variants_follow_the_forest_weights()
+    {
+        var counts = new int[TerrainSampler.ForestVariantWeights.Length];
+        var total = 0;
+        foreach (var seed in new[] { 1, 7, 42, 1337 })
+        {
+            var (sampler, centre) = IslandWorld(seed);
+            foreach (var coord in centre.WithinRadius(150))
+            {
+                if (sampler.TerrainAt(coord) != Terrain.Forest)
+                {
+                    continue;
+                }
+
+                counts[sampler.VariantAt(coord)]++;
+                total++;
+            }
+        }
+
+        Assert.True(total > 3_000);
+        for (var i = 0; i < counts.Length; i++)
+        {
+            Assert.InRange(Math.Abs((double)counts[i] / total - TerrainSampler.ForestVariantWeights[i]), 0, 0.02);
+        }
+    }
+
+    [Fact]
+    public void Sand_variants_follow_the_sand_weights()
+    {
+        var counts = new int[TerrainSampler.SandVariantWeights.Length];
+        var total = 0;
+        foreach (var seed in new[] { 1, 7, 42, 1337 })
+        {
+            var (sampler, centre) = IslandWorld(seed);
+            foreach (var coord in centre.WithinRadius(300))
+            {
+                if (sampler.TerrainAt(coord) != Terrain.Sand)
+                {
+                    continue;
+                }
+
+                counts[sampler.VariantAt(coord)]++;
+                total++;
+            }
+        }
+
+        Assert.True(total > 4_000);
+        for (var i = 0; i < counts.Length; i++)
+        {
+            Assert.InRange(Math.Abs((double)counts[i] / total - TerrainSampler.SandVariantWeights[i]), 0, 0.02);
+        }
+    }
+
+    [Fact]
+    public void ForestKindAt_forms_taiga_and_birch_regions_with_a_mixed_sprinkle()
+    {
+        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(1));
+        var kinds = new Dictionary<HexCoord, ForestKind>();
+        for (var q = -150; q <= 150; q++)
+        {
+            for (var r = -150; r <= 150; r++)
+            {
+                kinds[new HexCoord(q, r)] = sampler.ForestKindAt(new HexCoord(q, r));
+            }
+        }
+
+        var mixed = kinds.Values.Count(k => k == ForestKind.Mixed);
+        Assert.InRange((double)mixed / kinds.Count, 0.15, 0.35);
+        Assert.True(kinds.Values.Count(k => k == ForestKind.Taiga) > 1000);
+        Assert.True(kinds.Values.Count(k => k == ForestKind.Birch) > 1000);
+
+        double sameSum = 0;
+        var counted = 0;
+        foreach (var (coord, kind) in kinds.Where(kv => kv.Value != ForestKind.Mixed))
+        {
+            var pure = coord.Neighbours().Where(n => kinds.TryGetValue(n, out var k) && k != ForestKind.Mixed).Select(n => kinds[n]).ToList();
+            if (pure.Count == 0)
+            {
+                continue;
+            }
+
+            sameSum += (double)pure.Count(k => k == kind) / pure.Count;
+            counted++;
+        }
+
+        Assert.True(sameSum / counted > 0.8);
+    }
+
+    [Fact]
     public void Orientation_is_seed_stable()
     {
         var a = new TerrainSampler(WorldGenerationOptions.ForSeed(99));
@@ -193,7 +282,7 @@ public class TileFeatureTests
             maxSeen = Math.Max(maxSeen, variant);
         }
 
-        // Sea/sand aren't asserted here — they only ever fall back to variant
+        // Sea isn't asserted here — it only ever falls back to variant
         // 0 — but grass/forest/mountain should each show more than one
         // variant over a big enough sample, or the "not all have variants"
         // fallback would be indistinguishable from a bug that always
@@ -209,7 +298,7 @@ public class TileFeatureTests
         foreach (var coord in centre.WithinRadius(60))
         {
             var terrain = sampler.TerrainAt(coord);
-            if (terrain is Terrain.Sea or Terrain.Sand)
+            if (terrain is Terrain.Sea)
             {
                 Assert.Equal(0, sampler.VariantAt(coord));
             }
@@ -315,9 +404,10 @@ public class TileFeatureTests
     [MemberData(nameof(Seeds))]
     public void Orientation_and_variant_match_the_frontend_generator_hex_for_hex(int seed)
     {
-        var (_, orientation, variant) = TerrainChecksumFixture.Compute(seed);
+        var (_, orientation, variant, forestKind) = TerrainChecksumFixture.Compute(seed);
 
         Assert.Equal(TerrainChecksumFixture.Expected(seed, "orientation"), orientation);
         Assert.Equal(TerrainChecksumFixture.Expected(seed, "variant"), variant);
+        Assert.Equal(TerrainChecksumFixture.Expected(seed, "forestKind"), forestKind);
     }
 }

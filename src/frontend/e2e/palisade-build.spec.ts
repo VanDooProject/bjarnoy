@@ -24,6 +24,8 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
   const settlement = await SettlementPage.found(page);
   // Unlocks at Longhouse 7: level the longhouse up, rather than weaken the gate for the test.
   await settlement.setSettlementLevel(8);
+  // ...and its prerequisite, a level-5 tower (BuildingCatalogue.cs Prerequisites).
+  await settlement.standBuildings([{ type: 'tower', level: 5 }]);
   await settlement.setResources({ wood: 5000, stone: 5000, food: 5000, iron: 0 });
 
   // Find the layout through the model: four free plain hexes in a row and the hex that turns 120 degrees off the last one.
@@ -74,16 +76,23 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
   const place = async (hex: HexCoord, label: string) => {
     await openDefence(hex);
     const bubble = settlement.ring.child(label).first();
-    await expect(bubble).toBeVisible();
     await expect(bubble).not.toHaveClass(/locked/);
-    await bubble.click();
+    await settlement.ring.click(bubble);
     await expect.poll(() => settlement.buildingTypeAt(hex), { timeout: 5_000 }).toBeDefined();
   };
-  const pieceAt = (hex: HexCoord) =>
+  // One in-page read for a whole list of hexes: on this app's canvas views every Playwright round
+  // trip waits out a frame (~1s here, several times that on a loaded runner), so a read per hex
+  // was a large share of this test's budget.
+  const piecesAt = (hexes: HexCoord[]) =>
     page.evaluate(
-      (at) =>
-        (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld().model.wallNeighbourFlags(at) as boolean[],
-      hex,
+      (at) => {
+        const model = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld().model;
+        return at.map((hex) => ({
+          type: model.getTile(hex.q, hex.r).buildingType as string | undefined,
+          flags: model.wallNeighbourFlags(hex) as boolean[],
+        }));
+      },
+      hexes,
     );
 
   const [a0, a1, a2, a3] = layout.a as [HexCoord, HexCoord, HexCoord, HexCoord];
@@ -98,7 +107,7 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
   await expect(settlement.ring.card).toContainText(/a gate only stands between two opposite wall hexes/i);
   const post = settlement.ring.child('Palisade').first();
   await expect(post).not.toHaveClass(/locked/);
-  await post.click();
+  await settlement.ring.click(post);
   await expect.poll(() => settlement.buildingTypeAt(a0), { timeout: 5_000 }).toBe('palisade');
 
   // The rest of the run goes straight into the model, except the gate (a ring round-trip costs seconds on a software renderer; what the rest of
@@ -116,21 +125,22 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
   expect(await placeInModel(a3)).toBe(true);
   expect(await placeInModel(layout.e)).toBe(true);
 
-  expect(await settlement.buildingTypeAt(a1)).toBe('palisadegate');
-  for (const hex of [a0, a2, a3, layout.e]) expect(await settlement.buildingTypeAt(hex)).toBe('palisade');
-
-  // Each hex draws the piece its wall neighbours decide (the same resolver the renderer takes the art from).
-  const pieces: Record<string, string | undefined> = {};
-  for (const [name, hex, gateHex] of [
+  const wall = [
     ['a0', a0, false],
     ['a1', a1, true],
     ['a2', a2, false],
     ['a3', a3, false],
     ['e', layout.e, false],
-  ] as const) {
-    const result = palisadeTileFor({ wallNeighbours: await pieceAt(hex), gate: gateHex });
+  ] as const;
+  const read = await piecesAt(wall.map(([, hex]) => hex));
+  expect(read.map((r) => r.type)).toEqual(['palisade', 'palisadegate', 'palisade', 'palisade', 'palisade']);
+
+  // Each hex draws the piece its wall neighbours decide (the same resolver the renderer takes the art from).
+  const pieces: Record<string, string | undefined> = {};
+  wall.forEach(([name, , gateHex], i) => {
+    const result = palisadeTileFor({ wallNeighbours: read[i]!.flags, gate: gateHex });
     pieces[name] = 'piece' in result ? result.piece : result.refusal;
-  }
+  });
   expect(pieces).toEqual({ a0: 'end', a1: 'gate180', a2: 'straight180', a3: 'bend120', e: 'end' });
 
   // A hex beside the middle of the run would be a third arm: refused by the placement rules (the ring shows the same refusal as the

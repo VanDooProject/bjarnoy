@@ -56,6 +56,7 @@ import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
+import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
 
 // How often live mode re-polls a settlement to pick up build-queue
 // completions and rate changes it didn't cause itself (see
@@ -235,6 +236,11 @@ export const useWorldStore = defineStore('world', {
       // WorldModel places buildings instantly and has no queue to show.
       queue: [] as BuildOrderResponse[],
       queueFetchedAt: 0,
+      // X8: the last *confirmed* spend (a build that was accepted / placed),
+      // as an explicit event for the resource bar's tick-down — never derived
+      // from watching `resources`, which also moves with every production
+      // tick. `cost` holds only the resources that really dropped.
+      lastSpend: null as { cost: Partial<Resources>; at: number } | null,
       // Trade system (PR 2): live-mode-only snapshots of the trade board,
       // this settlement's own offers, and its shipments — see
       // `refreshTradeAsync`. Always empty in demo mode; TradePanel.vue reads
@@ -793,6 +799,53 @@ export const useWorldStore = defineStore('world', {
       await this.refreshLiveSettlement();
     },
     /**
+     * W3: `queueBuildLive` with an optimistic client-only order. A pending
+     * entry goes into `hud.queue` first, so the construction dial on `at`
+     * shows "…" at once, then the request runs and a refresh replaces the
+     * pending entry with the real order (or, on a refusal, the entry is
+     * removed again and the error rethrown; the stock never changed). A poll
+     * refresh in the meantime keeps the pending entry (see
+     * `refreshLiveSettlement`). With `cost`, a confirmed build also records
+     * `hud.lastSpend` for the resource bar's tick-down, limited to the
+     * resources whose stock really dropped (a reserved, waiting order does
+     * not spend yet).
+     */
+    async queueBuildOptimistic(building: string, at: AxialCoord, cost?: Partial<Resources>) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      const pending = makePendingOrder(building, at);
+      const before = { ...this.hud.resources };
+      this.hud.queue = [...this.hud.queue, pending];
+      try {
+        await api.queueBuild(
+          this.selectedSettlementId, { building, q: at.q, r: at.r }, this.ownerId ?? undefined,
+        );
+      } catch (err) {
+        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
+        throw err;
+      }
+      // Confirmed. The refresh swaps the pending entry for the real order; a
+      // failed refresh must not read as a refused build, the poll catches up.
+      try {
+        await this.refreshLiveSettlement();
+      } catch (err) {
+        console.warn('Refresh after a confirmed build failed; the next poll will catch up', err);
+      } finally {
+        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
+      }
+      if (cost) {
+        const spent: Partial<Resources> = {};
+        for (const kind of Object.keys(cost) as (keyof Resources)[]) {
+          if ((cost[kind] ?? 0) > 0 && this.hud.resources[kind] < before[kind]) spent[kind] = cost[kind];
+        }
+        this.recordSpend(spent);
+      }
+    },
+    /** X8: announces a confirmed spend; the resource bar counts the affected pills down. Empty costs are ignored. */
+    recordSpend(cost: Partial<Resources>) {
+      if (!Object.values(cost).some((v) => (v ?? 0) > 0)) return;
+      this.hud.lastSpend = { cost: { ...cost }, at: Date.now() };
+    },
+    /**
      * Live mode: cancels a still-queued build order, refunding its cost. For
      * a brand-new building this also clears the level-0 foundation stub the
      * backend placed on `Enqueue` — `refreshLiveSettlement`'s reconciliation
@@ -900,7 +953,9 @@ export const useWorldStore = defineStore('world', {
         buildings: response.buildings,
       });
       this.hud.buildings = response.buildings;
-      this.hud.queue = response.queue;
+      // An optimistic build still waiting for its answer (W3) must outlive a
+      // poll that was in flight when it was added; its own refresh clears it.
+      this.hud.queue = [...response.queue, ...this.hud.queue.filter(isPendingOrder)];
       this.hud.queueFetchedAt = Date.now();
       // `available` is not set here directly — `syncHud()` below (and every
       // subsequent tick) derives it live from `hud.resources`/`hud.reserved`,

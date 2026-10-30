@@ -82,7 +82,13 @@ describe('renderPreview', () => {
   });
 });
 
-describe('rivers layer', () => {
+// The rivers, bog and camps layers generate real terrain, rivers and bogs for a radius-1000 world (a cold
+// flood fill over every island, then per-island river generation): ~1-2 s on an idle machine, which
+// vitest's 5 s default does not leave headroom for when the whole suite runs in parallel. That work is the
+// point of these tests, so they get an explicit, generous limit instead of a shrunken world.
+const WORLD_GENERATION_TIMEOUT_MS = 30_000;
+
+describe('rivers layer', { timeout: WORLD_GENERATION_TIMEOUT_MS }, () => {
   it('traces real rivers on an island window and reports no inland mouths', () => {
     const options = { seed: 11, radius: 1000, window: { q: -215, r: 600, size: 60 }, hexPixels: 4, layers: ['terrain', 'rivers'], legend: true, stats: false };
     const result = renderPreview(options);
@@ -93,7 +99,7 @@ describe('rivers layer', () => {
   });
 });
 
-describe('bog layer', () => {
+describe('bog layer', { timeout: WORLD_GENERATION_TIMEOUT_MS }, () => {
   const options = { seed: 11, radius: 1000, window: { q: -17, r: 115, size: 60 }, hexPixels: 6, layers: ['terrain', 'rivers', 'bog'], legend: true, stats: false };
 
   it('draws the lake, lists every bog kind in the legend and reports zero violations of every rule', () => {
@@ -121,7 +127,7 @@ describe('cli arguments', () => {
   });
 });
 
-describe('camps layer', () => {
+describe('camps layer', { timeout: WORLD_GENERATION_TIMEOUT_MS }, () => {
   const options = { seed: 11, radius: 1000, window: { q: 0, r: 0, size: 60 }, hexPixels: 6, layers: ['terrain', 'camps'], legend: true, stats: false };
 
   it('draws marker pixels in the strong / weak colours and prints camp stats', () => {

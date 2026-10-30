@@ -150,8 +150,15 @@ Every one of them keeps the 24-hex gap from green land and from each other.
   streams join, or on a straight tile chosen at random within the second half of the stream's run before it
   must be river-width (sea mouth, bog, meeting a river). Never in the first half, and not always at the very
   last tile of a long run (that reads as artificial); the second half, rather than the last quarter, leaves
-  enough river-width tiles for the river buildings (Sawmill, Crop Mill, Hammer Forge).
+  enough river-width tiles for the river buildings (Sawmill, Crop Mill, Hammer Forge). The one exception is a
+  run into a sea mouth with no Straight tile in its second half: it widens on the Straight tile nearest the mouth.
+- On green islands every river reaches the sea head-on: the sea mouth is river width with the sea straight ahead
+  of its single inflow, so it always draws as a delta.
 - Springs are chosen as far apart from each other as possible so there are few parallel river runs.
+- Rivers on green islands arc instead of running straight (stretches of 8-16 steps bending to alternating sides), and a
+  river that has left a mountain range rarely climbs into a second one (entering a mountain costs extra). Seeds 1-8:
+  median spring-to-mouth sinuosity 1.07 to 1.32, spring walks re-entering mountains 29% to 11%. See
+  [`river-generation.md`](./river-generation.md#meanders-and-mountain-entry-green-islands).
 
 The old collision rule's limitation (about 2% of river mouths inland, a third river dropped at a full
 confluence: "merge two, drop the third") is gone for green islands: merging is decided while tracing and only
