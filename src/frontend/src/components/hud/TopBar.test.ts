@@ -448,13 +448,14 @@ describe('TopBar', () => {
       wrapper.unmount();
     });
 
-    it('joins the settlement bubble to the menu button, clear of the top safe area', async () => {
+    it('joins the settlement bubble to the menu button, 16px from the top and side edges', async () => {
       useWorldStore().hud.settlementName = 'Unnamed realm';
       const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
       await wrapper.vm.$nextTick();
 
       const bubble = wrapper.get('.settlement-bubble');
-      expect(bubble.attributes('style')).toContain('env(safe-area-inset-top');
+      expect(bubble.attributes('style')).toContain('top: 16px');
+      expect(bubble.attributes('style')).toContain('left: 16px');
       expect(bubble.classes()).toContain('settlement-bubble--floating');
       expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--rail-joined');
       wrapper.unmount();

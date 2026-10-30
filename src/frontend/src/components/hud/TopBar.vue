@@ -58,8 +58,8 @@ const props = defineProps<{
    * entirely — no background, no reserved height — and floats its contents
    * as chips instead: the drawer's ☰ joined to the settlement bubble at the
    * top-left, the trigger (and the ProfileNudge hanging from it) at the
-   * top-right, both clear of `env(safe-area-inset-top)`. Desktop, docked
-   * pages and the landscape rail are unaffected.
+   * top-right, each 16px from the screen's edges. Desktop, docked pages and
+   * the landscape rail are unaffected.
    */
   floating?: boolean;
 }>();
@@ -153,21 +153,29 @@ const barPosition = computed(() => (props.docked || isChipLayout.value ? 'top' :
 // instead (see `.mobile-title` below), not a second "Lv N · M hexes" bubble
 // that has nothing to do with them.
 const claimedHexes = computed(() => world.hud.claimedHexes);
-/** The floating chips' top edge — kept in sync with `.hud-bar--floating`'s own `inset`. */
-const FLOATING_TOP = 'calc(8px + env(safe-area-inset-top, 0px))';
+/**
+ * The floating chips' margin to the screen's top and side edges — the phone
+ * settlement bubble's own existing 16px side gutter (`.settlement-bubble`'s
+ * `left`), so the gap above the chips equals the gap beside them. Kept in sync
+ * with `.hud-bar--floating`'s own `inset`.
+ */
+const FLOATING_EDGE = '16px';
 const showSettlementBubble = computed(() => isCompact.value && !props.title && !!world.hud.settlementName);
 // In rail mode there is no bar band at all (hudBarHeightPx is 0): the bubble
 // sits at the top edge, to the right of the rail.
-// Floating: same, but clear of a status bar drawn over the page.
+// Floating: the same edge margin as at the sides.
 const settlementBubbleTop = computed(() => {
-  if (isFloating.value) return FLOATING_TOP;
+  if (isFloating.value) return FLOATING_EDGE;
   if (isRail.value) return '8px';
   return barPosition.value === 'top' ? `${hudBarHeightPx.value + 8}px` : '8px';
 });
 // Rail and floating: the ☰ button and the settlement bubble read as one
 // capsule — the bubble starts at the chips' own left edge and leaves room for
 // the button, which paints above it (the bar is z 40, the bubble z 36).
-const settlementBubbleLeft = computed(() => (isChipLayout.value ? 'calc(8px + env(safe-area-inset-left, 0px))' : undefined));
+const settlementBubbleLeft = computed(() => {
+  if (isFloating.value) return FLOATING_EDGE;
+  return isRail.value ? 'calc(8px + env(safe-area-inset-left, 0px))' : undefined;
+});
 const railJoined = computed(() => isChipLayout.value && showSettlementBubble.value && !isHudDrawerOpen.value);
 // Finding #13: only counts as "shown" once it's actually visible on screen —
 // the drawer hides it (`v-show="!isHudDrawerOpen"` below) without unmounting
@@ -926,13 +934,12 @@ const backdropStyle = computed(() => {
    transparent row that only spans the screen to place its two chips: the ☰
    button (joined to the settlement bubble, as in the rail) at the left, the
    nav's account trigger at the right. The row itself lets map clicks through;
-   each chip takes its own. Its top edge stays clear of a status bar drawn
-   over the page (`env(safe-area-inset-top)`), and must match TopBar's own
-   FLOATING_TOP for the settlement bubble. Same specificity trick as the rail
-   rule above. */
+   each chip takes its own. The same 16px margin to the top and side edges
+   (TopBar's own FLOATING_EDGE, which places the settlement bubble), so there
+   is no empty band above the chips. Same specificity trick as the rail rule
+   above. */
 .hud-bar.hud-bar--floating.hud-bar--drag-enabled {
-  inset: calc(8px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-right, 0px)) auto
-    calc(8px + env(safe-area-inset-left, 0px));
+  inset: 16px 16px auto 16px;
   height: auto;
   min-height: 0;
   align-items: flex-start;
@@ -961,17 +968,11 @@ const backdropStyle = computed(() => {
   background: rgba(6, 12, 16, 0.94);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
-/* ProfileNudge hangs from the trigger chip: pulled in so its right edge keeps
-   the usual 16px gutter (the chip itself sits 8px from the edge), and never
-   wider than the screen minus both gutters, so it stays wholly on screen on
-   the narrowest phones. Its notch moves with it to keep pointing at the
-   trigger's caret. */
+/* ProfileNudge hangs from the trigger chip, right-aligned with it (so 16px
+   from the screen's edge), and is never wider than the screen minus both 16px
+   gutters, so it stays wholly on screen on the narrowest phones. */
 .hud-bar--floating .hud-bar-right :deep(.nudge:not(.in-drawer)) {
-  right: 8px;
-  width: min(300px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-}
-.hud-bar--floating .hud-bar-right :deep(.nudge:not(.in-drawer) .notch) {
-  right: 10px;
+  width: min(300px, calc(100vw - 32px));
 }
 /* The drawer drops from under the chips (its `top` is measured, see
    `floatingDrawerTopPx`) and opens/closes by tap only, so its content
@@ -994,11 +995,11 @@ const backdropStyle = computed(() => {
   padding-left: 48px;
 }
 /* Floating: the ☰ eats 48px of the capsule, so let the name use the row up
-   to the trigger chip on the right instead of the usual 58vw cap — 8px edge
+   to the trigger chip on the right instead of the usual 58vw cap — 16px edge
    + 8px gap + the trigger's own 132px max-width (ReturningPlayerMenu.vue's
-   phone rule) + 8px edge. */
+   phone rule) + 16px edge. */
 .settlement-bubble.settlement-bubble--floating {
-  max-width: calc(100vw - 156px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+  max-width: calc(100vw - 172px);
 }
 /* Mobile-only settlement bubble — replaces the inline `.titles` name/caption
    (hidden above under isCompact) since the bar itself has no room for it.
