@@ -195,3 +195,29 @@ describe('BuildingModal Town Square feast', () => {
     });
   });
 });
+
+describe('BuildingModal actions', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    flags.demo = false;
+  });
+
+  it('is info-only on an empty claimed tile: a pointer to the ring, no cost line, no action button', () => {
+    rich(useWorldStore());
+    const wrapper = mountModal({ q: 1, r: 1, terrain: 'forest' } as Tile);
+
+    expect(wrapper.text()).toContain('Tap the hex to place a building');
+    expect(wrapper.text()).not.toMatch(/build cost/i);
+    expect(wrapper.find('button.primary').exists()).toBe(false);
+  });
+
+  it('still offers the upgrade action on a built tile', async () => {
+    rich(useWorldStore());
+    const wrapper = mountModal({ q: 1, r: 1, terrain: 'grass', buildingType: 'farm', buildingLevel: 1 } as Tile);
+
+    const button = wrapper.get('button.primary');
+    expect(button.text()).toContain('Upgrade to level 2');
+    await button.trigger('click');
+    expect(wrapper.emitted('upgrade')).toHaveLength(1);
+  });
+});

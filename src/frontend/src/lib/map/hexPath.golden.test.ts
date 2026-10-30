@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/river-pathing-golden.json';
 import { coordKey } from '../hex/coords';
 import { findPath, hoursFrom, pathCost, reachableRange, type PathContext } from './hexPath';
+import { bridgeRestrictions } from './bridgeMovement';
 import { palisadeRestrictions } from './palisadeMovement';
 import { isWideRiverTile } from './riverGenerator';
 import type { RiverTile, Terrain } from './types';
@@ -24,8 +25,8 @@ interface FindPathCase {
   from: HexCoordDto;
   to: HexCoordDto;
   isLandUnit: boolean;
-  /** Whose army walks: the wall owner's or an enemy's. */
-  army: 'friendly' | 'enemy';
+  /** Whose army walks: the wall and bridge owner's, a friend of that owner's, or an enemy's. */
+  army: 'friendly' | 'friend' | 'enemy';
   /** `null`: no land route exists. */
   expectedPath: HexCoordDto[] | null;
   expectedCumulativeHours: number[] | null;
@@ -43,6 +44,7 @@ interface GoldenFixture {
   terrain: Record<string, Terrain>;
   riverTiles: RiverTile[];
   walls: { q: number; r: number; gate: boolean; owner: string }[];
+  bridges: { q: number; r: number; level: number; owner: string }[];
   findPathCases: FindPathCase[];
   reachableRangeCases: ReachableRangeCase[];
 }
@@ -58,7 +60,7 @@ const RULES = {
   riverCrossingCost: 8.0,
 };
 
-function contextFor(fixture: GoldenFixture, army: 'friendly' | 'enemy' = 'friendly'): PathContext {
+function contextFor(fixture: GoldenFixture, army: 'friendly' | 'friend' | 'enemy' = 'friendly'): PathContext {
   const riverByKey = new Map(fixture.riverTiles.map((t) => [coordKey(t), t]));
   const riverAt = (c: HexCoordDto) => riverByKey.get(coordKey(c));
   const terrainAt = (c: HexCoordDto): Terrain => fixture.terrain[coordKey(c)] ?? 'sea';
@@ -67,14 +69,21 @@ function contextFor(fixture: GoldenFixture, army: 'friendly' | 'enemy' = 'friend
     return tile !== undefined && isWideRiverTile(tile, riverAt);
   };
   const walls = new Map(fixture.walls.map((w) => [coordKey(w), { gate: w.gate, owner: w.owner }]));
+  const bridges = new Map(fixture.bridges.filter((b) => b.level >= 1).map((b) => [coordKey(b), { level: b.level, owner: b.owner }]));
   const owner = fixture.walls[0]?.owner ?? '';
+  const walker = army === 'friendly' ? owner : army === 'friend' ? 'owner-friend' : 'someone-else';
+  // A friend's guild is at peace with the owner's, so the owner is among its friends.
+  const friends = new Set(army === 'friend' ? [owner] : []);
   return {
     terrainAt,
     isRiver: (c) => riverByKey.has(coordKey(c)),
     isWideRiver,
     rules: RULES,
     hexesPerHour: 1,
-    restrictions: palisadeRestrictions(walls, terrainAt, isWideRiver, army === 'friendly' ? owner : 'someone-else'),
+    restrictions: {
+      ...palisadeRestrictions(walls, terrainAt, isWideRiver, walker, friends),
+      ...bridgeRestrictions(bridges, terrainAt, RULES, walker, friends),
+    },
   };
 }
 
@@ -126,6 +135,16 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     expect(byName.get('wall_without_a_gate_stops_the_owner_too')?.expectedPath).toBeNull();
     expect(byName.get('half_open_end_is_crossed_by_an_enemy_at_3')?.expectedCumulativeHours?.slice(3, 5)).toEqual([3, 6]);
     expect(byName.get('sealed_end_beside_a_mountain_blocks')?.expectedPath).toBeNull();
+  });
+
+  it('covers a bridge per level, a guarded bridge for a friend and a stranger, and a foundation that opens nothing', () => {
+    const byName = new Map(fixture.findPathCases.map((c) => [c.name, c]));
+    expect(byName.get('bridge_level_1_causeway_crosses_a_wide_river_at_6')?.expectedCumulativeHours).toEqual([0, 6, 7]);
+    expect(byName.get('bridge_level_2_footbridge_crosses_a_wide_river_at_4')?.expectedCumulativeHours).toEqual([0, 4, 5]);
+    expect(byName.get('bridge_level_3_kings_bridge_costs_the_terrain_under_it')?.expectedCumulativeHours?.[1]).toBeCloseTo(1.3, 9);
+    expect(byName.get('bridge_level_4_guarded_bridge_lets_a_friend_over')?.expectedPath).not.toBeNull();
+    expect(byName.get('bridge_level_4_guarded_bridge_stops_a_stranger')?.expectedPath).toBeNull();
+    expect(byName.get('bridge_foundation_opens_nothing')?.expectedPath).toBeNull();
   });
 
   it.each(fixture.reachableRangeCases)('$name: matches the shared golden fixture', (testCase: ReachableRangeCase) => {

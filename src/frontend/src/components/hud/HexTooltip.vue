@@ -25,7 +25,11 @@ const WASTED_TERRAIN_LABEL_KEY: Partial<Record<string, string>> = {
   sea: 'blacksandcoast',
 };
 
-const props = defineProps<{ info: HoverInfo }>();
+const props = defineProps<{
+  info: HoverInfo;
+  /** The other accounts a guarded bridge also lets through (the viewer's guild and the guilds at peace with it; `guild.friendlyUserIds`). */
+  friendOwners?: ReadonlySet<string>;
+}>();
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -156,11 +160,30 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierPalisadeWall');
     case 'palisadeGate':
       return t('hud.hoverTooltip.modifierPalisadeGate');
+    case 'bridge':
+      return t(`hud.hoverTooltip.bridgeLevel${modifier.level}`);
   }
 }
 
+// A bridge shows what its level does to a crossing army, to everyone (its stats are otherwise the owner's alone), and for the guarded
+// one whether the viewer's armies may cross. Words only, no path costs (the "slower/quicker" convention of the walls docs).
+const bridgeLevel = computed(() => {
+  const subject = props.info.subject;
+  return subject.kind === 'building' && subject.buildingType === 'bridge' ? Math.min(Math.max(subject.level, 0), 4) : undefined;
+});
+const bridgeText = computed(() => (bridgeLevel.value === undefined ? undefined : t(`hud.hoverTooltip.bridgeLevel${bridgeLevel.value}`)));
+const bridgeAccessText = computed(() => {
+  if (bridgeLevel.value !== 4) return undefined;
+  const owner = props.info.owner;
+  if (owner?.mine) return t('hud.hoverTooltip.bridgeAccessOwner');
+  if (owner?.ownerId && props.friendOwners?.has(owner.ownerId)) return t('hud.hoverTooltip.bridgeAccessFriend');
+  return t('hud.hoverTooltip.bridgeAccessClosed');
+});
+
 const outputText = computed(() => (props.info.stats?.output ? formatOutput(props.info.stats.output) : undefined));
-const modifierText = computed(() => (props.info.stats?.modifier ? formatModifier(props.info.stats.modifier) : undefined));
+const modifierText = computed(() =>
+  props.info.stats?.modifier && props.info.stats.modifier.kind !== 'bridge' ? formatModifier(props.info.stats.modifier) : undefined,
+);
 const workersText = computed(() =>
   props.info.stats?.workers ? t('hud.hoverTooltip.workersValue', { cap: props.info.stats.workers.cap }) : undefined,
 );
@@ -178,7 +201,7 @@ const workersText = computed(() =>
     <ul v-if="campLines.length" class="camp-lines" data-testid="camp-lines">
       <li v-for="line in campLines" :key="line">{{ line }}</li>
     </ul>
-    <dl v-if="outputText || modifierText || workersText" class="stats">
+    <dl v-if="outputText || modifierText || workersText || bridgeText" class="stats">
       <template v-if="outputText">
         <dt>{{ t('hud.hoverTooltip.output') }}</dt>
         <dd>{{ outputText }}</dd>
@@ -186,6 +209,14 @@ const workersText = computed(() =>
       <template v-if="modifierText">
         <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>
         <dd>{{ modifierText }}</dd>
+      </template>
+      <template v-if="bridgeText">
+        <dt>{{ t('hud.hoverTooltip.crossing') }}</dt>
+        <dd data-testid="bridge-crossing">{{ bridgeText }}</dd>
+      </template>
+      <template v-if="bridgeAccessText">
+        <dt />
+        <dd data-testid="bridge-access">{{ bridgeAccessText }}</dd>
       </template>
       <template v-if="workersText">
         <dt>{{ t('hud.hoverTooltip.workers') }}</dt>

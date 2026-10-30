@@ -52,10 +52,6 @@
     "tapEmptyHex": "Tippe ein leeres Feld in deiner Grenze an",
     "foundFirst": "Gründe zuerst dein Langhaus"
   },
-  "footer": {
-    "sea": "Kettil-See",
-    "reservedFor": "Dein Grundstück ist noch {count} Minute reserviert | Dein Grundstück ist noch {count} Minuten reserviert"
-  },
   "banner": {
     "landfallTitle": "Landung geglückt.",
     "landfallBody": "Dein Langhaus steht. Noch zwei Gebäude.",

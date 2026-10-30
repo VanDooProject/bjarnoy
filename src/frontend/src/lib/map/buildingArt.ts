@@ -69,8 +69,9 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // The wall set (3D_assets docs/wall-tiles.md): the preview shows the straight and the straight with its gate.
   palisade: 'palisade_straight180',
   palisadegate: 'palisade_gate180',
+  // The river bridge (3D_assets hextile135_riverbridge): the preview shows the straight crossing (undefined until the atlas has it).
+  bridge: 'riverbridge',
 };
-
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
@@ -296,17 +297,17 @@ export function terrainArtByFamily(family: string, decorated = false): ArtRef {
 
 /**
  * One decorated look of a terrain family — the flattened `_variantNNN`
- * showcase frame (or loose PNG) — or `null` when the pack doesn't ship that
- * look. Unlike `terrainArtByFamily` it never falls back to the plain tile,
- * so a docs picker can offer exactly the looks that exist and pick up new
- * ones as soon as a pack carries them.
+ * showcase frame (or loose PNG) — for a caller like the docs tiles page's
+ * sand look picker. Throws when the pack has no such look, the same as
+ * `terrainFamilyArt`.
  */
-export function terrainVariantArt(family: string, variant: number): ArtRef | null {
+export function terrainVariantArt(family: string, variant: number): ArtRef {
   const name = `${family}_SE_variant${String(variant).padStart(3, '0')}`;
   const frame = findAtlasFrame('showcase', name);
   if (frame) return { kind: 'atlas', frame };
   const pngUrl = terrainPngByName[name];
-  return pngUrl ? { kind: 'png', url: pngUrl } : null;
+  if (!pngUrl) throw new Error(`buildingArt.ts: no terrain art for "${name}"`);
+  return { kind: 'png', url: pngUrl };
 }
 
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */
