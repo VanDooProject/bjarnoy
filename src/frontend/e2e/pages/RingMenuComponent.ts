@@ -155,6 +155,9 @@ export class RingMenuComponent {
   /** Root "Build" action → the build categories on the inner lane. */
   async openBuildCategories(): Promise<void> {
     await this.click(this.action('Build').first());
+    // The layer swap waits for the root bubbles to leave (a short fade under reduced motion, which this suite
+    // emulates): until the ‹ BACK bubble is there, `categoryBubbles` still matches the root actions.
+    await this.page.locator('.ring-bubble.back').first().waitFor();
   }
 
   /** A named category → its buildings on the outer lane. */

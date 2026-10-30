@@ -45,7 +45,7 @@ export function motionEnabled(): boolean {
 export interface AnimateOptions extends KeyframeAnimationOptions {
   /** Play even under reduced motion, at full length: for feedback that is not movement (a colour flash). */
   always?: boolean;
-  /** Reduced-motion stand-in frames, played as a fade of at most REDUCED_MAX_MS. Without them the animation is skipped. */
+  /** Reduced-motion stand-in frames, played as a fade of at most REDUCED_MAX_MS (keeping the animation's own `fill`, so an exit fade stays faded). Without them the animation is skipped. */
   reduced?: Keyframe[];
 }
 
@@ -68,7 +68,7 @@ export function play(el: Element, frames: Keyframe[], options: AnimateOptions = 
   if (prefersReducedMotion() && !always) {
     if (!reduced) return { animation: null, finished: Promise.resolve() };
     const duration = Math.min(REDUCED_MAX_MS, Number(timing.duration ?? REDUCED_MAX_MS));
-    const animation = el.animate(reduced, { fill: 'backwards', duration, easing: 'linear' });
+    const animation = el.animate(reduced, { fill: timing.fill ?? 'backwards', duration, easing: 'linear' });
     return { animation, finished: animation.finished.then(() => undefined, () => undefined) };
   }
   const animation = el.animate(frames, { fill: 'backwards', ...timing });
