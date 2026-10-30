@@ -11,9 +11,9 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
+import { useHudNavEntries } from '../../composables/useHudNavEntries';
 import { useLogout } from '../../composables/useLogout';
 import { profileLocation } from '../../lib/profileRoute';
-import { modalLocation } from '../../lib/modalRoute';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -52,6 +52,7 @@ const auth = useAuthStore();
 const player = usePlayerStore();
 const reports = useReportsStore();
 const { logout } = useLogout();
+const { entries } = useHudNavEntries();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #40 phase 3: a lightweight "new reports" badge. HudNav is mounted
@@ -145,74 +146,14 @@ watch(() => route.fullPath, closeAccountMenu);
 <template>
   <nav class="hud-nav" :class="{ 'hud-nav--no-drawer': !hasDrawer, 'hud-nav--with-resources': hasResourceBar }">
     <button
-      v-if="player.hasFoundedSettlement"
+      v-for="entry in entries"
+      :key="entry.id"
       class="link"
-      :class="{ active: route.name === 'settlement' }"
-      @click="router.push('/settlement')"
+      :class="{ active: entry.active, 'reports-link': entry.id === 'reports' }"
+      @click="entry.go()"
     >
-      {{ t('hud.nav.settlement') }}
-    </button>
-    <!-- landing-page-defects.md L1: the router guard (router/index.ts) bounces
-         `/world` straight back to `/` while `player.hasFoundedSettlement` is
-         false, so this link is a dead click on every pre-founding route this
-         nav gets mounted on (the landing page's post-founding half included,
-         for the brief window before founding flips it true) — hide it rather
-         than offer a click that silently does nothing. Layered onto that:
-         an anonymous visitor has no settlement of their own to view here
-         either (returning-player nav work), so the auth check on top of the
-         existing founded-settlement one keeps this hidden for them too. -->
-    <button
-      v-if="auth.isAuthenticated && player.hasFoundedSettlement"
-      class="link"
-      :class="{ active: route.name === 'world' }"
-      @click="router.push('/world')"
-    >
-      {{ t('hud.nav.worldMap') }}
-    </button>
-    <button
-      v-if="auth.isAuthenticated"
-      class="link"
-      :class="{ active: route.name === 'leaderboards' }"
-      @click="router.push(modalLocation(router, '/leaderboards'))"
-    >
-      {{ t('hud.nav.leaderboards') }}
-    </button>
-    <button
-      v-if="auth.isAuthenticated"
-      class="link"
-      :class="{ active: ['messages', 'conversation'].includes(String(route.name)) }"
-      @click="router.push('/messages')"
-    >
-      {{ t('hud.nav.messages') }}
-    </button>
-    <button
-      class="link reports-link"
-      :class="{ active: String(route.name).startsWith('report') }"
-      @click="router.push(modalLocation(router, '/reports'))"
-    >
-      {{ t('hud.nav.reports') }}
-      <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
-    </button>
-    <button
-      class="link"
-      :class="{ active: route.name === 'guild' }"
-      @click="router.push(modalLocation(router, '/guild'))"
-    >
-      {{ t('hud.nav.alliance') }}
-    </button>
-    <button
-      class="link"
-      :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }"
-      @click="router.push('/docs')"
-    >
-      {{ t('hud.nav.docs') }}
-    </button>
-    <!-- landing-page-defects.md L1: a self-link on the page you're already
-         on when route.name is 'landing' — HudNav is mounted there too, for
-         the post-founding half of LandingView (see that component's own
-         header split). Hide it there rather than offer a click to nowhere. -->
-    <button v-if="route.name !== 'landing'" class="link" @click="router.push('/')">
-      {{ t('hud.nav.landing') }}
+      {{ t(entry.labelKey) }}
+      <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
     </button>
     <LocaleSwitcher />
     <!-- Logged in, the avatar opens a small account dropdown — Profile
