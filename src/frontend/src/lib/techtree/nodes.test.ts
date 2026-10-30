@@ -62,6 +62,19 @@ describe('buildTechTreeNodes', () => {
     expect(byType.palisade).toHaveLength(3);
   });
 
+  it('shows the Bridge behind a level-1 Town Square, unlocking at LH 7, with its four levels', () => {
+    const bridge = byName.get('bridge')!;
+    expect(bridge.label).toBe('Bridge');
+    expect(bridge.chips).toEqual([
+      { text: 'LH 7', kind: 'longhouse' },
+      { text: 'Town square 1', kind: 'building' },
+    ]);
+    expect(bridge.gives).toBe('Opens a wide river to land armies');
+    expect(bridge.category).toBe('logistics');
+    expect(byType.bridge).toHaveLength(4);
+    expect(prerequisitesOf(byType, 'bridge')).toEqual([{ type: 'townsquare', level: 1 }]);
+  });
+
   it('draws the Odin Statue behind the Druid Hut, with both favours on the card', () => {
     const odin = byName.get('odinstatue')!;
     expect(odin.chips).toEqual([

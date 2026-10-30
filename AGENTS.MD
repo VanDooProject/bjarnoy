@@ -42,6 +42,18 @@
   unverified theory that sounds plausible is worse than no theory)
 - if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
 
+# no unrequested special conditions
+- don't add special conditions, special cases or fallbacks I didn't ask for: no "only if the art is
+  already packed" checks, no "hide this until X ships" switches, no special cases for existing
+  worlds. Ask me first if you think one is needed; usually it isn't
+- a change that depends on something not shipped yet (art in `bg_assets_hextile`, a backend
+  change, ...) just waits for it: both go out together in the same release, so the code is
+  written for the finished state, not for the gap in between
+- a running world stays pinned to the release tag it was started on. Whatever it should get after
+  that (a bug fix, a security fix, a feature) is backported to a branch made from that tag and
+  shipped as a hotfix release from there, never added to `main` as a special case for that world
+  (there are no releases yet, so this doesn't come up today)
+
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
 
@@ -180,6 +192,28 @@
   "Techbaum"
 - typography: „…" quotes, – as dash, correct spelling ("platzieren")
 - new or changed English text gets its German counterpart in the same commit, written to these rules, not machine-literal
+
+# code reuse
+- never implement the same behaviour twice or differently in two places
+  (e.g. a component's mount + open/close animation wired one way in
+  `MapView.vue` and another way in `LandingView.vue`). Put it in one
+  shared place (the component itself, a wrapper component or a
+  composable) that every caller uses
+- a fix for something that's used in more than one place goes into that
+  shared place, not into each caller; if you find two diverging copies
+  while working, unify them in your change or open a task for it
+
+# UI changes
+- every UI change follows `docs/design/ui-guidelines.md` (no leftover
+  actions, no links back into finished flows, no chrome without
+  information on phones, safe areas, every enter has a leave, one
+  implementation per behaviour, real-touch gestures)
+- apply it in the same PR as the change: when a flow changes, check the
+  surfaces around it for what the change made stale (old buttons, links,
+  reserved space, copy) and remove it right away — don't leave it for a
+  later cleanup pass
+- when a change reveals a new kind of recurring UI leftover, add the rule
+  to `docs/design/ui-guidelines.md`
 
 # interaction between u (AI) and user (me)
 

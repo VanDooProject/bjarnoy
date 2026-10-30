@@ -1049,10 +1049,8 @@ const backdropStyle = computed(() => {
   visibility: visible;
   transition: transform 180ms ease, visibility 0s;
 }
-@media (prefers-reduced-motion: reduce) {
-  .hud-drawer--rail,
-  .hud-drawer--rail-open {
-    transition: none;
-  }
+html[data-hud-motion='reduced'] .hud-drawer--rail,
+html[data-hud-motion='reduced'] .hud-drawer--rail-open {
+  transition: none;
 }
 </style>

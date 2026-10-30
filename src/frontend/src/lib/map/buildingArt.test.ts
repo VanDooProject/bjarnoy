@@ -11,7 +11,7 @@
 //   only working by accident against whatever was open in an editor at the
 //   time.
 import { describe, expect, it } from 'vitest';
-import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType } from './buildingArt';
+import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, terrainVariantArt } from './buildingArt';
 
 describe('buildingArtByFamily', () => {
   it('resolves art for each of the sawmill families', () => {
@@ -98,5 +98,18 @@ describe('buildingLayersForType', () => {
 
   it('is undefined for an unmapped type', () => {
     expect(buildingLayersForType('not-a-real-type', 1)).toBeUndefined();
+  });
+});
+
+// Backs the tiles docs page's sand look picker: a look resolves to its own
+// frame, and a missing one fails loudly instead of quietly showing the plain
+// tile in its place.
+describe('terrainVariantArt', () => {
+  it('resolves a decorated look the pack ships', () => {
+    expect(terrainVariantArt('grasstile', 0)).toBeDefined();
+  });
+
+  it('throws for a look the pack does not ship', () => {
+    expect(() => terrainVariantArt('grasstile', 99)).toThrow();
   });
 });

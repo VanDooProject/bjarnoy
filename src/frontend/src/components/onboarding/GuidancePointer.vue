@@ -258,10 +258,8 @@ onUnmounted(() => cancelAnimationFrame(frame));
 .bob {
   animation: pointer-bob 1.15s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .bob {
-    animation: none;
-  }
+html[data-hud-motion='reduced'] .bob {
+  animation: none;
 }
 .arrow-svg {
   display: block;

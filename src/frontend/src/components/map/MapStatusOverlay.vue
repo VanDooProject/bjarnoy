@@ -9,6 +9,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { MessageSchema } from "../../i18n/schema";
 import { describeLoadError } from "../../lib/loadError";
+import { prefersReducedMotion } from "../../lib/motion";
 
 const props = defineProps<{
   step: string | null;
@@ -20,10 +21,7 @@ const emit = defineEmits<{ retry: [] }>();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: "global" });
 
 // Same one-shot read as MapLoadingIndicator — a fixed device preference.
-const reducedMotion =
-  typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    : false;
+const reducedMotion = prefersReducedMotion();
 
 const hasError = computed(
   () => props.error !== null && props.error !== undefined,
@@ -178,11 +176,9 @@ const detail = computed(() =>
   outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .hex {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
+html[data-hud-motion='reduced'] .hex {
+  animation: none;
+  opacity: 1;
+  transform: none;
 }
 </style>

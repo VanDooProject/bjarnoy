@@ -8,12 +8,15 @@ public readonly record struct StandingWall(HexCoord Coord, bool IsGate, Guid Own
 
 /// <summary>
 /// What a land army's pathfinding takes from the world's palisades (<see cref="HexPathfinder.FindPath"/>'s <c>blocked</c>,
-/// <c>friendlyGate</c> and <c>halfOpen</c>), bound to one army's owner.
+/// <c>friendlyGate</c> and <c>halfOpen</c>), bound to one army's owner. <paramref name="BridgeCost"/> is the same for the world's bridges
+/// (<see cref="HexPathfinder.FindPath"/>'s <c>bridgeCost</c>, <see cref="BridgeIndex.ForOwner"/>); the type is named for the palisade but is
+/// the one bundle of per-owner route rules every route-building call site passes along.
 /// </summary>
 public sealed record WallRules(
     Func<HexCoord, bool> Blocked,
     Func<HexCoord, bool> FriendlyGate,
-    Func<HexCoord, bool> HalfOpen);
+    Func<HexCoord, bool> HalfOpen,
+    Func<HexCoord, double?>? BridgeCost = null);
 
 /// <summary>
 /// A world's standing palisade hexes as the movement rules need them: built once per request from the persisted buildings (like

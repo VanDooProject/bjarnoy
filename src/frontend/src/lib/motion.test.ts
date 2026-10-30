@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { motionPreferences } from './perf/motionPreferences';
+import { installHudMotionAttribute } from './perf/hudMotionAttribute';
 import { REDUCED_MAX_MS, animate, motionEnabled, play, prefersReducedMotion } from './motion';
 
 function stubMatchMedia(reduce: boolean) {
@@ -79,5 +81,52 @@ describe('motion helper', () => {
       expect(calls).toHaveLength(1);
       expect(calls[0].options.duration).toBe(520);
     });
+  });
+});
+
+describe('HUD motion setting', () => {
+  const original = Element.prototype.animate;
+  const originalMatchMedia = window.matchMedia;
+  afterEach(() => {
+    motionPreferences.hud = 'auto';
+    Element.prototype.animate = original;
+    window.matchMedia = originalMatchMedia;
+    vi.unstubAllGlobals();
+    delete document.documentElement.dataset.hudMotion;
+  });
+
+  it("'on' plays full motion even when the OS asks for reduced motion", () => {
+    stubMatchMedia(true);
+    stubAnimate();
+    motionPreferences.hud = 'on';
+    expect(prefersReducedMotion()).toBe(false);
+    expect(motionEnabled()).toBe(true);
+  });
+
+  it("'off' reduces motion even when the OS does not ask for it", () => {
+    stubMatchMedia(false);
+    stubAnimate();
+    motionPreferences.hud = 'off';
+    expect(prefersReducedMotion()).toBe(true);
+    expect(motionEnabled()).toBe(false);
+  });
+
+  it("'auto' follows the live OS query", () => {
+    stubMatchMedia(true);
+    expect(prefersReducedMotion()).toBe(true);
+    stubMatchMedia(false);
+    expect(prefersReducedMotion()).toBe(false);
+  });
+
+  it('mirrors the setting onto <html data-hud-motion>', async () => {
+    const stop = installHudMotionAttribute();
+    motionPreferences.hud = 'on';
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.documentElement.dataset.hudMotion).toBe('full');
+    motionPreferences.hud = 'off';
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.documentElement.dataset.hudMotion).toBe('reduced');
+    stop.stop();
   });
 });

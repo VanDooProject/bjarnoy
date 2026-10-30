@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installWaapi } from '../../test/waapi';
-import { DROPPING_ATTR, DROP_MS, HUB_OUT_MS, PULL_MS, openRing, retractRing, shake } from './ringMotion';
+import { DROPPING_ATTR, DROP_MS, HUB_OUT_MS, PULL_MS, layerIn, layerOut, openRing, retractRing, shake } from './ringMotion';
+import { REDUCED_MAX_MS } from '../motion';
+import { motionPreferences } from '../perf/motionPreferences';
 
 let waapi: ReturnType<typeof installWaapi>;
 
@@ -51,11 +53,58 @@ describe('ringMotion', () => {
       expect(bubbles[0].options.fill).toBe('backwards');
     });
 
-    it('does nothing under reduced motion', () => {
+    it('fades the hub, track and bubbles in under reduced motion, without any movement', () => {
       waapi.uninstall();
       waapi = installWaapi(true);
       void openRing(ringDom());
+      expect(waapi.calls.map((c) => c.el.className).sort()).toEqual(['ring-bubble', 'ring-bubble', 'ring-hub', 'ring-track']);
+      for (const call of waapi.calls) {
+        expect(call.frames).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+        expect(Number(call.options.duration)).toBeLessThanOrEqual(REDUCED_MAX_MS);
+        expect(call.options.delay).toBeUndefined();
+      }
+    });
+
+    it('plays nothing without the Web Animations API', () => {
+      waapi.uninstall();
+      delete (Element.prototype as { animate?: unknown }).animate;
+      void openRing(ringDom());
       expect(waapi.calls).toHaveLength(0);
+      waapi = installWaapi();
+    });
+
+    it("moves even under an OS reduce-motion request when the player's Menu animations is on", () => {
+      waapi.uninstall();
+      waapi = installWaapi(true);
+      motionPreferences.hud = 'on';
+      try {
+        void openRing(ringDom());
+        expect(waapi.on('.ring-bubble')[0].frames[0]).toMatchObject({ transform: 'translate(-60px, 0px) scale(.3)' });
+      } finally {
+        motionPreferences.hud = 'auto';
+      }
+    });
+  });
+
+  describe('layer swaps under reduced motion', () => {
+    beforeEach(() => {
+      waapi.uninstall();
+      waapi = installWaapi(true);
+    });
+
+    it('layerOut fades the departing bubbles out and holds them faded until the swap', () => {
+      void layerOut(ringDom(), 'lane1', { x: 200, y: 200 });
+      expect(waapi.calls.map((c) => c.el.id)).toEqual(['a', 'b']);
+      for (const call of waapi.calls) {
+        expect(call.frames).toEqual([{ opacity: 1 }, { opacity: 0 }]);
+        expect(call.options.fill).toBe('both');
+      }
+    });
+
+    it('layerIn fades the arriving bubbles in, with no transform', () => {
+      void layerIn(ringDom(), 'lane1', { x: 200, y: 200 });
+      expect(waapi.calls.map((c) => c.el.id)).toEqual(['a', 'b']);
+      for (const call of waapi.calls) expect(call.frames).toEqual([{ opacity: 0 }, { opacity: 1 }]);
     });
   });
 

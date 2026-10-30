@@ -59,6 +59,7 @@ const TYPE_LABELS: Record<string, string> = {
   // Display name only; the internal type stays `smithy`.
   smithy: 'Weaponsmith',
   palisadegate: 'Palisade gate',
+  bridge: 'Bridge',
 };
 
 export function typeLabel(type: string): string {
@@ -136,6 +137,7 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   greatstorehouse: 'logistics',
   cartworkshop: 'logistics',
   townsquare: 'logistics',
+  bridge: 'logistics',
   druidhut: 'logistics',
   shrineofthor: 'religion',
   shrineoffreyja: 'religion',

@@ -85,10 +85,8 @@ function nameYourJarl() {
      as every other HUD control. */
   pointer-events: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .nudge {
-    animation: none;
-  }
+html[data-hud-motion='reduced'] .nudge {
+  animation: none;
 }
 .notch {
   position: absolute;

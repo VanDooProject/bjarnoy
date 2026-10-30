@@ -479,7 +479,7 @@ public sealed record Army
 
         for (var i = 0; i < stops.Count - 1; i++)
         {
-            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
             if (leg is null || leg.Count == 0)
             {
                 return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
@@ -493,15 +493,15 @@ public sealed record Army
         var speed = stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
-        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         // Every mission, Support included, needs the full round trip: a guest
         // does not burn its own provisions while hosted (Settlement.SettleTo
@@ -1021,13 +1021,13 @@ public sealed record Army
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (path is null || path.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
@@ -1035,8 +1035,8 @@ public sealed record Army
 
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var provisionsNow = army.ProvisionsAt(now);
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
@@ -1174,14 +1174,14 @@ public sealed record Army
         // this army's own recall route needs.
         var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
 
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (path is null || path.Count == 0)
         {
             return null;
         }
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         // ProvisionsAt returns the raw Provisions field for anything other
         // than InTransit — including Supporting, which is exactly right here:
@@ -1241,12 +1241,12 @@ public sealed record Army
         // route already crossed fromHex), but rather than throw, it is left
         // standing exactly where it fought — still immune, just going
         // nowhere — a safe degenerate case rather than a crash.
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen) is { Count: > 0 } found
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is { Count: > 0 } found
             ? found
             : (List<HexCoord>)[fromHex];
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var retreatMovement = new Movement.Movement
         {
@@ -1382,7 +1382,7 @@ public sealed record Army
             fullPath = [fromHex];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
                 if (leg is null || leg.Count == 0)
                 {
                     return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1403,7 +1403,7 @@ public sealed record Army
             fullPath = [.. movement.Path];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
                 if (leg is null || leg.Count == 0)
                 {
                     return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1413,7 +1413,7 @@ public sealed record Army
             }
         }
 
-        var returnPath = HexPathfinder.FindPath(destination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var returnPath = HexPathfinder.FindPath(destination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1421,8 +1421,8 @@ public sealed record Army
 
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
         if (provisionsAtDeparture < totalFoodNeeded)
@@ -1537,13 +1537,13 @@ public sealed record Army
             return null;
         }
 
-        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return null;
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var provisionsNow = provisions is { } given ? Math.Max(0, given) : ProvisionsAt(now);
 
         var movement = Movement.Movement.Create(

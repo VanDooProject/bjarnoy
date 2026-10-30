@@ -176,6 +176,7 @@
     "odinstatue": "Odin-Statue",
     "palisade": "Palisade",
     "palisadegate": "Palisaden-Tor",
+    "bridge": "Brücke",
     "reindeerherder": "Rentierhirte"
   },
   "buildingLink": {
@@ -216,8 +217,8 @@
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
-      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es für pauschal 3, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Feuer und Belagerung werden ihr später Stufen nehmen.",
-      "palisadegate": "Ein Mauerfeld mit Tor. Es lässt sich nur dort setzen, wo die Mauer gerade zwischen zwei gegenüberliegenden Mauerfeldern verläuft. Die Armeen des Besitzers und seiner Freunde (dieselbe Gilde oder eine Gilde, die mit ihr im Frieden ist) passieren es zu den normalen Geländekosten. Jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Freischaltung, Voraussetzung, Stufen und Kosten sind dieselben wie bei der Palisade, beide teilen sich eine Karte im Techbaum.",
+      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Gewinnt ein Angreifer eine Belagerung, die ein Mauerfeld zum Ziel hat, nimmt sie ihm eine Stufe, egal wie viele Katapulte übrig sind. Feuer wird das später auch tun.",
+      "palisadegate": "Ein Mauerfeld mit Tor. Es lässt sich nur dort setzen, wo die Mauer gerade zwischen zwei gegenüberliegenden Mauerfeldern verläuft. Die Armeen des Besitzers und seiner Freunde (dieselbe Gilde oder eine Gilde, die mit ihr im Frieden ist) passieren es so schnell wie den Boden darunter. Jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Freischaltung, Voraussetzung, Stufen und Kosten sind dieselben wie bei der Palisade, beide teilen sich eine Karte im Techbaum.",
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
       "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte. Erreicht ein Rohstoff das Lagerlimit, stoppt seine Produktion – ein volles Lager verschenkt also Ertrag.",
@@ -241,7 +242,8 @@
       "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedlertrupps aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
       "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %. Ab Langhaus 6 verfügbar.",
-      "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus)."
+      "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
+      "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder."
     },
     "table": {
       "level": "Stufe",
@@ -283,6 +285,18 @@
       "corrie": "Kar",
       "saddleback": "Sattel",
       "table": "Tafelberg"
+    },
+    "sandLookLabel": "Aussehen:",
+    "sandLooks": {
+      "plain": "Schlicht",
+      "dunes": "Dünen",
+      "driftwood": "Treibholz",
+      "driftwoodPile": "Treibholzhaufen",
+      "boulders": "Findlinge",
+      "wreck": "Wrack",
+      "whaleBones": "Walknochen",
+      "boat": "Kieloben liegendes Boot",
+      "sandCastle": "Sandburg"
     },
     "riverShapes": {
       "spring": "Quelle",
@@ -785,11 +799,11 @@
       "body": "Mauern wirken nur auf Landarmeen. Flotten sind nicht betroffen.",
       "rules": {
         "block": "Ein Mauerfeld sperrt jede Landarmee, auch deine eigene. Es zählen nur fertige Felder: Eine Baustelle sperrt nicht.",
-        "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar zu den normalen Bodenkosten. Alle anderen werden aufgehalten.",
-        "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, und zwar zu Kosten von 3 statt der Kosten des Bodens. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
+        "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten.",
+        "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, aber langsamer als jeden offenen Boden. Armeen nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
         "sea": "Eine Mauer, die in einem Seeende ausläuft, schließt an der Küste ab. Hört eine Mauer an Land neben offenem Meer einfach auf, ist das anders: Ihr halb offenes Ende ist dann der Weg hindurch.",
         "natural": "Berge und breite Flüsse können Landarmeen ohnehin nicht überqueren. Reicht eine Mauer bis an einen von ihnen heran, ist sie dort also verschlossen.",
-        "rivers": "Flüsse: Ein breiter Fluss ist für Landarmeen kein Weg, daher ist eine Mauer, die an einem endet, dort verschlossen. Einen Bach kann man überqueren, er verschließt das Ende einer Mauer deshalb nicht. Auf keinem von beiden kann eine Mauer stehen.",
+        "rivers": "Flüsse: Ein breiter Fluss ist für Landarmeen kein Weg, daher ist eine Mauer, die an einem endet, dort verschlossen. Ein Bach ist seicht genug zum Durchwaten, und in fließendem Wasser lässt sich keine Mauer bauen. Ein Bach ist also immer ein Weg hindurch: langsam, aber offen. Eine Mauer, die an einem Bach endet, ist dort nicht verschlossen. Auf keinem von beiden kann eine Mauer stehen.",
         "fleets": "Mauern wirken nicht auf Flotten."
       },
       "diagram": {
@@ -798,9 +812,9 @@
         "riverEndTitle": "Vom Fluss verschlossen",
         "riverEnd": "Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, genau wie an einem Berg.",
         "halfOpenTitle": "Halb offen",
-        "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jede Armee überquert ihr letztes Feld zu Kosten von 3. Ob Gras oder Sand, macht keinen Unterschied.",
+        "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jede Armee überquert ihr letztes Feld, nur langsamer. Ob Gras oder Sand, macht keinen Unterschied.",
         "streamTitle": "Bach",
-        "stream": "Ein Bach verschließt das Ende einer Mauer nicht: Man kann ihn ohnehin überqueren, das Ende bleibt halb offen.",
+        "stream": "In einem Bach lässt sich keine Mauer bauen, und jede Armee kann ihn durchwaten, noch langsamer als am Mauerende vorbei. Ein Bach ist also immer eine Lücke in der Mauer, und das Ende daneben bleibt halb offen.",
         "seaEndTitle": "Seeende",
         "seaEnd": "Die Linie läuft an einem Seeende ins Wasser aus: Die Küste ist verschlossen.",
         "gateTitle": "Tor",
@@ -815,14 +829,26 @@
           "river": "Breiter Fluss",
           "stream": "Bach",
           "army": "Armee",
-          "pass": "Kommt durch (Zahl: Kosten)",
+          "pass": "Kommt durch",
           "blocked": "Aufgehalten"
-        }
+        },
+        "slower": "langsamer"
       }
     },
     "notBuilt": {
       "heading": "Noch nicht gebaut",
-      "body": "Belagerung und Feuer, die einer Mauer Stufen nehmen: Eine Mauer soll ihre Stufen nacheinander verlieren, bis sie verschwunden ist. Bisher passiert das noch nicht."
+      "body": "Feuer, das einer Mauer eine Stufe nimmt: Eine Mauer verliert ihre Stufen nacheinander, bis sie verschwunden ist. Noch brennt keine Mauer. Belagerungen tun das schon, siehe den Abschnitt zur Belagerung weiter oben."
+    },
+    "sieges": {
+      "heading": "Belagerung",
+      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen nur Katapulte, und nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört.",
+      "rules": {
+        "who": "Schick einen Angriff (oder einen Raubzug) mit Katapulten gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Gewinnt deine Armee die Schlacht, feuern die überlebenden Katapulte auf dieses Feld. Ein einziges überlebendes Katapult genügt. Verliert deine Armee die Schlacht, feuert nichts.",
+        "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, auch ein Mauerfeld.",
+        "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Katapulte überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
+        "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
+        "rebuild": "Ein Mauerfeld, das noch steht, kann der Besitzer wie jedes Gebäude wieder um eine Stufe ausbauen. Auf einem zerstörten Feld baut er neu und beachtet dabei die üblichen Bauregeln. Eine eigene Reparatur gibt es nicht."
+      }
     }
   },
   "production": {

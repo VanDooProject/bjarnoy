@@ -27,12 +27,24 @@ export interface MapLayers {
   fog?: boolean;
 }
 
+/** The player's per-device motion settings (Profile > Graphics). Omitted is 'auto', i.e. follows the emulated OS reduced-motion preference. */
+export interface MapMotion {
+  /** "Water motion": waves, shore surge, caustics. */
+  water?: 'auto' | 'on' | 'off';
+  /** "Fog drift": moving fog and mist edges. */
+  fog?: 'auto' | 'on' | 'off';
+  /** "Menu animations": radial menu, resource ticks, hints, drawers. */
+  hud?: 'auto' | 'on' | 'off';
+}
+
 export const test = base.extend<{
   forbidConsoleErrors: void;
   pinnedLocale: void;
   adminAuth: AdminAuthFixture;
   antialias: 'on' | 'off';
   mapLayers: MapLayers;
+  mapMotion: MapMotion;
+  motionPrompt: 'dismissed' | 'unset';
   graphicsSettings: void;
 }>({
   /**
@@ -66,11 +78,44 @@ export const test = base.extend<{
    */
   mapLayers: [{ water: true }, { option: true }],
 
+  /**
+   * The player's water / fog / HUD motion settings (lib/perf/motionPreferences.ts),
+   * seeded through their own localStorage keys before the app loads, the way a
+   * player sets them in Profile > Graphics. The suite emulates the OS's
+   * reduced-motion preference (playwright.config.ts), which 'auto' follows, so
+   * water and fog are frozen by default; a spec that asserts they *move*
+   * opts in with `test.use({ mapMotion: { water: 'on', fog: 'on' } })`.
+   */
+  mapMotion: [{}, { option: true }],
+
+  /**
+   * The landing page's one-time "Play with animations?" bubble
+   * (components/onboarding/MotionPrompt.vue) shows whenever the device asks
+   * for reduced motion and it was never answered - which is every test here,
+   * since the suite emulates reduced motion. Seeded as already answered
+   * ('dismissed', its own localStorage key, the way a player's "Keep reduced"
+   * would leave it) so it does not sit over every landing spec;
+   * motion-prompt.spec.ts opts in with `test.use({ motionPrompt: 'unset' })`.
+   */
+  motionPrompt: ['dismissed', { option: true }],
+
   graphicsSettings: [
-    async ({ page, antialias, mapLayers }, use) => {
+    async ({ page, antialias, mapLayers, mapMotion, motionPrompt }, use) => {
+      if (motionPrompt === 'dismissed') {
+        await page.addInitScript(() => {
+          // addInitScript runs on every navigation: only seed, never overwrite an answer the page itself recorded.
+          if (!window.localStorage.getItem('bjarnoy.motionPrompt')) window.localStorage.setItem('bjarnoy.motionPrompt', 'dismissed');
+        });
+      }
       await page.addInitScript((value) => {
         window.localStorage.setItem('bjarnoy.antialias', value);
       }, antialias);
+      await page.addInitScript((motion) => {
+        for (const key of ['water', 'fog', 'hud'] as const) {
+          const value = motion[key];
+          if (value) window.localStorage.setItem(`bjarnoy.motion.${key}`, value);
+        }
+      }, mapMotion);
       if (mapLayers.water === false) {
         await page.addInitScript(() => {
           // main.ts assigns the flags object once at startup (demo builds);
