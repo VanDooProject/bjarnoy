@@ -999,6 +999,18 @@ const backdropStyle = computed(() => {
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* `.hud-drawer`'s own `touch-action: none` stops at this element: a
+     scroll container starts a fresh touch-action scope for its contents, so
+     without repeating it here a finger on overflowing drawer content is
+     claimed by the browser's native pan (`pointercancel`), and the drawer
+     can no longer be dragged closed by touch. Touch scrolling of this
+     element is driven from useHudDrawer instead (see `scrollEl` there);
+     wheel and `scrollIntoView` stay native. The rail sheet below has no
+     drag and opts back into native touch scrolling. */
+  touch-action: none;
+}
+.hud-drawer--rail .hud-drawer-scroll {
+  touch-action: auto;
 }
 .hud-drawer--bottom .hud-drawer-scroll {
   /* A flex column (not `column-reverse`, which would flip `scrollTop`
