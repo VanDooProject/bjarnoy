@@ -1106,6 +1106,14 @@ const WASTED_VARIANT_WEIGHTS: Partial<Record<Terrain, number[]>> = {
  */
 export const FOREST_VARIANT_WEIGHTS = [0.04, 0.84, 0.06, 0.06];
 
+/**
+ * Top-variant weights for a living sand tile: index 0 is the plain sand, index N is `variant(N-1)` — 1 dunes, 2 driftwood,
+ * 3 boulders, 4 wreck, 5 whale bones, 6 upturned boat and cairn, 7 sand castle, 8 driftwood pile. The plain look is the
+ * common one, the wreck, whale bones and sand castle are rare accents. A variant whose art is not packed yet falls back
+ * to the plain frame (textures.ts `pickIndexedEntry`). Mirrors `TerrainSampler.SandVariantWeights`.
+ */
+export const SAND_VARIANT_WEIGHTS = [0.45, 0.11, 0.11, 0.11, 0.02, 0.02, 0.06, 0.01, 0.11];
+
 /** Wavelength (hexes) of the taiga/birch biome noise — mirrors `TerrainSampler.ForestBiomeScale`. */
 export const FOREST_BIOME_SCALE = 14;
 /** Seed offset of the biome noise (`kind = n >= 0.5 ? taiga : birch`). */
@@ -1171,6 +1179,7 @@ export function variantAt(q: number, r: number, world: WorldSeed): number {
   if (isCoastalWater(q, r, world)) return weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
   const terrain = terrainAt(q, r, world);
   if (terrain === 'forest') return forestVariantIndex(h);
+  if (terrain === 'sand') return weightedIndex(h, SAND_VARIANT_WEIGHTS);
   const count = VARIANT_COUNTS[terrain] ?? 1;
   if (count <= 1) return 0;
   const index = Math.floor(h * count);
@@ -1184,6 +1193,7 @@ export function variantAt(q: number, r: number, world: WorldSeed): number {
  */
 export function variantForTerrain(q: number, r: number, world: WorldSeed, terrain: Terrain): number {
   if (terrain === 'forest') return forestVariantIndex(hash2(q, r, world.seed + 31));
+  if (terrain === 'sand') return weightedIndex(hash2(q, r, world.seed + 31), SAND_VARIANT_WEIGHTS);
   const count = VARIANT_COUNTS[terrain] ?? 1;
   if (count <= 1) return 0;
   const index = Math.floor(hash2(q, r, world.seed + 31) * count);
@@ -1345,6 +1355,8 @@ export function generateTile(q: number, r: number, world: WorldSeed, sample?: Te
     variant = weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
   } else if (terrain === 'forest') {
     variant = forestVariantIndex(h);
+  } else if (terrain === 'sand') {
+    variant = weightedIndex(h, SAND_VARIANT_WEIGHTS);
   } else {
     const count = VARIANT_COUNTS[terrain] ?? 1;
     variant = count <= 1 ? 0 : Math.min(count - 1, Math.floor(h * count));

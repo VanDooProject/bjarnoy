@@ -7,6 +7,7 @@ import { WorldModel } from './WorldModel';
 import {
   COMPACT_GENERATION,
   FOREST_VARIANT_WEIGHTS,
+  SAND_VARIANT_WEIGHTS,
   forestKindAt,
   generateTile,
   terrainAt,
@@ -22,6 +23,15 @@ function forestHexes(w: WorldSeed, extent = 150) {
   const hexes: { q: number; r: number }[] = [];
   for (let q = -extent; q <= extent; q++) {
     for (let r = -extent; r <= extent; r++) if (terrainAt(q, r, w) === 'forest') hexes.push({ q, r });
+  }
+  return hexes;
+}
+
+/** Every sand hex in a q/r window (raw seed terrain). */
+function sandHexes(w: WorldSeed, extent = 150) {
+  const hexes: { q: number; r: number }[] = [];
+  for (let q = -extent; q <= extent; q++) {
+    for (let r = -extent; r <= extent; r++) if (terrainAt(q, r, w) === 'sand') hexes.push({ q, r });
   }
   return hexes;
 }
@@ -121,6 +131,35 @@ describe('forest variant pick', () => {
   it('generateTile agrees with variantAt for forest hexes', () => {
     const w = world(42);
     for (const h of forestHexes(w, 40)) expect(generateTile(h.q, h.r, w).variant).toBe(variantAt(h.q, h.r, w));
+  });
+});
+
+describe('sand variant pick', () => {
+  it('follows SAND_VARIANT_WEIGHTS over many sand hexes', () => {
+    const counts = SAND_VARIANT_WEIGHTS.map(() => 0);
+    let total = 0;
+    for (const seed of SEEDS) {
+      const w = world(seed);
+      for (const h of sandHexes(w, 400)) {
+        counts[variantAt(h.q, h.r, w)]++;
+        total++;
+      }
+    }
+    expect(total).toBeGreaterThan(4000);
+    SAND_VARIANT_WEIGHTS.forEach((weight, i) => {
+      expect(Math.abs(counts[i] / total - weight)).toBeLessThan(0.015);
+    });
+  });
+
+  it('has weights that sum to 1', () => {
+    expect(SAND_VARIANT_WEIGHTS.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10);
+  });
+
+  it('generateTile agrees with variantAt for sand hexes', () => {
+    const w = world(42);
+    const hexes = sandHexes(w, 80);
+    expect(hexes.length).toBeGreaterThan(100);
+    for (const h of hexes) expect(generateTile(h.q, h.r, w).variant).toBe(variantAt(h.q, h.r, w));
   });
 });
 
