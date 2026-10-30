@@ -11,6 +11,7 @@ import { onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import type { MapLoadState } from '../../lib/map/HexMapRenderer';
+import { prefersReducedMotion } from '../../lib/motion';
 
 const props = defineProps<{ state: MapLoadState }>();
 
@@ -20,10 +21,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // is a fixed, per-session device preference, not something that needs a
 // live-updating watcher for a loading indicator that's on screen for at most
 // a few seconds.
-const reducedMotion =
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    : false;
+const reducedMotion = prefersReducedMotion();
 
 const FADE_MS = 250;
 
@@ -213,15 +211,13 @@ onUnmounted(clearFadeTimer);
   transition: width 200ms ease;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .hex--pulse,
-  .top-bar-sweep {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
-  .map-loading {
-    transition: none;
-  }
+html[data-hud-motion='reduced'] .hex--pulse,
+html[data-hud-motion='reduced'] .top-bar-sweep {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+html[data-hud-motion='reduced'] .map-loading {
+  transition: none;
 }
 </style>

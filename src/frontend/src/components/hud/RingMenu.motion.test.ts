@@ -109,6 +109,32 @@ describe('RingMenu motion', () => {
       wrapper.unmount();
     });
 
+    it('under reduced motion still swaps layers through short opacity fades, never movement', async () => {
+      waapi.uninstall();
+      waapi = installWaapi(true);
+      vi.useFakeTimers();
+      const wrapper = mount(RingMenu, mountOptions);
+      // The open itself fades the hub and bubbles in.
+      expect(waapi.on('.ring-bubble')).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(2000);
+      waapi.calls.length = 0;
+
+      void bubble(wrapper, 'Build').trigger('click');
+      await nextTick();
+      // The departing root bubbles fade out first and the swap waits for that.
+      expect(labels(wrapper)).toEqual(['Details', 'Raze', 'Build']);
+      expect(waapi.on('.ring-bubble')).toHaveLength(3);
+      expect(waapi.on('.ring-bubble')[0].frames).toEqual([{ opacity: 1 }, { opacity: 0 }]);
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(labels(wrapper)).toEqual(['Housing', '‹ BACK']);
+      // The categories fade in rather than bloom.
+      const arriving = waapi.on('.ring-bubble').filter((c) => c.frames[0] && 'opacity' in c.frames[0] && c.frames[0].opacity === 0);
+      expect(arriving.length).toBeGreaterThanOrEqual(2);
+      for (const call of waapi.calls) expect(call.frames.every((f) => !('transform' in f))).toBe(true);
+      wrapper.unmount();
+    });
+
     it('ignores a second navigation click while a swap is running', async () => {
       const wrapper = mount(RingMenu, mountOptions);
       await vi.advanceTimersByTimeAsync(2000);

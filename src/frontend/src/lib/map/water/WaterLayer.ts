@@ -352,6 +352,10 @@ export class WaterLayer {
   private clock = 0;
   // The waves' own clock, advanced at `waveSpeed` times the rate of `clock`.
   private waveClock = 0;
+  // Frozen: the clocks stop advancing, so the surface holds its last frame
+  // in place (still drawn, still reacting to camera/debug flags) instead of
+  // being hidden. See `setFrozen`.
+  private frozen = false;
   private suppressed = false;
 
   constructor(mode: WaterMode, tileWidth: number, tileHeight: number) {
@@ -572,11 +576,18 @@ export class WaterLayer {
     this.suppressed = suppressed;
   }
 
-  /** Syncs the debug flags onto uniforms and advances the animation clock. Once a frame. */
+  /** Freezes (or resumes) the water's motion: the layer keeps drawing, its animation clocks just stop. */
+  setFrozen(frozen: boolean): void {
+    this.frozen = frozen;
+  }
+
+  /** Syncs the debug flags onto uniforms and advances the animation clock (unless frozen). Once a frame. */
   tick(nowMs: number): void {
     const sinceLast = this.lastTickAtMs === null ? 0 : nowMs - this.lastTickAtMs;
     this.lastTickAtMs = nowMs;
-    const elapsed = sinceLast / 1000;
+    // lastTickAtMs keeps tracking while frozen so thawing resumes smoothly
+    // instead of jumping by the whole frozen interval.
+    const elapsed = this.frozen ? 0 : sinceLast / 1000;
     this.clock += elapsed;
     this.waveClock += elapsed * waterDebugTuning.waveSpeed;
 

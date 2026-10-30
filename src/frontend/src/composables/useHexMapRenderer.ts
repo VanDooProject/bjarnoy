@@ -1,6 +1,7 @@
 import { onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue';
 import { HexMapRenderer, READY_LOAD_STATE, type HexMapRendererOptions, type MapLoadState } from '../lib/map/HexMapRenderer';
 import { animationPreference } from '../lib/perf/animationPreference';
+import { motionPreferences } from '../lib/perf/motionPreferences';
 
 /**
  * Mounts a HexMapRenderer on a <canvas> ref. Deliberately exposes almost
@@ -47,6 +48,8 @@ export function useHexMapRenderer(
   const mountError = shallowRef<unknown>(null);
   let resizeObserver: ResizeObserver | null = null;
   let stopAnimationWatch: (() => void) | null = null;
+  let stopWaterMotionWatch: (() => void) | null = null;
+  let stopFogMotionWatch: (() => void) | null = null;
   // Bumped on every (re)mount attempt and on unmount, so a mount that
   // resolves after being superseded (retry, or the component going away)
   // tears itself down instead of wiring up a second renderer.
@@ -57,6 +60,10 @@ export function useHexMapRenderer(
     resizeObserver = null;
     stopAnimationWatch?.();
     stopAnimationWatch = null;
+    stopWaterMotionWatch?.();
+    stopWaterMotionWatch = null;
+    stopFogMotionWatch?.();
+    stopFogMotionWatch = null;
     r?.destroy();
     renderer.value = null;
     delete containerRef.value?.dataset.mapReady;
@@ -95,6 +102,15 @@ export function useHexMapRenderer(
     // away, rather than leaving the renderer's own `animationsEnabled`
     // default until the preference happens to change for some other reason.
     stopAnimationWatch = watch(() => animationPreference.effective, (enabled) => r.setAnimationsEnabled(enabled), {
+      immediate: true,
+    });
+    // Water / fog freeze per the player's own motion settings (auto follows
+    // the device's reduced-motion preference). Applied immediately for the
+    // same reason as the animation watch above.
+    stopWaterMotionWatch = watch(() => motionPreferences.waterEnabled, (enabled) => r.setWaterMotion(enabled), {
+      immediate: true,
+    });
+    stopFogMotionWatch = watch(() => motionPreferences.fogEnabled, (enabled) => r.setFogMotion(enabled), {
       immediate: true,
     });
     // Real lifecycle signal for "the renderer is mounted and has drawn its

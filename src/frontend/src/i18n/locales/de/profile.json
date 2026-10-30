@@ -24,10 +24,32 @@
   "graphics": {
     "title": "Grafik",
     "hint": "Gilt nur auf diesem Gerät.",
-    "animations": "Kartenanimationen",
     "auto": "Automatisch",
     "on": "An",
     "off": "Aus",
+    "device": {
+      "label": "Dein Gerät: „Bewegung reduzieren“",
+      "on": "AN",
+      "off": "AUS",
+      "autoNote": "„Automatisch“ unten folgt dieser Einstellung.",
+      "hint": {
+        "windows": "Ändere sie unter Einstellungen → Barrierefreiheit → Visuelle Effekte → Animationseffekte.",
+        "macos": "Ändere sie unter Systemeinstellungen → Bedienungshilfen → Anzeige → Bewegung reduzieren.",
+        "ios": "Ändere sie unter Einstellungen → Bedienungshilfen → Bewegung → Bewegung reduzieren.",
+        "android": "Ändere sie unter Einstellungen → Bedienungshilfen → Animationen entfernen.",
+        "other": "Ändere sie in den Bedienungshilfen deines Geräts."
+      }
+    },
+    "groupMap": "Karte",
+    "groupHud": "HUD",
+    "buildings": "Gebäudeanimationen",
+    "buildingsSub": "Lager, Werkstätten, Riesen",
+    "water": "Wasserbewegung",
+    "waterSub": "Wellen, Brandung, Lichtreflexe",
+    "fog": "Nebeldrift",
+    "fogSub": "Ziehender Nebel und Dunstränder",
+    "menus": "Menüanimationen",
+    "menusSub": "Radialmenü, Rohstoff-Ticks, Hinweise, Schubladen",
     "antialias": "Kantenglättung",
     "antialiasHint": "Glattere Grenzen und Umrisse auf der Karte. Aus ist auf langsamen Geräten schneller; gilt beim nächsten Öffnen der Karte.",
     "status": {

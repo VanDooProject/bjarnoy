@@ -36,7 +36,7 @@ import { formatBuildTime } from '../../lib/map/ringCatalogue';
 import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
 import { ringFootprint } from '../../lib/map/markerOcclusion';
-import { motionEnabled } from '../../lib/motion';
+import { motionEnabled, supportsWaapi } from '../../lib/motion';
 import * as ringMotion from '../../lib/map/ringMotion';
 import {
   BUB1,
@@ -591,12 +591,13 @@ const hubLabelFont = computed(
  * Moves to another layer. With motion the departing layer is pulled into its
  * parent first (the hub, or the category bubble), the path only changes once
  * that has finished, and the new layer then blooms out of its parent
- * (lib/map/ringMotion.ts). Without motion (reduced motion, jsdom) the path
- * changes immediately.
+ * (lib/map/ringMotion.ts). Under reduced motion the same sequence runs with
+ * short opacity fades in place of the movement; without the Web Animations
+ * API (jsdom) the path changes immediately.
  */
 async function go(next: string[]) {
   const root = rootEl.value;
-  if (!root || !motionEnabled()) {
+  if (!root || !supportsWaapi()) {
     path.value = next;
     hover.value = null;
     hoverLane1.value = null;
@@ -733,7 +734,9 @@ function onBackdropPointerDown(e: PointerEvent) {
 </script>
 
 <template>
-  <div ref="rootEl" class="ring-backdrop" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
+  <!-- `data-swapping`: a layer change is mid-flight (old layer leaving, new one arriving), so the bubbles on screen
+       are not yet the final set. -->
+  <div ref="rootEl" class="ring-backdrop" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
     <div
       v-if="layout.showLane1Track"
       class="ring-track"
@@ -1360,22 +1363,20 @@ function onBackdropPointerDown(e: PointerEvent) {
       0 6px 18px rgba(0, 0, 0, 0.45);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ring-bubble,
-  .ring-hub {
-    transition: none;
-  }
-  .ring-bubble.armed {
-    animation: none;
-    box-shadow: 0 0 0 4px var(--gold);
-  }
-  /* The glow becomes a static gold ring. */
-  .ring-bubble.glow {
-    animation: none;
-    box-shadow:
-      0 0 0 2px rgba(255, 197, 92, 0.6),
-      0 6px 18px rgba(0, 0, 0, 0.45);
-  }
+html[data-hud-motion='reduced'] .ring-bubble,
+html[data-hud-motion='reduced'] .ring-hub {
+  transition: none;
+}
+html[data-hud-motion='reduced'] .ring-bubble.armed {
+  animation: none;
+  box-shadow: 0 0 0 4px var(--gold);
+}
+/* The glow becomes a static gold ring. */
+html[data-hud-motion='reduced'] .ring-bubble.glow {
+  animation: none;
+  box-shadow:
+    0 0 0 2px rgba(255, 197, 92, 0.6),
+    0 6px 18px rgba(0, 0, 0, 0.45);
 }
 .arm-badge {
   position: absolute;

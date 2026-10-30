@@ -155,11 +155,21 @@ export class RingMenuComponent {
   /** Root "Build" action → the build categories on the inner lane. */
   async openBuildCategories(): Promise<void> {
     await this.click(this.action('Build').first());
+    await this.settledLayer();
   }
 
   /** A named category → its buildings on the outer lane. */
   async openCategory(label: string): Promise<void> {
     await this.click(this.category(label).first());
+    await this.settledLayer();
+  }
+
+  /**
+   * Waits for a layer change to finish. The outgoing layer leaves first (a short fade under reduced motion, which
+   * this suite emulates), so right after a click the bubbles on screen can still be the previous layer's.
+   */
+  private async settledLayer(): Promise<void> {
+    await expect(this.backdrop).not.toHaveAttribute('data-swapping');
   }
 
   /**
@@ -168,5 +178,6 @@ export class RingMenuComponent {
    */
   async openFirstCategory(): Promise<void> {
     await this.click(this.categoryBubbles.first());
+    await this.settledLayer();
   }
 }
