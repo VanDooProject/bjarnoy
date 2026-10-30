@@ -668,7 +668,6 @@ function onRingOutsidePointerDown(e: PointerEvent) {
 }
 
 type BuildableType =
-  | 'hut'
   | 'reindeerherder'
   | 'farm'
   | 'tower'
@@ -1045,38 +1044,32 @@ const rootActions = computed<RingAction[]>(() => {
     return actions;
   }
   if (isMineTile.value) {
-    const buildableSea = (tile.terrain !== 'sea' && tile.terrain !== 'lake') || tile.isCoastalWater;
     // A giant hex is never buildable, claimed or not — its own art fully
     // occupies the ground there (mirrors WorldModel.placeBuilding's own
-    // `tile.giant` refusal). Checked ahead of the open-water hint since a
-    // giant is always land, so `buildableSea` alone would otherwise show
-    // "Build" as available on it.
+    // `tile.giant` refusal).
     const blockedByGiant = !!tile.giant;
     // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood) —
     // mirrors WorldModel.placeBuilding / the server's HexOccupiedByCamp rule.
     const blockedByCamp = !!tile.camp && !tile.buildingType && !campHexBuildable(tile.camp);
-    // A bog shore, mouth or spring takes no building at all (only plain moss, a creek and a half shore do).
-    const nothingToBuild = categoriesFor(tile).length === 0;
-    const bareBog = tile.terrain === 'bog' && nothingToBuild;
-    const bareMountain = tile.terrain === 'mountain' && nothingToBuild;
+    // A hex that offers no category at all (bog shore, mouth or spring, a mountain while quarries are off, a lake, open water)
+    // has no Build action — nothing in the ring that could only fail (docs/design/ui-guidelines.md, rule 1).
+    const canBuildHere = categoriesFor(tile).length > 0;
     return [
       detailsAction(tile),
-      {
-        id: 'build',
-        label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea || blockedByGiant || blockedByCamp || bareBog || bareMountain,
-        hint: blockedByGiant
-          ? t('hud.ringMenu.actions.giantOccupied')
-          : blockedByCamp
-            ? t('hud.ringMenu.actions.campOccupied')
-            : bareBog
-              ? t('hud.ringMenu.actions.bogNothingHere')
-              : bareMountain
-                ? t('hud.ringMenu.actions.mountainNothingHere')
-                : buildableSea
-                  ? undefined
-                  : t('hud.ringMenu.actions.openWater'),
-      },
+      ...(canBuildHere
+        ? [
+            {
+              id: 'build',
+              label: t('hud.ringMenu.actions.build'),
+              disabled: blockedByGiant || blockedByCamp,
+              hint: blockedByGiant
+                ? t('hud.ringMenu.actions.giantOccupied')
+                : blockedByCamp
+                  ? t('hud.ringMenu.actions.campOccupied')
+                  : undefined,
+            },
+          ]
+        : []),
       ...huntActions(tile),
       sendArmyAction(tile),
     ];
