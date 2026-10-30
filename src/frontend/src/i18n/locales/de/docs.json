@@ -166,6 +166,18 @@
       "saddleback": "Sattel",
       "table": "Tafelberg"
     },
+    "sandLookLabel": "Aussehen:",
+    "sandLooks": {
+      "plain": "Schlicht",
+      "dunes": "Dünen",
+      "driftwood": "Treibholz",
+      "driftwoodPile": "Treibholzhaufen",
+      "boulders": "Findlinge",
+      "wreck": "Wrack",
+      "whaleBones": "Walknochen",
+      "boat": "Kieloben liegendes Boot",
+      "sandCastle": "Sandburg"
+    },
     "riverShapes": {
       "spring": "Quelle",
       "straight": "Gerade",

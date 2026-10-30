@@ -8,7 +8,14 @@ import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
-import { coastalWaterArt, riverArt, terrainArt, terrainArtByFamily, type ArtRef } from '../lib/map/buildingArt';
+import {
+  coastalWaterArt,
+  riverArt,
+  terrainArt,
+  terrainArtByFamily,
+  terrainVariantArt,
+  type ArtRef,
+} from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 
 const catalogue = useBuildingCatalogueStore();
@@ -86,6 +93,32 @@ const MOUNTAIN_FAMILY: Record<MountainVariant, string> = {
 const mountainVariant = ref<MountainVariant>('plain');
 const mountainVariantArt = computed<ArtRef>(() => terrainArtByFamily(MOUNTAIN_FAMILY[mountainVariant.value]));
 
+// The sand tile's decorated looks (VanDooProject/3d_assets'
+// scripts/build_sandtile.py, variant000-007). Only the looks the vendored
+// pack actually carries are offered, so the picker stays hidden until the
+// rendered looks are packed and appears by itself once they are.
+const SAND_LOOKS = [
+  { id: 'plain', variant: null },
+  { id: 'dunes', variant: 0 },
+  { id: 'driftwood', variant: 1 },
+  { id: 'driftwoodPile', variant: 7 },
+  { id: 'boulders', variant: 2 },
+  { id: 'wreck', variant: 3 },
+  { id: 'whaleBones', variant: 4 },
+  { id: 'boat', variant: 5 },
+  { id: 'sandCastle', variant: 6 },
+] as const;
+const sandLook = ref<string>('plain');
+const sandLooks = computed(() =>
+  SAND_LOOKS.flatMap((look) => {
+    const art = look.variant === null ? terrainArt('sand') : terrainVariantArt('sandtile', look.variant);
+    return art ? [{ id: look.id, art }] : [];
+  }),
+);
+const sandLookArt = computed<ArtRef>(
+  () => (sandLooks.value.find((look) => look.id === sandLook.value) ?? sandLooks.value[0]!).art,
+);
+
 // id doubles as the anchor/ToC key; terrain is the wire name a building's
 // AllowedTerrain lists (see BuildingCatalogue.cs) — null for the rows that
 // aren't a BuildingType terrain value on their own (sea never holds a
@@ -98,6 +131,7 @@ interface TileEntry {
   coastal?: boolean;
   river?: boolean;
   mountain?: boolean;
+  sand?: boolean;
 }
 
 // Generation rules mirror WorldGenerationOptions' documented defaults
@@ -107,17 +141,18 @@ interface TileEntry {
 const TILES = computed<TileEntry[]>(() => [
   { id: 'sea', art: terrainArt('sea'), terrain: 'sea' },
   { id: 'coastal-water', art: coastalWaterArt(), terrain: null, coastal: true },
-  { id: 'sand', art: terrainArt('sand'), terrain: 'sand' },
+  { id: 'sand', art: terrainArt('sand'), terrain: 'sand', sand: true },
   { id: 'grass', art: terrainArt('grass'), terrain: 'grass' },
   { id: 'forest', art: terrainArt('forest'), terrain: 'forest' },
   { id: 'mountain', art: terrainArt('mountain'), terrain: 'mountain', mountain: true },
   { id: 'river', art: riverArt('straight'), terrain: null, river: true },
 ]);
 
-/** The picture a tile's card shows — the river/mountain entries swap in whichever shape/landform is picked, everything else is static. */
+/** The picture a tile's card shows — the river/mountain/sand entries swap in whichever shape/landform/look is picked, everything else is static. */
 function thumbArt(tile: TileEntry): ArtRef {
   if (tile.river) return riverShapeArt.value;
   if (tile.mountain) return mountainVariantArt.value;
+  if (tile.sand) return sandLookArt.value;
   return tile.art;
 }
 function thumbFrame(tile: TileEntry): AtlasFrameRect | null {
@@ -244,6 +279,16 @@ const buildingsByTile = computed(() => {
           "
           :model-value="mountainVariant"
           @update:model-value="mountainVariant = $event"
+        />
+
+        <!-- Sand's decorated looks (dunes, driftwood, a wreck, ...) — only
+             shown once the pack carries more than the plain tile. -->
+        <DocsPicker
+          v-if="tile.sand && sandLooks.length > 1"
+          :label="$t('docs.tiles.sandLookLabel')"
+          :options="sandLooks.map((look) => ({ value: look.id, label: t(`docs.tiles.sandLooks.${look.id}`) }))"
+          :model-value="sandLook"
+          @update:model-value="sandLook = $event"
         />
       </template>
     </DocsTileEntry>
