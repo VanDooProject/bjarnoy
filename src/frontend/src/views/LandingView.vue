@@ -16,6 +16,7 @@ import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
+import MotionPrompt from '../components/onboarding/MotionPrompt.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
@@ -989,7 +990,10 @@ watch(
          branch scoped to its own original condition. -->
     <TopBar v-else-if="!player.hasFoundedSettlement" title="Bjarnoy">
       <LocaleSwitcher />
-      <ReturningPlayerMenu />
+      <ReturningPlayerMenu>
+        <!-- One-time offer to turn animations on when the device asks for reduced motion. -->
+        <template #nudge><MotionPrompt /></template>
+      </ReturningPlayerMenu>
     </TopBar>
 
     <!-- Once a settlement exists, fog is on screen and the camera is

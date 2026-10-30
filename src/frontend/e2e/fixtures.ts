@@ -44,6 +44,7 @@ export const test = base.extend<{
   antialias: 'on' | 'off';
   mapLayers: MapLayers;
   mapMotion: MapMotion;
+  motionPrompt: 'dismissed' | 'unset';
   graphicsSettings: void;
 }>({
   /**
@@ -87,8 +88,25 @@ export const test = base.extend<{
    */
   mapMotion: [{}, { option: true }],
 
+  /**
+   * The landing page's one-time "Play with animations?" bubble
+   * (components/onboarding/MotionPrompt.vue) shows whenever the device asks
+   * for reduced motion and it was never answered - which is every test here,
+   * since the suite emulates reduced motion. Seeded as already answered
+   * ('dismissed', its own localStorage key, the way a player's "Keep reduced"
+   * would leave it) so it does not sit over every landing spec;
+   * motion-prompt.spec.ts opts in with `test.use({ motionPrompt: 'unset' })`.
+   */
+  motionPrompt: ['dismissed', { option: true }],
+
   graphicsSettings: [
-    async ({ page, antialias, mapLayers, mapMotion }, use) => {
+    async ({ page, antialias, mapLayers, mapMotion, motionPrompt }, use) => {
+      if (motionPrompt === 'dismissed') {
+        await page.addInitScript(() => {
+          // addInitScript runs on every navigation: only seed, never overwrite an answer the page itself recorded.
+          if (!window.localStorage.getItem('bjarnoy.motionPrompt')) window.localStorage.setItem('bjarnoy.motionPrompt', 'dismissed');
+        });
+      }
       await page.addInitScript((value) => {
         window.localStorage.setItem('bjarnoy.antialias', value);
       }, antialias);
