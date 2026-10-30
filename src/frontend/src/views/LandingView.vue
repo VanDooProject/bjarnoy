@@ -19,6 +19,7 @@ import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
 import MotionPrompt from '../components/onboarding/MotionPrompt.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
+import RingMenuHost from '../components/hud/RingMenuHost.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
 import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
@@ -1056,6 +1057,7 @@ watch(
     </template>
     <!-- Flat: no `categories`, so the ring stays one lane deep — onboarding
          offers a handful of types, not a hierarchy. -->
+    <RingMenuHost>
     <RingMenu
       v-if="ringScreen"
       :x="ringScreen.x"
@@ -1069,6 +1071,7 @@ watch(
       @outside-pointer-down="closeRing"
       @layout="ringLaneSpots = $event"
     />
+    </RingMenuHost>
   </div>
 </template>
 

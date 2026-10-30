@@ -4,17 +4,18 @@
 // has the per-animation timings): layer swaps wait for the out-animation, a
 // blocked click shakes instead of committing, the press precedes going back,
 // the glow marks only a buildable bubble whose card is up, and — wrapped in
-// a <Transition> with the leave hook MapView uses — the ring stays in the DOM
+// RingMenuHost (shared by MapView and LandingView) — the ring stays in the DOM
 // until its retract has finished.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h, nextTick, ref, Transition } from 'vue';
+import { defineComponent, h, nextTick, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import RingMenu, { type RingCategory } from './RingMenu.vue';
+import RingMenuHost from './RingMenuHost.vue';
 import { createTestI18n } from '../../test/i18n';
 import { installWaapi } from '../../test/waapi';
 import enHud from '../../i18n/locales/en/hud.json';
 import { computeAvailability } from '../../lib/map/ringAvailability';
-import { HUB_OUT_MS, PULL_MS, retractRing } from '../../lib/map/ringMotion';
+import { HUB_OUT_MS, PULL_MS } from '../../lib/map/ringMotion';
 
 const available = { wood: 1000, stone: 1000, food: 1000, iron: 1000 };
 const CATEGORIES: RingCategory[] = [
@@ -274,18 +275,20 @@ describe('RingMenu motion', () => {
     });
   });
 
-  describe('close retract (X3) behind a <Transition>', () => {
-    // The wrapper MapView uses: the ring only leaves the DOM when the leave hook calls done().
+  describe('close retract (X3) behind RingMenuHost', () => {
+    // The one host both MapView and LandingView mount the ring in: it only leaves the DOM when the retract is done.
     const Host = defineComponent({
       setup() {
         const open = ref(true);
         const closed = ref(0);
+        const retracted = ref(0);
         return () =>
           h('div', [
+            h('i', { id: 'retracted', 'data-n': retracted.value }),
             h('button', { id: 'toggle', onClick: () => (open.value = !open.value) }),
             h(
-              Transition,
-              { css: false, onLeave: (el: Element, done: () => void) => retractRing(el as HTMLElement).then(done, done) },
+              RingMenuHost,
+              { onRetracted: () => retracted.value++ },
               () =>
                 open.value
                   ? h(RingMenu, { ...mountOptions.props, onClose: () => { open.value = false; closed.value++; } })
@@ -311,6 +314,7 @@ describe('RingMenu motion', () => {
       expect(document.querySelector('.ring-backdrop')).not.toBeNull();
       await vi.advanceTimersByTimeAsync(10);
       expect(document.querySelector('.ring-backdrop')).toBeNull();
+      expect(wrapper.get('#retracted').attributes('data-n')).toBe('1');
       wrapper.unmount();
     });
 
