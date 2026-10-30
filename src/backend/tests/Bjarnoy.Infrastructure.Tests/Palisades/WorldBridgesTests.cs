@@ -62,7 +62,7 @@ public sealed class WorldBridgesTests : IDisposable
     private static async Task<(WorldEntity World, UserEntity Owner, SettlementEntity Settlement)> SeedAsync(
         GameDbContext db, int level, params UserEntity[] extraGuildmates)
     {
-        var world = new WorldEntity { Name = "W", MaxPlayers = 10 };
+        var world = new WorldEntity { Name = $"W-{Guid.NewGuid():N}", MaxPlayers = 10 };
         db.Worlds.Add(world);
         var island = new IslandEntity { WorldId = world.Id, Index = 0, Name = "I", CentreQ = 0, CentreR = 0, StartPositions = [new HexPoint(0, 0)] };
         db.Islands.Add(island);
