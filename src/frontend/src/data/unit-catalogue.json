@@ -140,7 +140,7 @@
       "requiredBuildingType": "dockyard"
     },
     {
-      "type": "settlercrew",
+      "type": "settler",
       "class": "civilian",
       "attack": 0,
       "defense": 3,
@@ -148,8 +148,8 @@
       "carryCapacity": 0,
       "foodCarryCapacity": 40,
       "upkeepPerHour": 1,
-      "trainingCost": { "wood": 200, "stone": 150, "food": 100, "iron": 100 },
-      "trainingSeconds": 2400,
+      "trainingCost": { "wood": 120, "stone": 90, "food": 60, "iron": 60 },
+      "trainingSeconds": 1440,
       "requiredLonghouseLevel": 10,
       "requiredUnitType": null,
       "requiredBuildingType": "cartworkshop"

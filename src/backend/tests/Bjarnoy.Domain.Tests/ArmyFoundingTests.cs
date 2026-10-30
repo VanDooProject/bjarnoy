@@ -160,19 +160,20 @@ public class ArmyFoundingTests
     }
 
     [Fact]
-    public void Sea_founding_convoy_is_rejected_when_ships_cannot_carry_every_settler()
+    public void Sea_founding_convoy_is_accepted_with_five_settlers_on_one_longship()
     {
         var settlement = Found(garrison:
         [
             new UnitStack(UnitType.Settler, 5),
-            new UnitStack(UnitType.Karve, 1),
+            new UnitStack(UnitType.Longship, 1),
         ]);
 
         var decision = DispatchFound(
             settlement, new HexCoord(5, 0),
-            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Karve, 1)]);
+            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Longship, 1)],
+            terrainAt: _ => Terrain.Sea);
 
-        Assert.Equal(DispatchRejection.InsufficientShipCapacityForSettlers, decision.Rejection);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]
@@ -317,7 +318,7 @@ public class ArmyFoundingTests
 
         // Load barely enough for the original short trip; retargeting much
         // further away should now fail the round-trip food check.
-        var decision = DispatchFound(settlement, new HexCoord(2, 0), provisions: 3);
+        var decision = DispatchFound(settlement, new HexCoord(2, 0), provisions: 5);
         var army = decision.Army!;
 
         var result = Army.RetargetFounding(army, new HexCoord(50, 0), T0.AddMinutes(10), Home, AllGrass());

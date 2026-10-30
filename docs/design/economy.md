@@ -348,7 +348,7 @@ shuts the river again.
 A new settlement needs:
 
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
-2. 3 Settler Crews (the crew cost doubles per settlement already held);
+2. 5 Settlers (the settler cost doubles per settlement already held);
 3. **renown**: +1 per building level per hour, across all settlements
    (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
    ×2 per settlement.
@@ -526,7 +526,7 @@ sources have to line up with the unit unlocks:
 | When | Iron source | Units it has to carry |
 |---|---|---|
 | LH 1–2 | Longhouse trickle only (2–4 iron/h) | Thrall (no iron) |
-| from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler Crew, Provisioner |
+| from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler, Provisioner |
 | LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
 So bog ground and the bog-ore works are needed by about LH 3, not as a
@@ -535,7 +535,7 @@ them so the levels match. *Implemented:*
 
 - the Thrall costs no iron (it was 15); every other unit still does (Spearman
   40, Axeman 60, Bowman 50, Berserker 120, Provisioner 20, Karve 100,
-  Longship 220, Settler Crew 100, Catapult 250);
+  Longship 220, Settler 60, Catapult 250);
 - each unit's Longhouse gate follows the building that trains it:
 
   | Unit | Trained at | Longhouse gate (was) |
@@ -545,7 +545,7 @@ them so the levels match. *Implemented:*
   | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
   | Karve | Dockyard | 8 (5) |
   | Bowman | Archery Range | 9 (4) |
-  | Provisioner, Settler Crew | Cart Workshop | 10 (4, 5) |
+  | Provisioner, Settler | Cart Workshop | 10 (4, 5) |
   | Berserker, Catapult, Longship | Barracks, Archery Range, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
 
   (Berserker still needs the Axeman, Catapult the Berserker, Longship the
@@ -587,7 +587,7 @@ Iron before the works (Longhouse 1 and 2) is the Longhouse trickle alone
 (2/h per level). From Longhouse 3 the works carry it, so the Barracks' first
 Spearmen (LH 5) are paid from works income, and every other unit is
 affordable the moment its gate opens, because its gate opens with or after
-the works: Axeman at LH 6, Karve at LH 8, Settler Crew and Provisioner at
+the works: Axeman at LH 6, Karve at LH 8, Settler and Provisioner at
 LH 10, the elite units at LH 20 (income 2 800/h against a Catapult's 250).
 The table is the Economy lab's own default setup re-run for the LH 3 unlock
 (three Lumberjacks, Quarries and Reindeer Herders, three bog-ore works, two

@@ -1031,7 +1031,7 @@ const rootActions = computed<RingAction[]>(() => {
     // action changes. Originally longhouse-only (issue #40 phase 1); every
     // building any UnitDefinition.RequiredBuildingType now points at
     // (archery range and dockyard for land troops/ships, then barracks and
-    // cart workshop once Thrall/Provisioner/SettlerCrew moved off the
+    // cart workshop once Thrall/Provisioner/Settler moved off the
     // longhouse) gets the same action. The backend enforces the real gate
     // either way — this is just where the UI surfaces the button.
     if (
@@ -1113,8 +1113,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierTrainsLandTroops');
     case 'trainsShips':
       return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'trainsCivilianCrews':
-      return t('hud.hoverTooltip.modifierTrainsCivilianCrews');
+    case 'trainsCivilians':
+      return t('hud.hoverTooltip.modifierTrainsCivilians');
     case 'terrainBoost':
       return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
     case 'coastal':

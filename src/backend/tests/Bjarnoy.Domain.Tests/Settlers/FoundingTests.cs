@@ -30,7 +30,7 @@ public class FoundingTests
     }
 
     [Fact]
-    public void Five_settlers_cost_what_three_former_settler_crews_cost()
+    public void Five_settlers_cost_the_same_in_total_as_the_former_three_settler_units()
     {
         var cost = UnitCatalogue.Get(UnitType.Settler).TrainingCost * Founding.RequiredSettlers;
 

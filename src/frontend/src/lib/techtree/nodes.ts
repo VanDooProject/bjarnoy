@@ -43,8 +43,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return 'Trains land troops';
     case 'trainsShips':
       return 'Trains ships';
-    case 'trainsCivilianCrews':
-      return 'Trains provisioners/settler crews';
+    case 'trainsCivilians':
+      return 'Trains provisioners and settlers';
     case 'terrainBoost':
       return `${TERRAIN_LABELS[modifier.terrain] ?? modifier.terrain} (+${modifier.percent}%)`;
     case 'coastal':

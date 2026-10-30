@@ -17,7 +17,7 @@ export type BuildingModifier =
   | { kind: 'borderAnchor' }
   | { kind: 'trainsLandTroops' }
   | { kind: 'trainsShips' }
-  | { kind: 'trainsCivilianCrews' }
+  | { kind: 'trainsCivilians' }
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain' | 'bog' | 'lake'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
@@ -442,9 +442,9 @@ export function buildingStatsFor(
       return {};
     // Mirrors BuildingCatalogue.cs's CartWorkshop(level): purely a training
     // gate for the civilian roster it took over from the longhouse
-    // (Provisioner/SettlerCrew) — no storage or production of its own.
+    // (Provisioner/Settler) — no storage or production of its own.
     case 'cartworkshop':
-      return { modifier: { kind: 'trainsCivilianCrews' } };
+      return { modifier: { kind: 'trainsCivilians' } };
     // A wall hex: no production, it stops land armies (the gate lets only its owner's through).
     case 'palisade':
       return { modifier: { kind: 'palisadeWall' } };

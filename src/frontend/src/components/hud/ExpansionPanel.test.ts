@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The founding convoy is 3 settler crews; the backend rejects provisions above
+// The founding convoy is 5 settlers; the backend rejects provisions above
 // their combined foodCarryCapacity (ProvisionsExceedCarryCapacity), so the
 // form must default to and be capped at that total.
 import { createPinia, setActivePinia } from 'pinia';
@@ -35,7 +35,7 @@ vi.mock('../../api/client', async (importOriginal) => {
 });
 
 const definitions = unitCatalogue.data as UnitDefinitionResponse[];
-const settlerCarry = definitions.find((d) => d.type === 'settlercrew')!.foodCarryCapacity;
+const settlerCarry = definitions.find((d) => d.type === 'settler')!.foodCarryCapacity;
 
 async function mountPanel() {
   setActivePinia(createPinia());
@@ -55,19 +55,19 @@ describe('ExpansionPanel provisions', () => {
   beforeEach(() => {
     Object.values(api).forEach((f) => f.mockReset());
     api.getRenown.mockResolvedValue({ total: 99, settlementCount: 1, requiredForNextSettlement: 10, canFoundAnother: true });
-    api.getSettlement.mockResolvedValue({ garrison: [{ unit: 'settlercrew', count: 3 }] });
+    api.getSettlement.mockResolvedValue({ garrison: [{ unit: 'settler', count: 5 }] });
     api.getSettlementArmies.mockResolvedValue([]);
     api.listMySettlements.mockResolvedValue([]);
     api.dispatchArmy.mockResolvedValue({});
   });
 
-  it('defaults to the three crews combined carry capacity and shows it as the max', async () => {
+  it('defaults to the five settlers combined carry capacity and shows it as the max', async () => {
     const wrapper = await mountPanel();
     const input = wrapper.find<HTMLInputElement>('input[aria-label="Provisions"]');
     expect(settlerCarry).toBeGreaterThan(0);
-    expect(input.element.value).toBe(String(settlerCarry * 3));
-    expect(input.attributes('max')).toBe(String(settlerCarry * 3));
-    expect(wrapper.text()).toContain(`max ${settlerCarry * 3}`);
+    expect(input.element.value).toBe(String(settlerCarry * 5));
+    expect(input.attributes('max')).toBe(String(settlerCarry * 5));
+    expect(wrapper.text()).toContain(`max ${settlerCarry * 5}`);
   });
 
   it('clamps a value above the carry capacity before dispatching', async () => {
@@ -75,12 +75,12 @@ describe('ExpansionPanel provisions', () => {
     const input = wrapper.find<HTMLInputElement>('input[aria-label="Provisions"]');
     input.element.value = '500';
     await input.trigger('input');
-    expect(input.element.value).toBe(String(settlerCarry * 3));
+    expect(input.element.value).toBe(String(settlerCarry * 5));
     await wrapper.find('.expansion-form button.expansion-button').trigger('click');
     await flushPromises();
     expect(api.dispatchArmy).toHaveBeenCalledWith(
       's1',
-      expect.objectContaining({ provisions: settlerCarry * 3, mission: 'found' }),
+      expect.objectContaining({ provisions: settlerCarry * 5, mission: 'found' }),
     );
   });
 });
