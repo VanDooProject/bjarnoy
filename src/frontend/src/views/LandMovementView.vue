@@ -4,13 +4,11 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
-import DocsHeroArt from '../components/docs/DocsHeroArt.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { terrainName, unitName } from '../i18n/catalogueNames';
-import { findAtlasFrame } from '../lib/map/atlas';
 import { ravensRings } from '../lib/map/buildingEconomy';
 import {
   ARMY_VISION_RINGS,
@@ -30,7 +28,6 @@ const { t, n, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global
 const units = useUnitCatalogueStore();
 onMounted(() => units.load());
 
-const art = computed(() => findAtlasFrame('showcase', 'riverbridge_SE_level004'));
 
 /** The columns of the pace table: each ground an army can walk, with its cost. */
 const columns = [...GROUND_COSTS.map((g) => ({ id: g.terrain, cost: g.cost })), { id: 'stream', cost: STREAM_COST }];
@@ -63,8 +60,6 @@ const tocLinks = computed(() =>
 
 <template>
   <DocsPageLayout class="land-movement" :title="$t('docs.landMovement.title')" caption="DOCS · LAND MOVEMENT" :intro="$t('docs.landMovement.intro')">
-    <DocsHeroArt :frame="art" />
-
     <DocsToc :links="tocLinks" />
 
     <section id="cost" class="block">

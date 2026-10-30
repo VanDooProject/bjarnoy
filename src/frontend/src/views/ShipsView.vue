@@ -4,13 +4,11 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
-import DocsHeroArt from '../components/docs/DocsHeroArt.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { resourceName, unitName } from '../i18n/catalogueNames';
-import { findAtlasFrame } from '../lib/map/atlas';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import { favourAt } from '../lib/docs/shrineDocs';
 import { formatMinutes } from '../lib/docs/landMovementDocs';
@@ -27,7 +25,6 @@ onMounted(() => {
   void units.load();
 });
 
-const art = computed(() => findAtlasFrame('showcase', 'dockyard_SE_level007'));
 
 const RESOURCES = ['wood', 'stone', 'food', 'iron'] as const;
 
@@ -50,8 +47,6 @@ const loc = computed(() => String(locale.value));
 
 <template>
   <DocsPageLayout class="ships" :title="$t('docs.ships.title')" caption="DOCS · SHIPS" :intro="$t('docs.ships.intro')">
-    <DocsHeroArt :frame="art" />
-
     <template v-if="loaded">
     <section id="dockyard" class="block">
       <h2>{{ $t('docs.ships.dockyard.heading') }}</h2>

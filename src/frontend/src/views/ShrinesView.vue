@@ -5,10 +5,8 @@ import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
-import AtlasSprite from '../components/AtlasSprite.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { runeRarityName, runeTypeName, terrainName } from '../i18n/catalogueNames';
-import { buildingArt } from '../lib/map/buildingArt';
 import { maxLevelFor, type BuildingKind } from '../lib/map/buildingEconomy';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import {
@@ -28,11 +26,6 @@ import {
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const catalogue = useBuildingCatalogueStore();
 onMounted(() => catalogue.load());
-
-const art = computed(() => {
-  const a = buildingArt('shrineofthor', maxLevelFor('shrineofthor'));
-  return a?.kind === 'atlas' ? a.frame : null;
-});
 
 const loaded = computed(() => SHRINE_GODS.every((g) => catalogue.byType[g.type]?.length));
 const maxLevel = computed(() => maxLevelFor('shrineofthor' as BuildingKind));
@@ -66,10 +59,6 @@ const slotRows = [
 
 <template>
   <DocsPageLayout class="shrines" :title="$t('docs.shrines.title')" caption="DOCS · SHRINES" :intro="$t('docs.shrines.intro')">
-    <div v-if="art" class="hero-art" data-testid="shrines-art">
-      <AtlasSprite :frame="art" :style="{ width: `min(100%, ${(150 * art.frame.w) / art.frame.h}px)` }" />
-    </div>
-
     <section id="rules" class="block">
       <h2>{{ $t('docs.shrines.rules.heading') }}</h2>
       <ul class="rules">
@@ -168,12 +157,6 @@ const slotRows = [
 </template>
 
 <style scoped>
-.hero-art {
-  display: flex;
-  justify-content: center;
-  margin: 0 0 8px;
-  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55));
-}
 .block {
   margin-top: 32px;
   scroll-margin-top: 84px;

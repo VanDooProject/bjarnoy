@@ -4,17 +4,11 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
-import DocsHeroArt from '../components/docs/DocsHeroArt.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
-import AnimatedBuildingSprite from '../components/AnimatedBuildingSprite.vue';
-import AtlasSprite from '../components/AtlasSprite.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
-import { useAnimationClock } from '../composables/useAnimationClock';
 import { resourceName, terrainName } from '../i18n/catalogueNames';
-import { findAtlasFrame } from '../lib/map/atlas';
-import { buildingLayers } from '../lib/map/buildingArt';
 import { buildingStatsFor, maxLevelFor, type BuildingKind } from '../lib/map/buildingEconomy';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import {
@@ -41,17 +35,6 @@ const RESOURCES = ['wood', 'stone', 'food', 'iron'] as const;
 type Resource = (typeof RESOURCES)[number];
 
 const loaded = computed(() => PRODUCER_TYPES.every((p) => catalogue.byType[p]?.length) && !!catalogue.byType.longhouse?.length);
-
-// --- header art: the reindeer herder at work, as on the hub card ---------------------------------------------------
-
-const now = useAnimationClock();
-const herder = computed(() => {
-  const layers = buildingLayers('reindeerherder', 4);
-  const canvas = layers.base?.sourceSize ?? layers.top?.sourceSize;
-  if (!layers.clip || !canvas) return null;
-  return { layers, style: { width: `min(100%, ${(150 * canvas.w) / canvas.h}px)` } };
-});
-const herderStill = computed(() => findAtlasFrame('showcase', 'reindeerherder_SE_level004'));
 
 // --- helpers -----------------------------------------------------------------------------------------------------
 
@@ -152,11 +135,6 @@ const tocLinks = computed(() =>
 
 <template>
   <DocsPageLayout class="production" :title="$t('docs.production.title')" caption="DOCS · PRODUCTION" :intro="$t('docs.production.intro')">
-    <DocsHeroArt :height="150">
-      <AnimatedBuildingSprite v-if="herder" :layers="herder.layers" :elapsed-ms="now" :style="herder.style" />
-      <AtlasSprite v-else-if="herderStill" :frame="herderStill" :style="{ width: `min(100%, ${(150 * herderStill.frame.w) / herderStill.frame.h}px)` }" />
-    </DocsHeroArt>
-
     <DocsToc :links="tocLinks" />
 
     <p v-if="catalogue.loading" class="muted">{{ $t('docs.status.loading') }}</p>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
@@ -9,70 +10,21 @@ import AtlasSprite from '../components/AtlasSprite.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { buildingLayers } from '../lib/map/buildingArt';
 import { useAnimationClock } from '../composables/useAnimationClock';
+import { DOCS_GROUPS } from '../lib/docs/docsPages';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const GROUPS = DOCS_GROUPS;
 
-interface DocPage {
-  id:
-    | 'tiles'
-    | 'bogLands'
-    | 'techTree'
-    | 'production'
-    | 'shrines'
-    | 'walls'
-    | 'founding'
-    | 'landMovement'
-    | 'ships'
-    | 'wildlifeCamps'
-    | 'wastedLands';
-  to: string;
-  /**
-   * A `showcase` atlas frame, `camp:<family>` for an animated wildlife camp, or
-   * `anim:<family>:<level>` for a building with a `buildings-anim` clip playing.
-   */
-  art: string;
+// The page scrolls inside its own container, where the browser's hash scrolling does not reach: `/docs#group-island`
+// (the breadcrumb's group menu) scrolls to that group's section here, on arrival and when the hash changes.
+const route = useRoute();
+async function scrollToHash() {
+  await nextTick();
+  const id = route.hash.slice(1);
+  if (id) document.getElementById(id)?.scrollIntoView({ block: 'start' });
 }
-interface DocGroup {
-  id: 'island' | 'building' | 'move' | 'beyond';
-  pages: DocPage[];
-}
-
-// The groups a future doc page joins. The routes guard the showcase manifests
-// (router/index.ts), so the art below resolves synchronously at setup.
-const GROUPS: DocGroup[] = [
-  {
-    id: 'island',
-    pages: [
-      { id: 'tiles', to: '/docs/tiles', art: 'foresttile_SE_variant001' },
-      { id: 'bogLands', to: '/docs/bog-lands', art: 'bog_SE_variant004' },
-    ],
-  },
-  {
-    id: 'building',
-    pages: [
-      { id: 'techTree', to: '/tech-tree', art: 'druidhut_SE_level006' },
-      { id: 'production', to: '/docs/production', art: 'anim:reindeerherder:4' },
-      // The Shrine of Thor's art family is `torshrine` (buildingArt.ts); its last level is 3.
-      { id: 'shrines', to: '/docs/shrines', art: 'torshrine_SE_level003' },
-      { id: 'walls', to: '/docs/walls', art: 'palisade_gate180_SE_level002' },
-    ],
-  },
-  {
-    id: 'move',
-    pages: [
-      { id: 'founding', to: '/docs/founding', art: 'cartworkshop_SE_level004' },
-      { id: 'landMovement', to: '/docs/land-movement', art: 'riverbridge_SE_level004' },
-      { id: 'ships', to: '/docs/ships', art: 'dockyard_SE_level007' },
-    ],
-  },
-  {
-    id: 'beyond',
-    pages: [
-      { id: 'wildlifeCamps', to: '/docs/wildlife-camps', art: 'camp:boarwallow' },
-      { id: 'wastedLands', to: '/docs/wasted-lands', art: 'jotunwatchtower_SE_level002' },
-    ],
-  },
-];
+onMounted(scrollToHash);
+watch(() => route.hash, scrollToHash);
 
 const utgard = computed(() => findAtlasFrame('showcase', 'giantutgard_SE_level000'));
 // AtlasSprite keeps the frame's aspect ratio, so a width of min(100%, box
@@ -115,9 +67,9 @@ function stillOf(art: string) {
     </section>
 
     <div class="groups">
-      <section v-for="group in GROUPS" :key="group.id" class="group" :data-group="group.id">
-        <h2>{{ t(`docs.hub.groups.${group.id}.title`) }}</h2>
-        <p class="group-desc">{{ t(`docs.hub.groups.${group.id}.description`) }}</p>
+      <section v-for="group in GROUPS" :id="`group-${group.id}`" :key="group.id" class="group" :data-group="group.id">
+        <h2>{{ t(group.titleKey) }}</h2>
+        <p class="group-desc">{{ t(group.descriptionKey) }}</p>
         <RouterLink v-for="page in group.pages" :key="page.id" :to="page.to" class="card" :data-page="page.id">
           <span class="art" data-testid="docs-card-art" aria-hidden="true">
             <AnimatedCamp v-if="page.art.startsWith('camp:')" :family="page.art.slice(5)" orientation="SE" />
@@ -131,8 +83,8 @@ function stillOf(art: string) {
             <AtlasSprite v-else-if="frameOf(page.art)" :frame="frameOf(page.art)!" :style="fit(frameOf(page.art)!, 84)" />
           </span>
           <span class="text">
-            <span class="title">{{ t(`docs.hub.pages.${page.id}.title`) }}</span>
-            <span class="desc">{{ t(`docs.hub.pages.${page.id}.description`) }}</span>
+            <span class="title">{{ t(page.titleKey) }}</span>
+            <span class="desc">{{ t(page.descriptionKey) }}</span>
           </span>
         </RouterLink>
       </section>
@@ -192,6 +144,7 @@ function stillOf(art: string) {
   }
 }
 .group {
+  scroll-margin-top: 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;

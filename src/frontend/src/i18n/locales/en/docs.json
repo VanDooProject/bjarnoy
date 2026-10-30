@@ -4,7 +4,77 @@
     "toggle": "Show admin notes",
     "label": "Admin note"
   },
-  "backToDocs": "← Docs",
+  "nav": {
+    "breadcrumb": "Breadcrumb",
+    "docs": "Docs",
+    "groups": "Docs sections",
+    "groupsMenu": "{group}, switch section",
+    "pagesIn": "Pages in {group}",
+    "pagesMenu": "{page}, pages in {group}",
+    "pager": "Previous and next page",
+    "previous": "← Previous",
+    "next": "Next →"
+  },
+  "related": {
+    "heading": "Related",
+    "reasons": {
+      "shrines": {
+        "techTree": "Costs and build times of every shrine level.",
+        "production": "Freyja and Ullr raise your food and wood.",
+        "landMovement": "Odin's statue lets a travelling army see farther."
+      },
+      "production": {
+        "techTree": "Cost and levels of every producer.",
+        "shrines": "Freyja and Ullr add to food and wood.",
+        "bogLands": "Clay and bog iron come from the bog."
+      },
+      "techTree": {
+        "production": "What each producer yields and how mills raise it.",
+        "shrines": "What each god's shrine gives you.",
+        "walls": "The palisade needs a level-5 Tower."
+      },
+      "tiles": {
+        "bogLands": "The bog tiles in detail.",
+        "production": "What the buildings on each ground produce.",
+        "landMovement": "What each ground costs an army to cross."
+      },
+      "bogLands": {
+        "tiles": "All the other grounds.",
+        "production": "How clay and bog iron are produced.",
+        "wildlifeCamps": "The bog camps stand on plain bog moss."
+      },
+      "walls": {
+        "landMovement": "How armies cross a wall, or fail to.",
+        "techTree": "Palisade and gate: unlock, levels and cost.",
+        "wastedLands": "Utgard's own walls close the giants' ground."
+      },
+      "founding": {
+        "landMovement": "How fast settler crews cross each ground.",
+        "wildlifeCamps": "Strong camps can ambush crews on the way.",
+        "bogLands": "Landing spots need bog within reach for clay and iron."
+      },
+      "landMovement": {
+        "walls": "A wall hex stops every land army.",
+        "wildlifeCamps": "Strong camps ambush armies that come close.",
+        "founding": "Settler crews cross the same grounds."
+      },
+      "ships": {
+        "shrines": "Njörd's shrine makes your ships attack harder.",
+        "walls": "Walls do not stop fleets.",
+        "wildlifeCamps": "Wildlife camps never ambush a fleet."
+      },
+      "wildlifeCamps": {
+        "landMovement": "Camps ambush armies on the road.",
+        "bogLands": "The bog camps stand on plain bog moss.",
+        "wastedLands": "Fenrir's brood and the jötnar hold the wastes."
+      },
+      "wastedLands": {
+        "wildlifeCamps": "The wastelands have camps of their own.",
+        "walls": "Your own walls, built in wood.",
+        "landMovement": "How armies cross the land to get there."
+      }
+    }
+  },
   "hub": {
     "title": "Docs",
     "heading": "The Bjarnøy handbook",

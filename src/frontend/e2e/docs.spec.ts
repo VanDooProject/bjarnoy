@@ -348,13 +348,13 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
 
     // The example island is drawn, and the page links back to the docs hub.
     await expect(page.locator("#example-map canvas")).toBeVisible();
-    await page.getByRole("link", { name: "← Docs" }).click();
+    await page.getByRole("link", { name: "Docs", exact: true }).click();
     await expect(page).toHaveURL(/\/docs$/);
   });
 
-  // Every docs page sits on the shared DocsPageLayout: the same top bar, a breadcrumb back to the hub
-  // (the hub itself has none), a title and the lede.
-  for (const path of [
+  // Every docs page sits on the shared DocsPageLayout: the same top bar, a breadcrumb (the hub itself has none),
+  // a title, the lede, header art and the related/previous/next footer.
+  const DOCS_PATHS = [
     "/tech-tree",
     "/docs/tiles",
     "/docs/wasted-lands",
@@ -365,19 +365,104 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     "/docs/founding",
     "/docs/land-movement",
     "/docs/ships",
-  ]) {
-    test(`${path} shows its breadcrumb back to the docs hub`, async ({
+    "/docs/walls",
+  ];
+  for (const path of DOCS_PATHS) {
+    test(`${path} shows its breadcrumb back to the docs hub and its footer`, async ({
       page,
     }) => {
       await page.goto(path);
       await expect(page.locator(".docs-page h1")).toBeVisible();
       await expect(page.locator(".docs-page .intro")).toBeVisible();
-      await page.locator(".docs-page .breadcrumb").click();
+      const crumb = page.getByRole("navigation", { name: "Breadcrumb" });
+      await expect(crumb.locator("[aria-current=page]")).toBeVisible();
+      await expect(page.getByTestId("docs-header-art").locator(".atlas-sprite:visible").first()).toBeVisible();
+      const related = page.locator("[data-related]");
+      expect(await related.count()).toBeGreaterThan(0);
+      await crumb.getByRole("link", { name: "Docs", exact: true }).click();
       await expect(page).toHaveURL(/\/docs$/);
       await expect(page.locator(".docs-page h1")).toBeVisible();
-      await expect(page.locator(".docs-page .breadcrumb")).toHaveCount(0);
+      await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
+      await expect(page.getByTestId("docs-footer")).toHaveCount(0);
     });
   }
+
+  test.describe("docs navigation", () => {
+    test("the page crumb lists the pages of its group and navigates", async ({ page }) => {
+      await page.goto("/docs/shrines");
+      const crumb = page.getByRole("navigation", { name: "Breadcrumb" });
+      await crumb.getByRole("button", { name: /^Shrines/ }).click();
+      const menu = page.getByRole("menu");
+      await expect(menu.getByRole("menuitem")).toHaveText(["Tech tree", "Resource production", "Shrines", "Walls"]);
+      await expect(menu.getByRole("menuitem", { name: "Shrines" })).toHaveAttribute("aria-current", "page");
+      await menu.getByRole("menuitem", { name: "Walls" }).click();
+      await expect(page).toHaveURL(/\/docs\/walls$/);
+      await expect(page.getByRole("menu")).toHaveCount(0);
+    });
+
+    test("Escape closes the menu and returns focus to its crumb", async ({ page }) => {
+      await page.goto("/docs/shrines");
+      const trigger = page.getByRole("button", { name: /^Shrines/ });
+      await trigger.click();
+      await expect(trigger).toHaveAttribute("aria-expanded", "true");
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("menu")).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+    });
+
+    test("the group crumb lists the four groups and goes to the hub scrolled to that group", async ({ page }) => {
+      await page.goto("/docs/shrines");
+      await page.getByRole("button", { name: /^Building up/ }).click();
+      const menu = page.getByRole("menu");
+      await expect(menu.getByRole("menuitem")).toHaveText(["Your island", "Building up", "On the move", "Beyond your shores"]);
+      await menu.getByRole("menuitem", { name: "Your island" }).click();
+      await expect(page).toHaveURL(/\/docs#group-island$/);
+      await expect(page.locator("#group-island")).toBeInViewport();
+      // A lower group scrolls the hub too.
+      await page.goto("/docs/shrines");
+      await page.getByRole("button", { name: /^Building up/ }).click();
+      await page.getByRole("menuitem", { name: "Beyond your shores" }).click();
+      await expect(page).toHaveURL(/\/docs#group-beyond$/);
+      await expect(page.locator("#group-beyond")).toBeInViewport();
+    });
+
+    test("the footer links to the related pages and to the previous and next page", async ({ page }) => {
+      await page.goto("/docs/shrines");
+      const footer = page.getByTestId("docs-footer");
+      await expect(footer.getByRole("heading", { name: "Related" })).toBeVisible();
+      await expect(footer.locator("[data-related]")).toHaveCount(3);
+      await expect(footer.locator("[data-related=techTree]")).toContainText("Costs and build times of every shrine level.");
+      await expect(page.getByTestId("docs-prev")).toHaveAttribute("href", "/docs/production");
+      await expect(page.getByTestId("docs-next")).toHaveAttribute("href", "/docs/walls");
+      await page.getByTestId("docs-next").click();
+      await expect(page).toHaveURL(/\/docs\/walls$/);
+    });
+
+    for (const path of DOCS_PATHS) {
+      test(`${path} has no horizontal overflow at 390px`, async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 800 });
+        await page.goto(path);
+        await expect(page.locator(".docs-page h1")).toBeVisible();
+        await expect(page.getByTestId("docs-footer")).toBeAttached();
+        const view = new ScrollableView(page, ".docs-page");
+        expect(await view.noHorizontalOverflow()).toBe(true);
+        // Backdrop pages swap to the icon on a phone.
+        await expect(page.getByTestId("docs-header-backdrop")).toBeHidden();
+        await expect(page.getByTestId("docs-header-icon")).toBeVisible();
+      });
+    }
+
+    test("a backdrop header bleeds out of the column without causing overflow at desktop widths", async ({ page }) => {
+      for (const width of [800, 1280, 1920]) {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto("/docs/ships");
+        await expect(page.getByTestId("docs-header-backdrop")).toBeVisible();
+        await expect(page.getByTestId("docs-header-icon")).toBeHidden();
+        const view = new ScrollableView(page, ".docs-page");
+        expect(await view.noHorizontalOverflow(), `${width}px`).toBe(true);
+      }
+    });
+  });
 
   test.describe("docs hub", () => {
     test("shows the four groups and eleven art cards, and the cards and footer link through", async ({
@@ -525,7 +610,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(
       page.locator('[data-producer="longhouse"] th').first().locator('a[href="/tech-tree#longhouse"]'),
     ).toHaveCount(1);
-    await expect(page.getByTestId("page-art").locator(".animated-building .layer").first()).toBeVisible();
+    // The header shows the herder's still frame (the hub card plays the clip).
+    await expect(page.getByTestId("docs-header-icon").locator(".atlas-sprite")).toBeVisible();
   });
 
   test("founding page prices the next settlements and hides the admin note", async ({
@@ -611,7 +697,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    await page.locator(".docs-page .breadcrumb").click();
+    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Docs", exact: true }).click();
     await expect(page).toHaveURL(/\/docs$/);
   });
 });

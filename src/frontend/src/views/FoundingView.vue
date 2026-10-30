@@ -4,14 +4,12 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
-import DocsHeroArt from '../components/docs/DocsHeroArt.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { resourceName, unitName } from '../i18n/catalogueNames';
-import { findAtlasFrame } from '../lib/map/atlas';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import {
   FEAST_HOURS,
@@ -36,7 +34,6 @@ onMounted(() => {
   void units.load();
 });
 
-const art = computed(() => findAtlasFrame('showcase', 'cartworkshop_SE_level004'));
 
 const RESOURCES = ['wood', 'stone', 'food', 'iron'] as const;
 
@@ -99,8 +96,6 @@ const tocLinks = computed(() =>
 
 <template>
   <DocsPageLayout class="founding" :title="$t('docs.founding.title')" caption="DOCS · FOUNDING" :intro="$t('docs.founding.intro')">
-    <DocsHeroArt :frame="art" />
-
     <DocsToc :links="tocLinks" />
 
     <p v-if="buildings.loading || units.loading" class="muted">{{ $t('docs.status.loading') }}</p>

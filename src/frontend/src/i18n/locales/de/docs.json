@@ -4,7 +4,77 @@
     "toggle": "Admin-Hinweise anzeigen",
     "label": "Admin-Hinweis"
   },
-  "backToDocs": "← Docs",
+  "nav": {
+    "breadcrumb": "Brotkrumennavigation",
+    "docs": "Docs",
+    "groups": "Bereiche der Docs",
+    "groupsMenu": "{group}, Bereich wechseln",
+    "pagesIn": "Seiten in „{group}“",
+    "pagesMenu": "{page}, Seiten in „{group}“",
+    "pager": "Vorherige und nächste Seite",
+    "previous": "← Zurück",
+    "next": "Weiter →"
+  },
+  "related": {
+    "heading": "Weiterlesen",
+    "reasons": {
+      "shrines": {
+        "techTree": "Kosten und Bauzeiten jeder Schreinstufe.",
+        "production": "Freyja und Ullr steigern Nahrung und Holz.",
+        "landMovement": "Odins Statue lässt reisende Armeen weiter sehen."
+      },
+      "production": {
+        "techTree": "Kosten und Stufen jedes Produzenten.",
+        "shrines": "Freyja und Ullr erhöhen Nahrung und Holz.",
+        "bogLands": "Lehm und Raseneisenerz kommen aus dem Moor."
+      },
+      "techTree": {
+        "production": "Was jeder Produzent liefert und wie Mühlen es steigern.",
+        "shrines": "Was dir der Schrein jedes Gottes bringt.",
+        "walls": "Die Palisade braucht einen Turm auf Stufe 5."
+      },
+      "tiles": {
+        "bogLands": "Die Moorfelder im Einzelnen.",
+        "production": "Was die Gebäude auf dem jeweiligen Boden erzeugen.",
+        "landMovement": "Was jedes Feld eine Armee beim Überqueren kostet."
+      },
+      "bogLands": {
+        "tiles": "Alle übrigen Bodenarten.",
+        "production": "Wie Lehm und Raseneisenerz gewonnen werden.",
+        "wildlifeCamps": "Die Moorlager stehen auf schlichtem Moorboden."
+      },
+      "walls": {
+        "landMovement": "Wie Armeen eine Mauer überwinden – oder nicht.",
+        "techTree": "Palisade und Tor: Freischaltung, Stufen und Kosten.",
+        "wastedLands": "Utgards eigene Mauern riegeln das Land der Riesen ab."
+      },
+      "founding": {
+        "landMovement": "Wie schnell Siedlertrupps jedes Feld überqueren.",
+        "wildlifeCamps": "Starke Lager können Trupps unterwegs überfallen.",
+        "bogLands": "Landeplätze brauchen Moor in Reichweite für Lehm und Eisen."
+      },
+      "landMovement": {
+        "walls": "Ein Mauerfeld hält jede Landarmee auf.",
+        "wildlifeCamps": "Starke Lager überfallen Armeen, die ihnen zu nahe kommen.",
+        "founding": "Siedlertrupps ziehen über dieselben Böden."
+      },
+      "ships": {
+        "shrines": "Njörds Schrein lässt deine Schiffe härter zuschlagen.",
+        "walls": "Mauern halten keine Flotten auf.",
+        "wildlifeCamps": "Wildtierlager überfallen nie eine Flotte."
+      },
+      "wildlifeCamps": {
+        "landMovement": "Lager überfallen Armeen unterwegs.",
+        "bogLands": "Die Moorlager stehen auf schlichtem Moorboden.",
+        "wastedLands": "Fenrirs Brut und die Jötnar beherrschen die Ödlande."
+      },
+      "wastedLands": {
+        "wildlifeCamps": "Auch das Ödland hat eigene Lager.",
+        "walls": "Deine eigenen Mauern, aus Holz gebaut.",
+        "landMovement": "Wie Armeen das Land bis dorthin durchqueren."
+      }
+    }
+  },
   "hub": {
     "title": "Docs",
     "heading": "Das Bjarnøy-Handbuch",
