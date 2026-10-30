@@ -9,7 +9,6 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HudNav from './HudNav.vue';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
-import { isTradePanelOpen } from '../../composables/tradePanelOpenState';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
@@ -252,7 +251,6 @@ describe('HudNav "Name your jarl" trigger', () => {
     afterEach(() => {
       vi.unstubAllGlobals();
       isHudDrawerOpen.value = false;
-      isTradePanelOpen.value = false;
     });
 
     function stubPhone(phone: boolean) {
@@ -266,29 +264,23 @@ describe('HudNav "Name your jarl" trigger', () => {
       );
     }
 
-    for (const [what, open] of [
-      ['the HUD drawer', () => (isHudDrawerOpen.value = true)],
-      ['the Trade panel', () => (isTradePanelOpen.value = true)],
-    ] as const) {
-      it(`leaves the in-game chip while ${what} is open and comes back after`, async () => {
-        stubPhone(true);
-        foundAndOnboarded(usePlayerStore());
-        const wrapper = await mountWith({ hasResourceBar: true });
-        open();
-        await flushPromises();
-        expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
-        isHudDrawerOpen.value = false;
-        isTradePanelOpen.value = false;
-        await flushPromises();
-        expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(true);
-      });
-    }
+    it('leaves the in-game chip while the HUD drawer is open and comes back after', async () => {
+      stubPhone(true);
+      foundAndOnboarded(usePlayerStore());
+      const wrapper = await mountWith({ hasResourceBar: true });
+      isHudDrawerOpen.value = true;
+      await flushPromises();
+      expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
+      isHudDrawerOpen.value = false;
+      await flushPromises();
+      expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(true);
+    });
 
-    it('keeps the inline trigger on desktop while the Trade panel is open', async () => {
+    it('keeps the inline trigger on desktop while the HUD drawer is open', async () => {
       stubPhone(false);
       foundAndOnboarded(usePlayerStore());
       const wrapper = await mountWith({ hasResourceBar: true });
-      isTradePanelOpen.value = true;
+      isHudDrawerOpen.value = true;
       await flushPromises();
       expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(true);
     });

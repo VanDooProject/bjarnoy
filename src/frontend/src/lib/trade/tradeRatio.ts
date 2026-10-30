@@ -2,8 +2,8 @@
 // #46's design brief): a player may offer at most `DEFAULT_MAX_RATIO` units
 // of one resource for one unit of another on the open market, or
 // `GUILD_MAX_RATIO` between guild mates. Kept here as a standalone module
-// (rather than inlined in TradePanel.vue) so both the live-mode instant
-// client-side check (TradePanel) and the demo-mode simulation
+// (rather than inlined in the trade UI, removed until trade is
+// redesigned) so both the live-mode instant client-side check and the demo-mode simulation
 // (WorldModel.postTradeOffer) validate against the exact same rule instead
 // of two hand-copied versions drifting apart.
 

@@ -448,7 +448,7 @@ test.describe('mobile HUD bar', () => {
   });
 
   // The anonymous trigger has no room in the bar itself: it floats as a chip
-  // below it (under the Trade toggle), and steps aside while the drawer is
+  // below it, and steps aside while the drawer is
   // open. Its entries (log in, world list) live only on that chip, not in
   // the drawer too.
   test('anonymous: the trigger floats below the bar, and the drawer does not repeat its entries', async ({ page }) => {
