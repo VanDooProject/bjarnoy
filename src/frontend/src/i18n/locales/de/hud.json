@@ -102,7 +102,6 @@
     "backButton": "‹ ZURÜCK",
     "buildHub": "BAUEN",
     "categories": {
-      "housing": "Wohnen",
       "resource": "Ressource",
       "military": "Militär",
       "logistics": "Logistik",
@@ -129,9 +128,7 @@
       "notWiredYet": "Noch nicht mit dem Backend verbunden",
       "trainUnits": "Einheiten ausbilden",
       "build": "Bauen",
-      "openWater": "Offenes Wasser",
       "giantOccupied": "Von einem Riesenwahrzeichen belegt",
-      "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden",
       "hunt": "Jagen",
       "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",

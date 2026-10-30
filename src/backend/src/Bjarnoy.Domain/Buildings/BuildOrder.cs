@@ -157,6 +157,12 @@ public enum BuildRejection
     /// for the impassable wide rivers only.
     /// </summary>
     BridgeNeedsWideRiver,
+
+    /// <summary>
+    /// A new building of a type that is switched off for placement (<see cref="BuildingCatalogue.NewPlacementDisabled"/>, currently the
+    /// Quarry) was ordered. Upgrading one that already stands is never refused for this reason.
+    /// </summary>
+    NewPlacementDisabled,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

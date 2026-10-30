@@ -259,7 +259,7 @@ describe('RingMenu', () => {
     const wrapper = ring({
       actions: [
         { id: 'details', label: 'Details' },
-        { id: 'build', label: 'Build', disabled: true, hint: 'Open water' },
+        { id: 'build', label: 'Build', disabled: true, hint: 'Occupied by a giant landmark' },
       ],
     });
     await bubble(wrapper, 'Build').trigger('click');

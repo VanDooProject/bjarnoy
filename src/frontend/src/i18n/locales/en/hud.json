@@ -102,7 +102,6 @@
     "backButton": "‹ BACK",
     "buildHub": "BUILD",
     "categories": {
-      "housing": "Housing",
       "resource": "Resource",
       "military": "Military",
       "logistics": "Logistics",
@@ -129,9 +128,7 @@
       "notWiredYet": "Not wired to the backend yet",
       "trainUnits": "Train units",
       "build": "Build",
-      "openWater": "Open water",
       "giantOccupied": "Occupied by a giant landmark",
-      "bogNothingHere": "Nothing can be built on this bog hex",
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",

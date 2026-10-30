@@ -523,7 +523,7 @@ describe('a producer that unlocks late (the bog-ore works)', () => {
 });
 
 // docs/design/economy.md section 8: the bog-ore works' level-1 iron (20/h) was tuned in this lab so iron stays the indirect gate for
-// the army: from the moment the works stand (LH 6) the Longhouse trickle alone (2/h per level) is what the first Spearmen run on,
+// the army: before the works stand (LH 3) the Longhouse trickle alone (2/h per level) is the only iron,
 // and with the default three works iron income settles at about half the wood income, where a unit costs about half the wood.
 describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
   const byType = group(catalogueSnapshot.data as BuildingDefinitionResponse[]);
@@ -539,19 +539,19 @@ describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
     }));
   const hourAt = (r: ReturnType<typeof run>, lh: number) => Math.ceil(r.lhReachedAt[lh]! / 60);
 
-  it('has only the Longhouse trickle (2 iron/h per level) until the bog-ore works open at Longhouse 6', () => {
+  it('has only the Longhouse trickle (2 iron/h per level) until the bog-ore works open at Longhouse 3', () => {
     const r = run(3);
-    for (let lh = 1; lh <= 5; lh++) {
+    for (let lh = 1; lh <= 2; lh++) {
       const at = hourAt(r, lh);
       expect(r.series.rate.iron[at], `LH ${lh}`).toBe(2 * lh);
     }
-    expect(r.series.rate.iron[hourAt(r, 6)]).toBeGreaterThan(2 * 6);
+    expect(r.series.rate.iron[hourAt(r, 4)]).toBeGreaterThan(2 * 4);
   });
 
-  it('builds no bog-ore works before Longhouse 6', () => {
+  it('builds no bog-ore works before Longhouse 3', () => {
     const r = run(3);
-    const before = hourAt(r, 6) - 1;
-    expect(r.series.rate.iron[before]).toBeLessThanOrEqual(2 * 5);
+    const before = hourAt(r, 3) - 1;
+    expect(r.series.rate.iron[before]).toBeLessThanOrEqual(2 * 2);
   });
 
   it('keeps iron income at about a third to a half of wood income with three works from Longhouse 8 on', () => {
