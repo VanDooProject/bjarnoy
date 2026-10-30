@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { ScrollableView } from "./pages";
 
@@ -12,6 +13,20 @@ import { ScrollableView } from "./pages";
  * back to the bundled `data/building-catalogue.json` snapshot with no
  * backend, which is exactly what `npm run test:e2e` runs against.
  */
+
+/**
+ * The wasted-lands island toy is an admin note: hidden from players, shown to
+ * an admin who has switched "Show admin notes" on (stored in localStorage).
+ */
+async function asAdminWithNotes(
+  page: Page,
+  adminAuth: { login: () => Promise<void> },
+) {
+  await adminAuth.login();
+  await page.addInitScript(() => {
+    window.localStorage.setItem("docs.adminNotes", "1");
+  });
+}
 
 test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   test("tech tree page scrolls to reveal content below the fold", async ({
@@ -65,13 +80,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     page,
   }) => {
     await page.goto("/docs/wasted-lands");
-    // The turning island mounts a real HexMapRenderer (useHexMapRenderer
-    // sets data-map-ready once it's drawn its first frame) — wait for that
-    // before measuring the page, same as the other two specs wait on their
-    // own first async-loaded content.
-    await page
-      .locator('.wasted-island .map-host[data-map-ready="true"]')
-      .waitFor();
+    // The turning island is an admin note, so a player's page starts at the
+    // pairs; wait for its first art before measuring the page.
+    await page.locator(".wasted-lands .atlas-sprite").first().waitFor();
 
     const view = new ScrollableView(page, ".wasted-lands");
     const { scrollHeight, clientHeight } = await view.metrics();
@@ -104,7 +115,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
 
   test("wasted lands island slider shows the all-living stage", async ({
     page,
+    adminAuth,
   }) => {
+    await asAdminWithNotes(page, adminAuth);
     await page.goto("/docs/wasted-lands");
     const mapHost = page.locator(
       '.wasted-island .map-host[data-map-ready="true"]',
@@ -139,9 +152,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   // box's full width while max-height squeezed it, stretching it sideways.
   test("wasted lands art keeps each frame aspect ratio", async ({ page }) => {
     await page.goto("/docs/wasted-lands");
-    await page
-      .locator('.wasted-island .map-host[data-map-ready="true"]')
-      .waitFor();
+    await page.locator(".wasted-lands .atlas-sprite").first().waitFor();
 
     const sprites = page.locator(".wasted-lands .atlas-sprite");
     expect(await sprites.count()).toBeGreaterThan(0);
@@ -297,8 +308,11 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     page,
   }) => {
     await page.goto("/docs/bog-lands");
+    // Players see no admin notes and no toggle to reveal them.
+    await expect(page.getByTestId("admin-note")).toHaveCount(0);
+    await expect(page.getByTestId("docs-admin-toggle")).toHaveCount(0);
     const view = new ScrollableView(page, ".bog-lands");
-    const lastSection = page.locator("#map-rules");
+    const lastSection = page.locator("#claybrickworks");
     await lastSection.waitFor();
     const { scrollHeight, clientHeight } = await view.metrics();
     expect(scrollHeight).toBeGreaterThan(clientHeight);
@@ -456,7 +470,11 @@ test.describe(
       for (const { path, island, caption, probes } of islands) {
         test(`${path} names the hovered hex at ${width}px wide`, async ({
           page,
+          adminAuth,
         }) => {
+          // The wasted-lands island is an admin note; the bog island is not.
+          if (path === "/docs/wasted-lands")
+            await asAdminWithNotes(page, adminAuth);
           await page.setViewportSize({ width, height: 1080 });
           await page.goto(path);
           const mapHost = page.locator(

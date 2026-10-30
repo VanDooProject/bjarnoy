@@ -8,6 +8,7 @@ import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import { coastalWaterArt, riverArt, terrainArt, terrainArtByFamily, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 
@@ -193,9 +194,11 @@ const buildingsByTile = computed(() => {
         <img v-else-if="thumbUrl(tile)" class="thumb-img" :src="thumbUrl(tile)!" alt="" />
       </template>
       <p class="lore">{{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.lore`) }}</p>
-      <p class="generation">
-        {{ $t('docs.tiles.generation') }} {{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.generation`) }}
-      </p>
+      <DocsAdminNote>
+        <p class="generation">
+          {{ $t('docs.tiles.generation') }} {{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.generation`) }}
+        </p>
+      </DocsAdminNote>
       <p v-if="tile.river" class="buildings">{{ $t('docs.tiles.riverSawmillNote') }}</p>
       <p v-else class="buildings">
         {{ $t('docs.tiles.buildings') }}

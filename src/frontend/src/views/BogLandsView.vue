@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
+import { useDocsAdminNotes } from '../composables/useDocsAdminNotes';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import BogIsland from '../components/docs/BogIsland.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { RETIRED_BOG_VARIANTS } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // The bog set (3D_assets hextile109-119 plus the Clay Brickworks moved onto
 // bog ground; that repo's docs/bog-tiles.md is the source of truth, and
@@ -143,11 +145,17 @@ function textOf(entry: Entry): string {
   return entry.group === 'ground' ? t('docs.bogLands.ground.body') : t(`${keyPrefix(entry)}.${entry.id}.body`);
 }
 
-const tocLinks = [
+function artNoteOf(entry: Entry): string | undefined {
+  const key = `${keyPrefix(entry)}.${entry.id}.artNote`;
+  return entry.group !== 'ground' && te(key) ? t(key) : undefined;
+}
+
+const { visible: adminNotes } = useDocsAdminNotes();
+const tocLinks = computed(() => [
   { href: '#example-map', label: t('docs.bogLands.example.heading') },
   ...ENTRIES.map((entry) => ({ href: `#${entry.id}`, label: titleOf(entry) })),
-  { href: '#map-rules', label: t('docs.bogLands.rules.heading') },
-];
+  ...(adminNotes.value ? [{ href: '#map-rules', label: t('docs.bogLands.rules.heading') }] : []),
+]);
 </script>
 
 <template>
@@ -158,7 +166,9 @@ const tocLinks = [
     :intro="$t('docs.bogLands.intro')"
   >
     <template #status>
-      <p class="status">{{ $t('docs.bogLands.status') }}</p>
+      <DocsAdminNote>
+        <p class="status">{{ $t('docs.bogLands.status') }}</p>
+      </DocsAdminNote>
     </template>
 
     <DocsToc :links="tocLinks" />
@@ -188,6 +198,7 @@ const tocLinks = [
           <AtlasSprite v-if="frameOf(entry)" :frame="frameOf(entry)!" />
         </template>
         <p class="lore">{{ textOf(entry) }}</p>
+        <DocsAdminNote v-if="artNoteOf(entry)">{{ artNoteOf(entry) }}</DocsAdminNote>
         <template #pickers>
           <DocsPicker
             v-if="entry.looks.length > 1"
@@ -210,7 +221,7 @@ const tocLinks = [
       </DocsTileEntry>
     </template>
 
-    <section id="map-rules" class="block">
+    <DocsAdminNote id="map-rules" as="section" class="block">
       <h2>{{ $t('docs.bogLands.rules.heading') }}</h2>
       <p class="group-body">{{ $t('docs.bogLands.rules.body') }}</p>
       <ol class="rules">
@@ -224,7 +235,7 @@ const tocLinks = [
         <li>{{ $t('docs.bogLands.rules.inland') }}</li>
         <li>{{ $t('docs.bogLands.rules.landing') }}</li>
       </ol>
-    </section>
+    </DocsAdminNote>
   </DocsPageLayout>
 </template>
 

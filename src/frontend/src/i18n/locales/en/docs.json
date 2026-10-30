@@ -1,5 +1,9 @@
 {
   "back": "← Back",
+  "adminNotes": {
+    "toggle": "Show admin notes",
+    "label": "Admin note"
+  },
   "backToDocs": "← Docs",
   "hub": {
     "title": "Docs",
@@ -123,7 +127,7 @@
       "cartworkshop": "Builds the settlement's carts on grass behind a Town Square — trains provisioners and settler crews in place of the longhouse. No storage of its own.",
       "claybrickworks": "Digs and fires clay on bog moss — a pit, a drying rack and a kiln turning red earth into stone where no mountain stands.",
       "bogoreworks": "The iron producer, on plain bog moss (not a shore, creek or lake): from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake hex next to it adds 10% to its output, up to +50%. Unlocks at longhouse 6.",
-      "hammerschmiede": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works. No iron of its own: it raises every bog-ore works within its level's range instead (a wider range and a bigger boost at higher levels). It is drawn as the river hammer mill until its own art exists."
+      "hammerschmiede": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works. No iron of its own: it raises every bog-ore works within its level's range instead (a wider range and a bigger boost at higher levels)."
     },
     "table": {
       "level": "Level",
@@ -228,12 +232,13 @@
     },
     "utgard": {
       "heading": "Utgard, the Outyard",
-      "body": "A giant tile: one fortress over seven hexes, a basalt crag with a curtain wall, round towers and a central keep, lit from within by rune-fire and wrapped in mist. The whole crag is cut into seven pieces, so each piece sorts on the map with the hex it stands on, like any other tile.",
+      "body": "A giant tile: one fortress over seven hexes, a basalt crag with a curtain wall, round towers and a central keep, lit from within by rune-fire and wrapped in mist.",
+      "techNote": "The whole crag is cut into seven pieces, so each piece sorts on the map with the hex it stands on, like any other tile.",
       "camera": "Camera"
     },
     "volcano": {
       "heading": "The fire-mountain",
-      "body": "The second giant of the Wasted Lands: a mountain that never cooled. Lava runs down its flanks, the crater bubbles and smoke rises from it without end. Like Utgard it covers seven hexes, and it is animated."
+      "body": "The second giant of the Wasted Lands: a mountain that never cooled. Lava runs down its flanks, the crater bubbles and smoke rises from it without end. Like Utgard, it covers seven hexes."
     },
     "defences": {
       "heading": "Utgard's defences",
@@ -448,7 +453,8 @@
       },
       "walrushaulout": {
         "name": "Walrus haul-out",
-        "guards": "Walrus bulls with long tusks on the shore, one rearing up to fight, among the bones of their kills. Drawn with the seal art until its own is ready."
+        "guards": "Walrus bulls with long tusks on the shore, one rearing up to fight, among the bones of their kills.",
+        "artNote": "Drawn with the seal art until its own is ready."
       },
       "boarwallow": {
         "name": "Boar wallow",
@@ -520,7 +526,7 @@
     },
     "water": {
       "heading": "Creeks and bog lakes",
-      "body": "Creeks have a river's profile, so they join rivers without a seam; lakes are open water with shore tiles around them. All of them are water tiles.",
+      "body": "Creeks flow into rivers; lakes are open water with shore tiles around them. All of them are water tiles.",
       "shape": "Tile",
       "shapes": {
         "creek": {
@@ -570,7 +576,8 @@
       },
       "hammerschmiede": {
         "name": "Hammer Forge",
-        "body": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works: it raises every bog-ore works within its range. It shows the river hammer mill until it gets art of its own."
+        "body": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works: it raises every bog-ore works within its range.",
+        "artNote": "Shown with the river hammer mill's art until it gets art of its own."
       },
       "claybrickworks": {
         "name": "Clay Brickworks",

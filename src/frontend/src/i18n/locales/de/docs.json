@@ -1,5 +1,9 @@
 {
   "back": "← Zurück",
+  "adminNotes": {
+    "toggle": "Admin-Hinweise anzeigen",
+    "label": "Admin-Hinweis"
+  },
   "backToDocs": "← Docs",
   "hub": {
     "title": "Docs",
@@ -123,7 +127,7 @@
       "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedlertrupps aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
       "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %. Ab Langhaus 6 verfügbar.",
-      "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus). Bis es eine eigene Grafik bekommt, wird es mit der Grafik des Flusshammerwerks gezeigt."
+      "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus)."
     },
     "table": {
       "level": "Stufe",
@@ -228,12 +232,13 @@
     },
     "utgard": {
       "heading": "Utgard, der Außenhof",
-      "body": "Ein Riesenfeld: eine Festung, die sich über sieben Hexfelder erstreckt. Ein Basaltfels mit Ringmauer, Rundtürmen und einem Bergfried in der Mitte, von innen in Runenfeuer getaucht und in Nebel gehüllt. Der Fels ist in sieben Stücke geschnitten, damit jedes Stück auf der Karte zusammen mit seinem Feld sortiert wird wie jedes andere Feld auch.",
+      "body": "Ein Riesenfeld: eine Festung, die sich über sieben Hexfelder erstreckt. Ein Basaltfels mit Ringmauer, Rundtürmen und einem Bergfried in der Mitte, von innen in Runenfeuer getaucht und in Nebel gehüllt.",
+      "techNote": "Der Fels ist in sieben Stücke geschnitten, damit jedes Stück auf der Karte zusammen mit seinem Feld sortiert wird wie jedes andere Feld auch.",
       "camera": "Kamera"
     },
     "volcano": {
       "heading": "Der Feuerberg",
-      "body": "Der zweite Riese der Ödlande: ein Berg, der nie erkaltet ist. Lava rinnt über seine Flanken, der Krater brodelt, und unaufhörlich steigt Rauch auf. Wie Utgard bedeckt er sieben Hexfelder, und er ist animiert."
+      "body": "Der zweite Riese der Ödlande: ein Berg, der nie erkaltet ist. Lava rinnt über seine Flanken, der Krater brodelt, und unaufhörlich steigt Rauch auf. Wie Utgard bedeckt er sieben Hexfelder."
     },
     "defences": {
       "heading": "Utgards Wehranlagen",
@@ -448,7 +453,8 @@
       },
       "walrushaulout": {
         "name": "Walross-Liegeplatz",
-        "guards": "Walrossbullen mit langen Stoßzähnen am Ufer, zwischen den Knochen ihrer Beute. Einer richtet sich zum Kampf auf. Bis die eigene Grafik fertig ist, wird die Robben-Grafik verwendet."
+        "guards": "Walrossbullen mit langen Stoßzähnen am Ufer, zwischen den Knochen ihrer Beute. Einer richtet sich zum Kampf auf.",
+        "artNote": "Bis die eigene Grafik fertig ist, wird die Robben-Grafik verwendet."
       },
       "boarwallow": {
         "name": "Wildschweinsuhle",
@@ -520,7 +526,7 @@
     },
     "water": {
       "heading": "Bäche und Moorseen",
-      "body": "Bäche haben das Profil eines Flusses und gehen nahtlos in Flüsse über. Seen sind offenes Wasser mit Uferfeldern ringsum. Alle gehören zu den Wasserfeldern.",
+      "body": "Bäche münden in Flüsse. Seen sind offenes Wasser mit Uferfeldern ringsum. Alle gehören zu den Wasserfeldern.",
       "shape": "Kachel",
       "shapes": {
         "creek": {
@@ -570,7 +576,8 @@
       },
       "hammerschmiede": {
         "name": "Hammerschmiede",
-        "body": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es steigert jede Raseneisenerz-Grube in seiner Reichweite. Bis es eine eigene Grafik bekommt, wird es mit der Grafik des Flusshammerwerks gezeigt."
+        "body": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es steigert jede Raseneisenerz-Grube in seiner Reichweite.",
+        "artNote": "Bis es eine eigene Grafik bekommt, wird es mit der Grafik des Flusshammerwerks gezeigt."
       },
       "claybrickworks": {
         "name": "Ziegelei",

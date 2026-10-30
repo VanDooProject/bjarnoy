@@ -6,6 +6,8 @@ import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
+import { useDocsAdminNotes } from '../composables/useDocsAdminNotes';
 import WallExample from '../components/docs/WallExample.vue';
 import WallMovementDiagram from '../components/docs/WallMovementDiagram.vue';
 import WallPiece from '../components/docs/WallPiece.vue';
@@ -41,13 +43,14 @@ function stageLabel(stage: number): string {
 
 const straightStage = computed(() => stageOf('straight180'));
 
-const tocLinks = [
+const { visible: adminNotes } = useDocsAdminNotes();
+const tocLinks = computed(() => [
   ...PIECES.map((p) => ({ href: `#${p.id}`, label: t(`docs.walls.pieces.${p.key}.name`) })),
   { href: '#choosing', label: t('docs.walls.choosing.heading') },
   { href: '#where', label: t('docs.walls.where.heading') },
   { href: '#movement', label: t('docs.walls.movement.heading') },
-  { href: '#not-built', label: t('docs.walls.notBuilt.heading') },
-];
+  ...(adminNotes.value ? [{ href: '#not-built', label: t('docs.walls.notBuilt.heading') }] : []),
+]);
 </script>
 
 <template>
@@ -124,10 +127,10 @@ const tocLinks = [
       <WallMovementDiagram />
     </section>
 
-    <section id="not-built" class="block">
+    <DocsAdminNote id="not-built" as="section" class="block">
       <h2>{{ $t('docs.walls.notBuilt.heading') }}</h2>
       <p class="group-body">{{ $t('docs.walls.notBuilt.body') }}</p>
-    </section>
+    </DocsAdminNote>
   </DocsPageLayout>
 </template>
 
