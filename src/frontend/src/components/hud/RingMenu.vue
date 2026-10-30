@@ -26,7 +26,7 @@
 // navigates — it only previews: hovering a building (or the root Upgrade /
 // Details bubble) shows its read-out card. This component owns layout and
 // navigation only — the caller supplies the tree and reacts to `select`.
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
@@ -50,6 +50,7 @@ import {
   NOTE_W,
   type Rect,
   bubbleLabelFontPx,
+  shrinkToFit,
   estimateWordEm,
   type WordEmWidth,
 } from '../../lib/map/ringLayout';
@@ -588,6 +589,59 @@ function wordEmAt(weight: number): WordEmWidth {
     return em;
   };
 }
+/**
+ * The size above is an estimate from canvas metrics; this is the check against what the browser really lays out.
+ * For every label it measures each word at the label's own font (a hidden probe copying family, weight, tracking
+ * and case; `offsetWidth` ignores the entrance/hover transforms) and, if the widest word is wider than the bubble's
+ * inner width, shrinks the font until it fits (`shrinkToFit`). So no word splits mid-word whatever font the browser
+ * ended up with. Runs after every render and when a web font finishes loading; map and onboarding share it.
+ */
+function fitLabels() {
+  const root = rootEl.value;
+  if (!root) return;
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;pointer-events:none;left:0;top:0';
+  root.appendChild(probe);
+  try {
+    const targets: { el: HTMLElement; text: string; available: number }[] = [];
+    for (const el of root.querySelectorAll<HTMLElement>('.ring-bubble')) {
+      const cs = getComputedStyle(el);
+      const text = [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent ?? '').join(' ');
+      const available = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+      targets.push({ el, text, available });
+    }
+    const hub = root.querySelector<HTMLElement>('.hub-label');
+    if (hub?.parentElement) targets.push({ el: hub, text: hub.textContent ?? '', available: hub.parentElement.clientWidth * 0.84 - 2 });
+    for (const { el, text, available } of targets) {
+      const words = text.split(/\s+/).filter(Boolean);
+      if (words.length === 0 || available <= 0) continue;
+      const cs = getComputedStyle(el);
+      const startPx = parseFloat(cs.fontSize);
+      if (!(startPx > 0)) continue;
+      const trackingEm = (parseFloat(cs.letterSpacing) || 0) / startPx;
+      probe.style.fontFamily = cs.fontFamily;
+      probe.style.fontWeight = cs.fontWeight;
+      probe.style.textTransform = cs.textTransform;
+      const widthAt = (word: string, px: number) => {
+        probe.style.fontSize = `${px}px`;
+        probe.style.letterSpacing = `${trackingEm}em`;
+        probe.textContent = word;
+        return probe.offsetWidth;
+      };
+      const fitted = shrinkToFit(words, available, startPx, widthAt);
+      if (fitted < startPx) el.style.fontSize = `${fitted}px`;
+    }
+  } finally {
+    probe.remove();
+  }
+}
+onMounted(() => {
+  void nextTick(fitLabels);
+  document.fonts?.addEventListener?.('loadingdone', fitLabels);
+});
+onUpdated(() => void nextTick(fitLabels));
+onUnmounted(() => document.fonts?.removeEventListener?.('loadingdone', fitLabels));
+
 const bubbleFont = (label: string, diameter: number, basePx: number) =>
   `${bubbleLabelFontPx(label, diameter, basePx, { wordEm: wordEmAt(700) })}px`;
 // `.hub-label` is capped at 84% of the hub (see its CSS), uppercase, 0.06em tracking.

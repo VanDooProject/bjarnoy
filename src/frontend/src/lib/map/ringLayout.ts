@@ -689,3 +689,27 @@ export function bubbleLabelFontPx(
   const fitting = availablePx / widestEm;
   return Math.floor(Math.max(minPx, Math.min(basePx, fitting)) * 10) / 10;
 }
+
+/**
+ * Shrinks `startPx` until the widest of `words` fits `availablePx`, using `widthAt(word, px)` - the real width of
+ * that word at that font size, however the caller measures it (the DOM at the bubble's own font in RingMenu). The
+ * estimate in `bubbleLabelFontPx` is only a first guess; a font that is wider than the guess (a fallback face, a web
+ * font that loaded late, another browser's hinting) is caught here, so no word ever splits mid-word. Glyph widths
+ * scale with the size, so a few proportional steps settle it; it stops at `minPx`.
+ */
+export function shrinkToFit(
+  words: readonly string[],
+  availablePx: number,
+  startPx: number,
+  widthAt: (word: string, px: number) => number,
+  minPx = 5,
+): number {
+  let px = startPx;
+  for (let step = 0; step < 6 && px > minPx; step++) {
+    const widest = Math.max(0, ...words.map((word) => widthAt(word, px)));
+    if (widest <= availablePx) break;
+    // Strictly smaller each time (the 0.1 floor-rounding), so it always ends.
+    px = Math.max(minPx, Math.min(px - 0.1, Math.floor(((px * availablePx) / widest) * 10) / 10));
+  }
+  return px;
+}
