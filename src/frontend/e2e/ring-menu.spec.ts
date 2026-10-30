@@ -133,7 +133,8 @@ test.describe('ring menu drill-down', () => {
 
       // ‹ BACK goes up exactly one level, back to the categories.
       await settlement.ring.click(backBubble);
-      await page.waitForTimeout(250);
+      // The outgoing building lane fades out first; read the labels only once it has gone.
+      await settlement.ring.settledLayer();
       await expect.poll(() => settlement.ring.labels()).toEqual(expect.arrayContaining(categoryTexts));
       const labelsAfterBack = await settlement.ring.labels();
       for (const rect of buildingRects) expect(labelsAfterBack).not.toContain(rect.text);
