@@ -290,6 +290,23 @@ export function useHudDrawer(
     isOpen.value = false;
   }
 
+  /**
+   * Bound (non-passive) to `touchmove` on the same elements as the pointer
+   * handlers. Once a drag is armed, its touch moves are canceled so the
+   * browser drops the gesture's scroll/fling recognition outright. Without
+   * this, `touch-action: none` alone still let Chromium start a fling at
+   * `touchend` (its fling controller sees the fling before the touch-action
+   * filter throws its scroll updates away), invisible on screen but "active"
+   * for a few hundred ms — and Chromium deliberately swallows the next tap
+   * that cancels an active fling, so a link tapped right after flicking the
+   * drawer open did nothing. Moves before the 8px intent threshold are left
+   * alone: canceling those would also cancel the tap of a slightly jittery
+   * finger.
+   */
+  function onTouchMove(e: TouchEvent) {
+    if (armed && e.cancelable) e.preventDefault();
+  }
+
   /** Call from a capture-phase click handler; returns true if this click should be swallowed. */
   function consumeClickSuppression(): boolean {
     const should = suppressNextClick;
@@ -307,6 +324,7 @@ export function useHudDrawer(
     onPointerUp,
     onPointerCancel,
     onLostPointerCapture,
+    onTouchMove,
     cancelDrag,
     toggle,
     close,

@@ -342,6 +342,9 @@ function onBarPointerCancel(e: PointerEvent) {
 function onBarLostPointerCapture(e: PointerEvent) {
   if (dragGestureEnabled.value) drawer.onLostPointerCapture(e);
 }
+function onBarTouchMove(e: TouchEvent) {
+  if (dragGestureEnabled.value) drawer.onTouchMove(e);
+}
 function onGripClick() {
   if (dragEnabled.value) drawer.toggle();
 }
@@ -417,6 +420,7 @@ const backdropStyle = computed(() => {
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
     @lostpointercapture="onBarLostPointerCapture"
+    @touchmove="onBarTouchMove"
     @click.capture="onClickCapture"
   >
     <!-- The logo lives in the mobile settlement-bubble instead (below) —
@@ -525,6 +529,7 @@ const backdropStyle = computed(() => {
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
     @lostpointercapture="onBarLostPointerCapture"
+    @touchmove="onBarTouchMove"
     @click.capture="onClickCapture"
   >
     <!-- The collapsed bar (and its grip) stays pinned to the screen's own

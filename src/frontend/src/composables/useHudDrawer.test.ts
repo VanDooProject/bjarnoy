@@ -210,6 +210,25 @@ describe('useHudDrawer', () => {
     expect(drawer.isOpen.value).toBe(true);
   });
 
+  it('cancels touch moves only once a drag is armed, so a jittery tap is never canceled', () => {
+    // Canceling an armed drag's touchmoves keeps Chromium from starting a
+    // (scroll-filtered, invisible) fling at release, which would swallow the
+    // next tap. Before the intent threshold the moves must stay untouched.
+    const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+    const touchMove = () => {
+      let prevented = false;
+      drawer.onTouchMove({ cancelable: true, preventDefault: () => (prevented = true) } as unknown as TouchEvent);
+      return prevented;
+    };
+    drawer.onPointerDown(fakeEvent(0, 0));
+    drawer.onPointerMove(fakeEvent(4, 10)); // under the 8px threshold
+    expect(touchMove()).toBe(false);
+    drawer.onPointerMove(fakeEvent(40, 20)); // armed
+    expect(touchMove()).toBe(true);
+    drawer.onPointerUp(fakeEvent(40, 20));
+    expect(touchMove()).toBe(false);
+  });
+
   it('finding #18: cancelDrag() tears down an in-flight drag without committing it', () => {
     const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
     drawer.onPointerDown(fakeEvent(0, 0));
