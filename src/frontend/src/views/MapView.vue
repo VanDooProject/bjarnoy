@@ -1575,51 +1575,6 @@ function describeActionError(err: unknown, fallback: string): string {
   return apiErrorMessage(err, fallback);
 }
 
-// Demo mode places the chosen building instantly; live mode queues that
-// same type against the backend's real catalogue (BuildingCatalogue.cs) —
-// "hut" is demo-only (BuildingModal's default when there's no picker; the
-// backend has no matching catalogue entry) and is expected to be rejected
-// server-side if ever picked in live mode, same as any other invalid
-// placement (wrong terrain, insufficient longhouse level, ...).
-/** Whether the placement/queue attempt actually went through. */
-async function buildType(type: BuildableType): Promise<boolean> {
-  if (!world.selectedSettlementId || !selectedCoord.value) return false;
-  actionError.value = null;
-  if (DEMO_MODE) {
-    const placed = world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
-    if (placed) canvasRef.value?.renderer?.forceRebuild();
-    else actionError.value = t('hud.ringMenu.errors.couldNotQueueBuild');
-    return placed;
-  }
-  modalBusy.value = true;
-  actionError.value = null;
-  try {
-    await world.queueBuildLive(type, selectedCoord.value);
-    return true;
-  } catch (err) {
-    console.error('Failed to queue building against the backend', err);
-    // Surface the rejection's detail — NoFreeSlot's premium hint included
-    // (issue #158) — rather than leaving the player to guess why nothing
-    // happened.
-    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild'));
-    return false;
-  } finally {
-    modalBusy.value = false;
-  }
-}
-
-// BuildingModal's own "Build here" button (opened via the ring's
-// Details/Info action on an empty tile) has no category/type picker of its
-// own, so it keeps the previous default of a hut.
-async function build() {
-  await buildType('hut');
-  // Only dismiss the modal on success — a rejection (e.g. NoFreeSlot) needs
-  // to stay visible via actionError rather than being closed out from under
-  // the player before they can read it.
-  if (actionError.value) return;
-  closeModal();
-}
-
 async function upgrade() {
   if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
   actionError.value = null;
@@ -1734,7 +1689,6 @@ async function upgrade() {
         :busy="modalBusy"
         :error="actionError"
         @close="closeModal"
-        @build="build"
         @upgrade="upgrade"
       />
       <TrainingModal
