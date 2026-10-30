@@ -444,7 +444,7 @@ public sealed class SettlementService(
     }
 
     /// <summary>
-    /// Founds a new settlement from a settler-crew convoy's arrival (issue
+    /// Founds a new settlement from a settler convoy's arrival (issue
     /// #55 §5) — the second-and-onward-settlement counterpart to
     /// <see cref="FoundAsync"/>'s first-settlement flow, reusing the same
     /// starting shape (a Lv 1 Longhouse, <see cref="BuildingCatalogue.FoundingStock"/>)
@@ -1273,11 +1273,11 @@ public sealed class SettlementService(
             .Where(coord => Territory.Claims(discs, coord, trainGiants))
             .Any(sampler.IsShoreline);
 
-        // Settler-crew training escalates per settlement the owning player
+        // Settler training escalates per settlement the owning player
         // already holds (issue #55 §4) — every other unit type trains at the
         // catalogue's flat cost (multiplier 1.0).
         var costMultiplier = 1.0;
-        if (unitType == UnitType.SettlerCrew)
+        if (unitType == UnitType.Settler)
         {
             var existingSettlementCount = await GetSettlementCountAsync(settlement.UserId, settlement.WorldId, cancellationToken)
                 .ConfigureAwait(false);

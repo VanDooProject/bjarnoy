@@ -17,7 +17,7 @@ namespace Bjarnoy.Domain.Units;
 /// <see cref="UnitType.Thrall"/> costs iron, so raising troops is gated by iron income. Each unit's
 /// Longhouse gate follows the building that trains it: Spearman with the Barracks (LH 5; the Thrall has no gate of its own, its Barracks is the gate), Axeman
 /// at LH 6, three levels after the bog-ore works open (LH 3), Karve with the Dockyard (LH 8), Bowman with the Archery Range (LH 9),
-/// Provisioner and Settler Crew with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
+/// Provisioner and Settler with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
 /// Longship) at LH 20, where the Hammerschmiede boosts the bog-ore works.
 /// </remarks>
 /// <remarks>
@@ -124,19 +124,16 @@ public static class UnitCatalogue
             RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
-        [UnitType.SettlerCrew] = new UnitDefinition
+        [UnitType.Settler] = new UnitDefinition
         {
-            Type = UnitType.SettlerCrew,
+            Type = UnitType.Settler,
             Class = UnitClass.Civilian,
             Attack = 0,
             Defense = 3,
             // Ordinary land-army pace so it neither bottlenecks nor outruns
             // an escort of infantry (issue #55) — the same figure the
-            // Spearman/Axeman/Bowman/Provisioner line already uses. A sea
-            // convoy travels at the carrying ship's (faster) speed instead —
-            // Army.TotalSpeed/PlanDispatch take the slowest stack, and no
-            // ship is ever slower than 4 — so this only ever paces an
-            // overland march.
+            // Spearman/Axeman/Bowman/Provisioner line already uses. Speed 4
+            // paces overland marches; sea movement is a separate follow-up.
             Speed = 4,
             CarryCapacity = 0,
             FoodCarryCapacity = 40,
@@ -145,8 +142,8 @@ public static class UnitCatalogue
             // per-existing-settlement multiplier (issue #55 §4) — deliberately
             // steep even at the base rate, mirroring Travian's settlers being
             // one of the most expensive units in the game.
-            TrainingCost = new ResourceAmounts(Wood: 200, Stone: 150, Food: 100, Iron: 100),
-            TrainingDuration = TimeSpan.FromMinutes(40),
+            TrainingCost = new ResourceAmounts(Wood: 120, Stone: 90, Food: 60, Iron: 60),
+            TrainingDuration = TimeSpan.FromMinutes(24),
             RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
