@@ -160,5 +160,36 @@ for (const viewport of [
         expect(b.y + b.h, JSON.stringify(b)).toBeLessThanOrEqual(viewport.height);
       }
     });
+
+    test('a category tapped while it is still fading in opens', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      const settlement = await SettlementPage.found(page);
+      await settlement.clickHex(await settlement.findHex({ terrain: 'grass' }));
+      await settlement.ring.waitForOpen();
+
+      // Clicks Resource in the same task that inserts it - while the swap that brings the categories in is still
+      // running, which a quick finger (or a slow frame) hits for real. A MutationObserver, not a rAF poll, so the
+      // click can never drift past the end of the swap on a slow runner.
+      // Installed (and awaited) before the Build tap, so it cannot miss the insertion.
+      await page.evaluate(() => {
+        (window as unknown as { __clickedMidSwap: Promise<boolean> }).__clickedMidSwap = new Promise<boolean>((resolve) => {
+          const find = () =>
+            [...document.querySelectorAll<HTMLElement>('.ring-bubble:not(.child)')].find((b) => b.getAttribute('aria-label') === 'Resource');
+          const observer = new MutationObserver(() => {
+            const el = find();
+            if (!el) return;
+            observer.disconnect();
+            const swapping = el.closest('[data-swapping]') !== null;
+            el.click();
+            resolve(swapping);
+          });
+          observer.observe(document.body, { childList: true, subtree: true });
+        });
+      });
+      await settlement.ring.action('Build').first().tap();
+      const clickedMidSwap = await page.evaluate(() => (window as unknown as { __clickedMidSwap: Promise<boolean> }).__clickedMidSwap);
+      expect(clickedMidSwap, 'Resource was clicked while its layer was still arriving').toBe(true);
+      await expect(settlement.ring.child('Reindeer Herder').first()).toBeVisible();
+    });
   });
 }

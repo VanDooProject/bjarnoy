@@ -146,6 +146,32 @@ describe('RingMenu motion', () => {
       wrapper.unmount();
     });
 
+    // The touch e2e drill-downs flaked on exactly this: a tap on a category that had just appeared, while the
+    // categories were still fading in, was dropped - nothing opened. The arriving layer is the one the player
+    // meant to reach, so the tap is held and runs once the swap has landed.
+    for (const reduced of [false, true]) {
+      it(`opens a category tapped while it is still arriving, once the swap lands${reduced ? ' (reduced motion)' : ''}`, async () => {
+        if (reduced) {
+          waapi.uninstall();
+          waapi = installWaapi(true);
+          vi.useFakeTimers();
+        }
+        const wrapper = mount(RingMenu, mountOptions);
+        await vi.advanceTimersByTimeAsync(2000);
+        void bubble(wrapper, 'Build').trigger('click');
+        // Past the old layer's exit, inside the categories' entrance.
+        await vi.advanceTimersByTimeAsync(PULL_MS + 2 * 12 + 1);
+        expect(labels(wrapper)).toEqual(['Housing', '‹ BACK']);
+        expect(wrapper.get('.ring-backdrop').attributes('data-swapping')).toBeDefined();
+
+        await bubble(wrapper, 'Housing').trigger('click');
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(labels(wrapper)).toContain('Hut');
+        expect(wrapper.get('.ring-backdrop').attributes('data-swapping')).toBeUndefined();
+        wrapper.unmount();
+      });
+    }
+
     it('opens a category with its links drawing out and its buildings blooming out of the category bubble', async () => {
       const wrapper = mount(RingMenu, mountOptions);
       await vi.advanceTimersByTimeAsync(2000);

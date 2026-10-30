@@ -212,8 +212,25 @@ const emit = defineEmits<{
 const path = ref<string[]>([]);
 /** The backdrop element: the choreography in lib/map/ringMotion.ts finds the bubbles, links and hub inside it. */
 const rootEl = ref<HTMLElement | null>(null);
-/** A layer swap is animating; navigation clicks are ignored until it has landed. */
+/** A layer swap is animating (old layer leaving, new one arriving). */
 const swapping = ref(false);
+/**
+ * The swap has reached its second half: the new layer is in the DOM, blooming or fading in. Its
+ * bubbles are the ones the player meant to reach, so a tap on one now is a real choice, not a
+ * stray one on a layer that is leaving: it is held in `queuedNav` and runs once the swap lands.
+ * Dropping it instead swallowed a quick tap on a category that had just appeared: the tap
+ * landed and nothing opened.
+ */
+let arriving = false;
+let queuedNav: (() => void) | null = null;
+/**
+ * Runs a navigation now, or once the swap in flight has landed if the click hit the arriving
+ * layer. A click while the old layer is still leaving is dropped: that bubble is on its way out.
+ */
+function whenLanded(nav: () => void) {
+  if (!swapping.value) nav();
+  else if (arriving) queuedNav = nav;
+}
 const hover = ref<string | null>(null);
 /** The root / category bubble under the pointer — only to preview its card or hint chip, never to navigate. */
 const hoverLane1 = ref<string | null>(null);
@@ -620,13 +637,18 @@ async function go(next: string[]) {
     path.value = next;
     hover.value = null;
     hoverLane1.value = null;
+    arriving = true;
     await nextTick();
     ringMotion.release(root);
     if (lane1Swap) await ringMotion.layerIn(root, 'lane1', hubPoint);
     else if (next.length === 2) await ringMotion.layerIn(root, 'kids', parentPoint());
   } finally {
     swapping.value = false;
+    arriving = false;
   }
+  const queued = queuedNav;
+  queuedNav = null;
+  queued?.();
 }
 
 function goUp() {
@@ -635,7 +657,7 @@ function goUp() {
 }
 /** X11: the hub / ‹ BACK squish, then go back. At the root the hub just closes (the retract is its own motion). */
 async function onBackClick(e: MouseEvent) {
-  if (swapping.value) return;
+  if (swapping.value) return whenLanded(goUp);
   if (path.value.length && motionEnabled()) await ringMotion.press(e.currentTarget as HTMLElement);
   goUp();
 }
@@ -647,15 +669,14 @@ function onLaneClick(e: MouseEvent, item: RingAction) {
     blockedFeedback(e.currentTarget as HTMLElement);
     return;
   }
-  if (swapping.value) return;
-  if (atRoot.value) {
-    if (item.id === 'build' && props.categories.length) void go(['build']);
-    else emit('select', item.id);
-    return;
-  }
-  if (props.categories.some((c) => c.id === item.id)) {
-    void go(['build', item.id]);
-  }
+  whenLanded(() => {
+    if (atRoot.value) {
+      if (item.id === 'build' && props.categories.length) void go(['build']);
+      else emit('select', item.id);
+      return;
+    }
+    if (props.categories.some((c) => c.id === item.id)) void go(['build', item.id]);
+  });
 }
 function onBuildingClick(e: MouseEvent, building: RingBuilding) {
   const el = e.currentTarget as HTMLElement;
@@ -663,12 +684,13 @@ function onBuildingClick(e: MouseEvent, building: RingBuilding) {
     blockedFeedback(el);
     return;
   }
-  if (swapping.value) return;
-  // X2: tells the retract (MapView's <Transition> leave hook) which bubble
-  // drops onto the hex; cleared again in case the caller kept the ring open.
-  el.setAttribute(ringMotion.DROPPING_ATTR, '');
-  emit('select', building.id);
-  setTimeout(() => el.removeAttribute(ringMotion.DROPPING_ATTR), 50);
+  whenLanded(() => {
+    // X2: tells the retract (MapView's <Transition> leave hook) which bubble
+    // drops onto the hex; cleared again in case the caller kept the ring open.
+    el.setAttribute(ringMotion.DROPPING_ATTR, '');
+    emit('select', building.id);
+    setTimeout(() => el.removeAttribute(ringMotion.DROPPING_ATTR), 50);
+  });
 }
 /** X1: the shake, the badge wobble and the reason flash for a click on something that is blocked. */
 function blockedFeedback(bubble: HTMLElement) {
