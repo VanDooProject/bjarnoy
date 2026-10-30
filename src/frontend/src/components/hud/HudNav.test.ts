@@ -220,11 +220,16 @@ describe('HudNav link visibility', () => {
     expect(wrapper.text()).not.toContain('Landing');
   });
 
-  it('shows the Landing link on any other route', async () => {
+  it('shows the Landing link on any other route while no settlement is founded', async () => {
+    const wrapper = await mountHudNav('/docs');
+    expect(wrapper.text()).toContain('Landing');
+  });
+
+  it('hides the Landing link once a settlement is founded: the landing page is no destination any more', async () => {
     const player = usePlayerStore();
     player.hasFoundedSettlement = true;
     const wrapper = await mountHudNav('/settlement');
-    expect(wrapper.text()).toContain('Landing');
+    expect(wrapper.text()).not.toContain('Landing');
   });
 });
 

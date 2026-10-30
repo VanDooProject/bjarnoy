@@ -113,12 +113,14 @@ export function useHudNavEntries(): {
         badge: 0,
         go: () => void router.push('/docs'),
       },
-      // A self-link on the landing route itself, which HudNav is mounted on
-      // too (post-founding half of LandingView).
+      // Only a way back to the pre-founding landing flow: once a settlement is
+      // founded the landing page is not a destination any more
+      // (docs/design/ui-guidelines.md §2), and on the landing route itself
+      // the link would be a self-link.
       {
         id: 'landing',
         labelKey: 'hud.nav.landing',
-        visible: route.name !== 'landing',
+        visible: !player.hasFoundedSettlement && route.name !== 'landing',
         active: false,
         badge: 0,
         go: () => void router.push('/'),

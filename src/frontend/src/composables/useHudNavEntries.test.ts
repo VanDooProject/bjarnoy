@@ -55,18 +55,25 @@ describe('useHudNavEntries', () => {
     expect(api.entries.value.map((e) => e.id)).toEqual(['reports', 'guild', 'docs', 'landing']);
   });
 
+  it('hides the landing link once a settlement is founded', async () => {
+    const { api } = await setup('/docs');
+    expect(api.entries.value.map((e) => e.id)).toContain('landing');
+    usePlayerStore().hasFoundedSettlement = true;
+    expect(api.entries.value.map((e) => e.id)).not.toContain('landing');
+  });
+
   it('hides the landing link on the landing route itself', async () => {
     const { api } = await setup('/');
     expect(api.entries.value.map((e) => e.id)).not.toContain('landing');
   });
 
-  it('shows every entry to a founded, logged-in player, and splits primary from secondary', async () => {
+  it('shows every entry but landing to a founded, logged-in player, and splits primary from secondary', async () => {
     const { api } = await setup('/settlement');
     usePlayerStore().hasFoundedSettlement = true;
     login();
-    expect(api.entries.value.map((e) => e.id)).toEqual(['settlement', 'world', 'leaderboards', 'messages', 'reports', 'guild', 'docs', 'landing']);
+    expect(api.entries.value.map((e) => e.id)).toEqual(['settlement', 'world', 'leaderboards', 'messages', 'reports', 'guild', 'docs']);
     expect(api.primary.value.map((e) => e.id)).toEqual(['settlement', 'world']);
-    expect(api.secondary.value.map((e) => e.id)).toEqual(['leaderboards', 'messages', 'reports', 'guild', 'docs', 'landing']);
+    expect(api.secondary.value.map((e) => e.id)).toEqual(['leaderboards', 'messages', 'reports', 'guild', 'docs']);
   });
 
   it('marks the entry of the current route active', async () => {
