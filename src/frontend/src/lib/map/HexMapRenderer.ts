@@ -3364,15 +3364,6 @@ export class HexMapRenderer {
       });
   }
 
-  /**
-   * Turns `buildings-anim` art on/off, per the `animationPreference`
-   * singleton (see `useHexMapRenderer`'s wiring). Just records the wanted
-   * state and defers the actual load/unload to `syncAnimationAtlases`
-   * (already run from every `rebuildAll`) so it applies once `this.textures`
-   * exists and covers a later mode switch into settlement or wasted-pack
-   * reveal the same way `maybeLoadWastedPack` does — rather than duplicating
-   * those readiness checks here.
-   */
   /** Freezes (false) or resumes (true) the water: shader clocks and the world map's wave squiggles. */
   setWaterMotion(enabled: boolean) {
     this.waterMotion = enabled;
@@ -3384,6 +3375,15 @@ export class HexMapRenderer {
     this.fogMotion = enabled;
   }
 
+  /**
+   * Turns `buildings-anim` art on/off, per the `animationPreference`
+   * singleton (see `useHexMapRenderer`'s wiring). Just records the wanted
+   * state and defers the actual load/unload to `syncAnimationAtlases`
+   * (already run from every `rebuildAll`) so it applies once `this.textures`
+   * exists and covers a later mode switch into settlement or wasted-pack
+   * reveal the same way `maybeLoadWastedPack` does — rather than duplicating
+   * those readiness checks here.
+   */
   setAnimationsEnabled(enabled: boolean) {
     if (this.animationsEnabled === enabled) return;
     this.animationsEnabled = enabled;
