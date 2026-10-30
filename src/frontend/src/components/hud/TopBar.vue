@@ -1120,11 +1120,14 @@ const backdropStyle = computed(() => {
      claimed by the browser's native pan (`pointercancel`), and the drawer
      can no longer be dragged closed by touch. Touch scrolling of this
      element is driven from useHudDrawer instead (see `scrollEl` there);
-     wheel and `scrollIntoView` stay native. The rail sheet below has no
-     drag and opts back into native touch scrolling. */
+     wheel and `scrollIntoView` stay native. The chip layouts' drawers
+     (the rail sheet and the floating drawer) have no drag, so nothing
+     drives their scrolling from script: they opt back into native touch
+     scrolling below. */
   touch-action: none;
 }
-.hud-drawer--rail .hud-drawer-scroll {
+.hud-drawer--rail .hud-drawer-scroll,
+.hud-drawer--floating .hud-drawer-scroll {
   touch-action: auto;
 }
 .hud-drawer--bottom .hud-drawer-scroll {

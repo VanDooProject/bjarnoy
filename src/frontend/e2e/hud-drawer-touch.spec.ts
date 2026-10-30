@@ -216,23 +216,56 @@ test.describe('mobile HUD drawer, touch', () => {
     });
   });
 
-  test('the founded landing page bar opens by touch drag too', async ({ page }) => {
+  test('the founded landing page: a touch tap on the floating ☰ opens the drawer, another closes it', async ({ page }) => {
+    // A portrait phone's founded landing has no bar band to drag (TopBar's
+    // `floating`): the ☰ sits beside the settlement bubble and the drawer
+    // opens and closes by tap only. A real touch tap must still toggle it.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await loginTestUser(page);
-    // The founded landing's bar (with its drawer) is back on a phone once
-    // the guided build steps are done (LandingView's hideBarForTutorial).
+    // The founded landing's header (with its drawer) is back on a phone
+    // once the guided build steps are done (LandingView's hideBarForTutorial).
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
     await settlement.placeGuidedBuildings();
     await expect(page.getByTestId('onboarding-continue')).toBeVisible();
-    await expect(page.locator('.hud-grip')).toHaveCount(1);
+    await expect(page.locator('header.hud-bar')).toHaveClass(/hud-bar--floating/);
 
-    // Pull the grip handle itself: the phone's founded landing bar has no
-    // other content, and the grip is a child button that holds the finger's
-    // implicit capture.
-    const grip = (await page.locator('.hud-grip').boundingBox())!;
-    const bar = (await page.locator('.hud-bar').boundingBox())!;
-    await touchDrag(page, grip.x + grip.width / 2, grip.y + grip.height / 2, bar.y + bar.height + 260);
+    await page.locator('.hud-grip').tap();
     await expectDrawerOpen(page);
+    await page.locator('.hud-grip').tap();
+    await expectDrawerClosed(page);
+  });
+
+  test.describe('short phone, founded landing', () => {
+    // Founding itself needs the taller phone (the landfall click); the test
+    // then shrinks to a height the drawer's content overflows.
+    test.use({ viewport: { width: 390, height: 664 } });
+
+    test('the floating drawer scrolls its content by native touch', async ({ page }) => {
+      // The floating drawer has no drag gesture, so nothing drives its
+      // scrolling from script: a finger on it must scroll natively, which a
+      // `touch-action: none` meant for the draggable band drawer would block.
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await loginTestUser(page);
+      const settlement = await SettlementPage.openLanding(page);
+      await settlement.claimLandfall();
+      await settlement.placeGuidedBuildings();
+      await expect(page.getByTestId('onboarding-continue')).toBeVisible();
+      await page.setViewportSize({ width: 390, height: 420 });
+      await expect(page.locator('header.hud-bar')).toHaveClass(/hud-bar--floating/);
+
+      await page.locator('.hud-grip').tap();
+      await expectDrawerOpen(page);
+      await waitDrawerSettled(page);
+      const scroller = page.locator('.hud-drawer-scroll');
+      expect(await scroller.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(60);
+
+      const open = (await page.locator('.hud-drawer').boundingBox())!;
+      const x = open.x + open.width / 2;
+      const fromY = open.y + open.height - 40;
+      await touchDrag(page, x, fromY, fromY - 120);
+      await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      await expect(page.locator('.hud-grip')).toHaveAttribute('aria-expanded', 'true');
+    });
   });
 });
