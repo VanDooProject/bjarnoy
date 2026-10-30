@@ -91,6 +91,7 @@ const ROWS = computed<Row[]>(() => [
         ]
       : [{ key: 'bordered', label: 'Realm borders drawn', ms: null, count: stats.borderedHexCount, countLabel: 'hexes' }],
   },
+  { key: 'bog-edges', label: 'Bog edges', ms: stats.bogEdgesMs },
   { key: 'markers', label: 'Markers', ms: stats.markersMs },
   {
     key: 'water-mask',
