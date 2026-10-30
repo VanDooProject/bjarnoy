@@ -39,7 +39,7 @@
       },
       "techTree": {
         "title": "Tech tree",
-        "description": "Every building, what each of its ten levels costs, produces and needs."
+        "description": "Every building, what each level costs, produces and needs."
       },
       "production": {
         "title": "Resource production",
@@ -114,7 +114,7 @@
   },
   "techTree": {
     "title": "Tech tree",
-    "intro": "Every building, and what each of its ten levels costs, produces, and requires.",
+    "intro": "Every building, and what each of its levels costs, produces, and requires.",
     "terrain": "Terrain:",
     "terrainCoastal": "Shallow (coastal) water",
     "terrainAny": "Any buildable land",
@@ -142,7 +142,7 @@
       "water": "Water"
     },
     "lore": {
-      "longhouse": "The heart of the settlement. Its level sets claim radius, build slots and how many settlers call the village home — every settlement starts with one, standing on grass.",
+      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass.",
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
@@ -150,7 +150,7 @@
       "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies and their friends' (the same guild, or a guild at peace with it) pass it at the normal terrain cost; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
-      "storagehouse": "Extra room for the harvest on grass, so a full warehouse never stalls production.",
+      "storagehouse": "Extra room for the harvest, on grass. A resource stops being produced once it reaches the storage limit, so a full store wastes output.",
       "tower": "A watch built on grass or sand at the border, pushing the claimed ground further out.",
       "fishinghut": "A dock over shallow water, fishing the shallows a farm never could. It also stands on stilts on the half shore of a bog lake.",
       "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player) — the bonus crop a \"more fertile\" island unlocks.",
@@ -234,7 +234,7 @@
       },
       "sand": {
         "title": "Sand",
-        "lore": "An island's beach — the coastal ring settlers actually land on when founding a settlement.",
+        "lore": "An island's beach: the ring of land along its coast.",
         "generation": "The outer edge of an island: beyond 82% of its radius from centre."
       },
       "grass": {
