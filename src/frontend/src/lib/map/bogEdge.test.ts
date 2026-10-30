@@ -4,7 +4,7 @@ import {
   bogEdgesOf,
   isBogGround,
   bogEdgeNeighbour,
-  BOG_EDGE_STYLES,
+  FOREST_GROUND,
   RIVER_EDGE_GAP,
   STREAM_EDGE_GAP,
 } from './bogEdge';
@@ -87,21 +87,18 @@ describe('bogEdgeShapes', () => {
   const a = { x: 0, y: 0 };
   const b = { x: 100, y: 0 };
   const out = { x: 0, y: 1 };
-
-  it('draws nothing when off', () => {
-    expect(bogEdgeShapes('off', a, b, out, [1, 2, 3])).toEqual([]);
-  });
+  const NEIGHBOURS_KINDS = ['grass', 'forest'] as const;
 
   it('gives the same edge the same shape on every rebuild, and another edge a different one', () => {
-    for (const style of BOG_EDGE_STYLES) {
-      expect(bogEdgeShapes(style, a, b, out, [4, 5, 0])).toEqual(bogEdgeShapes(style, a, b, out, [4, 5, 0]));
+    for (const n of NEIGHBOURS_KINDS) {
+      expect(bogEdgeShapes(n, a, b, out, [4, 5, 0])).toEqual(bogEdgeShapes(n, a, b, out, [4, 5, 0]));
+      expect(bogEdgeShapes(n, a, b, out, [4, 5, 0])).not.toEqual(bogEdgeShapes(n, a, b, out, [4, 5, 1]));
     }
-    expect(bogEdgeShapes('lobes', a, b, out, [4, 5, 0])).not.toEqual(bogEdgeShapes('lobes', a, b, out, [4, 5, 1]));
   });
 
-  it('pushes the lobes onto the grass side only, a bounded distance', () => {
+  it('pushes moss onto the grass side, a bounded distance', () => {
     for (let seed = 0; seed < 50; seed++) {
-      for (const shape of bogEdgeShapes('lobesRim', a, b, out, [seed, -seed, seed % 6])) {
+      for (const shape of bogEdgeShapes('grass', a, b, out, [seed, -seed, seed % 6])) {
         for (const p of shape.points) {
           expect(p.y).toBeGreaterThanOrEqual(-2.001);
           expect(p.y).toBeLessThanOrEqual(17);
@@ -110,26 +107,32 @@ describe('bogEdgeShapes', () => {
     }
   });
 
+  it('pushes the forest ground into the bog instead, with no rim and no moss on the forest', () => {
+    // Moss on the forest's darker ground reads as the wrong colour, so a forest edge reaches the other way.
+    for (let seed = 0; seed < 50; seed++) {
+      const shapes = bogEdgeShapes('forest', a, b, out, [seed, -seed, seed % 6]);
+      expect(shapes.every((s) => s.fill?.color === FOREST_GROUND && !s.stroke && !s.under)).toBe(true);
+      for (const p of shapes.flatMap((s) => s.points)) {
+        expect(p.y).toBeLessThanOrEqual(2.001);
+        expect(p.y).toBeGreaterThanOrEqual(-17);
+      }
+    }
+  });
+
   it('draws the rim under the moss so it only shows on the outside', () => {
-    const shapes = bogEdgeShapes('lobesRim', a, b, out, [1, 1, 1]);
+    const shapes = bogEdgeShapes('grass', a, b, out, [1, 1, 1]);
     expect(shapes.some((s) => s.under && s.stroke)).toBe(true);
     expect(shapes.filter((s) => !s.under).every((s) => s.fill && !s.stroke)).toBe(true);
   });
 
-  it('leaves the water gap bare in every style, and tapers the moss to nothing at the water', () => {
-    for (const style of BOG_EDGE_STYLES) {
-      for (const shape of bogEdgeShapes(style, a, b, out, [3, 3, 3], undefined, RIVER_EDGE_GAP)) {
-        for (const p of shape.points) expect(p.x <= 17.001 || p.x >= 82.999, `${style} at ${p.x}`).toBe(true);
+  it('leaves the water gap bare, and tapers the moss to nothing at the water', () => {
+    for (const n of NEIGHBOURS_KINDS) {
+      for (const shape of bogEdgeShapes(n, a, b, out, [3, 3, 3], RIVER_EDGE_GAP)) {
+        for (const p of shape.points) expect(p.x <= 17.001 || p.x >= 82.999, `${n} at ${p.x}`).toBe(true);
       }
     }
-    const lobe = bogEdgeShapes('lobes', a, b, out, [3, 3, 3], undefined, RIVER_EDGE_GAP).find((s) => s.points.length > 15)!;
+    const lobe = bogEdgeShapes('grass', a, b, out, [3, 3, 3], RIVER_EDGE_GAP).find((s) => !s.under && s.points.length > 15)!;
     const atWater = lobe.points.find((p) => Math.abs(p.x - 17) < 1e-6 && p.y >= 0)!;
     expect(atWater.y).toBeCloseTo(0, 6);
-  });
-
-  it('draws the straight border exactly on the hex edge, in the given colour', () => {
-    const shapes = bogEdgeShapes('straight', a, b, out, [1, 1, 1], 0x123456);
-    expect(shapes.every((s) => s.points.length === 2 && s.points[0] === a && s.points[1] === b)).toBe(true);
-    expect(shapes.some((s) => s.stroke?.color === 0x123456)).toBe(true);
   });
 });

@@ -110,7 +110,7 @@ import {
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
-import { bogEdgeDebug, bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
+import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { animationPreference } from '../perf/animationPreference';
@@ -4510,14 +4510,13 @@ export class HexMapRenderer {
 
   private rebuildBogEdges(coords: AxialCoord[]) {
     const { worldModel, mode } = this.options;
-    const { style, forestStyle, color } = bogEdgeDebug;
-    if (mode !== 'settlement' || (style === 'off' && forestStyle === 'off')) {
+    if (mode !== 'settlement') {
       this.syncBogEdgeGraphics([], []);
       return;
     }
-    // The geometry depends on nothing but the hex, its neighbours (bog, giant, river) and the debug switches, so it is
-    // built once per hex and only thrown away when one of those changes (or the cache has grown past a few screens).
-    const cacheKey = `${style}|${forestStyle}|${color}|${worldModel.riverRevision}|${worldModel.overlayRevision}`;
+    // The geometry depends on nothing but the hex and its neighbours (bog, giant, river), so it is built once per hex
+    // and only thrown away when one of those changes (or the cache has grown past a few screens of bog).
+    const cacheKey = `${worldModel.riverRevision}|${worldModel.overlayRevision}`;
     if (cacheKey !== this.bogEdgeCacheKey || this.bogEdgeCache.size > 4000) {
       this.clearBogEdgeCache();
       this.bogEdgeCacheKey = cacheKey;
@@ -4545,12 +4544,11 @@ export class HexMapRenderer {
           const mid = { x: (a.x + b.x) / 2 - centre.x, y: (a.y + b.y) / 2 - centre.y };
           const len = Math.hypot(mid.x, mid.y);
           const shapes = bogEdgeShapes(
-            neighbour === 'forest' ? forestStyle : style,
+            neighbour,
             { x: grid.x + a.x, y: grid.y + a.y },
             { x: grid.x + b.x, y: grid.y + b.y },
             { x: mid.x / len, y: mid.y / len },
             [c.q, c.r, edge],
-            color,
             gap,
           );
           for (const shape of shapes) (shape.under ? under : over).push(shape);
