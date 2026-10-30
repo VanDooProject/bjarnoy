@@ -63,6 +63,7 @@ import {
   isWallBuilding,
   longhouseLock,
   palisadeLock,
+  bridgeLock,
   riverBuildingAllowedHere,
   shrineLimitLock,
   storageHouseLock,
@@ -697,7 +698,8 @@ type BuildableType =
   | 'bogoreworks'
   | 'hammerschmiede'
   | 'palisade'
-  | 'palisadegate';
+  | 'palisadegate'
+  | 'bridge';
 
 interface BuildCategory {
   id: string;
@@ -734,9 +736,12 @@ const WATER_CATEGORY: BuildCategory = {
 // The wall (docs/design/economy.md section 5): a palisade hex, or a gate on a hex that is a straight, on grass, forest, sand or plain bog moss. A wall
 // also ends on a coastal-water hex (BuildingDefinition.AlsoOnCoastalWater), the sea end, which is never a gate. Whether this particular hex
 // takes one is the wall rules' (WorldModel.palisadePlacement), shown as a lock on the bubble.
+// The bridge (same section) (`bridge`) sits in this category too: it stands on a river hex's own ground, so it is listed on every grass, forest and sand hex and
+// filtered back out per hex unless that hex is a straight or bending river (riverBuildingAllowedHere); a river that is not wide shows it
+// locked (WorldModel.bridgePlacement).
 const DEFENSE_CATEGORY: BuildCategory = {
   id: 'defense',
-  buildings: [{ type: 'palisade' }, { type: 'palisadegate' }],
+  buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
 };
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
@@ -1149,6 +1154,8 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierPalisadeWall');
     case 'palisadeGate':
       return t('hud.hoverTooltip.modifierPalisadeGate');
+    case 'bridge':
+      return t(`hud.hoverTooltip.bridgeLevel${modifier.level}`);
   }
 }
 
@@ -1292,6 +1299,7 @@ function ringBuildingFor(type: BuildableType, coord: AxialCoord, levels: Record<
     SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined,
     type === 'storagehouse' ? storageHouseLockFor() : undefined,
     isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
+    type === 'bridge' ? bridgeLock(world.model.bridgePlacement(coord)) : undefined,
     ...prerequisiteLocks(definition?.prerequisites, levels),
   ].filter((lock): lock is string => !!lock);
   return {
@@ -1650,7 +1658,7 @@ async function upgrade() {
       <TradePanel />
       <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
-      <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
+      <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"

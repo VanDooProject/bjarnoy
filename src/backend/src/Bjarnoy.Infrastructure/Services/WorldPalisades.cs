@@ -51,10 +51,10 @@ public static class WorldPalisades
     }
 
     /// <summary>
-    /// Who a gate also opens for besides its owner: two accounts are friends when they are in the same guild or in guilds with an active
+    /// Who a gate (or a guarded bridge) also opens for besides its owner: two accounts are friends when they are in the same guild or in guilds with an active
     /// peace treaty. An anonymous settlement's key (the settlement itself) is in no guild and so nobody's friend.
     /// </summary>
-    private static async Task<Func<Guid, Guid, bool>> FriendsAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
+    internal static async Task<Func<Guid, Guid, bool>> FriendsAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
     {
         var memberships = await db.GuildMemberships
             .AsNoTracking()
