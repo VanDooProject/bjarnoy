@@ -664,7 +664,7 @@ function onBuildingClick(e: MouseEvent, building: RingBuilding) {
     return;
   }
   if (swapping.value) return;
-  // X2: tells the retract (MapView's <Transition> leave hook) which bubble
+  // X2: tells the retract (RingMenuHost's leave hook) which bubble
   // drops onto the hex; cleared again in case the caller kept the ring open.
   el.setAttribute(ringMotion.DROPPING_ATTR, '');
   emit('select', building.id);
