@@ -415,4 +415,85 @@ describe('TopBar', () => {
       wrapper.unmount();
     });
   });
+
+  // Phone screenshot: LandingView's founded bar was a full-width band whose
+  // only content was the "Name your jarl" trigger, hugging the very top edge
+  // (its nudge glow/dot clipped by the viewport). `floating` drops the band
+  // for chips on a portrait phone.
+  describe('floating (portrait phone, `floating` prop)', () => {
+    beforeEach(() => {
+      stubMediaQueries([HUD_COMPACT_QUERY]);
+    });
+
+    it('drops the band and publishes no top inset, so the map reclaims the space', async () => {
+      hudBarHeightPx.value = 64;
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--floating');
+      expect(wrapper.get('.hud-drawer').classes()).toContain('hud-drawer--floating');
+      expect(hudBarHeightPx.value).toBe(0);
+      expect(isHudRail.value).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('ignores the bottom docking preference', async () => {
+      useHudPrefsStore().setBarPosition('bottom');
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--bottom');
+      expect(isHudBarAtBottom.value).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('joins the settlement bubble to the menu button, clear of the top safe area', async () => {
+      useWorldStore().hud.settlementName = 'Unnamed realm';
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      const bubble = wrapper.get('.settlement-bubble');
+      expect(bubble.attributes('style')).toContain('env(safe-area-inset-top');
+      expect(bubble.classes()).toContain('settlement-bubble--floating');
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--rail-joined');
+      wrapper.unmount();
+    });
+
+    it('the menu button toggles the drawer by tap, and a pull does nothing', async () => {
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      const fire = (type: string, clientY: number) =>
+        wrapper.get('.hud-bar').element.dispatchEvent(
+          Object.assign(new Event(type, { bubbles: true }), { clientY, pointerId: 1, isPrimary: true, pointerType: 'touch' }),
+        );
+      fire('pointerdown', 10);
+      fire('pointermove', 200);
+      fire('pointerup', 200);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('false');
+
+      await wrapper.get('.hud-grip').trigger('click');
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('true');
+      expect(isHudDrawerOpen.value).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('keeps the band without the prop, on desktop, docked, and in landscape rail', async () => {
+      const cases: Array<[string[], Record<string, unknown>]> = [
+        [[HUD_COMPACT_QUERY], {}],
+        [[], { floating: true }],
+        [[HUD_COMPACT_QUERY], { floating: true, docked: true }],
+        [[HUD_COMPACT_QUERY, HUD_RAIL_QUERY], { floating: true }],
+      ];
+      for (const [queries, props] of cases) {
+        stubMediaQueries(queries);
+        const wrapper = mountTopBar(props, DRAWER_SLOT);
+        await wrapper.vm.$nextTick();
+        expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--floating');
+        wrapper.unmount();
+      }
+    });
+  });
 });

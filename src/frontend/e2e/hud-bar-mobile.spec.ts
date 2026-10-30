@@ -743,7 +743,10 @@ test('demo badge never overlaps the settlement bubble on a phone settlement view
 // A bottom-docked bar used to sit on top of the landing page's onboarding
 // completion banner on a real phone-height screen (390x664, iPhone 13), so
 // "Enter your settlement" couldn't be tapped and onboarding couldn't finish
-// — the landing overlays only ever cleared a *top* bar.
+// — the landing overlays only ever cleared a *top* bar. The founded landing's
+// phone bar now floats as top chips regardless of that preference (TopBar's
+// `floating`), so the bar can't sit at the bottom there at all any more; this
+// keeps guarding that the CTA stays uncovered and tappable with it set.
 test('bottom docking never covers the onboarding completion banner', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await page.setViewportSize({ width: 390, height: 664 });
@@ -756,7 +759,9 @@ test('bottom docking never covers the onboarding completion banner', async ({ pa
   const cta = page.getByTestId('onboarding-continue');
   await expect(cta).toBeVisible();
   const [ctaBox, barBox] = [await cta.boundingBox(), await page.locator('header.hud-bar').boundingBox()];
-  expect(ctaBox!.y + ctaBox!.height, 'completion CTA overlaps the bottom-docked bar').toBeLessThanOrEqual(barBox!.y);
+  const overlaps =
+    ctaBox!.y < barBox!.y + barBox!.height && barBox!.y < ctaBox!.y + ctaBox!.height;
+  expect(overlaps, 'completion CTA overlaps the HUD bar').toBe(false);
   await cta.click();
   await expect(page).toHaveURL(/\/settlement$/);
 });

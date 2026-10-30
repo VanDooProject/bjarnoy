@@ -318,14 +318,27 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
 test.describe('phone overlay layering', { tag: '@g1' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
-  test('the profile nudge paints above the settlement bubble', async ({ page }) => {
+  // The founded landing's phone header used to be a full-width band holding
+  // only the "Name your jarl" trigger, flush against the top edge (its glow
+  // clipped there), with the nudge hanging over the settlement bubble below
+  // it. The band is gone (TopBar's `floating`): the trigger is a chip clear
+  // of the top edge, and the nudge hangs from it, wholly on screen with the
+  // usual 16px gutters and clear of the settlement bubble.
+  test('the floating header: trigger clear of the top edge, nudge on screen and off the settlement bubble', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
     await settlement.placeGuidedBuildings();
     await expect(settlement.profileNudge).toBeVisible();
 
-    await expectPaintsAbove(settlement.profileNudge, page.locator('.settlement-bubble'), 'settlement bubble paints over the profile nudge');
+    await expect(page.locator('header.hud-bar')).toHaveClass(/hud-bar--floating/);
+    const trigger = (await page.getByTestId('returning-player-trigger').boundingBox())!;
+    expect(trigger.y, 'trigger hugs the top edge').toBeGreaterThanOrEqual(8);
+    const nudge = (await settlement.profileNudge.boundingBox())!;
+    expect(nudge.y, 'nudge hangs below its trigger').toBeGreaterThan(trigger.y + trigger.height);
+    expect(nudge.x).toBeGreaterThanOrEqual(16);
+    expect(nudge.x + nudge.width).toBeLessThanOrEqual(PHONE.width - 16);
+    await expectNoOverlap(settlement.profileNudge, page.locator('.settlement-bubble'), 'profile nudge covers the settlement bubble');
   });
 
   test('the open queue drawer paints above the settlement bubble', async ({ page }) => {
