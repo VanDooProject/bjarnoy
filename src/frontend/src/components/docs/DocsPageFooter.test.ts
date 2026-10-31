@@ -24,7 +24,7 @@ describe('DocsPageFooter', () => {
     expect(w.get('h2').text()).toBe('Related');
     const cards = w.findAll('[data-related]');
     expect(cards.map((c) => c.attributes('data-related'))).toEqual(['techTree', 'production', 'landMovement']);
-    expect(cards.map((c) => c.attributes('href'))).toEqual(['/tech-tree', '/docs/production', '/docs/land-movement']);
+    expect(cards.map((c) => c.attributes('href'))).toEqual(['/docs/tech-tree', '/docs/production', '/docs/land-movement']);
     expect(cards[0]!.text()).toContain('Tech tree');
     expect(cards[0]!.text()).toContain('Costs and build times of every shrine level.');
 
@@ -48,7 +48,7 @@ describe('DocsPageFooter', () => {
   });
 
   it('walks across groups: the last of one group links to the first of the next', () => {
-    expect(mountFooter('bogLands').get('[data-testid=docs-next]').attributes('href')).toBe('/tech-tree');
+    expect(mountFooter('bogLands').get('[data-testid=docs-next]').attributes('href')).toBe('/docs/tech-tree');
     wrapper!.unmount();
     expect(mountFooter('founding').get('[data-testid=docs-prev]').attributes('href')).toBe('/docs/walls');
   });

@@ -18,7 +18,7 @@ import enDocs from '../i18n/locales/en/docs.json';
 async function mountPage() {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/', component: { template: '<div />' } }, { path: '/docs', component: { template: '<div />' } }, { path: '/tech-tree', component: { template: '<div />' } }],
+    routes: [{ path: '/', component: { template: '<div />' } }, { path: '/docs', component: { template: '<div />' } }, { path: '/docs/tech-tree', component: { template: '<div />' } }],
   });
   const wrapper = mount(ShrinesView, {
     attachTo: document.body,
@@ -69,8 +69,8 @@ describe('ShrinesView', () => {
     expect(wrapper.get('#rules').text()).toContain('Longhouse of level 25');
     expect(wrapper.get('#rules').text()).toContain('level 5');
     const hrefs = wrapper.findAll('[data-testid=gods-table] a.link').map((a) => a.attributes('href'));
-    expect(hrefs).toContain('/tech-tree#shrineofthor');
-    expect(hrefs).toContain('/tech-tree#odinstatue');
+    expect(hrefs).toContain('/docs/tech-tree#shrineofthor');
+    expect(hrefs).toContain('/docs/tech-tree#odinstatue');
     wrapper.unmount();
   });
 

@@ -35,7 +35,7 @@ onBeforeUnmount(() => {
 });
 
 const name = computed(() => props.label ?? buildingName(props.type));
-const target = computed(() => ({ path: '/tech-tree', hash: `#${props.type}` }));
+const target = computed(() => ({ path: '/docs/tech-tree', hash: `#${props.type}` }));
 
 const maxLevel = computed(
   () => maxLevelFor(props.type as BuildingKind) || catalogue.byType[props.type]?.at(-1)?.level || 1,

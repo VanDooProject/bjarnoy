@@ -700,7 +700,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
   // mount outside the HUD drawer hides itself at phone width.
   test('no page shows the language switcher outside the drawer', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/tech-tree']) {
+    for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/docs/tech-tree']) {
       await page.goto(path);
       // Mounted (so this can't pass just because the page hadn't rendered
       // yet), but not shown.

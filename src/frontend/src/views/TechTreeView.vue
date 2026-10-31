@@ -27,7 +27,7 @@ const { t, te, n, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global'
 const route = useRoute();
 
 /**
- * Brings the section named by the URL hash (`/tech-tree#reindeerherder`, the
+ * Brings the section named by the URL hash (`/docs/tech-tree#reindeerherder`, the
  * links BuildingLink.vue makes) into view. The router does no scrolling of its
  * own and the sections only exist once the catalogue has rendered, so this
  * waits for them; without it a link into the page would open at the top.

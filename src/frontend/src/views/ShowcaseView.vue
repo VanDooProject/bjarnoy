@@ -250,7 +250,7 @@ const ENGINEERING: EngineeringCard[] = [
           </div>
         </div>
         <div class="doc-links">
-          <RouterLink to="/tech-tree" class="doc-link">{{ t('showcase.engineering.techTreeLink') }}</RouterLink>
+          <RouterLink to="/docs/tech-tree" class="doc-link">{{ t('showcase.engineering.techTreeLink') }}</RouterLink>
           <RouterLink to="/docs/tiles" class="doc-link">{{ t('showcase.engineering.tileDocsLink') }}</RouterLink>
         </div>
       </section>

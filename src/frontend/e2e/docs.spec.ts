@@ -32,7 +32,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   test("tech tree page scrolls to reveal content below the fold", async ({
     page,
   }) => {
-    await page.goto("/tech-tree");
+    await page.goto("/docs/tech-tree");
     // Catalogue load is async even against the bundled fallback — wait for
     // a real building section before measuring the page.
     const lastSection = page.locator("section.building").last();
@@ -64,7 +64,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   test("tech tree thumbnail keeps the tile floor still across a building's levels", async ({
     page,
   }) => {
-    await page.goto("/tech-tree");
+    await page.goto("/docs/tech-tree");
     const sawmill = page.locator("section.building", {
       has: page.locator("h3", { hasText: /^Sawmill/ }),
     });
@@ -462,7 +462,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   // Every docs page sits on the shared DocsPageLayout: the same top bar, a breadcrumb (the hub itself has none),
   // a title, the lede, header art and the related/previous/next footer.
   const DOCS_PATHS = [
-    "/tech-tree",
+    "/docs/tech-tree",
     "/docs/tiles",
     "/docs/wasted-lands",
     "/docs/wildlife-camps",
@@ -746,7 +746,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(tip).toHaveCount(0);
 
     await link.click();
-    await expect(page).toHaveURL(/\/tech-tree#shrineofthor$/);
+    await expect(page).toHaveURL(/\/docs\/tech-tree#shrineofthor$/);
     await expect(page.locator("#shrineofthor")).toBeInViewport();
   });
 
@@ -797,7 +797,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page
         .locator('[data-producer="longhouse"] th')
         .first()
-        .locator('a[href="/tech-tree#longhouse"]'),
+        .locator('a[href="/docs/tech-tree#longhouse"]'),
     ).toHaveCount(1);
     // The header shows the herder's still frame (the hub card plays the clip).
     await expect(

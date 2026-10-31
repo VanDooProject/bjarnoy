@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// A link into the tech tree (`/tech-tree#reindeerherder`, from BuildingLink) must land on that building's
+// A link into the tech tree (`/docs/tech-tree#reindeerherder`, from BuildingLink) must land on that building's
 // section: the router does not scroll, and the sections only exist once the catalogue has rendered.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -24,8 +24,8 @@ describe('TechTreeView hash links', () => {
     Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
       scrolled.push(this.id);
     });
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/tech-tree', component: TechTreeView }] });
-    await router.push('/tech-tree#reindeerherder');
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/docs/tech-tree', component: TechTreeView }] });
+    await router.push('/docs/tech-tree#reindeerherder');
     const wrapper = mount(TechTreeView, {
       attachTo: document.body,
       global: {
@@ -42,8 +42,8 @@ describe('TechTreeView hash links', () => {
   it('does not scroll when the URL has no hash', async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/tech-tree', component: TechTreeView }] });
-    await router.push('/tech-tree');
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/docs/tech-tree', component: TechTreeView }] });
+    await router.push('/docs/tech-tree');
     const wrapper = mount(TechTreeView, {
       attachTo: document.body,
       global: {

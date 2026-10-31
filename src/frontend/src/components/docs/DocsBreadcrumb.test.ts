@@ -52,7 +52,7 @@ describe('DocsBreadcrumb', () => {
     expect(pageTrigger().attributes('aria-expanded')).toBe('true');
     const items = wrapper!.findAll('[data-menu=page] [role=menuitem]');
     expect(items.map((i) => i.text())).toEqual(['Tech tree', 'Resource production', 'Shrines', 'Walls']);
-    expect(items.map((i) => i.attributes('href'))).toEqual(['/tech-tree', '/docs/production', '/docs/shrines', '/docs/walls']);
+    expect(items.map((i) => i.attributes('href'))).toEqual(['/docs/tech-tree', '/docs/production', '/docs/shrines', '/docs/walls']);
     expect(items.filter((i) => i.classes('current')).map((i) => i.text())).toEqual(['Shrines']);
     expect(items[2]!.attributes('aria-current')).toBe('page');
   });
