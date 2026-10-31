@@ -20,12 +20,11 @@ import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
-  hasCatapultSelected,
   isHuntUnit,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
-import { buildingLabel } from '../../lib/units/battleReports';
+import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
 import HuntTargetSummary from './HuntTargetSummary.vue';
 import { useArmyRows } from '../../composables/useArmyRows';
 
@@ -117,7 +116,7 @@ const hasDestination = computed(() =>
       : routeLength.value > 0,
 );
 const canConfirm = computed(
-  () => hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
+  () => hasUnitsSelected.value && hasDestination.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
 );
 
 function beginDispatch() {
@@ -166,31 +165,7 @@ function clearTarget() {
 // ownership check (confirmed from SettlementEndpoints.cs — see the PR notes),
 // so the enemy's real layout can be fetched and offered as specific hexes to
 // pick from, rather than falling back to a mere building-type preference.
-const showBuildingPicker = computed(
-  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasCatapultSelected(draft.value.unitCounts),
-);
-const targetBuildingRows = computed(() => {
-  if (!draft.value?.targetSettlementId) return [];
-  if (world.dispatchTargetBuildingsFor !== draft.value.targetSettlementId) return [];
-  return (world.dispatchTargetBuildings ?? []).map((b) => ({
-    q: b.q,
-    r: b.r,
-    label: buildingLabel(b.type),
-    level: b.level,
-  }));
-});
-const selectedBuildingLabel = computed(() => {
-  const coord = draft.value?.targetBuildingCoord;
-  if (!coord) return null;
-  const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
-  return row ? `${row.label} (${t('hud.armyPanel.buildingLevelCoord', { level: row.level, q: coord.q, r: coord.r })})` : `(${coord.q}, ${coord.r})`;
-});
-function pickBuildingTarget(q: number, r: number) {
-  world.setDispatchTargetBuilding({ q, r });
-}
-function clearBuildingTarget() {
-  world.setDispatchTargetBuilding(null);
-}
+const buildingPicker = useDispatchTargetBuilding(computed(() => !!selectedTarget.value));
 
 async function confirm() {
   await world.confirmDispatch();
@@ -454,32 +429,32 @@ async function confirmFieldOrderClick() {
             {{ t('hud.armyPanel.supportNote') }}
           </p>
 
-          <div v-if="showBuildingPicker" class="building-picker">
+          <div v-if="buildingPicker.showPicker.value" class="building-picker">
             <p class="status-subtext building-picker-hint">
-              {{ t('hud.armyPanel.buildingPickerHint') }}
+              {{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetBuildingPickerHint' : 'hud.armyPanel.buildingPickerHint') }}
             </p>
-            <div v-if="selectedBuildingLabel" class="target-selected">
-              <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedBuildingLabel }}</strong></span>
-              <button type="button" class="secondary change-target" @click="clearBuildingTarget">{{ t('hud.armyPanel.clear') }}</button>
+            <div v-if="buildingPicker.selectedLabel.value" class="target-selected">
+              <span>{{ t('hud.armyPanel.target') }} <strong>{{ buildingPicker.selectedLabel.value }}</strong></span>
+              <button type="button" class="secondary change-target" @click="buildingPicker.clear">{{ t('hud.armyPanel.clear') }}</button>
             </div>
             <template v-else>
               <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
               <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">
-                {{ t('hud.armyPanel.layoutLoadError') }}
+                {{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetLayoutLoadError' : 'hud.armyPanel.layoutLoadError') }}
               </p>
-              <div v-else-if="targetBuildingRows.length" class="target-list building-list">
+              <div v-else-if="buildingPicker.rows.value.length" class="target-list building-list">
                 <button
-                  v-for="b in targetBuildingRows"
+                  v-for="b in buildingPicker.rows.value"
                   :key="`${b.q},${b.r}`"
                   type="button"
                   class="target-row"
-                  @click="pickBuildingTarget(b.q, b.r)"
+                  @click="buildingPicker.pick(b.q, b.r)"
                 >
                   <span class="target-name">{{ b.label }}</span>
                   <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
                 </button>
               </div>
-              <p v-else class="status-subtext">{{ t('hud.armyPanel.noPreference') }}</p>
+              <p v-else class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetNoShoreBuilding' : 'hud.armyPanel.noPreference') }}</p>
             </template>
           </div>
         </template>

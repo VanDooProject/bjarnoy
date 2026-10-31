@@ -5,6 +5,7 @@
 import type { AxialCoord } from '../hex/coords';
 import type { DispatchArmyRequest, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
 import { i18n } from '../../i18n';
+import { isShoreBuildingHex, type TerrainLookup } from '../map/shoreline';
 
 /**
  * Converts an ordered list of clicked hexes into the shape `DispatchArmyRequest`
@@ -58,7 +59,8 @@ export function buildMoveDispatchRequest(
  * catapults hit on arrival — see `DispatchArmyRequest.targetBuildingCoord`'s
  * own comment. Omit (or pass `null`/`undefined`) for "no preference", the
  * same as never having picked one; `SiegeResolver` then falls back to a
- * seeded random pick server-side. Not validated here against the target's
+ * seeded random pick server-side. A fleet must always name one (a building on
+ * the target's shore; the server rejects the dispatch without it). Not validated here against the target's
  * actual layout — that can change before the army arrives — only forwarded
  * as-is.
  */
@@ -233,6 +235,29 @@ export function isUnitSelectableFor(
  */
 export function hasCatapultSelected(unitCounts: Record<string, number>): boolean {
   return (unitCounts.catapult ?? 0) > 0;
+}
+
+/**
+ * Whether the dispatch needs the player to name a building of the target settlement. A fleet attack is always sent at
+ * one building on the target's shore (`'required'`); a land attack may name a building for its catapults to hit
+ * (`'optional'`, only worth offering when catapults are along); everything else names none.
+ */
+export type TargetBuildingPickerMode = 'none' | 'optional' | 'required';
+
+export function targetBuildingPickerMode(
+  mission: string | undefined,
+  hasTargetSettlement: boolean,
+  unitCounts: Record<string, number>,
+  selection: FleetSelectionKind,
+): TargetBuildingPickerMode {
+  if (mission !== 'attack' || !hasTargetSettlement) return 'none';
+  if (selection === 'fleet') return 'required';
+  return hasCatapultSelected(unitCounts) ? 'optional' : 'none';
+}
+
+/** The buildings a fleet can be sent at: only those on the target's shore (see `isShoreBuildingHex`). */
+export function shoreBuildings<T extends { q: number; r: number }>(buildings: T[], terrain: TerrainLookup): T[] {
+  return buildings.filter((b) => isShoreBuildingHex({ q: b.q, r: b.r }, terrain));
 }
 
 /**
