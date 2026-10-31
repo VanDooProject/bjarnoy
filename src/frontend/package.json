@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "chart.js": "^4.5.1",
+    "hyphen": "1.14.1",
     "pinia": "^4.0.3",
     "pixi.js": "^8.20.0",
     "vue": "^3.5.41",
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@intlify/eslint-plugin-vue-i18n": "^4.5.1",
     "@playwright/test": "^1.62.1",
+    "@types/hyphen": "^1.14.0",
     "@types/node": "^24.13.3",
     "@typescript-eslint/parser": "^8.69.0",
     "@vitejs/plugin-vue": "^6.0.8",
