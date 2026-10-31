@@ -812,7 +812,7 @@
         "riverEndTitle": "Sealed by a river",
         "riverEnd": "A wall run up to a wide river is sealed there, just like at a mountain, with or without a bridge on the river.",
         "halfOpenTitle": "Half open",
-        "halfOpen": "A wall that simply stops on land: any army crosses its last hex, but the step costs 3 more than the ground under it. Grass or sand makes no difference.",
+        "halfOpen": "A wall that simply stops on land: any army crosses its last hex, but the step costs 3 more than the ground under it.",
         "streamTitle": "Stream",
         "stream": "No wall can be built in a stream, and any army can wade it, which costs even more than the wall's end. So a stream is always a gap in the wall, and the end next to it stays half open.",
         "seaEndTitle": "Sea end",
