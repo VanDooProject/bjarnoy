@@ -52,12 +52,13 @@ import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost } from '../lib/map/buildingEconomy';
 import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
-import { ringRoomFor, ringShapes } from '../lib/map/ringLayout';
-import { motionEnabled } from '../lib/motion';
+import { ringShapes } from '../lib/map/ringLayout';
+import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
-import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour, trainingSite } from '../lib/units/armyDispatch';
+import { isHostileWallTile, siegeAttackOptions } from '../lib/map/siegeRules';
+import { breachesWalls, classifyUnitSelection, totalSpeed, totalUpkeepPerHour, trainingSite } from '../lib/units/armyDispatch';
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -521,7 +522,7 @@ const modalOwnerLabel = computed(() => {
 // categories -> a category's buildings), so this only tracks *where* it is
 // open — the concentric ringStack/radius/angle-stagger machinery the
 // previous ring needed is gone with it.
-const ringScreen = ref<{ x: number; y: number } | null>(null);
+const ringScreen = ref<RingPlacement | null>(null);
 
 // The ring must stay clear of the HUD panels, which means knowing how big the
 // stage actually is. A ResizeObserver on the stage element rather than
@@ -726,6 +727,30 @@ function huntActions(tile: Tile): RingAction[] {
   ];
 }
 
+// Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is
+// neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. It opens an Attack on the wall owner's
+// settlement with the wall hex as the preferred target building. Walls fall to battering rams only, so one must be at home; without
+// one the bubble stays but is disabled with a hint, like the other army actions.
+function siegeActions(tile: Tile): RingAction[] {
+  if (
+    DEMO_MODE
+    || !tile.ownerId
+    || !isHostileWallTile(tile, world.model.rivalWallOwner(tile.q, tile.r), player.id, guild.friendlyUserIds)
+  ) {
+    return [];
+  }
+  const hasRam = world.hud.garrison.some((g) => g.count > 0 && breachesWalls(g.unit, unitCatalogue.byType));
+  return [
+    {
+      id: 'siege',
+      label: t('hud.ringMenu.actions.siege'),
+      color: 'var(--rival)',
+      disabled: !hasRam,
+      hint: hasRam ? undefined : t('hud.ringMenu.actions.noRamAtHome'),
+    },
+  ];
+}
+
 // The root Upgrade bubble. It states up front whether the upgrade is possible
 // and, on hover, shows the same card a building does — for the NEXT level:
 // its cost, time, output, slots and what (if anything) still blocks it.
@@ -826,13 +851,13 @@ const rootActions = computed<RingAction[]>(() => {
   // World zoom only offers the army action: BuildingModal/TrainingModal and
   // the build fan only exist in the settlement template, so Build/Upgrade/
   // Info bubbles here would open nothing.
-  if (mode.value === 'world') return [...huntActions(tile), sendArmyAction(tile)];
+  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [{ id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) }, sendArmyAction(tile)];
+    return [{ id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) }, ...siegeActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
@@ -885,6 +910,7 @@ const rootActions = computed<RingAction[]>(() => {
     if (
       tile.buildingType === 'longhouse'
       || tile.buildingType === 'archeryrange'
+      || tile.buildingType === 'siegeworkshop'
       || tile.buildingType === 'dockyard'
       || tile.buildingType === 'barracks'
       || tile.buildingType === 'cartworkshop'
@@ -986,25 +1012,13 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   actionError.value = null;
 }
 
-/** How long the map slides to make room for a ring (instant under reduced motion). */
-const RING_ROOM_PAN_MS = 220;
-/**
- * The ring always opens as a circle round its tile. Near an edge (or the phone's docked card)
- * where no circle fits - with every category it can drill into open in turn - the map slides
- * the tile to the nearest spot where one does, and the ring opens there, rather than the ring
- * deforming. Returns where the ring opens.
- */
-function roomForRing(screen: { x: number; y: number }): { x: number; y: number } {
-  const renderer = canvasRef.value?.renderer;
-  if (!renderer) return screen;
+/** Pans the map so the tapped tile's ring opens as a circle (lib/map/ringPlacement.ts); returns where it opens. */
+function roomForRing(screen: { x: number; y: number }): RingPlacement {
   const shapes = ringShapes(
     rootActions.value.length,
     ringCategories.value.map((c) => c.buildings.length),
   );
-  const target = ringRoomFor(screen.x, screen.y, (x) => ringBoundsAt(x), shapes);
-  if (!target || (target.x === screen.x && target.y === screen.y)) return screen;
-  const moved = renderer.panScreenBy(target.x - screen.x, target.y - screen.y, motionEnabled() ? RING_ROOM_PAN_MS : 0);
-  return moved ? target : screen;
+  return placeRing(canvasRef.value?.renderer, screen, ringBoundsAt, shapes);
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
@@ -1086,6 +1100,14 @@ async function onRingSelect(id: string) {
       return;
     case 'hunt':
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'hunt' });
+      closeRing();
+      return;
+    case 'siege':
+      // The wall's own settlement is the Attack's target (the walls read stamps it on the tile) and the wall hex its preferred building.
+      if (selectedCoord.value && tile) {
+        const options = siegeAttackOptions(tile, selectedCoord.value);
+        if (options) world.startDispatchAt(selectedCoord.value, options);
+      }
       closeRing();
       return;
     case 'attack':
@@ -1268,6 +1290,7 @@ async function upgrade() {
           v-if="selectedTile && ringScreen"
           :x="ringScreen.x"
           :y="ringScreen.y"
+          :scale="ringScreen.scale"
           :actions="rootActions"
           :categories="ringCategories"
           :terrain-label="ringTerrainLabel"
@@ -1316,6 +1339,7 @@ async function upgrade() {
           v-if="selectedTile && ringScreen"
           :x="ringScreen.x"
           :y="ringScreen.y"
+          :scale="ringScreen.scale"
           :actions="rootActions"
           :categories="ringCategories"
           :terrain-label="ringTerrainLabel"

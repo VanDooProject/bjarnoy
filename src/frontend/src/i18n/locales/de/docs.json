@@ -177,6 +177,7 @@
     "palisade": "Palisade",
     "palisadegate": "Palisaden-Tor",
     "bridge": "Brücke",
+    "siegeworkshop": "Belagerungswerkstatt",
     "reindeerherder": "Rentierhirte"
   },
   "buildingLink": {
@@ -217,7 +218,7 @@
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
-      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Gewinnt ein Angreifer eine Belagerung, die ein Mauerfeld zum Ziel hat, nimmt sie ihm eine Stufe, egal wie viele Katapulte übrig sind. Feuer wird das später auch tun.",
+      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Gewinnt ein Angreifer eine Belagerung, die ein Mauerfeld zum Ziel hat, nimmt sie ihm eine Stufe, egal wie viele Rammböcke übrig sind (nur Rammböcke beschädigen eine Mauer). Feuer wird das später auch tun.",
       "palisadegate": "Ein Mauerfeld mit Tor. Es lässt sich nur dort setzen, wo die Mauer gerade zwischen zwei gegenüberliegenden Mauerfeldern verläuft. Die Armeen des Besitzers und seiner Freunde (dieselbe Gilde oder eine Gilde, die mit ihr im Frieden ist) passieren es so schnell wie den Boden darunter. Jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Freischaltung, Voraussetzung, Stufen und Kosten sind dieselben wie bei der Palisade, beide teilen sich eine Karte im Techbaum.",
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
@@ -241,9 +242,10 @@
       "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
       "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedlertrupps aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
-      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
+      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See), hinter einer Ziegelei der Stufe 3: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
       "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
-      "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder."
+      "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder.",
+      "siegeworkshop": "Bildet auf Gras oder Sand Rammböcke aus, anstelle des Langhauses. Wird ab Langhaus 18 hinter einem Schießplatz der Stufe 3 freigeschaltet. Rammböcke sind die einzige Waffe, die Mauern bricht (Türme treffen sie auch); Katapulte, am Schießplatz ausgebildet, brennen Türme und alle anderen Gebäude nieder."
     },
     "table": {
       "level": "Stufe",
@@ -371,6 +373,11 @@
     "defences": {
       "heading": "Utgards Wehranlagen",
       "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinunter zum Wasser.",
+      "example": {
+        "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, ein Mauerring mit einem Tor darum und Jötun-Wachtürme außerhalb des Rings.",
+        "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+        "caption": "Utgard steht hinter zwei Mauerringen. Der innere Ring ist mit Stufe 2 stärker als der äußere mit Stufe 1, und Wachtürme sichern das Land davor."
+      },
       "level": "Stufe",
       "watchtower": {
         "heading": "Jötun-Wachturm",
@@ -393,7 +400,7 @@
     "endgame": {
       "heading": "So läuft das Endspiel",
       "status": "Geplant: Diese Regeln werden Schritt für Schritt gebaut und sind noch nicht alle im Spiel.",
-      "body": "Wenn der Endboss erwacht, tauchen die verwüsteten Inseln auf. Gilden zermürben gemeinsam die Jötnar, besetzen deren Türme mit Armeen, brechen Utgards Mauern mit Belagerungsgerät und stürmen die Festung. Die Armee, die Utgard leert, beendet das Zeitalter.",
+      "body": "Wenn der Endboss erwacht, tauchen die verwüsteten Inseln auf. Gilden zermürben gemeinsam die Jötnar, besetzen deren Türme mit Armeen, brechen Utgards Mauern mit Rammböcken und stürmen die Festung. Die Armee, die Utgard leert, beendet das Zeitalter.",
       "rules": {
         "fullBattles": "Jeder Kampf im Endspiel ist eine volle Schlacht: Der Verlierer verliert alles, der Sieger einen Anteil – je knapper der Kampf, desto größer. Eine Raubzug-Grenze gibt es hier nicht.",
         "towers": "Jede verwüstete Insel mit Utgard trägt drei bis sechs Jötun-Wachtürme, die über die Insel verteilt stehen, und dazu Utgard selbst. Jeder dieser Orte hat eine Jötunn-Besatzung.",
@@ -403,9 +410,9 @@
         "loot": "Eine besetzende Armee erhält jede Stunde Beute (300 an einem Wachturm, 1.000 an Utgard: 40 % Eisen, 30 % Nahrung, 30 % Stein), bis ihre Tragkraft voll ist. Was sie nicht tragen kann, geht verloren.",
         "aggression": "Orte mit Jötnar überfallen Armeen, die in ihre Wachreichweite kommen, und brennen Spielertürme dort nieder, sofern keine Armee sie verteidigt. Nach einem Kampf ist ein Ort 1 Stunde lang ruhig.",
         "walls": "Utgard steht, wenn die Insel genug Platz hat, hinter einem oder zwei Mauerringen: Der innere hat Stufe 2, der äußere Stufe 1. Sie halten Landarmeen auf, und ihre Tore öffnen sich nie für Spieler.",
-        "breaching": "Mauern brichst du mit der Belagerung: Bring Katapulte oder Rammböcke mit, zieh neben ein Mauerfeld und schlag zu. Auf Stufe 0 ist die Mauer durchbrochen, und Armeen kommen hindurch.",
+        "breaching": "Mauern brichst du mit einem Angriff mit Rammböcken, der die Mauer als Ziel nennt: Nur Rammböcke beschädigen eine Mauer, eine Stufe pro gewonnenem Schlag. Auf Stufe 0 ist die Mauer durchbrochen, und Armeen kommen hindurch. Utgards Mauern gehören zu keiner Siedlung, die man angreifen könnte, daher werden sie direkt gestürmt.",
         "wallPace": "Eine Utgardmauer verliert höchstens eine Stufe pro Tag und wird um eine Stufe pro Tag repariert, solange keine Armee auf oder neben ihr steht. Für den inneren Ring brauchst du zwei Schläge im Abstand eines Tages, und dazwischen muss eine Armee neben ihm bleiben.",
-        "ram": "Der Rammbock ist ein zweites Belagerungsgerät: Er hat dieselbe Belagerungskraft wie das Katapult, ist aber viel zäher und dafür langsamer.",
+        "ram": "Der Rammbock ist der Mauerbrecher: Er hat dieselbe Belagerungskraft wie das Katapult, ist aber viel zäher und langsamer, und wird in der Belagerungswerkstatt ausgebildet. Er beschädigt Mauern und Türme; Katapulte brennen Türme und alle anderen Gebäude nieder, können aber keine Mauer anrühren.",
         "gateRule": "Utgard lässt sich nur stürmen, solange jeder Wachturm auf seiner Insel eingenommen ist. Halte Armeen auf den Türmen, sonst wachsen die Besatzungen nach, und Utgards Tor bleibt zu.",
         "winning": "Die Armee, die Utgard ohne Jötnar zurücklässt, gewinnt das Zeitalter. Der Spieler, der es niedergeworfen hat, wird als Eroberer verzeichnet, und jedes Mitglied seiner Gilde erhält den Gildensieg.",
         "ageEnd": "Je nach Welt endet damit das Zeitalter und die Welt wird schreibgeschützt, oder das Spiel läuft weiter und der Sieger wird bekannt gegeben."
@@ -778,8 +785,7 @@
         "fork": "Mauern verzweigen sich nie: Kein Feld darf drei oder mehr Mauernachbarn haben.",
         "gate": "Ein Tor passt nur auf eine Gerade, die auf zwei gegenüberliegenden Seiten ein Mauerfeld hat. Das muss auch nach jedem späteren Bauen so bleiben.",
         "sea": "Ein Seeende berührt genau ein Mauerfeld an Land und kann nie ein Tor sein."
-      },
-      "example": "Ein Beispiel: eine Mauer, die an Land beginnt, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und im Meer ausläuft. Teil und Drehung jedes Feldes hat das Spiel allein aus der Lage der Felder ermittelt."
+      }
     },
     "example": {
       "alt": "Eine Beispielmauer aus {count} Feldern auf Gras, die im Meer endet."
@@ -837,15 +843,15 @@
     },
     "notBuilt": {
       "heading": "Noch nicht gebaut",
-      "body": "Feuer, das einer Mauer eine Stufe nimmt: Eine Mauer verliert ihre Stufen nacheinander, bis sie verschwunden ist. Noch brennt keine Mauer. Belagerungen tun das schon, siehe den Abschnitt zur Belagerung weiter oben."
+      "body": "Feuer, das einer Mauer eine Stufe nimmt: Eine Mauer verliert ihre Stufen nacheinander, bis sie verschwunden ist. Noch brennt keine Mauer. Rammböcke tun das schon, siehe den Abschnitt zur Belagerung weiter oben."
     },
     "sieges": {
       "heading": "Belagerung",
-      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen nur Katapulte, und nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört.",
+      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen nur Rammböcke, und nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört. Katapulte können keine Mauer beschädigen; sie brennen Türme und alle anderen Gebäude nieder.",
       "rules": {
-        "who": "Schick einen Angriff (oder einen Raubzug) mit Katapulten gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Gewinnt deine Armee die Schlacht, feuern die überlebenden Katapulte auf dieses Feld. Ein einziges überlebendes Katapult genügt. Verliert deine Armee die Schlacht, feuert nichts.",
-        "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, auch ein Mauerfeld.",
-        "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Katapulte überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
+        "who": "Schick einen Angriff (oder einen Raubzug) mit Rammböcken gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Bei der Mauer eines Rivalen erledigt das die Aktion „Belagern“ im Ringmenü für dich (sie braucht einen Rammbock zu Hause). Gewinnt deine Armee die Schlacht, schlagen die überlebenden Rammböcke auf dieses Feld. Ein einziger überlebender Rammbock genügt. Verliert deine Armee die Schlacht, schlägt nichts zu. Rammböcke werden in der Belagerungswerkstatt ausgebildet.",
+        "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, das deine überlebenden Belagerungswaffen beschädigen können. Eine Mauer, die nur Katapulten genannt wird, nimmt keinen Schaden.",
+        "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Rammböcke überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
         "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
         "rebuild": "Ein Mauerfeld, das noch steht, kann der Besitzer wie jedes Gebäude wieder um eine Stufe ausbauen. Auf einem zerstörten Feld baut er neu und beachtet dabei die üblichen Bauregeln. Eine eigene Reparatur gibt es nicht."
       }
@@ -1003,6 +1009,7 @@
     "title": "Bewegung an Land",
     "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
     "toc": {
+      "example": "Beispielroute",
       "cost": "Geländekosten",
       "pace": "Tempo",
       "food": "Nahrung",
@@ -1010,9 +1017,27 @@
       "sight": "Sicht",
       "bridges": "Brücken"
     },
+    "example": {
+      "heading": "Ein Marsch über die Insel",
+      "intro": "Eine Armee marschiert von ihrer Siedlung auf die andere Seite der Mauer. Die Route hat das Spiel selbst berechnet: Sie führt um das Moor und den Bergrücken herum, durch den Bach, über die Brücke ans andere Ufer des breiten Flusses und durch das Tor.",
+      "alt": "Eine Beispielinsel mit dem Weg einer Armee von ihrer Siedlung auf die andere Seite einer Mauer.",
+      "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "total": "Eine {unit}-Armee braucht für die ganze Route {time}.",
+      "names": {
+        "settlement": "Siedlung",
+        "bridge": "Brücke",
+        "wideRiver": "Breiter Fluss",
+        "stream": "Bach",
+        "wall": "Palisade",
+        "gate": "Palisaden-Tor",
+        "coast": "Küstenwasser",
+        "sea": "Offenes Wasser"
+      }
+    },
     "cost": {
       "heading": "Was ein Feld kostet",
       "body": "Jedes Feld, das eine Armee betritt, hat Kosten, die vom Gelände abhängen. Die Armee braucht für das Feld die Kosten geteilt durch ihr Tempo in Stunden. Ein Feld mit Kosten 2 dauert also doppelt so lang wie Gras.",
+      "summary": "Gras ist das schnellste Gelände. Sand und Wald bremsen eine Armee etwas, Moor deutlich. Einen Bach kannst du durchwaten, er kostet aber weit mehr als jedes Gelände. Ein breiter Fluss öffnet sich nur über eine Brücke, und Berge, Seen und das Meer kannst du gar nicht betreten.",
       "columns": {
         "ground": "Gelände",
         "cost": "Kosten"
@@ -1082,7 +1107,7 @@
         "where": "Eine Brücke passt auf ein gerades oder gebogenes Feld eines breiten Flusses, egal welches Gelände darunter liegt. Auf einer Quelle, einer Gabelung oder einer Mündung kannst du keine bauen, auf einem Bach auch nicht (den durchwaten Armeen ohnehin), und auf einer öden Insel ebenso wenig.",
         "site": "Eine Baustelle öffnet den Fluss nicht. Erst eine fertige Brücke ab Stufe 1 zählt. Mit jeder Stufe geht die Überquerung schneller, bis die Armeen bei der Königsbrücke so schnell hinüberkommen wie über das Gelände selbst.",
         "guarded": "Die Wehrbrücke verhält sich wie ein Mauertor: Sie lässt die Armeen ihres Besitzers und seiner Freunde durch und hält alle anderen auf.",
-        "siege": "Katapulte können eine Brücke niederbrennen, und zwar eine Stufe pro gewonnener Belagerung, egal wie viele Katapulte überleben. Eine Wehrbrücke fällt dabei zuerst zur Königsbrücke zurück und steht danach allen offen, auch den Angreifern. Ein Damm, der einmal niedergebrannt ist, ist weg, und der Fluss ist wieder dicht.",
+        "siege": "Katapulte (Rammböcke nicht) können eine Brücke niederbrennen, und zwar eine Stufe pro gewonnener Belagerung, egal wie viele Katapulte überleben. Eine Wehrbrücke fällt dabei zuerst zur Königsbrücke zurück und steht danach allen offen, auch den Angreifern. Ein Damm, der einmal niedergebrannt ist, ist weg, und der Fluss ist wieder dicht.",
         "walls": "Brücken ändern nichts an Mauern: Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, ob mit oder ohne Brücke. Mehr dazu unter {walls}.",
         "fleets": "Brücken betreffen nur Landarmeen. Schiffe bleiben unberührt."
       }

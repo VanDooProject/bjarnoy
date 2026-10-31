@@ -529,8 +529,8 @@ describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
   const byType = group(catalogueSnapshot.data as BuildingDefinitionResponse[]);
   const run = (works: number) =>
     simulatePacing(byType, params({
-      horizonDays: 40,
-      producerCounts: { lumberjack: 3, quarry: 3, farm: 3, bogoreworks: works },
+      horizonDays: 60,
+      producerCounts: { lumberjack: 3, quarry: 3, farm: 3, claybrickworks: 1, bogoreworks: works },
       startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
       settleType: 'cartworkshop',
       sessions: PROFILE_PRESETS.active,

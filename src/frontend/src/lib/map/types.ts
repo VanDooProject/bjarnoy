@@ -370,7 +370,8 @@ export interface Tile {
     | 'hammerschmiede'
     | 'palisade'
     | 'palisadegate'
-    | 'bridge';
+    | 'bridge'
+    | 'siegeworkshop';
   buildingLevel?: number;
   /**
    * A decoration on this open-lake hex, drawn because of a building nearby (`lakeProps.ts`): a fish weir or fishing boat

@@ -169,6 +169,7 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.Tower)]
     [InlineData(BuildingType.ArcheryRange)]
+    [InlineData(BuildingType.SiegeWorkshop)]
     [InlineData(BuildingType.Barracks)]
     public void The_tower_and_archery_range_are_gated_to_grass_or_sand(BuildingType type)
     {
@@ -230,6 +231,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Barracks, BuildingType.Tower, 3)]
     [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 5)]
     [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 5)]
+    [InlineData(BuildingType.SiegeWorkshop, BuildingType.ArcheryRange, 3)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 3)]
     [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 5)]

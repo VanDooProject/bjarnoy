@@ -459,7 +459,8 @@ export interface HexMapRendererOptions {
    * all there is to it. Without it, drag still pans (mouse; a touch drag along
    * the axis the host's `touch-action` leaves to the page scrolls the page
    * instead), pinch zooms, and a wheel with ctrl/meta held (a trackpad pinch,
-   * or ctrl+wheel) zooms while a plain wheel scrolls the page. The landing page's locked
+   * or ctrl+wheel) zooms while a plain wheel scrolls the page until the user presses on the map (it then zooms
+   * until the pointer leaves the canvas; see `wheelPassesToPage`). The landing page's locked
    * preview is a small island beside hero copy with no reason to block page
    * scroll; the Wasted Lands docs page's own locked island sits inline in a
    * scrolling article and needs the opposite of `SettlementCanvas.vue`'s
@@ -1395,6 +1396,22 @@ export function isWaypointTap(startCoordKey: string, lastCoordKey: string, moved
 }
 
 /**
+ * Whether a wheel event over the canvas goes to the page (scrolls it) instead of the map's zoom.
+ * Only `allowPageScroll` hosts ever pass: a locked camera cannot zoom, so its wheel always scrolls the
+ * page; otherwise a plain wheel scrolls the page until the user has pressed on the map (`engaged`,
+ * cleared again when the pointer leaves), while ctrl/meta + wheel (trackpad pinch) zooms at any time.
+ */
+export function wheelPassesToPage(o: {
+  allowPageScroll: boolean;
+  engaged: boolean;
+  modifier: boolean;
+  lockCamera: boolean;
+}): boolean {
+  if (!o.allowPageScroll) return false;
+  return o.lockCamera || !(o.engaged || o.modifier);
+}
+
+/**
  * `HexMapRenderer.waterMaskTerrain`'s lookup, as a pure function of the model
  * and mode so it can be tested without a renderer.
  *
@@ -2052,6 +2069,8 @@ export class HexMapRenderer {
   // settlement must keep working). See `zoomBy` and the pan branch of
   // `onPointerMove`.
   private lockCamera = false;
+  // allowPageScroll hosts: set by a pointerdown on the canvas, cleared when the pointer leaves it. While set, a plain wheel zooms (see wheelPassesToPage).
+  private wheelEngaged = false;
   /** See `renderedFrames`. */
   private frames = 0;
   // `confineCamera` option: user input stays enabled but is clamped to these
@@ -2686,6 +2705,7 @@ export class HexMapRenderer {
     // backdrop's own handler instead of this canvas-scoped listener — but
     // kept as a defensive guard rather than relying on that DOM layering.
     if (this.interactionLocked) return;
+    this.wheelEngaged = true;
     // A second finger landing while a pin drag is in progress is ignored
     // entirely, rather than cancelled over into a pinch: onWaypointMove has
     // already written the pin's position to the store per hex it crossed,
@@ -2993,6 +3013,7 @@ export class HexMapRenderer {
   }
 
   private onPointerLeave = () => {
+    this.wheelEngaged = false;
     this.setHoveredCoord(null);
   };
 
@@ -3149,8 +3170,15 @@ export class HexMapRenderer {
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
   private onWheel = (e: WheelEvent) => {
-    // A page-scroll host leaves a plain wheel to the page; ctrl/meta (a trackpad pinch, or ctrl+wheel) is the map's zoom.
-    if (this.options.allowPageScroll && !(e.ctrlKey || e.metaKey)) return;
+    if (
+      wheelPassesToPage({
+        allowPageScroll: !!this.options.allowPageScroll,
+        engaged: this.wheelEngaged,
+        modifier: e.ctrlKey || e.metaKey,
+        lockCamera: this.lockCamera,
+      })
+    )
+      return;
     e.preventDefault();
     if (this.interactionLocked) return;
     const screen = this.clientToCanvas(e.clientX, e.clientY);

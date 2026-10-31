@@ -31,6 +31,7 @@
     "palisade": "Palisade",
     "palisadegate": "Palisaden-Tor",
     "bridge": "Brücke",
+    "siegeworkshop": "Belagerungswerkstatt",
     "reindeerherder": "Rentierhirte"
   },
   "units": {
@@ -41,6 +42,7 @@
     "berserker": "Berserker",
     "provisioner": "Versorger",
     "catapult": "Katapult",
+    "ram": "Rammbock",
     "karve": "Karve",
     "longship": "Langschiff",
     "settlercrew": "Siedlertrupp"

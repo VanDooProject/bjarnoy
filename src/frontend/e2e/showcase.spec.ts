@@ -177,6 +177,55 @@ test.describe('showcase page', { tag: '@g2' }, () => {
     expect(await heroZoom(page)).toBe(zoomBefore);
   });
 
+  test('after a click on the hero map the plain wheel zooms it; leaving the map hands the wheel back to the page', async ({
+    page,
+  }) => {
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    const view = new ScrollableView(page, '.showcase');
+    const frame = page.locator('#hero .map-frame');
+    await frame.scrollIntoViewIfNeeded();
+    const box = await frame.boundingBox();
+    if (!box) throw new Error('hero map frame has no box');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+
+    await page.mouse.move(x, y);
+    await page.mouse.click(x, y);
+    await settle();
+    const scrollBefore = await view.scrollTop();
+    const zoomBefore = await heroZoom(page);
+    await page.mouse.wheel(0, -400);
+    await expect.poll(() => heroZoom(page)).toBeGreaterThan(zoomBefore);
+    await settle();
+    expect(await view.scrollTop()).toBe(scrollBefore);
+
+    // Off the map and back: the pointer left, so the wheel scrolls the page again.
+    await page.mouse.move(box.x - 20, box.y + 4);
+    await page.mouse.move(x, y);
+    const zoomAfter = await heroZoom(page);
+    await page.mouse.wheel(0, 400);
+    await expect.poll(() => view.scrollTop()).toBeGreaterThan(scrollBefore);
+    expect(await heroZoom(page)).toBe(zoomAfter);
+  });
+
+  test('ctrl+wheel zooms the hero map without a click', async ({ page }) => {
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    const view = new ScrollableView(page, '.showcase');
+    const zoomBefore = await heroZoom(page);
+    const scrollBefore = await view.scrollTop();
+    await page.locator('#hero .map-frame').hover();
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -400);
+    await page.keyboard.up('Control');
+    await expect.poll(() => heroZoom(page)).toBeGreaterThan(zoomBefore);
+    expect(await view.scrollTop()).toBe(scrollBefore);
+  });
+
   test('the village frame is always explorable: no opt-in button, the wheel and drag go to the map', async ({
     page,
   }) => {

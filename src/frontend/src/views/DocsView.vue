@@ -39,13 +39,17 @@ function frameOf(art: string) {
 // A building card plays its `buildings-anim` clip on the docs clock, which holds
 // still under reduced motion, Save-Data or "animations off" (useAnimationClock.ts).
 const now = useAnimationClock();
+/** The card art's box, in px: a static tile fits its height, an animated one its width. */
+const ART_BOX = 84;
+// The clip's canvas is taller than the building: it carries the room for the animated parts (a smoke plume) above it. Fitting
+// that whole canvas into the box would shrink the hex, so the canvas is sized by its width, the box width a static tile gets,
+// and the part that does not fit extends above the box.
 function animatedOf(art: string) {
   if (!art.startsWith('anim:')) return undefined;
   const [, family, level] = art.split(':');
   const layers = buildingLayers(family!, Number(level));
-  const canvas = layers.base?.sourceSize ?? layers.top?.sourceSize;
-  if (!layers.clip || !canvas) return undefined;
-  return { layers, style: { width: `min(100%, ${(84 * canvas.w) / canvas.h}px)` } };
+  if (!layers.clip || !(layers.base ?? layers.top)) return undefined;
+  return { layers, style: { width: `${ART_BOX}px`, flex: 'none', alignSelf: 'flex-end' } };
 }
 /** The still showcase frame of an `anim:` card, for as long as its clip is not there. */
 function stillOf(art: string) {
@@ -79,8 +83,8 @@ function stillOf(art: string) {
               :elapsed-ms="now"
               :style="animatedOf(page.art)!.style"
             />
-            <AtlasSprite v-else-if="page.art.startsWith('anim:') && stillOf(page.art)" :frame="stillOf(page.art)!" :style="fit(stillOf(page.art)!, 84)" />
-            <AtlasSprite v-else-if="frameOf(page.art)" :frame="frameOf(page.art)!" :style="fit(frameOf(page.art)!, 84)" />
+            <AtlasSprite v-else-if="page.art.startsWith('anim:') && stillOf(page.art)" :frame="stillOf(page.art)!" :style="fit(stillOf(page.art)!, ART_BOX)" />
+            <AtlasSprite v-else-if="frameOf(page.art)" :frame="frameOf(page.art)!" :style="fit(frameOf(page.art)!, ART_BOX)" />
           </span>
           <span class="text">
             <span class="title">{{ t(page.titleKey) }}</span>

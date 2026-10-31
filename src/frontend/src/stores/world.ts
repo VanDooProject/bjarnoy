@@ -1294,8 +1294,14 @@ export const useWorldStore = defineStore('world', {
     },
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
-      const summaries = await api.listSettlements(this.worldId, this.ownerId ?? undefined);
+      // Rival walls ride the same cadence: the settlement list is data-only, so this is the only way the client learns where another
+      // player's palisades stand (to draw them, offer Siege on them and route around them). A failed walls read keeps the last set.
+      const [summaries, walls] = await Promise.all([
+        api.listSettlements(this.worldId, this.ownerId ?? undefined),
+        api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
+      ]);
       this.registerSettlementSummaries(summaries);
+      if (walls) this.model.applyRivalWalls(walls);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1547,7 +1553,10 @@ export const useWorldStore = defineStore('world', {
      * to fill in. Units are still picked manually (no default selection);
      * this only sets the mission and destination the tap already implied.
      */
-    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {}) {
+    startDispatchAt(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+    ) {
       this.startDispatch();
       if (!this.dispatchDraft) return;
       if (opts.mission === 'hunt') {
@@ -1556,6 +1565,9 @@ export const useWorldStore = defineStore('world', {
       } else if (opts.mission && opts.targetSettlementId) {
         this.dispatchDraft.mission = opts.mission;
         this.setDispatchTarget(opts.targetSettlementId);
+        // The "Siege" ring action on a rival wall: an Attack on the wall's settlement that prefers the wall hex, the same
+        // draft state the target-building picker sets (setDispatchTarget cleared it, so it is set after).
+        if (opts.targetBuildingCoord) this.setDispatchTargetBuilding({ q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r });
       } else {
         this.addWaypoint(coord);
       }
