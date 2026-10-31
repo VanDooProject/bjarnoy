@@ -47,6 +47,7 @@ const TYPE_LABELS: Record<string, string> = {
   odinstatue: 'Odin Statue',
   reindeerherder: 'Reindeer herder',
   archeryrange: 'Archery range',
+  siegeworkshop: 'Siege workshop',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great storehouse',
   townsquare: 'Town square',
@@ -85,6 +86,7 @@ const SHORT_LABELS: Record<string, string> = {
   shrineofullr: 'Ullr',
   shrineofnjord: 'Njörd',
   archeryrange: 'Archery',
+  siegeworkshop: 'Siege',
 };
 
 export function shortLabel(type: string): string {
@@ -129,6 +131,7 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   hammerschmiede: 'production',
   tower: 'military',
   archeryrange: 'military',
+  siegeworkshop: 'military',
   barracks: 'military',
   smithy: 'military',
   palisade: 'military',

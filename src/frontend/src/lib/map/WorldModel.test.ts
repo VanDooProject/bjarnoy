@@ -14,6 +14,7 @@ import { placeLakeProps } from './lakeProps';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { BogTile, RiverTile } from './types';
+import { JOTNAR_OWNER_KEY } from './endgamePlacement';
 
 function foundLandedSettlement(model: WorldModel) {
   const at = model.findLandfall({ q: 0, r: 0 });
@@ -2163,6 +2164,61 @@ describe('WorldModel palisade and gate', () => {
   });
 });
 
+describe('WorldModel Utgard walls and Jötun watchtowers', () => {
+  const wall = (q: number, r: number, level: number, extra: { isGate?: boolean; piece?: 'straight180' | 'gate180' | 'end_coast' } = {}) => ({
+    coord: { q, r },
+    ring: 'inner' as const,
+    piece: extra.piece ?? ('straight180' as const),
+    dir: 'NW' as const,
+    isGate: extra.isGate ?? false,
+    level,
+  });
+
+  it('tags the hexes and reports a change only when something moved', () => {
+    const model = new WorldModel(1);
+    expect(model.setUtgardWalls([wall(5, 5, 2), wall(6, 5, 1)])).toBe(true);
+    expect(model.getTile(5, 5).utgardWall).toEqual({ ring: 'inner', piece: 'straight180', dir: 'NW', isGate: false, level: 2 });
+    expect(model.setUtgardWalls([wall(5, 5, 2)])).toBe(false);
+    // A breach lowers the level on the same hex.
+    expect(model.setUtgardWalls([wall(5, 5, 0)])).toBe(true);
+    expect(model.getTile(5, 5).utgardWall?.level).toBe(0);
+
+    expect(model.setJotunTowers([{ coord: { q: 9, r: 9 }, orientation: 'NE', level: 2 }])).toBe(true);
+    expect(model.getTile(9, 9).jotunTower).toEqual({ orientation: 'NE', level: 2 });
+    expect(model.setJotunTowers([{ coord: { q: 9, r: 9 }, orientation: 'NE', level: 2 }])).toBe(false);
+  });
+
+  it('hands the movement rules only standing walls, under the jötnar owner key, gates included', () => {
+    const model = new WorldModel(1);
+    model.setUtgardWalls([wall(5, 5, 2), wall(6, 5, 1, { isGate: true, piece: 'gate180' }), wall(7, 5, 0)]);
+
+    const standing = model.standingPalisadeWalls();
+
+    expect([...standing.keys()].sort()).toEqual(['5,5', '6,5']);
+    expect(standing.get('5,5')).toEqual({ gate: false, owner: JOTNAR_OWNER_KEY });
+    expect(standing.get('6,5')).toEqual({ gate: true, owner: JOTNAR_OWNER_KEY });
+  });
+
+  it('refuses to build on a wall (rubble included) or a watchtower hex, claimed or not', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
+    const free = hexesInRadius(at, model.borderRadius(settlement)).filter((c) => {
+      const tile = model.getTile(c.q, c.r);
+      return tile.ownerId === settlement.id && tile.terrain === 'grass' && !tile.buildingType && !model.getRiverTile(c.q, c.r);
+    });
+    const [onWall, onRubble, onTower, elsewhere] = free.slice(0, 4) as [AxialCoord, AxialCoord, AxialCoord, AxialCoord];
+    model.setUtgardWalls([wall(onWall.q, onWall.r, 2), wall(onRubble.q, onRubble.r, 0)]);
+    model.setJotunTowers([{ coord: onTower, orientation: 'SE', level: 2 }]);
+
+    expect(model.placeBuilding(settlement.id, onWall, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, onRubble, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, onTower, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, elsewhere, 'hut')).toBe(true);
+  });
+});
+
 describe('WorldModel bridge', () => {
   /** A settlement and one free owned grass hex to put a river on. */
   function bridgeSetting() {
@@ -2254,6 +2310,68 @@ describe('WorldModel bridge', () => {
     expect(model.razeBuilding(settlement.id, grass)).toBe(true);
 
     expect(model.standingBridges().size).toBe(0);
+  });
+});
+
+describe('WorldModel.applyRivalWalls', () => {
+  const rivalWall = (q: number, r: number, over: Partial<{ type: string; level: number; ownerUserId: string | null }> = {}) => ({
+    q, r, type: 'palisade', level: 2, settlementId: 'rival-1', ownerUserId: 'user-rival' as string | null, ...over,
+  });
+
+  it('puts the walls on their tiles like own walls, with the owner kept per hex', () => {
+    const model = new WorldModel(20260825);
+    model.applyRivalWalls([rivalWall(5, 5), rivalWall(5, 6, { type: 'palisadegate', level: 1 }), rivalWall(5, 7, { ownerUserId: null })]);
+
+    expect(model.getTile(5, 5)).toMatchObject({ buildingType: 'palisade', buildingLevel: 2, ownerId: 'rival-1' });
+    expect(model.getTile(5, 6)).toMatchObject({ buildingType: 'palisadegate', buildingLevel: 1 });
+    expect(model.rivalWallOwner(5, 5)).toBe('user-rival');
+    expect(model.rivalWallOwner(5, 7)).toBeNull();
+    expect(model.rivalWallOwner(9, 9)).toBeUndefined();
+    // The piece a wall draws follows its wall neighbours, rival or not.
+    expect(model.wallNeighbourFlags({ q: 5, r: 6 }).filter(Boolean)).toHaveLength(2);
+  });
+
+  it('replaces the previous set: moved walls follow and walls gone server-side disappear', () => {
+    const model = new WorldModel(20260825);
+    model.applyRivalWalls([rivalWall(5, 5), rivalWall(5, 6)]);
+    model.applyRivalWalls([rivalWall(5, 6, { level: 3 })]);
+
+    expect(model.getTile(5, 5).buildingType).toBeUndefined();
+    expect(model.getTile(5, 5).buildingLevel).toBeUndefined();
+    expect(model.rivalWallOwner(5, 5)).toBeUndefined();
+    expect(model.getTile(5, 6).buildingLevel).toBe(3);
+    expect([...model.standingPalisadeWalls().keys()]).toEqual(['5,6']);
+
+    model.applyRivalWalls([]);
+    expect(model.standingPalisadeWalls().size).toBe(0);
+  });
+
+  it('keys a rival wall to its account (or its settlement when anonymous) for the route rules', () => {
+    const model = new WorldModel(20260825);
+    model.applyRivalWalls([rivalWall(5, 5, { type: 'palisadegate' }), rivalWall(5, 6, { ownerUserId: null })]);
+
+    const standing = model.standingPalisadeWalls();
+    expect(standing.get('5,5')).toEqual({ gate: true, owner: 'user-rival' });
+    expect(standing.get('5,6')).toEqual({ gate: false, owner: 'rival-1' });
+  });
+
+  it('never overwrites a hex one of the player\'s own settlements renders, nor clears it', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const own = { q: settlement.q + 1, r: settlement.r };
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [{ ...own, type: 'palisade', level: 1 }],
+    });
+
+    model.applyRivalWalls([rivalWall(own.q, own.r)]);
+    model.applyRivalWalls([]);
+
+    expect(model.getTile(own.q, own.r)).toMatchObject({ buildingType: 'palisade', ownerId: settlement.id });
+    expect(model.rivalWallOwner(own.q, own.r)).toBeUndefined();
   });
 });
 

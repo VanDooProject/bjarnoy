@@ -97,10 +97,11 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   dockyard: [2, 4],
   shrineofnjord: [4, 4],
 
-  // Row 5 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9).
+  // Row 5 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9) -> Siege Workshop (LH 18, behind a level-3 Archery Range).
   tower: [1, 5],
   barracks: [2, 5],
   archeryrange: [3, 5],
+  siegeworkshop: [4, 5],
   // Row 6 — Tower's second target, the Palisade / Gate (LH 7, behind a level-5 Tower), one row below the Barracks chain.
   palisade: [2, 6],
   // Barracks' second target, the Weaponsmith (Smithy, LH 15), with

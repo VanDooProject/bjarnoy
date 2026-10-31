@@ -161,6 +161,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             island.Property(i => i.Camps)
                 .HasConversion(new CampListConverter())
                 .Metadata.SetValueComparer(CampListConverter.Comparer);
+            island.Property(i => i.UtgardWalls)
+                .HasConversion(new UtgardWallListConverter())
+                .Metadata.SetValueComparer(UtgardWallListConverter.Comparer);
+            island.Property(i => i.JotunTowers)
+                .HasConversion(new JotunTowerListConverter())
+                .Metadata.SetValueComparer(JotunTowerListConverter.Comparer);
         });
 
         modelBuilder.Entity<SettlementEntity>(settlement =>

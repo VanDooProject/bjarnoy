@@ -31,6 +31,7 @@
     "palisade": "Palisade",
     "palisadegate": "Palisade Gate",
     "bridge": "Bridge",
+    "siegeworkshop": "Siege workshop",
     "reindeerherder": "Reindeer Herder"
   },
   "units": {
@@ -41,6 +42,7 @@
     "berserker": "Berserker",
     "provisioner": "Provisioner",
     "catapult": "Catapult",
+    "ram": "Battering ram",
     "karve": "Karve",
     "longship": "Longship",
     "settlercrew": "Settler Crew"
@@ -206,5 +208,10 @@
       "adult": "Otter",
       "alpha": "Old otter"
     }
+  },
+  "endgame": {
+    "utgardwall": "Utgard wall",
+    "utgardgate": "Utgard gate",
+    "jotunwatchtower": "Jötun watchtower"
   }
 }

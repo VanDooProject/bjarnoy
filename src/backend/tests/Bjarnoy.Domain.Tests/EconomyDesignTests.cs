@@ -28,6 +28,7 @@ public class EconomyDesignTests
         (BuildingType.Meadery, 11),
         (BuildingType.DruidHut, 12),
         (BuildingType.Smithy, 15), (BuildingType.GreatStorehouse, 15),
+        (BuildingType.SiegeWorkshop, 18),
         (BuildingType.Sawmill, 20), (BuildingType.CropMill, 20), (BuildingType.Hammerschmiede, 20),
         (BuildingType.ShrineOfUllr, 25), (BuildingType.ShrineOfFreyja, 25),
         (BuildingType.ShrineOfNjord, 25), (BuildingType.ShrineOfThor, 25),
@@ -174,6 +175,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.StorageHouse, 25)]
     [InlineData(BuildingType.Barracks, 20)]
     [InlineData(BuildingType.ArcheryRange, 20)]
+    [InlineData(BuildingType.SiegeWorkshop, 5)]
     [InlineData(BuildingType.Dockyard, 20)]
     [InlineData(BuildingType.TownSquare, 20)]
     [InlineData(BuildingType.CartWorkshop, 20)]

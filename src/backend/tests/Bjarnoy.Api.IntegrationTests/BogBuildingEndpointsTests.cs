@@ -39,7 +39,7 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
         new(at.Q, at.R, (int)kind, inDirections ?? [], outDirection, waterEdges ?? []);
 
     /// <summary>
-    /// A settlement at Longhouse 20 with a level-10 bog-ore works standing, and one hex of every bog kind around its centre:
+    /// A settlement at Longhouse 20 with a level-10 bog-ore works and a level-3 clay brickworks standing, and one hex of every bog kind around its centre:
     /// plain moss twice, a creek, a half shore, a shore, a lake; the rest stays grass.
     /// </summary>
     private async Task<(HttpClient Client, SettlementResponse Settlement, Dictionary<string, HexCoord> Hexes)> SetUpAsync()
@@ -95,6 +95,14 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
                 R = centre.R - 2,
                 Type = BuildingType.BogOreWorks,
                 Level = 10,
+            });
+            db.PlacedBuildings.Add(new PlacedBuildingEntity
+            {
+                SettlementId = settlement.Id,
+                Q = centre.Q,
+                R = centre.R - 2,
+                Type = BuildingType.ClayBrickworks,
+                Level = 3,
             });
             await db.SaveChangesAsync(Ct);
         }

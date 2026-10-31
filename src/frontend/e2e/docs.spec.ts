@@ -71,24 +71,40 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     const art = sawmill.locator(".thumb > :not(.floating-art-shadow)");
     const rows = sawmill.locator("table tbody tr");
     await rows.first().waitFor();
+    // The page renders before the atlas manifests are in and fills the art in
+    // as they arrive (router/atlasGuard.ts): the thumb swaps its element from
+    // the PNG fallback to the showcase picture to the layered render. The
+    // layered render needs `buildings-anim`, the last manifest the Sawmill's
+    // art reads, so once the un-hovered thumb (its top level) shows it, every
+    // level below resolves to its final art the moment it is hovered. Waits as
+    // long as the test may (like the rows above): that batch is several MB of
+    // JSON, fetched after the core and showcase manifests, and takes 6-7s
+    // when several workers load the page at once.
+    await sawmill.locator(".thumb > .animated-building").waitFor();
 
     const kinds = new Set<string>();
     const bottoms = new Set<number>();
     for (const level of [1, 2, 3, 4]) {
       await rows.nth(level - 1).hover();
-      const sample = await art.evaluate((el) => {
-        const [w, h] = getComputedStyle(el).aspectRatio.split("/").map(Number);
-        const box = el.getBoundingClientRect();
-        const thumb = el.parentElement!.getBoundingClientRect();
-        return {
-          kind: el.className,
-          drift: Math.abs(box.width / box.height - w! / h!) / (w! / h!),
-          bottom: Math.round(thumb.bottom - box.bottom),
-        };
-      });
-      expect(sample.drift, `level ${level} art squashed`).toBeLessThan(0.02);
-      kinds.add(sample.kind);
-      bottoms.add(sample.bottom);
+      // Re-resolved on every attempt: the hover swaps the element itself
+      // where the level changes art source.
+      await expect(async () => {
+        const sample = await art.evaluate((el) => {
+          const [w, h] = getComputedStyle(el)
+            .aspectRatio.split("/")
+            .map(Number);
+          const box = el.getBoundingClientRect();
+          const thumb = el.parentElement!.getBoundingClientRect();
+          return {
+            kind: el.className,
+            drift: Math.abs(box.width / box.height - w! / h!) / (w! / h!),
+            bottom: Math.round(thumb.bottom - box.bottom),
+          };
+        });
+        expect(sample.drift, `level ${level} art squashed`).toBeLessThan(0.02);
+        kinds.add(sample.kind);
+        bottoms.add(sample.bottom);
+      }).toPass();
     }
     // Both art sources were actually exercised, and sit on the same floor.
     expect(kinds).toEqual(new Set(["atlas-sprite", "animated-building"]));
@@ -152,6 +168,21 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(
       endgame.getByRole("row", { name: /^Watchtower/ }),
     ).toContainText("4,650");
+  });
+
+  test("wasted lands shows the Utgard example map and does not overflow on a phone", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/docs/wasted-lands");
+    const example = page.getByTestId("utgard-example");
+    await example.scrollIntoViewIfNeeded();
+    await expect(example.locator("canvas")).toBeVisible();
+    await expect(example).toContainText("two rings of walls");
+    const box = await example.locator("canvas").boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    const overflow = await page
+      .locator(".docs-page")
+      .evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 
   test("wasted lands island slider shows the all-living stage", async ({
@@ -360,6 +391,15 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await view.wheel(100_000);
     await expect(lastSection).toBeInViewport();
     expect(await view.noHorizontalOverflow()).toBe(true);
+
+    // The example island has a locked camera: a click on it does not hand it the wheel, the page still scrolls.
+    const island = page.locator(".bog-island");
+    await island.scrollIntoViewIfNeeded();
+    await island.click();
+    const scrolledBefore = await view.scrollTop();
+    await island.hover();
+    await page.mouse.wheel(0, 300);
+    await expect.poll(() => view.scrollTop()).not.toBe(scrolledBefore);
 
     // The example island comes first, above the separate tiles.
     expect(
@@ -644,6 +684,16 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         expect(bg).toContain("url(");
       }
 
+      // The animated Resource production card keeps its hex as wide as a static tile's: the clip's canvas is taller (smoke
+      // plume above the hut) but is sized by its width, so the hex does not shrink to fit the plume into the box.
+      const herder = await page
+        .locator('a.card[data-page="production"] .animated-building')
+        .boundingBox();
+      const tile = await page
+        .locator('a.card[data-page="walls"] .atlas-sprite')
+        .boundingBox();
+      expect(herder!.width).toBeGreaterThanOrEqual(tile!.width - 2);
+
       await page.getByRole("link", { name: /^Bog lands/ }).click();
       await expect(page).toHaveURL(/\/docs\/bog-lands$/);
 
@@ -767,19 +817,31 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.getByText("issue #447")).toHaveCount(0);
   });
 
-  test("land movement page tabulates ground costs and minutes per hex and hides the admin note", async ({
+  test("land movement page shows the example route and the unit speeds, keeps the ground costs for admins and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/land-movement");
-    await expectPlayerPage(page, "Land movement", "ground-table");
-    await expect(page.locator('[data-ground="bog"]')).toContainText("2");
+    await expectPlayerPage(page, "Land movement", "pace-table");
+    // The ground cost table is an admin note: players read the rules and the example map instead.
+    await expect(page.getByTestId("ground-table")).toHaveCount(0);
+    await expect(page.getByText("Grass is the quickest ground")).toBeVisible();
     await expect(
       page.locator('[data-testid="pace-table"] [data-unit="spearman"]'),
-    ).toContainText("15 min");
-    // Wide rivers: shut except over a bridge, with a table of the bridge levels and no admin note about bridges "planned".
-    await expect(page.locator('[data-ground="wideRiver"]')).toContainText(
-      "Only over a bridge",
+    ).toContainText("4");
+    await expect(page.locator("#pace")).toContainText("a Spearman crosses a grass hex in 15 min");
+    // The example map: the game's own renderer, with the route's steps and the Spearman's total under it. No horizontal overflow
+    // at phone width (expectPlayerPage resized the viewport already).
+    const example = page.getByTestId("land-example");
+    await expect(example.locator("canvas")).toBeVisible();
+    await expect(example.getByTestId("land-example-steps").locator("li")).toHaveCount(9);
+    await expect(example.getByTestId("land-example-total")).toContainText("4 h 15 min");
+    const box = await example.locator("canvas").boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
+    expect(overflow).toBeLessThanOrEqual(1);
+    // Wide rivers: with a table of the bridge levels and no admin note about bridges "planned".
     await expect(page.locator('[data-bridge="causeway"]')).toContainText("6");
     await expect(page.locator('[data-bridge="footbridge"]')).toContainText("4");
     await expect(page.locator('[data-bridge="guarded"]')).toContainText(
@@ -844,8 +906,16 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toHaveClass(/active/);
     await expect(straight.locator(".animated-building")).toBeVisible();
 
-    // The example wall, drawn by the game's own map renderer, and the four grounds.
+    // The example wall, drawn by the game's own map renderer, comes before the six-piece showcase,
+    // which closes the page after the sieges text.
     await expect(page.locator(".wall-example canvas")).toBeVisible();
+    const exampleBox = await page.locator(".wall-example canvas").boundingBox();
+    const piecesBox = await straight.boundingBox();
+    const siegesBox = await page.locator("#sieges").boundingBox();
+    expect(exampleBox!.y).toBeLessThan(piecesBox!.y);
+    expect(siegesBox!.y).toBeLessThan(piecesBox!.y);
+    await expect(page.getByText("An example: a wall that ends on land")).toHaveCount(0);
+    // The four grounds.
     await expect(page.locator(".walls figure.ground")).toHaveCount(4);
     await expect(
       page.getByTestId("wall-movement-diagram").locator("figure"),
@@ -854,7 +924,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    // Sieges are player content now: catapults take one level per won siege, three levels per wall hex.
+    // Sieges are player content now: rams take one level per won siege, three levels per wall hex.
     const sieges = page.locator("#sieges");
     await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
     await expect(sieges.locator("li")).toHaveCount(5);

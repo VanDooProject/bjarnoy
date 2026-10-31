@@ -1,7 +1,8 @@
 import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { bubbleUnderPointerTip, waitForMapReady } from './helpers';
+import { RING_TIP_GAP_PX } from '../src/lib/map/guidanceArrowGeometry';
+import { bubbleNearestPointerTip, waitForMapReady } from './helpers';
 import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
@@ -61,9 +62,42 @@ test('landing page shows the guided pointer and a step-1 checklist before foundi
   await expect(page.locator('.tray-item.current')).toContainText('Longhouse & yard');
 });
 
+/** The bubble nearest the arrow's tip is the intended one, the tip just outside its rim, and no bubble under the tip. */
+async function expectPointerAtRimOf(page: import('@playwright/test').Page, name: string): Promise<void> {
+  await expect
+    .poll(async () => {
+      const at = await bubbleNearestPointerTip(page);
+      return at && at.nearest === name && at.rimDistance >= -1 && at.rimDistance <= RING_TIP_GAP_PX + 2 && at.under === null;
+    })
+    .toBe(true);
+}
+
+/** The guide chip (the arrow's label) is on screen and covers no ring bubble: not the one it names, not a neighbour. */
+async function expectChipClearOfBubbles(page: import('@playwright/test').Page): Promise<void> {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const chip = document.querySelector('[data-testid="guidance-pointer"] .chip')?.getBoundingClientRect();
+        if (!chip) return 'no chip';
+        if (chip.left < 0 || chip.top < 0 || chip.right > window.innerWidth || chip.bottom > window.innerHeight) return 'chip off screen';
+        for (const el of document.querySelectorAll('.ring-bubble, .ring-hub')) {
+          const b = el.getBoundingClientRect();
+          const cx = b.x + b.width / 2;
+          const cy = b.y + b.height / 2;
+          const nx = Math.min(Math.max(cx, chip.left), chip.right);
+          const ny = Math.min(Math.max(cy, chip.top), chip.bottom);
+          if (Math.hypot(cx - nx, cy - ny) < b.width / 2 - 1) return `chip covers ${el.textContent?.trim() || el.className}`;
+        }
+        return 'clear';
+      }),
+    )
+    .toBe('clear');
+}
+
 for (const screen of [
   { name: 'desktop 1280x800', viewport: { width: 1280, height: 800 }, phone: false },
   { name: 'phone 390x844', viewport: { width: 390, height: 844 }, phone: true },
+  { name: 'phone 320x568', viewport: { width: 320, height: 568 }, phone: true },
 ]) {
 test.describe(`onboarding ring pointer, ${screen.name}`, () => {
 test.use(screen.phone ? { viewport: screen.viewport, hasTouch: true, isMobile: true } : { viewport: screen.viewport });
@@ -91,8 +125,9 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   // Root: just Build (the map's rule), and the pointer on it.
   expect(await settlement.ring.labels()).toEqual(['Build']);
   await expect(settlement.guidancePointer).toContainText('Open Build');
-  // The arrow's tip is on the bubble it names, not on a neighbour.
-  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Build');
+  // The arrow's tip rests at the rim of the bubble it names, not at a neighbour's, and covers no bubble.
+  await expectPointerAtRimOf(page, 'Build');
+  await expectChipClearOfBubbles(page);
 
   // Categories of a grass hex, the same ones the map's ring shows there; the pointer moves to the right one.
   if (screen.phone) {
@@ -103,7 +138,8 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   }
   expect(await settlement.ring.labels()).toEqual(expect.arrayContaining(['Resource', 'Military', 'Logistics', 'Defence', 'Shrines']));
   await expect(settlement.guidancePointer).toContainText('Open Resource');
-  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Resource');
+  await expectPointerAtRimOf(page, 'Resource');
+  await expectChipClearOfBubbles(page);
 
   // Buildings: the herder is there, nothing is dimmed, and the pointer is on the herder.
   if (screen.phone) {
@@ -117,7 +153,8 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   await expect(herder).toBeEnabled();
   await expect(settlement.ring.child('Lumberjack')).toHaveCount(0);
   await expect(settlement.guidancePointer).toContainText('Build the Reindeer Herder');
-  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Reindeer Herder');
+  await expectPointerAtRimOf(page, 'Reindeer Herder');
+  await expectChipClearOfBubbles(page);
   await expect(page.getByTestId('ring-note')).toHaveCount(0);
 
   const before = await settlement.countBuildings();

@@ -3,6 +3,7 @@ import { coordKey, type AxialCoord } from '../hex/coords';
 import { findPath, hoursFrom, HALF_OPEN_END_COST, type PathContext } from './hexPath';
 import { palisadeRestrictions, type PalisadeWalls } from './palisadeMovement';
 import type { Terrain } from './types';
+import { WorldModel } from './WorldModel';
 
 const OWNER = 'owner-a';
 
@@ -55,13 +56,13 @@ describe('palisadeRestrictions', () => {
     expect(hoursFrom(west, ctx(terrain, gated, OWNER), Infinity).get(coordKey(east))).toBe(4);
   });
 
-  it('crosses a half-open land end at a flat 3 for every army', () => {
+  it('crosses a half-open land end at the ground cost plus 3 for every army', () => {
     const terrain = strip({}, ['3,3']);
     const walls = column(-3, 2);
     for (const walker of [OWNER, 'enemy']) {
       const hours = hoursFrom(west, ctx(terrain, walls, walker), Infinity);
-      // The tip (3,2) is 4 hexes from (1,0): three grass steps, then the tip at 3 instead of 1.
-      expect(hours.get('3,2')).toBeCloseTo(3 + 3, 9);
+      // The tip (3,2) is 4 hexes from (1,0): three grass steps, then the tip at grass 1 + 3.
+      expect(hours.get('3,2')).toBeCloseTo(3 + 1 + 3, 9);
       expect(HALF_OPEN_END_COST).toBe(3);
       expect(findPath(west, east, ctx(terrain, walls, walker))?.map(coordKey)).toContain('3,2');
     }
@@ -99,5 +100,55 @@ describe('palisadeRestrictions', () => {
 
     const plain = new Map([...column(-3, 3)].map(([k, w]) => [k, { ...w, owner: 'someone-else' }] as const));
     expect(findPath(west, east, ctx(terrain, plain, OWNER, () => false, friends))).toBeNull();
+  });
+});
+
+describe('Utgard walls in the palisade rules (the jötnar owner key)', () => {
+  const JOTNAR = 'jotnar';
+  const jotnarColumn = (fromR: number, toR: number, gateAtR?: number) => {
+    const walls = new Map<string, { gate: boolean; owner: string }>();
+    for (let r = fromR; r <= toR; r++) walls.set(`3,${r}`, { gate: r === gateAtR, owner: JOTNAR });
+    return walls;
+  };
+
+  it('a standing Utgard wall stops a land army, a hex left out (level 0) lets it through', () => {
+    const terrain = strip({ '3,4': 'mountain' });
+    expect(findPath(west, east, ctx(terrain, jotnarColumn(-3, 3), 'player'))).toBeNull();
+
+    const breached = jotnarColumn(-3, 3);
+    breached.delete('3,0');
+    expect(findPath(west, east, ctx(terrain, breached, 'player'))?.map(coordKey)).toContain('3,0');
+  });
+
+  it('a jötnar gate never opens for a player, not even one whose friends include everybody else', () => {
+    const terrain = strip({ '3,4': 'mountain' });
+    const gated = jotnarColumn(-3, 3, 0);
+    expect(findPath(west, east, ctx(terrain, gated, 'player'))).toBeNull();
+    expect(findPath(west, east, ctx(terrain, gated, 'player', () => false, new Set(['other-guildmate'])))).toBeNull();
+  });
+});
+
+describe('palisadeRestrictions with a rival wall from the walls read', () => {
+  it('opens a rival gate for its own friends only, and blocks a rival wall for everyone else', () => {
+    const rival = new WorldModel(20260825);
+    rival.applyRivalWalls([
+      { q: 3, r: 0, type: 'palisadegate', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
+      { q: 3, r: -1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
+      { q: 3, r: 1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
+    ]);
+    const walls = rival.standingPalisadeWalls();
+    const terrainAt = (): Terrain => 'grass';
+
+    const stranger = palisadeRestrictions(walls, terrainAt, () => false, 'someone-else')!;
+    const friend = palisadeRestrictions(walls, terrainAt, () => false, 'someone-else', new Set(['user-rival']))!;
+
+    const gate = { q: 3, r: 0 };
+    const wall = { q: 3, r: 1 };
+    // Every wall hex blocks; a gate is only open for its owner's friends.
+    expect(stranger.blocked!(gate)).toBe(true);
+    expect(stranger.friendlyGate!(gate)).toBe(false);
+    expect(friend.friendlyGate!(gate)).toBe(true);
+    expect(friend.friendlyGate!(wall)).toBe(false);
+    expect(friend.blocked!(wall)).toBe(true);
   });
 });

@@ -98,6 +98,7 @@ has 3–8 stages per building, and each level maps onto a stage
 | Shrines | 5 (one per settlement) |
 | Palisade | 3 |
 | Bridge | 4 |
+| Siege Workshop | 5 |
 
 Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 
@@ -138,6 +139,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
+| 18 | Siege Workshop (trains the battering ram) | Archery Range 3 |
 | 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
 | 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
@@ -261,8 +263,8 @@ and a level the atlas does not have yet shows the richest rung it has (level 3 s
 
 **Movement** (land armies; fleets are unaffected). The rules apply in this order in
 `HexPathfinder` and in the frontend's `hexPath.ts`: wide river and mountain
-impassable, then stream flat 9, then half-open end 3, then blocked (unless a friendly
-gate), then the terrain cost.
+impassable, then stream flat 9, then half-open end (ground + 3), then blocked (unless a
+friendly gate), then the terrain cost.
 
 - Every wall hex **blocks every army, the owner's included**. Only standing hexes
   count (level 1 or more): a foundation does not block.
@@ -272,7 +274,8 @@ gate), then the terrain cost.
   like at any wall hex. A friend's plain wall hex still blocks, and an anonymous
   settlement has no friends.
 - A **land end** (a plain palisade hex with exactly one wall neighbour) is **half open**:
-  every army crosses it at a flat cost of 3 in place of the terrain cost (bog's 2 included). If it touches
+  every army crosses it at the ground's own cost **plus 3** (grass 1 -> 4, forest 1.3 -> 4.3, bog 2 -> 5; a stream
+  under it, which no wall can be built on, would be 9 -> 12). If it touches
   a mountain or a wide river it is a **sealed end** and blocks like any wall hex, so a
   wall run up to a river or a mountain still seals.
 - The **sea end** stays sea, impassable to land armies, so a wall that ends in one
@@ -286,10 +289,26 @@ for friend and foe, a half-open end and a sealed end), the dispatch is refused w
 land route is left, and the range tint applies the same rules for the selected
 settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Siege.** A won siege that names a wall hex as its target takes **one level** off it,
-however many siege engines survive (`SiegeResolver.LevelsTakenFrom`, the same rule as a
-bridge): a level-3 palisade needs three won sieges to be breached, and the hex is gone at
-level 0. Any other building still loses several levels at once.
+**Siege.** A wall hex falls to **battering rams only**: a won Attack or Raid that names the wall hex
+as `TargetBuildingCoord` takes **one level** off it, however many rams survive
+(`SiegeResolver.LevelsTakenFrom`, the same rule as a bridge): a level-3 palisade needs three won
+sieges to be breached, and the hex is gone at level 0. Catapults do nothing to a wall. There is no
+separate siege mission: the in-game "Siege" action on a rival wall opens an Attack on the wall's
+settlement with the wall hex as the preferred target building. Which engine damages which
+building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolver.CanDamage`):
+
+| Target | Rams | Catapults | Levels per won siege |
+|---|---|---|---|
+| Wall hex (Palisade, Palisade Gate) | yes | no | 1 |
+| Tower | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
+| Bridge | no | yes | 1 |
+| Every other building (Longhouse included) | no | yes | `LevelsDestroyed` |
+
+Only the surviving engines that can damage the target count towards its levels. A named target
+the surviving engines cannot damage takes no damage (the report has no siege line). Without a
+named target, or when it is gone, the pick is random (seeded) among the buildings the surviving
+engines can damage; if there are none, no siege happens. Rams are trained at the Siege Workshop
+(section 8, the iron ladder).
 
 **Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
 burns walls yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
@@ -336,7 +355,7 @@ and the members of guilds with an active peace treaty with that guild
 (`WorldBridges.IndexAsync` reads both via `WorldPalisades.FriendsAsync`). An anonymous
 settlement has no friends.
 
-**Burning.** An Attack mission with catapults that names the bridge's hex as
+**Burning.** An Attack mission with catapults (rams cannot burn a bridge) that names the bridge's hex as
 `TargetBuildingCoord` burns it, but a bridge burns **one level per won siege**, however
 many catapults survive (`SiegeResolver.LevelsTakenFrom`), like a wall hex, where any other building loses several. A
 guarded bridge therefore falls to the king's bridge first and opens to everyone, attackers
@@ -547,6 +566,7 @@ them so the levels match. *Implemented:*
   | Bowman | Archery Range | 9 (4) |
   | Provisioner, Settler Crew | Cart Workshop | 10 (4, 5) |
   | Berserker, Catapult, Longship | Barracks, Archery Range, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
+  | Ram | Siege Workshop | 20: after the Berserker, like the Catapult |
 
   (Berserker still needs the Axeman, Catapult the Berserker, Longship the
   Karve.) The elite units are gated by the Longhouse level only, not by a

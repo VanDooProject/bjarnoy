@@ -1,21 +1,24 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
 import deCatalogue from '../../i18n/locales/de/catalogue.json';
+import { hyphenate, loadHyphenation, SOFT_HYPHEN } from '../hyphenation';
 import {
+  BUBBLE_LABEL_MIN_PX,
   bubbleLabelFontPx,
+  fitBubbleLabel,
   shrinkToFit,
   estimateWordEm,
   BUB1,
   BUB2,
   CARD_H,
   CARD_W,
-  DOT,
   HUB,
   LANE1_MAX,
   layoutRing,
   NOTE_H,
   NOTE_W,
   placementMode,
+  RING_MIN_SCALE,
   ringRoomFor,
   ringShapes,
   type Rect,
@@ -41,11 +44,11 @@ interface Circle {
   r: number;
 }
 
-function circlesOf(layout: RingLayoutResult, x: number, y: number): Circle[] {
+function circlesOf(layout: RingLayoutResult, x: number, y: number, scale = 1): Circle[] {
   return [
-    { x, y, r: HUB / 2 },
-    ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: (layout.collapsed ? DOT : BUB1) / 2 })),
-    ...layout.lane2.map((s) => ({ x: s.x, y: s.y, r: BUB2 / 2 })),
+    { x, y, r: (HUB / 2) * scale },
+    ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: (BUB1 / 2) * scale })),
+    ...layout.lane2.map((s) => ({ x: s.x, y: s.y, r: (BUB2 / 2) * scale })),
   ];
 }
 
@@ -110,6 +113,14 @@ const REPORTED: { name: string; x: number; y: number }[] = [
 ];
 
 describe('ring layout placement contract', () => {
+  // The tile the ring opens round is where `ringRoomFor` puts it (the map pans there), at full size on these screens.
+  const DEEPEST = { lane1Count: 5, lane2Count: 2, parentIndex: 1 };
+  const roomFor = (frame: { x: number; y: number; area: Rect }) => {
+    const room = ringRoomFor(frame.x, frame.y, () => frame.area, [DEEPEST]);
+    expect(room.scale).toBe(1);
+    return room;
+  };
+
   for (const frame of [
     ...GALLERY.map((f) => ({ ...f, area: f.area ?? FRAME, cardArea: FRAME_CARD })),
     ...REPORTED.map((f) => ({ ...f, area: HUD_BOUNDS, cardArea: HUD_CARD_BOUNDS })),
@@ -118,35 +129,19 @@ describe('ring layout placement contract', () => {
       // Four categories plus the reserved ‹ BACK slot, with a two-building
       // category open and its first building hovered — the deepest, busiest
       // state the ring ever reaches.
-      const layout = layoutRing({
-        x: frame.x,
-        y: frame.y,
-        area: frame.area,
-        cardArea: frame.cardArea,
-        lane1Count: 5,
-        lane2Count: 2,
-        parentIndex: 1,
-        cardAnchor: 0,
-      });
+      const room = roomFor(frame);
+      const layout = layoutRing({ ...room, area: frame.area, cardArea: frame.cardArea, ...DEEPEST, cardAnchor: 0 });
 
       expect(layout.lane1).toHaveLength(5);
       expect(layout.lane2).toHaveLength(2);
-      const circles = circlesOf(layout, frame.x, frame.y);
+      const circles = circlesOf(layout, room.x, room.y);
       expect(outOfArea(circles, frame.area)).toEqual([]);
       expect(smallestGap(circles)).toBeGreaterThanOrEqual(0);
     });
 
     it(`docks the detail card clear of the ring: ${frame.name}`, () => {
-      const layout = layoutRing({
-        x: frame.x,
-        y: frame.y,
-        area: frame.area,
-        cardArea: frame.cardArea,
-        lane1Count: 5,
-        lane2Count: 2,
-        parentIndex: 1,
-        cardAnchor: 0,
-      });
+      const room = roomFor(frame);
+      const layout = layoutRing({ ...room, area: frame.area, cardArea: frame.cardArea, ...DEEPEST, cardAnchor: 0 });
 
       expect(layout.card).not.toBeNull();
       const card = layout.card!;
@@ -154,7 +149,7 @@ describe('ring layout placement contract', () => {
       expect(card.y).toBeGreaterThanOrEqual(frame.cardArea.top);
       expect(card.x + CARD_W).toBeLessThanOrEqual(frame.cardArea.right);
       expect(card.y + CARD_H).toBeLessThanOrEqual(frame.cardArea.bottom);
-      expect(cardGap(card, circlesOf(layout, frame.x, frame.y))).toBeGreaterThanOrEqual(0);
+      expect(cardGap(card, circlesOf(layout, room.x, room.y))).toBeGreaterThanOrEqual(0);
     });
   }
 });
@@ -192,20 +187,13 @@ describe('ring layout behaviour', () => {
     expect(layout.leader).toBeNull();
   });
 
-  it('replaces the inner track with a leader when the lane is displaced off the tile', () => {
-    // A tile under the right-hand panel strip: the lane cannot orbit the hex,
-    // so an orbit drawn there would be an empty ring with the bubbles
-    // floating elsewhere.
-    const layout = layoutRing({
-      x: 1100,
-      y: 300,
-      area: HUD_BOUNDS,
-      cardArea: HUD_CARD_BOUNDS,
-      lane1Count: 5,
-      lane2Count: 2,
-      parentIndex: 1,
-      cardAnchor: null,
-    });
+  it('replaces the inner track with a leader when the lane orbits further out than the track', () => {
+    // A tile against the left edge of a 320px-wide phone: the only arc that seats the categories
+    // is wider than the 68px orbit, so a track drawn on the hex would be empty with the bubbles
+    // floating outside it.
+    const area = { left: 16, top: 12, right: 304, bottom: 324 };
+    const layout = layoutRing({ x: 16, y: 108, area, cardArea: area, lane1Count: 5, lane2Count: 0, parentIndex: -1, cardAnchor: null });
+    expect(layout.fits).toBe(true);
     expect(layout.showLane1Track).toBe(false);
     expect(layout.leader).not.toBeNull();
   });
@@ -277,7 +265,7 @@ describe('ring layout on a phone', () => {
 
   it('leaves a tile whose ring already fits where it is', () => {
     const { area } = PHONES[2];
-    expect(ringRoomFor(230, 360, () => area, SHAPES)).toEqual({ x: 230, y: 360 });
+    expect(ringRoomFor(230, 360, () => area, SHAPES)).toEqual({ x: 230, y: 360, scale: 1 });
   });
 
   it('moves the reported tile (low on the screen, above the dock) up to where its ring fits', () => {
@@ -314,6 +302,77 @@ describe('ring layout on a phone', () => {
       expect(bad.slice(0, 10), `${bad.length} bad placements`).toEqual([]);
     }, 30_000); // a few hundred tile spots, each searched for room: seconds of pure layout maths, not waiting
   }
+});
+
+// The ring is a circle round its tile on every screen, wherever the tile is tapped: after the map has
+// panned to the spot `ringRoomFor` finds (the same call MapView and the onboarding page make), every
+// lane is at one distance from the hub, on screen, and no bubble touches another.
+describe('ring layout is a circle on every screen', () => {
+  const SCREENS = [
+    { name: '320x568', w: 320, h: 568, compact: true },
+    { name: '360x740', w: 360, h: 740, compact: true },
+    { name: '390x844', w: 390, h: 844, compact: true },
+    { name: '1280x800', w: 1280, h: 800, compact: false },
+  ].map((p) => ({
+    ...p,
+    // The onboarding page's ring area: a phone keeps clear of the bottom card dock (236 + 8).
+    area: { left: 16, top: 12, right: p.w - 16, bottom: p.compact ? p.h - 236 - 8 : p.h - 16 },
+  }));
+  // The onboarding ring (Build, then two categories) and the map's (four actions, six categories).
+  const RINGS = [
+    { name: 'onboarding', shapes: ringShapes(1, [2, 3]) },
+    { name: 'map', shapes: ringShapes(4, [3, 5, 4, 4, 3, 2]) },
+  ];
+  const radii = (spots: { x: number; y: number }[], x: number, y: number) => spots.map((s) => Math.hypot(s.x - x, s.y - y));
+
+  for (const screen of SCREENS) {
+    for (const ring of RINGS) {
+      it(`opens the ${ring.name} ring as circles at full size from any tile on ${screen.name}`, () => {
+        const bad: string[] = [];
+        for (let x = 0; x <= screen.w; x += 40) {
+          for (let y = 0; y <= screen.h; y += 40) {
+            const room = ringRoomFor(x, y, () => screen.area, ring.shapes);
+            if (room.scale !== 1) bad.push(`${x},${y}: shrunk to ${room.scale}`);
+            for (const shape of ring.shapes) {
+              const layout = layoutRing({ ...room, area: screen.area, cardArea: screen.area, ...shape, cardAnchor: null });
+              const where = `${x},${y} -> ${room.x},${room.y} ${JSON.stringify(shape)}`;
+              const lane1 = radii(layout.lane1, room.x, room.y);
+              const lane2 = radii(layout.lane2, room.x, room.y);
+              if (Math.max(...lane1) - Math.min(...lane1) >= 0.5) bad.push(`${where}: inner lane not a circle`);
+              if (lane2.length && Math.max(...lane2) - Math.min(...lane2) >= 0.5) bad.push(`${where}: buildings not on a circle`);
+              const circles = circlesOf(layout, room.x, room.y);
+              if (outOfArea(circles, screen.area).length) bad.push(`${where}: off screen`);
+              else if (smallestGap(circles) < 0) bad.push(`${where}: overlapping`);
+            }
+          }
+        }
+        expect(bad.slice(0, 10), `${bad.length} bad placements`).toEqual([]);
+      }, 60_000);
+    }
+  }
+
+  it('seats a lone bubble (the onboarding ring\'s Build) beside the hub, not on it, near an edge', () => {
+    const area = { left: 16, top: 12, right: 304, bottom: 324 };
+    const layout = layoutRing({ x: 80, y: 80, area, cardArea: area, lane1Count: 1, lane2Count: 0, parentIndex: -1, cardAnchor: null });
+    expect(Math.hypot(layout.lane1[0].x - 80, layout.lane1[0].y - 80)).toBeGreaterThanOrEqual(HUB / 2 + BUB1 / 2);
+  });
+
+  it('shrinks the whole ring, keeping its shape, where the screen is smaller than the ring', () => {
+    // 120px square: no spot has room for the inner lane at full size.
+    const area = { left: 0, top: 0, right: 120, bottom: 120 };
+    const shapes = ringShapes(1, [2, 3]);
+    const room = ringRoomFor(60, 60, () => area, shapes);
+    expect(room.scale).toBeLessThan(1);
+    expect(room.scale).toBeGreaterThanOrEqual(RING_MIN_SCALE);
+    for (const shape of shapes) {
+      const layout = layoutRing({ ...room, area, cardArea: area, ...shape, cardAnchor: null });
+      const lane1 = layout.lane1.map((s) => Math.hypot(s.x - room.x, s.y - room.y));
+      expect(Math.max(...lane1) - Math.min(...lane1)).toBeLessThan(0.5);
+      const circles = circlesOf(layout, room.x, room.y, room.scale);
+      expect(outOfArea(circles, area)).toEqual([]);
+      expect(smallestGap(circles)).toBeGreaterThanOrEqual(0);
+    }
+  });
 });
 
 // A root bubble (Upgrade, Details) shows its own card while hovered: it has no
@@ -396,7 +455,7 @@ describe('ring layout note (flat onboarding ring)', () => {
 
       const circles = [
         { x: frame.x, y: frame.y, r: HUB / 2 },
-        ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: (layout.collapsed ? DOT : BUB1) / 2 })),
+        ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: BUB1 / 2 })),
       ];
       const gap = Math.min(
         ...circles.map((o) => {
@@ -477,5 +536,114 @@ describe('shrinkToFit', () => {
   it('leaves a label that already fits alone, and never goes below the floor', () => {
     expect(shrinkToFit(['Farm'], BUB2 - 6, 9.4, font(1.15))).toBe(9.4);
     expect(shrinkToFit(['Holzfällerhüttenerweiterung'], BUB2 - 6, 9, font(1.15))).toBe(5);
+  });
+});
+
+// A label in a round bubble: breaks at hyphenation points at the normal size first, shrinks only when that is not
+// enough, and never below the floor.
+describe('fitBubbleLabel', () => {
+  // The bubble's inner width (BUB2 minus its padding and border, as RingMenu measures it) and the building bubble's size.
+  const AVAILABLE = BUB2 - 6;
+  const START = 8.4;
+  // About what the UI font measures in a browser: ~0.5em a letter plus the bubble's 0.02em tracking.
+  const wordWidth = (word: string, px: number) => [...word.replaceAll(SOFT_HYPHEN, '')].length * 0.52 * px;
+  /** Lines of `text` in a box `AVAILABLE` wide, breaking only at spaces and (soft) hyphens, like the browser; Infinity when a piece is wider. */
+  const linesAt = (text: string, px: number) => {
+    const pieces = text.split(' ').flatMap((word, i, all) => {
+      const chunks = word.split(new RegExp(`(?<=[${SOFT_HYPHEN}-])`));
+      return chunks.map((chunk, j) => ({ chunk, spaceAfter: j === chunks.length - 1 && i < all.length - 1 }));
+    });
+    let lines = 1;
+    let used = 0;
+    for (const { chunk, spaceAfter } of pieces) {
+      const soft = chunk.endsWith(SOFT_HYPHEN);
+      const w = wordWidth(chunk, px) + (soft ? wordWidth('-', px) : 0);
+      if (w > AVAILABLE) return Infinity;
+      if (used + w > AVAILABLE) {
+        lines++;
+        used = 0;
+      }
+      used += w + (spaceAfter ? wordWidth(' ', px) : 0);
+    }
+    return lines;
+  };
+  const fit = (label: string, lang: string, minPx?: number, startPx = START) =>
+    fitBubbleLabel(label, startPx, {
+      widthAt: wordWidth,
+      linesAt,
+      availablePx: AVAILABLE,
+      hyphenate: (word) => hyphenate(word, lang),
+      ...(minPx ? { minPx } : {}),
+    });
+
+  beforeAll(async () => {
+    await Promise.all(['en', 'de'].map((lang) => loadHyphenation(lang)));
+  });
+
+  it('leaves a label that fits as it is, with no soft hyphens', () => {
+    expect(fit('Farm', 'en')).toEqual({ px: START, text: 'Farm', fits: true });
+    expect(fit('Town Square', 'en').text.includes(SOFT_HYPHEN)).toBe(false);
+  });
+
+  it('breaks a long German compound onto two lines at the normal size instead of shrinking it', () => {
+    const waffen = fit('Waffenschmiede', 'de');
+    expect(waffen.px).toBe(START);
+    expect(waffen.fits).toBe(true);
+    expect(waffen.text).toContain(SOFT_HYPHEN);
+    expect(waffen.text.replaceAll(SOFT_HYPHEN, '')).toBe('Waffenschmiede');
+    expect(linesAt(waffen.text, waffen.px)).toBe(2);
+    // the same rule for English
+    expect(fit('Weaponsmith', 'en')).toMatchObject({ px: START, fits: true });
+  });
+
+  it('hyphenates only the words that are wider than a line, not the ones next to them', () => {
+    const text = fit('Schrein der Freyja', 'de').text;
+    expect(text.includes(SOFT_HYPHEN)).toBe(false);
+    const mixed = fit('Great Storehouse Weaponsmith', 'en').text.split(' ');
+    expect(mixed[0]).toBe('Great');
+    expect(mixed[2]).toContain(SOFT_HYPHEN);
+  });
+
+  it('allows three lines only for a label with spaces', () => {
+    expect(fit('Schrein der Freyja', 'de')).toMatchObject({ px: START, fits: true });
+    expect(linesAt('Schrein der Freyja', START)).toBe(3);
+    // one word that needs three lines at the normal size is shrunk instead
+    expect(linesAt(hyphenate('Holzfällerhütte', 'de'), START)).toBe(3);
+    expect(fit('Holzfällerhütte', 'de').px).toBeLessThan(START);
+  });
+
+  it('shrinks only as far as needed, in steps of 0.1px, and stops at a size that fits', () => {
+    // two lines at the normal size are not enough for this one, so the font comes down
+    const shrunk = fit('Holzfällerhütte', 'de');
+    expect(shrunk.px).toBeLessThan(START);
+    expect(shrunk.px).toBeGreaterThanOrEqual(BUBBLE_LABEL_MIN_PX);
+    expect(shrunk.fits).toBe(true);
+    expect(linesAt(shrunk.text, shrunk.px)).toBeLessThanOrEqual(2);
+    expect(Math.round(shrunk.px * 10)).toBe(shrunk.px * 10);
+    // ... and a tenth bigger would not fit
+    const bigger = fit('Holzfällerhütte', 'de', shrunk.px + 0.1, shrunk.px + 0.1);
+    expect(bigger).toMatchObject({ px: shrunk.px + 0.1, fits: false });
+  });
+
+  it('holds the readable floor and reports a label that still does not fit there', () => {
+    expect(BUBBLE_LABEL_MIN_PX).toBe(7);
+    const tooLong = fit('Holzfällerhütten', 'de');
+    expect(tooLong.px).toBe(BUBBLE_LABEL_MIN_PX);
+    expect(tooLong.fits).toBe(false);
+    // no hyphenation patterns at all (a language without them): the unbreakable word is reported, not shrunk below the floor
+    const unbreakable = fit('Waffenschmiede', 'xx');
+    expect(unbreakable.px).toBe(BUBBLE_LABEL_MIN_PX);
+    expect(unbreakable.fits).toBe(false);
+  });
+
+  it('never goes below the floor for any catalogue name, in either language', () => {
+    for (const [lang, catalogue] of [['en', enCatalogue], ['de', deCatalogue]] as const) {
+      for (const label of Object.values(catalogue.buildings)) {
+        const result = fit(label, lang);
+        expect(result.px, `${lang}: ${label}`).toBeGreaterThanOrEqual(BUBBLE_LABEL_MIN_PX);
+        expect(result.px, `${lang}: ${label}`).toBeLessThanOrEqual(START);
+        expect(result.text.replaceAll(SOFT_HYPHEN, ''), `${lang}: ${label}`).toBe(label);
+      }
+    }
   });
 });

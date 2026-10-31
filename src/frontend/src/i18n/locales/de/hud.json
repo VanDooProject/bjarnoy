@@ -82,7 +82,13 @@
     "campEmpty": "Geräumt: leer",
     "campCalmUntil": "Ruhig bis {time}",
     "campAggressive": "Aggressiv",
-    "campClears": "Einmal geräumt | {count}-mal geräumt"
+    "campClears": "Einmal geräumt | {count}-mal geräumt",
+    "wallLevel2": "Unversehrte Mauer",
+    "wallLevel1": "Beschädigte Mauer",
+    "wallLevel0": "Mauerbruch",
+    "towerLevel2": "Besetzt",
+    "towerLevel1": "Beschädigt",
+    "towerLevel0": "Eingenommen"
   },
   "ringMenu": {
     "shrineLimitLock": "Diese Siedlung hat bereits einen Schrein",
@@ -133,7 +139,9 @@
       "hunt": "Jagen",
       "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
-      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause"
+      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
+      "siege": "Belagern",
+      "noRamAtHome": "Braucht einen Rammbock zu Hause"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -296,7 +304,9 @@
       "tower": "Wachturm",
       "fishinghut": "Fischerhütte",
       "reindeerherder": "Rentierhirte",
-      "pumpkinfarm": "Kürbisfarm"
+      "pumpkinfarm": "Kürbisfarm",
+      "palisade": "Palisade",
+      "palisadegate": "Palisadentor"
     },
     "missionAttack": "Angriff",
     "missionRaid": "Überfall",
@@ -379,10 +389,12 @@
     "searchSettlements": "Siedlungen zum {mission} suchen…",
     "noSettlementsFound": "Bisher keine weiteren Siedlungen gefunden.",
     "supportNote": "Der Gastgeber versorgt deine Truppen, sobald sie ankommen, aber sie brauchen weiterhin genug Proviant für die Rückreise, falls sie zurückgerufen werden.",
-    "buildingPickerHint": "Bevorzugtes Katapultziel — kann sich ändern, falls es beim Eintreffen deiner Armee nicht mehr dort steht.",
+    "buildingPickerHint": "Bevorzugtes Belagerungsziel — kann sich ändern, falls es beim Eintreffen deiner Armee nicht mehr dort steht.",
     "clear": "Löschen",
     "loadingEnemyLayout": "Feindliches Layout wird geladen…",
     "layoutLoadError": "Das Layout dieser Siedlung konnte nicht geladen werden — das Ziel wird bei der Ankunft zufällig gewählt.",
+    "engineReach": "Rammböcke brechen Mauern und Türme; Katapulte brennen Türme und alle anderen Gebäude nieder.",
+    "cannotDamage": "Deine gewählten Belagerungswaffen können das nicht beschädigen.",
     "buildingLevelCoord": "Stf {level} · ({q}, {r})",
     "noPreference": "Keine Präferenz — das Ziel wird bei der Ankunft zufällig gewählt.",
     "shipsOnly": "Schiffe",

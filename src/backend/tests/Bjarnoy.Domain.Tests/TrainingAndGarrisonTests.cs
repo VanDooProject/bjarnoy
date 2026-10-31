@@ -176,6 +176,18 @@ public class TrainingAndGarrisonTests
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
+    [Fact]
+    public void A_ram_is_trained_at_a_siege_workshop_and_not_at_an_archery_range()
+    {
+        var withRange = Found(
+            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 5)]);
+        var withWorkshop = Found(
+            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.SiegeWorkshop, 1)]);
+
+        Assert.Equal(TrainRejection.UnitNotAvailable, withRange.PlanTrain(UnitType.Ram, 1, T0, Guid.CreateVersion7()).Rejection);
+        Assert.True(withWorkshop.PlanTrain(UnitType.Ram, 1, T0, Guid.CreateVersion7()).Accepted);
+    }
+
     /// <summary>The basic melee slice of the roster is gated by a Barracks standing, not just the longhouse level.</summary>
     [Fact]
     public void A_basic_melee_unit_cannot_be_trained_without_a_barracks()

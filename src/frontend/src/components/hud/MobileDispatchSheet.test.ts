@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import MobileDispatchSheet from './MobileDispatchSheet.vue';
 import { useWorldStore } from '../../stores/world';
+import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import unitSnapshot from '../../data/unit-catalogue.json';
+import type { UnitDefinitionResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
@@ -140,5 +143,84 @@ describe('MobileDispatchSheet', () => {
 
     await decrementBtn.trigger('click');
     expect(world.dispatchDraft?.unitCounts.spearman).toBe(1);
+  });
+
+  describe('target-building picker', () => {
+    const buildings = [
+      { q: 1, r: 0, type: 'longhouse', level: 5 },
+      { q: 2, r: 0, type: 'tower', level: 3 },
+      { q: 3, r: 0, type: 'palisade', level: 2 },
+      { q: 4, r: 0, type: 'bridge', level: 4 },
+    ];
+
+    function attackDraft(units: Record<string, number>) {
+      const world = useWorldStore();
+      useUnitCatalogueStore().definitions = unitSnapshot.data as UnitDefinitionResponse[];
+      world.hud.garrison = Object.entries(units).map(([unit, count]) => ({ unit, count }));
+      vi.spyOn(world, 'listAttackableSettlements').mockReturnValue([{ id: 'rival', name: 'Rival', ownerName: 'Astrid', q: 9, r: 9 }]);
+      world.startDispatchAt({ q: 3, r: 0 }, { mission: 'attack', targetSettlementId: 'rival', targetBuildingCoord: { q: 3, r: 0 } });
+      world.dispatchTargetBuildings = buildings as never;
+      world.dispatchTargetBuildingsFor = 'rival';
+      world.dispatchTargetBuildingsLoading = false;
+      for (const [unit, count] of Object.entries(units)) world.setDispatchUnitCount(unit, count);
+      return world;
+    }
+
+    async function pickerRows(units: Record<string, number>) {
+      const world = attackDraft(units);
+      world.setDispatchTargetBuilding(null);
+      const wrapper = mountSheet();
+      await wrapper.vm.$nextTick();
+      return wrapper.findAll('[data-testid="building-target"]').map((row) => ({
+        text: row.text(),
+        disabled: (row.element as HTMLButtonElement).disabled,
+      }));
+    }
+
+    it('lets rams pick walls and towers only', async () => {
+      const rows = await pickerRows({ ram: 2 });
+
+      expect(rows.map((r) => r.disabled)).toEqual([true, false, false, true]);
+    });
+
+    it('lets catapults pick everything but walls', async () => {
+      const rows = await pickerRows({ catapult: 2 });
+
+      expect(rows.map((r) => r.disabled)).toEqual([false, false, true, false]);
+    });
+
+    it('lets a mixed army pick every target', async () => {
+      const rows = await pickerRows({ catapult: 1, ram: 1 });
+
+      expect(rows.every((r) => !r.disabled)).toBe(true);
+    });
+
+    it('says what a target the engines cannot damage is, and states each engine\'s reach', async () => {
+      const world = attackDraft({ ram: 1 });
+      world.setDispatchTargetBuilding(null);
+      const wrapper = mountSheet();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('[data-testid="engine-reach"]').text()).toContain('Rams breach walls and towers');
+      expect(wrapper.findAll('[data-testid="building-target"]')[0]!.text()).toContain("can't damage this");
+    });
+
+    it('warns when the wall the ring pre-selected is out of reach of the selected engines', async () => {
+      attackDraft({ catapult: 2 }); // the draft keeps the wall hex (3, 0) as its preferred target
+      const wrapper = mountSheet();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('[data-testid="target-unreachable"]').exists()).toBe(true);
+
+      useWorldStore().setDispatchUnitCount('ram', 1);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find('[data-testid="target-unreachable"]').exists()).toBe(false);
+    });
+
+    it('is not shown without a siege engine in the selection', async () => {
+      const rows = await pickerRows({ spearman: 5 });
+
+      expect(rows).toEqual([]);
+    });
   });
 });

@@ -19,6 +19,59 @@ async function waitForBothMapsReady(page: import('@playwright/test').Page): Prom
   );
 }
 
+type HeroHook = {
+  renderer: {
+    hexCenterScreen(c: { q: number; r: number }): { x: number; y: number };
+    cameraZoom: number;
+  };
+  frame: { center: { q: number; r: number }; radius: number };
+};
+declare global {
+  interface Window {
+    __showcaseHero: () => HeroHook;
+  }
+}
+
+/** Where the capped area's centre hex sits relative to the hero canvas centre, in screen px. */
+async function heroCapCenterOffset(page: import('@playwright/test').Page): Promise<{ x: number; y: number }> {
+  return page.evaluate(() => {
+    const { renderer, frame } = window.__showcaseHero();
+    const at = renderer.hexCenterScreen(frame.center);
+    const box = document.querySelector('#hero .map-container canvas')!.getBoundingClientRect();
+    return { x: at.x - box.width / 2, y: at.y - box.height / 2 };
+  });
+}
+
+/** The farthest the cap centre can sit from the canvas centre: the camera centre may reach the disc's bounding box, which is as wide/tall as the disc's extreme hexes. */
+async function heroCapHalfExtent(page: import('@playwright/test').Page): Promise<{ x: number; y: number }> {
+  return page.evaluate(() => {
+    const { renderer, frame } = window.__showcaseHero();
+    const mid = renderer.hexCenterScreen(frame.center);
+    const east = renderer.hexCenterScreen({ q: frame.center.q + frame.radius, r: frame.center.r });
+    const south = renderer.hexCenterScreen({ q: frame.center.q, r: frame.center.r + frame.radius });
+    // q+radius moves right and down, r+radius straight down (hex columns), so the box is as tall as the r run.
+    return { x: Math.abs(east.x - mid.x), y: Math.abs(south.y - mid.y) };
+  });
+}
+
+async function heroZoom(page: import('@playwright/test').Page): Promise<number> {
+  return page.evaluate(() => window.__showcaseHero().renderer.cameraZoom);
+}
+
+async function dragHero(page: import('@playwright/test').Page, dx: number, dy: number): Promise<void> {
+  const frame = page.locator('#hero .map-frame');
+  await frame.scrollIntoViewIfNeeded();
+  const box = await frame.boundingBox();
+  if (!box) throw new Error('hero map frame has no box');
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 8 });
+  await page.mouse.up();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+}
+
 test.describe('showcase page', { tag: '@g2' }, () => {
   test('renders the hero and both map frames become ready', async ({ page }) => {
     await page.goto('/showcase');
@@ -63,10 +116,8 @@ test.describe('showcase page', { tag: '@g2' }, () => {
 
     const engineering = page.locator('#engineering');
     await expect(engineering).not.toBeInViewport();
-    // Wheel with the pointer over the hero map on purpose: the renderer
-    // cancels every wheel event over its canvas (HexMapRenderer.onWheel), so
-    // until the visitor opts in via "Explore the map" the frame has to stay
-    // pointer-transparent or the page would be unscrollable past it.
+    // Wheel with the pointer over the hero map on purpose: it passes `allow-page-scroll`,
+    // so the renderer leaves a plain wheel to the page.
     await page.locator('#hero .map-frame').hover();
     await page.mouse.wheel(0, 100_000);
     await expect(engineering).toBeInViewport();
@@ -74,22 +125,105 @@ test.describe('showcase page', { tag: '@g2' }, () => {
     expect(await view.noHorizontalOverflow()).toBe(true);
   });
 
-  test('opting in to explore hands the wheel to the map instead of the page', async ({ page }) => {
+  test('the hero map is interactive from the start: no explore button, a drag moves the camera', async ({ page }) => {
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    await expect(page.locator('#hero .map-frame').getByRole('button')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /explore/i })).toHaveCount(0);
+
+    const before = await heroCapCenterOffset(page);
+    await dragHero(page, 80, 40);
+    const after = await heroCapCenterOffset(page);
+    // The camera moved with the drag: the cap centre slid across the screen by about the drag distance.
+    expect(after.x - before.x).toBeGreaterThan(40);
+  });
+
+  test('panning stops at the cap: dragging far leaves the camera inside the capped area', async ({ page }) => {
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    const limit = await heroCapHalfExtent(page);
+    for (const [dx, dy] of [
+      [3000, 0],
+      [-6000, 0],
+      [0, 3000],
+      [0, -6000],
+    ] as const) {
+      await dragHero(page, dx, dy);
+      const offset = await heroCapCenterOffset(page);
+      expect(Math.abs(offset.x)).toBeLessThanOrEqual(limit.x + 8);
+      expect(Math.abs(offset.y)).toBeLessThanOrEqual(limit.y + 8);
+    }
+    // Dragging the same way again does not move it: the camera sits on the bound, not short of it.
+    const stuck = await heroCapCenterOffset(page);
+    await dragHero(page, 0, -3000);
+    const again = await heroCapCenterOffset(page);
+    expect(again.x).toBeCloseTo(stuck.x, 0);
+    expect(again.y).toBeCloseTo(stuck.y, 0);
+    // And the camera was really on the bound, not stuck at the start.
+    expect(Math.abs(stuck.y)).toBeGreaterThan(limit.y - 8);
+  });
+
+  test('the wheel over the hero map scrolls the page and does not zoom the map', async ({ page }) => {
     await page.goto('/showcase');
     await waitForBothMapsReady(page);
 
     const view = new ScrollableView(page, '.showcase');
-    await page.getByRole('button', { name: 'Explore the map' }).click();
-    await page.locator('#hero .map-frame').hover();
-    await page.mouse.wheel(0, 400);
-    // Give a would-be page scroll a frame to land before asserting it didn't.
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
-    expect(await view.scrollTop()).toBe(0);
-
-    await page.getByRole('button', { name: 'Done exploring' }).click();
+    const zoomBefore = await heroZoom(page);
     await page.locator('#hero .map-frame').hover();
     await page.mouse.wheel(0, 400);
     await expect.poll(() => view.scrollTop()).toBeGreaterThan(0);
+    expect(await heroZoom(page)).toBe(zoomBefore);
+  });
+
+  test('after a click on the hero map the plain wheel zooms it; leaving the map hands the wheel back to the page', async ({
+    page,
+  }) => {
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    const view = new ScrollableView(page, '.showcase');
+    const frame = page.locator('#hero .map-frame');
+    await frame.scrollIntoViewIfNeeded();
+    const box = await frame.boundingBox();
+    if (!box) throw new Error('hero map frame has no box');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+
+    await page.mouse.move(x, y);
+    await page.mouse.click(x, y);
+    await settle();
+    const scrollBefore = await view.scrollTop();
+    const zoomBefore = await heroZoom(page);
+    await page.mouse.wheel(0, -400);
+    await expect.poll(() => heroZoom(page)).toBeGreaterThan(zoomBefore);
+    await settle();
+    expect(await view.scrollTop()).toBe(scrollBefore);
+
+    // Off the map and back: the pointer left, so the wheel scrolls the page again.
+    await page.mouse.move(box.x - 20, box.y + 4);
+    await page.mouse.move(x, y);
+    const zoomAfter = await heroZoom(page);
+    await page.mouse.wheel(0, 400);
+    await expect.poll(() => view.scrollTop()).toBeGreaterThan(scrollBefore);
+    expect(await heroZoom(page)).toBe(zoomAfter);
+  });
+
+  test('ctrl+wheel zooms the hero map without a click', async ({ page }) => {
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    const view = new ScrollableView(page, '.showcase');
+    const zoomBefore = await heroZoom(page);
+    const scrollBefore = await view.scrollTop();
+    await page.locator('#hero .map-frame').hover();
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -400);
+    await page.keyboard.up('Control');
+    await expect.poll(() => heroZoom(page)).toBeGreaterThan(zoomBefore);
+    expect(await view.scrollTop()).toBe(scrollBefore);
   });
 
   test('the village frame is always explorable: no opt-in button, the wheel and drag go to the map', async ({

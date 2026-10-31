@@ -24,8 +24,9 @@ namespace Bjarnoy.Domain.Units;
 /// <see cref="BuildingType.Barracks"/> and <see cref="BuildingType.ArcheryRange"/>
 /// split the land-army roster with no overlap by <see cref="UnitDefinition.RequiredBuildingType"/>:
 /// Barracks trains the core line (Thrall, Spearman, Axeman, Berserker),
-/// ArcheryRange trains the ranged/siege specialists (Bowman, Catapult) — no
-/// unit is ever trainable from both.
+/// ArcheryRange trains the ranged/siege specialists (Bowman, Catapult), and the
+/// <see cref="BuildingType.SiegeWorkshop"/> the battering ram — no
+/// unit is ever trainable from two of them.
 /// </remarks>
 public static class UnitCatalogue
 {
@@ -167,11 +168,32 @@ public static class UnitCatalogue
             // commitment, not a throwaway raid. Revisit alongside a real
             // combat balancing pass, same as UpkeepPerHour/Attack/Defense above.
             SiegePower = 40,
+            SiegeTargets = SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 200, Food: 40, Iron: 250),
             TrainingDuration = TimeSpan.FromHours(1),
             RequiredLonghouseLevel = 20,
             RequiredUnitType = UnitType.Berserker,
             RequiredBuildingType = BuildingType.ArcheryRange,
+        },
+        [UnitType.Ram] = new UnitDefinition
+        {
+            Type = UnitType.Ram,
+            Class = UnitClass.Siege,
+            Attack = 10,
+            Defense = 30,
+            Speed = 1.0,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 0,
+            UpkeepPerHour = 3,
+            // Same siege power as the catapult (the same SiegeResolver.LevelsDestroyed), more staying power, slower. It
+            // is the wall breaker: walls and towers, nothing else; the catapult covers the rest.
+            SiegePower = 40,
+            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers,
+            TrainingCost = new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150),
+            TrainingDuration = TimeSpan.FromHours(1),
+            RequiredLonghouseLevel = 20,
+            RequiredUnitType = UnitType.Berserker,
+            RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
         [UnitType.Karve] = new UnitDefinition
         {

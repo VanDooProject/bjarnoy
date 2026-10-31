@@ -240,7 +240,9 @@ public sealed record PreviewIslandResponse(
     IReadOnlyList<GiantResponse> Giants,
     bool Wasted,
     IReadOnlyList<CampResponse> Camps,
-    IReadOnlyList<BogTileResponse> BogTiles)
+    IReadOnlyList<BogTileResponse> BogTiles,
+    IReadOnlyList<UtgardWallResponse> UtgardWalls,
+    IReadOnlyList<JotunTowerResponse> JotunTowers)
 {
     public static PreviewIslandResponse From(GeneratedIsland island)
     {
@@ -257,7 +259,9 @@ public sealed record PreviewIslandResponse(
             [.. island.Giants.Select(GiantResponse.FromDomain)],
             island.IsWasted,
             [.. island.Camps.Select(CampResponse.FromDomain)],
-            [.. island.BogTiles.Select(BogTileResponse.FromDomain)]);
+            [.. island.BogTiles.Select(BogTileResponse.FromDomain)],
+            [.. island.UtgardWalls.Select(UtgardWallResponse.FromDomain)],
+            [.. island.JotunTowers.Select(JotunTowerResponse.FromDomain)]);
     }
 }
 

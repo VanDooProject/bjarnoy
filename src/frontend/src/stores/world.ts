@@ -52,6 +52,7 @@ import {
 import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
 import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
+import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
@@ -585,6 +586,29 @@ export const useWorldStore = defineStore('world', {
             coord: { q: camp.q, r: camp.r },
             level: camp.level,
             orientation: camp.orientation as TileOrientation,
+          })),
+        ),
+      );
+      // Server-generated Utgard walls and Jötun watchtowers of the wasted islands (see `IslandResponse.utgardWalls`): tagged for
+      // rendering and the client's route preview; the server is authoritative on pieces, rotations and levels.
+      this.model.setUtgardWalls(
+        this.islands.flatMap((island) =>
+          (island.utgardWalls ?? []).map((wall) => ({
+            coord: { q: wall.q, r: wall.r },
+            ring: wall.ring,
+            piece: wall.piece as PalisadePiece,
+            dir: wall.orientation as TileOrientation,
+            isGate: wall.isGate,
+            level: wall.level,
+          })),
+        ),
+      );
+      this.model.setJotunTowers(
+        this.islands.flatMap((island) =>
+          (island.jotunTowers ?? []).map((tower) => ({
+            coord: { q: tower.q, r: tower.r },
+            orientation: tower.orientation as TileOrientation,
+            level: 2,
           })),
         ),
       );
@@ -1270,8 +1294,14 @@ export const useWorldStore = defineStore('world', {
     },
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
-      const summaries = await api.listSettlements(this.worldId, this.ownerId ?? undefined);
+      // Rival walls ride the same cadence: the settlement list is data-only, so this is the only way the client learns where another
+      // player's palisades stand (to draw them, offer Siege on them and route around them). A failed walls read keeps the last set.
+      const [summaries, walls] = await Promise.all([
+        api.listSettlements(this.worldId, this.ownerId ?? undefined),
+        api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
+      ]);
       this.registerSettlementSummaries(summaries);
+      if (walls) this.model.applyRivalWalls(walls);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1523,7 +1553,10 @@ export const useWorldStore = defineStore('world', {
      * to fill in. Units are still picked manually (no default selection);
      * this only sets the mission and destination the tap already implied.
      */
-    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {}) {
+    startDispatchAt(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+    ) {
       this.startDispatch();
       if (!this.dispatchDraft) return;
       if (opts.mission === 'hunt') {
@@ -1532,6 +1565,9 @@ export const useWorldStore = defineStore('world', {
       } else if (opts.mission && opts.targetSettlementId) {
         this.dispatchDraft.mission = opts.mission;
         this.setDispatchTarget(opts.targetSettlementId);
+        // The "Siege" ring action on a rival wall: an Attack on the wall's settlement that prefers the wall hex, the same
+        // draft state the target-building picker sets (setDispatchTarget cleared it, so it is set after).
+        if (opts.targetBuildingCoord) this.setDispatchTargetBuilding({ q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r });
       } else {
         this.addWaypoint(coord);
       }

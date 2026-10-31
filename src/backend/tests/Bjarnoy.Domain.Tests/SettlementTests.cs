@@ -169,6 +169,7 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.Tower)]
     [InlineData(BuildingType.ArcheryRange)]
+    [InlineData(BuildingType.SiegeWorkshop)]
     [InlineData(BuildingType.Barracks)]
     public void The_tower_and_archery_range_are_gated_to_grass_or_sand(BuildingType type)
     {
@@ -230,6 +231,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Barracks, BuildingType.Tower, 3)]
     [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 5)]
     [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 5)]
+    [InlineData(BuildingType.SiegeWorkshop, BuildingType.ArcheryRange, 3)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 3)]
     [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 5)]
@@ -946,6 +948,32 @@ public class SettlementTests
             giants: giants);
 
         Assert.Equal(BuildRejection.HexOccupiedByGiant, decision.Rejection);
+    }
+
+    [Fact]
+    public void Building_on_an_endgame_site_hex_is_refused_even_when_claimed()
+    {
+        var wallHex = new HexCoord(1, 0);
+        var towerHex = new HexCoord(0, 1);
+        var sites = new EndgameSiteIndex([wallHex, towerHex]);
+        var settlement = Found();
+
+        Assert.True(settlement.Claims(wallHex) && settlement.Claims(towerHex), "sanity: the claim reaches both site hexes");
+
+        foreach (var hex in new[] { wallHex, towerHex })
+        {
+            var refused = settlement.PlanBuild(
+                BuildingType.ReindeerHerder, hex, Terrain.Grass, T0, Guid.CreateVersion7(), endgameSites: sites);
+            Assert.Equal(BuildRejection.HexOccupiedByEndgameSite, refused.Rejection);
+        }
+
+        var elsewhere = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), endgameSites: sites);
+        Assert.NotEqual(BuildRejection.HexOccupiedByEndgameSite, elsewhere.Rejection);
+
+        var noIndex = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, wallHex, Terrain.Grass, T0, Guid.CreateVersion7());
+        Assert.NotEqual(BuildRejection.HexOccupiedByEndgameSite, noIndex.Rejection);
     }
 
     [Fact]

@@ -193,6 +193,28 @@ export interface CampReportResponse {
   towerBurned: boolean;
 }
 
+/**
+ * Mirrors `UtgardWallResponse` — one hex of an Utgard wall ring (see `lib/map/endgamePlacement.ts` and `docs/design/endgame.md`).
+ * `piece` is the wall piece (`straight180`, `bend60`, `bend120`, `gate180`, `end` or `end_coast` on a sea hex); the atlas family is
+ * `utgardwall_<piece>`. `level` is 2 full, 1 damaged, 0 breached rubble.
+ */
+export interface UtgardWallResponse {
+  q: number;
+  r: number;
+  ring: 'inner' | 'outer';
+  piece: string;
+  orientation: string;
+  isGate: boolean;
+  level: number;
+}
+
+/** Mirrors `JotunTowerResponse` — a Jötun watchtower; `orientation` is the tile's own rotation wire name. */
+export interface JotunTowerResponse {
+  q: number;
+  r: number;
+  orientation: string;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;
@@ -206,6 +228,10 @@ export interface IslandResponse {
   camps: CampResponse[];
   /** This island's bogland (empty when it has none). */
   bogTiles: BogTileResponse[];
+  /** The Utgard wall rings of a wasted island with Utgard (empty otherwise). */
+  utgardWalls?: UtgardWallResponse[];
+  /** The Jötun watchtowers of a wasted island with Utgard (empty otherwise). */
+  jotunTowers?: JotunTowerResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
 }
@@ -404,6 +430,19 @@ export interface SettlementSummary {
   r: number;
   longhouseLevel: number;
   islandId: string;
+}
+
+/**
+ * Mirrors `WallResponse` (`GET /worlds/{id}/walls`): one standing wall hex of another player's settlement, fog-gated like
+ * the settlement list. `ownerUserId` is null for an anonymous settlement.
+ */
+export interface WorldWall {
+  q: number;
+  r: number;
+  type: 'palisade' | 'palisadegate';
+  level: number;
+  settlementId: string;
+  ownerUserId: string | null;
 }
 
 /**
@@ -725,6 +764,8 @@ export interface PreviewIslandResponse {
   giants: GiantResponse[];
   camps: CampResponse[];
   bogTiles: BogTileResponse[];
+  utgardWalls?: UtgardWallResponse[];
+  jotunTowers?: JotunTowerResponse[];
   /** True for an island generated from the wasted-island terrain layer (its river tiles are lava streams). */
   wasted: boolean;
 }
@@ -1675,6 +1716,8 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+  /** What this siege engine can damage (`UnitDefinition.SiegeTargets`): `"walls"`, `"towers"`, `"buildings"`; empty for a unit without siege power. */
+  siegeTargets: string[];
 }
 
 /** Mirrors `FogChunkResponse` — one 64 x 64-texel chunk of the fog mask (map-fog-v2.md §3). `png` is base64, or null for an empty (fully unknown) chunk. */

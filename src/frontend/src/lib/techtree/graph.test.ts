@@ -64,9 +64,9 @@ describe('ancestry', () => {
       new Set(['shrineoffreyja', 'meadery', 'cropmill']),
     );
     expect(descendantsOf(graph, 'tower')).toEqual(
-      new Set(['barracks', 'archeryrange', 'shrineofthor', 'smithy', 'palisade']),
+      new Set(['barracks', 'archeryrange', 'siegeworkshop', 'shrineofthor', 'smithy', 'palisade']),
     );
-    expect(descendantsOf(graph, 'claybrickworks')).toEqual(new Set());
+    expect(descendantsOf(graph, 'claybrickworks')).toEqual(new Set(['bogoreworks', 'hammerschmiede']));
   });
 });
 
@@ -94,10 +94,11 @@ describe('hoverSets', () => {
     const sets = hoverSets(graph, 'barracks');
 
     expect(sets.up).toEqual(new Set(['barracks', 'tower', 'longhouse']));
-    expect(sets.down).toEqual(new Set(['archeryrange', 'smithy', 'shrineofthor']));
+    expect(sets.down).toEqual(new Set(['archeryrange', 'siegeworkshop', 'smithy', 'shrineofthor']));
     expect(sets.downKeys).toEqual(
       new Set([
         edgeKey('barracks', 'archeryrange'),
+        edgeKey('archeryrange', 'siegeworkshop'),
         edgeKey('barracks', 'smithy'),
         edgeKey('smithy', 'shrineofthor'),
       ]),

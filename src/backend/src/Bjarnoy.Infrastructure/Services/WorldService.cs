@@ -431,6 +431,9 @@ public sealed class WorldService(
         BogTiles = [.. island.BogTiles.Select(ToBogTileRecord)],
         Giants = [.. island.Giants.Select(ToGiantRecord)],
         Camps = [.. island.Camps.Select(ToCampRecord)],
+        UtgardWalls = [.. island.UtgardWalls.Select(w => new UtgardWallRecord(
+            w.Coord.Q, w.Coord.R, (int)w.Ring, (int)w.Piece, (int)w.Dir, w.IsGate, w.Level))],
+        JotunTowers = [.. island.JotunTowers.Select(t => new JotunTowerRecord(t.Coord.Q, t.Coord.R, (int)t.Orientation))],
         IsWasted = island.IsWasted,
     };
 

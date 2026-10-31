@@ -82,7 +82,13 @@
     "campEmpty": "Cleared: empty",
     "campCalmUntil": "Calm until {time}",
     "campAggressive": "Aggressive",
-    "campClears": "Cleared once | Cleared {count} times"
+    "campClears": "Cleared once | Cleared {count} times",
+    "wallLevel2": "Intact wall",
+    "wallLevel1": "Damaged wall",
+    "wallLevel0": "Breached wall",
+    "towerLevel2": "Garrisoned",
+    "towerLevel1": "Damaged",
+    "towerLevel0": "Taken"
   },
   "ringMenu": {
     "shrineLimitLock": "This settlement already has a shrine",
@@ -133,7 +139,9 @@
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
-      "noLandUnitsAtHome": "No land units at home"
+      "noLandUnitsAtHome": "No land units at home",
+      "siege": "Siege",
+      "noRamAtHome": "Needs a battering ram at home"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -296,7 +304,9 @@
       "tower": "Watchtower",
       "fishinghut": "Fishing hut",
       "reindeerherder": "Reindeer herder",
-      "pumpkinfarm": "Pumpkin farm"
+      "pumpkinfarm": "Pumpkin farm",
+      "palisade": "Palisade",
+      "palisadegate": "Palisade gate"
     },
     "missionAttack": "Attack",
     "missionRaid": "Raid",
@@ -379,10 +389,12 @@
     "searchSettlements": "Search settlements to {mission}…",
     "noSettlementsFound": "No other settlements found yet.",
     "supportNote": "The host feeds your troops once they arrive, but they still need enough food loaded for the round trip home if recalled.",
-    "buildingPickerHint": "Preferred catapult target — may change if it's no longer there by the time your army arrives.",
+    "buildingPickerHint": "Preferred siege target — may change if it's no longer there by the time your army arrives.",
     "clear": "Clear",
     "loadingEnemyLayout": "Loading enemy layout…",
     "layoutLoadError": "Couldn't load this settlement's layout — target will be chosen at random on arrival.",
+    "engineReach": "Rams breach walls and towers; catapults burn towers and every other building.",
+    "cannotDamage": "Your selected siege engines can't damage this.",
     "buildingLevelCoord": "Lv {level} · ({q}, {r})",
     "noPreference": "No preference — target will be chosen at random on arrival.",
     "shipsOnly": "Ships",

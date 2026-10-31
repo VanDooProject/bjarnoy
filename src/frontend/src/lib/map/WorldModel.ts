@@ -19,6 +19,8 @@ import type { StandingBridges } from './bridgeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
+import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
+import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
@@ -385,6 +387,8 @@ export class WorldModel {
    * `findLandfall` and the build rule read it without materialising tiles.
    */
   private campByHex = new Map<string, NonNullable<Tile['camp']> & { q: number; r: number }>();
+  /** Utgard wall hexes by hex (see `setUtgardWalls`), kept beside `Tile.utgardWall` so the movement rules read them without materialising tiles. */
+  private utgardWallByHex = new Map<string, NonNullable<Tile['utgardWall']>>();
 
   constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
@@ -1578,6 +1582,7 @@ export class WorldModel {
       'palisade',
       'palisadegate',
       'bridge',
+      'siegeworkshop',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1657,6 +1662,56 @@ export class WorldModel {
     return levels;
   }
 
+  /** The rival walls `applyRivalWalls` last placed, by hex: who owns each (a user id, null for an anonymous settlement) and its settlement. */
+  private rivalWalls = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+
+  /**
+   * Replaces the set of other players' walls this model knows (live mode: `GET /worlds/{id}/walls`, which is fog-gated and leaves the
+   * player's own walls out). Each wall is put on its tile the way an own wall is (type, level, owning settlement), so the piece it
+   * draws, the hit-test and the route rules need nothing special. A wall of the previous call that is missing now is cleared; a hex
+   * one of the player's own settlements renders is never touched.
+   */
+  applyRivalWalls(
+    walls: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null }[],
+  ) {
+    const ownRendered = new Set<string>();
+    for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
+
+    const next = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+    for (const wall of walls) {
+      if (wall.type !== 'palisade' && wall.type !== 'palisadegate') continue;
+      const key = coordKey({ q: wall.q, r: wall.r });
+      if (ownRendered.has(key)) continue;
+      const tile = this.getTile(wall.q, wall.r);
+      tile.ownerId = wall.settlementId;
+      tile.buildingType = wall.type;
+      tile.buildingLevel = wall.level;
+      next.set(key, { settlementId: wall.settlementId, ownerUserId: wall.ownerUserId });
+    }
+
+    for (const [key, previous] of this.rivalWalls) {
+      if (next.has(key) || ownRendered.has(key)) continue;
+      const { q, r } = parseKey(key);
+      const tile = this.getTile(q, r);
+      if (tile.ownerId !== previous.settlementId) continue;
+      if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
+        tile.buildingType = undefined;
+        tile.buildingLevel = undefined;
+      }
+    }
+
+    this.rivalWalls = next;
+    this.wallRevision++;
+  }
+
+  /**
+   * Who owns the rival wall on a hex: its account's user id, `null` for an anonymous settlement, `undefined` when the hex is not
+   * a rival wall `applyRivalWalls` placed (the player's own walls, or none). What the siege action's own/friendly check reads.
+   */
+  rivalWallOwner(q: number, r: number): string | null | undefined {
+    return this.rivalWalls.get(coordKey({ q, r }))?.ownerUserId;
+  }
+
   /**
    * The highest level of each building type this settlement has standing (a
    * level-0 foundation counts as 0) — what a building's `prerequisites` are
@@ -1707,8 +1762,19 @@ export class WorldModel {
     const standing = new Map<string, { gate: boolean; owner: string }>();
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
-      const owner = wall.tileOwner ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner) : '';
+      // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
+      const rival = this.rivalWalls.get(key);
+      const owner = rival
+        ? (rival.ownerUserId ?? rival.settlementId)
+        : wall.tileOwner
+          ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner)
+          : '';
       standing.set(key, { gate: wall.gate, owner });
+    }
+    // The jötnar's Utgard walls block under a fixed owner key that is nobody's friend (a breached level-0 hex is passable).
+    for (const [key, wall] of this.utgardWallByHex) {
+      if (wall.level < 1) continue;
+      standing.set(key, { gate: wall.isGate, owner: JOTNAR_OWNER_KEY });
     }
     return standing;
   }
@@ -1793,6 +1859,8 @@ export class WorldModel {
     // A wildlife camp hex is not buildable while the camp stands guarded; a cleared
     // (empty) camp is, except Fenrir's brood (matches BuildRejection.HexOccupiedByCamp).
     if (tile.camp && !campHexBuildable(tile.camp)) return false;
+    // An Utgard wall (rubble included) or a Jötun watchtower is never buildable (matches BuildRejection.HexOccupiedByEndgameSite).
+    if (tile.utgardWall || tile.jotunTower) return false;
     // Every other building needs dry land; the fishing hut, dockyard and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
@@ -2044,6 +2112,59 @@ export class WorldModel {
         orientation: p.orientation ?? this.getTile(p.coord.q, p.coord.r).orientation ?? 'SE',
       })),
     );
+
+    // Utgard's wall rings and the Jötun watchtowers (a wasted island with Utgard only), after giants and camps — the backend's
+    // own order (`WorldGenerator.Generate`).
+    if (wasted) {
+      const sites = placeEndgame(
+        islandTiles,
+        (c) => this.terrainOf(c.q, c.r),
+        isRiver,
+        placements.map((p) => ({ anchor: p.anchor, family: p.family })),
+        new Set(campPlacements.map((p) => coordKey(p.coord))),
+        worldSeed,
+        islandIndex,
+      );
+      this.setUtgardWalls(
+        sites.walls.map((w) => ({ coord: w.coord, ring: w.ring, piece: w.piece, dir: w.dir, isGate: w.isGate, level: w.level })),
+      );
+      this.setJotunTowers(
+        sites.towers.map((coord) => ({ coord, orientation: this.getTile(coord.q, coord.r).orientation ?? 'SE', level: 2 })),
+      );
+    }
+  }
+
+  /**
+   * Tags each Utgard wall hex with `Tile.utgardWall`. Live mode feeds it the server's authoritative walls
+   * (`IslandResponse.utgardWalls`); demo mode feeds it `placeEndgame` output. Unlike `setCamps` a repeat call overwrites: a wall's
+   * level changes as it is breached. Returns whether anything changed, so a caller only forces a redraw for a real change.
+   */
+  setUtgardWalls(
+    walls: { coord: AxialCoord; ring: 'inner' | 'outer'; piece: PalisadePiece; dir: TileOrientation; isGate: boolean; level: number }[],
+  ): boolean {
+    let changed = false;
+    for (const wall of walls) {
+      const key = coordKey(wall.coord);
+      const next = { ring: wall.ring, piece: wall.piece, dir: wall.dir, isGate: wall.isGate, level: wall.level };
+      const known = this.utgardWallByHex.get(key);
+      if (known && JSON.stringify(known) === JSON.stringify(next)) continue;
+      this.getTile(wall.coord.q, wall.coord.r).utgardWall = next;
+      this.utgardWallByHex.set(key, next);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Tags each Jötun watchtower hex with `Tile.jotunTower` (live: `IslandResponse.jotunTowers`; demo: `placeEndgame`). Overwrites, like `setUtgardWalls`. */
+  setJotunTowers(towers: { coord: AxialCoord; orientation: TileOrientation; level: number }[]): boolean {
+    let changed = false;
+    for (const tower of towers) {
+      const tile = this.getTile(tower.coord.q, tower.coord.r);
+      if (tile.jotunTower?.orientation === tower.orientation && tile.jotunTower.level === tower.level) continue;
+      tile.jotunTower = { orientation: tower.orientation, level: tower.level };
+      changed = true;
+    }
+    return changed;
   }
 
   /**
