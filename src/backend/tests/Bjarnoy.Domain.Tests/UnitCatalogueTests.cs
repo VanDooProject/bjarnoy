@@ -257,6 +257,30 @@ public class UnitCatalogueTests
         Assert.Equal(new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150), ram.TrainingCost);
         Assert.Equal(TimeSpan.FromHours(1), ram.TrainingDuration);
         Assert.Equal(UnitType.Berserker, ram.RequiredUnitType);
-        Assert.Equal(BuildingType.ArcheryRange, ram.RequiredBuildingType);
+        Assert.Equal(BuildingType.SiegeWorkshop, ram.RequiredBuildingType);
+    }
+
+    [Fact]
+    public void The_siege_workshop_trains_the_ram_and_the_archery_range_does_not()
+    {
+        // The ram needs a Siege Workshop standing (its Berserker prerequisite a Barracks); an Archery Range, which keeps
+        // the bowman and the catapult, is not enough.
+        int Standing(BuildingType trains, BuildingType t) => t == trains || t == BuildingType.Barracks ? 1 : 0;
+
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.ArcheryRange, t)));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.ArcheryRange, t)));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
+    }
+
+    [Fact]
+    public void Siege_engines_carry_what_they_can_damage_and_nothing_else_does()
+    {
+        Assert.Equal(SiegeTargets.Towers | SiegeTargets.Buildings, UnitCatalogue.Get(UnitType.Catapult).SiegeTargets);
+        Assert.Equal(SiegeTargets.Walls | SiegeTargets.Towers, UnitCatalogue.Get(UnitType.Ram).SiegeTargets);
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).SiegePower == 0))
+        {
+            Assert.Equal(SiegeTargets.None, UnitCatalogue.Get(type).SiegeTargets);
+        }
     }
 }

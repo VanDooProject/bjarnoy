@@ -452,7 +452,8 @@ public sealed record UnitDefinitionResponse(
     double TrainingSeconds,
     int RequiredLonghouseLevel,
     string? RequiredUnitType,
-    string RequiredBuildingType)
+    string RequiredBuildingType,
+    IReadOnlyList<string> SiegeTargets)
 {
     public static UnitDefinitionResponse From(UnitDefinition definition)
     {
@@ -471,6 +472,14 @@ public sealed record UnitDefinitionResponse(
             definition.TrainingDuration.TotalSeconds,
             definition.RequiredLonghouseLevel,
             definition.RequiredUnitType?.ToWireName(),
-            definition.RequiredBuildingType.ToWireName());
+            definition.RequiredBuildingType.ToWireName(),
+            SiegeTargetNames(definition.SiegeTargets));
     }
+
+    /// <summary>The lowercase wire names of the kinds of building a siege engine can damage: <c>walls</c>, <c>towers</c>, <c>buildings</c>.</summary>
+    private static string[] SiegeTargetNames(Domain.Units.SiegeTargets targets) =>
+        Enum.GetValues<Domain.Units.SiegeTargets>()
+            .Where(t => t != Domain.Units.SiegeTargets.None && targets.HasFlag(t))
+            .Select(t => t.ToString().ToLowerInvariant())
+            .ToArray();
 }
