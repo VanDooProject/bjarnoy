@@ -28,6 +28,8 @@ import OnboardingBanner from '../components/onboarding/OnboardingBanner.vue';
 import ReturningLoginPanel from '../components/onboarding/ReturningLoginPanel.vue';
 import { useBuildRing, categoriesFor, type BuildableType } from '../composables/useBuildRing';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
+import { ringShapes } from '../lib/map/ringLayout';
+import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
@@ -371,7 +373,7 @@ function onContinueToSettlement() {
 
 // Ring menu state for the onboarding build step: the same two-lane ring the settlement map shows (Build ->
 // categories -> buildings), fed by the same useBuildRing model, so it offers exactly what the map offers on the hex.
-const ringScreen = ref<{ x: number; y: number } | null>(null);
+const ringScreen = ref<RingPlacement | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
 const ringTile = ref<Tile | null>(null);
 const ringError = ref<string | null>(null);
@@ -457,28 +459,29 @@ const ringCoordLabel = computed(() =>
 );
 
 // Same phone docking and bounds rules as the map's ring (lib/map/ringDock.ts), measured against the window.
-const ringDock = computed(() =>
-  ringScreen.value
-    ? ringDockFor({
-        compact: isCompactHudLanding.value,
-        width: window.innerWidth,
-        height: window.innerHeight,
-        x: ringScreen.value.x,
-      })
-    : null,
-);
-const ringBounds = computed(() =>
-  boundsClearOfDock(
+function ringDockAt(x: number) {
+  return ringDockFor({
+    compact: isCompactHudLanding.value,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    x,
+  });
+}
+/** The ring's area with the tile at screen x (the landscape dock goes on the side away from it). */
+function ringBoundsAt(x: number) {
+  return boundsClearOfDock(
     {
       left: 16,
       top: hudInsetTopPxLanding.value + 12,
       right: window.innerWidth - 16,
       bottom: window.innerHeight - (hudInsetBottomPxLanding.value + 16),
     },
-    ringDock.value,
+    ringDockAt(x),
     { width: window.innerWidth, height: window.innerHeight, insetBottom: hudInsetBottomPxLanding.value },
-  ),
-);
+  );
+}
+const ringDock = computed(() => (ringScreen.value ? ringDockAt(ringScreen.value.x) : null));
+const ringBounds = computed(() => ringBoundsAt(ringScreen.value?.x ?? window.innerWidth / 2));
 
 function closeRing() {
   ringScreen.value = null;
@@ -671,9 +674,15 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
       return;
     }
     ringCoord.value = coord;
-    ringScreen.value = screen;
     ringTile.value = tile;
     ringError.value = null;
+    // After the tile is set: the categories the ring will offer decide how much room it needs.
+    ringScreen.value = placeRing(
+      canvasRef.value?.renderer,
+      screen,
+      ringBoundsAt,
+      ringShapes(ringActions.value.length, ringCategories.value.map((c) => c.buildings.length)),
+    );
     return;
   }
   closeRing();
@@ -1028,6 +1037,7 @@ watch(
       :target-radius="pointerTarget.targetRadius"
       :tip-gap="pointerTarget.tipGap"
       :scale="pointerTarget.scale"
+      :avoid="pointerTarget.mode === 'screen' ? ringBubbles : undefined"
       clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
@@ -1058,6 +1068,7 @@ watch(
       v-if="ringScreen"
       :x="ringScreen.x"
       :y="ringScreen.y"
+      :scale="ringScreen.scale"
       :actions="ringActions"
       :categories="ringCategories"
       :terrain-label="ringTerrainLabel"

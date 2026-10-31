@@ -11,8 +11,8 @@ import enCatalogue from '../i18n/locales/en/catalogue.json';
 import type { UnitDefinitionResponse } from '../api/types';
 import { useDispatchTargetBuilding } from './useDispatchTargetBuilding';
 
-function unit(type: string, cls: string): UnitDefinitionResponse {
-  return { type, class: cls } as UnitDefinitionResponse;
+function unit(type: string, cls: string, siegeTargets: string[] = []): UnitDefinitionResponse {
+  return { type, class: cls, siegeTargets } as UnitDefinitionResponse;
 }
 
 // Land at q >= 0, sea at q < 0: (0,r) is shoreline, (3,r) is inland, (-1,r) is a sea hex.
@@ -22,7 +22,12 @@ function setup(unitCounts: Record<string, number>) {
   setActivePinia(createPinia());
   const world = useWorldStore();
   world.model = markRaw(COAST) as unknown as typeof world.model;
-  useUnitCatalogueStore().definitions = [unit('karve', 'ship'), unit('catapult', 'siege'), unit('spearman', 'infantry')];
+  useUnitCatalogueStore().definitions = [
+    unit('karve', 'ship', ['walls', 'towers', 'buildings']),
+    unit('catapult', 'siege', ['towers', 'buildings']),
+    unit('ram', 'siege', ['walls', 'towers']),
+    unit('spearman', 'infantry'),
+  ];
   world.startDispatch();
   world.setDispatchMission('attack');
   world.dispatchDraft!.unitCounts = unitCounts;
@@ -30,6 +35,7 @@ function setup(unitCounts: Record<string, number>) {
   world.dispatchTargetBuildingsFor = 'target-1';
   world.dispatchTargetBuildings = [
     { q: 3, r: 0, type: 'farm', level: 4 },
+    { q: 2, r: 0, type: 'palisade', level: 3 },
     { q: 0, r: 0, type: 'fishing_hut', level: 2 },
     { q: -1, r: 0, type: 'dockyard', level: 1 },
   ];
@@ -53,6 +59,7 @@ describe('useDispatchTargetBuilding', () => {
     expect(picker.showPicker.value).toBe(true);
     expect(picker.isRequired.value).toBe(true);
     expect(picker.rows.value.map((r) => `${r.q},${r.r}`)).toEqual(['0,0', '-1,0']);
+    expect(picker.rows.value.every((r) => r.damageable)).toBe(true);
     expect(picker.isMissingRequiredPick.value).toBe(true);
 
     picker.pick(0, 0);
@@ -65,8 +72,20 @@ describe('useDispatchTargetBuilding', () => {
 
     expect(picker.showPicker.value).toBe(true);
     expect(picker.isRequired.value).toBe(false);
-    expect(picker.rows.value).toHaveLength(3);
+    expect(picker.rows.value).toHaveLength(4);
     expect(picker.isMissingRequiredPick.value).toBe(false);
+  });
+
+  it('marks the buildings the selected engines cannot damage and warns about an unreachable pick', () => {
+    const { picker, world } = setup({ catapult: 3 });
+    expect(Object.fromEntries(picker.rows.value.map((r) => [`${r.q},${r.r}`, r.damageable]))).toMatchObject({ '2,0': false, '3,0': true });
+    expect(picker.selectedUnreachable.value).toBe(false);
+
+    picker.pick(2, 0);
+    expect(picker.selectedUnreachable.value).toBe(true);
+
+    world.dispatchDraft!.unitCounts = { ram: 1 };
+    expect(picker.selectedUnreachable.value).toBe(false);
   });
 
   it('shows no picker for a plain land attack', () => {

@@ -227,20 +227,62 @@ export function isUnitSelectableFor(
   return selection === 'fleet' ? isShip : !isShip;
 }
 
+/** The kinds of building a siege engine can damage — mirrors `SiegeTargets` (`UnitDefinition.SiegeTargets`) in the backend. */
+export type SiegeTargetKind = 'walls' | 'towers' | 'buildings';
+
 /**
- * True when `unitCounts` sends at least one Catapult — the gate `ArmyPanel.vue`
- * uses to decide whether the "preferred target building" picker is even worth
- * showing (issue #40 phase 5): a catapult-free attack does no siege damage
+ * Which kind of siege target a building type is — mirrors `SiegeResolver.KindOf`: wall hexes (palisade, gate), the tower, and
+ * every other building (the Longhouse and bridges included).
+ */
+export function siegeTargetKindOf(buildingType: string): SiegeTargetKind {
+  if (buildingType === 'palisade' || buildingType === 'palisadegate') return 'walls';
+  if (buildingType === 'tower') return 'towers';
+  return 'buildings';
+}
+
+/** The kinds of building the selected siege engines (units with siege targets, count above zero) can damage together. */
+export function selectedSiegeTargets(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): Set<SiegeTargetKind> {
+  const kinds = new Set<SiegeTargetKind>();
+  for (const [type, count] of Object.entries(unitCounts)) {
+    if (count <= 0) continue;
+    for (const kind of byType[type]?.siegeTargets ?? []) kinds.add(kind as SiegeTargetKind);
+  }
+  return kinds;
+}
+
+/**
+ * True when `unitCounts` sends at least one siege engine (a catapult or a ram) — the gate `ArmyPanel.vue` uses to decide whether
+ * the "preferred target building" picker is even worth showing (issue #40 phase 5): an attack without one does no siege damage
  * regardless of what's requested, per `SiegeResolver.Resolve`.
  */
-export function hasCatapultSelected(unitCounts: Record<string, number>): boolean {
-  return (unitCounts.catapult ?? 0) > 0;
+export function hasSiegeEngineSelected(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): boolean {
+  return selectedSiegeTargets(unitCounts, byType).size > 0;
+}
+
+/** Whether the selected siege engines can damage a `buildingType` building: rams breach walls and towers, catapults the rest. */
+export function canSiegeDamage(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+  buildingType: string,
+): boolean {
+  return selectedSiegeTargets(unitCounts, byType).has(siegeTargetKindOf(buildingType));
+}
+
+/** Whether a unit type is a ram-like engine: one that can breach walls. */
+export function breachesWalls(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
+  return byType[type]?.siegeTargets?.includes('walls') ?? false;
 }
 
 /**
  * Whether the dispatch needs the player to name a building of the target settlement. A fleet attack is always sent at
- * one building on the target's shore (`'required'`); a land attack may name a building for its catapults to hit
- * (`'optional'`, only worth offering when catapults are along); everything else names none.
+ * one building on the target's shore (`'required'`); a land attack may name a building for its siege engines to hit
+ * (`'optional'`, only worth offering when siege engines are along); everything else names none.
  */
 export type TargetBuildingPickerMode = 'none' | 'optional' | 'required';
 
@@ -248,11 +290,12 @@ export function targetBuildingPickerMode(
   mission: string | undefined,
   hasTargetSettlement: boolean,
   unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
   selection: FleetSelectionKind,
 ): TargetBuildingPickerMode {
   if (mission !== 'attack' || !hasTargetSettlement) return 'none';
   if (selection === 'fleet') return 'required';
-  return hasCatapultSelected(unitCounts) ? 'optional' : 'none';
+  return hasSiegeEngineSelected(unitCounts, byType) ? 'optional' : 'none';
 }
 
 /** The buildings a fleet can be sent at: only those on the target's shore (see `isShoreBuildingHex`). */

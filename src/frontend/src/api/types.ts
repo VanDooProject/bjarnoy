@@ -433,6 +433,19 @@ export interface SettlementSummary {
 }
 
 /**
+ * Mirrors `WallResponse` (`GET /worlds/{id}/walls`): one standing wall hex of another player's settlement, fog-gated like
+ * the settlement list. `ownerUserId` is null for an anonymous settlement.
+ */
+export interface WorldWall {
+  q: number;
+  r: number;
+  type: 'palisade' | 'palisadegate';
+  level: number;
+  settlementId: string;
+  ownerUserId: string | null;
+}
+
+/**
  * Mirrors `SettlementViewResponse` — the fog-gated read of any settlement
  * whose ground the caller has explored (`GET /settlements/{id}/view`):
  * identity, position and buildings only, no stock/rates/queue/garrison/runes.
@@ -1703,6 +1716,8 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+  /** What this siege engine can damage (`UnitDefinition.SiegeTargets`): `"walls"`, `"towers"`, `"buildings"`; empty for a unit without siege power. */
+  siegeTargets: string[];
 }
 
 /** Mirrors `FogChunkResponse` — one 64 x 64-texel chunk of the fog mask (map-fog-v2.md §3). `png` is base64, or null for an empty (fully unknown) chunk. */

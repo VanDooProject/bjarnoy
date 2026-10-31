@@ -76,8 +76,13 @@ const props = withDefaults(
      * of the HUD. Every visible match counts.
      */
     clearBelowSelector?: string;
+    /**
+     * Screen discs the chip must never cover: the ring menu's bubbles (RingMenu's `bubbles` emit, the
+     * same circles the arrow keeps clear of), so the label does not hide what it points at or its neighbours.
+     */
+    avoid?: readonly { x: number; y: number; r: number }[];
   }>(),
-  { angle: 38, targetRadius: HEX_TARGET_RADIUS_PX, tipGap: ARROW_TIP_GAP_PX, scale: 1, chipSide: 'left' },
+  { angle: 38, targetRadius: HEX_TARGET_RADIUS_PX, tipGap: ARROW_TIP_GAP_PX, scale: 1, chipSide: 'left', avoid: () => [] },
 );
 
 const anchorEl = ref<HTMLElement | null>(null);
@@ -169,6 +174,8 @@ function tick() {
     { width, height },
     safe,
     prefer,
+    undefined,
+    props.avoid,
   );
 
   // `.chip` is `position: absolute` inside `.shift`, which carries a

@@ -177,6 +177,7 @@
     "palisade": "Palisade",
     "palisadegate": "Palisade gate",
     "bridge": "Bridge",
+    "siegeworkshop": "Siege workshop",
     "reindeerherder": "Reindeer herder"
   },
   "buildingLink": {
@@ -217,9 +218,10 @@
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
-      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many catapults survive; fire will too, later.",
+      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many rams survive (on land only rams damage a wall; a fleet sent at the sea end does too); fire will too, later.",
       "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies and their friends' (the same guild, or a guild at peace with it) pass it as quickly as the ground under it; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
       "bridge": "Opens a wide river to land armies. A causeway first, then a footbridge, the king's bridge, and a guarded bridge with forts that only you and your friends may cross. Attackers burn a guarded bridge down a level at a time.",
+      "siegeworkshop": "Trains battering rams on grass or sand, in place of the longhouse. Unlocks at Longhouse 18 behind a level-3 Archery range. Rams are the only engine that breaches walls (they hit towers too); catapults, trained at the Archery range, burn towers and every other building.",
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest, on grass. A resource stops being produced once it reaches the storage limit, so a full store wastes output.",
@@ -242,7 +244,7 @@
       "druidhut": "A turf-roofed roundhouse on grass behind a Town Square, with a ring of runestones — no effect of its own yet, but meant for a future favour or rune mechanic.",
       "cartworkshop": "Builds the settlement's carts on grass behind a Town Square — trains provisioners and settler crews in place of the longhouse. No storage of its own.",
       "claybrickworks": "Digs and fires clay on bog moss — a pit, a drying rack and a kiln turning red earth into stone where no mountain stands.",
-      "bogoreworks": "The iron producer, on plain bog moss (not a shore, creek or lake): from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake hex next to it adds 10% to its output, up to +50%.",
+      "bogoreworks": "The iron producer, on plain bog moss (not a shore, creek or lake), behind a level-3 Clay Brickworks: from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake hex next to it adds 10% to its output, up to +50%.",
       "hammerschmiede": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works. No iron of its own: it raises every bog-ore works within its level's range instead (a wider range and a bigger boost at higher levels)."
     },
     "table": {
@@ -371,6 +373,11 @@
     "defences": {
       "heading": "Utgard's defences",
       "body": "The giants don't leave their islands open. Jötun watchtowers guard the approaches, and walls in Utgard's own masonry close the ground between them, down to the waterline.",
+      "example": {
+        "alt": "An example Utgard: the giant in the middle, a ring of walls round it with one gate, and Jötun watchtowers outside the ring.",
+        "hoverHint": "Point at a hex to see what it is.",
+        "caption": "Utgard stands inside two rings of walls. The inner ring is stronger (level 2) than the outer one (level 1), and watchtowers guard the ground outside."
+      },
       "level": "Level",
       "watchtower": {
         "heading": "Jötun watchtower",
@@ -393,7 +400,7 @@
     "endgame": {
       "heading": "How the endgame plays",
       "status": "Planned: these rules are being built step by step and are not all in the game yet.",
-      "body": "When the endboss rises, the wasted islands appear. Guilds wear down the jötnar together, hold their towers with armies, break Utgard's walls with siege engines and storm the fortress. The army that clears Utgard ends the age.",
+      "body": "When the endboss rises, the wasted islands appear. Guilds wear down the jötnar together, hold their towers with armies, break Utgard's walls with rams and storm the fortress. The army that clears Utgard ends the age.",
       "rules": {
         "fullBattles": "Every endgame fight is a full battle: the loser loses everything, the winner loses a share that grows the closer the fight was. There is no raid cap here.",
         "towers": "Each wasted island with Utgard has three to six jötun watchtowers spread over it, and Utgard itself, each with a jötunn garrison.",
@@ -403,9 +410,9 @@
         "loot": "A holding army takes loot every hour (300 at a watchtower, 1,000 at Utgard: 40% iron, 30% food, 30% stone) until its carry capacity is full. What it cannot carry is lost.",
         "aggression": "Sites with jötnar ambush armies that come into their guard range and burn player towers inside it unless an army defends them. After a fight a site is calm for 1 hour.",
         "walls": "Utgard stands inside one or two rings of walls, if the island has room: the inner ring at level 2, the outer one at level 1. They block land armies, and their gates never open for players.",
-        "breaching": "Walls are broken with the siege mission: bring catapults or rams, march next to a wall hex and strike. At level 0 the wall is breached and armies can pass.",
+        "breaching": "Walls are breached by an Attack with rams that names the wall: only rams damage a wall, one level per won strike. At level 0 the wall is breached and armies can pass. Utgard's walls have no settlement to attack, so they are assaulted directly.",
         "wallPace": "An Utgard wall loses at most one level a day, and repairs one level a day while no army stands on or next to it. The inner ring needs two strikes a day apart, with an army kept beside it in between.",
-        "ram": "The ram is a second siege engine: the same siege power as the catapult, much tougher, but slower.",
+        "ram": "The ram is the wall breaker: the same siege power as the catapult, much tougher and slower, trained at the Siege Workshop. It damages walls and towers; catapults burn towers and every other building but cannot touch a wall.",
         "gateRule": "Utgard can only be assaulted while every watchtower on its island is taken. Keep armies on the towers, or they regrow and Utgard's gate stays shut.",
         "winning": "The army that leaves Utgard with no jötnar wins the age. The player who threw it down is recorded as the conqueror, and every member of their guild gets the guild win.",
         "ageEnd": "Depending on the world, the age then ends and the world turns read-only, or play goes on with the winner announced."
@@ -724,6 +731,32 @@
       "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
       "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
       "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
+    },
+    "margins": {
+      "heading": "Bog margins (not used)",
+      "body": "The art set has five margin tiles for a bog meeting grass on one to five edges. The game doesn't place them: the soft moss edges with their peat rim are drawn by the map renderer along every bog edge against grass, forest and river banks, which needs no extra tile set and no placement rule. The tiles were replaced by those drawn edges for now and stay in the atlas in case that changes. Each has a plain look, a pools look and an ore seep look.",
+      "tiles": {
+        "bay": {
+          "name": "Bay",
+          "body": "Grass on one edge."
+        },
+        "shore": {
+          "name": "Shore",
+          "body": "Grass on two edges."
+        },
+        "half": {
+          "name": "Half",
+          "body": "Grass on three edges."
+        },
+        "tongue": {
+          "name": "Tongue",
+          "body": "Grass on four edges."
+        },
+        "spit": {
+          "name": "Spit",
+          "body": "Grass on five edges, the moss narrows to a spit."
+        }
+      }
     }
   },
   "animations": {
@@ -778,8 +811,7 @@
         "fork": "Walls never fork: no hex may have three or more wall neighbours.",
         "gate": "A gate only fits on a straight, with a wall hex on two opposite sides, and that has to stay true after any later placement.",
         "sea": "A sea end touches exactly one land wall hex and can never be a gate."
-      },
-      "example": "An example: a wall that ends on land, runs straight, passes a gate, runs on, turns by 120° and runs out into the sea. The game worked out each piece and its rotation from the hexes alone."
+      }
     },
     "example": {
       "alt": "An example wall of {count} hexes on grass, ending in the sea."
@@ -837,16 +869,16 @@
     },
     "notBuilt": {
       "heading": "Not built yet",
-      "body": "Fire taking a level off a wall: a wall will lose its levels one at a time until it is gone. Nothing burns walls yet. Sieges already do this: see the siege section above."
+      "body": "Fire taking a level off a wall: a wall will lose its levels one at a time until it is gone. Nothing burns walls yet. Rams already do this: see the siege section above."
     },
     "sieges": {
       "heading": "Sieges",
-      "body": "A wall can be breached, one level at a time. Catapults do it, and so does a fleet, but only as part of an attack on the settlement the wall belongs to.",
+      "body": "A wall can be breached, one level at a time. Battering rams do it, and so does a fleet, but only as part of an attack on the settlement the wall belongs to. Catapults cannot damage a wall; they burn towers and every other building.",
       "rules": {
-        "who": "Send an attack (or a raid) with catapults at the settlement and name the wall hex as the target when you send it. If your army wins the battle, the catapults that survived fire at that hex. One surviving catapult is enough; an army that loses the battle fires nothing.",
+        "who": "Send an attack (or a raid) with rams at the settlement and name the wall hex as the target when you send it. On a rival's wall, the Siege action in the ring menu does this for you (it needs a ram at home). If your army wins the battle, the rams that survived strike that hex. One surviving ram is enough; an army that loses the battle strikes nothing. Rams are trained at the Siege Workshop.",
         "ships": "A fleet's won fight damages the building it was sent at in the same way, the sea end of a wall included. It takes one level off a wall hex then too.",
-        "target": "If you name no target, or the building you named is gone by the time your army arrives, the siege hits a random building of that settlement instead, a wall hex among them.",
-        "level": "A won siege takes exactly one level off a wall hex, the gate included, however many catapults survive. Most buildings lose several levels at once to a strong army; a wall is breached a level at a time. A palisade or gate has {levels} levels, so a fully built wall hex takes {levels} won sieges. A damaged wall still stops armies until its last level is gone.",
+        "target": "If you name no target, or the building you named is gone by the time your army arrives, the siege hits a random building of that settlement instead, chosen among the buildings your surviving siege engines can damage. A wall named for catapults alone takes no damage.",
+        "level": "A won siege takes exactly one level off a wall hex, the gate included, however many rams survive. Most buildings lose several levels at once to a strong army; a wall is breached a level at a time. A palisade or gate has {levels} levels, so a fully built wall hex takes {levels} won sieges. A damaged wall still stops armies until its last level is gone.",
         "gone": "At level 0 the wall hex is gone: its hex is free ground again and armies walk through it. Any build order still queued for that hex is dropped.",
         "rebuild": "The owner can raise a wall hex that is still standing by a level again, like any building, and can build on a hex that is gone again under the usual placement rules. There is no separate repair."
       }
@@ -1004,6 +1036,7 @@
     "title": "Land movement",
     "intro": "How armies cross the land: ground costs, rivers, mountains and walls.",
     "toc": {
+      "example": "Example route",
       "cost": "Ground costs",
       "pace": "Pace",
       "food": "Food",
@@ -1011,9 +1044,27 @@
       "sight": "Sight",
       "bridges": "Bridges"
     },
+    "example": {
+      "heading": "A march across the island",
+      "intro": "An army marches from its settlement to the far side of the wall. The game worked out the route itself: it goes around the bog and the mountain ridge, wades through the stream, crosses the wide river on the bridge and passes through the gate.",
+      "alt": "An example island with the route of an army from its settlement to the far side of a wall.",
+      "hoverHint": "Point at a hex to see what it is.",
+      "total": "A {unit} army needs {time} for the whole route.",
+      "names": {
+        "settlement": "Settlement",
+        "bridge": "Bridge",
+        "wideRiver": "Wide river",
+        "stream": "Stream",
+        "wall": "Palisade",
+        "gate": "Palisade gate",
+        "coast": "Coastal water",
+        "sea": "Open water"
+      }
+    },
     "cost": {
       "heading": "What a hex costs",
       "body": "Every hex an army enters has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass.",
+      "summary": "Grass is the quickest ground. Sand and forest slow an army down a little, bog a lot. A stream can be waded, but it costs far more than any ground. A wide river only opens over a bridge, and mountains, lakes and the sea cannot be entered at all.",
       "columns": {
         "ground": "Ground",
         "cost": "Cost"
@@ -1082,7 +1133,7 @@
         "where": "A bridge fits on a straight or bending wide river hex, whatever ground lies under it. It does not fit on a spring, a fork or a mouth, on a stream (armies wade streams anyway) or on a wasted island.",
         "site": "A building site does not open the river. Only a finished bridge, level 1 or more, counts. Each level makes the crossing quicker, up to the king’s bridge, where armies cross as fast as over the ground itself.",
         "guarded": "The guarded bridge works like a wall gate: it lets through its owner’s armies and their friends’ and stops everyone else.",
-        "siege": "Catapults can burn a bridge down, one level per won siege, however many catapults survive. A guarded bridge therefore falls to the king’s bridge first and is then open to everyone, attackers included. A causeway burnt down once is gone, and the river is shut again.",
+        "siege": "Catapults can burn a bridge down (rams cannot), one level per won siege, however many catapults survive. A guarded bridge therefore falls to the king’s bridge first and is then open to everyone, attackers included. A causeway burnt down once is gone, and the river is shut again.",
         "walls": "A bridge does not change walls: a wall that runs up to a wide river is sealed there, with or without a bridge. See {walls}.",
         "fleets": "Bridges matter only to land armies. Ships are not affected."
       }

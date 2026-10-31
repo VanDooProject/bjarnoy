@@ -160,7 +160,7 @@ function clearTarget() {
 // Catapult target-building picker (issue #40 phase 5): only worth showing
 // once a target settlement is chosen *and* the selection actually includes a
 // Catapult — a catapult-free attack does no siege damage regardless of what's
-// requested (see `hasCatapultSelected`'s own comment), so there is nothing
+// requested (see `hasSiegeEngineSelected`'s own comment), so there is nothing
 // for a preference to apply to. `GET /api/v1/settlements/{id}` carries no
 // ownership check (confirmed from SettlementEndpoints.cs — see the PR notes),
 // so the enemy's real layout can be fetched and offered as specific hexes to
@@ -433,10 +433,12 @@ async function confirmFieldOrderClick() {
             <p class="status-subtext building-picker-hint">
               {{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetBuildingPickerHint' : 'hud.armyPanel.buildingPickerHint') }}
             </p>
+            <p v-if="!buildingPicker.isRequired.value" class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
             <div v-if="buildingPicker.selectedLabel.value" class="target-selected">
               <span>{{ t('hud.armyPanel.target') }} <strong>{{ buildingPicker.selectedLabel.value }}</strong></span>
               <button type="button" class="secondary change-target" @click="buildingPicker.clear">{{ t('hud.armyPanel.clear') }}</button>
             </div>
+            <p v-if="buildingPicker.selectedUnreachable.value" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
             <template v-else>
               <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
               <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">
@@ -448,10 +450,14 @@ async function confirmFieldOrderClick() {
                   :key="`${b.q},${b.r}`"
                   type="button"
                   class="target-row"
+                  :class="{ 'out-of-reach': !b.damageable }"
+                  :disabled="!b.damageable"
+                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
+                  data-testid="building-target"
                   @click="buildingPicker.pick(b.q, b.r)"
                 >
                   <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
+                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
                 </button>
               </div>
               <p v-else class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetNoShoreBuilding' : 'hud.armyPanel.noPreference') }}</p>
@@ -768,6 +774,10 @@ async function confirmFieldOrderClick() {
 }
 .target-row:hover {
   background: rgba(255, 197, 92, 0.08);
+}
+.target-row.out-of-reach {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .target-owner {
   color: var(--muted);

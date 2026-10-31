@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 
 namespace Bjarnoy.Domain.Tests;
@@ -143,14 +144,14 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void Only_the_catapult_and_the_ships_have_a_siege_power()
+    public void The_catapult_the_ram_and_the_ships_have_a_positive_siege_power_and_nothing_else_does()
     {
-        // Only the Catapult and the ships (fleet attacks hit a shore building) contribute to
-        // SiegeResolver's building-damage math — every other unit type is 0.
+        // Only these contribute to SiegeResolver's building-damage math (catapult and ram on land, the ships when a
+        // fleet attack hits a shore building) — every other unit type is 0.
         foreach (var type in UnitCatalogue.AllTypes)
         {
             var definition = UnitCatalogue.Get(type);
-            if (type == UnitType.Catapult || definition.Class == UnitClass.Ship)
+            if (type is UnitType.Catapult or UnitType.Ram || definition.Class == UnitClass.Ship)
             {
                 Assert.True(definition.SiegePower > 0, $"{type} must have a positive siege power");
             }
@@ -196,6 +197,7 @@ public class UnitCatalogueTests
     [InlineData(UnitType.SettlerCrew, 10)]
     [InlineData(UnitType.Berserker, 20)]
     [InlineData(UnitType.Catapult, 20)]
+    [InlineData(UnitType.Ram, 20)]
     [InlineData(UnitType.Longship, 20)]
     public void Unit_gates_follow_the_building_ladder(UnitType type, int longhouseLevel)
     {
@@ -218,7 +220,7 @@ public class UnitCatalogueTests
     public void The_elite_units_open_where_the_hammerschmiede_does()
     {
         var hammer = BuildingCatalogue.UnlockLevel(BuildingType.Hammerschmiede);
-        foreach (var type in new[] { UnitType.Berserker, UnitType.Catapult, UnitType.Longship })
+        foreach (var type in new[] { UnitType.Berserker, UnitType.Catapult, UnitType.Ram, UnitType.Longship })
         {
             Assert.Equal(hammer, UnitCatalogue.Get(type).RequiredLonghouseLevel);
         }
@@ -234,6 +236,63 @@ public class UnitCatalogueTests
             {
                 Assert.True(definition.RequiredLonghouseLevel >= UnitCatalogue.Get(prerequisite).RequiredLonghouseLevel);
             }
+        }
+    }
+
+    [Fact]
+    public void The_ram_is_a_slower_sturdier_catapult_with_the_same_siege_power()
+    {
+        var ram = UnitCatalogue.Get(UnitType.Ram);
+        var catapult = UnitCatalogue.Get(UnitType.Catapult);
+
+        Assert.Equal("ram", UnitType.Ram.ToWireName());
+        Assert.Equal(UnitClass.Siege, ram.Class);
+        Assert.Equal(10, ram.Attack);
+        Assert.Equal(30, ram.Defense);
+        Assert.Equal(1.0, ram.Speed);
+        Assert.True(ram.Speed < catapult.Speed);
+        Assert.Equal(catapult.SiegePower, ram.SiegePower);
+        Assert.Equal(0, ram.CarryCapacity);
+        Assert.Equal(3, ram.UpkeepPerHour);
+        Assert.Equal(new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150), ram.TrainingCost);
+        Assert.Equal(TimeSpan.FromHours(1), ram.TrainingDuration);
+        Assert.Equal(UnitType.Berserker, ram.RequiredUnitType);
+        Assert.Equal(BuildingType.SiegeWorkshop, ram.RequiredBuildingType);
+    }
+
+    [Fact]
+    public void The_siege_workshop_trains_the_ram_and_the_archery_range_does_not()
+    {
+        // The ram needs a Siege Workshop standing (its Berserker prerequisite a Barracks); an Archery Range, which keeps
+        // the bowman and the catapult, is not enough.
+        int Standing(BuildingType trains, BuildingType t) => t == trains || t == BuildingType.Barracks ? 1 : 0;
+
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.ArcheryRange, t)));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.ArcheryRange, t)));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
+    }
+
+    [Fact]
+    public void Siege_engines_carry_what_they_can_damage_and_nothing_else_does()
+    {
+        Assert.Equal(SiegeTargets.Towers | SiegeTargets.Buildings, UnitCatalogue.Get(UnitType.Catapult).SiegeTargets);
+        Assert.Equal(SiegeTargets.Walls | SiegeTargets.Towers, UnitCatalogue.Get(UnitType.Ram).SiegeTargets);
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).SiegePower == 0))
+        {
+            Assert.Equal(SiegeTargets.None, UnitCatalogue.Get(type).SiegeTargets);
+        }
+    }
+
+    [Fact]
+    public void The_ships_can_damage_walls_towers_and_buildings()
+    {
+        // A fleet damages whatever shore building it was sent at (SiegeResolver.LevelsTakenFrom still caps a wall or bridge at one level).
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).Class == UnitClass.Ship))
+        {
+            Assert.Equal(
+                SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
+                UnitCatalogue.Get(type).SiegeTargets);
         }
     }
 }

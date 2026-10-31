@@ -11,7 +11,11 @@ import {
   canFieldOrderArmy,
   classifyUnitSelection,
   formatEta,
-  hasCatapultSelected,
+  breachesWalls,
+  canSiegeDamage,
+  hasSiegeEngineSelected,
+  selectedSiegeTargets,
+  siegeTargetKindOf,
   isFieldOrderMidMarch,
   isUnitSelectableFor,
   maxAffordableProvisions,
@@ -35,6 +39,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    siegeTargets: [],
     ...overrides,
   };
 }
@@ -131,18 +136,57 @@ describe('buildAttackDispatchRequest', () => {
   });
 });
 
-describe('hasCatapultSelected', () => {
-  it('is false when no catapults are in the selection', () => {
-    expect(hasCatapultSelected({ spearman: 5 })).toBe(false);
-    expect(hasCatapultSelected({})).toBe(false);
+describe('siege engines by target', () => {
+  const byType = {
+    spearman: unit({ type: 'spearman' }),
+    catapult: unit({ type: 'catapult', class: 'siege', siegeTargets: ['towers', 'buildings'] }),
+    ram: unit({ type: 'ram', class: 'siege', siegeTargets: ['walls', 'towers'] }),
+  };
+
+  it('sorts building types into walls, towers and the rest, like SiegeResolver.KindOf', () => {
+    expect(siegeTargetKindOf('palisade')).toBe('walls');
+    expect(siegeTargetKindOf('palisadegate')).toBe('walls');
+    expect(siegeTargetKindOf('tower')).toBe('towers');
+    expect(siegeTargetKindOf('bridge')).toBe('buildings');
+    expect(siegeTargetKindOf('longhouse')).toBe('buildings');
   });
 
-  it('is false when catapult count is zero', () => {
-    expect(hasCatapultSelected({ spearman: 5, catapult: 0 })).toBe(false);
+  it('has no siege engine when only ordinary units, or zero engines, are selected', () => {
+    expect(hasSiegeEngineSelected({ spearman: 5 }, byType)).toBe(false);
+    expect(hasSiegeEngineSelected({}, byType)).toBe(false);
+    expect(hasSiegeEngineSelected({ spearman: 5, catapult: 0, ram: 0 }, byType)).toBe(false);
   });
 
-  it('is true when at least one catapult is selected', () => {
-    expect(hasCatapultSelected({ spearman: 5, catapult: 2 })).toBe(true);
+  it('has one as soon as a catapult or a ram is selected', () => {
+    expect(hasSiegeEngineSelected({ spearman: 5, catapult: 2 }, byType)).toBe(true);
+    expect(hasSiegeEngineSelected({ ram: 1 }, byType)).toBe(true);
+  });
+
+  it('collects what the selected engines can damage', () => {
+    expect([...selectedSiegeTargets({ ram: 1 }, byType)].sort()).toEqual(['towers', 'walls']);
+    expect([...selectedSiegeTargets({ catapult: 1 }, byType)].sort()).toEqual(['buildings', 'towers']);
+    expect([...selectedSiegeTargets({ catapult: 1, ram: 1 }, byType)].sort()).toEqual(['buildings', 'towers', 'walls']);
+    expect(selectedSiegeTargets({ spearman: 9 }, byType).size).toBe(0);
+  });
+
+  it('lets rams damage walls and towers only, catapults everything but walls', () => {
+    expect(canSiegeDamage({ ram: 1 }, byType, 'palisade')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'palisadegate')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'tower')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'bridge')).toBe(false);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'longhouse')).toBe(false);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'palisade')).toBe(false);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'tower')).toBe(true);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'bridge')).toBe(true);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'longhouse')).toBe(true);
+    expect(canSiegeDamage({ spearman: 3 }, byType, 'longhouse')).toBe(false);
+  });
+
+  it('says which unit types breach walls', () => {
+    expect(breachesWalls('ram', byType)).toBe(true);
+    expect(breachesWalls('catapult', byType)).toBe(false);
+    expect(breachesWalls('spearman', byType)).toBe(false);
+    expect(breachesWalls('nope', byType)).toBe(false);
   });
 });
 
@@ -427,19 +471,27 @@ describe('buildHuntDispatchRequest', () => {
 });
 
 describe('targetBuildingPickerMode', () => {
+  const byType = {
+    karve: unit({ type: 'karve', class: 'ship', siegeTargets: ['walls', 'towers', 'buildings'] }),
+    catapult: unit({ type: 'catapult', class: 'siege', siegeTargets: ['towers', 'buildings'] }),
+    ram: unit({ type: 'ram', class: 'siege', siegeTargets: ['walls', 'towers'] }),
+    spearman: unit({ type: 'spearman', class: 'infantry' }),
+  };
+
   it('requires a building for a fleet attack once a target settlement is chosen', () => {
-    expect(targetBuildingPickerMode('attack', true, { karve: 3 }, 'fleet')).toBe('required');
+    expect(targetBuildingPickerMode('attack', true, { karve: 3 }, byType, 'fleet')).toBe('required');
   });
 
-  it('offers an optional building for a land attack with catapults, none without', () => {
-    expect(targetBuildingPickerMode('attack', true, { catapult: 2 }, 'land')).toBe('optional');
-    expect(targetBuildingPickerMode('attack', true, { spearman: 5 }, 'land')).toBe('none');
+  it('offers an optional building for a land attack with siege engines, none without', () => {
+    expect(targetBuildingPickerMode('attack', true, { catapult: 2 }, byType, 'land')).toBe('optional');
+    expect(targetBuildingPickerMode('attack', true, { ram: 2 }, byType, 'land')).toBe('optional');
+    expect(targetBuildingPickerMode('attack', true, { spearman: 5 }, byType, 'land')).toBe('none');
   });
 
   it('names no building without a target settlement or for other missions', () => {
-    expect(targetBuildingPickerMode('attack', false, { karve: 3 }, 'fleet')).toBe('none');
-    expect(targetBuildingPickerMode('support', true, { karve: 3 }, 'fleet')).toBe('none');
-    expect(targetBuildingPickerMode('move', true, { karve: 3 }, 'fleet')).toBe('none');
+    expect(targetBuildingPickerMode('attack', false, { karve: 3 }, byType, 'fleet')).toBe('none');
+    expect(targetBuildingPickerMode('support', true, { karve: 3 }, byType, 'fleet')).toBe('none');
+    expect(targetBuildingPickerMode('move', true, { karve: 3 }, byType, 'fleet')).toBe('none');
   });
 });
 

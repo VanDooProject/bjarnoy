@@ -17,7 +17,8 @@
       "trainingSeconds": 600,
       "requiredLonghouseLevel": 1,
       "requiredUnitType": null,
-      "requiredBuildingType": "barracks"
+      "requiredBuildingType": "barracks",
+      "siegeTargets": []
     },
     {
       "type": "spearman",
@@ -32,7 +33,8 @@
       "trainingSeconds": 900,
       "requiredLonghouseLevel": 5,
       "requiredUnitType": null,
-      "requiredBuildingType": "barracks"
+      "requiredBuildingType": "barracks",
+      "siegeTargets": []
     },
     {
       "type": "axeman",
@@ -47,7 +49,8 @@
       "trainingSeconds": 1200,
       "requiredLonghouseLevel": 6,
       "requiredUnitType": null,
-      "requiredBuildingType": "barracks"
+      "requiredBuildingType": "barracks",
+      "siegeTargets": []
     },
     {
       "type": "bowman",
@@ -62,7 +65,8 @@
       "trainingSeconds": 1200,
       "requiredLonghouseLevel": 9,
       "requiredUnitType": null,
-      "requiredBuildingType": "archeryrange"
+      "requiredBuildingType": "archeryrange",
+      "siegeTargets": []
     },
     {
       "type": "berserker",
@@ -77,7 +81,8 @@
       "trainingSeconds": 2100,
       "requiredLonghouseLevel": 20,
       "requiredUnitType": "axeman",
-      "requiredBuildingType": "barracks"
+      "requiredBuildingType": "barracks",
+      "siegeTargets": []
     },
     {
       "type": "provisioner",
@@ -92,7 +97,8 @@
       "trainingSeconds": 1200,
       "requiredLonghouseLevel": 10,
       "requiredUnitType": null,
-      "requiredBuildingType": "cartworkshop"
+      "requiredBuildingType": "cartworkshop",
+      "siegeTargets": []
     },
     {
       "type": "catapult",
@@ -107,7 +113,24 @@
       "trainingSeconds": 3600,
       "requiredLonghouseLevel": 20,
       "requiredUnitType": "berserker",
-      "requiredBuildingType": "archeryrange"
+      "requiredBuildingType": "archeryrange",
+      "siegeTargets": ["towers", "buildings"]
+    },
+    {
+      "type": "ram",
+      "class": "siege",
+      "attack": 10,
+      "defense": 30,
+      "speed": 1,
+      "carryCapacity": 0,
+      "foodCarryCapacity": 0,
+      "upkeepPerHour": 3,
+      "trainingCost": { "wood": 400, "stone": 100, "food": 40, "iron": 150 },
+      "trainingSeconds": 3600,
+      "requiredLonghouseLevel": 20,
+      "requiredUnitType": "berserker",
+      "requiredBuildingType": "siegeworkshop",
+      "siegeTargets": ["walls", "towers"]
     },
     {
       "type": "karve",
@@ -122,7 +145,8 @@
       "trainingSeconds": 2700,
       "requiredLonghouseLevel": 8,
       "requiredUnitType": null,
-      "requiredBuildingType": "dockyard"
+      "requiredBuildingType": "dockyard",
+      "siegeTargets": []
     },
     {
       "type": "longship",
@@ -137,7 +161,8 @@
       "trainingSeconds": 5400,
       "requiredLonghouseLevel": 20,
       "requiredUnitType": "karve",
-      "requiredBuildingType": "dockyard"
+      "requiredBuildingType": "dockyard",
+      "siegeTargets": []
     },
     {
       "type": "settlercrew",
@@ -152,7 +177,8 @@
       "trainingSeconds": 2400,
       "requiredLonghouseLevel": 10,
       "requiredUnitType": null,
-      "requiredBuildingType": "cartworkshop"
+      "requiredBuildingType": "cartworkshop",
+      "siegeTargets": []
     }
   ]
 }

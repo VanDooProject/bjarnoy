@@ -14,6 +14,26 @@ public enum UnitClass
 }
 
 /// <summary>
+/// What kinds of building a siege engine can damage (<c>docs/design/economy.md</c> section 5). The catapult burns towers and every ordinary
+/// building (bridges included) but cannot touch a wall; the ram breaches walls and towers but nothing else.
+/// <see cref="Bjarnoy.Domain.Combat.SiegeResolver.KindOf"/> maps a <see cref="BuildingType"/> to one kind.
+/// </summary>
+[Flags]
+public enum SiegeTargets
+{
+    None = 0,
+
+    /// <summary>Palisade and palisade gate hexes.</summary>
+    Walls = 1,
+
+    /// <summary>The tower.</summary>
+    Towers = 2,
+
+    /// <summary>Every other building, bridges included.</summary>
+    Buildings = 4,
+}
+
+/// <summary>
 /// What one unit type costs, takes and gives. Movement (<see cref="Speed"/>)
 /// is carried here so the catalogue is complete, but nothing reads it yet —
 /// that is phase 2 (issue #40).
@@ -52,6 +72,12 @@ public sealed record UnitDefinition
     /// </summary>
     public int SiegePower { get; init; }
 
+    /// <summary>
+    /// Which kinds of building this unit's <see cref="SiegePower"/> counts against: <see cref="SiegeTargets.None"/> for a unit without
+    /// siege power. Data, not branches — the resolver asks <see cref="Bjarnoy.Domain.Combat.SiegeResolver.CanDamage"/>.
+    /// </summary>
+    public SiegeTargets SiegeTargets { get; init; }
+
     public required ResourceAmounts TrainingCost { get; init; }
 
     /// <summary>Time to train one unit. A batch drips out one at a time — see <see cref="Bjarnoy.Domain.Buildings.TrainingOrder"/>.</summary>
@@ -70,8 +96,9 @@ public sealed record UnitDefinition
     /// Which building type this unit trains at — the Longhouse for every
     /// civilian, <see cref="BuildingType.Barracks"/> for the basic melee
     /// land roster (Spearman, Axeman, Berserker),
-    /// <see cref="BuildingType.ArcheryRange"/> for the archer/siege land
-    /// roster (Bowman, Catapult), <see cref="BuildingType.Dockyard"/> for
+    /// <see cref="BuildingType.ArcheryRange"/> for the archer land roster
+    /// (Bowman, Catapult), <see cref="BuildingType.SiegeWorkshop"/> for the
+    /// battering ram, <see cref="BuildingType.Dockyard"/> for
     /// ships. Defaults to the Longhouse.
     /// </summary>
     public BuildingType RequiredBuildingType { get; init; } = BuildingType.Longhouse;

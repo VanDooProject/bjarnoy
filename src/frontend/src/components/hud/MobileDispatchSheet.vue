@@ -271,17 +271,29 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 
           <div v-if="buildingPicker.showPicker.value" class="building-picker">
             <p class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetBuildingPickerHint' : 'hud.armyPanel.buildingPickerHint') }}</p>
+            <p v-if="!buildingPicker.isRequired.value" class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
             <div v-if="buildingPicker.selectedLabel.value" class="target-selected">
               <span>{{ t('hud.armyPanel.target') }} <strong>{{ buildingPicker.selectedLabel.value }}</strong></span>
               <button type="button" class="secondary change-target" @click="buildingPicker.clear">{{ t('hud.armyPanel.clear') }}</button>
             </div>
+            <p v-if="buildingPicker.selectedUnreachable.value" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
             <template v-else>
               <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
               <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetLayoutLoadError' : 'hud.armyPanel.layoutLoadError') }}</p>
               <div v-else-if="buildingPicker.rows.value.length" class="target-list building-list">
-                <button v-for="b in buildingPicker.rows.value" :key="`${b.q},${b.r}`" type="button" class="target-row" @click="buildingPicker.pick(b.q, b.r)">
+                <button
+                  v-for="b in buildingPicker.rows.value"
+                  :key="`${b.q},${b.r}`"
+                  type="button"
+                  class="target-row"
+                  :class="{ 'out-of-reach': !b.damageable }"
+                  :disabled="!b.damageable"
+                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
+                  data-testid="building-target"
+                  @click="buildingPicker.pick(b.q, b.r)"
+                >
                   <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
+                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
                 </button>
               </div>
               <p v-else class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetNoShoreBuilding' : 'hud.armyPanel.noPreference') }}</p>
@@ -533,6 +545,10 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
   font-size: 12px;
   text-align: left;
   cursor: pointer;
+}
+.target-row.out-of-reach {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .target-owner {
   color: var(--muted);
