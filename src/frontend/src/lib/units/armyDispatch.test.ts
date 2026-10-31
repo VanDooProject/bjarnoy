@@ -17,6 +17,7 @@ import {
   maxAffordableProvisions,
   routeToWaypointsAndDestination,
   totalUpkeepPerHour,
+  trainingSite,
 } from './armyDispatch';
 
 function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): UnitDefinitionResponse {
@@ -421,5 +422,44 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('spearman', byType)).toBe(true);
     expect(isHuntUnit('longship', byType)).toBe(false);
     expect(isHuntUnit('unknown', byType)).toBe(false);
+  });
+});
+
+describe('trainingSite', () => {
+  const centre = { q: 0, r: 0 };
+  const byType = {
+    thrall: unit({ type: 'thrall', speed: 5, requiredBuildingType: 'barracks' }),
+    spearman: unit({ type: 'spearman', speed: 4, requiredBuildingType: 'barracks' }),
+    bowman: unit({ type: 'bowman', speed: 4, requiredBuildingType: 'archeryrange' }),
+    settlercrew: unit({ type: 'settlercrew', speed: 4, requiredBuildingType: 'cartworkshop' }),
+  };
+  const barracks = { q: 2, r: 0, type: 'barracks' };
+  const range = { q: -2, r: 0, type: 'archeryrange' };
+
+  it('is the building that trained the units', () => {
+    expect(trainingSite(centre, [barracks, range], { spearman: 3 }, byType)).toEqual({ q: 2, r: 0 });
+    expect(trainingSite(centre, [barracks, range], { bowman: 3 }, byType)).toEqual({ q: -2, r: 0 });
+  });
+
+  it('uses the building of the slowest unit type in a mixed army', () => {
+    expect(trainingSite(centre, [barracks, range], { thrall: 2, bowman: 2 }, byType)).toEqual({ q: -2, r: 0 });
+  });
+
+  it('breaks equal speeds by the lowest unit type', () => {
+    expect(trainingSite(centre, [barracks, range], { bowman: 1, spearman: 1 }, byType)).toEqual({ q: 2, r: 0 });
+  });
+
+  it('takes the nearest of several, ties by q then r', () => {
+    const far = { q: 4, r: 0, type: 'barracks' };
+    expect(trainingSite(centre, [far, barracks], { spearman: 1 }, byType)).toEqual({ q: 2, r: 0 });
+    const a = { q: 3, r: 0, type: 'barracks' };
+    const b = { q: 2, r: 1, type: 'barracks' };
+    expect(trainingSite(centre, [a, b], { spearman: 1 }, byType)).toEqual({ q: 2, r: 1 });
+  });
+
+  it('falls back to the centre without the building or without units', () => {
+    expect(trainingSite(centre, [range], { spearman: 1 }, byType)).toEqual(centre);
+    expect(trainingSite(centre, [barracks], {}, byType)).toEqual(centre);
+    expect(trainingSite(centre, [barracks], { spearman: 0 }, byType)).toEqual(centre);
   });
 });
