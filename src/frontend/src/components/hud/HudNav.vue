@@ -14,7 +14,6 @@ import { useReportsStore } from '../../stores/reports';
 import { useHudNavEntries, type HudNavEntry } from '../../composables/useHudNavEntries';
 import { useLogout } from '../../composables/useLogout';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
-import { isTradePanelOpen } from '../../composables/tradePanelOpenState';
 import { useIsMobile } from '../../composables/useIsMobile';
 import { fadeChip } from '../../lib/hud/chipMotion';
 import { profileLocation } from '../../lib/profileRoute';
@@ -117,13 +116,11 @@ const unclaimedRealm = computed(
     !player.nickname,
 );
 const showProfileNudge = computed(() => unclaimedRealm.value && !player.profileNudgeDismissed);
-// The in-game phone chip sits where the HUD drawer and the open Trade panel
-// also draw — it steps aside while either is open. Phone only: on desktop the
+// The in-game phone chip sits where the HUD drawer also draws — it steps
+// aside while that is open. Phone only: on desktop the
 // trigger is inline in the bar and nothing covers it.
 const isMobile = useIsMobile();
-const chipStepsAside = computed(
-  () => props.hasResourceBar && isMobile.value && (isHudDrawerOpen.value || isTradePanelOpen.value),
-);
+const chipStepsAside = computed(() => props.hasResourceBar && isMobile.value && isHudDrawerOpen.value);
 // Shown while anonymous (gone once registered), except while stepping aside.
 // Every enter has a leave: the chip fades out/in (lib/hud/chipMotion.ts,
 // through the HUD motion gate) rather than popping — on registration too.
@@ -346,9 +343,11 @@ watch(() => route.fullPath, closeAccountMenu);
 }
 /* In-game phone bar (ResourceBar shares it): there is no room in the bar for
    the anonymous ReturningPlayerMenu trigger, so the nav leaves the bar's flow
-   and floats as a chip under the Trade toggle (TradePanel.vue's own
-   `top: 76px` toggle, ~34px tall, plus the same 8px gap its panel uses at
-   `top: 118px`), 16px from the right edge like that toggle. Out of flow, the
+   and floats as a chip in the top-right corner, on the settlement bubble's
+   row (TopBar.vue publishes the bubble's `top` as `--settlement-bubble-top`):
+   16px from the right edge, vertically centred on the 34px bubble (the chip
+   is 44px tall, hence the -5px). The bubble's 58vw cap and the chip's 132px
+   cap leave them a gap at 360px and up. Out of flow, the
    nav no longer takes any of the bar's width (its padding/divider used to
    shove the evenly spread resource row off-centre), and with the links,
    locale switcher and avatar already hidden above it is just the trigger —
@@ -358,7 +357,7 @@ watch(() => route.fullPath, closeAccountMenu);
 @media (max-width: 768px), (max-height: 500px) {
   .hud-nav--with-resources:not(.hud-nav--no-drawer) {
     position: fixed;
-    top: 118px;
+    top: calc(var(--settlement-bubble-top, 72px) - 5px);
     right: 16px;
     padding-left: 0;
     border-left: none;

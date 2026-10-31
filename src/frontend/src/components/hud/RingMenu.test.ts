@@ -325,37 +325,20 @@ describe('RingMenu', () => {
     expect(wrapper.emitted('select')).toEqual([['farm']]);
   });
 
-  // Design handoff "2a": the flat onboarding ring's dimmed option gets a
-  // persistent, muted explanation instead of only a hover tooltip that reads
-  // as an error.
-  it('shows the note beside a flat ring when one is given, without waiting for a hover', () => {
-    const wrapper = ring({
-      categories: [],
-      actions: [{ id: 'farm', label: 'Farm' }, { id: 'lumberjack', label: 'Lumberjack', disabled: true }],
-      note: { title: "Why it's dim", body: 'Lumberjack needs forest. This hex is grass, so Farm is the fit here.' },
-    });
-    const note = wrapper.get('.ring-note');
-    expect(note.text()).toContain("Why it's dim");
-    expect(note.text()).toContain('Lumberjack needs forest');
-  });
-
-  it('shows no note when none is given', () => {
-    const wrapper = ring({ categories: [], actions: [{ id: 'farm', label: 'Farm' }] });
-    expect(wrapper.find('.ring-note').exists()).toBe(false);
-  });
-
-  it('shows no note for a drilled-in ring even when one is given — that ring has its own detail card', async () => {
-    const wrapper = ring({ note: { title: 'x', body: 'y' } });
-    await bubble(wrapper, 'Build').trigger('click');
-    await bubble(wrapper, 'Housing').trigger('click');
-    await bubble(wrapper, 'Hut').trigger('mouseenter');
-    expect(wrapper.find('.ring-note').exists()).toBe(false);
-    expect(wrapper.find('.ring-card').exists()).toBe(true);
-  });
-
   // Design handoff "2a" frame 3: GuidancePointer.vue aims at the enabled
   // guided building's spot, read from this emit rather than duplicating
   // ringLayout's own placement maths in the caller.
+  it('emits the Build hub, then the categories, then the opened category\'s buildings, so a pointer can follow the player in', async () => {
+    const wrapper = ring();
+    const last = () => Object.keys(wrapper.emitted('layout')!.at(-1)![0] as Record<string, unknown>);
+    expect(last()).toContain('build');
+    await bubble(wrapper, 'Build').trigger('click');
+    expect(last()).toEqual(expect.arrayContaining(['housing', 'defense']));
+    expect(last()).not.toContain('hut');
+    await bubble(wrapper, 'Housing').trigger('click');
+    expect(last()).toEqual(expect.arrayContaining(['housing', 'defense', 'hut']));
+  });
+
   it('emits each lane1 bubble\'s screen spot by action id, including on the very first render', () => {
     const wrapper = ring({
       categories: [],

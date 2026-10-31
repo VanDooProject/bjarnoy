@@ -1,7 +1,7 @@
 import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { waitForMapReady } from './helpers';
+import { bubbleUnderPointerTip, waitForMapReady } from './helpers';
 import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
@@ -61,64 +61,95 @@ test('landing page shows the guided pointer and a step-1 checklist before foundi
   await expect(page.locator('.tray-item.current')).toContainText('Longhouse & yard');
 });
 
-test('onboarding build step offers a ring menu with the tile-appropriate guided building enabled and everything else disabled', { tag: '@g3' }, async ({ page }) => {
-  // Regression coverage: the onboarding build step used to pop a
-  // BuildingModal with a single "Build here" button hardcoded to a type
-  // ('farm') that fails outside grass terrain — "can't actually select the
-  // correct building". It now opens the same kind of RingMenu the full
-  // settlement view uses, simplified to one flat ring (no build-category
-  // drill-down): only the guided type matching the *clicked tile's own
-  // terrain* is enabled (Reindeer Herder needs grass, Lumberjack needs forest) —
-  // enabling both regardless of terrain would just reintroduce the same
-  // silent-failure bug for whichever one doesn't fit.
+for (const screen of [
+  { name: 'desktop 1280x800', viewport: { width: 1280, height: 800 }, phone: false },
+  { name: 'phone 390x844', viewport: { width: 390, height: 844 }, phone: true },
+]) {
+test.describe(`onboarding ring pointer, ${screen.name}`, () => {
+test.use(screen.phone ? { viewport: screen.viewport, hasTouch: true, isMobile: true } : { viewport: screen.viewport });
+test('onboarding build step uses the map\'s two-lane ring, and the pointer walks the player through it to the guided building', { tag: '@g3' }, async ({ page }) => {
+  // The onboarding no longer has a ring of its own: it offers what the map's placement filter offers on the clicked
+  // hex (Build -> categories -> buildings) and only highlights the next guided building with the pointer. Nothing is
+  // dimmed or explained away; a building that can't stand on the hex is simply not there.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
-  // Frame 2: the landfall banner and a re-targeted pointer, right after
-  // founding and before the ring has ever opened.
+  // Frame 2: the landfall banner and the map pointer, right after founding and before the ring has ever opened.
   await expect(settlement.banner).toBeVisible();
   await expect(settlement.banner).toContainText('Landfall made.');
   await expect(settlement.guidancePointer).toContainText('Now build here');
   await expect(settlement.checklist).toContainText('Step 2 of 3');
 
-  // A guessed pixel offset only happens to land on a real hex at one
-  // particular zoom/camera framing — ask the model for a real empty *grass*
-  // hex inside the just-founded realm (deterministically exercising the Reindeer Herder's
-  // own terrain requirement), then the renderer's own camera math
-  // (__settlementRenderer's hexCenterScreen) for that hex's exact screen
-  // position. Same technique settlement-interactions.spec.ts uses for the
-  // full settlement view's own ring menu.
   const target = await settlement.findHex({ terrain: 'grass' });
-
   await settlement.clickHex(target);
 
-  // The landfall banner is gone the moment the ring opens (frame 3 has no
-  // such banner — the ring/note/pointer take over telling the story).
+  // The landfall banner is gone the moment the ring opens.
   await expect(settlement.banner).toHaveCount(0);
+  await settlement.ring.waitForOpen();
 
-  const farm = settlement.ring.action('Reindeer Herder');
-  const lumberjack = settlement.ring.action('Lumberjack');
-  await expect(farm).toBeVisible();
-  await expect(lumberjack).toBeVisible();
-  await expect(farm).toBeEnabled();
-  await expect(lumberjack).toBeDisabled();
+  // Root: just Build (the map's rule), and the pointer on it.
+  expect(await settlement.ring.labels()).toEqual(['Build']);
+  await expect(settlement.guidancePointer).toContainText('Open Build');
+  // The arrow's tip is on the bubble it names, not on a neighbour.
+  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Build');
 
-  // Frame 3: a persistent "why it's dim" note explaining the hex, not the
-  // click, plus the pointer aimed at whichever bubble actually fits.
-  await expect(settlement.ringNote).toBeVisible();
-  await expect(settlement.ringNote).toContainText("Why it's dim");
-  await expect(settlement.ringNote).toContainText('Lumberjack needs');
-  await expect(settlement.guidancePointer).toContainText('This one fits');
+  // Categories of a grass hex, the same ones the map's ring shows there; the pointer moves to the right one.
+  if (screen.phone) {
+    await settlement.ring.action('Build').first().tap();
+    await settlement.ring.settledLayer();
+  } else {
+    await settlement.ring.openBuildCategories();
+  }
+  expect(await settlement.ring.labels()).toEqual(expect.arrayContaining(['Resource', 'Military', 'Logistics', 'Defence', 'Shrines']));
+  await expect(settlement.guidancePointer).toContainText('Open Resource');
+  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Resource');
+
+  // Buildings: the herder is there, nothing is dimmed, and the pointer is on the herder.
+  if (screen.phone) {
+    await settlement.ring.category('Resource').first().tap();
+    await settlement.ring.settledLayer();
+  } else {
+    await settlement.ring.openCategory('Resource');
+  }
+  const herder = settlement.ring.child('Reindeer Herder').first();
+  await expect(herder).toBeVisible();
+  await expect(herder).toBeEnabled();
+  await expect(settlement.ring.child('Lumberjack')).toHaveCount(0);
+  await expect(settlement.guidancePointer).toContainText('Build the Reindeer Herder');
+  await expect.poll(() => bubbleUnderPointerTip(page)).toBe('Reindeer Herder');
+  await expect(page.getByTestId('ring-note')).toHaveCount(0);
 
   const before = await settlement.countBuildings();
-  await farm.click();
+  if (screen.phone) {
+    // The first tap arms the building, the second builds it.
+    await herder.tap();
+    await herder.tap();
+  } else {
+    await settlement.ring.click(herder);
+  }
   await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
   await expect(page.locator('.tray-item .sub').nth(1)).toHaveText('Placed');
 
   // Frame 4: one guided building down, the pointer moves on to the other.
   await expect(settlement.checklist).toContainText('Step 3 of 3');
   await expect(settlement.guidancePointer).toContainText('One more');
+});
+});
+}
+
+test('onboarding ring on a forest hex offers the lumberjack, and the map pointer still says where the herder goes', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  const settlement = await SettlementPage.openLanding(page);
+  await settlement.claimLandfall();
+
+  await settlement.clickHex(await settlement.findHex({ terrain: 'forest' }));
+  await settlement.ring.openBuildCategories();
+  await settlement.ring.openCategory('Resource');
+  await expect(settlement.ring.child('Lumberjack').first()).toBeVisible();
+  await expect(settlement.ring.child('Reindeer Herder')).toHaveCount(0);
+  // The herder is next but not offered here: no pointer at a ring bubble, the map pointer says where to go.
+  await expect(settlement.guidancePointer).toContainText('Now build here');
 });
 
 // Design handoff "2a" frame 5: completion drops the checklist for a banner

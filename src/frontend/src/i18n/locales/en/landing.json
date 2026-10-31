@@ -22,20 +22,15 @@
     "orderFailed": "That order didn't go through — try a different hex.",
     "plotTaken": "That plot was just taken — here's another one."
   },
-  "ring": {
-    "finishGuidedFirst": "Finish the guided buildings first",
-    "needsTerrain": "Only fits {terrain}",
-    "dimNoteTitle": "Why it's dim",
-    "dimNoteBody": "{otherBuilding} needs {otherTerrain}. This hex is {hexTerrain}, so {fitBuilding} is the fit here.",
-    "neitherFitsBody": "Neither guided building fits {hexTerrain}. Try a grass or forest hex instead."
-  },
   "pointer": {
     "clickThisPlot": "Click this plot",
     "tapThisPlot": "Tap this plot",
     "anyGlowingPlot": "Any glowing plot",
     "nowBuildHere": "Now build here",
     "oneMore": "One more — the {terrain}",
-    "thisOneFits": "This one fits {terrain}"
+    "openBuild": "Open Build",
+    "openCategory": "Open {category}",
+    "buildThis": "Build the {building}"
   },
   "foundHere": {
     "namedRealm": "{nickname}'s realm",
