@@ -70,7 +70,7 @@ describe('buildTechTreeNodes', () => {
       { text: 'LH 7', kind: 'longhouse' },
       { text: 'Tower 5', kind: 'building' },
     ]);
-    expect(wall.gives).toBe('Blocks every army');
+    expect(wall.gives).toBe('Blocks every land army (a lone end is half open)');
     expect(wall.category).toBe('military');
     // The Gate is a separate type with the same gate and prerequisite, merged into the card.
     expect(byType.palisadegate).toBeTruthy();
@@ -129,7 +129,7 @@ describe('buildTechTreeNodes', () => {
   });
 
   it('describes what a building gives from the shared stats helper', () => {
-    expect(byName.get('lumberjack')!.gives).toBe('+40 wood/h');
+    expect(byName.get('lumberjack')!.gives).toBe('+40 Wood/h');
     expect(byName.get('storagehouse')!.gives).toBe('+600 storage capacity');
     expect(byName.get('barracks')!.gives).toBe('Trains land troops');
   });

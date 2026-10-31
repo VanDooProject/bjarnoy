@@ -75,6 +75,7 @@
     "bridgeAccessFriend": "Deine Armeen dürfen als Freund hinüber",
     "bridgeAccessClosed": "Deine Armeen dürfen nicht hinüber",
     "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
+    "modifierRadiusBoostOneRing": "+{percent}% {resource} für Gebäude im Umkreis von 1 Ring",
     "domainFood": "Nahrung",
     "domainIron": "Eisen",
     "domainWood": "Holz",
