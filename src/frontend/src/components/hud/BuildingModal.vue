@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
 import { buildingName, terrainName, resourceName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
 import { DEMO_MODE } from '../../config';
 import { apiErrorMessage } from '../../i18n/apiErrors';
@@ -19,8 +20,6 @@ import { useWorldStore } from '../../stores/world';
 import {
   buildingStatsAt,
   buildingUpgradeCost,
-  type BuildingOutput,
-  type BuildingModifier,
   SHRINE_BUILDING_TYPES,
 } from '../../lib/map/buildingEconomy';
 
@@ -218,73 +217,6 @@ const level = computed(() => props.tile.buildingLevel ?? 0);
 // tooltip just showed.
 const getTile = (q: number, r: number): Tile => world.model.getTile(q, r);
 
-// Mirrors HexTooltip.vue's formatOutput/formatModifier.
-function formatOutput(output: BuildingOutput): string {
-  switch (output.kind) {
-    case 'resourceRate':
-      return t('hud.hoverTooltip.outputResourceRate', { amount: output.amount, resource: resourceName(output.resource) });
-    case 'populationCapacity':
-      return t('hud.hoverTooltip.outputPopulationCapacity', { amount: output.amount });
-    case 'storageCapacity':
-      return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
-    case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount, explored: output.explored });
-  }
-}
-
-function formatModifier(modifier: BuildingModifier): string {
-  switch (modifier.kind) {
-    case 'borderAnchor':
-      return t('hud.hoverTooltip.modifierBorderAnchor');
-    case 'trainsLandTroops':
-      return t('hud.hoverTooltip.modifierTrainsLandTroops');
-    case 'trainsShips':
-      return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'trainsCivilians':
-      return t('hud.hoverTooltip.modifierTrainsCivilians');
-    case 'terrainBoost':
-      return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
-    case 'coastal':
-      return modifier.percent
-        ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
-        : t('hud.hoverTooltip.modifierCoastal');
-    case 'shrineFavour':
-      if (modifier.domain === 'shipAttack') {
-        return t('hud.hoverTooltip.modifierShrineFavourShipAttack', { percent: modifier.percent });
-      }
-      if (modifier.domain === 'landAttack') {
-        return t('hud.hoverTooltip.modifierShrineFavourLandAttack', { percent: modifier.percent });
-      }
-      return t('hud.hoverTooltip.modifierShrineFavour', {
-        percent: modifier.percent,
-        domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
-      });
-    case 'odinFavour':
-      return t('hud.hoverTooltip.modifierOdinFavour', {
-        percent: modifier.buildTimePercent,
-        rings: modifier.visionRings,
-      });
-    case 'radiusBoost':
-      return t('hud.hoverTooltip.modifierRadiusBoost', {
-        percent: modifier.percent,
-        range: modifier.range,
-        resource: t(
-          modifier.resource === 'wood'
-            ? 'hud.hoverTooltip.domainWood'
-            : modifier.resource === 'iron'
-              ? 'hud.hoverTooltip.domainIron'
-              : 'hud.hoverTooltip.domainFood',
-        ),
-      });
-    case 'palisadeWall':
-      return t('hud.hoverTooltip.modifierPalisadeWall');
-    case 'palisadeGate':
-      return t('hud.hoverTooltip.modifierPalisadeGate');
-    case 'bridge':
-      return t(`hud.hoverTooltip.bridgeLevel${modifier.level}`);
-  }
-}
-
 // The existing building's current-level output/modifier — undefined
 // (and hidden) for an empty tile, since there's nothing standing yet.
 const buildingStats = computed(() =>
@@ -293,8 +225,8 @@ const buildingStats = computed(() =>
 const currentStats = computed(() =>
   buildingStats.value
     ? {
-        output: buildingStats.value.output ? formatOutput(buildingStats.value.output) : undefined,
-        modifier: buildingStats.value.modifier ? formatModifier(buildingStats.value.modifier) : undefined,
+        output: buildingStats.value.output ? formatBuildingOutput(buildingStats.value.output, t) : undefined,
+        modifier: buildingStats.value.modifier ? formatBuildingModifier(buildingStats.value.modifier, t) : undefined,
       }
     : undefined,
 );
