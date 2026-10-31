@@ -875,7 +875,7 @@ const rootActions = computed<RingAction[]>(() => {
     // action changes. Originally longhouse-only (issue #40 phase 1); every
     // building any UnitDefinition.RequiredBuildingType now points at
     // (archery range and dockyard for land troops/ships, then barracks and
-    // cart workshop once Thrall/Provisioner/SettlerCrew moved off the
+    // cart workshop once Thrall/Provisioner/Settler moved off the
     // longhouse) gets the same action. The backend enforces the real gate
     // either way — this is just where the UI surfaces the button.
     if (
