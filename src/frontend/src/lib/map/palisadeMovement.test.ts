@@ -56,13 +56,13 @@ describe('palisadeRestrictions', () => {
     expect(hoursFrom(west, ctx(terrain, gated, OWNER), Infinity).get(coordKey(east))).toBe(4);
   });
 
-  it('crosses a half-open land end at a flat 3 for every army', () => {
+  it('crosses a half-open land end at the ground cost plus 3 for every army', () => {
     const terrain = strip({}, ['3,3']);
     const walls = column(-3, 2);
     for (const walker of [OWNER, 'enemy']) {
       const hours = hoursFrom(west, ctx(terrain, walls, walker), Infinity);
-      // The tip (3,2) is 4 hexes from (1,0): three grass steps, then the tip at 3 instead of 1.
-      expect(hours.get('3,2')).toBeCloseTo(3 + 3, 9);
+      // The tip (3,2) is 4 hexes from (1,0): three grass steps, then the tip at grass 1 + 3.
+      expect(hours.get('3,2')).toBeCloseTo(3 + 1 + 3, 9);
       expect(HALF_OPEN_END_COST).toBe(3);
       expect(findPath(west, east, ctx(terrain, walls, walker))?.map(coordKey)).toContain('3,2');
     }

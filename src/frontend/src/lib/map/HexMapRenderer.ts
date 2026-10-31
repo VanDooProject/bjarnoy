@@ -40,7 +40,7 @@ import {
 } from './markerOcclusion';
 import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { formatCountdownShort } from '../hud/countdown';
@@ -453,10 +453,13 @@ export interface HexMapRendererOptions {
    */
   lockCamera?: boolean;
   /**
-   * Only meaningful alongside `lockCamera`: lets the page itself scroll
-   * under a wheel/touch gesture over the canvas instead of the renderer
-   * eating it for camera zoom/pan (which `lockCamera` already disables
-   * anyway — see `zoomBy`'s own doc comment). The landing page's locked
+   * Lets the page itself scroll under a wheel/touch gesture over the canvas
+   * instead of the renderer eating it for camera zoom/pan. With `lockCamera`
+   * (which already disables those — see `zoomBy`'s own doc comment) that is
+   * all there is to it. Without it, drag still pans (mouse; a touch drag along
+   * the axis the host's `touch-action` leaves to the page scrolls the page
+   * instead), pinch zooms, and a wheel with ctrl/meta held (a trackpad pinch,
+   * or ctrl+wheel) zooms while a plain wheel scrolls the page. The landing page's locked
    * preview is a small island beside hero copy with no reason to block page
    * scroll; the Wasted Lands docs page's own locked island sits inline in a
    * scrolling article and needs the opposite of `SettlementCanvas.vue`'s
@@ -479,6 +482,11 @@ export interface HexMapRendererOptions {
    * and every camera change is clamped by `confineCamera` — zoom never drops
    * below the fit zoom and the centre never leaves the bounding box of the
    * island's land inside the fit, so the visitor can look closely at the island but not wander off it.
+   *
+   * 'world' mode: the same clamp around the hex disc of `previewRadius` at `previewCenter` (the showcase hero map).
+   * The camera starts fitted to that disc, never zooms out past it, its centre stays inside the disc's bounding box,
+   * zooming in stops short of the world-to-settlement switch, the idle drift is off, and only hexes within
+   * `previewRenderRadius` (default `previewRadius`) of the centre are drawn.
    */
   confineCamera?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
@@ -1050,6 +1058,32 @@ export function previewFitZoom(params: {
   const usableHalfWidth = (0.5 - Math.abs(screenBiasX)) * viewport.width;
   const zoom = Math.min(usableHalfWidth / halfExtentX, viewport.height / 2 / halfExtentY);
   return Math.min(maxZoom, Math.max(minZoom, zoom));
+}
+
+/**
+ * The fit camera and clamp limits of a confined 'world' frame: the hex disc of `radius` around `center`,
+ * fitted to the viewport (zoom never drops below that fit) with the camera centre kept inside the disc's
+ * bounding box. Pure, so it is unit-testable without Pixi.
+ */
+export function worldConfineFrame(
+  center: AxialCoord,
+  radius: number,
+  viewport: { width: number; height: number },
+): {
+  camera: Camera;
+  limits: { bounds: { minX: number; maxX: number; minY: number; maxY: number }; minZoom: number };
+} {
+  const tiles = hexesInRadius(center, radius);
+  const bounds = previewIslandBounds(tiles)!;
+  const fit = previewFitZoom({
+    tiles,
+    screenBiasX: 0,
+    viewport,
+    fallbackZoom: WORLD_DEFAULT_ZOOM,
+    minZoom: 0.01,
+    maxZoom: 4,
+  });
+  return { camera: { x: bounds.centerX, y: bounds.centerY, zoom: fit }, limits: { bounds, minZoom: fit } };
 }
 
 /**
@@ -2038,12 +2072,14 @@ export class HexMapRenderer {
     this.options = options;
     this.bogEdgeLayer.addChild(this.bogEdgeUnder, this.bogEdgeOver);
     this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
-    this.idleDrift = options.mode === 'world';
+    this.idleDrift = options.mode === 'world' && !options.confineCamera;
     this.lockCamera = !!options.lockCamera;
     this.camera =
       options.mode === 'settlement'
         ? this.settlementCameraOrigin()
-        : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+        : options.confineCamera
+          ? this.worldConfinedCameraOrigin()
+          : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
     this.loadState = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
   }
 
@@ -2060,6 +2096,22 @@ export class HexMapRenderer {
     const biasX = this.options.screenBiasX ?? 0;
     if (biasX === 0 || this.viewport.width === 0) return worldX;
     return worldX - (biasX * this.viewport.width) / zoom;
+  }
+
+  /**
+   * `confineCamera` in 'world' mode: the fit camera for the hex disc of `previewRadius` around `previewCenter`
+   * (the same `previewFitZoom`/`previewIslandBounds` pair the settlement preview uses), and the limits `clampCamera`
+   * enforces afterwards — centre inside the disc's bounding box, zoom between the fit and just below the
+   * world-to-settlement switch (a confined frame never swaps modes, see `zoomBy`).
+   */
+  private worldConfinedCameraOrigin(): Camera {
+    const frame = worldConfineFrame(
+      this.options.previewCenter ?? { q: 0, r: 0 },
+      this.options.previewRadius ?? PREVIEW_ISLAND_RADIUS,
+      this.viewport,
+    );
+    this.confineLimits = frame.limits;
+    return frame.camera;
   }
 
   private settlementCameraOrigin(): Camera {
@@ -2373,11 +2425,12 @@ export class HexMapRenderer {
     // had (re-projected onto the new viewport), a locked one has no other
     // event (no drag, no wheel) that would ever re-fit it.
     if (this.lockCamera) this.camera = this.settlementCameraOrigin();
-    else if (this.options.confineCamera && !this.settlement()) {
+    else if (this.options.confineCamera && (this.options.mode === 'world' || !this.settlement())) {
       // Refreshes the cached limits for the new viewport. Until the visitor
       // has moved the camera it follows the fit; afterwards it is only
       // re-clamped, so a resize doesn't throw away where they were looking.
-      const origin = this.settlementCameraOrigin();
+      const origin =
+        this.options.mode === 'world' ? this.worldConfinedCameraOrigin() : this.settlementCameraOrigin();
       this.camera = this.cameraTouched ? this.clampCamera(this.camera) : origin;
     }
     this.applyCameraTransform();
@@ -3096,7 +3149,8 @@ export class HexMapRenderer {
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
   private onWheel = (e: WheelEvent) => {
-    if (this.options.allowPageScroll) return;
+    // A page-scroll host leaves a plain wheel to the page; ctrl/meta (a trackpad pinch, or ctrl+wheel) is the map's zoom.
+    if (this.options.allowPageScroll && !(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
     if (this.interactionLocked) return;
     const screen = this.clientToCanvas(e.clientX, e.clientY);
@@ -3116,13 +3170,20 @@ export class HexMapRenderer {
    * inter-touch distances) and calls this, picking up the `lockCamera` guard
    * and zoom clamp for free. See docs/design/zoom-transition.md §2/§9.
    */
+  /** Zoom-in limit: 4, or for a confined 'world' frame (it never switches modes) just below where the world view would. */
+  private maxZoom(): number {
+    return this.options.mode === 'world' && this.options.confineCamera
+      ? Math.min(4, zoomTransitionTuning.enterSettlementZoom * 0.99)
+      : 4;
+  }
+
   private zoomBy(screen: { x: number; y: number }, factor: number) {
     if (this.lockCamera) return;
     this.idleDrift = false;
     const prevZoom = this.camera.zoom;
     const before = screenToWorld(this.camera, screen, this.viewport);
     // A confined preview floors the zoom here, before the zoom-around-the-cursor offset below, so the limit never shifts the view sideways.
-    const zoom = Math.min(4, Math.max(this.confineLimits?.minZoom ?? 0.05, this.camera.zoom * factor));
+    const zoom = Math.min(this.maxZoom(), Math.max(this.confineLimits?.minZoom ?? 0.05, this.camera.zoom * factor));
     this.camera = { ...this.camera, zoom };
     const after = screenToWorld(this.camera, screen, this.viewport);
     this.camera = this.clampCamera({
@@ -3364,6 +3425,14 @@ export class HexMapRenderer {
   }
 
   /** Every hex axial coord whose grid position falls within `rect` (world-space). */
+  /** A confined 'world' frame draws only the hexes within `previewDrawRadius` of `previewCenter`; every other mode passes through. */
+  private capToPreviewDisc(coords: AxialCoord[]): AxialCoord[] {
+    if (this.options.mode !== 'world' || !this.options.confineCamera) return coords;
+    const at = this.options.previewCenter ?? { q: 0, r: 0 };
+    const radius = previewDrawRadius(this.options);
+    return coords.filter((c) => hexDistance(at, c) <= radius);
+  }
+
   private coordsInRect(
     rect: { minX: number; minY: number; maxX: number; maxY: number },
     clipSources: FogSource[] | null,
@@ -3641,7 +3710,7 @@ export class HexMapRenderer {
     const fogActive = this.isFogActive();
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
     this.rebuildBounds = this.scanBoundsOfRect(rect);
-    const coords = this.coordsInRect(rect, this.scanClipSources(fogActive));
+    const coords = this.capToPreviewDisc(this.coordsInRect(rect, this.scanClipSources(fogActive)));
     const deepFogOnly =
       this.options.mode === 'world' && fogActive && fogDebugFlags.terrainCull && this.isEntirelyDeepFog(rect);
     this.deepFogOnly = deepFogOnly;

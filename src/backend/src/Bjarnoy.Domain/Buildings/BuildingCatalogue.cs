@@ -904,10 +904,8 @@ public static class BuildingCatalogue
     // storage of its own — it trains the ship roster in place of the
     // Longhouse (see Units.UnitDefinition.RequiredBuildingType).
     //
-    // Deferred follow-up, not implemented here: ships departing a fleet
-    // should render from the Dockyard's own hex rather than the settlement
-    // centre — that needs an Army/pathing rendering change out of scope for
-    // this pass.
+    // When the settlement centre is inland, fleets depart from and return to
+    // the Dockyard's hex (see Army.FleetAnchor).
     private static BuildingDefinition Dockyard(int level) => new()
     {
         Type = BuildingType.Dockyard,

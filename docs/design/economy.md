@@ -263,8 +263,8 @@ and a level the atlas does not have yet shows the richest rung it has (level 3 s
 
 **Movement** (land armies; fleets are unaffected). The rules apply in this order in
 `HexPathfinder` and in the frontend's `hexPath.ts`: wide river and mountain
-impassable, then stream flat 9, then half-open end 3, then blocked (unless a friendly
-gate), then the terrain cost.
+impassable, then stream flat 9, then half-open end (ground + 3), then blocked (unless a
+friendly gate), then the terrain cost.
 
 - Every wall hex **blocks every army, the owner's included**. Only standing hexes
   count (level 1 or more): a foundation does not block.
@@ -274,7 +274,8 @@ gate), then the terrain cost.
   like at any wall hex. A friend's plain wall hex still blocks, and an anonymous
   settlement has no friends.
 - A **land end** (a plain palisade hex with exactly one wall neighbour) is **half open**:
-  every army crosses it at a flat cost of 3 in place of the terrain cost (bog's 2 included). If it touches
+  every army crosses it at the ground's own cost **plus 3** (grass 1 -> 4, forest 1.3 -> 4.3, bog 2 -> 5; a stream
+  under it, which no wall can be built on, would be 9 -> 12). If it touches
   a mountain or a wide river it is a **sealed end** and blocks like any wall hex, so a
   wall run up to a river or a mountain still seals.
 - The **sea end** stays sea, impassable to land armies, so a wall that ends in one

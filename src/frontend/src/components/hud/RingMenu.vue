@@ -26,13 +26,14 @@
 // navigates — it only previews: hovering a building (or the root Upgrade /
 // Details bubble) shows its read-out card. This component owns layout and
 // navigation only — the caller supplies the tree and reacts to `select`.
-import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
 import type { MessageSchema } from '../../i18n/schema';
 import { resourceName } from '../../i18n/catalogueNames';
 import { formatBuildTime } from '../../lib/map/ringCatalogue';
+import { hyphenate, loadHyphenation, SOFT_HYPHEN } from '../../lib/hyphenation';
 import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
 import { ringFootprint } from '../../lib/map/markerOcclusion';
@@ -50,6 +51,7 @@ import {
   NOTE_W,
   type Rect,
   bubbleLabelFontPx,
+  fitBubbleLabel,
   shrinkToFit,
   estimateWordEm,
   type WordEmWidth,
@@ -179,7 +181,7 @@ const props = withDefaults(
   },
 );
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const emit = defineEmits<{
   select: [id: string];
@@ -191,6 +193,9 @@ const emit = defineEmits<{
   // The screen spot of every current bubble (both lanes), by action, category or
   // building id — GuidancePointer.vue aims at the guided next step through them.
   layout: [spots: Record<string, { x: number; y: number }>];
+  // Every bubble as a circle (hub, both lanes, the back slot) with its id, so the guide arrow can keep clear of the
+  // ones it is not pointing at. The hub is `hub`, the back slot `back`.
+  bubbles: [circles: { id: string; x: number; y: number; r: number }[]];
   // The circle the open ring covers on screen (hub to the far edge of the
   // farthest bubble, outer lane included); re-emitted as the buildings lane
   // opens and closes. MapView hands it to the renderer so canvas markers
@@ -393,6 +398,20 @@ watch(
   { immediate: true },
 );
 
+watch(
+  [lane1, lane2, backSpot, layout],
+  () => {
+    const r1 = (layout.value.collapsed ? DOT : BUB1) / 2;
+    emit('bubbles', [
+      { id: 'hub', x: props.x, y: props.y, r: HUB / 2 },
+      ...lane1.value.map((e) => ({ id: e.item.id, x: e.x, y: e.y, r: r1 })),
+      ...(backSpot.value ? [{ id: 'back', x: backSpot.value.x, y: backSpot.value.y, r: BUB1 / 2 }] : []),
+      ...lane2.value.map((b) => ({ id: b.building.id, x: b.x, y: b.y, r: BUB2 / 2 })),
+    ]);
+  },
+  { immediate: true },
+);
+
 const footprint = computed(() => {
   const backIndex = atRoot.value ? -1 : props.categories.length;
   const bubbles = layout.value.lane1.map((spot, i) => ({
@@ -590,50 +609,102 @@ function wordEmAt(weight: number): WordEmWidth {
   };
 }
 /**
- * The size above is an estimate from canvas metrics; this is the check against what the browser really lays out.
- * For every label it measures each word at the label's own font (a hidden probe copying family, weight, tracking
- * and case; `offsetWidth` ignores the entrance/hover transforms) and, if the widest word is wider than the bubble's
- * inner width, shrinks the font until it fits (`shrinkToFit`). So no word splits mid-word whatever font the browser
- * ended up with. Runs after every render and when a web font finishes loading; map and onboarding share it.
+ * Bubble labels are laid out against what the browser really renders. A label that fits its bubble (every word on a
+ * line, at most two lines, three when the name has spaces) is left alone. A word wider than the bubble is broken at
+ * its hyphenation points for the active locale (`lib/hyphenation.ts`: "Waffen-" / "schmiede"), at the normal size;
+ * only when that is still too much is the font shrunk, down to `BUBBLE_LABEL_MIN_PX` (`fitBubbleLabel`). The
+ * hyphenated text is kept in `fittedLabels` and rendered through `shown`, so the DOM text is the plain label for
+ * every name that fits. The hub label (not a bubble) keeps its own shrink-to-fit. Runs after every render and when a
+ * web font finishes loading; map and onboarding share it.
  */
+const fittedLabels = shallowRef(new Map<string, string>());
+const labelKey = (label: string, child: boolean) => `${child ? 'child' : 'lane'}:${label}`;
+const shown = (label: string, child: boolean) => fittedLabels.value.get(labelKey(label, child)) ?? label;
+
 function fitLabels() {
   const root = rootEl.value;
   if (!root) return;
   const probe = document.createElement('span');
   probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;pointer-events:none;left:0;top:0';
-  root.appendChild(probe);
+  // Same box as a bubble's text: as wide as the bubble's inner width, centred, breaking only at spaces and hyphens.
+  const box = document.createElement('div');
+  box.style.cssText =
+    'position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;white-space:normal;overflow-wrap:normal;hyphens:manual;text-align:center;box-sizing:content-box';
+  root.append(probe, box);
+  const fitted = new Map<string, string>();
   try {
-    const targets: { el: HTMLElement; text: string; available: number }[] = [];
     for (const el of root.querySelectorAll<HTMLElement>('.ring-bubble')) {
+      el.style.fontSize = '';
       const cs = getComputedStyle(el);
-      const text = [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent ?? '').join(' ');
+      const text = [...el.childNodes]
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => n.textContent ?? '')
+        .join(' ')
+        .replaceAll(SOFT_HYPHEN, '')
+        .trim();
       const available = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
-      targets.push({ el, text, available });
-    }
-    const hub = root.querySelector<HTMLElement>('.hub-label');
-    if (hub?.parentElement) targets.push({ el: hub, text: hub.textContent ?? '', available: hub.parentElement.clientWidth * 0.84 - 2 });
-    for (const { el, text, available } of targets) {
-      const words = text.split(/\s+/).filter(Boolean);
-      if (words.length === 0 || available <= 0) continue;
-      const cs = getComputedStyle(el);
       const startPx = parseFloat(cs.fontSize);
-      if (!(startPx > 0)) continue;
+      if (!text || available <= 0 || !(startPx > 0)) continue;
+      const lineHeightEm = (parseFloat(cs.lineHeight) || startPx * 1.12) / startPx;
       const trackingEm = (parseFloat(cs.letterSpacing) || 0) / startPx;
-      probe.style.fontFamily = cs.fontFamily;
-      probe.style.fontWeight = cs.fontWeight;
-      probe.style.textTransform = cs.textTransform;
+      for (const style of [probe.style, box.style]) {
+        style.fontFamily = cs.fontFamily;
+        style.fontWeight = cs.fontWeight;
+        style.textTransform = cs.textTransform;
+      }
+      box.style.width = `${available}px`;
       const widthAt = (word: string, px: number) => {
         probe.style.fontSize = `${px}px`;
         probe.style.letterSpacing = `${trackingEm}em`;
         probe.textContent = word;
         return probe.offsetWidth;
       };
-      const fitted = shrinkToFit(words, available, startPx, widthAt);
-      if (fitted < startPx) el.style.fontSize = `${fitted}px`;
+      const linesAt = (value: string, px: number) => {
+        box.style.fontSize = `${px}px`;
+        box.style.letterSpacing = `${trackingEm}em`;
+        box.style.lineHeight = String(lineHeightEm);
+        box.textContent = value;
+        // A piece with no break point wider than the box spills over its right edge.
+        if (box.scrollWidth > box.clientWidth + 0.5) return Infinity;
+        return Math.round(box.offsetHeight / (px * lineHeightEm));
+      };
+      const fit = fitBubbleLabel(text, startPx, {
+        widthAt,
+        linesAt,
+        availablePx: available,
+        hyphenate: (word) => hyphenate(word, locale.value),
+      });
+      if (fit.px < startPx) el.style.fontSize = `${fit.px}px`;
+      if (fit.text !== text) fitted.set(labelKey(text, el.classList.contains('child')), fit.text);
+    }
+    const hub = root.querySelector<HTMLElement>('.hub-label');
+    if (hub?.parentElement) {
+      const words = (hub.textContent ?? '').split(/\s+/).filter(Boolean);
+      const hubAvailable = hub.parentElement.clientWidth * 0.84 - 2;
+      const cs = getComputedStyle(hub);
+      const startPx = parseFloat(cs.fontSize);
+      if (words.length > 0 && hubAvailable > 0 && startPx > 0) {
+        const trackingEm = (parseFloat(cs.letterSpacing) || 0) / startPx;
+        probe.style.fontFamily = cs.fontFamily;
+        probe.style.fontWeight = cs.fontWeight;
+        probe.style.textTransform = cs.textTransform;
+        const hubWidthAt = (word: string, px: number) => {
+          probe.style.fontSize = `${px}px`;
+          probe.style.letterSpacing = `${trackingEm}em`;
+          probe.textContent = word;
+          return probe.offsetWidth;
+        };
+        const shrunk = shrinkToFit(words, hubAvailable, startPx, hubWidthAt);
+        if (shrunk < startPx) hub.style.fontSize = `${shrunk}px`;
+      }
     }
   } finally {
     probe.remove();
+    box.remove();
   }
+  const before = fittedLabels.value;
+  const same = before.size === fitted.size && [...fitted].every(([key, value]) => before.get(key) === value);
+  if (!same) fittedLabels.value = fitted;
 }
 onMounted(() => {
   void nextTick(fitLabels);
@@ -641,9 +712,13 @@ onMounted(() => {
 });
 onUpdated(() => void nextTick(fitLabels));
 onUnmounted(() => document.fonts?.removeEventListener?.('loadingdone', fitLabels));
+// The patterns of the active language arrive lazily; labels are laid out again once they are there.
+watch(
+  locale,
+  (lang) => void loadHyphenation(lang).then(() => nextTick(fitLabels)),
+  { immediate: true },
+);
 
-const bubbleFont = (label: string, diameter: number, basePx: number) =>
-  `${bubbleLabelFontPx(label, diameter, basePx, { wordEm: wordEmAt(700) })}px`;
 // `.hub-label` is capped at 84% of the hub (see its CSS), uppercase, 0.06em tracking.
 const hubLabelFont = computed(
   () =>
@@ -884,7 +959,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         width: `${layout.collapsed ? DOT : BUB1}px`,
         height: `${layout.collapsed ? DOT : BUB1}px`,
         '--d': `${layout.collapsed ? DOT : BUB1}px`,
-        fontSize: bubbleFont(entry.item.label, BUB1, entry.item.label.length > 7 ? 8.2 : 9.2),
+        '--label-px': `${entry.item.label.length > 7 ? 8.2 : 9.2}px`,
         '--tint': entry.color,
       }"
       :aria-disabled="entry.item.disabled || undefined"
@@ -897,7 +972,7 @@ function onBackdropPointerDown(e: PointerEvent) {
       @mouseleave="hoverLane1 = null"
     >
       <!-- No whitespace between the label and the badges: it would end up in the label's text. -->
-      <template v-if="!layout.collapsed">{{ entry.item.label }}</template><span
+      <template v-if="!layout.collapsed">{{ shown(entry.item.label, false) }}</template><span
         v-if="!layout.collapsed && (entry.ban || entry.state)" class="ring-badge" :class="entry.ban ? 'ban' : entry.state" aria-hidden="true">
         <svg v-if="entry.state === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
         <svg v-else-if="entry.state === 'waiting'" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
@@ -933,7 +1008,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         width: `${BUB2}px`,
         height: `${BUB2}px`,
         '--d': `${BUB2}px`,
-        fontSize: bubbleFont(b.building.label, BUB2, b.building.label.length > 7 ? 8.4 : 9.4),
+        '--label-px': `${b.building.label.length > 7 ? 8.4 : 9.4}px`,
         '--tint': b.color,
       }"
       :aria-disabled="!isActionable(stateOf(b.building)) || b.building.disabled || undefined"
@@ -941,7 +1016,7 @@ function onBackdropPointerDown(e: PointerEvent) {
       @click="onBuildingClick($event, b.building)"
       @mouseenter="hover = b.building.id"
     >
-      {{ b.building.label }}<span
+      {{ shown(b.building.label, true) }}<span
         v-if="stateOf(b.building) !== 'ready' && stateOf(b.building) !== 'queues'" class="ring-badge" :class="stateOf(b.building)" aria-hidden="true">
         <svg v-if="stateOf(b.building) === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
         <svg v-else viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
@@ -1134,8 +1209,9 @@ function onBackdropPointerDown(e: PointerEvent) {
   line-height: 1.12;
   letter-spacing: 0.02em;
   font-weight: 600;
-  /* A long single word ("Watchtower") has nowhere to break otherwise and just
-     overflows the circle; natural word boundaries still win first. */
+  font-size: var(--label-px);
+  /* Long words are broken at hyphenation points (soft hyphens, see fitLabels); this is only the last resort for a
+     piece that has none, so nothing runs out of the circle. */
   overflow-wrap: anywhere;
   background: rgba(8, 18, 26, 0.9);
   border: 1px solid color-mix(in oklab, var(--tint) 50%, transparent);

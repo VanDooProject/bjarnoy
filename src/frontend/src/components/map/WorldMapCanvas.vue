@@ -5,7 +5,19 @@ import type { WorldModel } from '../../lib/map/WorldModel';
 import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
 
-const props = defineProps<{ worldModel: WorldModel; playerId: string }>();
+const props = defineProps<{
+  worldModel: WorldModel;
+  playerId: string;
+  // The capped frame (the showcase hero): the same shared HexMapRenderer options SettlementCanvas passes for its preview.
+  // `previewCenter`/`previewRadius` is the disc the camera is fitted to and confined to, `previewRenderRadius` how far
+  // the hexes are drawn; `confineCamera` switches the cap on. See HexMapRendererOptions.
+  previewCenter?: AxialCoord;
+  previewRadius?: number;
+  previewRenderRadius?: number;
+  confineCamera?: boolean;
+  // A page-scroll host: a plain wheel scrolls the page, a vertical touch swipe too. See HexMapRendererOptions.allowPageScroll.
+  allowPageScroll?: boolean;
+}>();
 const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }] }>();
 
 const container = ref<HTMLElement | null>(null);
@@ -15,6 +27,11 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   mode: 'world',
   worldModel: props.worldModel,
   playerId: props.playerId,
+  previewCenter: props.previewCenter,
+  previewRadius: props.previewRadius,
+  previewRenderRadius: props.previewRenderRadius,
+  confineCamera: props.confineCamera,
+  allowPageScroll: props.allowPageScroll,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
 });
 
@@ -27,7 +44,7 @@ defineExpose({ renderer });
 
 <template>
   <div ref="container" class="map-container">
-    <canvas ref="canvas" />
+    <canvas ref="canvas" :class="{ 'page-scroll': allowPageScroll }" />
   </div>
 </template>
 
@@ -51,5 +68,9 @@ canvas {
   height: 100%;
   touch-action: none;
   cursor: grab;
+}
+/* Vertical swipes belong to the page (the renderer's touchstart no longer cancels them either); horizontal drags and pinches stay the map's. */
+canvas.page-scroll {
+  touch-action: pan-y;
 }
 </style>

@@ -373,6 +373,11 @@
     "defences": {
       "heading": "Utgards Wehranlagen",
       "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinunter zum Wasser.",
+      "example": {
+        "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, ein Mauerring mit einem Tor darum und Jötun-Wachtürme außerhalb des Rings.",
+        "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+        "caption": "Utgard steht hinter zwei Mauerringen. Der innere Ring ist mit Stufe 2 stärker als der äußere mit Stufe 1, und Wachtürme sichern das Land davor."
+      },
       "level": "Stufe",
       "watchtower": {
         "heading": "Jötun-Wachturm",
@@ -780,8 +785,7 @@
         "fork": "Mauern verzweigen sich nie: Kein Feld darf drei oder mehr Mauernachbarn haben.",
         "gate": "Ein Tor passt nur auf eine Gerade, die auf zwei gegenüberliegenden Seiten ein Mauerfeld hat. Das muss auch nach jedem späteren Bauen so bleiben.",
         "sea": "Ein Seeende berührt genau ein Mauerfeld an Land und kann nie ein Tor sein."
-      },
-      "example": "Ein Beispiel: eine Mauer, die an Land beginnt, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und im Meer ausläuft. Teil und Drehung jedes Feldes hat das Spiel allein aus der Lage der Felder ermittelt."
+      }
     },
     "example": {
       "alt": "Eine Beispielmauer aus {count} Feldern auf Gras, die im Meer endet."
@@ -802,7 +806,7 @@
       "rules": {
         "block": "Ein Mauerfeld sperrt jede Landarmee, auch deine eigene. Es zählen nur fertige Felder: Eine Baustelle sperrt nicht.",
         "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten.",
-        "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, aber langsamer als jeden offenen Boden. Armeen nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
+        "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, doch der Schritt kostet 3 mehr als der Boden darunter. Armeen nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
         "sea": "Eine Mauer, die in einem Seeende ausläuft, schließt an der Küste ab. Hört eine Mauer an Land neben offenem Meer einfach auf, ist das anders: Ihr halb offenes Ende ist dann der Weg hindurch.",
         "natural": "Berge können Landarmeen gar nicht überqueren, breite Flüsse nur über eine Brücke. Reicht eine Mauer bis an einen von beiden heran, ist sie dort verschlossen, mit oder ohne Brücke.",
         "rivers": "Flüsse: Ein breiter Fluss ist für Landarmeen kein Weg, es sei denn, eine Brücke führt darüber, doch eine Mauer, die an einem endet, ist dort in jedem Fall verschlossen. Ein Bach ist seicht genug zum Durchwaten, und in fließendem Wasser lässt sich keine Mauer bauen. Ein Bach ist also immer ein Weg hindurch: langsam, aber offen. Eine Mauer, die an einem Bach endet, ist dort nicht verschlossen. Auf keinem von beiden kann eine Mauer stehen.",
@@ -814,9 +818,9 @@
         "riverEndTitle": "Vom Fluss verschlossen",
         "riverEnd": "Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, genau wie an einem Berg, auch wenn eine Brücke über den Fluss führt.",
         "halfOpenTitle": "Halb offen",
-        "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jede Armee überquert ihr letztes Feld, nur langsamer. Ob Gras oder Sand, macht keinen Unterschied.",
+        "halfOpen": "Eine Mauer, die an Land einfach aufhört: Jede Armee überquert ihr letztes Feld, doch der Schritt kostet 3 mehr als der Boden darunter.",
         "streamTitle": "Bach",
-        "stream": "In einem Bach lässt sich keine Mauer bauen, und jede Armee kann ihn durchwaten, noch langsamer als am Mauerende vorbei. Ein Bach ist also immer eine Lücke in der Mauer, und das Ende daneben bleibt halb offen.",
+        "stream": "In einem Bach lässt sich keine Mauer bauen, und jede Armee kann ihn durchwaten, was noch mehr kostet als das Mauerende. Ein Bach ist also immer eine Lücke in der Mauer, und das Ende daneben bleibt halb offen.",
         "seaEndTitle": "Seeende",
         "seaEnd": "Die Linie läuft an einem Seeende ins Wasser aus: Die Küste ist verschlossen.",
         "gateTitle": "Tor",
@@ -1005,6 +1009,7 @@
     "title": "Bewegung an Land",
     "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
     "toc": {
+      "example": "Beispielroute",
       "cost": "Geländekosten",
       "pace": "Tempo",
       "food": "Nahrung",
@@ -1012,9 +1017,27 @@
       "sight": "Sicht",
       "bridges": "Brücken"
     },
+    "example": {
+      "heading": "Ein Marsch über die Insel",
+      "intro": "Eine Armee marschiert von ihrer Siedlung auf die andere Seite der Mauer. Die Route hat das Spiel selbst berechnet: Sie führt um das Moor und den Bergrücken herum, durch den Bach, über die Brücke ans andere Ufer des breiten Flusses und durch das Tor.",
+      "alt": "Eine Beispielinsel mit dem Weg einer Armee von ihrer Siedlung auf die andere Seite einer Mauer.",
+      "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "total": "Eine {unit}-Armee braucht für die ganze Route {time}.",
+      "names": {
+        "settlement": "Siedlung",
+        "bridge": "Brücke",
+        "wideRiver": "Breiter Fluss",
+        "stream": "Bach",
+        "wall": "Palisade",
+        "gate": "Palisaden-Tor",
+        "coast": "Küstenwasser",
+        "sea": "Offenes Wasser"
+      }
+    },
     "cost": {
       "heading": "Was ein Feld kostet",
       "body": "Jedes Feld, das eine Armee betritt, hat Kosten, die vom Gelände abhängen. Die Armee braucht für das Feld die Kosten geteilt durch ihr Tempo in Stunden. Ein Feld mit Kosten 2 dauert also doppelt so lang wie Gras.",
+      "summary": "Gras ist das schnellste Gelände. Sand und Wald bremsen eine Armee etwas, Moor deutlich. Einen Bach kannst du durchwaten, er kostet aber weit mehr als jedes Gelände. Ein breiter Fluss öffnet sich nur über eine Brücke, und Berge, Seen und das Meer kannst du gar nicht betreten.",
       "columns": {
         "ground": "Gelände",
         "cost": "Kosten"
@@ -1022,7 +1045,8 @@
       "stream": "Bach",
       "streamNote": "pauschal, egal über welchem Gelände",
       "wallEnd": "Offenes Mauerende",
-      "wallEndNote": "statt des Geländes",
+      "surcharge": "+{n}",
+      "wallEndNote": "mehr als der Boden",
       "wideRiver": "Breiter Fluss",
       "blocked": "Nicht betretbar",
       "walls": "Ein Mauerfeld hält jede Landarmee auf, ein Tor lässt Freunde durch. Die ganzen Regeln stehen unter {walls}.",

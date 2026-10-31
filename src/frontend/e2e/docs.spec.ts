@@ -154,6 +154,21 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toContainText("4,650");
   });
 
+  test("wasted lands shows the Utgard example map and does not overflow on a phone", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/docs/wasted-lands");
+    const example = page.getByTestId("utgard-example");
+    await example.scrollIntoViewIfNeeded();
+    await expect(example.locator("canvas")).toBeVisible();
+    await expect(example).toContainText("two rings of walls");
+    const box = await example.locator("canvas").boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    const overflow = await page
+      .locator(".docs-page")
+      .evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
+
   test("wasted lands island slider shows the all-living stage", async ({
     page,
     adminAuth,
@@ -567,6 +582,16 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         expect(bg).toContain("url(");
       }
 
+      // The animated Resource production card keeps its hex as wide as a static tile's: the clip's canvas is taller (smoke
+      // plume above the hut) but is sized by its width, so the hex does not shrink to fit the plume into the box.
+      const herder = await page
+        .locator('a.card[data-page="production"] .animated-building')
+        .boundingBox();
+      const tile = await page
+        .locator('a.card[data-page="walls"] .atlas-sprite')
+        .boundingBox();
+      expect(herder!.width).toBeGreaterThanOrEqual(tile!.width - 2);
+
       await page.getByRole("link", { name: /^Bog lands/ }).click();
       await expect(page).toHaveURL(/\/docs\/bog-lands$/);
 
@@ -667,17 +692,31 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.getByText("issue #447")).toHaveCount(0);
   });
 
-  test("land movement page tabulates ground costs and minutes per hex and hides the admin note", async ({
+  test("land movement page shows the example route and the unit speeds, keeps the ground costs for admins and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/land-movement");
-    await expectPlayerPage(page, "Land movement", "ground-table");
-    await expect(page.locator('[data-ground="bog"]')).toContainText("2");
+    await expectPlayerPage(page, "Land movement", "pace-table");
+    // The ground cost table is an admin note: players read the rules and the example map instead.
+    await expect(page.getByTestId("ground-table")).toHaveCount(0);
+    await expect(page.getByText("Grass is the quickest ground")).toBeVisible();
     await expect(
       page.locator('[data-testid="pace-table"] [data-unit="spearman"]'),
-    ).toContainText("15 min");
-    // Wide rivers: shut except over a bridge, with a table of the bridge levels and no admin note about bridges "planned".
-    await expect(page.locator('[data-ground="wideRiver"]')).toContainText("Only over a bridge");
+    ).toContainText("4");
+    await expect(page.locator("#pace")).toContainText("a Spearman crosses a grass hex in 15 min");
+    // The example map: the game's own renderer, with the route's steps and the Spearman's total under it. No horizontal overflow
+    // at phone width (expectPlayerPage resized the viewport already).
+    const example = page.getByTestId("land-example");
+    await expect(example.locator("canvas")).toBeVisible();
+    await expect(example.getByTestId("land-example-steps").locator("li")).toHaveCount(9);
+    await expect(example.getByTestId("land-example-total")).toContainText("4 h 15 min");
+    const box = await example.locator("canvas").boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+    // Wide rivers: with a table of the bridge levels and no admin note about bridges "planned".
     await expect(page.locator('[data-bridge="causeway"]')).toContainText("6");
     await expect(page.locator('[data-bridge="footbridge"]')).toContainText("4");
     await expect(page.locator('[data-bridge="guarded"]')).toContainText("their friends");
@@ -736,8 +775,16 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toHaveClass(/active/);
     await expect(straight.locator(".animated-building")).toBeVisible();
 
-    // The example wall, drawn by the game's own map renderer, and the four grounds.
+    // The example wall, drawn by the game's own map renderer, comes before the six-piece showcase,
+    // which closes the page after the sieges text.
     await expect(page.locator(".wall-example canvas")).toBeVisible();
+    const exampleBox = await page.locator(".wall-example canvas").boundingBox();
+    const piecesBox = await straight.boundingBox();
+    const siegesBox = await page.locator("#sieges").boundingBox();
+    expect(exampleBox!.y).toBeLessThan(piecesBox!.y);
+    expect(siegesBox!.y).toBeLessThan(piecesBox!.y);
+    await expect(page.getByText("An example: a wall that ends on land")).toHaveCount(0);
+    // The four grounds.
     await expect(page.locator(".walls figure.ground")).toHaveCount(4);
     await expect(
       page.getByTestId("wall-movement-diagram").locator("figure"),

@@ -72,9 +72,17 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
   // round edge; the label size now shrinks to fit the longest word.
   // `wideFont`: a face much wider than the UI font (as a fallback or a late-loading web font can be) - the labels are
   // sized against what the browser really lays out, so no word may split whichever font it is.
+  // `de`: the long compound names ("Waffenschmiede") wrap at hyphenation points of their own language at a readable
+  // size instead of shrinking to a few pixels.
+  const LANGUAGES = [
+    { lang: 'en', chip: 'Open Build', build: 'Build', military: 'Military', longWord: 'Watchtower' },
+    { lang: 'de', chip: 'Öffne Bauen', build: 'Bauen', military: 'Militär', longWord: 'Waffenschmiede' },
+  ];
+  for (const { lang, chip, build, military, longWord } of LANGUAGES)
   for (const wideFont of [false, true]) {
-  test(`no bubble splits a word across lines or runs past its own edge${wideFont ? ' (with a much wider font)' : ''}`, async ({ page }) => {
+  test(`no bubble splits a word across lines or runs past its own edge (${lang})${wideFont ? ' (with a much wider font)' : ''}`, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    if (lang !== 'en') await page.addInitScript((value) => window.localStorage.setItem('bjarnoy.locale', value), lang);
     if (wideFont) {
       await page.addInitScript(() => {
         document.addEventListener('DOMContentLoaded', () => {
@@ -86,24 +94,28 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
     }
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
-    await openRingOnGuidedHex(settlement);
+    await openRingOnGuidedHex(settlement, chip);
     // The onboarding ring is the map's: Build, then a category, then its buildings. Check every layer.
     const broken: string[] = [];
     broken.push(...(await brokenLabels(page)));
-    await settlement.ring.action('Build').first().tap();
+    await settlement.ring.action(build).first().tap();
     await settlement.ring.settledLayer();
     broken.push(...(await brokenLabels(page)));
-    await settlement.ring.category('Military').first().tap();
+    await settlement.ring.category(military).first().tap();
     await settlement.ring.settledLayer();
-    // the long single word the bug was found on must be on screen, or the check proves nothing
-    await expect(settlement.ring.bubbles.filter({ hasText: 'Watchtower' })).toBeVisible();
+    // a long single word must be on screen, or the check proves nothing
+    await expect(settlement.ring.child(longWord)).toBeVisible();
     broken.push(...(await brokenLabels(page)));
     expect(broken).toEqual([]);
   });
   }
 });
 
-/** Words that split across lines or run past their own bubble, for every bubble on screen. */
+/**
+ * Problems with the labels of every bubble on screen: a word that breaks anywhere but at a hyphen (a soft hyphen the
+ * hyphenation put in, or one the name has, "Raseneisenerz-Grube"), or text that runs past its own bubble. A break at
+ * a hyphen is the intended way for a long word to wrap; each piece between two hyphens must stay on one line.
+ */
 async function brokenLabels(page: Page): Promise<string[]> {
     return page.locator('.ring-hub, .ring-bubble').evaluateAll((els) =>
       els.flatMap((el) => {
@@ -113,13 +125,41 @@ async function brokenLabels(page: Page): Promise<string[]> {
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const text = node.textContent ?? '';
           for (const match of text.matchAll(/\S+/g)) {
+            const start = match.index!;
+            const word = match[0].replaceAll('\u00AD', '');
+            // the pieces between hyphens (a real hyphen stays on its piece, a soft one is left out): a line may
+            // only break between two of them
+            let from = 0;
+            const pieces: [number, number][] = [];
+            for (let i = 0; i < match[0].length; i++) {
+              if (match[0][i] === '\u00AD') {
+                pieces.push([from, i]);
+                from = i + 1;
+              } else if (match[0][i] === '-') {
+                pieces.push([from, i + 1]);
+                from = i + 1;
+              }
+            }
+            pieces.push([from, match[0].length]);
+            for (const [pieceStart, pieceEnd] of pieces) {
+              // the line of each letter on its own (the first letter after a soft-hyphen break also reports a rect at
+              // the end of the line before, where the hyphen is drawn: the letter itself is the last rect)
+              const tops = new Set<number>();
+              for (let i = pieceStart; i < pieceEnd; i++) {
+                if (match[0][i] === '-') continue;
+                const range = document.createRange();
+                range.setStart(node, start + i);
+                range.setEnd(node, start + i + 1);
+                const rect = [...range.getClientRects()].at(-1);
+                if (rect) tops.add(Math.round(rect.top / 4));
+              }
+              if (tops.size > 1) problems.push(`"${word}" split across lines inside "${match[0].slice(pieceStart, pieceEnd)}"`);
+            }
             const range = document.createRange();
-            range.setStart(node, match.index!);
-            range.setEnd(node, match.index! + match[0].length);
-            const rects = [...range.getClientRects()];
-            if (rects.length > 1) problems.push(`"${match[0]}" split across lines`);
-            for (const r of rects) {
-              if (r.left < box.left - 1 || r.right > box.right + 1) problems.push(`"${match[0]}" runs past its bubble`);
+            range.setStart(node, start);
+            range.setEnd(node, start + match[0].length);
+            for (const r of range.getClientRects()) {
+              if (r.left < box.left - 1 || r.right > box.right + 1) problems.push(`"${word}" runs past its bubble`);
             }
           }
         }
