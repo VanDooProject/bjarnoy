@@ -762,10 +762,10 @@ describe('living mountain shapes', () => {
     }
   });
 
-  it('keeps a wasted mountain, a building on a mountain and a spring on their own art', () => {
+  it('keeps a wasted mountain, a building on a mountain and a river art override on their own art', () => {
     expect(textureKeyFor(mountain(2, { wasted: true }))).toBe('wastedmountain');
     expect(textureKeyFor(mountain(2, { buildingType: 'quarry' }))).toBe('quarry');
-    expect(textureKeyFor(mountain(2), { key: 'springcorrie', orientation: 'E' })).toBe('springcorrie');
+    expect(textureKeyFor(mountain(2), { key: 'sawmillbend60', orientation: 'E' })).toBe('sawmillbend60');
   });
 });
 
