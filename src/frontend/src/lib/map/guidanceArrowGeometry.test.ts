@@ -15,7 +15,7 @@ import {
   rotatedTipVector,
   tipStandoffFor,
 } from './guidanceArrowGeometry';
-import { BUB1, BUB2, DOT, HUB, layoutRing, type Rect } from './ringLayout';
+import { BUB1, BUB2, HUB, layoutRing, type Rect } from './ringLayout';
 
 /**
  * landing-page-defects.md L2: without `arrowTipOffset`, the arrow's tip lands
@@ -161,7 +161,7 @@ describe('ringBubbleAim on real ring layouts', () => {
           parentIndex: step.lane2 > 0 ? 0 : -1,
           cardAnchor: null,
         });
-        const r1 = layout.collapsed ? DOT / 2 : BUB1 / 2;
+        const r1 = BUB1 / 2;
         const circles = [
           { id: 'hub', x: screen.hub.x, y: screen.hub.y, r: HUB / 2 },
           ...layout.lane1.map((spot, i) => ({ id: `l1-${i}`, x: spot.x, y: spot.y, r: r1 })),

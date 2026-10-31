@@ -52,8 +52,8 @@ import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost } from '../lib/map/buildingEconomy';
 import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
-import { ringRoomFor, ringShapes } from '../lib/map/ringLayout';
-import { motionEnabled } from '../lib/motion';
+import { ringShapes } from '../lib/map/ringLayout';
+import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
@@ -518,7 +518,7 @@ const modalOwnerLabel = computed(() => {
 // categories -> a category's buildings), so this only tracks *where* it is
 // open — the concentric ringStack/radius/angle-stagger machinery the
 // previous ring needed is gone with it.
-const ringScreen = ref<{ x: number; y: number } | null>(null);
+const ringScreen = ref<RingPlacement | null>(null);
 
 // The ring must stay clear of the HUD panels, which means knowing how big the
 // stage actually is. A ResizeObserver on the stage element rather than
@@ -1008,25 +1008,13 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   actionError.value = null;
 }
 
-/** How long the map slides to make room for a ring (instant under reduced motion). */
-const RING_ROOM_PAN_MS = 220;
-/**
- * The ring always opens as a circle round its tile. Near an edge (or the phone's docked card)
- * where no circle fits - with every category it can drill into open in turn - the map slides
- * the tile to the nearest spot where one does, and the ring opens there, rather than the ring
- * deforming. Returns where the ring opens.
- */
-function roomForRing(screen: { x: number; y: number }): { x: number; y: number } {
-  const renderer = canvasRef.value?.renderer;
-  if (!renderer) return screen;
+/** Pans the map so the tapped tile's ring opens as a circle (lib/map/ringPlacement.ts); returns where it opens. */
+function roomForRing(screen: { x: number; y: number }): RingPlacement {
   const shapes = ringShapes(
     rootActions.value.length,
     ringCategories.value.map((c) => c.buildings.length),
   );
-  const target = ringRoomFor(screen.x, screen.y, (x) => ringBoundsAt(x), shapes);
-  if (!target || (target.x === screen.x && target.y === screen.y)) return screen;
-  const moved = renderer.panScreenBy(target.x - screen.x, target.y - screen.y, motionEnabled() ? RING_ROOM_PAN_MS : 0);
-  return moved ? target : screen;
+  return placeRing(canvasRef.value?.renderer, screen, ringBoundsAt, shapes);
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
@@ -1298,6 +1286,7 @@ async function upgrade() {
           v-if="selectedTile && ringScreen"
           :x="ringScreen.x"
           :y="ringScreen.y"
+          :scale="ringScreen.scale"
           :actions="rootActions"
           :categories="ringCategories"
           :terrain-label="ringTerrainLabel"
@@ -1346,6 +1335,7 @@ async function upgrade() {
           v-if="selectedTile && ringScreen"
           :x="ringScreen.x"
           :y="ringScreen.y"
+          :scale="ringScreen.scale"
           :actions="rootActions"
           :categories="ringCategories"
           :terrain-label="ringTerrainLabel"
