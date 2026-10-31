@@ -125,6 +125,11 @@ const props = withDefaults(
   defineProps<{
     x: number;
     y: number;
+    /**
+     * Size of the whole ring as a fraction of full size. Below 1 only on a screen with no room for
+     * the full ring anywhere (`ringRoomFor`): it shrinks, it never changes shape.
+     */
+    scale?: number;
     /** Root actions. The action with id `build` is the gateway to `categories`. */
     actions: RingAction[];
     /** Build categories (the map's and the onboarding's ring both use them). */
@@ -170,6 +175,7 @@ const props = withDefaults(
     dock?: RingDock | null;
   }>(),
   {
+    scale: 1,
     categories: () => [],
     terrainLabel: '',
     coordLabel: '',
@@ -287,6 +293,9 @@ watch(path, () => {
   armed.value = null;
 });
 
+/** A full-size length of the ring at the ring's size. */
+const px = (length: number) => length * props.scale;
+
 const area = computed<Rect>(
   () => props.bounds ?? { left: 16, top: 76, right: viewport.value.w - 16, bottom: viewport.value.h - 16 },
 );
@@ -339,6 +348,7 @@ const layout = computed(() =>
     cardArea: cardArea.value,
     lane1Count: laneCount.value,
     lane2Count: buildings.value.length,
+    scale: props.scale,
     parentIndex: activeCategory.value ? props.categories.indexOf(activeCategory.value) : -1,
     // A docked card lives at a screen edge, so the ring doesn't make room for it.
     cardAnchor: props.dock ? null : hoveredIndex.value,
@@ -401,12 +411,12 @@ watch(
 watch(
   [lane1, lane2, backSpot, layout],
   () => {
-    const r1 = (layout.value.collapsed ? DOT : BUB1) / 2;
+    const r1 = px(layout.value.collapsed ? DOT : BUB1) / 2;
     emit('bubbles', [
-      { id: 'hub', x: props.x, y: props.y, r: HUB / 2 },
+      { id: 'hub', x: props.x, y: props.y, r: px(HUB) / 2 },
       ...lane1.value.map((e) => ({ id: e.item.id, x: e.x, y: e.y, r: r1 })),
-      ...(backSpot.value ? [{ id: 'back', x: backSpot.value.x, y: backSpot.value.y, r: BUB1 / 2 }] : []),
-      ...lane2.value.map((b) => ({ id: b.building.id, x: b.x, y: b.y, r: BUB2 / 2 })),
+      ...(backSpot.value ? [{ id: 'back', x: backSpot.value.x, y: backSpot.value.y, r: px(BUB1) / 2 }] : []),
+      ...lane2.value.map((b) => ({ id: b.building.id, x: b.x, y: b.y, r: px(BUB2) / 2 })),
     ]);
   },
   { immediate: true },
@@ -418,10 +428,10 @@ const footprint = computed(() => {
     x: spot.x,
     y: spot.y,
     // The reserved back slot stays full size even when the rest collapse to dots.
-    r: (layout.value.collapsed && i !== backIndex ? DOT : BUB1) / 2,
+    r: px(layout.value.collapsed && i !== backIndex ? DOT : BUB1) / 2,
   }));
-  if (lane2.value.length > 0) for (const b of lane2.value) bubbles.push({ x: b.x, y: b.y, r: BUB2 / 2 });
-  return ringFootprint({ x: props.x, y: props.y }, bubbles, HUB / 2);
+  if (lane2.value.length > 0) for (const b of lane2.value) bubbles.push({ x: b.x, y: b.y, r: px(BUB2) / 2 });
+  return ringFootprint({ x: props.x, y: props.y }, bubbles, px(HUB) / 2);
 });
 watch(footprint, (circle) => emit('footprint', circle), { immediate: true });
 
@@ -722,10 +732,10 @@ watch(
 // `.hub-label` is capped at 84% of the hub (see its CSS), uppercase, 0.06em tracking.
 const hubLabelFont = computed(
   () =>
-    `${bubbleLabelFontPx(hubLabel.value, HUB, 10.5, {
+    `${bubbleLabelFontPx(hubLabel.value, px(HUB), 10.5 * props.scale, {
       uppercase: true,
       letterSpacingEm: 0.06,
-      availablePx: HUB * 0.84 - 2,
+      availablePx: px(HUB) * 0.84 - 2,
       wordEm: wordEmAt(700),
     })}px`,
 );
@@ -871,7 +881,7 @@ const hintStyle = computed(() => {
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len;
   const uy = dy / len;
-  const reach = BUB1 / 2 + 8;
+  const reach = px(BUB1) / 2 + 8;
   const tx = ux > 0.35 ? '0' : ux < -0.35 ? '-100%' : '-50%';
   const ty = uy > 0.35 ? '0' : uy < -0.35 ? '-100%' : '-50%';
   return {
@@ -894,12 +904,12 @@ function onBackdropPointerDown(e: PointerEvent) {
     <div
       v-if="layout.showLane1Track"
       class="ring-track"
-      :style="{ left: `${x - LANE1}px`, top: `${y - LANE1}px`, width: `${LANE1 * 2}px`, height: `${LANE1 * 2}px` }"
+      :style="{ left: `${x - px(LANE1)}px`, top: `${y - px(LANE1)}px`, width: `${px(LANE1) * 2}px`, height: `${px(LANE1) * 2}px` }"
     />
     <div
       v-if="layout.showLane2Track"
       class="ring-track faint"
-      :style="{ left: `${x - LANE2}px`, top: `${y - LANE2}px`, width: `${LANE2 * 2}px`, height: `${LANE2 * 2}px` }"
+      :style="{ left: `${x - px(LANE2)}px`, top: `${y - px(LANE2)}px`, width: `${px(LANE2) * 2}px`, height: `${px(LANE2) * 2}px` }"
     />
     <!-- The lane was displaced clear of a panel, so there's no orbit around
          the tile to draw — this connects the hex to where the menu went. -->
@@ -928,7 +938,7 @@ function onBackdropPointerDown(e: PointerEvent) {
 
     <button
       class="ring-hub"
-      :style="{ left: `${x}px`, top: `${y}px`, width: `${HUB}px`, height: `${HUB}px`, '--d': `${HUB}px` }"
+      :style="{ left: `${x}px`, top: `${y}px`, width: `${px(HUB)}px`, height: `${px(HUB)}px`, '--d': `${px(HUB)}px` }"
       :title="atRoot ? undefined : t('hud.ringMenu.back')"
       @click="onBackClick"
     >
@@ -956,10 +966,10 @@ function onBackdropPointerDown(e: PointerEvent) {
       :style="{
         left: `${entry.x}px`,
         top: `${entry.y}px`,
-        width: `${layout.collapsed ? DOT : BUB1}px`,
-        height: `${layout.collapsed ? DOT : BUB1}px`,
-        '--d': `${layout.collapsed ? DOT : BUB1}px`,
-        '--label-px': `${entry.item.label.length > 7 ? 8.2 : 9.2}px`,
+        width: `${px(layout.collapsed ? DOT : BUB1)}px`,
+        height: `${px(layout.collapsed ? DOT : BUB1)}px`,
+        '--d': `${px(layout.collapsed ? DOT : BUB1)}px`,
+        '--label-px': `${px(entry.item.label.length > 7 ? 8.2 : 9.2)}px`,
         '--tint': entry.color,
       }"
       :aria-disabled="entry.item.disabled || undefined"
@@ -984,7 +994,7 @@ function onBackdropPointerDown(e: PointerEvent) {
     <button
       v-if="backSpot"
       class="ring-bubble back"
-      :style="{ left: `${backSpot.x}px`, top: `${backSpot.y}px`, width: `${BUB1}px`, height: `${BUB1}px`, '--d': `${BUB1}px` }"
+      :style="{ left: `${backSpot.x}px`, top: `${backSpot.y}px`, width: `${px(BUB1)}px`, height: `${px(BUB1)}px`, '--d': `${px(BUB1)}px` }"
       @click="onBackClick"
     >
       {{ t('hud.ringMenu.backButton') }}
@@ -1005,10 +1015,10 @@ function onBackdropPointerDown(e: PointerEvent) {
       :style="{
         left: `${b.x}px`,
         top: `${b.y}px`,
-        width: `${BUB2}px`,
-        height: `${BUB2}px`,
-        '--d': `${BUB2}px`,
-        '--label-px': `${b.building.label.length > 7 ? 8.4 : 9.4}px`,
+        width: `${px(BUB2)}px`,
+        height: `${px(BUB2)}px`,
+        '--d': `${px(BUB2)}px`,
+        '--label-px': `${px(b.building.label.length > 7 ? 8.4 : 9.4)}px`,
         '--tint': b.color,
       }"
       :aria-disabled="!isActionable(stateOf(b.building)) || b.building.disabled || undefined"
