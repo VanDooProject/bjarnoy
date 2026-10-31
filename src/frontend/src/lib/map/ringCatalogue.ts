@@ -158,6 +158,16 @@ export function cropAllowedHere(type: string, soil: 'wheat' | 'pumpkin' | undefi
 }
 
 /**
+ * Buildings that can no longer be placed anew (the Quarry, for now); ones already standing keep producing and upgrading.
+ * Mirrors `BuildingCatalogue.NewPlacementDisabled` / `BuildRejection.NewPlacementDisabled`; `WorldModel.placeBuilding` (new
+ * placements only) refuses them, and the build ring simply does not list them.
+ */
+const NEW_PLACEMENT_DISABLED: ReadonlySet<string> = new Set(['quarry']);
+export function newPlacementDisabled(type: string): boolean {
+  return NEW_PLACEMENT_DISABLED.has(type);
+}
+
+/**
  * The exact shortfall against `cost`, e.g. "40 Wood, 15 Stone" — omits any
  * resource `stock` already covers. Mirrors `trainingEconomy.ts`'s
  * `formatCostLine` (which shows the whole price), but for what's still

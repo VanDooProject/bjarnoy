@@ -75,6 +75,7 @@
     "bridgeAccessFriend": "Your armies may cross as a friend",
     "bridgeAccessClosed": "Your armies may not cross",
     "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
+    "modifierRadiusBoostOneRing": "+{percent}% {resource} to buildings within 1 ring",
     "domainFood": "Food",
     "domainIron": "Iron",
     "domainWood": "Wood",
@@ -108,7 +109,6 @@
     "backButton": "‹ BACK",
     "buildHub": "BUILD",
     "categories": {
-      "housing": "Housing",
       "resource": "Resource",
       "military": "Military",
       "logistics": "Logistics",
@@ -135,9 +135,7 @@
       "notWiredYet": "Not wired to the backend yet",
       "trainUnits": "Train units",
       "build": "Build",
-      "openWater": "Open water",
       "giantOccupied": "Occupied by a giant landmark",
-      "bogNothingHere": "Nothing can be built on this bog hex",
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
@@ -293,36 +291,6 @@
     "dispatchFailed": "Dispatch failed.",
     "recallFailed": "Recall failed.",
     "retargetFailed": "Retarget failed."
-  },
-  "tradePanel": {
-    "toggle": "Trade",
-    "title": "Trade",
-    "close": "Close trade panel",
-    "somethingWentWrong": "Something went wrong.",
-    "postAnOffer": "Post an offer",
-    "give": "Give",
-    "for": "For",
-    "guildOnlyRatio": "Guild only (up to 8x ratio)",
-    "postOffer": "Post offer",
-    "openOffers": "Open offers",
-    "noOffersInRange": "No offers in range right now.",
-    "guildOnlyBadge": "Guild only",
-    "accept": "Accept",
-    "myOffers": "My offers",
-    "noOffersPosted": "You haven't posted anything yet.",
-    "states": {
-      "open": "open",
-      "accepted": "accepted",
-      "delivered": "delivered",
-      "cancelled": "cancelled",
-      "expired": "expired"
-    },
-    "cancel": "Cancel",
-    "shipments": "Shipments",
-    "noCartsOnRoad": "No carts on the road.",
-    "hex": "hex {q}-{r}",
-    "delivered": "delivered",
-    "arriving": "arriving"
   },
   "battleReport": {
     "buildings": {

@@ -87,8 +87,6 @@ export class SettlementPage {
   readonly banner: Locator;
   /** The completion banner's explicit hand-off to /settlement. */
   readonly continueButton: Locator;
-  /** The ring's persistent "why it's dim" note (RingMenu.vue's `note` prop). */
-  readonly ringNote: Locator;
   /** The profile-mark tooltip that replaces the old nickname modal (ProfileNudge.vue). */
   readonly profileNudge: Locator;
   /** Player logout/login gate: HudNav's authenticated avatar dropdown trigger (only mounted once founded). */
@@ -123,7 +121,6 @@ export class SettlementPage {
     this.checklist = page.getByTestId('onboarding-checklist');
     this.banner = page.getByTestId('onboarding-banner');
     this.continueButton = page.getByTestId('onboarding-continue');
-    this.ringNote = page.getByTestId('ring-note');
     this.profileNudge = page.getByTestId('profile-nudge');
     this.accountMenuTrigger = page.getByTestId('account-menu-trigger');
     this.accountMenu = page.getByTestId('account-menu');
@@ -428,14 +425,6 @@ export class SettlementPage {
       () =>
         (window as unknown as { __demoWorld: () => { hud: { resources: { wood: number; iron: number } } } })
           .__demoWorld().hud.resources,
-    );
-  }
-
-  /** The cosmetic cart shipments a trade acceptance drops onto the world map (issue #46). */
-  listCartShipments(): Promise<unknown[]> {
-    return this.page.evaluate(() =>
-      (window as unknown as { __demoWorld: () => { model: { listCartShipments: () => unknown[] } } })
-        .__demoWorld().model.listCartShipments(),
     );
   }
 

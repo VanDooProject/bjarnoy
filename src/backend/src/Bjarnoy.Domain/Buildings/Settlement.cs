@@ -1183,6 +1183,12 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.UnknownBuildingLevel);
         }
 
+        // A type switched off for placement (the Quarry) can still be levelled where it already stands (baseLevel > 0).
+        if (baseLevel == 0 && BuildingCatalogue.NewPlacementDisabled.Contains(type))
+        {
+            return BuildDecision.Rejected(BuildRejection.NewPlacementDisabled);
+        }
+
         if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);

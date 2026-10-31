@@ -1560,14 +1560,17 @@ describe('bog art', () => {
     expect(classified.top!.W[8]).toBe('bog_W_variant008');
   });
 
-  it('draws a retired moss look (variant006, the peat cuttings) as plain moss, every other look in its own slot', () => {
+  it('never draws a retired moss look (plain moss, variant006 the peat cuttings): every variant lands on a decorated one', () => {
     const tops = Array.from({ length: 9 }, (_, i) => `bog_W_${i}`);
     const slot = (variant: number) => bogVariantIn('bog', { variant } as Tile, tops);
-    expect(slot(6)).toBe(0);
-    expect(slot(15)).toBe(0);
-    expect([1, 2, 3, 4, 5, 7, 8].map(slot)).toEqual([1, 2, 3, 4, 5, 7, 8]);
-    // Only the moss retires slot 6: a lake shows its own variant there.
+    const decorated = [1, 2, 3, 4, 5, 7, 8];
+    expect(Array.from({ length: 7 }, (_, v) => slot(v))).toEqual(decorated);
+    for (let v = 0; v < 100; v++) expect(decorated, `variant ${v}`).toContain(slot(v));
+    // While only the plain frame has loaded there is nothing else to draw.
+    expect(bogVariantIn('bog', { variant: 3 } as Tile, ['bog_W'])).toBe(0);
+    // Only the moss retires looks: a lake shows its own variant in every slot.
     expect(bogVariantIn('lake', { variant: 6 } as Tile, tops)).toBe(6);
+    expect(bogVariantIn('lake', { variant: 0 } as Tile, tops)).toBe(0);
   });
 
   it('gives every bog family its own key and family, all of them terrain keys', () => {

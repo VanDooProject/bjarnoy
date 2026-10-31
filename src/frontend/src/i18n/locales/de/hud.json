@@ -75,6 +75,7 @@
     "bridgeAccessFriend": "Deine Armeen dürfen als Freund hinüber",
     "bridgeAccessClosed": "Deine Armeen dürfen nicht hinüber",
     "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
+    "modifierRadiusBoostOneRing": "+{percent}% {resource} für Gebäude im Umkreis von 1 Ring",
     "domainFood": "Nahrung",
     "domainIron": "Eisen",
     "domainWood": "Holz",
@@ -108,7 +109,6 @@
     "backButton": "‹ ZURÜCK",
     "buildHub": "BAUEN",
     "categories": {
-      "housing": "Wohnen",
       "resource": "Ressource",
       "military": "Militär",
       "logistics": "Logistik",
@@ -135,9 +135,7 @@
       "notWiredYet": "Noch nicht mit dem Backend verbunden",
       "trainUnits": "Einheiten ausbilden",
       "build": "Bauen",
-      "openWater": "Offenes Wasser",
       "giantOccupied": "Von einem Riesenwahrzeichen belegt",
-      "bogNothingHere": "Auf diesem Moorfeld kann nichts gebaut werden",
       "hunt": "Jagen",
       "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
@@ -293,36 +291,6 @@
     "dispatchFailed": "Entsendung fehlgeschlagen.",
     "recallFailed": "Rückruf fehlgeschlagen.",
     "retargetFailed": "Neuausrichtung fehlgeschlagen."
-  },
-  "tradePanel": {
-    "toggle": "Handel",
-    "title": "Handel",
-    "close": "Handelsfenster schließen",
-    "somethingWentWrong": "Etwas ist schiefgelaufen.",
-    "postAnOffer": "Angebot einstellen",
-    "give": "Geben",
-    "for": "Für",
-    "guildOnlyRatio": "Nur Gilde (bis zu 8-fach)",
-    "postOffer": "Angebot einstellen",
-    "openOffers": "Offene Angebote",
-    "noOffersInRange": "Derzeit keine Angebote in Reichweite.",
-    "guildOnlyBadge": "Nur Gilde",
-    "accept": "Annehmen",
-    "myOffers": "Meine Angebote",
-    "noOffersPosted": "Du hast noch nichts eingestellt.",
-    "states": {
-      "open": "offen",
-      "accepted": "angenommen",
-      "delivered": "geliefert",
-      "cancelled": "storniert",
-      "expired": "abgelaufen"
-    },
-    "cancel": "Stornieren",
-    "shipments": "Transporte",
-    "noCartsOnRoad": "Keine Karren unterwegs.",
-    "hex": "Hex {q}-{r}",
-    "delivered": "geliefert",
-    "arriving": "kommt an"
   },
   "battleReport": {
     "buildings": {

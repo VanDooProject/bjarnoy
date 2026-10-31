@@ -159,6 +159,12 @@ public enum BuildRejection
     BridgeNeedsWideRiver,
 
     /// <summary>
+    /// A new building of a type that is switched off for placement (<see cref="BuildingCatalogue.NewPlacementDisabled"/>, currently the
+    /// Quarry) was ordered. Upgrading one that already stands is never refused for this reason.
+    /// </summary>
+    NewPlacementDisabled,
+
+    /// <summary>
     /// An Utgard wall hex or a Jötun watchtower stands on the hex — never buildable (<c>docs/design/endgame.md</c>). Rubble of a
     /// breached wall counts: the hex stays taken.
     /// </summary>

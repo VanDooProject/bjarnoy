@@ -6,7 +6,7 @@
 import { hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
 import type { Terrain, Tile } from './types';
 
-/** The two buildings the onboarding ring guides the player toward — see LandingView.vue's own GUIDED_BUILD_TERRAIN. */
+/** The two buildings the onboarding guides the player toward (highlighted in the map's build ring, never enforced there). */
 export type GuidedBuildType = 'reindeerherder' | 'lumberjack';
 export const GUIDED_BUILD_TYPES: readonly GuidedBuildType[] = ['reindeerherder', 'lumberjack'];
 
@@ -80,10 +80,8 @@ export function nextGuidedType(placedTypes: readonly Tile['buildingType'][]): Gu
 }
 
 /**
- * The terrain each guided building needs — kept here (rather than only in
- * LandingView.vue's own GUIDED_BUILD_TERRAIN, which also covers the ring's
- * cosmetic-disabled types like quarry/tower) since it's a small, stable
- * domain fact both the ring and the map pointer need to agree on.
+ * The terrain each guided building stands on - only used to pick the hex the map pointer aims at and to name that
+ * terrain in its label. It never enables or disables a ring entry: the ring offers what the map's placement filter does.
  */
 export const GUIDED_BUILD_TERRAIN: Record<GuidedBuildType, Terrain> = {
   reindeerherder: 'grass',
@@ -122,25 +120,6 @@ export function findGuidedTarget(
   return best;
 }
 
-/** Which guided type fits a hex's terrain, and which doesn't — the decision behind the ring's "why it's dim" note. */
-export type RingNoteReason =
-  | { kind: 'oneFits'; fit: GuidedBuildType; dim: GuidedBuildType }
-  | { kind: 'neitherFits' };
-
-/**
- * The onboarding ring only ever guides toward the reindeer herder (grass) or lumberjack
- * (forest) — different terrain each — so a given hex fits at most one of
- * them. This is the decision `LandingView.vue`'s ring note explains; kept
- * pure (no i18n) so the actual "which one is dim" logic is testable apart
- * from the translated copy.
- */
-export function ringNoteReason(hexTerrain: Terrain): RingNoteReason {
-  const fit = GUIDED_BUILD_TYPES.find((type) => GUIDED_BUILD_TERRAIN[type] === hexTerrain);
-  if (!fit) return { kind: 'neitherFits' };
-  const dim = GUIDED_BUILD_TYPES.find((type) => type !== fit)!;
-  return { kind: 'oneFits', fit, dim };
-}
-
 /**
  * landing-page-defects.md L6a: a live-mode click that misses every offered
  * plot (`world.startPositionAt` returned null) but lands within one hex of
@@ -160,4 +139,30 @@ export function ringNoteReason(hexTerrain: Terrain): RingNoteReason {
 export function snapToOfferedPlot(clicked: AxialCoord, offered: readonly AxialCoord[]): AxialCoord | null {
   const adjacent = offered.filter((plot) => hexDistance(clicked, plot) === 1);
   return adjacent.length === 1 ? adjacent[0] : null;
+}
+
+export interface GuidedRingStep {
+  /** Which bubble the pointer aims at: the Build hub, the category holding the building, or the building itself. */
+  kind: 'build' | 'category' | 'building';
+  /** Category or building id; absent for the hub. */
+  id?: string;
+  spot: { x: number; y: number };
+}
+
+/**
+ * Where the pointer goes inside the open ring for the next guided building: the Build hub first, then the category
+ * that holds it, then its own bubble - whichever of them the ring is showing right now (`spots` has the bubbles on
+ * screen, by id). Null when the building is not offered on the clicked hex, so the caller points at the map instead.
+ */
+export function guidedRingStep(
+  type: GuidedBuildType,
+  categories: readonly { id: string; buildings: readonly { id: string }[] }[],
+  spots: Readonly<Record<string, { x: number; y: number }>>,
+): GuidedRingStep | null {
+  const category = categories.find((c) => c.buildings.some((b) => b.id === type));
+  if (!category) return null;
+  if (spots[type]) return { kind: 'building', id: type, spot: spots[type] };
+  if (spots[category.id]) return { kind: 'category', id: category.id, spot: spots[category.id] };
+  if (spots.build) return { kind: 'build', spot: spots.build };
+  return null;
 }

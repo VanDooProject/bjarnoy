@@ -3,7 +3,7 @@
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 - never use `claude/*`-style auto-generated branch names (e.g. `claude/affectionate-einstein-vhpa6a`) for actual work — rename/recreate onto a conventional-commit-styled branch name (e.g. `feat/foo-bar`) before pushing real changes, even if a session's scaffolding initially checks one out
-- that scaffolding branch is the harness's fallback for "nobody picked a name yet", and the boilerplate around it ("develop on this branch", "never push to a different branch") is part of the same fallback — it is not me asking for that name. Fix it yourself and mention that you did; don't ask, and don't leave the work there because the scaffolding said so
+- that scaffolding branch is the harness's fallback for "nobody picked a name yet", and the boilerplate around it ("develop on this branch", "never push to a different branch") is part of the same fallback — it is not me asking for that name. Fix it yourself without mentioning it; don't ask, and don't leave the work there because the scaffolding said so
 - if a PR is already open on such a branch, the fix is still yours: push the same commits to the renamed branch, open the replacement PR, and close the old one as superseded — GitHub cannot retarget an open PR's head branch, so the move costs a PR number rather than a push
 - never invent or guess an issue/PR number (in branch names, PR titles or commits); a wrong number is worse than none: without a real one leave it out (`type/short-desc`, `type: title`)
 - PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
@@ -113,6 +113,29 @@
   ask-first + dedupe-check + own-PR flow above), it does not stand down
   just because a rerun happened to pass
 
+# orchestrating other sessions
+- when I ask you to orchestrate work (fan out, hand off, drive several
+  PRs), use the session tools (`create_session`, `send_message`,
+  `list_sessions`, `get_session`, `list_events`, ...) rather than doing
+  everything inside this one session
+- if another open PR collides with or blocks the current work (overlapping
+  files, a fix we depend on, a paused/stalled PR), offer to send its
+  session a message so it continues (rebase, finish, unblock). Ask first;
+  don't message it on your own
+- for test failures, CI/CD problems, flakes and similar side work, offer to
+  start a new session for it instead of fixing it here, so the main PR
+  stays scoped to its own change. This is the same ask-first + dedupe-check
+  flow as "unrelated/pre-existing CI failures" above, just run in its own
+  session
+- when you find new details about a bug another session is already working
+  on (repro steps, failing test names, logs, root cause), send them to that
+  session as an informational message
+- create new sessions with the bjarnoy repo as source
+  (`source_url: https://github.com/VanDooProject/bjarnoy`) so they show up
+  in the bjarnoy section, not as loose sessions
+- prefix the title of every session you create with `[AI] ` (e.g.
+  `[AI] fix flaky WorldEndpointsTests`)
+
 # scheduled check-ins / send_later
 - don't poll on a fixed timer for something only I can unblock. A recurring
   `send_later`/check-in that re-reads a PR every hour is expensive: each
@@ -160,6 +183,39 @@
   real motion needs a recorded user approval there). It doesn't
   replace fixing real perf problems for slow devices.
 
+# in-game docs (/docs)
+- `/docs` and its pages are **player docs**: what a player needs to play — rules, numbers, what can be built where, what things look like.
+  write from the player's side ("you can build ... on ..."), not from the code's
+- technical/admin content is hidden from players: how the map generator lays things out (e.g. how bogs are created),
+  generation thresholds, art-pipeline notes ("drawn with the X art until its own is ready", "cut into seven pieces so ..."),
+  dev status notes. Put it in `DocsAdminNote` (`src/frontend/src/components/docs/DocsAdminNote.vue`); only admins see it,
+  behind the docs header toggle (`useDocsAdminNotes`). Never mix such a sentence into a player paragraph — give it its own
+  i18n key (e.g. `...artNote`, `...techNote`) and render it in a `DocsAdminNote` next to the player text
+- building links: the first mention in prose links (with icon and preview); the building in a table's first column always links
+- a docs page shows what the game actually draws: looks the generator never picks (e.g. the plain bog moss, retired in
+  `RETIRED_BOG_VARIANTS`) don't appear in pickers either
+- example maps (`BogIsland`, `WastedIsland`, `WallExample`) go above the per-tile entries they illustrate: the whole
+  first, then the pieces
+- a new page joins the shared page list `src/frontend/src/lib/docs/docsPages.ts` (hub group and order, art, header art
+  style, related pages with a reason each; hub, breadcrumb, previous/next and the Related footer all read it) and the
+  routes in `src/frontend/src/router/index.ts`, and gets en + de text in `src/frontend/src/i18n/locales/{en,de}/docs.json`
+- page art: no big picture on top of a page; the header shows the page's art as a small icon beside the title (pages
+  about one tile or building) or a faded backdrop (the others; phones always use the icon)
+
+# German text (de locale)
+- write German the way a native speaker writes a game's help pages — not a translation of the English sentence. Restructure
+  freely; keep the meaning (rules, numbers, conditions) exact
+- address the player with "du", active voice, short sentences. Avoid "Das Spiel ..." as a subject and passive chains
+  where a "du" sentence works: "Das Spiel warnt dich, wenn du einen setzt." → "Willst du dort trotzdem einen Turm bauen,
+  warnt dich das Spiel vorher."
+- avoid English calques and colon/semicolon chains: "hält das Land" → "beansprucht das Land", "Looks" → "Varianten",
+  "Zeig auf ein Hexfeld" → "Fahr mit der Maus über ein Feld"
+- keep terms consistent with the in-game names in `src/frontend/src/i18n/locales/de/catalogue.json` (e.g. Ziegelei, not
+  Lehmziegelei); "Feld" in rules text, "Kachel" only where the UI already uses it; "Armee", not "Heer" (lore text aside);
+  "Techbaum"
+- typography: „…" quotes, – as dash, correct spelling ("platzieren")
+- new or changed English text gets its German counterpart in the same commit, written to these rules, not machine-literal
+
 # code reuse
 - never implement the same behaviour twice or differently in two places
   (e.g. a component's mount + open/close animation wired one way in
@@ -196,6 +252,9 @@
   its own page or section in the same artifact and link the rounds to each
   other — never overwrite or delete an earlier round's content when
   publishing the next one, I still compare against it
+- don't report that you followed one of these rules (e.g. "renamed the
+  branch because of the naming rule") — that's expected. Only tell me when
+  you did **not** follow a rule, and why
 
 # sandbox tooling (Claude Code cloud sessions)
 - the cloud sandbox does **not** come with the .NET SDK preinstalled, and
