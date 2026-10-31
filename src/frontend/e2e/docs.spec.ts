@@ -629,17 +629,31 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.getByText("issue #447")).toHaveCount(0);
   });
 
-  test("land movement page tabulates ground costs and minutes per hex and hides the admin note", async ({
+  test("land movement page shows the example route and the unit speeds, keeps the ground costs for admins and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/land-movement");
-    await expectPlayerPage(page, "Land movement", "ground-table");
-    await expect(page.locator('[data-ground="bog"]')).toContainText("2");
+    await expectPlayerPage(page, "Land movement", "pace-table");
+    // The ground cost table is an admin note: players read the rules and the example map instead.
+    await expect(page.getByTestId("ground-table")).toHaveCount(0);
+    await expect(page.getByText("Grass is the quickest ground")).toBeVisible();
     await expect(
       page.locator('[data-testid="pace-table"] [data-unit="spearman"]'),
-    ).toContainText("15 min");
-    // Wide rivers: shut except over a bridge, with a table of the bridge levels and no admin note about bridges "planned".
-    await expect(page.locator('[data-ground="wideRiver"]')).toContainText("Only over a bridge");
+    ).toContainText("4");
+    await expect(page.locator("#pace")).toContainText("a Spearman crosses a grass hex in 15 min");
+    // The example map: the game's own renderer, with the route's steps and the Spearman's total under it. No horizontal overflow
+    // at phone width (expectPlayerPage resized the viewport already).
+    const example = page.getByTestId("land-example");
+    await expect(example.locator("canvas")).toBeVisible();
+    await expect(example.getByTestId("land-example-steps").locator("li")).toHaveCount(9);
+    await expect(example.getByTestId("land-example-total")).toContainText("4 h 15 min");
+    const box = await example.locator("canvas").boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+    // Wide rivers: with a table of the bridge levels and no admin note about bridges "planned".
     await expect(page.locator('[data-bridge="causeway"]')).toContainText("6");
     await expect(page.locator('[data-bridge="footbridge"]')).toContainText("4");
     await expect(page.locator('[data-bridge="guarded"]')).toContainText("their friends");

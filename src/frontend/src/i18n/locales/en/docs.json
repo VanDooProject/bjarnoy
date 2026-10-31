@@ -1002,6 +1002,7 @@
     "title": "Land movement",
     "intro": "How armies cross the land: ground costs, rivers, mountains and walls.",
     "toc": {
+      "example": "Example route",
       "cost": "Ground costs",
       "pace": "Pace",
       "food": "Food",
@@ -1009,9 +1010,27 @@
       "sight": "Sight",
       "bridges": "Bridges"
     },
+    "example": {
+      "heading": "A march across the island",
+      "intro": "An army marches from its settlement to the far side of the wall. The game worked out the route itself: it goes around the bog and the mountain ridge, wades through the stream, crosses the wide river on the bridge and passes through the gate.",
+      "alt": "An example island with the route of an army from its settlement to the far side of a wall.",
+      "hoverHint": "Point at a hex to see what it is.",
+      "total": "A {unit} army needs {time} for the whole route.",
+      "names": {
+        "settlement": "Settlement",
+        "bridge": "Bridge",
+        "wideRiver": "Wide river",
+        "stream": "Stream",
+        "wall": "Palisade",
+        "gate": "Palisade gate",
+        "coast": "Coastal water",
+        "sea": "Open water"
+      }
+    },
     "cost": {
       "heading": "What a hex costs",
       "body": "Every hex an army enters has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass.",
+      "summary": "Grass is the quickest ground. Sand and forest slow an army down a little, bog a lot. A stream can be waded, but it costs far more than any ground. A wide river only opens over a bridge, and mountains, lakes and the sea cannot be entered at all.",
       "columns": {
         "ground": "Ground",
         "cost": "Cost"

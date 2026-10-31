@@ -1002,6 +1002,7 @@
     "title": "Bewegung an Land",
     "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
     "toc": {
+      "example": "Beispielroute",
       "cost": "Geländekosten",
       "pace": "Tempo",
       "food": "Nahrung",
@@ -1009,9 +1010,27 @@
       "sight": "Sicht",
       "bridges": "Brücken"
     },
+    "example": {
+      "heading": "Ein Marsch über die Insel",
+      "intro": "Eine Armee marschiert von ihrer Siedlung auf die andere Seite der Mauer. Die Route hat das Spiel selbst berechnet: Sie führt um das Moor und den Bergrücken herum, durch den Bach, über die Brücke ans andere Ufer des breiten Flusses und durch das Tor.",
+      "alt": "Eine Beispielinsel mit dem Weg einer Armee von ihrer Siedlung auf die andere Seite einer Mauer.",
+      "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "total": "Eine {unit}-Armee braucht für die ganze Route {time}.",
+      "names": {
+        "settlement": "Siedlung",
+        "bridge": "Brücke",
+        "wideRiver": "Breiter Fluss",
+        "stream": "Bach",
+        "wall": "Palisade",
+        "gate": "Palisaden-Tor",
+        "coast": "Küstenwasser",
+        "sea": "Offenes Wasser"
+      }
+    },
     "cost": {
       "heading": "Was ein Feld kostet",
       "body": "Jedes Feld, das eine Armee betritt, hat Kosten, die vom Gelände abhängen. Die Armee braucht für das Feld die Kosten geteilt durch ihr Tempo in Stunden. Ein Feld mit Kosten 2 dauert also doppelt so lang wie Gras.",
+      "summary": "Gras ist das schnellste Gelände. Sand und Wald bremsen eine Armee etwas, Moor deutlich. Einen Bach kannst du durchwaten, er kostet aber weit mehr als jedes Gelände. Ein breiter Fluss öffnet sich nur über eine Brücke, und Berge, Seen und das Meer kannst du gar nicht betreten.",
       "columns": {
         "ground": "Gelände",
         "cost": "Kosten"
