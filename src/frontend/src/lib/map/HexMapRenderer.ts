@@ -940,6 +940,28 @@ export function previewDrawRadius(options: { previewRadius?: number; previewRend
 }
 
 /**
+ * The settlement-mode preview's (no settlement yet: the landing page, onboarding) ground crop of `coords`.
+ * landing-page-defects.md L5: a small radius crop around `previewCenter` (deliberate framing, matching the mockup's own
+ * scale) intersected with landmass membership, so a *foreign* island a world seed placed nearby within that radius
+ * doesn't bleed in, and water isn't drawn (`previewCropTiles` only returns land). `previewSea` widens it to the whole
+ * drawn disc, so the sea there draws its own tile art. This is also exactly the tile set `settlementCameraOrigin`'s
+ * locked-preview branch (L4) fits the camera to; the two must agree. `previewCropTiles` is cached per centre inside
+ * WorldModel, so this is cheap on every rebuild.
+ */
+export function previewGroundCoords(
+  coords: AxialCoord[],
+  worldModel: Pick<WorldModel, 'previewCropTiles'>,
+  options: { previewCenter?: AxialCoord; previewSea?: boolean; previewRadius?: number; previewRenderRadius?: number },
+): AxialCoord[] {
+  const center = options.previewCenter ?? { q: 0, r: 0 };
+  const radius = previewDrawRadius(options);
+  const keys = new Set(
+    (options.previewSea ? hexesInRadius(center, radius) : worldModel.previewCropTiles(center, radius)).map(coordKey),
+  );
+  return coords.filter((c) => keys.has(coordKey(c)));
+}
+
+/**
  * Client (viewport) point -> canvas layout pixels. `rect` is the canvas's
  * `getBoundingClientRect()`, `layout` its `offsetWidth/Height`: they differ
  * only under a CSS `zoom` on an ancestor, where the rect is in zoomed pixels
@@ -3739,6 +3761,12 @@ export class HexMapRenderer {
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
     this.rebuildBounds = this.scanBoundsOfRect(rect);
     const coords = this.capToPreviewDisc(this.coordsInRect(rect, this.scanClipSources(fogActive)));
+    // The ground and everything drawn straight onto it (the bog edge border) share one crop, so nothing outlines a hex
+    // the preview never draws.
+    const groundCoords =
+      this.options.mode === 'settlement' && !this.settlement()
+        ? previewGroundCoords(coords, this.options.worldModel, this.options)
+        : coords;
     const deepFogOnly =
       this.options.mode === 'world' && fogActive && fogDebugFlags.terrainCull && this.isEntirelyDeepFog(rect);
     this.deepFogOnly = deepFogOnly;
@@ -3752,7 +3780,7 @@ export class HexMapRenderer {
       fogPerfStats.terrainDrawnCount = 0;
       fogPerfStats.terrainCulledCount = 0;
     } else {
-      this.rebuildTerrain(coords, fogActive);
+      this.rebuildTerrain(groundCoords, fogActive);
     }
     fogPerfStats.terrainMs = performance.now() - phaseStart;
 
@@ -3763,7 +3791,7 @@ export class HexMapRenderer {
     }
 
     phaseStart = performance.now();
-    this.rebuildBogEdges(coords);
+    this.rebuildBogEdges(groundCoords);
     fogPerfStats.bogEdgesMs = performance.now() - phaseStart;
 
     phaseStart = performance.now();
@@ -4024,42 +4052,10 @@ export class HexMapRenderer {
     };
     const baseEntries = new Map<string, Entry>();
     const topEntries = new Map<string, Entry>();
-    const settlement = this.settlement();
-    const preview = !settlement;
-    const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
-    // landing-page-defects.md L5: culled by `previewCropTiles` — a small
-    // radius crop around `previewCenter` (deliberate framing, matching the
-    // mockup's own scale, not itself a bug) intersected with landmass
-    // membership, so a *foreign* island a world seed happened to place
-    // nearby within that same radius no longer bleeds in (computed once per
-    // rebuild here, then checked per-hex via a Set — not re-flooded per
-    // hex; `previewCropTiles`/`previewIslandTiles` are cached per centre
-    // inside WorldModel, so this is cheap even though rebuildTerrain runs
-    // on every camera change). This is also exactly the tile set
-    // `settlementCameraOrigin`'s locked-preview branch (L4) fits the camera
-    // to — the two must agree, or the framing goes wrong again (see that
-    // method's own comment).
-    const previewTileKeys = preview
-      ? new Set(
-          (this.options.previewSea
-            ? hexesInRadius(previewCenter, previewDrawRadius(this.options))
-            : worldModel.previewCropTiles(previewCenter, previewDrawRadius(this.options))
-          ).map((c) => coordKey(c)),
-        )
-      : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
-      // zip 6a: before a settlement exists, this is the landing page's
-      // preview — a small crop of one island, not a slice of the whole
-      // (unfogged) world. Water isn't drawn at all (matching how world mode
-      // treats sea — see rebuildTerrainFlat) and membership in
-      // `previewTileKeys` already excludes it (`previewCropTiles` only ever
-      // returns land), so this one check replaces the old sea check and the
-      // old (membership-blind) radius check both. `previewSea` widens the set
-      // to the whole drawn disc, so the sea there draws its own tile art.
-      if (preview && !previewTileKeys!.has(coordKey(c))) continue;
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
       // scouted ring, instead of the tile popping into existence only once
