@@ -20,7 +20,8 @@ import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
-  hasCatapultSelected,
+  canSiegeDamage,
+  hasSiegeEngineSelected,
   isHuntUnit,
   isUnitSelectableFor,
   maxAffordableProvisions,
@@ -161,13 +162,13 @@ function clearTarget() {
 // Catapult target-building picker (issue #40 phase 5): only worth showing
 // once a target settlement is chosen *and* the selection actually includes a
 // Catapult — a catapult-free attack does no siege damage regardless of what's
-// requested (see `hasCatapultSelected`'s own comment), so there is nothing
+// requested (see `hasSiegeEngineSelected`'s own comment), so there is nothing
 // for a preference to apply to. `GET /api/v1/settlements/{id}` carries no
 // ownership check (confirmed from SettlementEndpoints.cs — see the PR notes),
 // so the enemy's real layout can be fetched and offered as specific hexes to
 // pick from, rather than falling back to a mere building-type preference.
 const showBuildingPicker = computed(
-  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasCatapultSelected(draft.value.unitCounts),
+  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasSiegeEngineSelected(draft.value.unitCounts, catalogue.byType),
 );
 const targetBuildingRows = computed(() => {
   if (!draft.value?.targetSettlementId) return [];
@@ -177,6 +178,8 @@ const targetBuildingRows = computed(() => {
     r: b.r,
     label: buildingLabel(b.type),
     level: b.level,
+    // Whether the selected engines can damage this kind of building: rams breach walls and towers, catapults burn towers and the rest.
+    damageable: canSiegeDamage(draft.value?.unitCounts ?? {}, catalogue.byType, b.type),
   }));
 });
 const selectedBuildingLabel = computed(() => {
@@ -184,6 +187,14 @@ const selectedBuildingLabel = computed(() => {
   if (!coord) return null;
   const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
   return row ? `${row.label} (${t('hud.armyPanel.buildingLevelCoord', { level: row.level, q: coord.q, r: coord.r })})` : `(${coord.q}, ${coord.r})`;
+});
+// The preferred target can be set before the engines are (the ring's Siege action pre-selects a wall): say so when the selected
+// engines cannot damage it, since the siege would then do nothing.
+const selectedBuildingUnreachable = computed(() => {
+  const coord = draft.value?.targetBuildingCoord;
+  if (!coord) return false;
+  const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
+  return !!row && !row.damageable;
 });
 function pickBuildingTarget(q: number, r: number) {
   world.setDispatchTargetBuilding({ q, r });
@@ -458,10 +469,12 @@ async function confirmFieldOrderClick() {
             <p class="status-subtext building-picker-hint">
               {{ t('hud.armyPanel.buildingPickerHint') }}
             </p>
+            <p class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
             <div v-if="selectedBuildingLabel" class="target-selected">
               <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedBuildingLabel }}</strong></span>
               <button type="button" class="secondary change-target" @click="clearBuildingTarget">{{ t('hud.armyPanel.clear') }}</button>
             </div>
+            <p v-if="selectedBuildingUnreachable" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
             <template v-else>
               <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
               <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">
@@ -473,10 +486,14 @@ async function confirmFieldOrderClick() {
                   :key="`${b.q},${b.r}`"
                   type="button"
                   class="target-row"
+                  :class="{ 'out-of-reach': !b.damageable }"
+                  :disabled="!b.damageable"
+                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
+                  data-testid="building-target"
                   @click="pickBuildingTarget(b.q, b.r)"
                 >
                   <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
+                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
                 </button>
               </div>
               <p v-else class="status-subtext">{{ t('hud.armyPanel.noPreference') }}</p>
@@ -793,6 +810,10 @@ async function confirmFieldOrderClick() {
 }
 .target-row:hover {
   background: rgba(255, 197, 92, 0.08);
+}
+.target-row.out-of-reach {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .target-owner {
   color: var(--muted);

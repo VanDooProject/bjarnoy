@@ -72,7 +72,8 @@ export type BuildableType =
   | 'hammerschmiede'
   | 'palisade'
   | 'palisadegate'
-  | 'bridge';
+  | 'bridge'
+  | 'siegeworkshop';
 
 export interface BuildCategory {
   id: string;
@@ -150,6 +151,7 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       buildings: [
         { type: 'tower' },
         { type: 'archeryrange' },
+        { type: 'siegeworkshop' },
         { type: 'barracks' },
         { type: 'smithy' },
       ],

@@ -160,6 +160,8 @@ export function maxLevelFor(type: BuildingKind): number {
       return 3;
     case 'bridge':
       return 4;
+    case 'siegeworkshop':
+      return 5;
     default:
       return 0;
   }
@@ -296,6 +298,8 @@ export function buildingStatsFor(
     // Tower, which is why this reads the same as Tower's own "no output"
     // shape rather than inventing a stat line with nothing behind it.
     case 'archeryrange':
+    // The Siege Workshop trains the battering ram, the other half of the siege roster.
+    case 'siegeworkshop':
       return { modifier: { kind: 'trainsLandTroops' } };
     case 'dockyard':
       return { modifier: { kind: 'trainsShips' } };
@@ -496,6 +500,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   storagehouse: { wood: 80, stone: 60, food: 0, iron: 0 },
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
   archeryrange: { wood: 140, stone: 100, food: 0, iron: 0 },
+  siegeworkshop: { wood: 220, stone: 160, food: 0, iron: 0 },
   dockyard: { wood: 200, stone: 120, food: 0, iron: 0 },
   barracks: { wood: 130, stone: 110, food: 0, iron: 0 },
   sawmill: SMALL_BUILDING_COST,

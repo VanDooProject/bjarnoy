@@ -6,6 +6,15 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
+ * A long label is shown with soft hyphens in it when it has to wrap ("Weapon\u00ADsmith"), which `hasText` with a plain
+ * string would not match: find it by its letters, soft hyphens allowed anywhere between them.
+ */
+function labelText(label: string): RegExp {
+  const letters = [...label].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(letters.join('\u00AD?'), 'i');
+}
+
+/**
  * The ring menu (issue #16) — the radial menu a hex click opens, in both
  * SettlementView and LandingView's onboarding step.
  *
@@ -43,17 +52,17 @@ export class RingMenuComponent {
 
   /** A bubble at any depth by label, e.g. "Build", "Upgrade". */
   action(label: string): Locator {
-    return this.page.locator('.ring-bubble', { hasText: label });
+    return this.page.locator('.ring-bubble', { hasText: labelText(label) });
   }
 
   /** An inner-lane bubble by label, e.g. "Military", "Shrines", "Water". */
   category(label: string): Locator {
-    return this.page.locator('.ring-bubble:not(.back):not(.child)', { hasText: label });
+    return this.page.locator('.ring-bubble:not(.back):not(.child)', { hasText: labelText(label) });
   }
 
   /** An outer-lane building bubble by label, e.g. "Watchtower", "Sawmill". */
   child(label: string): Locator {
-    return this.page.locator('.ring-bubble.child', { hasText: label });
+    return this.page.locator('.ring-bubble.child', { hasText: labelText(label) });
   }
 
   /**
@@ -62,7 +71,7 @@ export class RingMenuComponent {
    * trip per label (see `settledCentre` for what a round trip costs on this app's canvas views).
    */
   labels(): Promise<string[]> {
-    return this.bubbles.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? (el.textContent ?? '').trim()));
+    return this.bubbles.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? (el.textContent ?? '').replaceAll('\u00AD', '').trim()));
   }
 
   /** Waits for a ring to have opened at all. */

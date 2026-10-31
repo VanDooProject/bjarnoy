@@ -9,6 +9,9 @@ import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent } from 'vue';
 import LandMovementView from './LandMovementView.vue';
 import { createI18n } from 'vue-i18n';
+import { useAuthStore } from '../stores/auth';
+import { useDocsAdminNotes } from '../composables/useDocsAdminNotes';
+import type { UserResponse } from '../api/types';
 import enCommon from '../i18n/locales/en/common.json';
 import deCommon from '../i18n/locales/de/common.json';
 import enCatalogue from '../i18n/locales/en/catalogue.json';
@@ -22,6 +25,7 @@ vi.mock('../stores/unitCatalogue', () => ({
 }));
 
 const Passthrough = defineComponent({ template: '<div><slot /></div>' });
+const ExampleStub = defineComponent({ template: '<div data-testid="land-example-stub" />' });
 const BuildingLinkStub = defineComponent({ props: ['type'], template: '<span class="building-link" :data-type="type">{{ type }}</span>' });
 
 function i18nFor(locale: 'en' | 'de') {
@@ -41,12 +45,14 @@ function i18nFor(locale: 'en' | 'de') {
 }
 
 const mounted: VueWrapper[] = [];
-function mountPage(locale: 'en' | 'de') {
+function mountPage(locale: 'en' | 'de', asAdmin = false) {
   setActivePinia(createPinia());
+  if (asAdmin) useAuthStore().user = { role: 'admin' } as unknown as UserResponse;
+  useDocsAdminNotes().setEnabled(asAdmin);
   const wrapper = mount(LandMovementView, {
     global: {
       plugins: [i18nFor(locale)],
-      stubs: { DocsPageLayout: Passthrough, DocsToc: true, DocsPageLink: Passthrough, BuildingLink: BuildingLinkStub },
+      stubs: { LandMovementExample: ExampleStub, DocsPageLayout: Passthrough, DocsToc: true, DocsPageLink: Passthrough, BuildingLink: BuildingLinkStub },
     },
   });
   mounted.push(wrapper);
@@ -56,10 +62,21 @@ function mountPage(locale: 'en' | 'de') {
 describe('LandMovementView bridges', () => {
   afterEach(() => mounted.splice(0).forEach((w) => w.unmount()));
 
-  it('shuts the wide river except over a bridge, and shows no "planned" admin note any more', () => {
+  it('shows players the example map and the rules, but not the ground cost table', () => {
     const page = mountPage('en');
-    expect(page.get('[data-ground="wideRiver"]').text()).toContain('Only over a bridge');
+    expect(page.find('[data-testid="land-example-stub"]').exists()).toBe(true);
+    expect(page.find('[data-testid="ground-table"]').exists()).toBe(false);
     expect(page.find('[data-testid="admin-note"]').exists()).toBe(false);
+    expect(page.text()).toContain('Grass is the quickest ground');
+    // The unit speeds stay; the per-ground minutes (the costs in disguise) are admin-only.
+    expect(page.text()).not.toContain('Time per hex at the default world speed');
+  });
+
+  it('shows an admin with the notes on the ground cost table, and the wide river shut except over a bridge', () => {
+    const page = mountPage('en', true);
+    expect(page.find('[data-testid="admin-note"] [data-testid="ground-table"]').exists()).toBe(true);
+    expect(page.get('[data-ground="wideRiver"]').text()).toContain('Only over a bridge');
+    expect(page.get('[data-ground="bog"]').text()).toContain('2');
     expect(page.text()).not.toContain('planned but not in the game');
   });
 
@@ -77,7 +94,7 @@ describe('LandMovementView bridges', () => {
   });
 
   it('says the same in German', () => {
-    const page = mountPage('de');
+    const page = mountPage('de', true);
     expect(page.get('[data-ground="wideRiver"]').text()).toContain('Nur über eine Brücke');
     expect(page.get('[data-bridge="guarded"]').text()).toContain('Wehrbrücke');
     expect(page.get('[data-bridge="causeway"]').text()).toContain('Damm');

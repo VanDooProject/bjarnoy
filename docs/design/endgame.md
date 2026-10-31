@@ -15,7 +15,7 @@ Utgard (one per wasted island of 150+ tiles, `GiantGenerator`) is defended by:
 - **Utgard** itself, with a big garrison.
 
 Guilds wear the garrisons down together (losses stay), hold them down with armies standing on them (siege),
-breach the walls with catapults and rams, take every watchtower, and then storm Utgard. The army that clears
+breach the walls with rams, take every watchtower, and then storm Utgard. The army that clears
 Utgard wins the age for its player and guild.
 
 **Every endgame fight is a full battle**: the loser loses everything, the winner `(loser/winner)^1.5` of its
@@ -64,33 +64,43 @@ the ground + 3 like palisade ends. A breached wall hex (level 0) is passable.
 
 ## Siege engines
 
-- **Catapult**: unchanged (siege power 40).
-- **Ram** (new `UnitType.Ram`, class Siege): the same siege pattern as the catapult (siege power 40, the same
-  `SiegeResolver.LevelsDestroyed`), more staying power, slower. Attack 10, **defense 30** (catapult 10),
-  **speed 1.0** (catapult 1.5), carry 0, upkeep 3, cost wood 400 / stone 100 / food 40 / iron 150, 1 h,
-  Longhouse 20, after the Berserker, trained at the Archery Range like the catapult. Siege power sums over
-  every siege unit in an army (catapults and rams).
+- **Catapult**: siege power 40, trained at the Archery Range. It burns towers and every ordinary building
+  (bridges included) but **cannot damage a wall**.
+- **Ram** (new `UnitType.Ram`, class Siege): the same siege power (40, the same `SiegeResolver.LevelsDestroyed`),
+  more staying power, slower. Attack 10, **defense 30** (catapult 10), **speed 1.0** (catapult 1.5), carry 0,
+  upkeep 3, cost wood 400 / stone 100 / food 40 / iron 150, 1 h, Longhouse 20, after the Berserker. Trained at
+  the new **Siege Workshop** (`BuildingType.SiegeWorkshop` 33, five levels, Longhouse 18, behind a level-3
+  Archery Range). The ram is the **wall breaker**: it damages walls and towers, nothing else.
+- Which engine hits which building is data: `UnitDefinition.SiegeTargets` (walls / towers / buildings), asked
+  through `SiegeResolver.CanDamage`; `economy.md` section 5 has the table. Only the surviving engines that can
+  damage the target count towards the levels destroyed.
 
 ### Breaching walls
 
-New army mission **`siege`** against a wall hex: a player's **palisade** (any other player's, never your own or a
-friend's) or an **Utgard wall**.
+There is **no separate siege mission**. A wall is breached by an ordinary **Attack** (or Raid) with rams that
+**names the wall hex** as its preferred target building (`TargetBuildingCoord`):
 
-- Needs at least one catapult or ram; the army marches to a passable hex next to the wall and strikes on arrival.
-- Levels destroyed = `LevelsDestroyed(total siege power of surviving siege units)`; a wall hex at level 0 is
-  **breached** (a palisade hex is removed; an Utgard wall becomes rubble).
+- A **player's palisade** belongs to a settlement, so the Attack targets that settlement. The ring menu's
+  "Siege" action on a rival's wall hex (needs a ram at home) opens exactly that dispatch: an Attack on the
+  wall's owner with the wall hex pre-selected in the target-building picker, which marks what the selected
+  engines can damage (rams: walls and towers; catapults: towers and everything else).
+- Only the surviving **rams** count against a wall, and a won siege takes **one level** off the hex whatever
+  the ram count (`SiegeResolver.LevelsTakenFrom`, like a bridge). A named wall the surviving engines cannot
+  damage (a catapult-only army) takes no damage. A wall hex at level 0 is **breached** (a palisade hex is
+  removed; an Utgard wall becomes rubble).
+- **Utgard walls** have no settlement to attack, so they get their own wall-assault path in step 3 (an
+  assault on the wall hex with rams, with the 24 h rules below); the wall-state rules below describe it.
 - **Utgard walls lose at most 1 level per `WallBreachInterval` = 24 h** per wall hex, matching the repair pace:
-  a siege strike takes 1 level whatever its siege power, and a strike on a hex that already lost a level in
+  a strike takes 1 level whatever the ram count, and a strike on a hex that already lost a level in
   the last 24 h fights its battle but takes no level (the report says when the next strike can land). So the
   inner ring (level 2) needs two strikes a day apart, with an army kept next to it in between so it does not
   repair.
-- Before the siege strike a full battle is fought against the wall's defenders: for a palisade, the owner's
-  armies standing on or next to it; for an Utgard wall, nothing: walls and gates hold **no garrison**, they are
+- The Attack's battle comes first (the defenders of a player's settlement); an Utgard wall has no defenders: walls and gates hold **no garrison**, they are
   pure siege targets (but towers and Utgard ambush armies that come into their range, see below).
 - **Utgard walls repair**: a breached or damaged Utgard wall regains 1 level every `WallRepairInterval` = 24 h,
   up to its ring level, while no player army stands on or next to it. Player palisades are rebuilt by their
   owner as usual.
-- Report: a battle-style report with the siege line (wall hex, level before/after, breached).
+- Report: the ordinary battle report with its siege line (target, level before/after).
 
 ## Jötunn garrisons
 
@@ -145,12 +155,12 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 ## Reports and UI
 
 - New report kinds on the camp report (`CampReportKind`): `Assault`, `SiegeTick`, `EndgameAmbush`,
-  `EndgameTower`; wall sieges use the battle report with its siege line.
+  `EndgameTower`; sieges of player walls use the battle report with its siege line.
 - **Bundled siege reports**: siege ticks are folded into one report per (army, site), updated in place each
   tick (ticks fought, jötnar killed, units lost, loot taken, last tick). The inbox groups reports by target
   and collapses a group to one row with a count; expanding shows every report.
 - Map: watchtower and wall art per state, Utgard and tower tooltips with the garrison like camps, `Assault`
-  and `Siege` actions in the ring menu (siege only with siege units at home), the guard ranges on hover.
+  and `Siege` actions in the ring menu (siege only with rams at home), the guard ranges on hover.
 - Docs: the Wasted Lands page gains a "How the endgame plays" section with these rules.
 
 ## Delivery (PRs)
@@ -159,15 +169,16 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
 2. In parallel (separate worktrees, no shared files):
    - **2a Map**: wall rings and watchtowers in world generation (C#, TS, golden), storage, rendering with the
      existing art, walls blocking land armies.
-   - **2b Siege engines**: the Ram unit and the `siege` mission with breaching against **palisades** (Utgard walls
-     plug in through the same wall-target interface in step 3).
-3. **Jötunn garrisons**: garrisons, `assault`, siege ticks with loot, aggression, Utgard wall state and repair,
+   - **2b Siege engines**: the Ram unit, the Siege Workshop and the engine-by-target damage split, breaching
+     **player palisades** through the ordinary Attack that names the wall (Utgard walls get their wall-assault
+     path in step 3).
+3. **Jötunn garrisons**: garrisons, `assault`, siege ticks with loot, aggression, the wall-assault path against Utgard walls (rams), Utgard wall state and repair,
    sieging Utgard walls, bundled reports and the inbox grouping.
 4. **Utgard**: gate rule, winning, the age-end world setting and banner.
 
 ## Open questions
 
-None open. (Player palisades take the full `LevelsDestroyed` per siege; only Utgard walls are capped at 1 level per 24 h.)
+None open. (A won siege takes one level off a player wall hex; Utgard walls are additionally capped at 1 level per 24 h.)
 
 ## Screenshots
 

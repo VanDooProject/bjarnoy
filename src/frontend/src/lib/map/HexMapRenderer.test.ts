@@ -6,6 +6,7 @@ import {
   hoverSubjectFor,
   isIslandNearViewport,
   isWaypointTap,
+  wheelPassesToPage,
   landfallBurstFrames,
   loadProgressFraction,
   plotRippleFrames,
@@ -1032,5 +1033,28 @@ describe('worldConfineFrame', () => {
     const { limits } = worldConfineFrame({ q: 0, r: 0 }, 20, viewport);
     const far = confineCamera({ x: 1e6, y: -1e6, zoom: 0.0001 }, limits.bounds, limits.minZoom);
     expect(far).toEqual({ x: limits.bounds.maxX, y: limits.bounds.minY, zoom: limits.minZoom });
+  });
+});
+
+describe('wheelPassesToPage', () => {
+  const base = { allowPageScroll: true, engaged: false, modifier: false, lockCamera: false };
+
+  it('scrolls the page on a plain wheel until the user has pressed on the map', () => {
+    expect(wheelPassesToPage(base)).toBe(true);
+    expect(wheelPassesToPage({ ...base, engaged: true })).toBe(false);
+  });
+
+  it('zooms on ctrl/meta + wheel at any time', () => {
+    expect(wheelPassesToPage({ ...base, modifier: true })).toBe(false);
+  });
+
+  it('always scrolls the page when the camera is locked, engaged or not', () => {
+    expect(wheelPassesToPage({ ...base, lockCamera: true, engaged: true })).toBe(true);
+    expect(wheelPassesToPage({ ...base, lockCamera: true, modifier: true })).toBe(true);
+  });
+
+  it('never passes on a host that did not opt into page scroll', () => {
+    expect(wheelPassesToPage({ ...base, allowPageScroll: false })).toBe(false);
+    expect(wheelPassesToPage({ ...base, allowPageScroll: false, lockCamera: true })).toBe(false);
   });
 });
