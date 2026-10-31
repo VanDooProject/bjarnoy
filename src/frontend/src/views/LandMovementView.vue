@@ -99,7 +99,7 @@ const tocLinks = computed(() =>
               </tr>
               <tr data-ground="wallEnd">
                 <th scope="row" class="name">{{ $t('docs.landMovement.cost.wallEnd') }}</th>
-                <td class="value">{{ n(WALL_END_COST) }} <span class="muted">{{ $t('docs.landMovement.cost.wallEndNote') }}</span></td>
+                <td class="value">{{ $t('docs.landMovement.cost.surcharge', { n: n(WALL_END_COST) }) }} <span class="muted">{{ $t('docs.landMovement.cost.wallEndNote') }}</span></td>
               </tr>
               <tr v-for="id in ['mountain', 'sea', 'lake'] as const" :key="id" :data-ground="id">
                 <th scope="row" class="name">{{ terrainName(id) }}</th>

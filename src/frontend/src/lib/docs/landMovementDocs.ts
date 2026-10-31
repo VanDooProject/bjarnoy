@@ -18,7 +18,7 @@ export const RIVER_CROSSING_COST = 8;
 /** A stream costs a flat `1 + RiverCrossingCost` whatever it runs over (`HexPathfinder.LandStepCost`). */
 export const STREAM_COST = 1 + RIVER_CROSSING_COST;
 
-/** What entering the open end of a wall costs, instead of its ground (`HexPathfinder.HalfOpenEndCost`). */
+/** What entering the open end of a wall costs on top of its ground (`HexPathfinder.HalfOpenEndCost`). */
 export const WALL_END_COST = HALF_OPEN_END_COST;
 
 /**
