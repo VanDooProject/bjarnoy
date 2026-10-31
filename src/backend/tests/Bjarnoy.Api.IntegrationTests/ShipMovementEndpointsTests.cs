@@ -380,4 +380,84 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         Assert.True(recall.Movement!.IsReturning);
         Assert.Equal(new HexPointResponse(dock.Q, dock.R), recall.Movement.Path[^1]);
     }
+
+    [Fact]
+    public async Task A_fleet_attack_is_sent_at_a_shore_building_of_an_inland_centred_target_and_damages_only_it()
+    {
+        // Issue #450, target half. The target's centre (-60,-38) has no sea within two hexes, but its claim (radius 2)
+        // reaches the shoreline hex (-60,-40); the fleet must name a building there, sails to that hex, wins against the
+        // empty garrison, and the siege hits that building only (3 Karves = 30 siege power -> 3 levels).
+        using var client = Client();
+        var attackerOwner = $"owner-{Guid.CreateVersion7():N}";
+        var targetOwner = $"rival-{Guid.CreateVersion7():N}";
+        var attackerCentre = new HexCoord(-58, -35);
+        var dock = new HexCoord(-59, -41);
+        var targetCentre = new HexCoord(-60, -38);
+        var shoreBuilding = new HexCoord(-60, -40);
+        var inlandBuilding = new HexCoord(-60, -37);
+        Guid attackerId, targetId;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var (worldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
+            var attacker = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, attackerOwner, attackerCentre.Q, attackerCentre.R);
+            attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = dock.Q, R = dock.R, Type = BuildingType.Dockyard, Level = 1 });
+            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Karve, Count = 3 });
+            attacker.StockFood = 100_000;
+            attacker.CapacityFood = 100_000;
+
+            var target = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, targetOwner, targetCentre.Q, targetCentre.R);
+            target.Buildings.Add(new PlacedBuildingEntity { SettlementId = target.Id, Q = shoreBuilding.Q, R = shoreBuilding.R, Type = BuildingType.Farm, Level = 5 });
+            target.Buildings.Add(new PlacedBuildingEntity { SettlementId = target.Id, Q = inlandBuilding.Q, R = inlandBuilding.R, Type = BuildingType.Farm, Level = 5 });
+            db.Settlements.AddRange(attacker, target);
+            await db.SaveChangesAsync(Ct);
+            attackerId = attacker.Id;
+            targetId = target.Id;
+        }
+
+        client.DefaultRequestHeaders.Add("X-Owner-Id", attackerOwner);
+        UnitCountRequest[] karves = [new UnitCountRequest("karve", 3)];
+        var centre = new HexPointRequest(targetCentre.Q, targetCentre.R);
+
+        var withoutBuilding = await client.PostJsonAsync(
+            $"/api/v1/settlements/{attackerId}/armies",
+            new DispatchArmyRequest(karves, null, centre, 30, "attack", targetId), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, withoutBuilding.StatusCode);
+
+        var inland = await client.PostJsonAsync(
+            $"/api/v1/settlements/{attackerId}/armies",
+            new DispatchArmyRequest(karves, null, centre, 30, "attack", targetId, new HexPointRequest(inlandBuilding.Q, inlandBuilding.R)), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, inland.StatusCode);
+
+        var dispatched = await client.PostJsonAsync(
+            $"/api/v1/settlements/{attackerId}/armies",
+            new DispatchArmyRequest(karves, null, centre, 30, "attack", targetId, new HexPointRequest(shoreBuilding.Q, shoreBuilding.R)), Ct);
+        Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
+        var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
+        Assert.Equal(new HexPointResponse(shoreBuilding.Q, shoreBuilding.R), army.Movement!.Path[^1]);
+
+        _factory.Time.Advance(TimeSpan.FromHours(army.Movement.CumulativeHours[^1] + 0.1));
+
+        // Arrivals are settled when someone reads: the attacker looks at its fleet first.
+        var returning = await client.GetFromJsonAsync<ArmyResponse>(
+            $"/api/v1/armies/{army.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(returning!.Movement!.IsReturning);
+
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", targetOwner);
+        var reports = await client.GetFromJsonAsync<List<BattleReportResponse>>(
+            $"/api/v1/settlements/{targetId}/reports", SqliteApiFixture.StrictJson, Ct);
+        var report = Assert.Single(reports!);
+        Assert.Equal("attacker", report.Winner);
+        Assert.NotNull(report.Siege);
+        Assert.Equal(new HexPointResponse(shoreBuilding.Q, shoreBuilding.R), report.Siege!.TargetCoord);
+        Assert.Equal(5, report.Siege.LevelBefore);
+        Assert.Equal(2, report.Siege.LevelAfter);
+
+        var settlement = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{targetId}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, settlement!.Buildings.Single(b => b.Q == shoreBuilding.Q && b.R == shoreBuilding.R).Level);
+        Assert.Equal(5, settlement.Buildings.Single(b => b.Q == inlandBuilding.Q && b.R == inlandBuilding.R).Level);
+    }
 }

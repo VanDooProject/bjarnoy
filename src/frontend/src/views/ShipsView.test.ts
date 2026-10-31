@@ -81,12 +81,22 @@ describe('ShipsView', () => {
     wrapper.unmount();
   });
 
+  it('explains that a fleet is sent at one shore building, which a won fight damages', async () => {
+    const wrapper = await mountPage();
+
+    const text = wrapper.get('#battles').text();
+    expect(text).toContain("one building on the enemy's shore");
+    expect(text).toContain('Longhouse can stand inland');
+    expect(text).toContain('it damages that building');
+    wrapper.unmount();
+  });
+
   it('keeps the admin note from players, even with the stored admin toggle on', async () => {
     useDocsAdminNotes().setEnabled(true);
     const wrapper = await mountPage();
 
     expect(wrapper.find('[data-testid=admin-note]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('route starts at the settlement centre');
+    expect(wrapper.text()).not.toContain('Founding by sea');
     wrapper.unmount();
   });
 
@@ -95,7 +105,7 @@ describe('ShipsView', () => {
     useDocsAdminNotes().setEnabled(true);
     const wrapper = await mountPage();
 
-    expect(wrapper.get('[data-testid=admin-note]').text()).toContain('route starts at the settlement centre');
+    expect(wrapper.get('[data-testid=admin-note]').text()).toContain('Founding by sea');
     wrapper.unmount();
   });
 });

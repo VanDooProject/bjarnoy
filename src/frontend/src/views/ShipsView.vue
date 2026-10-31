@@ -143,6 +143,8 @@ const loc = computed(() => String(locale.value));
       <h2>{{ $t('docs.ships.battles.heading') }}</h2>
       <ul class="rules">
         <li>{{ $t('docs.ships.battles.same') }}</li>
+        <li>{{ $t('docs.ships.battles.shore') }}</li>
+        <li>{{ $t('docs.ships.battles.damage') }}</li>
         <i18n-t keypath="docs.ships.battles.tower" tag="li" scope="global">
           <template #tower><BuildingLink type="tower" /></template>
           <template #percent>{{ TOWER_DEFENCE_PERCENT_PER_LEVEL }}</template>
@@ -160,7 +162,6 @@ const loc = computed(() => String(locale.value));
     </template>
 
     <DocsAdminNote class="block">
-      <p>{{ $t('docs.ships.adminNote.route') }}</p>
       <p>{{ $t('docs.ships.adminNote.sea', { karve: SHIP_CREW_CAPACITY.karve, longship: SHIP_CREW_CAPACITY.longship }) }}</p>
     </DocsAdminNote>
   </DocsPageLayout>

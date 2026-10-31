@@ -205,6 +205,10 @@ public static class UnitCatalogue
             CarryCapacity = 200,
             FoodCarryCapacity = 100,
             UpkeepPerHour = 2,
+            // Starting value, to be tuned: a won fleet attack damages the building it was sent at by
+            // SiegeResolver.LevelsDestroyed over the surviving ships' summed SiegePower (catapult: 40).
+            SiegePower = 10,
+            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
             RequiredLonghouseLevel = 8,
@@ -220,6 +224,9 @@ public static class UnitCatalogue
             CarryCapacity = 80,
             FoodCarryCapacity = 60,
             UpkeepPerHour = 3,
+            // Starting value, to be tuned (see Karve).
+            SiegePower = 20,
+            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 200, Food: 60, Iron: 220),
             TrainingDuration = TimeSpan.FromHours(1.5),
             RequiredLonghouseLevel = 20,

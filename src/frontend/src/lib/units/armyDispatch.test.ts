@@ -20,6 +20,8 @@ import {
   isUnitSelectableFor,
   maxAffordableProvisions,
   routeToWaypointsAndDestination,
+  shoreBuildings,
+  targetBuildingPickerMode,
   totalUpkeepPerHour,
 } from './armyDispatch';
 
@@ -465,5 +467,49 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('spearman', byType)).toBe(true);
     expect(isHuntUnit('longship', byType)).toBe(false);
     expect(isHuntUnit('unknown', byType)).toBe(false);
+  });
+});
+
+describe('targetBuildingPickerMode', () => {
+  const byType = {
+    karve: unit({ type: 'karve', class: 'ship', siegeTargets: ['walls', 'towers', 'buildings'] }),
+    catapult: unit({ type: 'catapult', class: 'siege', siegeTargets: ['towers', 'buildings'] }),
+    ram: unit({ type: 'ram', class: 'siege', siegeTargets: ['walls', 'towers'] }),
+    spearman: unit({ type: 'spearman', class: 'infantry' }),
+  };
+
+  it('requires a building for a fleet attack once a target settlement is chosen', () => {
+    expect(targetBuildingPickerMode('attack', true, { karve: 3 }, byType, 'fleet')).toBe('required');
+  });
+
+  it('offers an optional building for a land attack with siege engines, none without', () => {
+    expect(targetBuildingPickerMode('attack', true, { catapult: 2 }, byType, 'land')).toBe('optional');
+    expect(targetBuildingPickerMode('attack', true, { ram: 2 }, byType, 'land')).toBe('optional');
+    expect(targetBuildingPickerMode('attack', true, { spearman: 5 }, byType, 'land')).toBe('none');
+  });
+
+  it('names no building without a target settlement or for other missions', () => {
+    expect(targetBuildingPickerMode('attack', false, { karve: 3 }, byType, 'fleet')).toBe('none');
+    expect(targetBuildingPickerMode('support', true, { karve: 3 }, byType, 'fleet')).toBe('none');
+    expect(targetBuildingPickerMode('move', true, { karve: 3 }, byType, 'fleet')).toBe('none');
+  });
+});
+
+describe('shoreBuildings', () => {
+  // Land at q >= 0, sea at q < 0.
+  const coast = { isLand: (q: number) => q >= 0 };
+
+  it('keeps only buildings on a shoreline hex or a sea hex', () => {
+    const farm = { q: 3, r: 0, type: 'farm' };
+    const hut = { q: 0, r: 0, type: 'fishing_hut' };
+    const dock = { q: -1, r: 0, type: 'dockyard' };
+    expect(shoreBuildings([farm, hut, dock], coast)).toEqual([hut, dock]);
+  });
+});
+
+describe('a fleet attack request', () => {
+  it('carries the chosen shore building as the target building', () => {
+    const request = buildAttackDispatchRequest({ karve: 3 }, [], 30, 'target-1', { q: 9, r: 0 });
+    expect(request?.targetBuildingCoord).toEqual({ q: 9, r: 0 });
   });
 });

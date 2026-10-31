@@ -218,7 +218,7 @@
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
-      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many rams survive (only rams damage a wall); fire will too, later.",
+      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many rams survive (on land only rams damage a wall; a fleet sent at the sea end does too); fire will too, later.",
       "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies and their friends' (the same guild, or a guild at peace with it) pass it as quickly as the ground under it; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
       "bridge": "Opens a wide river to land armies. A causeway first, then a footbridge, the king's bridge, and a guarded bridge with forts that only you and your friends may cross. Attackers burn a guarded bridge down a level at a time.",
       "siegeworkshop": "Trains battering rams on grass or sand, in place of the longhouse. Unlocks at Longhouse 18 behind a level-3 Archery range. Rams are the only engine that breaches walls (they hit towers too); catapults, trained at the Archery range, burn towers and every other building.",
@@ -873,9 +873,10 @@
     },
     "sieges": {
       "heading": "Sieges",
-      "body": "A wall can be breached, one level at a time. Only battering rams do it, and only as part of an attack on the settlement the wall belongs to. Catapults cannot damage a wall; they burn towers and every other building.",
+      "body": "A wall can be breached, one level at a time. Battering rams do it, and so does a fleet, but only as part of an attack on the settlement the wall belongs to. Catapults cannot damage a wall; they burn towers and every other building.",
       "rules": {
         "who": "Send an attack (or a raid) with rams at the settlement and name the wall hex as the target when you send it. On a rival's wall, the Siege action in the ring menu does this for you (it needs a ram at home). If your army wins the battle, the rams that survived strike that hex. One surviving ram is enough; an army that loses the battle strikes nothing. Rams are trained at the Siege Workshop.",
+        "ships": "A fleet's won fight damages the building it was sent at in the same way, the sea end of a wall included. It takes one level off a wall hex then too.",
         "target": "If you name no target, or the building you named is gone by the time your army arrives, the siege hits a random building of that settlement instead, chosen among the buildings your surviving siege engines can damage. A wall named for catapults alone takes no damage.",
         "level": "A won siege takes exactly one level off a wall hex, the gate included, however many rams survive. Most buildings lose several levels at once to a strong army; a wall is breached a level at a time. A palisade or gate has {levels} levels, so a fully built wall hex takes {levels} won sieges. A damaged wall still stops armies until its last level is gone.",
         "gone": "At level 0 the wall hex is gone: its hex is free ground again and armies walk through it. Any build order still queued for that hex is dropped.",
@@ -1175,12 +1176,13 @@
     "battles": {
       "heading": "Battles",
       "same": "Fleets fight by the same rules as armies on land: attack against defence, and a tie goes to the defender.",
+      "shore": "You send a fleet at one building on the enemy's shore: a building on a shoreline hex or on coastal water, inside the settlement's claim. The fleet sails to that building and the fight happens there. The settlement's Longhouse can stand inland.",
+      "damage": "If the fleet wins, it damages that building, and the more of your ships survive the fight, the more levels it loses. Nothing else of the settlement is hit. If the building is gone when the fleet arrives, the fight still happens, but nothing is damaged.",
       "tower": "A defending settlement's {tower} adds {percent}% defence per level.",
       "njord": "The {shrine} raises your ships' attack by {low}% at level 1, up to {high}% at level 5. See {shrines}.",
       "shrinesLink": "Shrines"
     },
     "adminNote": {
-      "route": "Known bug (issue #450): a fleet's route starts at the settlement centre, which is never next to the sea for a starting settlement, so fleets cannot leave a first settlement, and cannot attack a settlement whose centre is inland. This page describes the intended behaviour: fleets leave from the Dockyard.",
       "sea": "Founding by sea (a Karve carries {karve} Settler crew, a Longship {longship}) exists in the rules but has no interface yet (issue #447)."
     }
   },

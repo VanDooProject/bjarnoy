@@ -44,9 +44,11 @@ public sealed record HexPointRequest(int Q, int R)
 /// to garrison as a guest on arrival).
 /// </param>
 /// <param name="TargetBuildingCoord">
-/// Optional, only meaningful for <c>"attack"</c>/<c>"raid"</c> — the
+/// Only meaningful for <c>"attack"</c>/<c>"raid"</c> — the
 /// coordinate of a building within the target settlement to hit with any
-/// surviving catapults on arrival (issue #40 phase 5). Omit (or leave
+/// surviving catapults on arrival (issue #40 phase 5). <b>Required for a fleet</b>:
+/// a fleet sails to this building, which must stand on the target's shore (inside its claim, on a
+/// shoreline land hex or a sea hex), and only it can be damaged. For a land army omit (or leave
 /// <see langword="null"/>) for "no preference" —
 /// <see cref="Bjarnoy.Domain.Combat.SiegeResolver"/> then picks uniformly at
 /// random among whatever buildings the defender actually has standing when

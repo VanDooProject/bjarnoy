@@ -144,14 +144,14 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void The_catapult_and_the_ram_have_a_positive_siege_power_and_nothing_else_does()
+    public void The_catapult_the_ram_and_the_ships_have_a_positive_siege_power_and_nothing_else_does()
     {
-        // Only the siege units contribute to SiegeResolver's building-damage
-        // math (issue #40 phase 5, rams in endgame step 2b) — every other unit type is 0.
+        // Only these contribute to SiegeResolver's building-damage math (catapult and ram on land, the ships when a
+        // fleet attack hits a shore building) — every other unit type is 0.
         foreach (var type in UnitCatalogue.AllTypes)
         {
             var definition = UnitCatalogue.Get(type);
-            if (type is UnitType.Catapult or UnitType.Ram)
+            if (type is UnitType.Catapult or UnitType.Ram || definition.Class == UnitClass.Ship)
             {
                 Assert.True(definition.SiegePower > 0, $"{type} must have a positive siege power");
             }
@@ -281,6 +281,18 @@ public class UnitCatalogueTests
         foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).SiegePower == 0))
         {
             Assert.Equal(SiegeTargets.None, UnitCatalogue.Get(type).SiegeTargets);
+        }
+    }
+
+    [Fact]
+    public void The_ships_can_damage_walls_towers_and_buildings()
+    {
+        // A fleet damages whatever shore building it was sent at (SiegeResolver.LevelsTakenFrom still caps a wall or bridge at one level).
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).Class == UnitClass.Ship))
+        {
+            Assert.Equal(
+                SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
+                UnitCatalogue.Get(type).SiegeTargets);
         }
     }
 }

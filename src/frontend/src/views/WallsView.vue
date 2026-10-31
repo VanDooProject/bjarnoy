@@ -105,6 +105,7 @@ const tocLinks = computed(() => [
         <li>{{ $t('docs.walls.sieges.rules.who') }}</li>
         <li>{{ $t('docs.walls.sieges.rules.target') }}</li>
         <li>{{ $t('docs.walls.sieges.rules.level', { levels: WALL_SIEGE.levels }) }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.ships') }}</li>
         <li>{{ $t('docs.walls.sieges.rules.gone') }}</li>
         <li>{{ $t('docs.walls.sieges.rules.rebuild') }}</li>
       </ul>

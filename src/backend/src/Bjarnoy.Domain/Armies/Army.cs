@@ -135,12 +135,13 @@ public sealed record Army
     public Guid? TargetSettlementId { get; init; }
 
     /// <summary>
-    /// The building this <see cref="ArmyMission.Attack"/> army was told to
-    /// hit with any surviving catapults (issue #40 phase 5) — a coordinate
+    /// The building this <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Raid"/> army was told to
+    /// hit with its surviving siege power (catapults, issue #40 phase 5; ships) — a coordinate
     /// within the target settlement, not an arbitrary hex. <see langword="null"/>
     /// means "no preference": <see cref="Combat.SiegeResolver.Resolve"/>
     /// picks uniformly at random among whatever buildings the defender
-    /// actually has standing when the army arrives. Only ever set for
+    /// actually has standing when the army arrives. Always set for a fleet (it is the building on the
+    /// target's shore the fleet sails to, and the only building it can damage; if it is gone at arrival, nothing is hit). Only ever set for
     /// <see cref="ArmyMission.Attack"/> — see <see cref="PlanDispatch"/>.
     /// Deliberately unvalidated against the target's actual layout at
     /// dispatch time (that layout can change before the army arrives — see
@@ -212,15 +213,10 @@ public sealed record Army
     /// centred on that tower's own hex, not the settlement's centre. Only
     /// consulted when <paramref name="mission"/> is <see cref="ArmyMission.Attack"/>
     /// or <see cref="ArmyMission.Raid"/> and the requested units are a fleet
-    /// (issue #40 phase 6, design doc §8): a fleet can only reach a
-    /// settlement that claims at least one <see cref="Shoreline.IsShoreline"/>
-    /// hex anywhere in its territory — a tower can extend that territory to
-    /// the coast even when the centre disc alone never reaches it, so every
-    /// disc is walked, not just the one around <paramref name="destination"/>.
-    /// <see langword="null"/> or empty is treated as a single zero-radius
-    /// disc at <paramref name="destination"/> (only <paramref name="destination"/>
-    /// itself must be a shoreline hex) — a safe default for callers that
-    /// have not computed the target's real territory. Ignored for land
+    /// (design doc §8): the fleet's <paramref name="targetBuildingCoord"/> must lie inside
+    /// this territory (a tower can extend it to the coast even when the centre disc alone never reaches it,
+    /// so every disc counts) and be on its shore. <see langword="null"/> or empty is treated as a single
+    /// zero-radius disc at <paramref name="destination"/>. Ignored for land
     /// armies and for every other mission.
     /// </param>
     /// <param name="isHexFoundable">
@@ -404,29 +400,32 @@ public sealed record Army
             return DispatchDecision.Rejected(DispatchRejection.TargetBuildingRequiresAttackMission);
         }
 
-        // Ships raid resources only (design doc §8) — a fleet attacking a
-        // fully inland settlement has no shoreline to land on at all. Land
-        // armies are unaffected. (A fleet can never carry a Catapult in the
-        // first place — Catapult is UnitClass.Siege, not Ship, so the mixed-
-        // class rejection above already makes "an all-Ship dispatch with a
-        // catapult in it" unreachable; no separate check is needed here.)
+        // A fleet Attack/Raid is always sent at one building on the target's shore: it sails to that building's
+        // hex, the fight happens there, and a won fight damages only that building. The target's Longhouse may be
+        // inland. "On the shore" = inside the target's claim and either a shoreline land hex or a sea hex (the
+        // coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd). Whether a building actually stands there
+        // is checked at arrival, like for catapults. Land armies are unaffected (and a fleet can never carry a
+        // Catapult: Catapult is UnitClass.Siege, so the mixed-class rejection above already covers it).
+        var routeDestination = destination;
         if (mission is ArmyMission.Attack or ArmyMission.Raid && isFleet)
         {
+            if (targetBuildingCoord is not { } shoreBuilding)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.FleetTargetBuildingRequired);
+            }
+
             IReadOnlyList<(HexCoord Centre, int Radius)> discs =
                 targetClaimDiscs is { Count: > 0 } ? targetClaimDiscs : [(destination, 0)];
-            // Filtered through the territory rule, not the raw disc union —
-            // a giant hex only geometrically inside a disc but not actually
-            // claimed (its footprint isn't fully covered) must not count as
-            // the defender's shoreline either.
-            var giantIndex = giants ?? GiantIndex.Empty;
-            var targetHasShoreline = discs
-                .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
-                .Where(coord => Territory.Claims(discs, coord, giantIndex))
-                .Any(coord => Shoreline.IsShoreline(coord, terrainAt));
-            if (!targetHasShoreline)
+            // The territory rule, not the raw disc union: a giant hex only geometrically inside a disc but not
+            // actually claimed must not count as the defender's shore either.
+            var onShore = Territory.Claims(discs, shoreBuilding, giants ?? GiantIndex.Empty)
+                && (terrainAt(shoreBuilding) == Terrain.Sea || Shoreline.IsShoreline(shoreBuilding, terrainAt));
+            if (!onShore)
             {
-                return DispatchDecision.Rejected(DispatchRejection.DefenderHasNoShoreline);
+                return DispatchDecision.Rejected(DispatchRejection.FleetTargetBuildingNotOnShore);
             }
+
+            routeDestination = shoreBuilding;
         }
 
         var settlementDecision = settlement.PlanDispatch(requestedUnits, provisions, now);
@@ -441,23 +440,18 @@ public sealed record Army
         // every HexPathfinder call for this dispatch.
         var isLandUnit = !isFleet;
 
-        // A land army's Attack/Support destination is always a real
-        // settlement's own centre — inherently land — so this check applies
-        // to it exactly as before fleets existed. A fleet's Attack/Support
-        // destination is that same settlement centre, which is land too —
-        // but landing there is exactly the point for a fleet (see FindPath's
-        // isLandUnit remarks on the beaching/harbor exemption it applies at
-        // both route endpoints), so this generic sea-only check is skipped
-        // only for that one combination; the real fleet-reachability gate for
-        // Attack is DefenderHasNoShoreline above, not this check. A sea Found
-        // convoy's destination is, by definition, the land hex it means to
-        // land settlers on (issue #55 §2) — same beaching exemption, no
-        // separate shoreline check needed: HexPathfinder can only ever reach
-        // that land hex by sea if it is adjacent to reachable open water,
-        // which is exactly what "shoreline" means (see Shoreline.IsShoreline);
-        // any other land hex fails as UnreachableLeg below instead.
+        // A land army's Attack/Support destination is always a real settlement's own centre — inherently land — so
+        // this check applies to it exactly as before fleets existed. A fleet's Attack/Raid destination is the shore
+        // building it was sent at (a shoreline land hex or a sea hex), and its Support destination is the settlement
+        // centre, which is land; landing on land is exactly the point for a fleet (see FindPath's isLandUnit remarks
+        // on the beaching/harbor exemption it applies at both route endpoints), so this generic sea-only check is
+        // skipped for those missions. The real fleet-reachability gate for Attack/Raid is the shore-building check
+        // above, not this one. A sea Found convoy's destination is, by definition, the land hex it means to land
+        // settlers on (issue #55 §2) — same beaching exemption, no separate shoreline check needed:
+        // HexPathfinder can only ever reach that land hex by sea if it is adjacent to reachable open water, which is
+        // exactly what "shoreline" means (see Shoreline.IsShoreline); any other land hex fails as UnreachableLeg below.
         var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found;
-        if (!skipDestinationTerrainCheck && !terrainAt(destination).IsTraversable(isLandUnit))
+        if (!skipDestinationTerrainCheck && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return DispatchDecision.Rejected(isFleet
                 ? DispatchRejection.DestinationNotSea
@@ -477,7 +471,7 @@ public sealed record Army
         // A fleet leaves from (and returns to) its settlement's harbour hex, which is the centre only when the
         // centre itself touches the sea (see FleetAnchor); a land army always uses the centre.
         var origin = isFleet ? FleetAnchor(settlement, terrainAt) : settlement.Centre;
-        List<HexCoord> stops = [origin, .. waypoints, destination];
+        List<HexCoord> stops = [origin, .. waypoints, routeDestination];
         List<HexCoord> fullPath = [origin];
 
         for (var i = 0; i < stops.Count - 1; i++)
@@ -498,7 +492,7 @@ public sealed record Army
 
         var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
-        var returnPath = HexPathfinder.FindPath(destination, origin, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnPath = HexPathfinder.FindPath(routeDestination, origin, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
@@ -680,7 +674,8 @@ public sealed record Army
         // nothing extra is needed here for that to fall out correctly.
         var siege = plan.Winner == BattleWinner.Attacker
             ? Combat.SiegeResolver.Resolve(
-                plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed)
+                plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed,
+                randomFallback: !army.IsFleet)
             : Combat.SiegeOutcome.None;
 
         if (siege.Applied)
@@ -1785,12 +1780,17 @@ public enum DispatchRejection
     WaypointNotSea,
 
     /// <summary>
-    /// A fleet's <see cref="ArmyMission.Attack"/> target settlement claims no
-    /// <see cref="Shoreline.IsShoreline"/> hex — a fully inland
-    /// settlement cannot be reached by ship at all (issue #40 phase 6, design
-    /// doc §8). Never raised for a land army.
+    /// A fleet <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Raid"/> named no target building: a fleet is
+    /// always sent at one building on the target's shore. Never raised for a land army.
     /// </summary>
-    DefenderHasNoShoreline,
+    FleetTargetBuildingRequired,
+
+    /// <summary>
+    /// A fleet <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Raid"/>'s target building hex is not on the
+    /// target's shore: outside the target's claim, or neither a <see cref="Shoreline.IsShoreline"/> land hex nor a
+    /// <see cref="Terrain.Sea"/> hex. Never raised for a land army.
+    /// </summary>
+    FleetTargetBuildingNotOnShore,
 
     /// <summary>
     /// An <see cref="ArmyMission.Found"/> dispatch did not name exactly

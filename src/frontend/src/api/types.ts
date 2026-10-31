@@ -1457,8 +1457,8 @@ export interface UnitCountRequest {
 /**
  * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
  * `destination`: required for `mission: 'move'` (the default); ignored for
- * attack/support/raid, whose destination is always the target settlement's
- * own hex. `provisions`: food loaded onto the army, capped by carry capacity
+ * attack/support/raid, whose destination is the target settlement's own hex
+ * (a fleet attack/raid sails to `targetBuildingCoord` instead). `provisions`: food loaded onto the army, capped by carry capacity
  * and what the settlement can afford.
  */
 export interface DispatchArmyRequest {

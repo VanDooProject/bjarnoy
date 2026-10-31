@@ -373,7 +373,7 @@ public class ArmyAttackTests
 
     /// <summary>Fleet attack shoreline validation (issue #40 phase 6 §4).</summary>
     [Fact]
-    public void Fleet_attack_is_accepted_when_the_target_has_a_shoreline_hex()
+    public void Fleet_attack_is_accepted_when_the_target_building_stands_on_a_shoreline_hex()
     {
         var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
         Terrain TerrainAt(HexCoord c) => c == TargetHex ? Terrain.Grass : Terrain.Sea;
@@ -381,13 +381,13 @@ public class ArmyAttackTests
         var decision = Army.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
             Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
-            targetClaimDiscs: [(TargetHex, 0)]);
+            targetBuildingCoord: TargetHex, targetClaimDiscs: [(TargetHex, 0)]);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]
-    public void Fleet_attack_is_rejected_against_a_fully_inland_settlement()
+    public void Fleet_attack_is_rejected_against_a_fully_inland_settlement_because_no_building_is_on_the_shore()
     {
         var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
         var landBlob = TargetHex.Neighbours().Append(TargetHex).ToHashSet();
@@ -396,9 +396,9 @@ public class ArmyAttackTests
         var decision = Army.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
             Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
-            targetClaimDiscs: [(TargetHex, 0)]);
+            targetBuildingCoord: TargetHex, targetClaimDiscs: [(TargetHex, 0)]);
 
-        Assert.Equal(DispatchRejection.DefenderHasNoShoreline, decision.Rejection);
+        Assert.Equal(DispatchRejection.FleetTargetBuildingNotOnShore, decision.Rejection);
     }
 
     [Fact]
