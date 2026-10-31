@@ -529,6 +529,16 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         expect(bg).toContain("url(");
       }
 
+      // The animated Resource production card keeps its hex as wide as a static tile's: the clip's canvas is taller (smoke
+      // plume above the hut) but is sized by its width, so the hex does not shrink to fit the plume into the box.
+      const herder = await page
+        .locator('a.card[data-page="production"] .animated-building')
+        .boundingBox();
+      const tile = await page
+        .locator('a.card[data-page="walls"] .atlas-sprite')
+        .boundingBox();
+      expect(herder!.width).toBeGreaterThanOrEqual(tile!.width - 2);
+
       await page.getByRole("link", { name: /^Bog lands/ }).click();
       await expect(page).toHaveURL(/\/docs\/bog-lands$/);
 
