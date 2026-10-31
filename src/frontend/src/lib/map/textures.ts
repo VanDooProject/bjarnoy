@@ -118,6 +118,10 @@ export type TextureKey =
   | 'forest_taiga'
   | 'forest_birch'
   | 'forest_mixed'
+  // The living mountain's other three landforms (3D_assets hextile043-045), each its own art family; `mountain` is the cone. Picked by `Tile.variant` (`MOUNTAIN_SHAPE_KEY`).
+  | 'mountain_table'
+  | 'mountain_saddleback'
+  | 'mountain_corrie'
   | 'blacksand'
   | 'wastedmountain'
   | 'taintedwater'
@@ -173,6 +177,9 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   sea: 'watertile',
   sand: 'sandtile',
   mountain: 'mountaintile',
+  mountain_table: 'mountaintile_table',
+  mountain_saddleback: 'mountaintile_saddleback',
+  mountain_corrie: 'mountaintile_corrie',
   grass: 'grasstile',
   forest: 'foresttile',
   forest_taiga: 'forest_taiga',
@@ -728,6 +735,14 @@ export const BIOME_FOREST_KEY: Readonly<Record<ForestKind, TextureKey>> = {
   mixed: 'forest_mixed',
 };
 
+/**
+ * The living mountain's art by shape, indexed by `Tile.variant` (the backend's `MountainShape`: cone, table, saddleback, corrie).
+ * Each shape is its own family with a single look per rotation, so the variant picks the family, not a frame inside one.
+ */
+export const MOUNTAIN_SHAPE_KEY: readonly TextureKey[] = ['mountain', 'mountain_table', 'mountain_saddleback', 'mountain_corrie'];
+
+const MOUNTAIN_SHAPE_KEYS: ReadonlySet<TextureKey> = new Set(MOUNTAIN_SHAPE_KEY);
+
 /** `BIOME_FOREST_KEY`'s keys as a list (hoisted so `TERRAIN_TEXTURE_KEYS` can spread it). */
 const BIOME_FOREST_KEYS: readonly TextureKey[] = Object.values(BIOME_FOREST_KEY);
 
@@ -1241,7 +1256,7 @@ const TERRAIN_TEXTURE_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
   'grass',
   'forest',
   ...BIOME_FOREST_KEYS,
-  'mountain',
+  ...MOUNTAIN_SHAPE_KEY,
   'wasteland',
   'deadforest',
   'blacksand',
@@ -1728,6 +1743,7 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
   if (tile.bog) return bogTextureKey(tile.bog);
+  if (tile.terrain === 'mountain') return MOUNTAIN_SHAPE_KEY[tile.variant ?? 0] ?? 'mountain';
   // A living forest draws its biome's art; a forest the generator hasn't given a kind (older saves, hand-built islands) is the mixed one.
   if (tile.terrain === 'forest') return BIOME_FOREST_KEY[tile.forestKind ?? 'mixed'];
   return tile.terrain;
@@ -1983,6 +1999,8 @@ function topKeyAndIndex(textures: TileTextures, tile: Tile, riverArt?: RiverArt)
   // A lake decoration is one frame per rotation (index 0); a building is its level; terrain its hashed variant.
   if (tile.lakeProp && !tile.buildingType) return { key, index: 0 };
   if (tile.buildingType) return { key, index: tile.buildingLevel ?? 1 };
+  // A mountain shape is a family of its own with one look per rotation: its variant chose the family (`textureKeyFor`), so it draws index 0.
+  if (MOUNTAIN_SHAPE_KEYS.has(key)) return { key, index: 0 };
   const variant = tile.variant ?? 0;
   // A biome forest that fell back to foresttile draws its plain frame: the variant indexes the biome looks (index 1, the
   // full forest, is ~84% of hexes), and on foresttile that index is the bear, which would then stand in most forests.

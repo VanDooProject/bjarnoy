@@ -27,6 +27,7 @@ import {
   RIVER_FAMILY,
   KEY_FAMILY,
   LAKE_PROP_VARIANT,
+  MOUNTAIN_SHAPE_KEY,
   PALISADE_TEXTURE_KEY,
   UTGARD_WALL_TEXTURE_KEY,
   endgameDrawTile,
@@ -724,6 +725,47 @@ describe('textureKeyFor wasted-island mapping', () => {
   it('a building on a tile still takes priority over the wasted mapping', () => {
     const tile: Tile = { q: 0, r: 0, terrain: 'grass', wasted: true, buildingType: 'hut' };
     expect(textureKeyFor(tile)).toBe('hut');
+  });
+});
+
+describe('living mountain shapes', () => {
+  const FAMILIES = ['mountaintile', 'mountaintile_table', 'mountaintile_saddleback', 'mountaintile_corrie'];
+  const mountain = (variant: number, extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'mountain', orientation: 'E', variant, ...extra });
+
+  // A one-frame-per-rotation family, as the atlas ships each shape: tagged with its key so a test sees which family drew.
+  function fixture(): TileTextures {
+    const perRotation = (tag: string) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, [`${tag}-top`]]));
+    const baseOf = (tag: string) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, `${tag}-base`]));
+    const keys = MOUNTAIN_SHAPE_KEY;
+    return {
+      base: Object.fromEntries(keys.map((k) => [k, baseOf(k)])),
+      baseIndexed: {},
+      top: Object.fromEntries(keys.map((k) => [k, perRotation(k)])),
+      animTop: {},
+    } as unknown as TileTextures;
+  }
+
+  it('maps the four shapes to the four atlas families, in the backend MountainShape order', () => {
+    expect(MOUNTAIN_SHAPE_KEY.map((k) => KEY_FAMILY[k])).toEqual(FAMILIES);
+  });
+
+  it('picks the shape key by the tile variant', () => {
+    expect([0, 1, 2, 3].map((v) => textureKeyFor(mountain(v)))).toEqual([...MOUNTAIN_SHAPE_KEY]);
+  });
+
+  it('draws the shape family on both layers, not the cone, for variants 1-3', () => {
+    const textures = fixture();
+    for (const key of MOUNTAIN_SHAPE_KEY) {
+      const tile = mountain(MOUNTAIN_SHAPE_KEY.indexOf(key));
+      expect(baseTextureFor(textures, tile)).toBe(`${key}-base`);
+      expect(topTextureFor(textures, tile)).toBe(`${key}-top`);
+    }
+  });
+
+  it('keeps a wasted mountain, a building on a mountain and a spring on their own art', () => {
+    expect(textureKeyFor(mountain(2, { wasted: true }))).toBe('wastedmountain');
+    expect(textureKeyFor(mountain(2, { buildingType: 'quarry' }))).toBe('quarry');
+    expect(textureKeyFor(mountain(2), { key: 'springcorrie', orientation: 'E' })).toBe('springcorrie');
   });
 });
 
