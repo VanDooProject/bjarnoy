@@ -38,7 +38,7 @@ import {
 import { PALISADE_FAMILY } from './palisadeTiles';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { BogTile, RiverTile, Tile } from './types';
-import { findAtlasClip, findAtlasFrame, type AtlasClip, type LoadedAtlas } from './atlas';
+import { findAtlasClip, findAtlasFrame, swayFramesPerColumn, type AtlasClip, type LoadedAtlas } from './atlas';
 import { clipFrameIndex, clipTimingOf, sharedClockPlayback } from './clipPlayback';
 
 /** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
@@ -2210,6 +2210,41 @@ describe('biome forest art', () => {
       expect(textures.animTop.forest).toBeUndefined();
     });
 
+    it('shares the clock for any family whose clip says shared_clock, carrying sway.frames_per_column (a building clip would do the same)', () => {
+      const anim = animAtlas('foresttile', []);
+      const frames = [0, 1, 2, 3].map((i) => `foresttile_E_level001_f0${i}`);
+      for (const f of frames) anim.textures[f] = fakeTexture(f);
+      anim.clips['foresttile_E_level001'] = {
+        name: 'foresttile_E_level001', family: 'foresttile', orientation: 'E', camera: 'E', layer: 'top', source_level: null, variant: null,
+        pass_suffix: '', anim_type: 'loop', playback: 'loop', fps: 4, pause: 0, frame_count: 4, frame_padding: 2, frames, parts: [],
+        shared_clock: true, sway: { wavelength: 6, frames_per_column: 2 },
+      } as unknown as AtlasClip;
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2)], anim);
+      const clip = textures.animTop.forest!.E[1]!;
+      expect(clip.sharedClock).toBe(true);
+      expect(clip.framesPerColumn).toBe(2);
+    });
+
+    it('classifyFamilyClips ignores a malformed sway but keeps shared_clock; no new fields means no shared clock', () => {
+      const base = {
+        name: 'x_E_level001', family: 'x', orientation: 'E', camera: 'E', layer: 'top', variant: null, playback: 'loop', fps: 4, pause: 0, frames: ['a'],
+      } as unknown as AtlasClip;
+      const run = (extra: Partial<AtlasClip>) => classifyFamilyClips([{ ...base, ...extra }], (n) => n).E.get(1)!;
+      expect(run({ shared_clock: true, sway: { wavelength: 6, frames_per_column: 2 } })).toMatchObject({ sharedClock: true, framesPerColumn: 2 });
+      expect(run({ shared_clock: true, sway: { wavelength: 6, frames_per_column: 1.5 } })).toMatchObject({ sharedClock: true, framesPerColumn: 0 });
+      expect(run({ shared_clock: true, sway: { wavelength: 6, frames_per_column: -1 } })).toMatchObject({ framesPerColumn: 0 });
+      expect(run({}).sharedClock).toBeUndefined();
+      expect(swayFramesPerColumn({ sway: { wavelength: 6, frames_per_column: 0 } })).toBe(0);
+      expect(swayFramesPerColumn({})).toBe(0);
+    });
+
+    it('the forest fallback (no new fields) is shared-clock with a column offset of 0', () => {
+      const textures = buildTileTextures([terrainAtlas('forest_taiga', 3)], animAtlas('forest_taiga', [null]));
+      const clip = textures.animTop.forest_taiga!.E[0]!;
+      expect(clip.sharedClock).toBe(true);
+      expect(clip.framesPerColumn ?? 0).toBe(0);
+    });
+
     it('keeps a later, fuller terrain clip batch over an earlier partial one when merging', () => {
       const terrain = terrainAtlas('forest_taiga', 3);
       const partial = buildTileTextures([terrain], animAtlas('forest_taiga', [null]));
@@ -2220,6 +2255,31 @@ describe('biome forest art', () => {
   });
 
   describe('global clock', () => {
+    const sway = clipTimingOf({ frameRects: new Array(8).fill(0), fps: 4, playback: 'loop', pause: 0 });
+
+    it('offsets the gust per map column: adjacent columns (2 frames per column, 8 frames) are exactly 2 frames apart at every clock time', () => {
+      for (let clockMs = 0; clockMs < 6000; clockMs += 37) {
+        const g = Math.floor((clockMs / 1000) * 4);
+        for (const col of [-9, -3, -1, 0, 1, 2, 7, 8, 25]) {
+          const here = sharedClockPlayback(sway, clockMs, 2 * col).frame;
+          const right = sharedClockPlayback(sway, clockMs, 2 * (col + 1)).frame;
+          expect(here).toBe((((g - 2 * col) % 8) + 8) % 8);
+          expect((here - right + 8) % 8).toBe(2); // the column to the right is 2 frames behind
+        }
+      }
+    });
+
+    it('stays in lockstep after advancing by the same deltas, and a zero offset is the plain shared clock', () => {
+      const a = sharedClockPlayback(sway, 777, 0);
+      const b = sharedClockPlayback(sway, 777, 2);
+      for (const delta of [16, 250, 90, 400, 1000, 33]) {
+        a.playedMs += delta;
+        b.playedMs += delta;
+        expect((clipFrameIndex(sway, a.playedMs) - clipFrameIndex(sway, b.playedMs) + 8) % 8).toBe(2);
+      }
+      expect(sharedClockPlayback(sway, 777, 0)).toEqual({ playedMs: 777, frame: clipFrameIndex(sway, 777) });
+    });
+
     const timing = clipTimingOf({ frameRects: [0, 0, 0, 0], fps: 4, playback: 'loop', pause: 0 });
 
     it('starts a clip at the shared clock time: every tile shows frame floor(t * fps) mod 4 whenever it spawned', () => {

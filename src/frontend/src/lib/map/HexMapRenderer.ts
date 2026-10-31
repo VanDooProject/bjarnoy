@@ -40,7 +40,7 @@ import {
 } from './markerOcclusion';
 import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey } from '../hex/coords';
+import { axialToOddQ, coordKey, hexDistance, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { formatCountdownShort } from '../hud/countdown';
@@ -4482,7 +4482,7 @@ export class HexMapRenderer {
         layer.active.set(key, sprite);
       }
       if (isTopLayer) {
-        this.syncTopAnim(key, sprite, anim, texture);
+        this.syncTopAnim(key, sprite, anim, texture, coord);
       } else {
         sprite.texture = texture;
       }
@@ -4685,7 +4685,7 @@ export class HexMapRenderer {
    * legacy, non-overlay clip needs no second sprite at all — `sprite` itself
    * still cycles through full frames exactly as before.
    */
-  private syncTopAnim(key: string, sprite: Sprite, anim: TileAnimClip | undefined, staticTexture: Texture) {
+  private syncTopAnim(key: string, sprite: Sprite, anim: TileAnimClip | undefined, staticTexture: Texture, coord: AxialCoord) {
     const existing = this.topAnimState.get(key);
     if (!anim) {
       if (existing) this.releaseTopAnim(key);
@@ -4706,8 +4706,13 @@ export class HexMapRenderer {
     }
     const overlay = anim.rest !== undefined ? (this.topOverlayPool.pop() ?? new Sprite()) : undefined;
     // A shared-clock clip (terrain wind sway) joins the global clock mid-cycle so neighbouring tiles stay in phase; others start at frame 0.
+    // A sway clip also shifts by its map column (the integer `col` isoGridPosition places the tile by) so the gust wave is continuous across tiles.
     const start = anim.sharedClock
-      ? sharedClockPlayback(clipTimingOf({ ...anim, frameRects: anim.textures }), this.animClockMs)
+      ? sharedClockPlayback(
+          clipTimingOf({ ...anim, frameRects: anim.textures }),
+          this.animClockMs,
+          (anim.framesPerColumn ?? 0) * axialToOddQ(coord).col,
+        )
       : { playedMs: 0, frame: 0 };
     const initial = topAnimTextures(anim, start.frame);
     sprite.texture = initial.base;

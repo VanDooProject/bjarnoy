@@ -36,6 +36,7 @@ import {
   loadOptionalAtlasCategory,
   unloadAtlasCategory,
   type AtlasClip,
+  swayFramesPerColumn,
   type AtlasPack,
   type AtlasPageProgress,
   type LoadedAtlas,
@@ -903,6 +904,8 @@ export interface TileAnimClip {
    * (`clipPlayback.ts`'s `sharedClockPlayback`). A building clip keeps its own start.
    */
   sharedClock?: boolean;
+  /** Frames of per-map-column phase shift of a sway clip (`AtlasClip.sway.frames_per_column`); 0/absent = every column in step. Only used with `sharedClock`. */
+  framesPerColumn?: number;
 }
 
 /**
@@ -919,9 +922,9 @@ export function classifyFamilyClips<T>(
   clips: AtlasClip[],
   resolveFrame: (name: string) => T | undefined,
   levelOf?: (clip: AtlasClip) => number | undefined,
-): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T }>> {
+): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T; sharedClock?: boolean; framesPerColumn?: number }>> {
   const byOrientation = emptyOrientationMap<
-    Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T }>
+    Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T; sharedClock?: boolean; framesPerColumn?: number }>
   >(() => new Map());
   for (const clip of clips) {
     const level = levelOf ? levelOf(clip) : ANIM_LEVEL_RE.exec(clip.name) ? Number(ANIM_LEVEL_RE.exec(clip.name)![1]) : undefined;
@@ -946,6 +949,7 @@ export function classifyFamilyClips<T>(
       playback: clip.playback,
       pause: clip.pause ?? 0,
       rest,
+      ...(clip.shared_clock === true ? { sharedClock: true, framesPerColumn: swayFramesPerColumn(clip) } : {}),
     });
   }
   return byOrientation;
@@ -1190,7 +1194,7 @@ function withAnimClips(statics: TileTextures, animAtlas: LoadedAtlas): TileTextu
       animTop[key] = mapOrientations(topArr, (o, arr) =>
         arr.map((_v, i) => {
           const clip = clipsByOrientation[o].get(i);
-          return clip && variantSlotted ? { ...clip, sharedClock: true } : clip;
+          return clip && variantSlotted && !clip.sharedClock ? { ...clip, sharedClock: true, framesPerColumn: 0 } : clip;
         }),
       );
     }
