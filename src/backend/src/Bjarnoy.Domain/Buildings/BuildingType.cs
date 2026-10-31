@@ -238,6 +238,13 @@ public enum BuildingType
     /// the end so persisted integers do not shift.
     /// </summary>
     Bridge = 32,
+
+    /// <summary>
+    /// The Siege Workshop (<c>docs/design/economy.md</c> section 5): trains the battering ram, in place of the Longhouse
+    /// (<see cref="Units.UnitDefinition.RequiredBuildingType"/>). Five levels on grass or sand; unlocks at Longhouse 18 behind a
+    /// level-3 <see cref="ArcheryRange"/>. Appended at the end so persisted integers do not shift.
+    /// </summary>
+    SiegeWorkshop = 33,
 }
 
 public static class BuildingTypeExtensions
@@ -277,6 +284,7 @@ public static class BuildingTypeExtensions
         BuildingType.Palisade => "palisade",
         BuildingType.PalisadeGate => "palisadegate",
         BuildingType.Bridge => "bridge",
+        BuildingType.SiegeWorkshop => "siegeworkshop",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

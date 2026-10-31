@@ -41,6 +41,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   lumberjack: 'lumberjack',
   storagehouse: 'storagebuilding',
   archeryrange: 'archeryrange',
+  // TODO(art): no `siegeworkshop` family in the atlas yet (see textures.ts KEY_FAMILY); preview cards fall back to bare terrain until it lands.
   dockyard: 'dockyard',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',

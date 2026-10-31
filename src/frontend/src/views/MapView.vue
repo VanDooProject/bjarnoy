@@ -57,7 +57,8 @@ import { motionEnabled } from '../lib/motion';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
-import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { isHostileWallTile, siegeAttackOptions } from '../lib/map/siegeRules';
+import { breachesWalls, classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -722,6 +723,30 @@ function huntActions(tile: Tile): RingAction[] {
   ];
 }
 
+// Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is
+// neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. It opens an Attack on the wall owner's
+// settlement with the wall hex as the preferred target building. Walls fall to battering rams only, so one must be at home; without
+// one the bubble stays but is disabled with a hint, like the other army actions.
+function siegeActions(tile: Tile): RingAction[] {
+  if (
+    DEMO_MODE
+    || !tile.ownerId
+    || !isHostileWallTile(tile, world.model.rivalWallOwner(tile.q, tile.r), player.id, guild.friendlyUserIds)
+  ) {
+    return [];
+  }
+  const hasRam = world.hud.garrison.some((g) => g.count > 0 && breachesWalls(g.unit, unitCatalogue.byType));
+  return [
+    {
+      id: 'siege',
+      label: t('hud.ringMenu.actions.siege'),
+      color: 'var(--rival)',
+      disabled: !hasRam,
+      hint: hasRam ? undefined : t('hud.ringMenu.actions.noRamAtHome'),
+    },
+  ];
+}
+
 // The root Upgrade bubble. It states up front whether the upgrade is possible
 // and, on hover, shows the same card a building does — for the NEXT level:
 // its cost, time, output, slots and what (if anything) still blocks it.
@@ -822,13 +847,13 @@ const rootActions = computed<RingAction[]>(() => {
   // World zoom only offers the army action: BuildingModal/TrainingModal and
   // the build fan only exist in the settlement template, so Build/Upgrade/
   // Info bubbles here would open nothing.
-  if (mode.value === 'world') return [...huntActions(tile), sendArmyAction(tile)];
+  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [{ id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) }, sendArmyAction(tile)];
+    return [{ id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) }, ...siegeActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
@@ -881,6 +906,7 @@ const rootActions = computed<RingAction[]>(() => {
     if (
       tile.buildingType === 'longhouse'
       || tile.buildingType === 'archeryrange'
+      || tile.buildingType === 'siegeworkshop'
       || tile.buildingType === 'dockyard'
       || tile.buildingType === 'barracks'
       || tile.buildingType === 'cartworkshop'
@@ -1082,6 +1108,14 @@ async function onRingSelect(id: string) {
       return;
     case 'hunt':
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'hunt' });
+      closeRing();
+      return;
+    case 'siege':
+      // The wall's own settlement is the Attack's target (the walls read stamps it on the tile) and the wall hex its preferred building.
+      if (selectedCoord.value && tile) {
+        const options = siegeAttackOptions(tile, selectedCoord.value);
+        if (options) world.startDispatchAt(selectedCoord.value, options);
+      }
       closeRing();
       return;
     case 'attack':
