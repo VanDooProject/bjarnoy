@@ -366,14 +366,21 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       await page.evaluate(() => {
         const map = document.querySelector("#example-map")!;
         const ground = document.querySelector("#ground")!;
-        return Boolean(map.compareDocumentPosition(ground) & Node.DOCUMENT_POSITION_FOLLOWING);
+        return Boolean(
+          map.compareDocumentPosition(ground) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        );
       }),
     ).toBe(true);
 
     // Bog ground never draws the plain moss, so the docs only offer its decorated looks.
     const ground = page.locator("#ground");
-    await expect(ground.locator(".variant-button", { hasText: "Open mire 1" })).toBeVisible();
-    await expect(ground.locator(".variant-button", { hasText: "Plain moss" })).toHaveCount(0);
+    await expect(
+      ground.locator(".variant-button", { hasText: "Open mire 1" }),
+    ).toBeVisible();
+    await expect(
+      ground.locator(".variant-button", { hasText: "Plain moss" }),
+    ).toHaveCount(0);
 
     // Ground + eight water shapes + four buildings, each its own entry with a thumbnail.
     await expect(
@@ -391,6 +398,25 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.locator("#example-map canvas")).toBeVisible();
     await page.getByRole("link", { name: "Docs", exact: true }).click();
     await expect(page).toHaveURL(/\/docs$/);
+  });
+
+  test("bog lands page lists the unused bog margins for admins only", async ({
+    page,
+    adminAuth,
+  }) => {
+    await asAdminWithNotes(page, adminAuth);
+    await page.goto("/docs/bog-lands");
+    const margins = page.locator("#margins");
+    await expect(margins).toHaveAttribute("data-testid", "admin-note");
+    // Five margin tiles, each with its art and its three looks.
+    await expect(margins.locator(".tile .thumb .atlas-sprite")).toHaveCount(5);
+    const spit = margins.locator("#margin-spit");
+    await expect(
+      spit.locator(".variant-button", { hasText: /^\d+$/ }),
+    ).toHaveCount(3);
+    await spit.getByRole("button", { name: "3", exact: true }).click();
+    await expect(spit.locator(".atlas-sprite")).toBeVisible();
+    await expect(page.locator(".toc a[href='#margins']")).toHaveCount(1);
   });
 
   // Every docs page sits on the shared DocsPageLayout: the same top bar, a breadcrumb (the hub itself has none),
@@ -417,31 +443,49 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       await expect(page.locator(".docs-page .intro")).toBeVisible();
       const crumb = page.getByRole("navigation", { name: "Breadcrumb" });
       await expect(crumb.locator("[aria-current=page]")).toBeVisible();
-      await expect(page.getByTestId("docs-header-art").locator(".atlas-sprite:visible").first()).toBeVisible();
+      await expect(
+        page
+          .getByTestId("docs-header-art")
+          .locator(".atlas-sprite:visible")
+          .first(),
+      ).toBeVisible();
       const related = page.locator("[data-related]");
       expect(await related.count()).toBeGreaterThan(0);
       await crumb.getByRole("link", { name: "Docs", exact: true }).click();
       await expect(page).toHaveURL(/\/docs$/);
       await expect(page.locator(".docs-page h1")).toBeVisible();
-      await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
+      await expect(
+        page.getByRole("navigation", { name: "Breadcrumb" }),
+      ).toHaveCount(0);
       await expect(page.getByTestId("docs-footer")).toHaveCount(0);
     });
   }
 
   test.describe("docs navigation", () => {
-    test("the page crumb lists the pages of its group and navigates", async ({ page }) => {
+    test("the page crumb lists the pages of its group and navigates", async ({
+      page,
+    }) => {
       await page.goto("/docs/shrines");
       const crumb = page.getByRole("navigation", { name: "Breadcrumb" });
       await crumb.getByRole("button", { name: /^Shrines/ }).click();
       const menu = page.getByRole("menu");
-      await expect(menu.getByRole("menuitem")).toHaveText(["Tech tree", "Resource production", "Shrines", "Walls"]);
-      await expect(menu.getByRole("menuitem", { name: "Shrines" })).toHaveAttribute("aria-current", "page");
+      await expect(menu.getByRole("menuitem")).toHaveText([
+        "Tech tree",
+        "Resource production",
+        "Shrines",
+        "Walls",
+      ]);
+      await expect(
+        menu.getByRole("menuitem", { name: "Shrines" }),
+      ).toHaveAttribute("aria-current", "page");
       await menu.getByRole("menuitem", { name: "Walls" }).click();
       await expect(page).toHaveURL(/\/docs\/walls$/);
       await expect(page.getByRole("menu")).toHaveCount(0);
     });
 
-    test("Escape closes the menu and returns focus to its crumb", async ({ page }) => {
+    test("Escape closes the menu and returns focus to its crumb", async ({
+      page,
+    }) => {
       await page.goto("/docs/shrines");
       const trigger = page.getByRole("button", { name: /^Shrines/ });
       await trigger.click();
@@ -451,11 +495,18 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       await expect(trigger).toBeFocused();
     });
 
-    test("the group crumb lists the four groups and goes to the hub scrolled to that group", async ({ page }) => {
+    test("the group crumb lists the four groups and goes to the hub scrolled to that group", async ({
+      page,
+    }) => {
       await page.goto("/docs/shrines");
       await page.getByRole("button", { name: /^Building up/ }).click();
       const menu = page.getByRole("menu");
-      await expect(menu.getByRole("menuitem")).toHaveText(["Your island", "Building up", "On the move", "Beyond your shores"]);
+      await expect(menu.getByRole("menuitem")).toHaveText([
+        "Your island",
+        "Building up",
+        "On the move",
+        "Beyond your shores",
+      ]);
       await menu.getByRole("menuitem", { name: "Your island" }).click();
       await expect(page).toHaveURL(/\/docs#group-island$/);
       await expect(page.locator("#group-island")).toBeInViewport();
@@ -467,14 +518,26 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       await expect(page.locator("#group-beyond")).toBeInViewport();
     });
 
-    test("the footer links to the related pages and to the previous and next page", async ({ page }) => {
+    test("the footer links to the related pages and to the previous and next page", async ({
+      page,
+    }) => {
       await page.goto("/docs/shrines");
       const footer = page.getByTestId("docs-footer");
-      await expect(footer.getByRole("heading", { name: "Related" })).toBeVisible();
+      await expect(
+        footer.getByRole("heading", { name: "Related" }),
+      ).toBeVisible();
       await expect(footer.locator("[data-related]")).toHaveCount(3);
-      await expect(footer.locator("[data-related=techTree]")).toContainText("Costs and build times of every shrine level.");
-      await expect(page.getByTestId("docs-prev")).toHaveAttribute("href", "/docs/production");
-      await expect(page.getByTestId("docs-next")).toHaveAttribute("href", "/docs/walls");
+      await expect(footer.locator("[data-related=techTree]")).toContainText(
+        "Costs and build times of every shrine level.",
+      );
+      await expect(page.getByTestId("docs-prev")).toHaveAttribute(
+        "href",
+        "/docs/production",
+      );
+      await expect(page.getByTestId("docs-next")).toHaveAttribute(
+        "href",
+        "/docs/walls",
+      );
       await page.getByTestId("docs-next").click();
       await expect(page).toHaveURL(/\/docs\/walls$/);
     });
@@ -493,7 +556,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       });
     }
 
-    test("a backdrop header bleeds out of the column without causing overflow at desktop widths", async ({ page }) => {
+    test("a backdrop header bleeds out of the column without causing overflow at desktop widths", async ({
+      page,
+    }) => {
       for (const width of [800, 1280, 1920]) {
         await page.setViewportSize({ width, height: 800 });
         await page.goto("/docs/ships");
@@ -513,7 +578,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       await expect(
         page.getByRole("heading", { level: 1, name: "The Bjarnøy handbook" }),
       ).toBeVisible();
-      await expect(page.getByTestId("docs-hero-art").getByRole("img")).toBeVisible();
+      await expect(
+        page.getByTestId("docs-hero-art").getByRole("img"),
+      ).toBeVisible();
 
       for (const name of [
         "Your island",
@@ -521,7 +588,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "On the move",
         "Beyond your shores",
       ]) {
-        await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+        await expect(
+          page.getByRole("heading", { level: 2, name }),
+        ).toBeVisible();
       }
       await expect(page.locator(".groups .group")).toHaveCount(4);
       await expect(page.locator(".groups .group a.card")).toHaveCount(11);
@@ -531,7 +600,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         ["move", 3],
         ["beyond", 2],
       ] as const) {
-        await expect(page.locator(`.group[data-group=${group}] a.card`)).toHaveCount(count);
+        await expect(
+          page.locator(`.group[data-group=${group}] a.card`),
+        ).toHaveCount(count);
       }
 
       const cards = page.locator(".groups a.card");
@@ -550,7 +621,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Wasted lands",
       ]) {
         await expect(
-          page.locator(".groups a.card .title", { hasText: new RegExp(`^${title}$`) }),
+          page.locator(".groups a.card .title", {
+            hasText: new RegExp(`^${title}$`),
+          }),
         ).toBeVisible();
       }
       // Every card's art is drawn from the atlas: a sprite with a background
@@ -560,10 +633,14 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       for (let i = 0; i < 11; i++) {
         const layer = arts
           .nth(i)
-          .locator(".atlas-sprite, .animated-camp .layer, .animated-building .layer")
+          .locator(
+            ".atlas-sprite, .animated-camp .layer, .animated-building .layer",
+          )
           .first();
         await expect(layer).toBeVisible();
-        const bg = await layer.evaluate((el) => getComputedStyle(el).backgroundImage);
+        const bg = await layer.evaluate(
+          (el) => getComputedStyle(el).backgroundImage,
+        );
         expect(bg).toContain("url(");
       }
 
@@ -571,7 +648,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       await expect(page).toHaveURL(/\/docs\/bog-lands$/);
 
       await page.goto("/docs");
-      await page.getByRole("link", { name: "See the game in pictures" }).click();
+      await page
+        .getByRole("link", { name: "See the game in pictures" })
+        .click();
       await expect(page).toHaveURL(/\/showcase$/);
     });
 
@@ -590,7 +669,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     page,
   }) => {
     await page.goto("/docs/shrines");
-    await expect(page.getByRole("heading", { level: 1, name: "Shrines" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Shrines" }),
+    ).toBeVisible();
 
     const rows = page.locator('[data-testid="gods-table"] tbody tr');
     await expect(rows).toHaveCount(5);
@@ -624,8 +705,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
    * phone the page does not scroll sideways (wide tables scroll inside their own box).
    */
   async function expectPlayerPage(page: Page, h1: string, table: string) {
-    await expect(page.getByRole("heading", { level: 1, name: h1 })).toBeVisible();
-    await expect(page.locator(`[data-testid="${table}"] tbody tr`).first()).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: h1 }),
+    ).toBeVisible();
+    await expect(
+      page.locator(`[data-testid="${table}"] tbody tr`).first(),
+    ).toBeVisible();
     await expect(page.getByTestId("admin-note")).toHaveCount(0);
     await expect(page.getByTestId("docs-admin-toggle")).toHaveCount(0);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -641,20 +726,33 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await page.goto("/docs/production");
     await expectPlayerPage(page, "Resource production", "producers-table");
     // Seven producers a player can still place (no Quarry) plus the Longhouse.
-    await expect(page.locator('[data-testid="producers-table"] tbody tr')).toHaveCount(8);
+    await expect(
+      page.locator('[data-testid="producers-table"] tbody tr'),
+    ).toHaveCount(8);
     await expect(page.locator('[data-producer="quarry"]')).toHaveCount(0);
-    await expect(page.locator('[data-producer="lumberjack"]')).toContainText("206");
-    await expect(page.locator('[data-mill="cropmill"]')).toContainText("Straight river");
+    await expect(page.locator('[data-producer="lumberjack"]')).toContainText(
+      "206",
+    );
+    await expect(page.locator('[data-mill="cropmill"]')).toContainText(
+      "Straight river",
+    );
     // The first mention of a building is the link, and that is its row in the first table.
     await expect(
-      page.locator('[data-producer="lumberjack"] th [data-building-link="link"]'),
+      page.locator(
+        '[data-producer="lumberjack"] th [data-building-link="link"]',
+      ),
     ).toHaveCount(1);
     // A table's first column always links, even though the Longhouse was already linked in row 1's "Unlocks at" cell.
     await expect(
-      page.locator('[data-producer="longhouse"] th').first().locator('a[href="/tech-tree#longhouse"]'),
+      page
+        .locator('[data-producer="longhouse"] th')
+        .first()
+        .locator('a[href="/tech-tree#longhouse"]'),
     ).toHaveCount(1);
     // The header shows the herder's still frame (the hub card plays the clip).
-    await expect(page.getByTestId("docs-header-icon").locator(".atlas-sprite")).toBeVisible();
+    await expect(
+      page.getByTestId("docs-header-icon").locator(".atlas-sprite"),
+    ).toBeVisible();
   });
 
   test("founding page prices the next settlements and hides the admin note", async ({
@@ -663,7 +761,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await page.goto("/docs/founding");
     await expectPlayerPage(page, "Founding settlements", "price-table");
     await expect(page.locator('[data-settlement="2"]')).toContainText("55,000");
-    await expect(page.locator('[data-settlement="3"]')).toContainText("400 / 300 / 200 / 200");
+    await expect(page.locator('[data-settlement="3"]')).toContainText(
+      "400 / 300 / 200 / 200",
+    );
     await expect(page.getByText("issue #447")).toHaveCount(0);
   });
 
@@ -677,11 +777,19 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.locator('[data-testid="pace-table"] [data-unit="spearman"]'),
     ).toContainText("15 min");
     // Wide rivers: shut except over a bridge, with a table of the bridge levels and no admin note about bridges "planned".
-    await expect(page.locator('[data-ground="wideRiver"]')).toContainText("Only over a bridge");
+    await expect(page.locator('[data-ground="wideRiver"]')).toContainText(
+      "Only over a bridge",
+    );
     await expect(page.locator('[data-bridge="causeway"]')).toContainText("6");
     await expect(page.locator('[data-bridge="footbridge"]')).toContainText("4");
-    await expect(page.locator('[data-bridge="guarded"]')).toContainText("their friends");
-    await expect(page.locator("#bridges").getByRole("heading", { name: "Bridges over wide rivers" })).toBeVisible();
+    await expect(page.locator('[data-bridge="guarded"]')).toContainText(
+      "their friends",
+    );
+    await expect(
+      page
+        .locator("#bridges")
+        .getByRole("heading", { name: "Bridges over wide rivers" }),
+    ).toBeVisible();
     await expect(page.getByText("planned but not in the game")).toHaveCount(0);
   });
 
@@ -755,7 +863,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     // The note on what is still not built (fire) stays admin-only.
     await expect(page.locator("#not-built")).toHaveCount(0);
 
-    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Docs", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByRole("link", { name: "Docs", exact: true })
+      .click();
     await expect(page).toHaveURL(/\/docs$/);
   });
 });

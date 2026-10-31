@@ -724,6 +724,32 @@
       "landing": "Von jedem Landeplatz, der einem neuen Spieler angeboten wird, ist Moor in Reichweite, denn Ziegelei und Raseneisenerz-Grube brauchen es beide.",
       "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal mündet ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
       "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Moorring, und die Flüsse in der Nähe münden in ihn."
+    },
+    "margins": {
+      "heading": "Moorränder (nicht verwendet)",
+      "body": "Das Grafikset hat fünf Randfelder für ein Moor, das an einer bis fünf Kanten an Gras grenzt. Das Spiel setzt sie nicht: Die weichen Moosränder mit ihrem Torfsaum zeichnet der Kartenrenderer selbst, an jeder Moorkante zu Gras, Wald und Flussufer. Dafür braucht es weder eigene Felder noch eine Regel, wo sie hinkommen. Vorerst ersetzen diese gezeichneten Ränder die Randfelder. Die Felder bleiben im Atlas, falls sich das ändert. Jedes gibt es schlicht, mit Tümpeln und mit Erzquelle.",
+      "tiles": {
+        "bay": {
+          "name": "Bucht",
+          "body": "Gras an einer Kante."
+        },
+        "shore": {
+          "name": "Ufer",
+          "body": "Gras an zwei Kanten."
+        },
+        "half": {
+          "name": "Hälfte",
+          "body": "Gras an drei Kanten."
+        },
+        "tongue": {
+          "name": "Zunge",
+          "body": "Gras an vier Kanten."
+        },
+        "spit": {
+          "name": "Spitze",
+          "body": "Gras an fünf Kanten, das Moos läuft zu einer schmalen Spitze aus."
+        }
+      }
     }
   },
   "animations": {
