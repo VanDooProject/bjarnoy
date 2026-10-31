@@ -71,24 +71,40 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     const art = sawmill.locator(".thumb > :not(.floating-art-shadow)");
     const rows = sawmill.locator("table tbody tr");
     await rows.first().waitFor();
+    // The page renders before the atlas manifests are in and fills the art in
+    // as they arrive (router/atlasGuard.ts): the thumb swaps its element from
+    // the PNG fallback to the showcase picture to the layered render. The
+    // layered render needs `buildings-anim`, the last manifest the Sawmill's
+    // art reads, so once the un-hovered thumb (its top level) shows it, every
+    // level below resolves to its final art the moment it is hovered. Waits as
+    // long as the test may (like the rows above): that batch is several MB of
+    // JSON, fetched after the core and showcase manifests, and takes 6-7s
+    // when several workers load the page at once.
+    await sawmill.locator(".thumb > .animated-building").waitFor();
 
     const kinds = new Set<string>();
     const bottoms = new Set<number>();
     for (const level of [1, 2, 3, 4]) {
       await rows.nth(level - 1).hover();
-      const sample = await art.evaluate((el) => {
-        const [w, h] = getComputedStyle(el).aspectRatio.split("/").map(Number);
-        const box = el.getBoundingClientRect();
-        const thumb = el.parentElement!.getBoundingClientRect();
-        return {
-          kind: el.className,
-          drift: Math.abs(box.width / box.height - w! / h!) / (w! / h!),
-          bottom: Math.round(thumb.bottom - box.bottom),
-        };
-      });
-      expect(sample.drift, `level ${level} art squashed`).toBeLessThan(0.02);
-      kinds.add(sample.kind);
-      bottoms.add(sample.bottom);
+      // Re-resolved on every attempt: the hover swaps the element itself
+      // where the level changes art source.
+      await expect(async () => {
+        const sample = await art.evaluate((el) => {
+          const [w, h] = getComputedStyle(el)
+            .aspectRatio.split("/")
+            .map(Number);
+          const box = el.getBoundingClientRect();
+          const thumb = el.parentElement!.getBoundingClientRect();
+          return {
+            kind: el.className,
+            drift: Math.abs(box.width / box.height - w! / h!) / (w! / h!),
+            bottom: Math.round(thumb.bottom - box.bottom),
+          };
+        });
+        expect(sample.drift, `level ${level} art squashed`).toBeLessThan(0.02);
+        kinds.add(sample.kind);
+        bottoms.add(sample.bottom);
+      }).toPass();
     }
     // Both art sources were actually exercised, and sit on the same floor.
     expect(kinds).toEqual(new Set(["atlas-sprite", "animated-building"]));
