@@ -38,9 +38,6 @@ public class BattleReportEntity
     /// <summary>True when this was fought as an <see cref="Domain.Armies.ArmyMission.Raid"/> rather than a plain Attack (issue #40 phase 7).</summary>
     public bool WasRaid { get; set; }
 
-    /// <summary>Whether this was a wall siege (<see cref="BattleReport.WasWallSiege"/>).</summary>
-    public bool WasWallSiege { get; set; }
-
     public double LootWood { get; set; }
 
     public double LootStone { get; set; }
@@ -85,7 +82,6 @@ public class BattleReportEntity
             DefensePower = report.DefensePower,
             Seed = report.Seed,
             WasRaid = report.WasRaid,
-            WasWallSiege = report.WasWallSiege,
             LootWood = report.LootTaken.Wood,
             LootStone = report.LootTaken.Stone,
             LootFood = report.LootTaken.Food,
@@ -130,7 +126,6 @@ public class BattleReportEntity
         DefensePower = DefensePower,
         Seed = Seed,
         WasRaid = WasRaid,
-        WasWallSiege = WasWallSiege,
         LootTaken = new ResourceAmounts(LootWood, LootStone, LootFood, LootIron),
         Siege = SiegeTargetQ is { } q
             ? new BattleReportSiegeLine(
