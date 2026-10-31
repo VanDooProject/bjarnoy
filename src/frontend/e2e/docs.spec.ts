@@ -376,6 +376,15 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(lastSection).toBeInViewport();
     expect(await view.noHorizontalOverflow()).toBe(true);
 
+    // The example island has a locked camera: a click on it does not hand it the wheel, the page still scrolls.
+    const island = page.locator(".bog-island");
+    await island.scrollIntoViewIfNeeded();
+    await island.click();
+    const scrolledBefore = await view.scrollTop();
+    await island.hover();
+    await page.mouse.wheel(0, 300);
+    await expect.poll(() => view.scrollTop()).not.toBe(scrolledBefore);
+
     // The example island comes first, above the separate tiles.
     expect(
       await page.evaluate(() => {
