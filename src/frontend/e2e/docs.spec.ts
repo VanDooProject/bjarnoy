@@ -116,6 +116,21 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toContainText("4,650");
   });
 
+  test("wasted lands shows the Utgard example map and does not overflow on a phone", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/docs/wasted-lands");
+    const example = page.getByTestId("utgard-example");
+    await example.scrollIntoViewIfNeeded();
+    await expect(example.locator("canvas")).toBeVisible();
+    await expect(example).toContainText("two rings of walls");
+    const box = await example.locator("canvas").boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    const overflow = await page
+      .locator(".docs-page")
+      .evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
+
   test("wasted lands island slider shows the all-living stage", async ({
     page,
     adminAuth,

@@ -371,6 +371,11 @@
     "defences": {
       "heading": "Utgards Wehranlagen",
       "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinunter zum Wasser.",
+      "example": {
+        "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, ein Mauerring mit einem Tor darum und Jötun-Wachtürme außerhalb des Rings.",
+        "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+        "caption": "Utgard steht hinter zwei Mauerringen. Der innere Ring ist mit Stufe 2 stärker als der äußere mit Stufe 1, und Wachtürme sichern das Land davor."
+      },
       "level": "Stufe",
       "watchtower": {
         "heading": "Jötun-Wachturm",

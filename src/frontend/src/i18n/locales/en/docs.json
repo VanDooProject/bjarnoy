@@ -371,6 +371,11 @@
     "defences": {
       "heading": "Utgard's defences",
       "body": "The giants don't leave their islands open. Jötun watchtowers guard the approaches, and walls in Utgard's own masonry close the ground between them, down to the waterline.",
+      "example": {
+        "alt": "An example Utgard: the giant in the middle, a ring of walls round it with one gate, and Jötun watchtowers outside the ring.",
+        "hoverHint": "Point at a hex to see what it is.",
+        "caption": "Utgard stands inside two rings of walls. The inner ring is stronger (level 2) than the outer one (level 1), and watchtowers guard the ground outside."
+      },
       "level": "Level",
       "watchtower": {
         "heading": "Jötun watchtower",
