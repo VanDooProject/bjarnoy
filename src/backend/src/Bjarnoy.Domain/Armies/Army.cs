@@ -475,8 +475,11 @@ public sealed record Army
         }
 
         // A fleet leaves from (and returns to) its settlement's harbour hex, which is the centre only when the
-        // centre itself touches the sea (see FleetAnchor); a land army always uses the centre.
-        var origin = isFleet ? FleetAnchor(settlement, terrainAt) : settlement.Centre;
+        // centre itself touches the sea (see FleetAnchor); a land army leaves from the building that trained its
+        // slowest unit (see TrainingSite).
+        var origin = isFleet
+            ? FleetAnchor(settlement, terrainAt)
+            : TrainingSite(settlement.Centre, settlement.Buildings, settlementDecision.Stacks!);
         List<HexCoord> stops = [origin, .. waypoints, destination];
         List<HexCoord> fullPath = [origin];
 
@@ -815,10 +818,40 @@ public sealed record Army
 
     /// <summary>
     /// The hex this army starts from and walks back to: <see cref="FleetAnchor(HexCoord, IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain})"/>
-    /// for a fleet, the settlement <paramref name="centre"/> for a land army.
+    /// for a fleet, <see cref="TrainingSite"/> for a land army.
     /// </summary>
     public HexCoord HomeHex(HexCoord centre, IEnumerable<PlacedBuilding> buildings, Func<HexCoord, Terrain> terrainAt) =>
-        IsFleet ? FleetAnchor(centre, buildings, terrainAt) : centre;
+        IsFleet ? FleetAnchor(centre, buildings, terrainAt) : TrainingSite(centre, buildings, Stacks);
+
+    /// <summary>
+    /// The hex a land army leaves from and returns to: the building that trained its slowest unit type (ties: lowest
+    /// <see cref="UnitType"/>). With several of that building the one nearest <paramref name="centre"/> (ties by Q,
+    /// then R); with none (demolished) or no units, the centre.
+    /// </summary>
+    public static HexCoord TrainingSite(HexCoord centre, IEnumerable<PlacedBuilding> buildings, IEnumerable<UnitStack> stacks)
+    {
+        ArgumentNullException.ThrowIfNull(buildings);
+        ArgumentNullException.ThrowIfNull(stacks);
+
+        var slowest = stacks
+            .Where(s => s.Count > 0)
+            .Select(s => s.Type)
+            .OrderBy(t => UnitCatalogue.Get(t).Speed).ThenBy(t => (int)t)
+            .Cast<UnitType?>()
+            .FirstOrDefault();
+        if (slowest is not { } type)
+        {
+            return centre;
+        }
+
+        var required = UnitCatalogue.Get(type).RequiredBuildingType;
+        return buildings
+            .Where(b => b.Type == required)
+            .Select(b => b.Coord)
+            .OrderBy(c => c.DistanceTo(centre)).ThenBy(c => c.Q).ThenBy(c => c.R)
+            .Cast<HexCoord?>()
+            .FirstOrDefault() ?? centre;
+    }
 
     /// <summary>
     /// The hex a <see cref="ArmyMission.Hunt"/> route ends on: the camp's own hex when a land army can stand on it,
