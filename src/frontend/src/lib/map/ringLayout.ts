@@ -663,7 +663,8 @@ export const estimateWordEm: WordEmWidth = (word) =>
   [...word].reduce((sum, ch) => sum + (ch === ch.toUpperCase() && ch !== ch.toLowerCase() ? 0.7 : 0.56), 0);
 
 /**
- * Font size for a label inside a round bubble of `diameter` px: `basePx`,
+ * Font size for a single-line label inside a round shape of `diameter` px (the ring's hub; the bubbles' labels use
+ * `fitBubbleLabel`, which may break long words at hyphens): `basePx`,
  * shrunk just enough that the label's longest word fits on one line.
  * Without it a single long word ("Watchtower", "GRASSLAND", German
  * "Holzfällerhütte") either overflowed the circle or — with
@@ -712,4 +713,70 @@ export function shrinkToFit(
     px = Math.max(minPx, Math.min(px - 0.1, Math.floor(((px * availablePx) / widest) * 10) / 10));
   }
   return px;
+}
+
+/** Smallest font a ring bubble's label is ever set in; below it a name is not readable on a phone. */
+export const BUBBLE_LABEL_MIN_PX = 7;
+
+export interface BubbleLabelFit {
+  /** The font size to set. */
+  px: number;
+  /** The label to render: words that do not fit a line alone carry soft hyphens, the rest are untouched. */
+  text: string;
+  /** False when even `minPx` leaves the label too tall or a piece wider than the bubble. */
+  fits: boolean;
+}
+
+/**
+ * Font size and text for a label in a round bubble. A label stays at `startPx` when it fits on up to two lines
+ * (three when the name has spaces, e.g. "Schrein der Freyja") with its too-wide words broken at hyphenation
+ * points ("Waffen-" / "schmiede"); only when that does not fit is the font shrunk, never below `minPx`. A word
+ * is only hyphenated when it is wider than a line by itself, so "Great Storehouse" never becomes "Great Sto-".
+ * The browser is asked through the two callbacks (the DOM at the bubble's own font in RingMenu):
+ * `widthAt(word, px)` is a word's width on one line, `linesAt(text, px)` the number of lines the text takes in
+ * the bubble's width, or Infinity when a piece (no break point) is wider than the bubble.
+ */
+export function fitBubbleLabel(
+  label: string,
+  startPx: number,
+  {
+    widthAt,
+    linesAt,
+    availablePx,
+    hyphenate,
+    minPx = BUBBLE_LABEL_MIN_PX,
+  }: {
+    widthAt: (word: string, px: number) => number;
+    linesAt: (text: string, px: number) => number;
+    availablePx: number;
+    hyphenate: (word: string) => string;
+    minPx?: number;
+  },
+): BubbleLabelFit {
+  const words = label.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { px: startPx, text: label, fits: true };
+  const maxLines = words.length > 1 ? 3 : 2;
+  const evaluate = (px: number): BubbleLabelFit => {
+    const text = words.map((word) => (widthAt(word, px) > availablePx ? hyphenate(word) : word)).join(' ');
+    return { px, text, fits: linesAt(text, px) <= maxLines };
+  };
+  const atStart = evaluate(startPx);
+  if (atStart.fits || startPx <= minPx) return atStart;
+  const atFloor = evaluate(minPx);
+  if (!atFloor.fits) return atFloor;
+  // Largest size on a 0.1px grid that fits (smaller is never wider, so bisect); the floor always does.
+  let best = atFloor;
+  let low = Math.round(minPx * 10) + 1;
+  let high = Math.round(startPx * 10) - 1;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const tried = evaluate(mid / 10);
+    if (tried.fits) {
+      best = tried;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return best;
 }

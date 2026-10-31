@@ -65,6 +65,14 @@ the change made stale. Don't defer it to a later cleanup.
 - Verify gestures with real touch events (Playwright + CDP `Input.dispatchTouchEvent`, `hasTouch`/`isMobile`),
   not synthetic `dispatchEvent` pointer events.
 
+## 8. Text in a small shape stays readable
+
+- A label in a bubble or chip never shrinks below a readable size (7px for the ring's bubbles). A long word wraps
+  at hyphenation points of the player's language (`lib/hyphenation.ts`, soft hyphens, the same on every browser)
+  first; the font only shrinks when that does not fit, and a name that still does not fit at the floor gets a
+  shorter name, not a smaller font.
+- Never rely on `hyphens: auto` for this: whether a browser has a dictionary depends on the platform.
+
 ## Checklist for a UI PR
 
 - [ ] No button left that can only fail; moved actions removed from their old place (handler, i18n, tests).
@@ -73,6 +81,7 @@ the change made stale. Don't defer it to a later cleanup.
 - [ ] 16px HUD gutter from every viewport edge (top included); popovers fully on-screen at 360×740 and 390×844.
 - [ ] Every enter has a leave, including data-driven unmounts; motion goes through the motion setting.
 - [ ] Shared components share their mount/animation/gesture code across views.
+- [ ] Labels in small shapes wrap at hyphens and keep a readable size; no word breaks mid-word.
 - [ ] Gestures tested with real touch input on a mobile viewport.
 - [ ] Phone screenshots in the PR.
 
