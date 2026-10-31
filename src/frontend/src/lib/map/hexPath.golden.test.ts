@@ -128,12 +128,12 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     expect(byName.get('stream_on_a_mountain_costs_a_flat_9')?.expectedCumulativeHours).toEqual([0, 9, 10]);
   });
 
-  it('covers a gate for the owner and not for an enemy, a half-open end at a flat 3 and a sealed end', () => {
+  it('covers a gate for the owner and not for an enemy, a half-open end at the ground plus 3 and a sealed end', () => {
     const byName = new Map(fixture.findPathCases.map((c) => [c.name, c]));
     expect(byName.get('wall_with_a_gate_stops_an_enemy')?.expectedPath).toBeNull();
     expect(byName.get('wall_with_a_gate_lets_the_owner_through')?.expectedCumulativeHours?.at(-1)).toBe(4);
     expect(byName.get('wall_without_a_gate_stops_the_owner_too')?.expectedPath).toBeNull();
-    expect(byName.get('half_open_end_is_crossed_by_an_enemy_at_3')?.expectedCumulativeHours?.slice(3, 5)).toEqual([3, 6]);
+    expect(byName.get('half_open_end_is_crossed_by_an_enemy_at_ground_plus_3')?.expectedCumulativeHours?.slice(3, 5)).toEqual([3, 7]);
     expect(byName.get('sealed_end_beside_a_mountain_blocks')?.expectedPath).toBeNull();
   });
 

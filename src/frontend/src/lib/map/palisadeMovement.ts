@@ -4,7 +4,7 @@
 //
 // Every wall hex blocks every army, the owner's included, with two exceptions (docs/design/economy.md section 5): a gate is passable
 // for its owner's armies only, and a land end (a plain palisade hex with exactly one wall neighbour) is half open, passable for every
-// army at HALF_OPEN_END_COST, unless it touches a mountain or a wide river (a sealed end, which blocks like any wall hex). The sea end
+// army at the ground cost plus HALF_OPEN_END_COST, unless it touches a mountain or a wide river (a sealed end, which blocks like any wall hex). The sea end
 // stands on a sea hex a land army never enters anyway. Fleets are unaffected.
 import { coordKey, neighbors, type AxialCoord } from '../hex/coords';
 import { classifyEnd } from './palisadeTiles';
