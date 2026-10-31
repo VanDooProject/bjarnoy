@@ -841,9 +841,10 @@
     },
     "sieges": {
       "heading": "Belagerung",
-      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen nur Katapulte, und nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört.",
+      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen Katapulte und Flotten, aber nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört.",
       "rules": {
         "who": "Schick einen Angriff (oder einen Raubzug) mit Katapulten gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Gewinnt deine Armee die Schlacht, feuern die überlebenden Katapulte auf dieses Feld. Ein einziges überlebendes Katapult genügt. Verliert deine Armee die Schlacht, feuert nichts.",
+        "ships": "Gewinnt eine Flotte ihren Kampf, beschädigt sie das Gebäude, gegen das du sie geschickt hast, auf dieselbe Weise, auch das Seeende einer Mauer. Einem Mauerfeld nimmt sie dann ebenfalls genau eine Stufe.",
         "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, auch ein Mauerfeld.",
         "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Katapulte überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
         "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
@@ -1124,12 +1125,13 @@
     "battles": {
       "heading": "Kämpfe",
       "same": "Flotten kämpfen nach denselben Regeln wie Armeen an Land: Angriff gegen Verteidigung, bei Gleichstand gewinnt der Verteidiger.",
+      "shore": "Du schickst eine Flotte gegen ein einzelnes Gebäude am Ufer des Gegners: ein Gebäude auf einem Küstenfeld oder im Küstenwasser, innerhalb des Gebiets der Siedlung. Die Flotte segelt bis zu diesem Gebäude, und dort wird gekämpft. Das Langhaus der Siedlung darf auch im Landesinneren stehen.",
+      "damage": "Gewinnt die Flotte, beschädigt sie dieses Gebäude. Je mehr deiner Schiffe den Kampf überstehen, desto mehr Stufen verliert es. Sonst wird nichts von der Siedlung getroffen. Steht das Gebäude bei der Ankunft nicht mehr, wird trotzdem gekämpft, aber nichts beschädigt.",
       "tower": "Ein {tower} der verteidigenden Siedlung gibt pro Stufe {percent} % Verteidigung dazu.",
       "njord": "Der {shrine} steigert den Angriff deiner Schiffe auf Stufe 1 um {low} %, bis Stufe 5 um {high} %. Mehr unter {shrines}.",
       "shrinesLink": "Schreine"
     },
     "adminNote": {
-      "route": "Bekannter Fehler (Issue #450): Der Weg einer Flotte beginnt in der Mitte der Siedlung, und die liegt bei einer Startsiedlung nie am Meer. Flotten können deshalb eine erste Siedlung nicht verlassen und keine Siedlung angreifen, deren Mitte im Landesinneren liegt. Diese Seite beschreibt das gewollte Verhalten: Flotten legen an der Werft ab.",
       "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedlertrupp, ein Langschiff {longship}) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },

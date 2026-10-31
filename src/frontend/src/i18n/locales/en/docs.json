@@ -841,9 +841,10 @@
     },
     "sieges": {
       "heading": "Sieges",
-      "body": "A wall can be breached, one level at a time. Only catapults do it, and only as part of an attack on the settlement the wall belongs to.",
+      "body": "A wall can be breached, one level at a time. Catapults do it, and so does a fleet, but only as part of an attack on the settlement the wall belongs to.",
       "rules": {
         "who": "Send an attack (or a raid) with catapults at the settlement and name the wall hex as the target when you send it. If your army wins the battle, the catapults that survived fire at that hex. One surviving catapult is enough; an army that loses the battle fires nothing.",
+        "ships": "A fleet's won fight damages the building it was sent at in the same way, the sea end of a wall included. It takes one level off a wall hex then too.",
         "target": "If you name no target, or the building you named is gone by the time your army arrives, the siege hits a random building of that settlement instead, a wall hex among them.",
         "level": "A won siege takes exactly one level off a wall hex, the gate included, however many catapults survive. Most buildings lose several levels at once to a strong army; a wall is breached a level at a time. A palisade or gate has {levels} levels, so a fully built wall hex takes {levels} won sieges. A damaged wall still stops armies until its last level is gone.",
         "gone": "At level 0 the wall hex is gone: its hex is free ground again and armies walk through it. Any build order still queued for that hex is dropped.",
@@ -1124,12 +1125,13 @@
     "battles": {
       "heading": "Battles",
       "same": "Fleets fight by the same rules as armies on land: attack against defence, and a tie goes to the defender.",
+      "shore": "You send a fleet at one building on the enemy's shore: a building on a shoreline hex or on coastal water, inside the settlement's claim. The fleet sails to that building and the fight happens there. The settlement's Longhouse can stand inland.",
+      "damage": "If the fleet wins, it damages that building, and the more of your ships survive the fight, the more levels it loses. Nothing else of the settlement is hit. If the building is gone when the fleet arrives, the fight still happens, but nothing is damaged.",
       "tower": "A defending settlement's {tower} adds {percent}% defence per level.",
       "njord": "The {shrine} raises your ships' attack by {low}% at level 1, up to {high}% at level 5. See {shrines}.",
       "shrinesLink": "Shrines"
     },
     "adminNote": {
-      "route": "Known bug (issue #450): a fleet's route starts at the settlement centre, which is never next to the sea for a starting settlement, so fleets cannot leave a first settlement, and cannot attack a settlement whose centre is inland. This page describes the intended behaviour: fleets leave from the Dockyard.",
       "sea": "Founding by sea (a Karve carries {karve} Settler crew, a Longship {longship}) exists in the rules but has no interface yet (issue #447)."
     }
   },
