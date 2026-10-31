@@ -241,6 +241,9 @@ interface DragState {
 }
 
 let dragState: DragState | null = null;
+// Set when a pointer gesture on the handle ended as a drag (or a vertical
+// scroll), so the click the browser may still fire for it doesn't toggle.
+let handleGestureWasDrag = false;
 
 const rootStyle = computed(() => {
   // Landscape rail (TopBar.vue): the HUD's ☰ button and resource bubbles fill
@@ -255,6 +258,7 @@ const rootStyle = computed(() => {
 function onHandlePointerDown(event: PointerEvent) {
   const handle = event.currentTarget as HTMLElement;
   handle.setPointerCapture(event.pointerId);
+  handleGestureWasDrag = false;
   dragState = {
     pointerId: event.pointerId,
     startX: event.clientX,
@@ -298,13 +302,14 @@ function settleDrag(event: PointerEvent) {
   dragState = null;
   dragPx.value = null;
 
+  // A tap is toggled by the click that follows it (onHandleClick), not here:
+  // opening on pointerup slides the panel in under the finger before that
+  // click fires, so a touch click then lands on a drawer row (selecting it
+  // and closing the drawer again) instead of on the handle.
+  const isTap = decided === null && Math.abs(dx) < 8 && Math.abs(dy) < 8;
+  if (isTap) return;
+  handleGestureWasDrag = true;
   if (decided === 'vertical') return;
-
-  const isTap = Math.abs(dx) < 8 && Math.abs(dy) < 8 && dt < 500;
-  if (isTap) {
-    open.value = !open.value;
-    return;
-  }
 
   const travel = TRAVEL.value;
   const velocity = dt > 0 ? dx / dt : 0;
@@ -323,13 +328,12 @@ function onHandlePointerCancel(event: PointerEvent) {
   dragPx.value = null;
 }
 
-// The pointerup tap path above already toggles `open` — this only handles
-// the keyboard-activated click (Enter/Space on the focused handle button),
-// which fires with `detail === 0`. A touch/mouse-generated click always has
-// detail >= 1, so it's a no-op duplicate of the pointer path, not a second
-// toggle.
+// Taps (touch or mouse) and keyboard activation (Enter/Space, `detail === 0`)
+// all toggle here. The click a browser fires after a drag is skipped — the
+// drag's own pointerup already settled the drawer.
 function onHandleClick(event: MouseEvent) {
-  if (event.detail === 0) toggle();
+  if (event.detail !== 0 && handleGestureWasDrag) return;
+  toggle();
 }
 
 // P2 + P4: after a confirmed build, with the drawer collapsed, a peek panel
