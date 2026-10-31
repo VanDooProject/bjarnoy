@@ -1703,6 +1703,19 @@ describe('bog buildings and lake decorations', () => {
     expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
   });
 
+  it('draws a tower with the art of the ground it replaces', () => {
+    expect(KEY_FAMILY.tower).toBe('stavetower');
+    expect(KEY_FAMILY.towerforest).toBe('stavetower_forest');
+    expect(KEY_FAMILY.towerbog).toBe('stavetower_bog');
+    const tower = (tile: Partial<Tile>): Tile => ({ q: 0, r: 0, terrain: 'grass', buildingType: 'tower', buildingLevel: 1, ...tile });
+
+    expect(textureKeyFor(tower({}))).toBe('tower');
+    expect(textureKeyFor(tower({ terrain: 'sand' }))).toBe('tower');
+    expect(textureKeyFor(tower({ terrain: 'forest' }))).toBe('towerforest');
+    expect(textureKeyFor(tower({ terrain: 'forest', forestKind: 'taiga' }))).toBe('towerforest');
+    expect(textureKeyFor(tower({ terrain: 'bog', bog: bog('bog', [], null) }))).toBe('towerbog');
+  });
+
   it('draws a Fishing Hut on a half shore with the lake art, and one on the coast with the coastal art', () => {
     const half: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 2, bog: bog('half', [], null, ['SE', 'E', 'NE']) };
     expect(textureKeyFor(half)).toBe('fisherhutlake');

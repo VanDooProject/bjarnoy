@@ -65,15 +65,15 @@ describe('LEGACY_TALL_KEYS', () => {
   it('holds exactly the unsplit families that rise above their top face', () => {
     // Measured from the art by first row with >=5 opaque pixels (a raw alpha
     // bbox is inflated by stray near-transparent rows): mountaintile 66px,
-    // magictower 102px, dockyard 25px, towerbuilding 20px.
-    expect([...LEGACY_TALL_KEYS].sort()).toEqual(['dockyard', 'magictower', 'mountain', 'tower']);
+    // magictower 102px, dockyard 25px.
+    expect([...LEGACY_TALL_KEYS].sort()).toEqual(['dockyard', 'magictower', 'mountain']);
   });
 
   it('leaves the flat unsplit families alone', () => {
     // The distinction this set exists to make. Keying the split on "is it
     // legacy" instead would put sand — the most common terrain on any coastline
     // — through a second, empty sprite it does not need, on every coastal hex.
-    for (const flat of ['water', 'coastalwater', 'sand', 'fishinghut']) {
+    for (const flat of ['water', 'coastalwater', 'sand', 'fishinghut', 'tower', 'towerforest', 'towerbog']) {
       expect(LEGACY_TALL_KEYS.has(flat)).toBe(false);
     }
   });

@@ -206,6 +206,12 @@ export function isLakeShoreHut(tile: { buildingType?: string; bog?: { kind: BogT
   return tile.buildingType !== undefined && LAKE_SHORE_KINDS_BY_TYPE[tile.buildingType]?.has(tile.bog?.kind ?? 'bog') === true;
 }
 
+/** Grass, forest, sand or plain bog moss (not a shore, mouth, creek or lake): the ground a wall hex and a tower stand on. */
+function wallOrTowerGround(tile: { terrain: string; bog?: { kind: BogTileKind } }): boolean {
+  if (tile.terrain === 'bog') return tile.bog?.kind === 'bog';
+  return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
+}
+
 /**
  * Whether `type` may stand on this one hex, from its terrain, coastal-water flag and bog kind — the client mirror of
  * `BuildingDefinition.AllowsHex` (river shape and soil rules are separate, see `riverBuildingAllowedHere`/`cropAllowedHere`).
@@ -218,13 +224,12 @@ export function buildingAllowedOnHex(
 ): boolean {
   if (tile.terrain === 'lake') return false;
   // A wall stands on grass, forest, sand or plain bog moss; the palisade (not the gate) also on coastal water, as the wall's sea end. Whether the
-  // hex then takes one is the wall rules' (`WorldModel.palisadePlacement`).
+  // hex then takes one is the wall rules' (`WorldModel.palisadePlacement`). The tower stands on the same ground, but never on water.
   if (type === 'palisade' || type === 'palisadegate') {
     if (tile.terrain === 'sea') return type === 'palisade' && tile.isCoastalWater === true;
-    // Plain bog moss only (not a shore, mouth, creek or lake), like the bog buildings' kind check.
-    if (tile.terrain === 'bog') return tile.bog?.kind === 'bog';
-    return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
+    return wallOrTowerGround(tile);
   }
+  if (type === 'tower') return wallOrTowerGround(tile);
   // A bridge stands on the river tile's own ground: grass, forest or sand (never mountain; BuildingCatalogue.BridgeHex).
   if (type === 'bridge') return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
   const bogKinds = BOG_KINDS_BY_TYPE[type];

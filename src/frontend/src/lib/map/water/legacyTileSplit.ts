@@ -30,7 +30,7 @@ import { TILE_ART_NATIVE_H, TILE_ART_NATIVE_W, TILE_ART_TOPFACE_Y_FRAC } from '.
  * near-transparent row at the very top of the canvas, which a raw bbox reads as
  * a full-height overhang (`top/foresttile_*` measures 139px raw and 48px real).
  *
- *   mountaintile 66px · magictower 102px · dockyard 25px · towerbuilding 20px
+ *   mountaintile 66px · magictower 102px · dockyard 25px
  *
  * The row pitch is 92px, so only magictower (1.11 rows) reaches well past its
  * own hex; mountaintile is 0.72 and the rest under a third.
@@ -41,12 +41,15 @@ import { TILE_ART_NATIVE_H, TILE_ART_NATIVE_W, TILE_ART_TOPFACE_Y_FRAC } from '.
  * measurement would put sand, the most common terrain on any coastline, through
  * a split it does not need.
  *
+ * The tower is not in it: the stave tower families (`stavetower`, `stavetower_forest`, `stavetower_bog`) ship split into base and top
+ * like every other proper tile, so `topTextureFor` finds their top half and they never reach the legacy path.
+ *
  * This set is the only *performance* filter here; the predicate for splitting at
  * all is structural (`topTextureFor` returning nothing already means "unsplit").
  * Empty once the pack ships these split, at which point this whole module goes
  * — see water-shader.md §10's note to link that work back to this one.
  */
-export const LEGACY_TALL_KEYS: ReadonlySet<string> = new Set(['mountain', 'magictower', 'tower', 'dockyard']);
+export const LEGACY_TALL_KEYS: ReadonlySet<string> = new Set(['mountain', 'magictower', 'dockyard']);
 
 /** Native-pixel y the pack cuts a split family's art at — the top of the top face. */
 const SPLIT_Y = Math.round(TILE_ART_NATIVE_W * TILE_ART_TOPFACE_Y_FRAC);
