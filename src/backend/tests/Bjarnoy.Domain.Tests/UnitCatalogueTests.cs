@@ -207,7 +207,7 @@ public class UnitCatalogueTests
     [Fact]
     public void Only_the_first_spearmen_run_on_the_longhouse_trickle_everything_else_waits_for_the_bog_ore_works()
     {
-        // The Longhouse trickle is the only iron before the bog-ore works (LH 6): the Thrall needs none and the Barracks'
+        // The Longhouse trickle is the only iron before the bog-ore works (LH 3): the Thrall needs none and the Barracks'
         // first Spearman (LH 5) is what the trickle carries; every other iron unit opens with or after the bog-ore works.
         var bogOre = BuildingCatalogue.UnlockLevel(BuildingType.BogOreWorks);
         foreach (var type in UnitCatalogue.AllTypes.Where(t => t is not (UnitType.Thrall or UnitType.Spearman)))

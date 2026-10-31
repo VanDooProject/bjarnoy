@@ -3,7 +3,6 @@ import { coordKey, type AxialCoord } from '../hex/coords';
 import { findPath, hoursFrom, HALF_OPEN_END_COST, type PathContext } from './hexPath';
 import { palisadeRestrictions, type PalisadeWalls } from './palisadeMovement';
 import type { Terrain } from './types';
-import { WorldModel } from './WorldModel';
 
 const OWNER = 'owner-a';
 
@@ -100,6 +99,31 @@ describe('palisadeRestrictions', () => {
 
     const plain = new Map([...column(-3, 3)].map(([k, w]) => [k, { ...w, owner: 'someone-else' }] as const));
     expect(findPath(west, east, ctx(terrain, plain, OWNER, () => false, friends))).toBeNull();
+  });
+});
+
+describe('Utgard walls in the palisade rules (the jötnar owner key)', () => {
+  const JOTNAR = 'jotnar';
+  const jotnarColumn = (fromR: number, toR: number, gateAtR?: number) => {
+    const walls = new Map<string, { gate: boolean; owner: string }>();
+    for (let r = fromR; r <= toR; r++) walls.set(`3,${r}`, { gate: r === gateAtR, owner: JOTNAR });
+    return walls;
+  };
+
+  it('a standing Utgard wall stops a land army, a hex left out (level 0) lets it through', () => {
+    const terrain = strip({ '3,4': 'mountain' });
+    expect(findPath(west, east, ctx(terrain, jotnarColumn(-3, 3), 'player'))).toBeNull();
+
+    const breached = jotnarColumn(-3, 3);
+    breached.delete('3,0');
+    expect(findPath(west, east, ctx(terrain, breached, 'player'))?.map(coordKey)).toContain('3,0');
+  });
+
+  it('a jötnar gate never opens for a player, not even one whose friends include everybody else', () => {
+    const terrain = strip({ '3,4': 'mountain' });
+    const gated = jotnarColumn(-3, 3, 0);
+    expect(findPath(west, east, ctx(terrain, gated, 'player'))).toBeNull();
+    expect(findPath(west, east, ctx(terrain, gated, 'player', () => false, new Set(['other-guildmate'])))).toBeNull();
   });
 });
 

@@ -66,7 +66,7 @@ describe('ancestry', () => {
     expect(descendantsOf(graph, 'tower')).toEqual(
       new Set(['barracks', 'archeryrange', 'shrineofthor', 'smithy', 'palisade']),
     );
-    expect(descendantsOf(graph, 'quarry')).toEqual(new Set());
+    expect(descendantsOf(graph, 'claybrickworks')).toEqual(new Set());
   });
 });
 

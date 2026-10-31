@@ -141,3 +141,29 @@ export function arrowTipOffset(angleDeg: number, targetRadiusPx = HEX_TARGET_RAD
     y: -shift * Math.cos(rad),
   };
 }
+
+/** The arrow bobs this far back along its shaft (GuidancePointer's `pointer-bob` keyframe, `translateY(-14px)`). */
+export const ARROW_BOB_PX = 14;
+
+/**
+ * The arrow's rotation and target radius for pointing at one ring bubble. One rule for every bubble on every
+ * screen: the arrow comes in from the side of the bubble facing away from the ring's hub (outside the ring, where no
+ * other bubble is), and its tip rests on the bubble's centre, so even at the top of its bob (`ARROW_BOB_PX` back along the shaft) it is still inside the bubble.
+ * Feed the result to `GuidancePointer` as `angle` / `target-radius` with the bubble's centre as the anchor.
+ */
+export function ringBubbleAim(hub: Vec2, spot: Vec2): { angle: number; targetRadius: number } {
+  const dx = spot.x - hub.x;
+  const dy = spot.y - hub.y;
+  const len = Math.hypot(dx, dy);
+  // The arrow's tail points along `outward` and its tip against it; at rotation `angle` the tail is (sin, -cos).
+  const outward = len > 0 ? { x: dx / len, y: dy / len } : { x: 0, y: -1 };
+  const angle = (Math.atan2(outward.x, -outward.y) * 180) / Math.PI;
+    return { angle, targetRadius: -ARROW_TIP_GAP_PX };
+}
+
+/** Where the arrow's tip ends up on screen for a pointer anchored at `anchor` (the maths GuidancePointer applies). */
+export function arrowTipPoint(anchor: Vec2, angleDeg: number, targetRadiusPx: number): Vec2 {
+  const shift = arrowTipOffset(angleDeg, targetRadiusPx);
+  const tip = rotatedTipVector(angleDeg);
+  return { x: anchor.x + shift.x + tip.x, y: anchor.y + shift.y + tip.y };
+}

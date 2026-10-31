@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
+import { useDocsAdminNotes } from '../composables/useDocsAdminNotes';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import BogIsland from '../components/docs/BogIsland.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { RETIRED_BOG_VARIANTS } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // The bog set (3D_assets hextile109-119 plus the Clay Brickworks moved onto
 // bog ground; that repo's docs/bog-tiles.md is the source of truth, and
@@ -24,9 +26,9 @@ function showcase(name: string): AtlasFrameRect | undefined {
   return findAtlasFrame('showcase', name);
 }
 
-/** `''` for the plain look plus every `_variantNNN` the atlas has for this terrain family. */
+/** `''` for the plain look plus every `_variantNNN` the atlas has for this terrain family, minus the retired ones (slot 0 is the plain look). */
 function looksOf(family: string, retired: ReadonlySet<number> = new Set()): string[] {
-  const looks = [''];
+  const looks = retired.has(0) ? [] : [''];
   for (let i = 1; i < 20; i++) {
     const suffix = `_variant${String(i).padStart(3, '0')}`;
     if (!retired.has(i) && showcase(`${family}_SE${suffix}`)) looks.push(suffix);
@@ -48,8 +50,8 @@ function levelsOf(family: string): number[] {
 // pick a look, buildings a stage, and each has its own camera.
 
 // Look names follow the variant order in 3D_assets' docs/bog-tiles.md, minus the looks the game no longer shows
-// (variant006, the peat cuttings: `RETIRED_BOG_VARIANTS`).
-const GROUND_LOOKS = ['plain', 'mire1', 'mire2', 'mire3', 'oreSeep', 'fen', 'copse', 'seepChain'] as const;
+// (the plain moss and variant006, the peat cuttings: `RETIRED_BOG_VARIANTS`).
+const GROUND_LOOKS = ['mire1', 'mire2', 'mire3', 'oreSeep', 'fen', 'copse', 'seepChain'] as const;
 
 const WATER_SHAPES = [
   { id: 'creek', family: 'bogcreek' },
@@ -112,8 +114,8 @@ const view = reactive(
     ENTRIES.map((e) => [
       e.id,
       {
-        // The ground opens on the first decorated look; a building on its last, finished stage.
-        look: e.group === 'ground' ? Math.min(1, e.looks.length - 1) : 0,
+        // A building opens on its last, finished stage.
+        look: 0,
         level: e.levels.at(-1) ?? 0,
         camera: 'SE' as TileOrientation,
       },
@@ -143,11 +145,17 @@ function textOf(entry: Entry): string {
   return entry.group === 'ground' ? t('docs.bogLands.ground.body') : t(`${keyPrefix(entry)}.${entry.id}.body`);
 }
 
-const tocLinks = [
-  ...ENTRIES.map((entry) => ({ href: `#${entry.id}`, label: titleOf(entry) })),
+function artNoteOf(entry: Entry): string | undefined {
+  const key = `${keyPrefix(entry)}.${entry.id}.artNote`;
+  return entry.group !== 'ground' && te(key) ? t(key) : undefined;
+}
+
+const { visible: adminNotes } = useDocsAdminNotes();
+const tocLinks = computed(() => [
   { href: '#example-map', label: t('docs.bogLands.example.heading') },
-  { href: '#map-rules', label: t('docs.bogLands.rules.heading') },
-];
+  ...ENTRIES.map((entry) => ({ href: `#${entry.id}`, label: titleOf(entry) })),
+  ...(adminNotes.value ? [{ href: '#map-rules', label: t('docs.bogLands.rules.heading') }] : []),
+]);
 </script>
 
 <template>
@@ -158,10 +166,18 @@ const tocLinks = [
     :intro="$t('docs.bogLands.intro')"
   >
     <template #status>
-      <p class="status">{{ $t('docs.bogLands.status') }}</p>
+      <DocsAdminNote>
+        <p class="status">{{ $t('docs.bogLands.status') }}</p>
+      </DocsAdminNote>
     </template>
 
     <DocsToc :links="tocLinks" />
+
+    <section id="example-map" class="block">
+      <h2>{{ $t('docs.bogLands.example.heading') }}</h2>
+      <p class="group-body">{{ $t('docs.bogLands.example.body') }}</p>
+      <BogIsland />
+    </section>
 
     <template v-for="group in GROUPS" :key="group">
       <h2 class="group-heading">
@@ -182,6 +198,7 @@ const tocLinks = [
           <AtlasSprite v-if="frameOf(entry)" :frame="frameOf(entry)!" />
         </template>
         <p class="lore">{{ textOf(entry) }}</p>
+        <DocsAdminNote v-if="artNoteOf(entry)">{{ artNoteOf(entry) }}</DocsAdminNote>
         <template #pickers>
           <DocsPicker
             v-if="entry.looks.length > 1"
@@ -204,13 +221,7 @@ const tocLinks = [
       </DocsTileEntry>
     </template>
 
-    <section id="example-map" class="block">
-      <h2>{{ $t('docs.bogLands.example.heading') }}</h2>
-      <p class="group-body">{{ $t('docs.bogLands.example.body') }}</p>
-      <BogIsland />
-    </section>
-
-    <section id="map-rules" class="block">
+    <DocsAdminNote id="map-rules" as="section" class="block">
       <h2>{{ $t('docs.bogLands.rules.heading') }}</h2>
       <p class="group-body">{{ $t('docs.bogLands.rules.body') }}</p>
       <ol class="rules">
@@ -224,7 +235,7 @@ const tocLinks = [
         <li>{{ $t('docs.bogLands.rules.inland') }}</li>
         <li>{{ $t('docs.bogLands.rules.landing') }}</li>
       </ol>
-    </section>
+    </DocsAdminNote>
   </DocsPageLayout>
 </template>
 

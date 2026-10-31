@@ -101,7 +101,7 @@ The rules for **land armies** (fleets are unchanged):
 | --- | --- |
 | Sea, lake | impassable |
 | Mountain | **impassable** |
-| Wide river | **impassable** |
+| Wide river | **impassable**, unless a bridge stands on it (below) |
 | Stream (any river tile that is not wide) | walkable at a **flat `1.0 + RiverCrossingCost` (= 9)** over *any* land terrain, mountains included |
 | Anything else | its terrain cost (grass 1.0, sand 1.1, forest 1.3, bog 2.0) |
 
@@ -133,6 +133,22 @@ Consequences:
   gate, terrain cost. `PalisadeIndex` (loaded per world like the rivers) and
   `palisadeRestrictions` (`lib/map/palisadeMovement.ts`) build them; `docs/design/economy.md`
   section 5 has the wall rules.
+
+- **Bridges** open a wide river (`BridgeIndex`, loaded per world next to the palisades by
+  `WorldBridges.RouteIndexAsync`; `FindPath`/`CumulativeHours` take it as `bridgeCost`, a
+  per-owner lookup carried in `WallRules.BridgeCost`). Only a standing bridge (level 1 or
+  more) counts, and only on a wide river hex; streams keep their flat price and fleets
+  ignore bridges. The bridge's price replaces the impassable verdict, and every price stays
+  at least 1.0 so the heuristic stays admissible:
+
+  | Bridge level | Price of entering the hex |
+  | --- | --- |
+  | 1, causeway | `1.0 + CausewayCrossingCost` (= 6), slower than any ground |
+  | 2, footbridge | `1.0 + FootbridgeCrossingCost` (= 4), slower than the ground, quicker than the causeway |
+  | 3, king's bridge | the terrain cost, every army |
+  | 4, guarded bridge | the terrain cost for the owner's armies and their friends (the gate rule), impassable for everyone else |
+
+  `docs/design/economy.md` section 5 has the placement and burning rules.
 
 Settlement founding and claim logic are not affected: they never path.
 

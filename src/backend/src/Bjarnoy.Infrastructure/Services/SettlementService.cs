@@ -1084,6 +1084,12 @@ public sealed class SettlementService(
         var terrain = sampler.TerrainAt(coord);
         var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
+        // A bridge is the one building that stands on a wide river: it needs the raw tile (a stream's shape too, so PlanBuild can name
+        // the stream), whether the tile is wide, and whether its island is a wasted one.
+        var bridgeSite = type == BuildingType.Bridge
+            ? await BridgeSiteAsync(settlement.WorldId, coord, cancellationToken).ConfigureAwait(false)
+            : default;
+        riverShapeAt = bridgeSite.Shape ?? riverShapeAt;
         // Only meaningful when there's a river shape to begin with — see
         // Settlement.PlanBuild's riverVariantAt doc comment.
         var riverVariantAt = riverShapeAt is { } shapeAt ? sampler.RiverVariantAt(coord, shapeAt) : RiverVariant.Plain;
@@ -1113,10 +1119,13 @@ public sealed class SettlementService(
             islandSoil: islandSoil,
             giants: buildGiants,
             camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false),
+            endgameSites: await LoadEndgameSiteIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false),
             bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false),
             palisades: type is BuildingType.Palisade or BuildingType.PalisadeGate
                 ? await WorldPalisades.NearAsync(_dbContext, settlement.WorldId, coord, sampler.TerrainAt, cancellationToken).ConfigureAwait(false)
-                : null);
+                : null,
+            isWideRiverAt: bridgeSite.IsWide,
+            onWastedIsland: bridgeSite.OnWastedIsland);
 
         if (!decision.Accepted)
         {
@@ -1529,6 +1538,29 @@ public sealed class SettlementService(
     }
 
     /// <summary>
+    /// What a bridge's placement rule needs to know about <paramref name="coord"/>: the shape of the river tile standing there whatever its
+    /// width (<see langword="null"/> when there is none), whether that tile is a wide river (<see cref="RiverIndex.IsWide"/>), and whether
+    /// the island it lies on is a wasted one.
+    /// </summary>
+    private async Task<(RiverTileShape? Shape, bool IsWide, bool OnWastedIsland)> BridgeSiteAsync(
+        Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    {
+        var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        if (rivers.TileAt(coord) is not { } tile)
+        {
+            return (null, false, false);
+        }
+
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => new { i.IsWasted, i.RiverTiles })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var wasted = islands.Any(i => i.IsWasted && i.RiverTiles.Any(t => t.Q == coord.Q && t.R == coord.R));
+        return (tile.Shape, rivers.IsWide(coord), wasted);
+    }
+
+    /// <summary>
     /// Which gods already have a standing shrine somewhere on
     /// <paramref name="islandId"/>, at a hex other than
     /// (<paramref name="settlementId"/>, <paramref name="coord"/>) — spanning
@@ -1601,6 +1633,19 @@ public sealed class SettlementService(
     /// </summary>
     public Task<ICampIndex> LoadCampIndexAsync(Guid worldId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
         _campService.LoadBlockingIndexAsync(worldId, now, cancellationToken);
+
+    /// <summary>The world's Utgard wall hexes (rubble included) and Jötun watchtowers as one lookup for the build rule.</summary>
+    public async Task<IEndgameSiteIndex> LoadEndgameSiteIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId && i.IsWasted)
+            .Select(i => new { i.UtgardWalls, i.JotunTowers })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return new EndgameSiteIndex(islands.SelectMany(i =>
+            i.UtgardWalls.Select(w => new HexCoord(w.Q, w.R)).Concat(i.JotunTowers.Select(t => new HexCoord(t.Q, t.R)))));
+    }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements

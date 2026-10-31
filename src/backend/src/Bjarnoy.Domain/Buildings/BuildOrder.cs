@@ -151,6 +151,24 @@ public enum BuildRejection
     /// stands between two opposite wall hexes.
     /// </summary>
     GateNotOnStraight,
+
+    /// <summary>
+    /// A bridge was ordered on a river hex that is not a wide river (a stream, or a river tile the army already crosses): bridges are
+    /// for the impassable wide rivers only.
+    /// </summary>
+    BridgeNeedsWideRiver,
+
+    /// <summary>
+    /// A new building of a type that is switched off for placement (<see cref="BuildingCatalogue.NewPlacementDisabled"/>, currently the
+    /// Quarry) was ordered. Upgrading one that already stands is never refused for this reason.
+    /// </summary>
+    NewPlacementDisabled,
+
+    /// <summary>
+    /// An Utgard wall hex or a Jötun watchtower stands on the hex — never buildable (<c>docs/design/endgame.md</c>). Rubble of a
+    /// breached wall counts: the hex stays taken.
+    /// </summary>
+    HexOccupiedByEndgameSite,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

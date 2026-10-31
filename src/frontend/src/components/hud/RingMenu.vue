@@ -26,7 +26,7 @@
 // navigates — it only previews: hovering a building (or the root Upgrade /
 // Details bubble) shows its read-out card. This component owns layout and
 // navigation only — the caller supplies the tree and reacts to `select`.
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
@@ -50,6 +50,7 @@ import {
   NOTE_W,
   type Rect,
   bubbleLabelFontPx,
+  shrinkToFit,
   estimateWordEm,
   type WordEmWidth,
 } from '../../lib/map/ringLayout';
@@ -124,7 +125,7 @@ const props = withDefaults(
     y: number;
     /** Root actions. The action with id `build` is the gateway to `categories`. */
     actions: RingAction[];
-    /** Build categories; empty for a flat, one-level ring (LandingView's onboarding). */
+    /** Build categories (the map's and the onboarding's ring both use them). */
     categories?: RingCategory[];
     /** Hub line 1 at root level, e.g. "Grassland". */
     terrainLabel?: string;
@@ -165,15 +166,6 @@ const props = withDefaults(
      * of floating it beside the ring. Null keeps the floating desktop card.
      */
     dock?: RingDock | null;
-    /**
-     * Design handoff "2a": a persistent, muted explanation shown beside a
-     * flat ring (no `categories`) — e.g. why the one disabled guided
-     * building doesn't fit this hex. Explains the *hex*, not the click, so
-     * it reads as information rather than an error. Ignored once the ring
-     * has categories: a drilled-in ring shows its own per-building detail
-     * card instead.
-     */
-    note?: { title: string; body: string } | null;
   }>(),
   {
     categories: () => [],
@@ -184,7 +176,6 @@ const props = withDefaults(
     stock: undefined,
     error: null,
     dock: null,
-    note: null,
   },
 );
 
@@ -197,9 +188,8 @@ const emit = defineEmits<{
   // back so the caller can turn that one gesture straight into a map drag —
   // a plain `close` on click only fires on release, too late for that.
   outsidePointerDown: [event: PointerEvent];
-  // Design handoff "2a": the screen spot of every current lane1 bubble, by
-  // action id — GuidancePointer.vue aims at the enabled guided building's
-  // spot for the onboarding ring (frame 3, "This one fits {terrain}").
+  // The screen spot of every current bubble (both lanes), by action, category or
+  // building id — GuidancePointer.vue aims at the guided next step through them.
   layout: [spots: Record<string, { x: number; y: number }>];
   // The circle the open ring covers on screen (hub to the far edge of the
   // farthest bubble, outer lane included); re-emitted as the buildings lane
@@ -212,8 +202,30 @@ const emit = defineEmits<{
 const path = ref<string[]>([]);
 /** The backdrop element: the choreography in lib/map/ringMotion.ts finds the bubbles, links and hub inside it. */
 const rootEl = ref<HTMLElement | null>(null);
-/** A layer swap is animating; navigation clicks are ignored until it has landed. */
-const swapping = ref(false);
+/**
+ * Where a layer swap is: 'out' = the departing layer is being pulled in (its
+ * bubbles are leaving, clicks are ignored), 'in' = the new layer is blooming
+ * (its bubbles are the live ones, so a click is kept and run once it has landed).
+ */
+const swapPhase = ref<null | 'out' | 'in'>(null);
+const swapping = computed(() => swapPhase.value !== null);
+/** The latest click made while the new layer bloomed in; run when the swap ends. */
+let pendingAction: (() => void) | null = null;
+function runPendingAction() {
+  const pending = pendingAction;
+  pendingAction = null;
+  pending?.();
+}
+/**
+ * True when a swap is running and the click has been dealt with: dropped in the
+ * out phase, queued (latest wins) in the in phase. The action runs after the
+ * event is over, so it must capture whatever it needs from the event up front.
+ */
+function deferDuringSwap(action: () => void): boolean {
+  if (!swapping.value) return false;
+  if (swapPhase.value === 'in') pendingAction = action;
+  return true;
+}
 const hover = ref<string | null>(null);
 /** The root / category bubble under the pointer — only to preview its card or hint chip, never to navigate. */
 const hoverLane1 = ref<string | null>(null);
@@ -326,7 +338,7 @@ const layout = computed(() =>
     // A docked card lives at a screen edge, so the ring doesn't make room for it.
     cardAnchor: props.dock ? null : hoveredIndex.value,
     lane1CardAnchor: props.dock ? null : hoveredLane1Index.value,
-    wantsNote: !!props.note || !!props.error,
+    wantsNote: !!props.error,
   }),
 );
 
@@ -351,19 +363,6 @@ const lane1 = computed(() =>
 /** ‹ BACK owns the reserved last slot, and stays full size even when the rest collapse to dots. */
 const backSpot = computed(() => (atRoot.value ? null : (layout.value.lane1[props.categories.length] ?? null)));
 
-// Re-emitted whenever a bubble's placement actually changes (opening,
-// re-anchoring, an edge-case reflow) — not a one-off at mount, since the
-// caller's pointer needs to track the same spot the bubble is drawn at.
-watch(
-  lane1,
-  (entries) => {
-    const spots: Record<string, { x: number; y: number }> = {};
-    for (const entry of entries) spots[entry.item.id] = { x: entry.x, y: entry.y };
-    emit('layout', spots);
-  },
-  { immediate: true },
-);
-
 const lane2 = computed(() => {
   const category = activeCategory.value;
   const parent = category ? layout.value.lane1[props.categories.indexOf(category)] : null;
@@ -377,6 +376,22 @@ const lane2 = computed(() => {
     color: category.color,
   }));
 });
+
+// Re-emitted whenever a bubble's placement actually changes (opening,
+// re-anchoring, an edge-case reflow) — not a one-off at mount, since the
+// caller's pointer needs to track the same spot the bubble is drawn at.
+// Covers both lanes (category and building ids never collide), so a pointer can
+// follow the player from the Build hub through a category to a building.
+watch(
+  [lane1, lane2],
+  ([inner, outer]) => {
+    const spots: Record<string, { x: number; y: number }> = {};
+    for (const entry of inner) spots[entry.item.id] = { x: entry.x, y: entry.y };
+    for (const entry of outer) spots[entry.building.id] = { x: entry.x, y: entry.y };
+    emit('layout', spots);
+  },
+  { immediate: true },
+);
 
 const footprint = computed(() => {
   const backIndex = atRoot.value ? -1 : props.categories.length;
@@ -574,6 +589,59 @@ function wordEmAt(weight: number): WordEmWidth {
     return em;
   };
 }
+/**
+ * The size above is an estimate from canvas metrics; this is the check against what the browser really lays out.
+ * For every label it measures each word at the label's own font (a hidden probe copying family, weight, tracking
+ * and case; `offsetWidth` ignores the entrance/hover transforms) and, if the widest word is wider than the bubble's
+ * inner width, shrinks the font until it fits (`shrinkToFit`). So no word splits mid-word whatever font the browser
+ * ended up with. Runs after every render and when a web font finishes loading; map and onboarding share it.
+ */
+function fitLabels() {
+  const root = rootEl.value;
+  if (!root) return;
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;pointer-events:none;left:0;top:0';
+  root.appendChild(probe);
+  try {
+    const targets: { el: HTMLElement; text: string; available: number }[] = [];
+    for (const el of root.querySelectorAll<HTMLElement>('.ring-bubble')) {
+      const cs = getComputedStyle(el);
+      const text = [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent ?? '').join(' ');
+      const available = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+      targets.push({ el, text, available });
+    }
+    const hub = root.querySelector<HTMLElement>('.hub-label');
+    if (hub?.parentElement) targets.push({ el: hub, text: hub.textContent ?? '', available: hub.parentElement.clientWidth * 0.84 - 2 });
+    for (const { el, text, available } of targets) {
+      const words = text.split(/\s+/).filter(Boolean);
+      if (words.length === 0 || available <= 0) continue;
+      const cs = getComputedStyle(el);
+      const startPx = parseFloat(cs.fontSize);
+      if (!(startPx > 0)) continue;
+      const trackingEm = (parseFloat(cs.letterSpacing) || 0) / startPx;
+      probe.style.fontFamily = cs.fontFamily;
+      probe.style.fontWeight = cs.fontWeight;
+      probe.style.textTransform = cs.textTransform;
+      const widthAt = (word: string, px: number) => {
+        probe.style.fontSize = `${px}px`;
+        probe.style.letterSpacing = `${trackingEm}em`;
+        probe.textContent = word;
+        return probe.offsetWidth;
+      };
+      const fitted = shrinkToFit(words, available, startPx, widthAt);
+      if (fitted < startPx) el.style.fontSize = `${fitted}px`;
+    }
+  } finally {
+    probe.remove();
+  }
+}
+onMounted(() => {
+  void nextTick(fitLabels);
+  document.fonts?.addEventListener?.('loadingdone', fitLabels);
+});
+onUpdated(() => void nextTick(fitLabels));
+onUnmounted(() => document.fonts?.removeEventListener?.('loadingdone', fitLabels));
+
 const bubbleFont = (label: string, diameter: number, basePx: number) =>
   `${bubbleLabelFontPx(label, diameter, basePx, { wordEm: wordEmAt(700) })}px`;
 // `.hub-label` is capped at 84% of the hub (see its CSS), uppercase, 0.06em tracking.
@@ -604,7 +672,8 @@ async function go(next: string[]) {
     return;
   }
   if (swapping.value) return;
-  swapping.value = true;
+  swapPhase.value = 'out';
+  pendingAction = null;
   try {
     const prev = path.value;
     const hubPoint = { x: props.x, y: props.y };
@@ -622,10 +691,12 @@ async function go(next: string[]) {
     hoverLane1.value = null;
     await nextTick();
     ringMotion.release(root);
+    swapPhase.value = 'in';
     if (lane1Swap) await ringMotion.layerIn(root, 'lane1', hubPoint);
     else if (next.length === 2) await ringMotion.layerIn(root, 'kids', parentPoint());
   } finally {
-    swapping.value = false;
+    swapPhase.value = null;
+    runPendingAction();
   }
 }
 
@@ -635,9 +706,13 @@ function goUp() {
 }
 /** X11: the hub / ‹ BACK squish, then go back. At the root the hub just closes (the retract is its own motion). */
 async function onBackClick(e: MouseEvent) {
-  if (swapping.value) return;
-  if (path.value.length && motionEnabled()) await ringMotion.press(e.currentTarget as HTMLElement);
-  goUp();
+  const el = e.currentTarget as HTMLElement;
+  const back = async () => {
+    if (path.value.length && motionEnabled()) await ringMotion.press(el);
+    goUp();
+  };
+  if (deferDuringSwap(() => void back())) return;
+  await back();
 }
 // Navigation is click-only: Build opens its categories, a category opens its
 // buildings, exactly as going back already needed a click. Hover only previews.
@@ -647,15 +722,17 @@ function onLaneClick(e: MouseEvent, item: RingAction) {
     blockedFeedback(e.currentTarget as HTMLElement);
     return;
   }
-  if (swapping.value) return;
-  if (atRoot.value) {
-    if (item.id === 'build' && props.categories.length) void go(['build']);
-    else emit('select', item.id);
-    return;
-  }
-  if (props.categories.some((c) => c.id === item.id)) {
-    void go(['build', item.id]);
-  }
+  const act = () => {
+    if (atRoot.value) {
+      if (item.id === 'build' && props.categories.length) void go(['build']);
+      else emit('select', item.id);
+      return;
+    }
+    if (props.categories.some((c) => c.id === item.id)) {
+      void go(['build', item.id]);
+    }
+  };
+  if (!deferDuringSwap(act)) act();
 }
 function onBuildingClick(e: MouseEvent, building: RingBuilding) {
   const el = e.currentTarget as HTMLElement;
@@ -663,12 +740,14 @@ function onBuildingClick(e: MouseEvent, building: RingBuilding) {
     blockedFeedback(el);
     return;
   }
-  if (swapping.value) return;
-  // X2: tells the retract (RingMenuHost's leave hook) which bubble
-  // drops onto the hex; cleared again in case the caller kept the ring open.
-  el.setAttribute(ringMotion.DROPPING_ATTR, '');
-  emit('select', building.id);
-  setTimeout(() => el.removeAttribute(ringMotion.DROPPING_ATTR), 50);
+  const commit = () => {
+    // X2: tells the retract (RingMenuHost's leave hook) which bubble
+    // drops onto the hex; cleared again in case the caller kept the ring open.
+    el.setAttribute(ringMotion.DROPPING_ATTR, '');
+    emit('select', building.id);
+    setTimeout(() => el.removeAttribute(ringMotion.DROPPING_ATTR), 50);
+  };
+  if (!deferDuringSwap(commit)) commit();
 }
 /** X1: the shake, the badge wobble and the reason flash for a click on something that is blocked. */
 function blockedFeedback(bubble: HTMLElement) {
@@ -796,7 +875,6 @@ function onBackdropPointerDown(e: PointerEvent) {
         disabled: entry.ban,
         'is-locked': entry.state === 'locked',
         'is-waiting': entry.state === 'waiting',
-        soft: !!note,
         armed: armed === entry.item.id,
         dot: layout.collapsed,
       }"
@@ -945,16 +1023,6 @@ function onBackdropPointerDown(e: PointerEvent) {
     >
       <div class="note-body">{{ error }}</div>
     </div>
-
-    <div
-      v-if="note && !error && lane2.length === 0 && layout.note"
-      class="ring-note"
-      data-testid="ring-note"
-      :style="{ left: `${layout.note.x}px`, top: `${layout.note.y}px`, width: `${NOTE_W}px` }"
-    >
-      <div class="note-title">{{ note.title }}</div>
-      <div class="note-body">{{ note.body }}</div>
-    </div>
   </div>
 </template>
 
@@ -1096,11 +1164,6 @@ function onBackdropPointerDown(e: PointerEvent) {
   border: 1.5px dashed rgba(226, 112, 95, 0.55);
   color: var(--text);
   background: rgba(8, 18, 26, 0.9);
-}
-/* The onboarding ring's "why it's dim" design keeps its soft, dimmed look. */
-.ring-bubble.disabled.soft {
-  opacity: 0.4;
-  border: 1px solid color-mix(in oklab, var(--tint) 50%, transparent);
 }
 .ring-bubble.is-locked {
   cursor: not-allowed;

@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
+import enCatalogue from '../../i18n/locales/en/catalogue.json';
+import deCatalogue from '../../i18n/locales/de/catalogue.json';
 import {
   bubbleLabelFontPx,
+  shrinkToFit,
+  estimateWordEm,
   BUB1,
   BUB2,
   CARD_H,
   CARD_W,
   DOT,
   HUB,
+  LANE1_MAX,
   layoutRing,
   NOTE_H,
   NOTE_W,
   placementMode,
+  ringRoomFor,
+  ringShapes,
   type Rect,
   type RingLayoutResult,
 } from './ringLayout';
@@ -212,6 +219,103 @@ describe('ring layout behaviour', () => {
   });
 });
 
+// Reported on an Android phone in portrait (~412x915): the six build categories
+// plus ‹ BACK opened as ONE straight row across the screen, the last bubble
+// clipped by the right edge. The area MapView hands a portrait phone is narrow
+// (64px queue handle on the left, the docked card strip at the bottom).
+// arcPlace's `need` radius was sized for n-1 gaps while spread seats n, so it
+// always failed its own spacing check, and with the fixed radii too small for a
+// narrow wedge the lane fell through to a straight row of 7 x 58px = 404px.
+// The ring is a circle round its tile, always: an arc of one circle when that
+// fits here, and where nothing does, MapView pans the tile to the spot
+// `ringRoomFor` finds.
+describe('ring layout on a phone', () => {
+  // MapView's ringBounds on a portrait phone: left 64, the 64px HUD bar on top (+12), the bottom dock strip (236 + 8) below.
+  const PHONES = [
+    { name: '360x740', w: 360, h: 740 },
+    { name: '390x844', w: 390, h: 844 },
+    { name: '412x915', w: 412, h: 915 },
+  ].map((p) => ({ ...p, area: { left: 64, top: 76, right: p.w - 16, bottom: p.h - 236 - 8 } }));
+  // Root actions, then six categories (+ ‹ BACK) holding 3, 5, 4, 4, 3 and 2 buildings.
+  const SHAPES = ringShapes(4, [3, 5, 4, 4, 3, 2]);
+
+  const radiusSpread = (spots: { x: number; y: number }[], x: number, y: number) => {
+    const radii = spots.map((s) => Math.hypot(s.x - x, s.y - y));
+    return Math.max(...radii) - Math.min(...radii);
+  };
+
+  it('lists the root ring, the categories and each category opened as the shapes to make room for', () => {
+    expect(ringShapes(3, [2, 0, 4])).toEqual([
+      { lane1Count: 3, lane2Count: 0, parentIndex: -1 },
+      { lane1Count: 4, lane2Count: 0, parentIndex: -1 },
+      { lane1Count: 4, lane2Count: 2, parentIndex: 0 },
+      { lane1Count: 4, lane2Count: 4, parentIndex: 2 },
+    ]);
+    expect(ringShapes(3, [])).toEqual([{ lane1Count: 3, lane2Count: 0, parentIndex: -1 }]);
+  });
+
+  it('says it does not fit wherever the inner lane is not an arc of one circle round the tile, so the map moves the tile', () => {
+    const { area } = PHONES[2];
+    // Includes the reported spot (206, 640: low on the screen, just above the dock) and spots off the area entirely.
+    for (let x = 0; x <= 412; x += 24) {
+      for (let y = 0; y <= 915; y += 24) {
+        const layout = layoutRing({ x, y, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null });
+        if (layout.fits) expect(radiusSpread(layout.lane1, x, y), `${x},${y}`).toBeLessThan(0.5);
+        if (layout.fits) expect(Math.hypot(layout.lane1[0].x - x, layout.lane1[0].y - y), `${x},${y}`).toBeLessThanOrEqual(LANE1_MAX + 0.5);
+      }
+    }
+    expect(layoutRing({ x: 206, y: 640, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null }).fits).toBe(false);
+  });
+
+  it('seats seven bubbles on an arc when the arc only fits at a radius beyond the fixed ones', () => {
+    // 412x915, a hex in the upper left of the area: before, the only radius big enough was `need`, which always failed.
+    const { area } = PHONES[2];
+    const layout = layoutRing({ x: 160, y: 200, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null });
+    expect(layout.fits).toBe(true);
+    expect(radiusSpread(layout.lane1, 160, 200)).toBeLessThan(0.5);
+  });
+
+  it('leaves a tile whose ring already fits where it is', () => {
+    const { area } = PHONES[2];
+    expect(ringRoomFor(230, 360, () => area, SHAPES)).toEqual({ x: 230, y: 360 });
+  });
+
+  it('moves the reported tile (low on the screen, above the dock) up to where its ring fits', () => {
+    const { area } = PHONES[2];
+    expect(layoutRing({ x: 206, y: 640, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null }).fits).toBe(false);
+    const room = ringRoomFor(206, 640, () => area, SHAPES)!;
+    expect(room).not.toBeNull();
+    expect(room.y).toBeLessThan(640);
+    expect(Math.hypot(room.x - 206, room.y - 640)).toBeLessThan(140);
+  });
+
+  for (const phone of PHONES) {
+    it(`opens every shape of the ring as circles, inside the area and clear of each other, from any tile on a ${phone.name} screen`, () => {
+      const bad: string[] = [];
+      for (let x = 0; x <= phone.w; x += 56) {
+        for (let y = 0; y <= phone.h; y += 56) {
+          const room = ringRoomFor(x, y, () => phone.area, SHAPES);
+          if (!room) {
+            bad.push(`${x},${y}: no room anywhere`);
+            continue;
+          }
+          for (const shape of SHAPES) {
+            const layout = layoutRing({ x: room.x, y: room.y, area: phone.area, cardArea: phone.area, ...shape, cardAnchor: null });
+            const circles = circlesOf(layout, room.x, room.y);
+            const where = `${x},${y} -> ${room.x},${room.y} ${JSON.stringify(shape)}`;
+            if (!layout.fits) bad.push(`${where}: does not fit`);
+            else if (radiusSpread(layout.lane1, room.x, room.y) >= 0.5) bad.push(`${where}: inner lane not on a circle`);
+            else if (layout.lane2.length && radiusSpread(layout.lane2, room.x, room.y) >= 0.5) bad.push(`${where}: buildings not on a circle`);
+            else if (outOfArea(circles, phone.area).length) bad.push(`${where}: outside the area`);
+            else if (smallestGap(circles) < 0) bad.push(`${where}: overlapping`);
+          }
+        }
+      }
+      expect(bad.slice(0, 10), `${bad.length} bad placements`).toEqual([]);
+    }, 30_000); // a few hundred tile spots, each searched for room: seconds of pure layout maths, not waiting
+  }
+});
+
 // A root bubble (Upgrade, Details) shows its own card while hovered: it has no
 // lane2 building to anchor on, so the card docks off that bubble's lane1 spot.
 describe('ring layout root-bubble card', () => {
@@ -318,6 +422,13 @@ describe('bubbleLabelFontPx', () => {
     expect(size).toBeGreaterThan(6.5);
   });
 
+  it('fits the longest English label (Weaponsmith) into a building bubble at the floor instead of splitting it', () => {
+    // 6.5px was too big for it on a 320px phone: measured 44px of text in a 42px bubble, so it split mid-word.
+    const size = bubbleLabelFontPx('Weaponsmith', BUB2, 8.4);
+    expect(size).toBeGreaterThanOrEqual(6);
+    expect(size * (estimateWordEm('Weaponsmith') + 11 * 0.02)).toBeLessThanOrEqual(BUB2 - 6);
+  });
+
   it('accounts for uppercase and letter spacing (the hub label)', () => {
     const upper = bubbleLabelFontPx('Longhouse', HUB, 10.5, { uppercase: true, letterSpacingEm: 0.06 });
     const lower = bubbleLabelFontPx('Longhouse', HUB, 10.5);
@@ -333,6 +444,38 @@ describe('bubbleLabelFontPx', () => {
   });
 
   it('never goes below the readable floor', () => {
-    expect(bubbleLabelFontPx('Holzfällerhüttenerweiterung', BUB2, 9)).toBe(6.5);
+    expect(bubbleLabelFontPx('Holzfällerhüttenerweiterung', BUB2, 9)).toBe(6);
+  });
+});
+
+// The bug that survived a fixed px floor: a browser whose font is wider than the estimate split "Watchtower" mid-word.
+// shrinkToFit sizes against the real width at each size, so it holds for any font.
+describe('shrinkToFit', () => {
+  const wordsOf = (catalogue: { buildings: Record<string, string> }) => [
+    ...new Set(Object.values(catalogue.buildings).flatMap((name) => name.split(/\s+/).filter(Boolean))),
+  ];
+  // The estimate with the bubble's 0.02em tracking, optionally `wider` (1.15 = a font 15% wider than the guess).
+  const font = (wider: number) => (word: string, px: number) => wider * (estimateWordEm(word) + [...word].length * 0.02) * px;
+
+  // Every word fits, even with a 15% wider font, except where it cannot at any readable size: the longest German
+  // compounds (Waffenschmiede, Raseneisenerz-Grube) are wider than the bubble at the 5px floor, so they stop there.
+  for (const [language, catalogue, wider] of [['English', enCatalogue, 1.15], ['German', deCatalogue, 1.15]] as const) {
+    for (const [lane, diameter, base] of [['inner', BUB1, 8.2], ['outer', BUB2, 8.4]] as const) {
+      it(`no ${language} building word is wider than the ${lane} bubble (font ${Math.round((wider - 1) * 100)}% wider)`, () => {
+        const words = wordsOf(catalogue);
+        expect(words.length).toBeGreaterThan(30);
+        const available = diameter - 6;
+        for (const word of words) {
+          const px = shrinkToFit([word], available, base, font(wider));
+          if (language === 'English') expect(font(wider)(word, px), `${word} at ${px}px`).toBeLessThanOrEqual(available);
+          else expect(font(wider)(word, px) <= available || px === 5, `${word} at ${px}px`).toBe(true);
+        }
+      });
+    }
+  }
+
+  it('leaves a label that already fits alone, and never goes below the floor', () => {
+    expect(shrinkToFit(['Farm'], BUB2 - 6, 9.4, font(1.15))).toBe(9.4);
+    expect(shrinkToFit(['Holzfällerhüttenerweiterung'], BUB2 - 6, 9, font(1.15))).toBe(5);
   });
 });

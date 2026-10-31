@@ -28,6 +28,8 @@ import {
   KEY_FAMILY,
   LAKE_PROP_VARIANT,
   PALISADE_TEXTURE_KEY,
+  UTGARD_WALL_TEXTURE_KEY,
+  endgameDrawTile,
   palisadeArtFor,
   selectVariantFrames,
   type FamilyFrame,
@@ -1558,14 +1560,17 @@ describe('bog art', () => {
     expect(classified.top!.W[8]).toBe('bog_W_variant008');
   });
 
-  it('draws a retired moss look (variant006, the peat cuttings) as plain moss, every other look in its own slot', () => {
+  it('never draws a retired moss look (plain moss, variant006 the peat cuttings): every variant lands on a decorated one', () => {
     const tops = Array.from({ length: 9 }, (_, i) => `bog_W_${i}`);
     const slot = (variant: number) => bogVariantIn('bog', { variant } as Tile, tops);
-    expect(slot(6)).toBe(0);
-    expect(slot(15)).toBe(0);
-    expect([1, 2, 3, 4, 5, 7, 8].map(slot)).toEqual([1, 2, 3, 4, 5, 7, 8]);
-    // Only the moss retires slot 6: a lake shows its own variant there.
+    const decorated = [1, 2, 3, 4, 5, 7, 8];
+    expect(Array.from({ length: 7 }, (_, v) => slot(v))).toEqual(decorated);
+    for (let v = 0; v < 100; v++) expect(decorated, `variant ${v}`).toContain(slot(v));
+    // While only the plain frame has loaded there is nothing else to draw.
+    expect(bogVariantIn('bog', { variant: 3 } as Tile, ['bog_W'])).toBe(0);
+    // Only the moss retires looks: a lake shows its own variant in every slot.
     expect(bogVariantIn('lake', { variant: 6 } as Tile, tops)).toBe(6);
+    expect(bogVariantIn('lake', { variant: 0 } as Tile, tops)).toBe(0);
   });
 
   it('gives every bog family its own key and family, all of them terrain keys', () => {
@@ -1969,6 +1974,121 @@ describe('palisade art', () => {
   });
 });
 
+// The Utgard wall set and the Jötun watchtower (wasted pack): the server resolves piece and camera, the renderer draws them at the
+// site's level (level000 breached/taken, level001 damaged, level002 full/garrisoned) and the vendored atlas carries every frame.
+describe('endgame site art', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+  function emptyTextures(): TileTextures {
+    return {
+      base: {},
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      riverBase: {} as TileTextures['riverBase'],
+      riverTop: {} as TileTextures['riverTop'],
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+  }
+  const wall = (piece: NonNullable<Tile['utgardWall']>['piece'], level: number, dir: NonNullable<Tile['utgardWall']>['dir'] = 'NW'): Tile => ({
+    q: 0, r: 0, terrain: 'grass', wasted: true, orientation: 'SE', utgardWall: { ring: 'inner', piece, dir, isGate: piece === 'gate180', level },
+  });
+
+  it('maps every piece and the tower to the atlas family the art ships under', () => {
+    expect(
+      (['straight180', 'bend60', 'bend120', 'gate180', 'end', 'end_coast'] as const).map((piece) => KEY_FAMILY[UTGARD_WALL_TEXTURE_KEY[piece]]),
+    ).toEqual([
+      'utgardwall_straight180',
+      'utgardwall_bend60',
+      'utgardwall_bend120',
+      'utgardwall_gate180',
+      'utgardwall_end',
+      'utgardwall_end_coast',
+    ]);
+    expect(KEY_FAMILY.jotunwatchtower).toBe('jotunwatchtower');
+  });
+
+  it('draws the server-resolved piece in the server-resolved camera, not the tile\'s own rotation', () => {
+    const drawn = endgameDrawTile(wall('bend120', 2, 'SW'))!;
+    expect(drawn.art).toEqual({ key: 'utgardwallbend120', orientation: 'SW' });
+    expect(endgameDrawTile(wall('gate180', 2, 'E'))!.art.key).toBe('utgardwallgate');
+    expect(endgameDrawTile({ q: 0, r: 0, terrain: 'grass', jotunTower: { orientation: 'NE', level: 2 } })!.art).toEqual({
+      key: 'jotunwatchtower',
+      orientation: 'NE',
+    });
+    expect(endgameDrawTile({ q: 0, r: 0, terrain: 'grass' })).toBeUndefined();
+  });
+
+  it('draws a wall at its current level: rubble, damaged, full', () => {
+    const textures = emptyTextures();
+    textures.top.utgardwallstraight = orientationMap(['rubble', 'damaged', 'full'] as unknown as never);
+
+    for (const [level, texture] of [[0, 'rubble'], [1, 'damaged'], [2, 'full']] as const) {
+      const drawn = endgameDrawTile(wall('straight180', level))!;
+      expect(topTextureFor(textures, drawn.tile, drawn.art)).toBe(texture);
+    }
+  });
+
+  it('draws the tower at its level too, on the hex\'s own wasted ground', () => {
+    const textures = emptyTextures();
+    textures.top.jotunwatchtower = orientationMap(['taken', 'damaged', 'garrisoned'] as unknown as never);
+    textures.base.wasteland = orientationMap('wasteland-base' as unknown as never);
+    const tile: Tile = { q: 0, r: 0, terrain: 'grass', wasted: true, orientation: 'SE', jotunTower: { orientation: 'SE', level: 2 } };
+    const drawn = endgameDrawTile(tile)!;
+
+    expect(topTextureFor(textures, drawn.tile, drawn.art)).toBe('garrisoned');
+    expect(baseTextureFor(textures, drawn.tile, drawn.art)).toBe('wasteland-base');
+    expect(topTextureFor(textures, endgameDrawTile({ ...tile, jotunTower: { orientation: 'SE', level: 0 } })!.tile, drawn.art)).toBe('taken');
+  });
+
+  it('keeps a land wall on the wasted ground and the shore end on its own coastal base per level', () => {
+    const textures = emptyTextures();
+    textures.base.wasteland = orientationMap('wasteland-base' as unknown as never);
+    textures.baseIndexed.utgardwallendcoast = orientationMap(['coast-0', 'coast-1', 'coast-2'] as unknown as never);
+    const land = endgameDrawTile(wall('straight180', 2))!;
+    expect(baseTextureFor(textures, land.tile, land.art)).toBe('wasteland-base');
+
+    const shore: Tile = {
+      q: 0, r: 0, terrain: 'sea', isCoastalWater: true, orientation: 'SE',
+      utgardWall: { ring: 'outer', piece: 'end_coast', dir: 'W', isGate: false, level: 1 },
+    };
+    const drawn = endgameDrawTile(shore)!;
+    expect(baseTextureFor(textures, drawn.tile, drawn.art)).toBe('coast-1');
+  });
+
+  const manifests = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/wasted-buildings-{static,level1}-*.json', {
+    eager: true,
+    import: 'default',
+  }) as Record<string, { frames: Record<string, unknown> }>;
+  const vendored = Object.keys(manifests).length > 0;
+
+  it.skipIf(!vendored)('the vendored wasted atlas carries every frame the walls and towers can ask for', () => {
+    const frames = new Set<string>();
+    for (const manifest of Object.values(manifests)) {
+      for (const name of Object.keys(manifest.frames)) if (name.startsWith('utgardwall_') || name.startsWith('jotunwatchtower_')) frames.add(name);
+    }
+    const missing: string[] = [];
+    for (const family of [...Object.values(UTGARD_WALL_TEXTURE_KEY).map((k) => KEY_FAMILY[k]!), 'jotunwatchtower']) {
+      for (const dir of ORIENTATIONS) {
+        for (const level of [0, 1, 2]) {
+          const top = `${family}_${dir}_level00${level}`;
+          if (!frames.has(top)) missing.push(top);
+          if (family === 'utgardwall_end_coast' && !frames.has(`${top}_base`)) missing.push(`${top}_base`);
+        }
+      }
+    }
+
+    expect(missing).toEqual([]);
+  });
+});
+
 // The biome forests (3D_assets hextile143-145): forest_taiga / forest_birch / forest_mixed replace foresttile on living islands,
 // fall back to it while the atlas has no frames for them, and play a wind-sway clip per top variant on one shared clock.
 describe('biome forest art', () => {
@@ -2118,6 +2238,77 @@ describe('biome forest art', () => {
         a.playedMs += delta;
         b.playedMs += delta;
         expect(clipFrameIndex(timing, a.playedMs)).toBe(clipFrameIndex(timing, b.playedMs));
+      }
+    });
+  });
+});
+
+// The river bridge (3D_assets hextile135-137): three crossing families picked by the river tile's shape, oriented by the river like the
+// Sawmill's, and drawn as the hex's plain river (never a bare terrain texture) while the atlas has no frames for them yet.
+describe('river bridge art', () => {
+  const fakeTexture = (name: string) => ({ label: name }) as unknown as Texture;
+  const bridgeTile = (overrides: Partial<Tile> = {}): Tile =>
+    ({ q: 0, r: 0, terrain: 'grass', buildingType: 'bridge', buildingLevel: 2, orientation: 'SE', ownerId: 's1', ...overrides }) as Tile;
+
+  /** A `buildings-static` stand-in with `levels` art levels of one bridge family: a top and a base frame per level and camera. */
+  function bridgeAtlas(family: string, levels: number): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    for (const camera of TILE_ORIENTATIONS) {
+      for (let l = 0; l < levels; l++) {
+        const name = `${family}_${camera}_level${String(l).padStart(3, '0')}`;
+        atlas.textures[name] = fakeTexture(name);
+        atlas.frameMeta[name] = { family, layer: 'top' };
+        atlas.textures[`${name}_base`] = fakeTexture(`${name}_base`);
+        atlas.frameMeta[`${name}_base`] = { family, layer: 'base' };
+      }
+    }
+    return atlas;
+  }
+
+  it('ships the three crossings under the atlas family names the art is rendered as', () => {
+    expect(KEY_FAMILY.riverbridge).toBe('riverbridge');
+    expect(KEY_FAMILY.riverbridgebend).toBe('riverbridge_bend');
+    expect(KEY_FAMILY.riverbridgebend60).toBe('riverbridge_bend60');
+  });
+
+  it('picks the family by the river tile shape and the camera by the river, like the Sawmill', () => {
+    const cases = [
+      [riverTile('straight', 'W', null), 'riverbridge'],
+      [riverTile('bend', 'NW', 'SW'), 'riverbridgebend'],
+      [riverTile('bend60', 'NE', 'NW'), 'riverbridgebend60'],
+    ] as const;
+    for (const [river, key] of cases) {
+      expect(riverBuildingArtFor('bridge', river)).toEqual({ key, orientation: riverArtFor(river, null).orientation });
+      // The Sawmill stands on the same three shapes, on the same camera.
+      expect(riverBuildingArtFor('bridge', river)!.orientation).toBe(riverBuildingArtFor('sawmill', river)!.orientation);
+    }
+  });
+
+  it('draws no bridge art on a spring, a fork, a mouth or a stream', () => {
+    for (const shape of ['spring', 'confluence', 'mouth'] as const) {
+      expect(riverBuildingArtFor('bridge', riverTile(shape, 'W', 'E'))).toBeUndefined();
+    }
+    expect(riverBuildingArtFor('bridge', { ...riverTile('straight', 'W', null), width: 'stream' })).toBeUndefined();
+  });
+
+  it('keys a bridge tile to the straight family when no river tile is at hand', () => {
+    expect(textureKeyFor(bridgeTile())).toBe('riverbridge');
+  });
+
+  describe('the art by level', () => {
+    const river = riverTile('straight', 'W', null);
+    const textures = buildTileTextures([bridgeAtlas('riverbridge', 5)]);
+    const art = riverBuildingArtFor('bridge', river)!;
+
+    it('resolves the bridge art for the river tile', () => {
+      expect(art.key).toBe('riverbridge');
+    });
+
+    it('shows level000 (the building site) while level 1 is under construction, then each level in turn', () => {
+      for (let level = 0; level <= 4; level++) {
+        const tile = bridgeTile({ buildingLevel: level });
+        expect(topTextureFor(textures, tile, art)).toBe(textures.top.riverbridge![art.orientation][level]);
+        expect(baseTextureFor(textures, tile, art)).toBe(textures.baseIndexed.riverbridge![art.orientation][level]);
       }
     });
   });

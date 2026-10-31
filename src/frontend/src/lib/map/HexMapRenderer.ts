@@ -87,6 +87,7 @@ import {
   baseTextureFor,
   campArtFor,
   drawnCampOf,
+  endgameDrawTile,
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
@@ -620,9 +621,9 @@ export interface ArmyOverlayFrame {
 /**
  * What the settlement view's hover tooltip needs, plus screen position to
  * anchor it. Issue #16 "better hover" wants a richer card for buildings
- * (title + level, an output rate, a modifier line, worker count, "click to
- * open") like the mockup's "Crop farm LEVEL 2 / Output +72 food/h /
- * Workers 8/8 / CLICK TO OPEN". None of that is
+ * (title + level, an output rate, a modifier line, "click to open") like
+ * the mockup's "Crop farm LEVEL 2 / Output +72 food/h / CLICK TO OPEN"
+ * (its "Workers 8/8" line was dropped: the backend has no workers). None of that is
  * tracked per-building anywhere (the backend/WorldModel only know a
  * settlement's *aggregate* rates, not a single building's own output) so
  * `stats` below is derived deterministically from the building's
@@ -658,7 +659,11 @@ export type HoverSubject =
         aggressive: boolean;
         clears: number;
       };
-    };
+    }
+  // An Utgard wall piece (a gate is named apart) at its current level: 2 intact, 1 damaged, 0 breached.
+  | { kind: 'utgardwall'; gate: boolean; level: number }
+  // A Jötun watchtower at its current level: 2 garrisoned, 1 damaged, 0 taken.
+  | { kind: 'jotuntower'; level: number };
 
 export interface HoverInfo {
   screenX: number;
@@ -668,7 +673,7 @@ export interface HoverInfo {
   subject: HoverSubject;
   // Present whenever the tile belongs to a settlement (building or claimed
   // terrain); absent for unclaimed ground.
-  owner?: { settlementName: string; ownerName: string; mine: boolean };
+  owner?: { settlementName: string; ownerName: string; mine: boolean; /** The owning account, for the friend check of a guarded bridge. */ ownerId?: string };
   // Building stats are only ever populated for the viewer's own buildings —
   // see hoverInfoFor. `premiumLocked` tells HexTooltip.vue to render a gated
   // "Pro" upsell row in their place for a building tile that belongs to
@@ -727,6 +732,8 @@ export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): Hover
           : undefined,
     };
   }
+  if (tile.utgardWall) return { kind: 'utgardwall', gate: tile.utgardWall.isGate, level: tile.utgardWall.level };
+  if (tile.jotunTower) return { kind: 'jotuntower', level: tile.jotunTower.level };
   if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
   const { terrain, isRiver, wasted } = terrainTitleFor(tile, river);
   return { kind: 'terrain', terrain, isRiver, wasted };
@@ -3042,7 +3049,7 @@ export class HexMapRenderer {
     const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
-    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
+    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine, ownerId: owner.ownerId } : undefined;
 
     const subject = hoverSubjectFor(tile, river);
     if (subject.kind === 'building') {
@@ -3077,8 +3084,8 @@ export class HexMapRenderer {
    * See the HoverInfo doc comment: building stats aren't tracked
    * per-building anywhere, so these are derived deterministically from the
    * building's own type/level/neighbours purely so the hover card has
-   * something concrete to show, matching the mockup's "Output +240 food/h /
-   * Workers 8/8" for a farm. The formulas themselves live in
+   * something concrete to show, matching the mockup's "Output +240 food/h"
+   * for a farm. The formulas themselves live in
    * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
   private buildingStats(tile: Tile, level: number): BuildingLevelStats | undefined {
@@ -3204,7 +3211,10 @@ export class HexMapRenderer {
       this.handleClick(e);
       return;
     }
-    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: performance.now() };
+    // The event's own timestamp, not the time this handler runs: on a busy
+    // main thread both taps' events can queue up and be handled long after
+    // the finger lifted, which must not push a real double tap out of the window.
+    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: e.timeStamp };
     if (this.pendingTap && isDoubleTap(this.pendingTap.tap, tap)) {
       this.dropPendingTap();
       const screen = this.clientToCanvas(e.clientX, e.clientY);
@@ -4036,6 +4046,16 @@ export class HexMapRenderer {
           fogPerfStats.terrainDrawnCount++;
           continue;
         }
+      }
+      // An Utgard wall piece or a Jötun watchtower (a wasted island's endgame sites) draws its server-resolved piece and camera at its
+      // current level, on the hex's own ground (the sea end brings its own coastal base).
+      const endgame = endgameDrawTile(tile);
+      if (endgame) {
+        baseEntries.set(key, { texture: baseTextureFor(textures, endgame.tile, endgame.art), coord: c });
+        const siteTop = topTextureFor(textures, endgame.tile, endgame.art);
+        if (siteTop) topEntries.set(key, { texture: siteTop, coord: c, anim: topAnimFor(textures, endgame.tile, endgame.art) });
+        fogPerfStats.terrainDrawnCount++;
+        continue;
       }
       // A wall hex (palisade or gate) draws the piece and camera its wall neighbours decide (palisadeArtFor), on its own ground (on
       // coastal water, the sea end brings its own base). The whole visible region is re-resolved on every rebuild, so a hex whose
@@ -5329,6 +5349,27 @@ export class HexMapRenderer {
     this.camera = { ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
     this.applyCameraTransform();
     this.rebuildAll();
+  }
+
+  /**
+   * Slides the map so everything drawn on it moves (dx, dy) screen px: eased over `durationMs`, or
+   * at once when that is 0. The ring menu uses it to bring a tile near an edge to where its ring
+   * fits as a circle (MapView's onHexClick). False when the camera cannot move (a locked camera).
+   */
+  panScreenBy(dx: number, dy: number, durationMs = 0): boolean {
+    if (!this.app || this.lockCamera) return false;
+    if (dx === 0 && dy === 0) return true;
+    const to = { ...this.camera, x: this.camera.x - dx / this.camera.zoom, y: this.camera.y - dy / this.camera.zoom };
+    this.cameraTouched = true;
+    if (durationMs > 0) {
+      this.animateCameraTo(to, durationMs);
+    } else {
+      this.cameraAnim = null;
+      this.camera = to;
+      this.applyCameraTransform();
+      this.rebuildAll();
+    }
+    return true;
   }
 
   /**

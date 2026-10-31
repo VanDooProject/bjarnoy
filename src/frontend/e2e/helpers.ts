@@ -90,6 +90,21 @@ export async function gotoWorldMap(page: Page): Promise<void> {
 }
 
 /**
+ * Clicks a secondary HUD destination (Leaderboards, Messages, Reports,
+ * Alliance, Docs, Landing) on a desktop-width bar: those entries live in the
+ * avatar's dropdown — the account menu when logged in, the returning-player
+ * menu otherwise — not inline in `.hud-nav`. `label` is the visible row text
+ * (a Reports row may carry an unread count after it). One helper so no spec
+ * has to know where the entries live; phone specs use the drawer instead.
+ */
+export async function clickHudMenuEntry(page: Page, label: string): Promise<void> {
+  const account = page.getByTestId('account-menu-trigger');
+  const trigger = (await account.isVisible()) ? account : page.getByTestId('returning-player-trigger');
+  await trigger.click();
+  await page.locator('.hud-nav [role="menuitem"]', { hasText: label }).click();
+}
+
+/**
  * Clicks the landing page's starter plot and waits for the store to actually
  * hold a settlement. Assumes the landing page is already mounted
  * (`waitForMapReady`). Split out of `foundSettlement` so specs that stop at
@@ -234,7 +249,7 @@ export async function placeGuidedBuildings(page: Page): Promise<void> {
   // specific nearby hex by pixel offset unreliable. __demoWorld is the same
   // test/debug hook main.ts documents for exactly this kind of "drive
   // WorldModel directly" case. placeBuilding itself doesn't enforce
-  // terrain (only the ring UI does — see LandingView's GUIDED_BUILD_TERRAIN),
+  // terrain (only the ring's placement filter does, see useBuildRing),
   // so any nearby empty hex works for either type.
   await page.evaluate(() => {
     const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
@@ -461,37 +476,105 @@ export async function layoutOverflow(page: Page): Promise<{ pageScrollsSideways:
  * aiming at (design handoff "2a" frame 2, right after landfall — the pointer
  * follows the camera via `useMapAnchor`, which writes the hex's screen point
  * into `--anchor-x`/`--anchor-y` on `[data-testid="guidance-pointer"]`) and
- * waits for frame 3's "This one fits {terrain}" chip, the case the chip's
+ * waits for the pointer's first in-ring step ("Open Build", aimed at the Build hub), the case the chip's
  * placement bug was found on. Reads the anchor vars rather than re-deriving
  * the guided hex from `__demoWorld`, since GuidancePointer's own screen math
  * (camera + arrowTipOffset) is exactly where the click needs to land.
  */
+/** Frames `openRingOnGuidedHex` waits for the pointer's anchor to stop moving: well past the 1.4 s founding ease at 60 fps. */
+const GUIDANCE_SETTLE_MAX_FRAMES = 600;
+
 export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
   const pointer = settlement.guidancePointer;
-  const anchor = async (): Promise<string> => {
-    const style = (await pointer.getAttribute('style')) ?? '';
-    const x = style.match(/--anchor-x: (-?[\d.]+)px/)?.[1];
-    const y = style.match(/--anchor-y: (-?[\d.]+)px/)?.[1];
-    return x !== undefined && y !== undefined ? `${x},${y}` : '';
-  };
-  // The anchor follows the camera, which is still easing toward the new settlement right after landfall: a click on
-  // the first anchor it reports can land on the hex the guided one is about to slide away from. Wait until two reads
-  // a moment apart agree, so the click lands where the pointer comes to rest.
-  let previous = '';
-  await expect
-    .poll(
-      async () => {
-        const now = await anchor();
-        const settled = now !== '' && now === previous;
-        previous = now;
-        return settled;
-      },
-      { message: 'guidance pointer never came to rest on an anchor point', intervals: [250] },
-    )
-    .toBe(true);
-  const [x, y] = previous.split(',').map(Number) as [number, number];
+  // The anchor follows the camera: a click on an anchor read mid-ease can land on the hex the guided one is about to
+  // slide away from. Wait in the page until useMapAnchor writes the same point on consecutive animation frames, so the
+  // click lands where the pointer comes to rest. The wait counts frames, not wall time, and takes one round trip.
+  // It used to be an `expect.poll` of two `getAttribute` reads 250 ms apart inside expect's 5 s budget. Under CPU
+  // starvation (8x CDP throttle) a single round trip took up to 4 s, so the second read landed after the deadline
+  // and the test failed with the anchor already at rest (every read in 20 throttled runs returned the same point).
+  const anchor = await pointer.evaluate(async (el, maxFrames) => {
+    const read = (): string => {
+      const x = el.style.getPropertyValue('--anchor-x');
+      const y = el.style.getPropertyValue('--anchor-y');
+      return x && y ? `${parseFloat(x)},${parseFloat(y)}` : '';
+    };
+    let previous = read();
+    for (let frame = 0; frame < maxFrames; frame++) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const now = read();
+      if (now !== '' && now === previous) return now;
+      previous = now;
+    }
+    return null;
+  }, GUIDANCE_SETTLE_MAX_FRAMES);
+  expect(anchor, 'guidance pointer never came to rest on an anchor point').not.toBeNull();
+  const [x, y] = anchor!.split(',').map(Number) as [number, number];
   const box = await settlement.canvasBox();
   await settlement.page.mouse.click(box.x + x, box.y + y);
   await settlement.ring.waitForOpen();
-  await expect(pointer.locator('.chip')).toContainText('fits');
+  await expect(pointer.locator('.chip')).toContainText('Open Build');
+}
+
+/**
+ * A touch double tap at `p` via CDP, sent the way a finger produces it:
+ * all four touch events go out back to back. `page.touchscreen.tap` twice
+ * would wait for the page to acknowledge each event before sending the
+ * next, which on a slow runner spaces the taps seconds apart — far past
+ * the renderer's double-tap window (src/lib/map/doubleTap.ts).
+ */
+export async function doubleTap(page: Page, p: { x: number; y: number }): Promise<void> {
+  const session = await cdpSessionFor(page);
+  const point = [{ x: p.x, y: p.y, id: 0 }];
+  await Promise.all([
+    session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point }),
+    session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }),
+    session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point }),
+    session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }),
+  ]);
+}
+
+/**
+ * Builds `building` through the onboarding's ring on the already-clicked hex, the way a player does: Build hub, then
+ * the category, then the building (the ring is the map's own, see useBuildRing). A phone taps (the first tap on a
+ * building arms it and docks its card, the second commits); desktop clicks with the real pointer.
+ */
+export async function buildThroughOpenRing(settlement: SettlementPage, category: string, building: string): Promise<void> {
+  const ring = settlement.ring;
+  await ring.waitForOpen();
+  const phone = (settlement.page.viewportSize()?.width ?? 1280) <= 768;
+  if (phone) {
+    await ring.action('Build').first().tap();
+    await ring.settledLayer();
+    await ring.category(category).first().tap();
+    await ring.settledLayer();
+    const bubble = ring.child(building).first();
+    await expect(bubble).toBeVisible();
+    await bubble.tap();
+    await bubble.tap();
+    return;
+  }
+  await ring.openBuildCategories();
+  await ring.openCategory(category);
+  await ring.click(ring.child(building).first());
+}
+
+/**
+ * The ring bubble under the guidance arrow's tip, by its accessible name or, for a building bubble, its text (null when the tip is over something else).
+ * The tip is read off the arrow's own polygon through the SVG's screen transform, so it is where the arrow really is
+ * (bob and rotation included), not a re-derivation of GuidancePointer's maths. The arrow is pointer-events: none, so
+ * `elementFromPoint` sees what a finger would hit.
+ */
+export async function bubbleUnderPointerTip(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const polygon = document.querySelector<SVGPolygonElement>('[data-testid="guidance-pointer"] svg polygon');
+    const svg = polygon?.ownerSVGElement;
+    const ctm = polygon?.getScreenCTM();
+    if (!polygon || !svg || !ctm) return null;
+    const point = svg.createSVGPoint();
+    point.x = 75;
+    point.y = 136;
+    const tip = point.matrixTransform(ctm);
+    const hit = document.elementFromPoint(tip.x, tip.y)?.closest('.ring-bubble');
+    return hit ? (hit.getAttribute('aria-label') ?? (hit.textContent ?? '').trim()) : null;
+  });
 }

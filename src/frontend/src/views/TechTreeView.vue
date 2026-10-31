@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
@@ -23,7 +24,26 @@ import { GRAPH_CATEGORY_ORDER, graphCategoryOf } from '../lib/techtree/buildingP
 const catalogue = useBuildingCatalogueStore();
 const { t, te, n, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-onMounted(() => catalogue.load());
+const route = useRoute();
+
+/**
+ * Brings the section named by the URL hash (`/tech-tree#reindeerherder`, the
+ * links BuildingLink.vue makes) into view. The router does no scrolling of its
+ * own and the sections only exist once the catalogue has rendered, so this
+ * waits for them; without it a link into the page would open at the top.
+ */
+async function scrollToHash() {
+  const id = decodeURIComponent(route.hash.slice(1));
+  if (!id) return;
+  await nextTick();
+  document.getElementById(id)?.scrollIntoView({ block: 'start' });
+}
+
+onMounted(async () => {
+  await catalogue.load();
+  await scrollToHash();
+});
+watch([() => route.hash, () => catalogue.types.length], scrollToHash, { flush: 'post' });
 
 function lore(type: string): string {
   const key = `docs.techTree.lore.${type}`;
@@ -430,13 +450,19 @@ function formatAmount(value: number): string {
   align-items: center;
   gap: 16px;
 }
+/* The art box is exactly one full 2:3 canvas tall (plus .floating-art's 10px
+   shadow padding): the showcase picture and the layered base/top render both
+   come from a 2:3 canvas with the tile floor at its bottom, so filling the
+   width bottom-anchored puts the floor on the same line for every level. Any
+   shorter and `max-height` squashes the full-canvas layered render, so the
+   tile jumps where a building's levels switch from one source to the other. */
 .thumb {
   display: flex;
   align-items: flex-end;
   justify-content: center;
   flex: none;
   width: 96px;
-  height: 144px;
+  height: calc(96px * 1.5 + 10px);
   border-radius: 8px;
   cursor: pointer;
 }
@@ -450,7 +476,7 @@ function formatAmount(value: number): string {
 }
 .thumb.large {
   width: 176px;
-  height: 264px;
+  height: calc(176px * 1.5 + 10px);
 }
 .thumb-img {
   max-width: 100%;

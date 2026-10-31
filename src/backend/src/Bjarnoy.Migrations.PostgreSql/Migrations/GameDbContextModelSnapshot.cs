@@ -778,6 +778,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<bool>("IsWasted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("JotunTowers")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -793,6 +797,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("TileCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("UtgardWalls")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");

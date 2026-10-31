@@ -45,6 +45,12 @@ export interface HexQuery {
    * spec gets back — is unchanged.
    */
   reach?: number;
+  /**
+   * Of the matching hexes, the one drawn closest to this canvas point rather
+   * than the first in scan order — for a spec that needs the ring opened at a
+   * particular part of the screen (e.g. low on a phone, above the docked card).
+   */
+  nearest?: ScreenPoint;
 }
 
 /**
@@ -81,8 +87,6 @@ export class SettlementPage {
   readonly banner: Locator;
   /** The completion banner's explicit hand-off to /settlement. */
   readonly continueButton: Locator;
-  /** The ring's persistent "why it's dim" note (RingMenu.vue's `note` prop). */
-  readonly ringNote: Locator;
   /** The profile-mark tooltip that replaces the old nickname modal (ProfileNudge.vue). */
   readonly profileNudge: Locator;
   /** Player logout/login gate: HudNav's authenticated avatar dropdown trigger (only mounted once founded). */
@@ -117,7 +121,6 @@ export class SettlementPage {
     this.checklist = page.getByTestId('onboarding-checklist');
     this.banner = page.getByTestId('onboarding-banner');
     this.continueButton = page.getByTestId('onboarding-continue');
-    this.ringNote = page.getByTestId('ring-note');
     this.profileNudge = page.getByTestId('profile-nudge');
     this.accountMenuTrigger = page.getByTestId('account-menu-trigger');
     this.accountMenu = page.getByTestId('account-menu');
@@ -189,6 +192,8 @@ export class SettlementPage {
       const world = win.__demoWorld();
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       const radius = q.reach ?? world.model.borderRadius(settlement);
+      const renderer = win.__settlementRenderer();
+      let best: { hex: { q: number; r: number }; screen: { x: number; y: number }; d: number } | null = null;
       for (let dq = -radius; dq <= radius; dq++) {
         for (let dr = -radius; dr <= radius; dr++) {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
@@ -199,13 +204,25 @@ export class SettlementPage {
           if (q.terrain !== undefined && tile.terrain !== q.terrain) continue;
           if (q.notTerrain !== undefined && tile.terrain === q.notTerrain) continue;
           if (q.coastalWater && !tile.isCoastalWater) continue;
+          if (q.nearest) {
+            const screen = renderer.hexCenterScreen(at);
+            const d = Math.hypot(screen.x - q.nearest.x, screen.y - q.nearest.y);
+            if (!best || d < best.d) best = { hex: at, screen, d };
+            continue;
+          }
           if (q.withRiver) {
             world.model.setRiverTiles([
               { q: at.q, r: at.r, shape: 'straight', inDirections: [], outDirection: null },
             ]);
           }
-          return { hex: at, screen: win.__settlementRenderer().hexCenterScreen(at) };
+          return { hex: at, screen: renderer.hexCenterScreen(at) };
         }
+      }
+      if (best) {
+        if (q.withRiver) {
+          world.model.setRiverTiles([{ q: best.hex.q, r: best.hex.r, shape: 'straight', inDirections: [], outDirection: null }]);
+        }
+        return { hex: best.hex, screen: best.screen };
       }
       throw new Error(
         `no empty, owned hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
@@ -408,14 +425,6 @@ export class SettlementPage {
       () =>
         (window as unknown as { __demoWorld: () => { hud: { resources: { wood: number; iron: number } } } })
           .__demoWorld().hud.resources,
-    );
-  }
-
-  /** The cosmetic cart shipments a trade acceptance drops onto the world map (issue #46). */
-  listCartShipments(): Promise<unknown[]> {
-    return this.page.evaluate(() =>
-      (window as unknown as { __demoWorld: () => { model: { listCartShipments: () => unknown[] } } })
-        .__demoWorld().model.listCartShipments(),
     );
   }
 

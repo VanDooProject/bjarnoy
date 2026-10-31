@@ -12,12 +12,15 @@ import {
   ravensRings,
   wisdomBuildTimeFactor,
 } from './buildingEconomy';
-import { buildingAllowedOnHex, cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
+import { buildingAllowedOnHex, cropAllowedHere, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
+import type { StandingBridges } from './bridgeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
+import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
+import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
@@ -41,7 +44,7 @@ import {
   type WorldGenerationConstants,
   type WorldSeed,
 } from './worldGenerator';
-import { generateRiversWithBogs } from './riverGenerator';
+import { generateRiversWithBogs, isWideRiverTile } from './riverGenerator';
 import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps, type LakeProp, type LakePropBuilding } from './lakeProps';
 import {
@@ -63,8 +66,8 @@ import {
 
 /**
  * Demo mode's client-only trade offer — mirrors the shape of the backend's
- * `TradeOfferResponse` closely enough that TradePanel.vue can read either
- * with the same template, without actually matching it field-for-field
+ * `TradeOfferResponse` closely enough that the trade UI (removed until trade is
+ * redesigned) could read either with the same template, without actually matching it field-for-field
  * (there's no id-per-poster-settlement notion of a shipment here — see
  * `WorldModel.acceptTradeOffer`'s doc comment for why).
  */
@@ -84,7 +87,7 @@ export interface DemoTradeOffer {
 /**
  * Demo-mode trade rejection, thrown by `WorldModel`'s trade methods —
  * mirrors `ApiError`'s `problem.rejection` closely enough that
- * TradePanel.vue can display both the same way (`err.rejection` here vs
+ * the trade UI (removed until trade is redesigned) could display both the same way (`err.rejection` here vs
  * `err.problem?.rejection` there) without a real HTTP round trip to reject.
  */
 export class DemoTradeError extends Error {
@@ -384,6 +387,8 @@ export class WorldModel {
    * `findLandfall` and the build rule read it without materialising tiles.
    */
   private campByHex = new Map<string, NonNullable<Tile['camp']> & { q: number; r: number }>();
+  /** Utgard wall hexes by hex (see `setUtgardWalls`), kept beside `Tile.utgardWall` so the movement rules read them without materialising tiles. */
+  private utgardWallByHex = new Map<string, NonNullable<Tile['utgardWall']>>();
 
   constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
@@ -1576,6 +1581,7 @@ export class WorldModel {
       'hammerschmiede',
       'palisade',
       'palisadegate',
+      'bridge',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1764,7 +1770,42 @@ export class WorldModel {
           : '';
       standing.set(key, { gate: wall.gate, owner });
     }
+    // The jötnar's Utgard walls block under a fixed owner key that is nobody's friend (a breached level-0 hex is passable).
+    for (const [key, wall] of this.utgardWallByHex) {
+      if (wall.level < 1) continue;
+      standing.set(key, { gate: wall.isGate, owner: JOTNAR_OWNER_KEY });
+    }
     return standing;
+  }
+
+  private bridgeCache: { revision: number; bridges: StandingBridges } | null = null;
+
+  /**
+   * The standing bridges (level 1 or more; a foundation does not open the river) as the movement rules take them, each with its owner
+   * (the account that holds the settlement the hex belongs to, like `standingPalisadeWalls`). Same shape as the backend's `BridgeIndex`.
+   */
+  standingBridges(): StandingBridges {
+    if (this.bridgeCache?.revision === this.wallRevision) return this.bridgeCache.bridges;
+    const bridges = new Map<string, { level: number; owner: string }>();
+    for (const tile of this.storedTiles()) {
+      if (tile.buildingType !== 'bridge' || (tile.buildingLevel ?? 1) < 1) continue;
+      const owner = tile.ownerId ? (this.settlements.get(tile.ownerId)?.ownerId ?? tile.ownerId) : '';
+      bridges.set(coordKey(tile), { level: tile.buildingLevel ?? 1, owner });
+    }
+    this.bridgeCache = { revision: this.wallRevision, bridges };
+    return bridges;
+  }
+
+  /**
+   * Whether a bridge may stand on the river hex `at`, beyond what `riverBuildingAllowedHere` and `buildingAllowedOnHex` already say
+   * (shape and ground): the tile has to be a wide river (`isWideRiverTile`, the twin of the backend's `RiverIndex.IsWide`), since a
+   * stream is crossed anyway (`BuildRejection.BridgeNeedsWideRiver`), and the island must not be wasted.
+   */
+  bridgePlacement(at: AxialCoord): { ok: true } | { ok: false; reason: 'notWide' | 'wasted' } {
+    if (this.getTile(at.q, at.r).wasted) return { ok: false, reason: 'wasted' };
+    const river = this.getRiverTile(at.q, at.r);
+    if (!river || !isWideRiverTile(river, (c) => this.getRiverTile(c.q, c.r))) return { ok: false, reason: 'notWide' };
+    return { ok: true };
   }
 
   /**
@@ -1817,6 +1858,8 @@ export class WorldModel {
     // A wildlife camp hex is not buildable while the camp stands guarded; a cleared
     // (empty) camp is, except Fenrir's brood (matches BuildRejection.HexOccupiedByCamp).
     if (tile.camp && !campHexBuildable(tile.camp)) return false;
+    // An Utgard wall (rubble included) or a Jötun watchtower is never buildable (matches BuildRejection.HexOccupiedByEndgameSite).
+    if (tile.utgardWall || tile.jotunTower) return false;
     // Every other building needs dry land; the fishing hut, dockyard and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
@@ -1825,6 +1868,8 @@ export class WorldModel {
     // shore, and nothing stands on a lake or on bog it has no business on (matches BuildingDefinition.AllowsHex).
     if (!type || !buildingAllowedOnHex(type, tile)) return false;
     if (tile.buildingType) return false;
+    // A type switched off for placement (the Quarry) is never placed anew (matches BuildRejection.NewPlacementDisabled).
+    if (newPlacementDisabled(type)) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes (and, for the Sawmill, only some variants — see
     // ringCatalogue.ts's EXCLUDED_VARIANTS_BY_TYPE) have a matching river-
@@ -1862,6 +1907,8 @@ export class WorldModel {
     // A wall hex must keep every wall hex drawable (matches BuildRejection.PalisadeWouldBranch/GateNotOnStraight and the terrain
     // refusals): no branch, a gate only on a straight, no river, the sea end on exactly one land wall.
     if ((type === 'palisade' || type === 'palisadegate') && !this.palisadePlacement(at, type === 'palisadegate').ok) return false;
+    // A bridge only spans a wide river on ground that is not wasted (matches BuildRejection.BridgeNeedsWideRiver / TerrainNotAllowed).
+    if (type === 'bridge' && !this.bridgePlacement(at).ok) return false;
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;
@@ -2064,6 +2111,59 @@ export class WorldModel {
         orientation: p.orientation ?? this.getTile(p.coord.q, p.coord.r).orientation ?? 'SE',
       })),
     );
+
+    // Utgard's wall rings and the Jötun watchtowers (a wasted island with Utgard only), after giants and camps — the backend's
+    // own order (`WorldGenerator.Generate`).
+    if (wasted) {
+      const sites = placeEndgame(
+        islandTiles,
+        (c) => this.terrainOf(c.q, c.r),
+        isRiver,
+        placements.map((p) => ({ anchor: p.anchor, family: p.family })),
+        new Set(campPlacements.map((p) => coordKey(p.coord))),
+        worldSeed,
+        islandIndex,
+      );
+      this.setUtgardWalls(
+        sites.walls.map((w) => ({ coord: w.coord, ring: w.ring, piece: w.piece, dir: w.dir, isGate: w.isGate, level: w.level })),
+      );
+      this.setJotunTowers(
+        sites.towers.map((coord) => ({ coord, orientation: this.getTile(coord.q, coord.r).orientation ?? 'SE', level: 2 })),
+      );
+    }
+  }
+
+  /**
+   * Tags each Utgard wall hex with `Tile.utgardWall`. Live mode feeds it the server's authoritative walls
+   * (`IslandResponse.utgardWalls`); demo mode feeds it `placeEndgame` output. Unlike `setCamps` a repeat call overwrites: a wall's
+   * level changes as it is breached. Returns whether anything changed, so a caller only forces a redraw for a real change.
+   */
+  setUtgardWalls(
+    walls: { coord: AxialCoord; ring: 'inner' | 'outer'; piece: PalisadePiece; dir: TileOrientation; isGate: boolean; level: number }[],
+  ): boolean {
+    let changed = false;
+    for (const wall of walls) {
+      const key = coordKey(wall.coord);
+      const next = { ring: wall.ring, piece: wall.piece, dir: wall.dir, isGate: wall.isGate, level: wall.level };
+      const known = this.utgardWallByHex.get(key);
+      if (known && JSON.stringify(known) === JSON.stringify(next)) continue;
+      this.getTile(wall.coord.q, wall.coord.r).utgardWall = next;
+      this.utgardWallByHex.set(key, next);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Tags each Jötun watchtower hex with `Tile.jotunTower` (live: `IslandResponse.jotunTowers`; demo: `placeEndgame`). Overwrites, like `setUtgardWalls`. */
+  setJotunTowers(towers: { coord: AxialCoord; orientation: TileOrientation; level: number }[]): boolean {
+    let changed = false;
+    for (const tower of towers) {
+      const tile = this.getTile(tower.coord.q, tower.coord.r);
+      if (tile.jotunTower?.orientation === tower.orientation && tile.jotunTower.level === tower.level) continue;
+      tile.jotunTower = { orientation: tower.orientation, level: tower.level };
+      changed = true;
+    }
+    return changed;
   }
 
   /**

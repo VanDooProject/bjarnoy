@@ -30,6 +30,7 @@
     "odinstatue": "Odin-Statue",
     "palisade": "Palisade",
     "palisadegate": "Palisaden-Tor",
+    "bridge": "Brücke",
     "reindeerherder": "Rentierhirte"
   },
   "units": {
@@ -207,5 +208,10 @@
       "adult": "Otter",
       "alpha": "Alter Otter"
     }
+  },
+  "endgame": {
+    "utgardwall": "Utgardmauer",
+    "utgardgate": "Utgardtor",
+    "jotunwatchtower": "Jötunn-Wachturm"
   }
 }

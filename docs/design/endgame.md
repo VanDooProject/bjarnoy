@@ -177,10 +177,7 @@ The in-game docs page (`/docs/wasted-lands`, section "How the endgame plays"):
 ![Jötnar and garrison tables, German](img/endgame/docs_tables_de.png)
 ![Garrison tables on a phone, scrolling sideways](img/endgame/docs_tables_mobile.png)
 
-Siege against a player's palisade (step 2b), live mode:
+The map (step 2a), demo mode on a wasted island:
 
-![A rival's palisade on the map](img/endgame/siege_rival_walls.png)
-![The Siege action on the palisade's ring menu](img/endgame/siege_ring.png)
-![The siege dispatch panel with rams](img/endgame/siege_dispatch.png)
-![The army besieging](img/endgame/siege_besieging.png)
-![The battle report: palisade breached](img/endgame/siege_report.png)
+![Utgard with its inner and outer wall rings](img/endgame/map_utgard_walls.png)
+![A garrisoned jötun watchtower](img/endgame/map_jotun_tower.png)

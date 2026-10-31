@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Movement;
+using Bjarnoy.Domain.Palisades;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
@@ -255,7 +256,9 @@ public sealed record IslandResponse(
     IReadOnlyList<GiantResponse> Giants,
     bool Wasted,
     IReadOnlyList<CampResponse> Camps,
-    IReadOnlyList<BogTileResponse> BogTiles)
+    IReadOnlyList<BogTileResponse> BogTiles,
+    IReadOnlyList<UtgardWallResponse> UtgardWalls,
+    IReadOnlyList<JotunTowerResponse> JotunTowers)
 {
     public static IslandResponse From(IslandEntity island)
     {
@@ -273,8 +276,45 @@ public sealed record IslandResponse(
             [.. island.Giants.Select(GiantResponse.From)],
             island.IsWasted,
             [.. island.Camps.Select(CampResponse.From)],
-            [.. island.BogTiles.Select(BogTileResponse.From)]);
+            [.. island.BogTiles.Select(BogTileResponse.From)],
+            [.. island.UtgardWalls.Select(UtgardWallResponse.From)],
+            [.. island.JotunTowers.Select(JotunTowerResponse.From)]);
     }
+}
+
+/// <summary>
+/// One hex of an Utgard wall ring — see <see cref="Bjarnoy.Domain.World.UtgardWall"/> and <c>docs/design/endgame.md</c>.
+/// Ships with the wasted island, so it stays hidden until the endboss triggers like the island itself.
+/// </summary>
+/// <param name="Ring"><c>inner</c> or <c>outer</c>.</param>
+/// <param name="Piece">
+/// The wall piece: <c>straight180</c>, <c>bend60</c>, <c>bend120</c>, <c>gate180</c>, <c>end</c> or <c>end_coast</c> (a sea hex);
+/// the atlas family is <c>utgardwall_&lt;piece&gt;</c>.
+/// </param>
+/// <param name="Orientation">The art file's camera wire name.</param>
+/// <param name="Level">2 full, 1 damaged, 0 breached rubble.</param>
+public sealed record UtgardWallResponse(int Q, int R, string Ring, string Piece, string Orientation, bool IsGate, int Level)
+{
+    public static UtgardWallResponse From(UtgardWallRecord wall) => FromDomain(new UtgardWall(
+        new HexCoord(wall.Q, wall.R), (UtgardRing)wall.Ring, (PalisadePiece)wall.Piece, (TileOrientation)wall.Dir, wall.IsGate, wall.Level));
+
+    public static UtgardWallResponse FromDomain(UtgardWall wall) => new(
+        wall.Coord.Q,
+        wall.Coord.R,
+        wall.Ring == UtgardRing.Inner ? "inner" : "outer",
+        PalisadeRules.FamilyOf(wall.Piece)["palisade_".Length..],
+        wall.Dir.ToWireName(),
+        wall.IsGate,
+        wall.Level);
+}
+
+/// <summary>A Jötun watchtower — see <see cref="Bjarnoy.Domain.World.JotunTower"/>. Hidden with its wasted island until the endboss triggers.</summary>
+/// <param name="Orientation">The tile's own orientation wire name.</param>
+public sealed record JotunTowerResponse(int Q, int R, string Orientation)
+{
+    public static JotunTowerResponse From(JotunTowerRecord tower) => new(tower.Q, tower.R, ((TileOrientation)tower.Orientation).ToWireName());
+
+    public static JotunTowerResponse FromDomain(JotunTower tower) => new(tower.Coord.Q, tower.Coord.R, tower.Orientation.ToWireName());
 }
 
 /// <summary>

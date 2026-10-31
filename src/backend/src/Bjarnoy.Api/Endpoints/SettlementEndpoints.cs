@@ -777,6 +777,7 @@ public static class SettlementEndpoints
         BuildRejection.HexNotInSettlement => "That hex is outside the settlement's borders.",
         BuildRejection.HexOccupiedByGiant => "That hex is part of a giant feature and can never be built on.",
         BuildRejection.HexOccupiedByCamp => "A wildlife camp stands on that hex and it cannot be built on.",
+        BuildRejection.HexOccupiedByEndgameSite => "An Utgard wall or a jötun watchtower stands on that hex and it cannot be built on.",
         BuildRejection.HexOccupied => "Another building already stands there.",
         BuildRejection.NotEnoughResources =>
             "Not enough resources (some may be reserved for queued construction).",
@@ -798,6 +799,9 @@ public static class SettlementEndpoints
             "A wall never branches: that hex would leave a wall hex with three or more wall neighbours.",
         BuildRejection.GateNotOnStraight =>
             "A gate only stands between two opposite wall hexes, so the wall stays straight through it.",
+        BuildRejection.NewPlacementDisabled => "That building can no longer be built; existing ones keep working.",
+        BuildRejection.BridgeNeedsWideRiver =>
+            "A bridge only spans a wide river crossing: streams can be waded and other river tiles take no bridge.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",

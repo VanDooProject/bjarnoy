@@ -14,6 +14,7 @@ import { placeLakeProps } from './lakeProps';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { BogTile, RiverTile } from './types';
+import { JOTNAR_OWNER_KEY } from './endgamePlacement';
 
 function foundLandedSettlement(model: WorldModel) {
   const at = model.findLandfall({ q: 0, r: 0 });
@@ -1895,6 +1896,20 @@ describe('WorldModel bog buildings', () => {
     }
   });
 
+  it('refuses a new quarry even on a mountain hex inside the realm (new placement is switched off)', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
+    const free = hexesInRadius(at, 2).find((c) => {
+      const tile = model.getTile(c.q, c.r);
+      return tile.terrain === 'grass' && !tile.buildingType && !tile.giant && !tile.camp;
+    })!;
+    expect(free).toBeDefined();
+    model.getTile(free.q, free.r).terrain = 'mountain';
+    expect(model.placeBuilding(settlement.id, free, 'quarry')).toBe(false);
+    expect(model.getTile(free.q, free.r).buildingType).toBeUndefined();
+  });
+
   it('no longer builds the Clay Brickworks on grass', () => {
     const model = new WorldModel(DEMO_SEED);
     const at = model.findLandfall({ q: 0, r: 0 })!;
@@ -2146,6 +2161,155 @@ describe('WorldModel palisade and gate', () => {
 
     expect(model.wallNeighbourFlags(line[0]!).filter(Boolean)).toHaveLength(0);
     expect(model.standingPalisadeWalls().size).toBe(1);
+  });
+});
+
+describe('WorldModel Utgard walls and Jötun watchtowers', () => {
+  const wall = (q: number, r: number, level: number, extra: { isGate?: boolean; piece?: 'straight180' | 'gate180' | 'end_coast' } = {}) => ({
+    coord: { q, r },
+    ring: 'inner' as const,
+    piece: extra.piece ?? ('straight180' as const),
+    dir: 'NW' as const,
+    isGate: extra.isGate ?? false,
+    level,
+  });
+
+  it('tags the hexes and reports a change only when something moved', () => {
+    const model = new WorldModel(1);
+    expect(model.setUtgardWalls([wall(5, 5, 2), wall(6, 5, 1)])).toBe(true);
+    expect(model.getTile(5, 5).utgardWall).toEqual({ ring: 'inner', piece: 'straight180', dir: 'NW', isGate: false, level: 2 });
+    expect(model.setUtgardWalls([wall(5, 5, 2)])).toBe(false);
+    // A breach lowers the level on the same hex.
+    expect(model.setUtgardWalls([wall(5, 5, 0)])).toBe(true);
+    expect(model.getTile(5, 5).utgardWall?.level).toBe(0);
+
+    expect(model.setJotunTowers([{ coord: { q: 9, r: 9 }, orientation: 'NE', level: 2 }])).toBe(true);
+    expect(model.getTile(9, 9).jotunTower).toEqual({ orientation: 'NE', level: 2 });
+    expect(model.setJotunTowers([{ coord: { q: 9, r: 9 }, orientation: 'NE', level: 2 }])).toBe(false);
+  });
+
+  it('hands the movement rules only standing walls, under the jötnar owner key, gates included', () => {
+    const model = new WorldModel(1);
+    model.setUtgardWalls([wall(5, 5, 2), wall(6, 5, 1, { isGate: true, piece: 'gate180' }), wall(7, 5, 0)]);
+
+    const standing = model.standingPalisadeWalls();
+
+    expect([...standing.keys()].sort()).toEqual(['5,5', '6,5']);
+    expect(standing.get('5,5')).toEqual({ gate: false, owner: JOTNAR_OWNER_KEY });
+    expect(standing.get('6,5')).toEqual({ gate: true, owner: JOTNAR_OWNER_KEY });
+  });
+
+  it('refuses to build on a wall (rubble included) or a watchtower hex, claimed or not', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
+    const free = hexesInRadius(at, model.borderRadius(settlement)).filter((c) => {
+      const tile = model.getTile(c.q, c.r);
+      return tile.ownerId === settlement.id && tile.terrain === 'grass' && !tile.buildingType && !model.getRiverTile(c.q, c.r);
+    });
+    const [onWall, onRubble, onTower, elsewhere] = free.slice(0, 4) as [AxialCoord, AxialCoord, AxialCoord, AxialCoord];
+    model.setUtgardWalls([wall(onWall.q, onWall.r, 2), wall(onRubble.q, onRubble.r, 0)]);
+    model.setJotunTowers([{ coord: onTower, orientation: 'SE', level: 2 }]);
+
+    expect(model.placeBuilding(settlement.id, onWall, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, onRubble, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, onTower, 'hut')).toBe(false);
+    expect(model.placeBuilding(settlement.id, elsewhere, 'hut')).toBe(true);
+  });
+});
+
+describe('WorldModel bridge', () => {
+  /** A settlement and one free owned grass hex to put a river on. */
+  function bridgeSetting() {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass' && model.getTile(c.q, c.r).buildingType === undefined);
+    return { model, settlement, grass };
+  }
+  const river = (at: AxialCoord, shape: RiverTile['shape'], width: RiverTile['width'], inDirections: RiverTile['inDirections'], outDirection: RiverTile['outDirection']): RiverTile => ({
+    q: at.q, r: at.r, shape, width, inDirections, outDirection,
+  });
+
+  it.each(['straight', 'bend', 'bend60'] as const)('places a bridge on a wide %s river hex', (shape) => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, shape, 'river', ['W'], shape === 'straight' ? 'E' : 'SE')]);
+
+    expect(model.bridgePlacement(grass)).toEqual({ ok: true });
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(true);
+    expect(model.getTile(grass.q, grass.r).buildingType).toBe('bridge');
+  });
+
+  it('refuses a bridge on a river hex that is not wide (a river that has only just begun)', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, 'straight', 'river', [], 'E')]);
+
+    expect(model.bridgePlacement(grass)).toEqual({ ok: false, reason: 'notWide' });
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+    expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
+  });
+
+  it('refuses a bridge on a stream, whatever its shape', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, 'straight', 'stream', ['W'], 'E')]);
+
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+  });
+
+  it.each(['spring', 'confluence', 'mouth'] as const)('refuses a bridge on a %s river tile', (shape) => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, shape, 'river', ['W', 'NW'], 'E')]);
+
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+  });
+
+  it('refuses a bridge on dry land with no river', () => {
+    const { model, settlement, grass } = bridgeSetting();
+
+    expect(model.bridgePlacement(grass)).toEqual({ ok: false, reason: 'notWide' });
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+  });
+
+  it('refuses a bridge on a wasted island', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, 'straight', 'river', ['W'], 'E')]);
+    model.getTile(grass.q, grass.r).wasted = true;
+
+    expect(model.bridgePlacement(grass)).toEqual({ ok: false, reason: 'wasted' });
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(false);
+  });
+
+  it('hands the pathfinder only standing bridges (a level-0 foundation does not open the river), each with its level and owner', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    const second = neighbors(grass)[0]!;
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [
+        { q: grass.q, r: grass.r, type: 'bridge', level: 3 },
+        { q: second.q, r: second.r, type: 'bridge', level: 0 },
+      ],
+    });
+
+    expect(model.getTile(second.q, second.r).buildingType).toBe('bridge');
+    expect(model.getTile(second.q, second.r).buildingLevel).toBe(0);
+    const standing = model.standingBridges();
+    expect([...standing.keys()]).toEqual([`${grass.q},${grass.r}`]);
+    expect(standing.get(`${grass.q},${grass.r}`)).toEqual({ level: 3, owner: settlement.ownerId });
+  });
+
+  it('forgets a bridge that is razed', () => {
+    const { model, settlement, grass } = bridgeSetting();
+    model.setRiverTiles([river(grass, 'straight', 'river', ['W'], 'E')]);
+    expect(model.placeBuilding(settlement.id, grass, 'bridge')).toBe(true);
+    expect(model.standingBridges().size).toBe(1);
+
+    expect(model.razeBuilding(settlement.id, grass)).toBe(true);
+
+    expect(model.standingBridges().size).toBe(0);
   });
 });
 

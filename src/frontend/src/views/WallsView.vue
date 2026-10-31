@@ -6,6 +6,8 @@ import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
+import { useDocsAdminNotes } from '../composables/useDocsAdminNotes';
 import WallExample from '../components/docs/WallExample.vue';
 import WallMovementDiagram from '../components/docs/WallMovementDiagram.vue';
 import WallPiece from '../components/docs/WallPiece.vue';
@@ -13,6 +15,7 @@ import { findAtlasFrame } from '../lib/map/atlas';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import { PALISADE_PIECES, WALL_GROUNDS, usePieceStages } from '../lib/docs/palisadeDocs';
+import { WALL_SIEGE } from '../lib/docs/wallSiegeDocs';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -41,13 +44,15 @@ function stageLabel(stage: number): string {
 
 const straightStage = computed(() => stageOf('straight180'));
 
-const tocLinks = [
+const { visible: adminNotes } = useDocsAdminNotes();
+const tocLinks = computed(() => [
   ...PIECES.map((p) => ({ href: `#${p.id}`, label: t(`docs.walls.pieces.${p.key}.name`) })),
   { href: '#choosing', label: t('docs.walls.choosing.heading') },
   { href: '#where', label: t('docs.walls.where.heading') },
   { href: '#movement', label: t('docs.walls.movement.heading') },
-  { href: '#not-built', label: t('docs.walls.notBuilt.heading') },
-];
+  { href: '#sieges', label: t('docs.walls.sieges.heading') },
+  ...(adminNotes.value ? [{ href: '#not-built', label: t('docs.walls.notBuilt.heading') }] : []),
+]);
 </script>
 
 <template>
@@ -124,10 +129,22 @@ const tocLinks = [
       <WallMovementDiagram />
     </section>
 
-    <section id="not-built" class="block">
+    <section id="sieges" class="block">
+      <h2>{{ $t('docs.walls.sieges.heading') }}</h2>
+      <p class="group-body">{{ $t('docs.walls.sieges.body') }}</p>
+      <ul class="rules">
+        <li>{{ $t('docs.walls.sieges.rules.who') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.target') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.level', { levels: WALL_SIEGE.levels }) }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.gone') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.rebuild') }}</li>
+      </ul>
+    </section>
+
+    <DocsAdminNote id="not-built" as="section" class="block">
       <h2>{{ $t('docs.walls.notBuilt.heading') }}</h2>
       <p class="group-body">{{ $t('docs.walls.notBuilt.body') }}</p>
-    </section>
+    </DocsAdminNote>
   </DocsPageLayout>
 </template>
 

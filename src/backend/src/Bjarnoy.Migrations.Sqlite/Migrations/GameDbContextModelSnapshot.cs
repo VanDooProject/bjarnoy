@@ -773,6 +773,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<bool>("IsWasted")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("JotunTowers")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -788,6 +792,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("TileCount")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("UtgardWalls")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");

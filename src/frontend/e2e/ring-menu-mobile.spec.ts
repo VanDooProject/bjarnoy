@@ -30,7 +30,9 @@ for (const layout of LAYOUTS) {
       await settlement.clickHex(target);
       await settlement.ring.waitForOpen();
       await settlement.ring.action('Build').first().tap();
+      await settlement.ring.settledLayer();
       await settlement.ring.category('Resource').first().tap();
+      await settlement.ring.settledLayer();
       const herder = settlement.ring.child('Reindeer Herder').first();
       await expect(herder).toBeVisible();
       return herder;
@@ -112,5 +114,78 @@ for (const layout of LAYOUTS) {
       await upgrade.tap();
       await expect.poll(() => settlement.longhouseBuildingLevel(), { timeout: 5_000 }).toBe(levelBefore + 1);
     });
+  });
+}
+
+// Reported on a 412x915 Android phone: drilled into Build on a hex low on the screen, the six categories and
+// ‹ BACK opened as one straight row wider than the screen, the last one clipped. The ring is a circle round its
+// hex, always: where none fits, the map slides the hex to where one does first.
+for (const viewport of [
+  { width: 360, height: 740 },
+  { width: 390, height: 844 },
+  { width: 412, height: 915 },
+]) {
+  test.describe(`ring menu on a ${viewport.width}x${viewport.height} phone`, { tag: '@g3' }, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    // Just above the docked card strip, where the categories used to line up; and under the strip, where no circle
+    // fits at all, so the map slides the hex up first.
+    for (const low of [
+      { where: 'just above the docked card', fromBottom: 274, slides: false },
+      { where: 'under the docked card, sliding the map up', fromBottom: 170, slides: true },
+    ]) {
+      test(`the build categories open on a circle round a hex ${low.where}, inside the screen`, async ({ page }) => {
+        test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+        const settlement = await SettlementPage.found(page);
+        // The realm starts centred, so drag the map the way a player would to bring one of its hexes down there.
+        const spot = { x: viewport.width / 2, y: viewport.height - low.fromBottom };
+        const first = await settlement.findHex({ terrain: 'grass', nearest: spot });
+        const box = await settlement.canvasBox();
+        const from = { x: box.x + viewport.width / 2, y: box.y + 200 };
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(from.x + (spot.x - first.screen.x), from.y + (spot.y - first.screen.y), { steps: 8 });
+        await page.mouse.up();
+        const target = await settlement.findHex({ terrain: 'grass', nearest: spot });
+        await settlement.clickHex(target);
+        await settlement.ring.waitForOpen();
+        await settlement.ring.action('Build').first().tap();
+        await expect(settlement.ring.backBubble).toBeVisible();
+        await expect(settlement.ring.backdrop).not.toHaveAttribute('data-swapping');
+
+        // One round trip: the hub, the inner lane's bubbles, and where the tapped hex is drawn now (the map may
+        // have slid it to where a circle fits).
+        const { hub, boxes, hex } = await page.evaluate((at) => {
+          const rect = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return { x: r.x, y: r.y, w: r.width, h: r.height };
+          };
+          const renderer = (
+            window as unknown as { __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } } }
+          ).__settlementRenderer();
+          const canvas = document.querySelector('canvas')!.getBoundingClientRect();
+          const centre = renderer.hexCenterScreen(at);
+          return {
+            hub: rect(document.querySelector('.ring-hub')!),
+            boxes: [...document.querySelectorAll('.ring-bubble:not(.child)')].map(rect),
+            hex: { x: canvas.x + centre.x, y: canvas.y + centre.y },
+          };
+        }, target.hex);
+        expect(boxes.length).toBeGreaterThanOrEqual(4);
+        const hubCentre = { x: hub.x + hub.w / 2, y: hub.y + hub.h / 2 };
+        // The hub sits on its hex, wherever the map put it.
+        expect(Math.hypot(hubCentre.x - hex.x, hubCentre.y - hex.y), JSON.stringify({ hubCentre, hex })).toBeLessThan(3);
+        if (low.slides) expect(hubCentre.y, `slid up from ${target.screen.y}`).toBeLessThan(target.screen.y - 24);
+        // Every category (and ‹ BACK) the same distance from the hub: a circle, not a row.
+        const radii = boxes.map((b) => Math.hypot(b.x + b.w / 2 - hubCentre.x, b.y + b.h / 2 - hubCentre.y));
+        expect(Math.max(...radii) - Math.min(...radii), `radii ${radii.map(Math.round).join(', ')}`).toBeLessThan(1.5);
+        for (const b of boxes) {
+          expect(b.x, JSON.stringify(b)).toBeGreaterThanOrEqual(0);
+          expect(b.y, JSON.stringify(b)).toBeGreaterThanOrEqual(0);
+          expect(b.x + b.w, JSON.stringify(b)).toBeLessThanOrEqual(viewport.width);
+          expect(b.y + b.h, JSON.stringify(b)).toBeLessThanOrEqual(viewport.height);
+        }
+      });
+    }
   });
 }
