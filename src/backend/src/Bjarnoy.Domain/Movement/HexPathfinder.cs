@@ -200,11 +200,12 @@ public static class HexPathfinder
     /// (its home harbor) and <paramref name="to"/> (an
     /// <see cref="Armies.ArmyMission.Attack"/>/<see cref="Armies.ArmyMission.Support"/>
     /// target's centre) are exempt from the sea-only rule — the search still
-    /// requires every hex in between to be real open sea, so a fleet with no
-    /// adjacent sea at all (impossible in practice — issue #40 phase 6 §4
-    /// requires a coastal settlement to train ships in the first place) or a
-    /// target with no shoreline hex to beach on (see
-    /// <see cref="World.Shoreline"/>) still fails to find a route.
+    /// requires every hex in between to be real open sea, so a start with no
+    /// adjacent sea at all or a target with no shoreline hex to beach on (see
+    /// <see cref="World.Shoreline"/>) still fails to find a route. Training
+    /// ships only checks that the settlement's claim touches the shore, so a
+    /// fleet does not necessarily start from the settlement's centre: it starts
+    /// from the settlement's harbour hex (<see cref="Armies.Army.FleetAnchor(HexCoord, IEnumerable{Buildings.PlacedBuilding}, Func{HexCoord, Terrain})"/>).
     /// </param>
     /// <param name="isRiver">
     /// Optional river-tile lookup (issue #159 part A) — a land unit's step
