@@ -5,6 +5,9 @@ import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
+import LandMovementExample from '../components/docs/LandMovementExample.vue';
+import { useDocsAdminNotes } from '../composables/useDocsAdminNotes';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { terrainName, unitName } from '../i18n/catalogueNames';
@@ -29,6 +32,8 @@ import {
 const { t, n, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const units = useUnitCatalogueStore();
 onMounted(() => units.load());
+// The ground costs are the admin's numbers: players read the rules and the example, and see times, not costs.
+const { visible: adminNotes } = useDocsAdminNotes();
 
 
 /** The columns of the pace table: each ground an army can walk, with its cost. */
@@ -56,7 +61,7 @@ const slowest = computed(() => {
 });
 
 const tocLinks = computed(() =>
-  ['cost', 'bridges', 'pace', 'food', 'road', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
+  ['example', 'cost', 'bridges', 'pace', 'food', 'road', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
 );
 </script>
 
@@ -64,41 +69,50 @@ const tocLinks = computed(() =>
   <DocsPageLayout class="land-movement" :title="$t('docs.landMovement.title')" caption="DOCS · LAND MOVEMENT" :intro="$t('docs.landMovement.intro')">
     <DocsToc :links="tocLinks" />
 
+    <section id="example" class="block">
+      <h2>{{ $t('docs.landMovement.example.heading') }}</h2>
+      <p class="text">{{ $t('docs.landMovement.example.intro') }}</p>
+      <LandMovementExample />
+    </section>
+
     <section id="cost" class="block">
       <h2>{{ $t('docs.landMovement.cost.heading') }}</h2>
       <p class="text">{{ $t('docs.landMovement.cost.body') }}</p>
-      <div class="table-scroll">
-        <table data-testid="ground-table">
-          <thead>
-            <tr>
-              <th>{{ $t('docs.landMovement.cost.columns.ground') }}</th>
-              <th>{{ $t('docs.landMovement.cost.columns.cost') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="g in GROUND_COSTS" :key="g.terrain" :data-ground="g.terrain">
-              <th scope="row" class="name">{{ terrainName(g.terrain) }}</th>
-              <td class="value">{{ n(g.cost) }}</td>
-            </tr>
-            <tr data-ground="stream">
-              <th scope="row" class="name">{{ $t('docs.landMovement.cost.stream') }}</th>
-              <td class="value">{{ n(STREAM_COST) }} <span class="muted">{{ $t('docs.landMovement.cost.streamNote') }}</span></td>
-            </tr>
-            <tr data-ground="wallEnd">
-              <th scope="row" class="name">{{ $t('docs.landMovement.cost.wallEnd') }}</th>
-              <td class="value">{{ $t('docs.landMovement.cost.surcharge', { n: n(WALL_END_COST) }) }} <span class="muted">{{ $t('docs.landMovement.cost.wallEndNote') }}</span></td>
-            </tr>
-            <tr v-for="id in ['mountain', 'sea', 'lake'] as const" :key="id" :data-ground="id">
-              <th scope="row" class="name">{{ terrainName(id) }}</th>
-              <td class="blocked">{{ $t('docs.landMovement.cost.blocked') }}</td>
-            </tr>
-            <tr data-ground="wideRiver">
-              <th scope="row" class="name">{{ $t('docs.landMovement.cost.wideRiver') }}</th>
-              <td class="blocked">{{ $t('docs.landMovement.cost.wideRiverBridge') }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <p class="text">{{ $t('docs.landMovement.cost.summary') }}</p>
+      <DocsAdminNote>
+        <div class="table-scroll">
+          <table data-testid="ground-table">
+            <thead>
+              <tr>
+                <th>{{ $t('docs.landMovement.cost.columns.ground') }}</th>
+                <th>{{ $t('docs.landMovement.cost.columns.cost') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="g in GROUND_COSTS" :key="g.terrain" :data-ground="g.terrain">
+                <th scope="row" class="name">{{ terrainName(g.terrain) }}</th>
+                <td class="value">{{ n(g.cost) }}</td>
+              </tr>
+              <tr data-ground="stream">
+                <th scope="row" class="name">{{ $t('docs.landMovement.cost.stream') }}</th>
+                <td class="value">{{ n(STREAM_COST) }} <span class="muted">{{ $t('docs.landMovement.cost.streamNote') }}</span></td>
+              </tr>
+              <tr data-ground="wallEnd">
+                <th scope="row" class="name">{{ $t('docs.landMovement.cost.wallEnd') }}</th>
+                <td class="value">{{ $t('docs.landMovement.cost.surcharge', { n: n(WALL_END_COST) }) }} <span class="muted">{{ $t('docs.landMovement.cost.wallEndNote') }}</span></td>
+              </tr>
+              <tr v-for="id in ['mountain', 'sea', 'lake'] as const" :key="id" :data-ground="id">
+                <th scope="row" class="name">{{ terrainName(id) }}</th>
+                <td class="blocked">{{ $t('docs.landMovement.cost.blocked') }}</td>
+              </tr>
+              <tr data-ground="wideRiver">
+                <th scope="row" class="name">{{ $t('docs.landMovement.cost.wideRiver') }}</th>
+                <td class="blocked">{{ $t('docs.landMovement.cost.wideRiverBridge') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </DocsAdminNote>
       <i18n-t keypath="docs.landMovement.cost.walls" tag="p" class="text" scope="global">
         <template #walls>
           <DocsPageLink to="/docs/walls">{{ $t('docs.landMovement.cost.wallsLink') }}</DocsPageLink>
@@ -163,19 +177,23 @@ const tocLinks = computed(() =>
             <tr>
               <th>{{ $t('docs.landMovement.pace.columns.unit') }}</th>
               <th>{{ $t('docs.landMovement.pace.columns.speed') }}</th>
-              <th v-for="c in columns" :key="c.id">{{ c.id === 'stream' ? $t('docs.landMovement.cost.stream') : terrainName(c.id) }}</th>
+              <template v-if="adminNotes">
+                <th v-for="c in columns" :key="c.id">{{ c.id === 'stream' ? $t('docs.landMovement.cost.stream') : terrainName(c.id) }}</th>
+              </template>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in unitRows" :key="row.type" :data-unit="row.type">
               <th scope="row" class="name">{{ unitName(row.type) }}</th>
               <td class="value">{{ n(row.speed) }}</td>
-              <td v-for="(minutes, i) in row.minutes" :key="columns[i]!.id" class="value">{{ minutes }}</td>
+              <template v-if="adminNotes">
+                <td v-for="(minutes, i) in row.minutes" :key="columns[i]!.id" class="value">{{ minutes }}</td>
+              </template>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="muted">{{ $t('docs.landMovement.pace.note') }}</p>
+      <p v-if="adminNotes" class="muted">{{ $t('docs.landMovement.pace.note') }}</p>
       <p v-if="slowest" class="text">{{ $t('docs.landMovement.pace.slowest', { unit: unitName(slowest.type) }) }}</p>
     </section>
 

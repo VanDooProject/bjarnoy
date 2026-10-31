@@ -5,6 +5,7 @@ import type { MessageSchema } from "../i18n/schema";
 import DocsPageLayout from "../components/docs/DocsPageLayout.vue";
 import AtlasSprite from "../components/AtlasSprite.vue";
 import WastedIsland from "../components/docs/WastedIsland.vue";
+import UtgardExample from "../components/docs/UtgardExample.vue";
 import DocsAdminNote from "../components/docs/DocsAdminNote.vue";
 import AnimatedGiant from "../components/docs/AnimatedGiant.vue";
 import AnimationPausedNote from "../components/docs/AnimationPausedNote.vue";
@@ -335,6 +336,7 @@ function defensePower(garrison: readonly number[]): number {
     <section id="defences" class="defences-section">
       <h2>{{ $t("docs.wastedLands.defences.heading") }}</h2>
       <p>{{ $t("docs.wastedLands.defences.body") }}</p>
+      <UtgardExample />
       <div class="giants-section">
         <div class="giant-card">
           <h3>{{ $t("docs.wastedLands.defences.watchtower.heading") }}</h3>

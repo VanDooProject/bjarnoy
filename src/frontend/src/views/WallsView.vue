@@ -46,11 +46,11 @@ const straightStage = computed(() => stageOf('straight180'));
 
 const { visible: adminNotes } = useDocsAdminNotes();
 const tocLinks = computed(() => [
-  ...PIECES.map((p) => ({ href: `#${p.id}`, label: t(`docs.walls.pieces.${p.key}.name`) })),
   { href: '#choosing', label: t('docs.walls.choosing.heading') },
   { href: '#where', label: t('docs.walls.where.heading') },
   { href: '#movement', label: t('docs.walls.movement.heading') },
   { href: '#sieges', label: t('docs.walls.sieges.heading') },
+  ...PIECES.map((p) => ({ href: `#${p.id}`, label: t(`docs.walls.pieces.${p.key}.name`) })),
   ...(adminNotes.value ? [{ href: '#not-built', label: t('docs.walls.notBuilt.heading') }] : []),
 ]);
 </script>
@@ -58,36 +58,6 @@ const tocLinks = computed(() => [
 <template>
   <DocsPageLayout class="walls" :title="$t('docs.walls.title')" caption="DOCS · WALLS" :intro="$t('docs.walls.intro')">
     <DocsToc :links="tocLinks" />
-
-    <h2 class="group-heading">{{ $t('docs.walls.pieces.heading') }}</h2>
-    <p class="group-body">{{ $t('docs.walls.pieces.body') }}</p>
-
-    <DocsTileEntry
-      v-for="p in PIECES"
-      :id="p.id"
-      :key="p.piece"
-      :title="$t(`docs.walls.pieces.${p.key}.name`)"
-      :level="3"
-    >
-      <template #thumb>
-        <WallPiece :piece="p.piece" :dir="dirs[p.piece]" :stage="stageOf(p.piece)" />
-      </template>
-      <p>{{ $t(`docs.walls.pieces.${p.key}.body`) }}</p>
-      <template #pickers>
-        <DocsPicker
-          v-if="stages[p.piece].length > 1"
-          :model-value="stageOf(p.piece)"
-          :label="$t('docs.walls.stage')"
-          :options="stages[p.piece].map((stage) => ({ value: stage, label: stageLabel(stage) }))"
-          @update:model-value="pick(p.piece, $event)"
-        />
-        <DocsPicker
-          v-model="dirs[p.piece]"
-          :label="$t('docs.walls.camera')"
-          :options="TILE_ORIENTATIONS.map((dir) => ({ value: dir, label: dir }))"
-        />
-      </template>
-    </DocsTileEntry>
 
     <section id="choosing" class="block">
       <h2>{{ $t('docs.walls.choosing.heading') }}</h2>
@@ -97,7 +67,6 @@ const tocLinks = computed(() => [
         <li>{{ $t('docs.walls.choosing.rules.gate') }}</li>
         <li>{{ $t('docs.walls.choosing.rules.sea') }}</li>
       </ul>
-      <p class="group-body">{{ $t('docs.walls.choosing.example') }}</p>
       <WallExample />
     </section>
 
@@ -140,6 +109,36 @@ const tocLinks = computed(() => [
         <li>{{ $t('docs.walls.sieges.rules.rebuild') }}</li>
       </ul>
     </section>
+
+    <h2 class="group-heading">{{ $t('docs.walls.pieces.heading') }}</h2>
+    <p class="group-body">{{ $t('docs.walls.pieces.body') }}</p>
+
+    <DocsTileEntry
+      v-for="p in PIECES"
+      :id="p.id"
+      :key="p.piece"
+      :title="$t(`docs.walls.pieces.${p.key}.name`)"
+      :level="3"
+    >
+      <template #thumb>
+        <WallPiece :piece="p.piece" :dir="dirs[p.piece]" :stage="stageOf(p.piece)" />
+      </template>
+      <p>{{ $t(`docs.walls.pieces.${p.key}.body`) }}</p>
+      <template #pickers>
+        <DocsPicker
+          v-if="stages[p.piece].length > 1"
+          :model-value="stageOf(p.piece)"
+          :label="$t('docs.walls.stage')"
+          :options="stages[p.piece].map((stage) => ({ value: stage, label: stageLabel(stage) }))"
+          @update:model-value="pick(p.piece, $event)"
+        />
+        <DocsPicker
+          v-model="dirs[p.piece]"
+          :label="$t('docs.walls.camera')"
+          :options="TILE_ORIENTATIONS.map((dir) => ({ value: dir, label: dir }))"
+        />
+      </template>
+    </DocsTileEntry>
 
     <DocsAdminNote id="not-built" as="section" class="block">
       <h2>{{ $t('docs.walls.notBuilt.heading') }}</h2>
