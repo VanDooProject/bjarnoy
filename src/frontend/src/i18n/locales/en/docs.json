@@ -778,8 +778,7 @@
         "fork": "Walls never fork: no hex may have three or more wall neighbours.",
         "gate": "A gate only fits on a straight, with a wall hex on two opposite sides, and that has to stay true after any later placement.",
         "sea": "A sea end touches exactly one land wall hex and can never be a gate."
-      },
-      "example": "An example: a wall that ends on land, runs straight, passes a gate, runs on, turns by 120° and runs out into the sea. The game worked out each piece and its rotation from the hexes alone."
+      }
     },
     "example": {
       "alt": "An example wall of {count} hexes on grass, ending in the sea."

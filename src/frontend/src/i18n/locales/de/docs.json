@@ -778,8 +778,7 @@
         "fork": "Mauern verzweigen sich nie: Kein Feld darf drei oder mehr Mauernachbarn haben.",
         "gate": "Ein Tor passt nur auf eine Gerade, die auf zwei gegenüberliegenden Seiten ein Mauerfeld hat. Das muss auch nach jedem späteren Bauen so bleiben.",
         "sea": "Ein Seeende berührt genau ein Mauerfeld an Land und kann nie ein Tor sein."
-      },
-      "example": "Ein Beispiel: eine Mauer, die an Land beginnt, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und im Meer ausläuft. Teil und Drehung jedes Feldes hat das Spiel allein aus der Lage der Felder ermittelt."
+      }
     },
     "example": {
       "alt": "Eine Beispielmauer aus {count} Feldern auf Gras, die im Meer endet."

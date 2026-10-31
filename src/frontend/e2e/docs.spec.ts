@@ -698,8 +698,16 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toHaveClass(/active/);
     await expect(straight.locator(".animated-building")).toBeVisible();
 
-    // The example wall, drawn by the game's own map renderer, and the four grounds.
+    // The example wall, drawn by the game's own map renderer, comes before the six-piece showcase,
+    // which closes the page after the sieges text.
     await expect(page.locator(".wall-example canvas")).toBeVisible();
+    const exampleBox = await page.locator(".wall-example canvas").boundingBox();
+    const piecesBox = await straight.boundingBox();
+    const siegesBox = await page.locator("#sieges").boundingBox();
+    expect(exampleBox!.y).toBeLessThan(piecesBox!.y);
+    expect(siegesBox!.y).toBeLessThan(piecesBox!.y);
+    await expect(page.getByText("An example: a wall that ends on land")).toHaveCount(0);
+    // The four grounds.
     await expect(page.locator(".walls figure.ground")).toHaveCount(4);
     await expect(
       page.getByTestId("wall-movement-diagram").locator("figure"),
