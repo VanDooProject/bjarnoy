@@ -11,6 +11,7 @@ import { useWorldStore } from '../stores/world';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { createTestI18n } from '../test/i18n';
 import enHud from '../i18n/locales/en/hud.json';
+import enCatalogue from '../i18n/locales/en/catalogue.json';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
 
@@ -25,7 +26,7 @@ function mountRing() {
         return () => h('div');
       },
     }),
-    { global: { plugins: [createTestI18n({ hud: enHud })] } },
+    { global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } },
   );
   const select = (at: AxialCoord) => {
     coord.value = at;

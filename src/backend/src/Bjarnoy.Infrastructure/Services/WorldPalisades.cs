@@ -22,7 +22,8 @@ public static class WorldPalisades
     /// <summary>
     /// Every standing wall hex (level 1 or more; a foundation does not block) of <paramref name="worldId"/> as a <see cref="PalisadeIndex"/>
     /// — one query per request at each call site that builds a land route, like <see cref="WorldRivers.IndexAsync"/>. A world with no
-    /// wall costs one empty query.
+    /// wall costs two small queries. The standing Utgard wall hexes of the world's wasted islands (<c>islands.UtgardWalls</c>, level 1 or
+    /// more) are in it too, owned by <see cref="EndgameRules.JotnarOwnerKey"/>.
     /// </summary>
     public static async Task<PalisadeIndex> IndexAsync(
         GameDbContext db, Guid worldId, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool> isWideRiver,
@@ -42,9 +43,20 @@ public static class WorldPalisades
             ? await FriendsAsync(db, worldId, cancellationToken).ConfigureAwait(false)
             : null;
 
+        // The jötnar's Utgard walls (wasted islands, level 1 or more; a breached level-0 hex is passable) block like any wall. Their key
+        // belongs to no account or guild, so a jötnar gate is never friendly to a player.
+        var utgardWalls = await db.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId && i.IsWasted)
+            .Select(i => i.UtgardWalls)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
         return new PalisadeIndex(
             rows.Select(r => new StandingWall(
-                new HexCoord(r.Q, r.R), r.Type == BuildingType.PalisadeGate, OwnerKeyOf(r.UserId, r.SettlementId))),
+                new HexCoord(r.Q, r.R), r.Type == BuildingType.PalisadeGate, OwnerKeyOf(r.UserId, r.SettlementId)))
+            .Concat(utgardWalls.SelectMany(walls => walls)
+                .Where(w => w.Level >= 1)
+                .Select(w => new StandingWall(new HexCoord(w.Q, w.R), w.IsGate, EndgameRules.JotnarOwnerKey))),
             terrainAt,
             isWideRiver,
             areFriends);

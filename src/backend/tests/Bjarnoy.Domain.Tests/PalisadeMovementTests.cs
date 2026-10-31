@@ -242,4 +242,35 @@ public sealed class PalisadeMovementTests
     {
         Assert.Null(Index(Strip(), []).ForOwner(Owner));
     }
+
+    // Utgard's walls feed the same index under EndgameRules.JotnarOwnerKey (WorldPalisades.IndexAsync), level 1 or more only.
+    private static IEnumerable<StandingWall> Utgard(int fromR, int toR, int? gateAtR = null) =>
+        Enumerable.Range(fromR, toR - fromR + 1)
+            .Select(r => new StandingWall(new HexCoord(3, r), r == gateAtR, EndgameRules.JotnarOwnerKey));
+
+    [Fact]
+    public void A_standing_utgard_wall_stops_a_land_army_and_a_breached_hex_lets_it_through()
+    {
+        var terrain = Strip();
+        terrain[new HexCoord(3, 4)] = Terrain.Mountain;
+
+        Assert.Null(Route(terrain, Index(terrain, Utgard(-3, 3)), Stranger));
+
+        // Level 0 hexes are left out of the index: the wall has a gap at r = 0.
+        var breached = Utgard(-3, 3).Where(w => w.Coord.R != 0);
+        var path = Route(terrain, Index(terrain, breached), Stranger);
+        Assert.NotNull(path);
+        Assert.Contains(new HexCoord(3, 0), path!);
+    }
+
+    [Fact]
+    public void A_jotnar_gate_stays_shut_for_players_however_friendly_they_are_with_each_other()
+    {
+        var terrain = Strip();
+        terrain[new HexCoord(3, 4)] = Terrain.Mountain;
+        var walls = Index(terrain, Utgard(-3, 3, gateAtR: 0), areFriends: (a, b) => a != EndgameRules.JotnarOwnerKey && b != EndgameRules.JotnarOwnerKey);
+
+        Assert.Null(Route(terrain, walls, Stranger));
+        Assert.Null(Route(terrain, walls, Owner));
+    }
 }

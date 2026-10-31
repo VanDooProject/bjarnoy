@@ -146,12 +146,12 @@ export type TextureKey =
   | 'palisadegatepiece'
   | 'palisadeend'
   | 'palisadeendcoast'
-  // The wasted islands' counterparts (3D_assets hextile075-080 and the Jötun watchtower): a wasted wall hex draws the Utgard wall
-  // piece its neighbours decide, a wasted tower the Jötun watchtower. Texture-lookup keys like the palisade's.
+  // The Utgard wall set and the Jötun watchtower (wasted pack, `docs/design/endgame.md`): same six pieces as the palisade, drawn at the
+  // wall's level (`utgardWallArtFor`); not wire building types either.
   | 'utgardwallstraight'
   | 'utgardwallbend60'
   | 'utgardwallbend120'
-  | 'utgardwallgatepiece'
+  | 'utgardwallgate'
   | 'utgardwallend'
   | 'utgardwallendcoast'
   | 'jotunwatchtower'
@@ -277,14 +277,24 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   palisadegatepiece: PALISADE_FAMILY.gate180,
   palisadeend: PALISADE_FAMILY.end,
   palisadeendcoast: PALISADE_FAMILY.end_coast,
-  // The Utgard walls (the palisade's stone twin on wasted islands, same six pieces and stages) and the Jötun watchtower.
+  // The Utgard walls and the Jötun watchtower (wasted pack): level000 breached/taken, level001 damaged, level002 full/garrisoned.
   utgardwallstraight: 'utgardwall_straight180',
   utgardwallbend60: 'utgardwall_bend60',
   utgardwallbend120: 'utgardwall_bend120',
-  utgardwallgatepiece: 'utgardwall_gate180',
+  utgardwallgate: 'utgardwall_gate180',
   utgardwallend: 'utgardwall_end',
   utgardwallendcoast: 'utgardwall_end_coast',
   jotunwatchtower: 'jotunwatchtower',
+};
+
+/** The texture key of each Utgard wall piece. */
+export const UTGARD_WALL_TEXTURE_KEY: Record<PalisadePiece, TextureKey> = {
+  straight180: 'utgardwallstraight',
+  bend60: 'utgardwallbend60',
+  bend120: 'utgardwallbend120',
+  gate180: 'utgardwallgate',
+  end: 'utgardwallend',
+  end_coast: 'utgardwallendcoast',
 };
 
 /** The texture key of each palisade piece. */
@@ -297,16 +307,6 @@ export const PALISADE_TEXTURE_KEY: Record<PalisadePiece, TextureKey> = {
   end_coast: 'palisadeendcoast',
 };
 
-/** The texture key of each Utgard wall piece: what a wasted wall hex draws in place of the palisade's. */
-export const UTGARD_WALL_TEXTURE_KEY: Record<PalisadePiece, TextureKey> = {
-  straight180: 'utgardwallstraight',
-  bend60: 'utgardwallbend60',
-  bend120: 'utgardwallbend120',
-  gate180: 'utgardwallgatepiece',
-  end: 'utgardwallend',
-  end_coast: 'utgardwallendcoast',
-};
-
 /** The land wall pieces: they stand on their hex's own ground (the sea end brings its own coastal base). */
 const LAND_WALL_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
   'palisadestraight',
@@ -314,12 +314,37 @@ const LAND_WALL_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
   'palisadebend120',
   'palisadegatepiece',
   'palisadeend',
+  // The Utgard land pieces and the watchtower stand on their hex's own (wasted) ground the same way.
   'utgardwallstraight',
   'utgardwallbend60',
   'utgardwallbend120',
-  'utgardwallgatepiece',
+  'utgardwallgate',
   'utgardwallend',
+  'jotunwatchtower',
 ]);
+
+/** Every Utgard wall piece and the watchtower: art that is drawn at the level carried in `Tile.buildingLevel` of the draw tile (`endgameDrawTile`). */
+const ENDGAME_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([...Object.values(UTGARD_WALL_TEXTURE_KEY), 'jotunwatchtower']);
+
+/** The art an Utgard wall hex draws: the piece's texture key and the camera file the server resolved through the palisade rules. */
+export function utgardWallArtFor(wall: NonNullable<Tile['utgardWall']>): RiverArt {
+  return { key: UTGARD_WALL_TEXTURE_KEY[wall.piece], orientation: wall.dir };
+}
+
+/** The art a Jötun watchtower hex draws, in the tile's own rotation. */
+export function jotunTowerArtFor(tower: NonNullable<Tile['jotunTower']>): RiverArt {
+  return { key: 'jotunwatchtower', orientation: tower.orientation };
+}
+
+/**
+ * The tile an endgame site is drawn from: the hex's own tile with the wall's (or tower's) level in `buildingLevel`, which is where
+ * `baseTextureFor`/`topTextureFor` read the art level from. `undefined` for a tile without a site.
+ */
+export function endgameDrawTile(tile: Tile): { tile: Tile; art: RiverArt } | undefined {
+  if (tile.utgardWall) return { tile: { ...tile, buildingLevel: tile.utgardWall.level }, art: utgardWallArtFor(tile.utgardWall) };
+  if (tile.jotunTower) return { tile: { ...tile, buildingLevel: tile.jotunTower.level }, art: jotunTowerArtFor(tile.jotunTower) };
+  return undefined;
+}
 
 /**
  * The art a palisade or gate hex draws: the piece and the camera file the wall resolver (`palisadeTiles.ts`) picks from which of the
@@ -327,17 +352,10 @@ const LAND_WALL_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
  * brings its own orientation). A hex the resolver cannot draw (no wall neighbour yet, or an admin-built branch) is an `end` (a sea end on
  * water) facing east: a post that is not joined to anything.
  */
-export function palisadeArtFor(input: {
-  wallNeighbours: readonly boolean[];
-  coastalWater: boolean;
-  gate: boolean;
-  /** A wall on a wasted island: the Utgard wall's pieces instead of the palisade's. */
-  wasted?: boolean;
-}): RiverArt {
-  const keys = input.wasted ? UTGARD_WALL_TEXTURE_KEY : PALISADE_TEXTURE_KEY;
+export function palisadeArtFor(input: { wallNeighbours: readonly boolean[]; coastalWater: boolean; gate: boolean }): RiverArt {
   const resolved = palisadeTileFor(input);
-  if (!isRefusal(resolved)) return { key: keys[resolved.piece], orientation: resolved.dir };
-  return { key: keys[input.coastalWater ? 'end_coast' : 'end'], orientation: 'E' };
+  if (!isRefusal(resolved)) return { key: PALISADE_TEXTURE_KEY[resolved.piece], orientation: resolved.dir };
+  return { key: PALISADE_TEXTURE_KEY[input.coastalWater ? 'end_coast' : 'end'], orientation: 'E' };
 }
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
@@ -1694,8 +1712,6 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.lakeProp && !tile.buildingType) return LAKE_PROP_KEY[tile.lakeProp];
   if (tile.buildingType === 'sawmill') return 'sawmillriver';
   if (tile.buildingType === 'bridge') return 'riverbridge';
-  // A tower on a wasted island is the Jötun watchtower.
-  if (tile.buildingType === 'tower' && tile.wasted) return 'jotunwatchtower';
   // A Fishing Hut on a bog lake's half shore has its own lake art; the Hammer Forge on a creek is the river hammer mill
   // (straight creek or bend), a placeholder until the bog-creek art exists.
   if (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half') return 'fisherhutlake';
@@ -1894,7 +1910,8 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
     return bogBase ?? baseTextureFor(textures, ground);
   }
   const orientation = tileOrientationFor(tile, riverArt);
-  if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
+  // (A shore end of an Utgard wall stands on coastal water but brings its own base, like the palisade's sea end.)
+  if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType && !(riverArt && ENDGAME_KEYS.has(riverArt.key))) {
     const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
   }
@@ -1954,6 +1971,8 @@ function topKeyAndIndex(textures: TileTextures, tile: Tile, riverArt?: RiverArt)
   if (camp && !riverArt) return { key: camp.family as CampFamily, index: campArtLevel(camp) };
   const key = artKeyFor(textures, tile, riverArt);
   if (camp && riverArt?.key === camp.family) return { key, index: campArtLevel(camp) };
+  // An endgame site draws at its level (carried in buildingLevel, `endgameDrawTile`).
+  if (riverArt && ENDGAME_KEYS.has(riverArt.key)) return { key, index: tile.buildingLevel ?? 2 };
   // A lake decoration is one frame per rotation (index 0); a building is its level; terrain its hashed variant.
   if (tile.lakeProp && !tile.buildingType) return { key, index: 0 };
   if (tile.buildingType) return { key, index: tile.buildingLevel ?? 1 };

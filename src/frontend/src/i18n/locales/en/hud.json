@@ -75,13 +75,20 @@
     "bridgeAccessFriend": "Your armies may cross as a friend",
     "bridgeAccessClosed": "Your armies may not cross",
     "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
+    "modifierRadiusBoostOneRing": "+{percent}% {resource} to buildings within 1 ring",
     "domainFood": "Food",
     "domainIron": "Iron",
     "domainWood": "Wood",
     "campEmpty": "Cleared: empty",
     "campCalmUntil": "Calm until {time}",
     "campAggressive": "Aggressive",
-    "campClears": "Cleared once | Cleared {count} times"
+    "campClears": "Cleared once | Cleared {count} times",
+    "wallLevel2": "Intact wall",
+    "wallLevel1": "Damaged wall",
+    "wallLevel0": "Breached wall",
+    "towerLevel2": "Garrisoned",
+    "towerLevel1": "Damaged",
+    "towerLevel0": "Taken"
   },
   "ringMenu": {
     "shrineLimitLock": "This settlement already has a shrine",

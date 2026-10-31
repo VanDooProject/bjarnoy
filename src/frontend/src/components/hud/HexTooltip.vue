@@ -9,9 +9,9 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
-import type { BuildingOutput, BuildingModifier } from '../../lib/map/buildingEconomy';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName, terrainName, wastedTerrainName, resourceName, giantName, campName, beastName } from '../../i18n/catalogueNames';
+import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
+import { buildingName, terrainName, wastedTerrainName, giantName, campName, beastName, endgameName } from '../../i18n/catalogueNames';
 
 // Mirrors textures.ts's WASTED_TEXTURE_KEY (grass/forest/sand -> their
 // wasted-island art family) plus the coastal case (sea bordering wasted
@@ -51,6 +51,8 @@ const title = computed(() => {
   if (subject.kind === 'building') return buildingName(subject.buildingType);
   if (subject.kind === 'giant') return giantName(subject.family);
   if (subject.kind === 'camp') return campName(subject.family);
+  if (subject.kind === 'utgardwall') return endgameName(subject.gate ? 'utgardgate' : 'utgardwall');
+  if (subject.kind === 'jotuntower') return endgameName('jotunwatchtower');
   if (subject.isRiver) return t('hud.hoverTooltip.river');
   if (subject.wasted) {
     const key = WASTED_TERRAIN_LABEL_KEY[subject.terrain];
@@ -77,6 +79,9 @@ const stat = computed(() => {
   if (subject.kind === 'building') return undefined;
   // A wildlife camp: not buildable, so no "click to build" line — say how strong it is.
   if (subject.kind === 'camp') return subject.strong ? t('hud.hoverTooltip.campStrong') : t('hud.hoverTooltip.campWeak');
+  // An endgame site is not buildable either: say what state it is in.
+  if (subject.kind === 'utgardwall') return t(`hud.hoverTooltip.wallLevel${Math.min(Math.max(subject.level, 0), 2)}`);
+  if (subject.kind === 'jotuntower') return t(`hud.hoverTooltip.towerLevel${Math.min(Math.max(subject.level, 0), 2)}`);
   const owner = props.info.owner;
   if (!owner) return t('hud.hoverTooltip.unclaimed');
   return owner.mine ? t('hud.hoverTooltip.clickToBuildHere') : t('hud.hoverTooltip.claimedGround');
@@ -99,72 +104,6 @@ const campLines = computed(() => {
   return lines;
 });
 
-function formatOutput(output: BuildingOutput): string {
-  switch (output.kind) {
-    case 'resourceRate':
-      return t('hud.hoverTooltip.outputResourceRate', { amount: output.amount, resource: resourceName(output.resource) });
-    case 'populationCapacity':
-      return t('hud.hoverTooltip.outputPopulationCapacity', { amount: output.amount });
-    case 'storageCapacity':
-      return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
-    case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount, explored: output.explored });
-  }
-}
-
-function formatModifier(modifier: BuildingModifier): string {
-  switch (modifier.kind) {
-    case 'borderAnchor':
-      return t('hud.hoverTooltip.modifierBorderAnchor');
-    case 'trainsLandTroops':
-      return t('hud.hoverTooltip.modifierTrainsLandTroops');
-    case 'trainsShips':
-      return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'trainsCivilianCrews':
-      return t('hud.hoverTooltip.modifierTrainsCivilianCrews');
-    case 'terrainBoost':
-      return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
-    case 'coastal':
-      return modifier.percent
-        ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
-        : t('hud.hoverTooltip.modifierCoastal');
-    case 'shrineFavour':
-      if (modifier.domain === 'shipAttack') {
-        return t('hud.hoverTooltip.modifierShrineFavourShipAttack', { percent: modifier.percent });
-      }
-      if (modifier.domain === 'landAttack') {
-        return t('hud.hoverTooltip.modifierShrineFavourLandAttack', { percent: modifier.percent });
-      }
-      return t('hud.hoverTooltip.modifierShrineFavour', {
-        percent: modifier.percent,
-        domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
-      });
-    case 'odinFavour':
-      return t('hud.hoverTooltip.modifierOdinFavour', {
-        percent: modifier.buildTimePercent,
-        rings: modifier.visionRings,
-      });
-    case 'radiusBoost':
-      return t('hud.hoverTooltip.modifierRadiusBoost', {
-        percent: modifier.percent,
-        range: modifier.range,
-        resource: t(
-          modifier.resource === 'wood'
-            ? 'hud.hoverTooltip.domainWood'
-            : modifier.resource === 'iron'
-              ? 'hud.hoverTooltip.domainIron'
-              : 'hud.hoverTooltip.domainFood',
-        ),
-      });
-    case 'palisadeWall':
-      return t('hud.hoverTooltip.modifierPalisadeWall');
-    case 'palisadeGate':
-      return t('hud.hoverTooltip.modifierPalisadeGate');
-    case 'bridge':
-      return t(`hud.hoverTooltip.bridgeLevel${modifier.level}`);
-  }
-}
-
 // A bridge shows what its level does to a crossing army, to everyone (its stats are otherwise the owner's alone), and for the guarded
 // one whether the viewer's armies may cross. Words only, no path costs (the "slower/quicker" convention of the walls docs).
 const bridgeLevel = computed(() => {
@@ -180,9 +119,9 @@ const bridgeAccessText = computed(() => {
   return t('hud.hoverTooltip.bridgeAccessClosed');
 });
 
-const outputText = computed(() => (props.info.stats?.output ? formatOutput(props.info.stats.output) : undefined));
+const outputText = computed(() => (props.info.stats?.output ? formatBuildingOutput(props.info.stats.output, t) : undefined));
 const modifierText = computed(() =>
-  props.info.stats?.modifier && props.info.stats.modifier.kind !== 'bridge' ? formatModifier(props.info.stats.modifier) : undefined,
+  props.info.stats?.modifier && props.info.stats.modifier.kind !== 'bridge' ? formatBuildingModifier(props.info.stats.modifier, t) : undefined,
 );
 </script>
 
