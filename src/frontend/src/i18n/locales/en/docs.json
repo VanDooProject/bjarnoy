@@ -731,6 +731,32 @@
       "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
       "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
       "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
+    },
+    "margins": {
+      "heading": "Bog margins (not used)",
+      "body": "The art set has five margin tiles for a bog meeting grass on one to five edges. The game doesn't place them: the soft moss edges with their peat rim are drawn by the map renderer along every bog edge against grass, forest and river banks, which needs no extra tile set and no placement rule. The tiles were replaced by those drawn edges for now and stay in the atlas in case that changes. Each has a plain look, a pools look and an ore seep look.",
+      "tiles": {
+        "bay": {
+          "name": "Bay",
+          "body": "Grass on one edge."
+        },
+        "shore": {
+          "name": "Shore",
+          "body": "Grass on two edges."
+        },
+        "half": {
+          "name": "Half",
+          "body": "Grass on three edges."
+        },
+        "tongue": {
+          "name": "Tongue",
+          "body": "Grass on four edges."
+        },
+        "spit": {
+          "name": "Spit",
+          "body": "Grass on five edges, the moss narrows to a spit."
+        }
+      }
     }
   },
   "animations": {
