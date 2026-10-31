@@ -712,7 +712,9 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(8, level),
-        AllowedTerrain = SandOrGrass,
+        // Stands on grass, sand, forest or plain bog moss (the palisade's rule); the tower replaces the tile under it.
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand, Terrain.Forest },
+        AlsoOnBogKinds = PlainBogOnly,
         // Unlocks at LH 3, later than the first producers on purpose: a tower
         // extends the realm, so opening it at the very first longhouse level
         // made expansion the obvious first move rather than a decision. It is
