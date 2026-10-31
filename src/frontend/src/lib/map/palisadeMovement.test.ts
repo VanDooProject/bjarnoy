@@ -55,13 +55,13 @@ describe('palisadeRestrictions', () => {
     expect(hoursFrom(west, ctx(terrain, gated, OWNER), Infinity).get(coordKey(east))).toBe(4);
   });
 
-  it('crosses a half-open land end at a flat 3 for every army', () => {
+  it('crosses a half-open land end at the ground cost plus 3 for every army', () => {
     const terrain = strip({}, ['3,3']);
     const walls = column(-3, 2);
     for (const walker of [OWNER, 'enemy']) {
       const hours = hoursFrom(west, ctx(terrain, walls, walker), Infinity);
-      // The tip (3,2) is 4 hexes from (1,0): three grass steps, then the tip at 3 instead of 1.
-      expect(hours.get('3,2')).toBeCloseTo(3 + 3, 9);
+      // The tip (3,2) is 4 hexes from (1,0): three grass steps, then the tip at grass 1 + 3.
+      expect(hours.get('3,2')).toBeCloseTo(3 + 1 + 3, 9);
       expect(HALF_OPEN_END_COST).toBe(3);
       expect(findPath(west, east, ctx(terrain, walls, walker))?.map(coordKey)).toContain('3,2');
     }
@@ -99,5 +99,30 @@ describe('palisadeRestrictions', () => {
 
     const plain = new Map([...column(-3, 3)].map(([k, w]) => [k, { ...w, owner: 'someone-else' }] as const));
     expect(findPath(west, east, ctx(terrain, plain, OWNER, () => false, friends))).toBeNull();
+  });
+});
+
+describe('Utgard walls in the palisade rules (the jötnar owner key)', () => {
+  const JOTNAR = 'jotnar';
+  const jotnarColumn = (fromR: number, toR: number, gateAtR?: number) => {
+    const walls = new Map<string, { gate: boolean; owner: string }>();
+    for (let r = fromR; r <= toR; r++) walls.set(`3,${r}`, { gate: r === gateAtR, owner: JOTNAR });
+    return walls;
+  };
+
+  it('a standing Utgard wall stops a land army, a hex left out (level 0) lets it through', () => {
+    const terrain = strip({ '3,4': 'mountain' });
+    expect(findPath(west, east, ctx(terrain, jotnarColumn(-3, 3), 'player'))).toBeNull();
+
+    const breached = jotnarColumn(-3, 3);
+    breached.delete('3,0');
+    expect(findPath(west, east, ctx(terrain, breached, 'player'))?.map(coordKey)).toContain('3,0');
+  });
+
+  it('a jötnar gate never opens for a player, not even one whose friends include everybody else', () => {
+    const terrain = strip({ '3,4': 'mountain' });
+    const gated = jotnarColumn(-3, 3, 0);
+    expect(findPath(west, east, ctx(terrain, gated, 'player'))).toBeNull();
+    expect(findPath(west, east, ctx(terrain, gated, 'player', () => false, new Set(['other-guildmate'])))).toBeNull();
   });
 });

@@ -5,7 +5,7 @@
 // SettlementCanvas components against a standalone, backend-free WorldModel
 // (same trick stores/world.ts's own DEMO_MODE model uses), so this page can
 // never go stale relative to what the live renderer actually looks like.
-import { computed, markRaw, ref, watch } from 'vue';
+import { computed, markRaw, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
@@ -17,7 +17,12 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { hexDistance } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
-import { buildShowcaseVillage, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_RENDER_RADIUS } from '../lib/showcase/showcaseVillage';
+import {
+  buildShowcaseVillage,
+  SHOWCASE_PREVIEW_RADIUS,
+  SHOWCASE_RENDER_RADIUS,
+  showcaseWorldFrame,
+} from '../lib/showcase/showcaseVillage';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
@@ -65,8 +70,11 @@ function buildShowcase(worldSeed: number) {
 
 const showcase = ref(buildShowcase(seed.value));
 const heroModel = computed(() => showcase.value.model);
-// The village site on the generated island: the "one view" frame previews it and the hero map pans to it.
+// The village site on the generated island: the "one view" frame previews it.
 const islandCenter = computed(() => showcase.value.center);
+// The hero map is capped to the village island and a margin of sea (see showcaseWorldFrame): the camera starts
+// fitted to that disc and can neither leave nor zoom out of it.
+const worldFrame = computed(() => showcaseWorldFrame(heroModel.value, islandCenter.value));
 
 // useHexMapRenderer captures its options once at mount (see
 // SettlementCanvas.vue's own comment on `mode`) — a `:key="seed"` on the
@@ -77,23 +85,20 @@ function reroll() {
   showcase.value = buildShowcase(seed.value);
 }
 
-// The world-mode camera always starts at (0, 0), which for most seeds is open
-// sea — recentre on the village once the renderer has mounted (it's only set
-// after the async Pixi init, hence a watch rather than onMounted).
+// e2e (showcase.spec.ts): a read-only accessor for the hero renderer's camera math and the cap it was given,
+// the same kind of hook LandingView/MapView install as `__settlementRenderer`.
 const heroCanvas = ref<InstanceType<typeof WorldMapCanvas> | null>(null);
-watch(
-  () => heroCanvas.value?.renderer,
-  (renderer) => renderer?.panTo(islandCenter.value),
-);
+type HeroHookWindow = { __showcaseHero?: () => unknown };
+onMounted(() => {
+  (window as HeroHookWindow).__showcaseHero = () => ({ renderer: heroCanvas.value?.renderer, frame: worldFrame.value });
+});
+onUnmounted(() => {
+  delete (window as HeroHookWindow).__showcaseHero;
+});
 
-// The map frames sit in a scrolling page, but the renderer claims every
-// wheel/touch gesture over its canvas (zoom, pan, pinch). Until the visitor
-// opts in, the frames are pointer-transparent so scrolling past them works —
-// the usual "click to interact" pattern for maps embedded in a page.
-const exploring = ref(false);
-
-// The village frame needs no opt-in: its camera is confined to the island
-// (`confine-camera`), so the visitor can pan and zoom freely without leaving it.
+// Both map frames are interactive from the start and confined to their area (`confine-camera`), so the
+// visitor can pan and zoom freely without leaving it. The hero map sits in the scrolling page and passes
+// `allow-page-scroll`: a plain wheel or a vertical swipe over it scrolls the page, a drag pans.
 
 function goPlay() {
   router.push('/');
@@ -174,11 +179,18 @@ const ENGINEERING: EngineeringCard[] = [
           </div>
         </div>
         <div class="hero-map">
-          <div class="map-frame" :class="{ exploring }">
-            <WorldMapCanvas ref="heroCanvas" :key="seed" :world-model="heroModel" :player-id="PLAYER_ID" />
-            <button type="button" class="explore" @click="exploring = !exploring">
-              {{ exploring ? t('showcase.hero.exploreDone') : t('showcase.hero.explore') }}
-            </button>
+          <div class="map-frame">
+            <WorldMapCanvas
+              ref="heroCanvas"
+              :key="seed"
+              :world-model="heroModel"
+              :player-id="PLAYER_ID"
+              :preview-center="worldFrame.center"
+              :preview-radius="worldFrame.radius"
+              :preview-render-radius="worldFrame.renderRadius"
+              confine-camera
+              allow-page-scroll
+            />
           </div>
           <div class="map-meta">
             <span class="seed">{{ t('showcase.hero.seed', { seed }) }}</span>
@@ -350,28 +362,6 @@ section {
   overflow: hidden;
   border: 1px solid var(--panel-border);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-}
-/* See `exploring` in the script: the hero canvas ignores the pointer until opted in. */
-.map-frame:not(.exploring) :deep(.map-container) {
-  pointer-events: none;
-}
-.explore {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  border-radius: 999px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-  background: rgba(11, 17, 22, 0.8);
-  color: var(--text);
-  border: 1px solid var(--panel-border);
-}
-.explore:hover {
-  border-color: var(--gold);
-  color: var(--gold);
 }
 .map-meta {
   display: flex;

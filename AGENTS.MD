@@ -42,6 +42,14 @@
   unverified theory that sounds plausible is worse than no theory)
 - if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
 
+# my gameplay wishes and requirements
+- collect the game wishes, requirements and mechanics I state (e.g. "a realm is taken by destroying its Longhouse", "ships can hit
+  the buildings on a target's shore") in the MD design docs under `docs/design/` — the doc for that topic, or a new one if none fits
+- only things that make sense and are settled (a closed rule, not a half-thought or a question still being discussed)
+- ask me before saving: name the doc and the exact text, and write it only after I say yes
+- write down only what I asked for or decided: no "not planned" / "won't do" entries unless I explicitly list something as a
+  don't or no-go
+
 # no unrequested special conditions
 - don't add special conditions, special cases or fallbacks I didn't ask for: no "only if the art is
   already packed" checks, no "hide this until X ships" switches, no special cases for existing
@@ -389,6 +397,10 @@
   action of mine, or the session ends), give me a minimal state table so I can see at a glance what is still open
 - that is the table's place: the end of a turn that waits. Not on an event or notification that needs no action, not mid-turn status
   messages, and not when nothing changed since the last table
+- unchanged means unchanged for the table **and** its questions: don't repeat either while nothing in them changed. A turn that
+  only answers a nudge (a stop hook that sees uncommitted changes while a subagent is still editing, a notification that needs
+  nothing) gets one line saying what is still running, no table, no questions
+- proposals and questions stay in the chat; written once and not repeated, they don't get buried
 - one row per piece of work (PR, task, test run, subagent, ...), with just these columns: what, state, waiting on
   - state: `done`, `open work` (something is still for u to do), or `waiting`
   - waiting on: `tests`, `CI`, `subagents`, `user decision` (a choice to make), `user action` (something only I can do, e.g. a
@@ -397,6 +409,7 @@
 - keep it to the rows that matter: no prose recap, no finished work that needs nothing further, and
   say `nothing open` instead of an empty table
 - for every row waiting on `user decision` or `user action`, add a short line after the table with the question (or the exact steps) and the options (recommended one first), so I can answer without scrolling back
+  — when the question is new or has changed; a question already asked and still unchanged is not written again
 - example:
 
   | what | state | waiting on |

@@ -12,6 +12,7 @@ import {
   previewDrawRadius,
   previewFitZoom,
   confineCamera,
+  worldConfineFrame,
   previewIslandBounds,
   READY_LOAD_STATE,
   startTextureLoad,
@@ -181,6 +182,18 @@ describe('hoverSubjectFor', () => {
     });
     // A giant still wins over a camp (a camp is never on a giant footprint; the precedence is defensive).
     expect(hoverSubjectFor({ ...tileOf('grass'), camp, giant }, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
+  });
+
+  it('names an Utgard wall piece and a watchtower with their level, a gate apart from a plain wall', () => {
+    const wall = { ring: 'inner' as const, piece: 'straight180' as const, dir: 'NW' as const, isGate: false, level: 1 };
+    expect(hoverSubjectFor({ ...tileOf('grass'), utgardWall: wall }, undefined)).toEqual({ kind: 'utgardwall', gate: false, level: 1 });
+    expect(hoverSubjectFor({ ...tileOf('grass'), utgardWall: { ...wall, piece: 'gate180', isGate: true, level: 0 } }, undefined)).toEqual({
+      kind: 'utgardwall',
+      gate: true,
+      level: 0,
+    });
+    expect(hoverSubjectFor({ ...tileOf('sea'), utgardWall: { ...wall, piece: 'end_coast' } }, undefined).kind).toBe('utgardwall');
+    expect(hoverSubjectFor({ ...tileOf('grass'), jotunTower: { orientation: 'SE', level: 2 } }, undefined)).toEqual({ kind: 'jotuntower', level: 2 });
   });
 
   it('carries the live camp state and the effective level, and drops a removed camp', () => {
@@ -990,5 +1003,34 @@ describe('confineCamera', () => {
     const camera = { x: 900, y: 900, zoom: 0.1 };
     confineCamera(camera, bounds, 0.5);
     expect(camera).toEqual({ x: 900, y: 900, zoom: 0.1 });
+  });
+});
+
+describe('worldConfineFrame', () => {
+  const viewport = { width: 800, height: 600 };
+
+  it('starts on the middle of the disc, zoomed so the whole disc fits the viewport', () => {
+    const { camera, limits } = worldConfineFrame({ q: 5, r: -3 }, 20, viewport);
+    expect(camera.zoom).toBe(limits.minZoom);
+    expect(camera.x).toBeCloseTo((limits.bounds.minX + limits.bounds.maxX) / 2);
+    expect(camera.y).toBeCloseTo((limits.bounds.minY + limits.bounds.maxY) / 2);
+    // fitted: the disc's extent at that zoom fills (but does not overflow) one axis of the viewport
+    const w = (limits.bounds.maxX - limits.bounds.minX) * camera.zoom;
+    const h = (limits.bounds.maxY - limits.bounds.minY) * camera.zoom;
+    expect(w).toBeLessThanOrEqual(viewport.width);
+    expect(h).toBeLessThanOrEqual(viewport.height);
+  });
+
+  it('a bigger disc fits at a smaller zoom, and the same disc fits larger on a bigger viewport', () => {
+    const small = worldConfineFrame({ q: 0, r: 0 }, 10, viewport).limits.minZoom;
+    const big = worldConfineFrame({ q: 0, r: 0 }, 40, viewport).limits.minZoom;
+    expect(big).toBeLessThan(small);
+    expect(worldConfineFrame({ q: 0, r: 0 }, 40, { width: 1600, height: 1200 }).limits.minZoom).toBeGreaterThan(big);
+  });
+
+  it('its limits confine a far-away camera back onto the disc and floor the zoom', () => {
+    const { limits } = worldConfineFrame({ q: 0, r: 0 }, 20, viewport);
+    const far = confineCamera({ x: 1e6, y: -1e6, zoom: 0.0001 }, limits.bounds, limits.minZoom);
+    expect(far).toEqual({ x: limits.bounds.maxX, y: limits.bounds.minY, zoom: limits.minZoom });
   });
 });

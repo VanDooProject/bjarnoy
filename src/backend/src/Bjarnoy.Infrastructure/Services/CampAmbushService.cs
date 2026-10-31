@@ -113,7 +113,7 @@ public sealed class CampAmbushService(
         }
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
-        var home = new HexCoord(settlement.CentreQ, settlement.CentreR);
+        var home = settlement.HomeHexFor(survivors, sampler.TerrainAt);
         armyEntity.ApplyDomain(survivors.ForceFieldRetreat(ambush.At, ambush.Hex, home, sampler.TerrainAt, world.SpeedFactor));
         return CampAmbushOutcome.Fought;
     }
