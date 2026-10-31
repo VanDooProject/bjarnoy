@@ -215,7 +215,7 @@ public static class BuildingCatalogue
     /// </para>
     /// <para>
     /// Storage House, Quarry, Clay Brickworks, Lumberjack, Reindeer Herder,
-    /// Tower and Town Square gate nothing on their own way in: Quarry needs a Mountain hex, and
+    /// Tower and Town Square need nothing standing before them: Quarry needs a Mountain hex, and
     /// <see cref="World.WorldGenerator"/> does not guarantee one within reach
     /// of a starting position — anything behind a Quarry would be unreachable
     /// for an unlucky map roll rather than merely expensive.
@@ -233,6 +233,7 @@ public static class BuildingCatalogue
             [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 5)],
             [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 5)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
+            [BuildingType.BogOreWorks] = [new(BuildingType.ClayBrickworks, 3)],
             [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
             [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 5)],
             [BuildingType.Smithy] = [new(BuildingType.Barracks, 10)],

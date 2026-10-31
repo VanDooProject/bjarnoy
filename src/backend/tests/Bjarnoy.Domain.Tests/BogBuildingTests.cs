@@ -182,7 +182,7 @@ public class BogBuildingTests
     }
 
     [Fact]
-    public void The_bog_ore_works_is_the_iron_producer_unlocking_at_longhouse_3_with_no_feeder()
+    public void The_bog_ore_works_is_the_iron_producer_unlocking_at_longhouse_3_behind_a_level_3_clay_brickworks()
     {
         for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.BogOreWorks); level++)
         {
@@ -195,7 +195,7 @@ public class BogBuildingTests
             Assert.Equal(BuildingCatalogue.BogOreWorksIronAtLevelOne * Math.Pow(1.20, level - 1), production.Iron, 6);
             Assert.Equal(0, definition.Cost.Iron);
             Assert.Equal(3, definition.RequiredLonghouseLevel);
-            Assert.Empty(definition.Prerequisites);
+            Assert.Equal(level == 1 ? [new BuildingPrerequisite(BuildingType.ClayBrickworks, 3)] : [], definition.Prerequisites);
         }
 
         Assert.Contains(BuildingType.BogOreWorks, BuildingCatalogue.StorageCappedProducers);
@@ -214,11 +214,19 @@ public class BogBuildingTests
     [Fact]
     public void The_bog_ore_works_is_refused_below_longhouse_3_and_placed_on_plain_bog_from_3()
     {
-        Assert.Equal(BuildRejection.LonghouseTooLow, Try(Rich(2), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
-        Assert.Null(Try(Rich(3), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
-        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Creek));
-        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3), BuildingType.BogOreWorks, Terrain.Grass, null));
-        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3), BuildingType.BogOreWorks, Terrain.Lake, BogTileKind.Lake));
+        Assert.Equal(BuildRejection.LonghouseTooLow, Try(Rich(2, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
+        Assert.Null(Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Creek));
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Grass, null));
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Lake, BogTileKind.Lake));
+    }
+
+    [Fact]
+    public void The_bog_ore_works_is_refused_until_a_clay_brickworks_of_level_3_stands()
+    {
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, Try(Rich(3), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, Try(Rich(3, (BuildingType.ClayBrickworks, 2)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
+        Assert.Null(Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
     }
 
     [Fact]
