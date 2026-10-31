@@ -1582,6 +1582,7 @@ export class WorldModel {
       'palisade',
       'palisadegate',
       'bridge',
+      'siegeworkshop',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
