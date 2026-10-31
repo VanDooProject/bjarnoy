@@ -99,6 +99,19 @@ export interface AtlasClip {
    * yet); `rest` above is what every clip that exists today uses.
    */
   rest_by_camera?: Record<string, string>;
+  /** True for a clip every tile must play on the one global clock (a wind-sway clip), so a gust stays continuous across tiles. */
+  shared_clock?: boolean;
+  /**
+   * Gust-wave metadata of a sway clip: the art is rendered so a tree's phase is `frame / N - s / wavelength` (s = position along screen-right in
+   * render units), so a tile in map column k must show frame `(g - k * frames_per_column) mod N`. Read it through `swayFramesPerColumn`.
+   */
+  sway?: { wavelength: number; frames_per_column: number };
+}
+
+/** The clip's `sway.frames_per_column` when it is a non-negative integer, else 0 (no per-column offset: a malformed `sway` is ignored). */
+export function swayFramesPerColumn(clip: Pick<AtlasClip, 'sway'>): number {
+  const n = (clip.sway as { frames_per_column?: unknown } | undefined)?.frames_per_column;
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : 0;
 }
 
 // Exported (only) so atlas.test.ts can build synthetic manifests for the

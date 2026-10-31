@@ -94,6 +94,22 @@ export function advanceClipFrame(
  * frameCount at the same moment whenever it was spawned, and the gust wave is continuous across tiles. The caller then advances
  * every state by the same per-tick delta (`advanceClipFrame`), which keeps them in lockstep.
  */
-export function sharedClockPlayback(clip: ClipTiming, clockMs: number): { playedMs: number; frame: number } {
-  return { playedMs: clockMs, frame: clipFrameIndex(clip, clockMs) };
+export function sharedClockPlayback(
+  clip: ClipTiming,
+  clockMs: number,
+  frameOffset = 0,
+): { playedMs: number; frame: number } {
+  // `frameOffset` (whole frames; a sway clip's `framesPerColumn * column`, may be negative) shows the global frame that many steps behind,
+  // wrapping in the clip's cycle (including a `pause` tail) like any other clip.
+  if (frameOffset === 0) return { playedMs: clockMs, frame: clipFrameIndex(clip, clockMs) };
+  const stepMs = 1000 / clip.fps;
+  const cycleSteps = stepsPerCycle(clip);
+  // Shift in whole frame-steps (not ms) so float error can't tip the floor onto the neighbouring frame; keep the sub-step remainder.
+  const clockSteps = clockMs / stepMs;
+  const whole = Math.floor(clockSteps + 1e-9);
+  const shifted = (((whole - frameOffset) % cycleSteps) + cycleSteps) % cycleSteps;
+  // Keep playedMs on the clock's own cycle count (>= 0, same magnitude) so `advanceClipFrame` continues it seamlessly.
+  const cycles = Math.floor(whole / cycleSteps);
+  const playedMs = (cycles * cycleSteps + shifted + Math.max(0, clockSteps - whole) + 1e-6) * stepMs;
+  return { playedMs, frame: clipFrameIndex(clip, playedMs) };
 }
