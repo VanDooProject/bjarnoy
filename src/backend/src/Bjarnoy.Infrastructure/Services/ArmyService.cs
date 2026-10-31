@@ -256,7 +256,10 @@ public sealed class ArmyService(
             if (camp is { } found)
             {
                 targetCampCoord = found.Camp.Coord;
-                effectiveDestination = Army.HuntRouteDestination(found.Camp.Coord, settled.Centre, sampler.TerrainAt);
+                effectiveDestination = Army.HuntRouteDestination(
+                    found.Camp.Coord,
+                    Army.TrainingSite(settled.Centre, settled.Buildings, unitCounts),
+                    sampler.TerrainAt);
             }
         }
 

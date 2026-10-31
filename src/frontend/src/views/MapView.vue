@@ -58,7 +58,7 @@ import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
 import { isHostileWallTile, siegeAttackOptions } from '../lib/map/siegeRules';
-import { breachesWalls, classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { breachesWalls, classifyUnitSelection, totalSpeed, totalUpkeepPerHour, trainingSite } from '../lib/units/armyDispatch';
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -385,8 +385,9 @@ watch(
 );
 
 // Issue #159 part B: the reachable-range tint while composing a dispatch.
-// Origin and home are both the settlement's own hex — a field order from a
-// standing army (where they'd differ) is #156 phase 1, not built yet.
+// Origin and home are both the hex a land army leaves from (the building that
+// trained its slowest unit, see trainingSite) — a fleet keeps the settlement's
+// hex. A field order from a standing army is #156 phase 1, not built yet.
 // Rounded to the nearest tenth of an hour so a sub-pixel provisions-slider
 // twitch doesn't force a fresh flood-fill every frame.
 const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
@@ -412,7 +413,10 @@ const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
     home.ownerId,
     guild.friendlyUserIds,
   );
-  const origin = { q: home.q, r: home.r };
+  const origin =
+    classifyUnitSelection(draft.unitCounts, unitCatalogue.byType) === 'fleet'
+      ? { q: home.q, r: home.r }
+      : trainingSite({ q: home.q, r: home.r }, world.hud.buildings, draft.unitCounts, unitCatalogue.byType);
   const range = reachableRange(origin, origin, hoursOfFood, ctx);
   return [...range.keys()].map(parseKey);
 });

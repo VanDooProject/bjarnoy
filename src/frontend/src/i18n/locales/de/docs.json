@@ -1081,6 +1081,7 @@
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
       "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit.",
+      "start": "Deine Truppen ziehen aus dem Gebäude los, in dem sie ausgebildet wurden, und kehren dorthin zurück. Eine Armee aus mehreren Einheitentypen bricht vom Gebäude ihrer langsamsten Einheit auf.",
       "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
       "columns": {
         "unit": "Einheit",
@@ -1179,7 +1180,7 @@
       "shrinesLink": "Schreine"
     },
     "adminNote": {
-      "route": "Bekannter Fehler (Issue #450): Der Weg einer Flotte beginnt in der Mitte der Siedlung, und die liegt bei einer Startsiedlung nie am Meer. Flotten können deshalb eine erste Siedlung nicht verlassen und keine Siedlung angreifen, deren Mitte im Landesinneren liegt. Diese Seite beschreibt das gewollte Verhalten: Flotten legen an der Werft ab.",
+      "route": "Bekannte Lücke (Issue #450): Eine Siedlung, deren Mitte im Landesinneren liegt, kann eine Flotte noch nicht angreifen oder plündern – auch wenn ihr Land bis an die Küste reicht.",
       "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedler, ein Langschiff {longship}, also je eine ganze Gründungsgruppe) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },

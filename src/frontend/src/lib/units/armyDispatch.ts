@@ -2,7 +2,7 @@
 // (ArmyPanel.vue, stores/world.ts) — kept separate and dependency-free so
 // they're unit-testable without mounting a component or a Pinia store, same
 // reasoning as lib/units/trainingEconomy.ts.
-import type { AxialCoord } from '../hex/coords';
+import { hexDistance, type AxialCoord } from '../hex/coords';
 import type { DispatchArmyRequest, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
 import { i18n } from '../../i18n';
 
@@ -410,4 +410,39 @@ export function armyStatusLabel(
   if (army.movement?.isReturning) return i18n.global.t('hud.armyStatus.returning');
   if (army.mission === 'hunt') return i18n.global.t('hud.armyStatus.hunting');
   return i18n.global.t('hud.armyStatus.inTransit');
+}
+
+/**
+ * The hex a land army leaves from and returns to: the building that trained its slowest unit type
+ * (ties: the unit type listed first in the catalogue, which `/api/v1/units` serves in backend
+ * `UnitType` enum order), the one nearest `centre` when there are several (ties by Q, then R), and
+ * the centre when that building is gone or nothing is selected. Mirrors `Army.TrainingSite`.
+ */
+export function trainingSite(
+  centre: AxialCoord,
+  buildings: ReadonlyArray<{ q: number; r: number; type: string }>,
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): AxialCoord {
+  const order = Object.keys(byType);
+  let slowest: UnitDefinitionResponse | null = null;
+  for (const [type, count] of Object.entries(unitCounts)) {
+    if (count <= 0) continue;
+    const definition = byType[type];
+    if (!definition) continue;
+    if (
+      slowest === null ||
+      definition.speed < slowest.speed ||
+      (definition.speed === slowest.speed && order.indexOf(type) < order.indexOf(slowest.type))
+    ) {
+      slowest = definition;
+    }
+  }
+  if (!slowest) return centre;
+
+  const required = slowest.requiredBuildingType;
+  const candidates = buildings
+    .filter((b) => b.type === required)
+    .sort((a, b) => hexDistance(a, centre) - hexDistance(b, centre) || a.q - b.q || a.r - b.r);
+  return candidates.length > 0 ? { q: candidates[0].q, r: candidates[0].r } : centre;
 }

@@ -1081,6 +1081,7 @@
     "pace": {
       "heading": "How fast armies move",
       "body": "Speed is counted in hexes per hour on grass. An army marches at the speed of its slowest unit.",
+      "start": "Your troops set out from the building that trained them and return there. An army of several unit types leaves from the building of its slowest unit.",
       "example": "Example: a {unit} crosses a grass hex in {minutes}.",
       "columns": {
         "unit": "Unit",
@@ -1179,7 +1180,7 @@
       "shrinesLink": "Shrines"
     },
     "adminNote": {
-      "route": "Known bug (issue #450): a fleet's route starts at the settlement centre, which is never next to the sea for a starting settlement, so fleets cannot leave a first settlement, and cannot attack a settlement whose centre is inland. This page describes the intended behaviour: fleets leave from the Dockyard.",
+      "route": "Known gap (issue #450): a fleet cannot yet attack or raid a settlement whose centre is inland, even when that settlement's land reaches the shore.",
       "sea": "Founding by sea (a Karve carries {karve} settlers, a Longship {longship}, one founding party each) exists in the rules but has no interface yet (issue #447)."
     }
   },

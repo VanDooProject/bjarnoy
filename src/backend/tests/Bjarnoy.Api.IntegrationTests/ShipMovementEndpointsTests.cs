@@ -380,4 +380,56 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         Assert.True(recall.Movement!.IsReturning);
         Assert.Equal(new HexPointResponse(dock.Q, dock.R), recall.Movement.Path[^1]);
     }
+
+    [Fact]
+    public async Task A_land_army_departs_from_and_is_recalled_to_its_Barracks()
+    {
+        using var client = Client();
+        var ownerId = $"owner-{Guid.CreateVersion7():N}";
+        var centre = new HexCoord(0, 0);
+        var barracks = new HexCoord(2, 0);
+        var destination = new HexCoord(10, 0);
+        Guid settlementId;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var (worldId, islandId) = await AddWorldAsync(db);
+            var settlement = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, ownerId, centre.Q, centre.R);
+            settlement.Buildings.Add(new PlacedBuildingEntity
+            {
+                SettlementId = settlement.Id,
+                Q = barracks.Q,
+                R = barracks.R,
+                Type = BuildingType.Barracks,
+                Level = 1,
+            });
+            settlement.Garrison.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Spearman, Count = 3 });
+            settlement.StockFood = 100_000;
+            settlement.CapacityFood = 100_000;
+            db.Settlements.Add(settlement);
+            await db.SaveChangesAsync(Ct);
+            settlementId = settlement.Id;
+        }
+
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
+        var dispatched = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlementId}/armies",
+            new DispatchArmyRequest(
+                [new UnitCountRequest("spearman", 3)], null, new HexPointRequest(destination.Q, destination.R), 30),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
+        var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
+        Assert.Equal(new HexPointResponse(barracks.Q, barracks.R), army.Movement!.Path[0]);
+        Assert.Equal(new HexPointResponse(barracks.Q, barracks.R), army.Movement.ReturnPath[^1]);
+
+        _factory.Time.Advance(TimeSpan.FromHours(army.Movement.CumulativeHours[^1] * 0.5));
+
+        var recalled = await client.PostAsync($"/api/v1/armies/{army.Id}/recall", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, recalled.StatusCode);
+        var recall = await recalled.ReadStrictAsync<ArmyResponse>(Ct);
+        Assert.True(recall.Movement!.IsReturning);
+        Assert.Equal(new HexPointResponse(barracks.Q, barracks.R), recall.Movement.Path[^1]);
+    }
 }
