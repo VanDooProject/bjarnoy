@@ -220,7 +220,11 @@ describe('QueueDrawer', () => {
     expect(wrapper.emitted('update:open')).toBeUndefined();
   });
 
-  it('a small, quick pointer tap toggles the drawer, same as a click', async () => {
+  // Bug: on a phone a tap on the handle opened the drawer on pointerup, the
+  // panel slid in under the finger, and the touch's click then landed on a
+  // drawer row, which selected it and closed the drawer again. The tap now
+  // toggles on its click, which still hits the handle.
+  it('a pointer tap toggles on its click, not on pointerup', async () => {
     const world = useWorldStore();
     world.hud.trainingQueueFetchedAt = Date.now();
     world.hud.trainingQueue = [trainingOrder()];
@@ -231,8 +235,27 @@ describe('QueueDrawer', () => {
 
     handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
     handle.dispatchEvent(new PointerEvent('pointerup', { clientX: 2, clientY: 1, pointerId: 1 }));
+    expect(wrapper.emitted('update:open')).toBeUndefined();
 
-    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([true]);
+    handle.dispatchEvent(new MouseEvent('click', { detail: 1 }));
+    expect(wrapper.emitted('update:open')).toEqual([[true]]);
+  });
+
+  it('the click a browser fires after a drag does not toggle the drawer a second time', async () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountDrawer();
+    const handle = wrapper.get('.queue-drawer-handle').element as HTMLElement;
+    stubPointerCapture(handle);
+
+    handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointermove', { clientX: 150, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerup', { clientX: 150, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new MouseEvent('click', { detail: 1 }));
+
+    expect(wrapper.emitted('update:open')).toEqual([[true]]);
   });
 
   it('bails out of the drawer drag when the gesture is more vertical than horizontal', async () => {
