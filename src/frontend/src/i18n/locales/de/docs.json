@@ -1130,7 +1130,7 @@
       "shrinesLink": "Schreine"
     },
     "adminNote": {
-      "route": "Bekannter Fehler (Issue #450): Der Weg einer Flotte beginnt in der Mitte der Siedlung, und die liegt bei einer Startsiedlung nie am Meer. Flotten können deshalb eine erste Siedlung nicht verlassen und keine Siedlung angreifen, deren Mitte im Landesinneren liegt. Diese Seite beschreibt das gewollte Verhalten: Flotten legen an der Werft ab.",
+      "route": "Bekannte Lücke (Issue #450): Eine Siedlung, deren Mitte im Landesinneren liegt, kann eine Flotte noch nicht angreifen oder plündern – auch wenn ihr Land bis an die Küste reicht.",
       "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedlertrupp, ein Langschiff {longship}) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },

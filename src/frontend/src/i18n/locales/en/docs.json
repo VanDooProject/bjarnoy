@@ -1130,7 +1130,7 @@
       "shrinesLink": "Shrines"
     },
     "adminNote": {
-      "route": "Known bug (issue #450): a fleet's route starts at the settlement centre, which is never next to the sea for a starting settlement, so fleets cannot leave a first settlement, and cannot attack a settlement whose centre is inland. This page describes the intended behaviour: fleets leave from the Dockyard.",
+      "route": "Known gap (issue #450): a fleet cannot yet attack or raid a settlement whose centre is inland, even when that settlement's land reaches the shore.",
       "sea": "Founding by sea (a Karve carries {karve} Settler crew, a Longship {longship}) exists in the rules but has no interface yet (issue #447)."
     }
   },

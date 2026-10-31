@@ -86,7 +86,7 @@ describe('ShipsView', () => {
     const wrapper = await mountPage();
 
     expect(wrapper.find('[data-testid=admin-note]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('route starts at the settlement centre');
+    expect(wrapper.text()).not.toContain('cannot yet attack or raid a settlement whose centre is inland');
     wrapper.unmount();
   });
 
@@ -95,7 +95,7 @@ describe('ShipsView', () => {
     useDocsAdminNotes().setEnabled(true);
     const wrapper = await mountPage();
 
-    expect(wrapper.get('[data-testid=admin-note]').text()).toContain('route starts at the settlement centre');
+    expect(wrapper.get('[data-testid=admin-note]').text()).toContain('cannot yet attack or raid a settlement whose centre is inland');
     wrapper.unmount();
   });
 });
