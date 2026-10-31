@@ -574,6 +574,9 @@ function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: 
   return { id: step.id!, spot: step.spot, label: t('landing.pointer.openCategory', { category: category?.label ?? '' }) };
 }
 
+// Bumped by the checklist's current step: GuidancePointer plays one poke per change.
+const pointerNudge = ref(0);
+
 const pointerTarget = computed(() => {
   if (joinBlocked.value) return null;
   // Player logout/login gate: ReturningLoginPanel replaces the founding
@@ -1039,6 +1042,7 @@ watch(
       :scale="pointerTarget.scale"
       :avoid="pointerTarget.mode === 'screen' ? ringBubbles : undefined"
       clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
+      :nudge="pointerNudge"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
@@ -1057,6 +1061,8 @@ watch(
       v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
       :guidance="guidance"
       :has-founded="player.hasFoundedSettlement"
+      :can-focus="!!pointerTarget && mapDrawn"
+      @focus="pointerNudge++"
     />
 
     <template v-if="player.hasFoundedSettlement">
