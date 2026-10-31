@@ -99,9 +99,10 @@ public static class HexPathfinder
     public const double RiverCrossingCost = 8.0;
 
     /// <summary>
-    /// What a land army pays to enter a palisade hex that is half open (a land end of a wall that touches no mountain or wide river), in
-    /// place of its terrain cost: passable for every army at this flat cost (<c>docs/design/economy.md</c> section 5). Above every
-    /// terrain cost but the stream's, so an open way round is preferred over wading through the gap.
+    /// What a land army pays on top of the ground's own cost to enter a palisade hex that is half open (a land end of a wall that
+    /// touches no mountain or wide river): passable for every army at ground + this (grass 1.0 -> 4.0, forest 1.3 -> 4.3, bog 2.0 -> 5.0;
+    /// a stream under the end 9.0 -> 12.0) (<c>docs/design/economy.md</c> section 5). The surcharge alone is above every terrain cost
+    /// but the stream's, so an open way round is preferred over wading through the gap.
     /// </summary>
     public const double HalfOpenEndCost = 3.0;
 
@@ -120,7 +121,7 @@ public static class HexPathfinder
     /// rule both <see cref="FindPath"/> and <see cref="CumulativeHours"/> price a step with, in the same precedence as the frontend's
     /// <c>stepCost</c> (hexPath.ts): sea and lakes are not in the cost table; a wide river is impassable; a stream is a flat
     /// <c>1.0 + <see cref="RiverCrossingCost"/></c> over any land terrain (mountain included); a plain mountain is impassable; a
-    /// <paramref name="halfOpen"/> palisade end costs <see cref="HalfOpenEndCost"/>; a <paramref name="blocked"/> hex (a palisade) is
+    /// <paramref name="halfOpen"/> palisade end costs its ground (a stream's flat price included) plus <see cref="HalfOpenEndCost"/>; a <paramref name="blocked"/> hex (a palisade) is
     /// impassable unless <paramref name="friendlyGate"/> holds for it; anything else costs its terrain.
     /// </summary>
     private static double? LandStepCost(
@@ -144,7 +145,7 @@ public static class HexPathfinder
                 return bridgeCost?.Invoke(hex);
             }
 
-            return 1.0 + RiverCrossingCost;
+            return 1.0 + RiverCrossingCost + (halfOpen is not null && halfOpen(hex) ? HalfOpenEndCost : 0.0);
         }
 
         if (terrain == Terrain.Mountain)
@@ -154,7 +155,7 @@ public static class HexPathfinder
 
         if (halfOpen is not null && halfOpen(hex))
         {
-            return HalfOpenEndCost;
+            return cost + HalfOpenEndCost;
         }
 
         if (blocked is not null && blocked(hex) && !(friendlyGate is not null && friendlyGate(hex)))

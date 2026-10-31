@@ -60,7 +60,7 @@ Existing worlds get them on their next reseed.
 
 Utgard walls feed the same `PalisadeIndex` the pathfinder already uses, under a fixed jötnar owner key: a
 standing wall hex (level ≥ 1) blocks land armies, gates are never friendly to players, half-open land ends cost
-3 like palisade ends. A breached wall hex (level 0) is passable.
+the ground + 3 like palisade ends. A breached wall hex (level 0) is passable.
 
 ## Siege engines
 

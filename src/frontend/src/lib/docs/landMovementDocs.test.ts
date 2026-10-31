@@ -44,7 +44,7 @@ describe('landMovementDocs', () => {
     expect(stepCostOf('grass', true, true)).toBe(Infinity);
   });
 
-  it('prices the open end of a wall at 3', () => {
+  it('prices the open end of a wall at 3 on top of the ground', () => {
     expect(WALL_END_COST).toBe(3);
   });
 

@@ -253,7 +253,7 @@ public sealed record Army
     /// </param>
     /// <param name="walls">
     /// The palisade rules for this army's owner (<see cref="PalisadeIndex.ForOwner"/>): every wall hex blocks, a gate of the owner's
-    /// passes, a half-open end costs <see cref="HexPathfinder.HalfOpenEndCost"/>. <see langword="null"/> (the default) means no wall.
+    /// passes, a half-open end costs the ground plus <see cref="HexPathfinder.HalfOpenEndCost"/>. <see langword="null"/> (the default) means no wall.
     /// Threaded alongside <c>isRiver</c>/<c>isWideRiver</c> into every route and travel-time query of this method, and into the
     /// same-named parameter of the other planning methods here.
     /// </param>

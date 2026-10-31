@@ -79,7 +79,7 @@ public class HexPathfinderGoldenTests
         Assert.Null(byName["wall_with_a_gate_stops_an_enemy"].ExpectedPath);
         Assert.Equal(4.0, byName["wall_with_a_gate_lets_the_owner_through"].ExpectedCumulativeHours![^1]);
         Assert.Null(byName["wall_without_a_gate_stops_the_owner_too"].ExpectedPath);
-        Assert.Equal([3.0, 6.0], byName["half_open_end_is_crossed_by_an_enemy_at_3"].ExpectedCumulativeHours!.Skip(3).Take(2));
+        Assert.Equal([3.0, 7.0], byName["half_open_end_is_crossed_by_an_enemy_at_ground_plus_3"].ExpectedCumulativeHours!.Skip(3).Take(2));
         Assert.Equal(HexPathfinder.HalfOpenEndCost, 3.0);
         Assert.Null(byName["sealed_end_beside_a_mountain_blocks"].ExpectedPath);
     }
