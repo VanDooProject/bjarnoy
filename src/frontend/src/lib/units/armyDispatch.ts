@@ -372,9 +372,9 @@ export function armyStatusLabel(
 
 /**
  * The hex a land army leaves from and returns to: the building that trained its slowest unit type
- * (ties: the unit type that comes first in `UnitType`, i.e. the lowest backend enum value, which
- * `unitOrder` lists), the one nearest `centre` when there are several (ties by Q, then R), and the
- * centre when that building is gone or nothing is selected. Mirrors `Army.TrainingSite`.
+ * (ties: the unit type listed first in the catalogue, which `/api/v1/units` serves in backend
+ * `UnitType` enum order), the one nearest `centre` when there are several (ties by Q, then R), and
+ * the centre when that building is gone or nothing is selected. Mirrors `Army.TrainingSite`.
  */
 export function trainingSite(
   centre: AxialCoord,
@@ -382,6 +382,7 @@ export function trainingSite(
   unitCounts: Record<string, number>,
   byType: Record<string, UnitDefinitionResponse>,
 ): AxialCoord {
+  const order = Object.keys(byType);
   let slowest: UnitDefinitionResponse | null = null;
   for (const [type, count] of Object.entries(unitCounts)) {
     if (count <= 0) continue;
@@ -390,7 +391,7 @@ export function trainingSite(
     if (
       slowest === null ||
       definition.speed < slowest.speed ||
-      (definition.speed === slowest.speed && UNIT_TYPE_ORDER.indexOf(type) < UNIT_TYPE_ORDER.indexOf(slowest.type))
+      (definition.speed === slowest.speed && order.indexOf(type) < order.indexOf(slowest.type))
     ) {
       slowest = definition;
     }
@@ -403,8 +404,3 @@ export function trainingSite(
     .sort((a, b) => hexDistance(a, centre) - hexDistance(b, centre) || a.q - b.q || a.r - b.r);
   return candidates.length > 0 ? { q: candidates[0].q, r: candidates[0].r } : centre;
 }
-
-/** The backend `UnitType` enum order (wire names), used only to break speed ties like the backend does. */
-const UNIT_TYPE_ORDER = [
-  'thrall', 'spearman', 'axeman', 'bowman', 'berserker', 'provisioner', 'catapult', 'karve', 'longship', 'settlercrew',
-];
