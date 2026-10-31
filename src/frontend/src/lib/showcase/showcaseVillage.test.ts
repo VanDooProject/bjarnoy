@@ -3,7 +3,7 @@ import { hexDistance, hexesInRadius, neighbors } from '../hex/coords';
 import { WorldModel } from '../map/WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands } from '../map/worldGenerator';
 import { maxLevelFor } from '../map/buildingEconomy';
-import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_RENDER_RADIUS, SHOWCASE_VILLAGE_OWNER } from './showcaseVillage';
+import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_RENDER_RADIUS, SHOWCASE_VILLAGE_OWNER, SHOWCASE_WORLD_SEA_MARGIN, showcaseWorldFrame } from './showcaseVillage';
 
 // The showcase page's own default seed (ShowcaseView.vue DEFAULT_SEED): its village site has shore for the dockyard.
 const SEED = 20261824;
@@ -172,5 +172,25 @@ describe('buildShowcaseVillage', () => {
     const summary = (b: typeof built) =>
       buildingsOf(b.model, b.settlement.id, b.center).map((t) => `${t.q},${t.r}:${t.buildingType}:${t.buildingLevel}`);
     expect(summary(again)).toEqual(summary(built));
+  });
+});
+
+describe('showcaseWorldFrame', () => {
+  const { model, center } = build();
+  const frame = showcaseWorldFrame(model, center);
+
+  it('covers every hex of the village island plus the sea margin, and none of another island', () => {
+    const land = model.previewIslandTiles(center);
+    expect(land.length).toBeGreaterThan(0);
+    for (const c of land) expect(hexDistance(frame.center, c)).toBeLessThanOrEqual(frame.radius - SHOWCASE_WORLD_SEA_MARGIN);
+    // the farthest coast sits exactly one sea margin inside the disc
+    expect(Math.max(...land.map((c) => hexDistance(frame.center, c)))).toBe(frame.radius - SHOWCASE_WORLD_SEA_MARGIN);
+    const landKeys = new Set(land.map((c) => `${c.q},${c.r}`));
+    const foreign = [...model.listIslands()].filter((i) => hexDistance(frame.center, i) <= frame.radius && !landKeys.has(`${i.q},${i.r}`));
+    expect(foreign).toEqual([]);
+  });
+
+  it('draws further out than the camera fits, so the cut-off stays off screen', () => {
+    expect(frame.renderRadius).toBeGreaterThan(frame.radius);
   });
 });
