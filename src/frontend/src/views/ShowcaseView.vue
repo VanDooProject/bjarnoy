@@ -179,7 +179,7 @@ const ENGINEERING: EngineeringCard[] = [
           </div>
         </div>
         <div class="hero-map">
-          <div class="map-frame">
+          <div class="map-frame frame">
             <WorldMapCanvas
               ref="heroCanvas"
               :key="seed"
@@ -187,7 +187,6 @@ const ENGINEERING: EngineeringCard[] = [
               :player-id="PLAYER_ID"
               :preview-center="worldFrame.center"
               :preview-radius="worldFrame.radius"
-              :preview-render-radius="worldFrame.renderRadius"
               confine-camera
               allow-page-scroll
             />
@@ -201,7 +200,7 @@ const ENGINEERING: EngineeringCard[] = [
 
       <!-- One view -->
       <section id="one-view" class="one-view">
-        <div class="one-view-frame">
+        <div class="one-view-frame frame">
           <SettlementCanvas
             :key="seed"
             :world-model="heroModel"
@@ -354,10 +353,11 @@ section {
   flex-direction: column;
   gap: 8px;
 }
-.map-frame {
+/* Both map frames (hero world map, "one view" settlement) share one size and look. */
+.frame {
   position: relative;
-  height: 60vh;
-  min-height: 320px;
+  height: 48vh;
+  min-height: 280px;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid var(--panel-border);
@@ -401,15 +401,6 @@ section {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
     align-items: center;
   }
-}
-.one-view-frame {
-  position: relative;
-  height: 48vh;
-  min-height: 280px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--panel-border);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
 }
 .one-view-copy h2 {
   margin: 0 0 10px;
