@@ -484,7 +484,8 @@ export async function layoutOverflow(page: Page): Promise<{ pageScrollsSideways:
 /** Frames `openRingOnGuidedHex` waits for the pointer's anchor to stop moving: well past the 1.4 s founding ease at 60 fps. */
 const GUIDANCE_SETTLE_MAX_FRAMES = 600;
 
-export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<void> {
+/** `chipText`: what the pointer's chip says once the ring is open, when the app is not in English. */
+export async function openRingOnGuidedHex(settlement: SettlementPage, chipText = 'Open Build'): Promise<void> {
   const pointer = settlement.guidancePointer;
   // The anchor follows the camera: a click on an anchor read mid-ease can land on the hex the guided one is about to
   // slide away from. Wait in the page until useMapAnchor writes the same point on consecutive animation frames, so the
@@ -512,7 +513,7 @@ export async function openRingOnGuidedHex(settlement: SettlementPage): Promise<v
   const box = await settlement.canvasBox();
   await settlement.page.mouse.click(box.x + x, box.y + y);
   await settlement.ring.waitForOpen();
-  await expect(pointer.locator('.chip')).toContainText('Open Build');
+  await expect(pointer.locator('.chip')).toContainText(chipText);
 }
 
 /**

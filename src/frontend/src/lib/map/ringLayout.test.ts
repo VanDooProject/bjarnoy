@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
 import deCatalogue from '../../i18n/locales/de/catalogue.json';
+import { hyphenate, loadHyphenation, SOFT_HYPHEN } from '../hyphenation';
 import {
+  BUBBLE_LABEL_MIN_PX,
   bubbleLabelFontPx,
+  fitBubbleLabel,
   shrinkToFit,
   estimateWordEm,
   BUB1,
@@ -477,5 +480,114 @@ describe('shrinkToFit', () => {
   it('leaves a label that already fits alone, and never goes below the floor', () => {
     expect(shrinkToFit(['Farm'], BUB2 - 6, 9.4, font(1.15))).toBe(9.4);
     expect(shrinkToFit(['Holzfällerhüttenerweiterung'], BUB2 - 6, 9, font(1.15))).toBe(5);
+  });
+});
+
+// A label in a round bubble: breaks at hyphenation points at the normal size first, shrinks only when that is not
+// enough, and never below the floor.
+describe('fitBubbleLabel', () => {
+  // The bubble's inner width (BUB2 minus its padding and border, as RingMenu measures it) and the building bubble's size.
+  const AVAILABLE = BUB2 - 6;
+  const START = 8.4;
+  // About what the UI font measures in a browser: ~0.5em a letter plus the bubble's 0.02em tracking.
+  const wordWidth = (word: string, px: number) => [...word.replaceAll(SOFT_HYPHEN, '')].length * 0.52 * px;
+  /** Lines of `text` in a box `AVAILABLE` wide, breaking only at spaces and (soft) hyphens, like the browser; Infinity when a piece is wider. */
+  const linesAt = (text: string, px: number) => {
+    const pieces = text.split(' ').flatMap((word, i, all) => {
+      const chunks = word.split(new RegExp(`(?<=[${SOFT_HYPHEN}-])`));
+      return chunks.map((chunk, j) => ({ chunk, spaceAfter: j === chunks.length - 1 && i < all.length - 1 }));
+    });
+    let lines = 1;
+    let used = 0;
+    for (const { chunk, spaceAfter } of pieces) {
+      const soft = chunk.endsWith(SOFT_HYPHEN);
+      const w = wordWidth(chunk, px) + (soft ? wordWidth('-', px) : 0);
+      if (w > AVAILABLE) return Infinity;
+      if (used + w > AVAILABLE) {
+        lines++;
+        used = 0;
+      }
+      used += w + (spaceAfter ? wordWidth(' ', px) : 0);
+    }
+    return lines;
+  };
+  const fit = (label: string, lang: string, minPx?: number, startPx = START) =>
+    fitBubbleLabel(label, startPx, {
+      widthAt: wordWidth,
+      linesAt,
+      availablePx: AVAILABLE,
+      hyphenate: (word) => hyphenate(word, lang),
+      ...(minPx ? { minPx } : {}),
+    });
+
+  beforeAll(async () => {
+    await Promise.all(['en', 'de'].map((lang) => loadHyphenation(lang)));
+  });
+
+  it('leaves a label that fits as it is, with no soft hyphens', () => {
+    expect(fit('Farm', 'en')).toEqual({ px: START, text: 'Farm', fits: true });
+    expect(fit('Town Square', 'en').text.includes(SOFT_HYPHEN)).toBe(false);
+  });
+
+  it('breaks a long German compound onto two lines at the normal size instead of shrinking it', () => {
+    const waffen = fit('Waffenschmiede', 'de');
+    expect(waffen.px).toBe(START);
+    expect(waffen.fits).toBe(true);
+    expect(waffen.text).toContain(SOFT_HYPHEN);
+    expect(waffen.text.replaceAll(SOFT_HYPHEN, '')).toBe('Waffenschmiede');
+    expect(linesAt(waffen.text, waffen.px)).toBe(2);
+    // the same rule for English
+    expect(fit('Weaponsmith', 'en')).toMatchObject({ px: START, fits: true });
+  });
+
+  it('hyphenates only the words that are wider than a line, not the ones next to them', () => {
+    const text = fit('Schrein der Freyja', 'de').text;
+    expect(text.includes(SOFT_HYPHEN)).toBe(false);
+    const mixed = fit('Great Storehouse Weaponsmith', 'en').text.split(' ');
+    expect(mixed[0]).toBe('Great');
+    expect(mixed[2]).toContain(SOFT_HYPHEN);
+  });
+
+  it('allows three lines only for a label with spaces', () => {
+    expect(fit('Schrein der Freyja', 'de')).toMatchObject({ px: START, fits: true });
+    expect(linesAt('Schrein der Freyja', START)).toBe(3);
+    // one word that needs three lines at the normal size is shrunk instead
+    expect(linesAt(hyphenate('Holzfällerhütte', 'de'), START)).toBe(3);
+    expect(fit('Holzfällerhütte', 'de').px).toBeLessThan(START);
+  });
+
+  it('shrinks only as far as needed, in steps of 0.1px, and stops at a size that fits', () => {
+    // two lines at the normal size are not enough for this one, so the font comes down
+    const shrunk = fit('Holzfällerhütte', 'de');
+    expect(shrunk.px).toBeLessThan(START);
+    expect(shrunk.px).toBeGreaterThanOrEqual(BUBBLE_LABEL_MIN_PX);
+    expect(shrunk.fits).toBe(true);
+    expect(linesAt(shrunk.text, shrunk.px)).toBeLessThanOrEqual(2);
+    expect(Math.round(shrunk.px * 10)).toBe(shrunk.px * 10);
+    // ... and a tenth bigger would not fit
+    const bigger = fit('Holzfällerhütte', 'de', shrunk.px + 0.1, shrunk.px + 0.1);
+    expect(bigger).toMatchObject({ px: shrunk.px + 0.1, fits: false });
+  });
+
+  it('holds the readable floor and reports a label that still does not fit there', () => {
+    expect(BUBBLE_LABEL_MIN_PX).toBe(7);
+    const tooLong = fit('Holzfällerhütten', 'de');
+    expect(tooLong.px).toBe(BUBBLE_LABEL_MIN_PX);
+    expect(tooLong.fits).toBe(false);
+    // no hyphenation patterns at all (a language without them): the unbreakable word is reported, not shrunk below the floor
+    const unbreakable = fit('Waffenschmiede', 'xx');
+    expect(unbreakable.px).toBe(BUBBLE_LABEL_MIN_PX);
+    expect(unbreakable.fits).toBe(false);
+  });
+
+  it('never goes below the floor for any catalogue name, in either language', () => {
+    for (const [lang, catalogue] of [['en', enCatalogue], ['de', deCatalogue]] as const) {
+      for (const label of Object.values(catalogue.buildings)) {
+        const result = fit(label, lang);
+        expect(result.px, `${lang}: ${label}`).toBeGreaterThanOrEqual(BUBBLE_LABEL_MIN_PX);
+        expect(result.px, `${lang}: ${label}`).toBeLessThanOrEqual(START);
+        expect(result.text.replaceAll(SOFT_HYPHEN, ''), `${lang}: ${label}`).toBe(label);
+      }
+    }
   });
 });
