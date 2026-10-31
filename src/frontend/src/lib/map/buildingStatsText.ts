@@ -33,8 +33,8 @@ export function formatBuildingModifier(modifier: BuildingModifier, t: StatsTrans
       return t('hud.hoverTooltip.modifierTrainsLandTroops');
     case 'trainsShips':
       return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'trainsCivilianCrews':
-      return t('hud.hoverTooltip.modifierTrainsCivilianCrews');
+    case 'trainsCivilians':
+      return t('hud.hoverTooltip.modifierTrainsCivilians');
     case 'terrainBoost':
       return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainLabel(t, modifier.terrain), percent: modifier.percent });
     case 'coastal':

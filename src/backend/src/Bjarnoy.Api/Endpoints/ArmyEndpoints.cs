@@ -3,6 +3,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -593,10 +594,10 @@ public static class ArmyEndpoints
                 DispatchRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
                 DispatchRejection.DefenderHasNoShoreline =>
                     "The target settlement is fully inland and cannot be reached by ship.",
-                DispatchRejection.WrongSettlerCrewCount =>
-                    "A founding mission requires exactly 3 settler crews, no more, no fewer.",
+                DispatchRejection.WrongSettlerCount =>
+                    $"A founding mission requires exactly {Founding.RequiredSettlers} settlers, no more, no fewer.",
                 DispatchRejection.InsufficientShipCapacityForSettlers =>
-                    "The ships in this convoy cannot carry this many settler crews (Karve: 1, Longship: 2).",
+                    $"The ships in this convoy cannot carry this many settlers (each ship carries {Founding.ShipCapacity(UnitType.Karve)}).",
                 DispatchRejection.RenownOrSettlementSlotRequirementNotMet =>
                     "Not enough renown for another settlement yet, or founding requires a real account.",
                 DispatchRejection.TargetHexNotFoundable =>

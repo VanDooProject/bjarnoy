@@ -2155,8 +2155,8 @@ public sealed record Settlement
     /// class.
     /// </param>
     /// <param name="costMultiplier">
-    /// Multiplies the catalogue's flat per-unit cost (issue #55 §4: settler
-    /// crews cost more the more settlements the player already holds — see
+    /// Multiplies the catalogue's flat per-unit cost (issue #55 §4: settlers
+    /// cost more the more settlements the player already holds — see
     /// <see cref="Settlers.Founding.CostMultiplier"/>). 1.0 for every ordinary
     /// unit; the caller (<c>SettlementService.TrainUnitsAsync</c>) is the one
     /// that knows how many settlements the owning player holds, so it

@@ -19,19 +19,30 @@ public class FoundingTests
     }
 
     [Fact]
-    public void ScaledSettlerCrewCost_applies_the_multiplier_to_the_catalogue_base_cost()
+    public void ScaledSettlerCost_applies_the_multiplier_to_the_catalogue_base_cost()
     {
-        var baseCost = UnitCatalogue.Get(UnitType.SettlerCrew).TrainingCost;
+        var baseCost = UnitCatalogue.Get(UnitType.Settler).TrainingCost;
 
-        var scaled = Founding.ScaledSettlerCrewCost(existingSettlementCount: 3);
+        var scaled = Founding.ScaledSettlerCost(existingSettlementCount: 3);
 
         Assert.Equal(baseCost.Wood * 4, scaled.Wood);
         Assert.Equal(baseCost.Iron * 4, scaled.Iron);
     }
 
+    [Fact]
+    public void Five_settlers_cost_the_same_in_total_as_the_former_three_settler_units()
+    {
+        var cost = UnitCatalogue.Get(UnitType.Settler).TrainingCost * Founding.RequiredSettlers;
+
+        Assert.Equal(600, cost.Wood);
+        Assert.Equal(450, cost.Stone);
+        Assert.Equal(300, cost.Food);
+        Assert.Equal(300, cost.Iron);
+    }
+
     [Theory]
-    [InlineData(UnitType.Karve, 1)]
-    [InlineData(UnitType.Longship, 2)]
+    [InlineData(UnitType.Karve, 5)]
+    [InlineData(UnitType.Longship, 5)]
     [InlineData(UnitType.Spearman, 0)]
     public void ShipCapacity_matches_the_documented_figures(UnitType type, int expected)
     {

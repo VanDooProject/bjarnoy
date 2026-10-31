@@ -409,7 +409,7 @@ export interface SettlementResponse {
   construction: ConstructionResponse;
   buildings: PlacedBuildingResponse[];
   queue: BuildOrderResponse[];
-  /** Units standing at this settlement (issue #55: includes trained `settlercrew`). */
+  /** Units standing at this settlement (issue #55: includes trained `settler`). */
   garrison: UnitStackResponse[];
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
@@ -463,7 +463,7 @@ export interface SettlementViewResponse {
   buildings: PlacedBuildingResponse[];
 }
 
-// Settlement expansion (issue #55) — mirrors the settler-crew additions to
+// Settlement expansion (issue #55) — mirrors the settler additions to
 // SettlementContracts.cs and ArmyContracts.cs. `UnitStackResponse`,
 // `TrainingOrderResponse`, `TrainUnitsRequest`, `UnitDefinitionResponse`,
 // `DispatchArmyRequest`, `MovementResponse`, `ArmyResponse` and `ArmySummary`
@@ -472,7 +472,7 @@ export interface SettlementViewResponse {
 // mission, so it rides those same shapes rather than duplicating them; see
 // `HexPoint` there too (used in place of what used to be `HexPointRequest`).
 // `mission` on `DispatchArmyRequest` is `"move" | "attack" | "support" |
-// "raid" | "found"` — `found` requires exactly 3 `settlercrew` in `units`
+// "raid" | "found"` — `found` requires exactly 5 `settler` in `units`
 // (plus, for a sea convoy, enough Karve/Longship capacity to carry them) and
 // no `targetSettlementId`; `destination` is the target hex to colonise.
 

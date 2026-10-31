@@ -49,14 +49,14 @@
         "wastedLands": "Utgards eigene Mauern riegeln das Land der Riesen ab."
       },
       "founding": {
-        "landMovement": "Wie schnell Siedlertrupps jedes Feld überqueren.",
-        "wildlifeCamps": "Starke Lager können Trupps unterwegs überfallen.",
+        "landMovement": "Wie schnell Siedler jedes Feld überqueren.",
+        "wildlifeCamps": "Starke Lager können Siedler unterwegs überfallen.",
         "bogLands": "Landeplätze brauchen Moor in Reichweite für Lehm und Eisen."
       },
       "landMovement": {
         "walls": "Ein Mauerfeld hält jede Landarmee auf.",
         "wildlifeCamps": "Starke Lager überfallen Armeen, die ihnen zu nahe kommen.",
-        "founding": "Siedlertrupps ziehen über dieselben Böden."
+        "founding": "Siedler ziehen über dieselben Böden."
       },
       "ships": {
         "shrines": "Njörds Schrein lässt deine Schiffe härter zuschlagen.",
@@ -125,7 +125,7 @@
       },
       "founding": {
         "title": "Siedlungen gründen",
-        "description": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann."
+        "description": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann."
       },
       "landMovement": {
         "title": "Bewegung an Land",
@@ -240,7 +240,7 @@
       "cropmill": "Mahlt auf einem geraden Flussfeld das Getreide eines Bauernhofs, der bis Stufe 10 ausgebaut ist – ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Sie erzeugt keine eigene Nahrung, sondern steigert jeden Bauernhof im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus. Die Kürbisfarm profitiert nicht davon: Kürbisse sind eine andere Feldfrucht, die eine Mühle nicht mahlt.",
       "smithy": "Die Schmiede der Siedlung mit Amboss, auf Gras oder Sand hinter einer Kaserne der Stufe 10. Sie ist der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: Hier sollen später einmal Truppen aufgewertet werden, die Mechanik dafür kommt noch.",
       "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
-      "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedlertrupps aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
+      "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedler aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
       "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See), hinter einer Ziegelei der Stufe 3: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
       "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
@@ -966,7 +966,7 @@
   },
   "founding": {
     "title": "Siedlungen gründen",
-    "intro": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann.",
+    "intro": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann.",
     "toc": {
       "first": "Erste Siedlung",
       "more": "Weitere Siedlungen",
@@ -980,8 +980,8 @@
     },
     "more": {
       "heading": "Weitere Siedlungen",
-      "body": "Neue Siedlungen gründen {count} Siedlertrupps, die gemeinsam losziehen. Du bildest sie in der {workshop} aus. Sie braucht ein {longhouse} auf Stufe {level} und einen {square} auf Stufe {squareLevel}.",
-      "crew": {
+      "body": "Neue Siedlungen gründen {count} Siedler, die gemeinsam losziehen. Du bildest sie in der {workshop} aus. Sie braucht ein {longhouse} auf Stufe {level} und einen {square} auf Stufe {squareLevel}.",
+      "settler": {
         "defense": "Verteidigung",
         "speed": "Tempo",
         "food": "Trägt Nahrung",
@@ -990,23 +990,23 @@
         "longhouse": "Langhaus-Stufe",
         "minutes": "{n} Min."
       },
-      "provisions": "Jeder Trupp trägt {food} Nahrung, alle drei zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
-      "ambush": "Unterwegs können starke Wildtierlager deine Trupps überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
+      "provisions": "Jeder Siedler trägt {food} Nahrung, alle fünf zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
+      "ambush": "Unterwegs können starke Wildtierlager deine Siedler überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
       "campsLink": "Wildtierlager",
       "movementLink": "Bewegung an Land"
     },
     "renown": {
       "heading": "Ruhm und Preis",
-      "body": "Jede Siedlung nach der ersten kostet Ruhm und Trupps. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird, und ebenso der Preis ihrer Trupps.",
+      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird, und ebenso der Preis ihrer Siedler.",
       "columns": {
         "next": "Du gründest",
         "renown": "Nötiger Ruhm",
-        "perCrew": "Kosten pro Trupp",
-        "total": "Kosten für {count} Trupps"
+        "perSettler": "Kosten pro Siedler",
+        "total": "Kosten für {count} Siedler"
       },
       "nth": "Siedlung Nr. {n}",
       "order": "Die Kosten sind {resources}.",
-      "when": "Der Ruhm wird geprüft, wenn die Trupps aufbrechen.",
+      "when": "Der Ruhm wird geprüft, wenn die Siedler aufbrechen.",
       "feasts": "Ein Fest auf dem {square} bringt zusätzlich Ruhm. Es dauert {hours} Stunden, kostet gleich viel Holz, Stein und Nahrung und wird mit der Stufe des Platzes größer.",
       "feast": {
         "level": "Stufe des Dorfplatzes",
@@ -1016,19 +1016,18 @@
     },
     "where": {
       "heading": "Wo eine Siedlung landen kann",
-      "land": "Auf jedem Landfeld, das deine Trupps erreichen können, nur nicht auf einem Riesen.",
+      "land": "Auf jedem Landfeld, das deine Siedler erreichen können, nur nicht auf einem Riesen.",
       "spacing": "Mindestens {hexes} Felder jenseits der Gebietsgrenze jeder Siedlung der Welt, egal ob deiner eigenen oder der anderer Spieler.",
       "twice": "Das wird beim Aufbruch geprüft und noch einmal bei der Ankunft.",
-      "taken": "Hat inzwischen jemand anderes den Platz besetzt, warten die Trupps dort. Du kannst sie weiterschicken oder zurückrufen, und sie kehren von allein heim, wenn ihnen die Nahrung ausgeht."
+      "taken": "Hat inzwischen jemand anderes den Platz besetzt, warten die Siedler dort. Du kannst sie weiterschicken oder zurückrufen, und sie kehren von allein heim, wenn ihnen die Nahrung ausgeht."
     },
     "new": {
       "heading": "Eine neue Siedlung",
       "body": "Sie startet mit einem {longhouse} auf Stufe 1. Es beansprucht {claim1} Felder, ab Stufe 2 sind es {claim2}. Das Lager enthält je {stock} Holz, Stein und Nahrung, aber kein Eisen.",
-      "garrison": "Alle Einheiten, die mit den Trupps gezogen sind, bleiben als Besatzung dort, nur die Trupps selbst nicht."
+      "garrison": "Alle Einheiten, die mit den Siedlern gezogen sind, bleiben als Besatzung dort, nur die Siedler selbst nicht."
     },
     "adminNote": {
-      "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447).",
-      "provisions": "Das Expansionspanel schlägt standardmäßig 200 Proviant vor, drei Trupps tragen aber nur {carried}."
+      "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },
   "landMovement": {
@@ -1181,7 +1180,7 @@
     },
     "adminNote": {
       "route": "Bekannter Fehler (Issue #450): Der Weg einer Flotte beginnt in der Mitte der Siedlung, und die liegt bei einer Startsiedlung nie am Meer. Flotten können deshalb eine erste Siedlung nicht verlassen und keine Siedlung angreifen, deren Mitte im Landesinneren liegt. Diese Seite beschreibt das gewollte Verhalten: Flotten legen an der Werft ab.",
-      "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedlertrupp, ein Langschiff {longship}) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
+      "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedler, ein Langschiff {longship}, also je eine ganze Gründungsgruppe) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },
   "shrines": {

@@ -133,7 +133,7 @@ public class UnitCatalogueTests
         // Barracks (BuildingType.Barracks) trains the basic melee slice of
         // the land roster plus Thrall; ArcheryRange keeps the archer/siege
         // slice (Bowman, Catapult), and Cart Workshop trains the rest of the
-        // civilian roster (Provisioner, SettlerCrew). Documents that split
+        // civilian roster (Provisioner, Settler). Documents that split
         // so a future roster change updates this test deliberately rather
         // than by accident.
         Assert.Equal(
@@ -194,7 +194,7 @@ public class UnitCatalogueTests
     [InlineData(UnitType.Karve, 8)]
     [InlineData(UnitType.Bowman, 9)]
     [InlineData(UnitType.Provisioner, 10)]
-    [InlineData(UnitType.SettlerCrew, 10)]
+    [InlineData(UnitType.Settler, 10)]
     [InlineData(UnitType.Berserker, 20)]
     [InlineData(UnitType.Catapult, 20)]
     [InlineData(UnitType.Ram, 20)]

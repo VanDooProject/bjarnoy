@@ -2,9 +2,6 @@
 // which live in the backend only. Keep these in step with the C# files named on each line.
 import type { ResourceLine } from '../../api/types';
 
-/** `Founding.RequiredSettlerCrews`: a founding march takes exactly this many Settler crews. */
-export const FOUNDING_CREWS = 3;
-
 /** `SettlementService.MinimumSpacing`: hexes between a new settlement and every other settlement's claim border. */
 export const MINIMUM_SPACING = 15;
 
@@ -14,8 +11,8 @@ export const BASE_STORAGE = 500;
 /** `BuildingCatalogue.FoundingHeadroom`: how far below its full storage a new settlement's stock starts. */
 export const FOUNDING_HEADROOM = 50;
 
-/** `Founding.CostMultiplier`: the Settler crew price doubles with every settlement you already hold (×1 at one). */
-export function crewCostMultiplier(settlementsHeld: number): number {
+/** `Founding.CostMultiplier`: the Settler price doubles with every settlement you already hold (×1 at one). */
+export function settlerCostMultiplier(settlementsHeld: number): number {
   return 2 ** Math.max(0, settlementsHeld - 1);
 }
 
