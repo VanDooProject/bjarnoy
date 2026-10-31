@@ -198,8 +198,8 @@ public static class HexPathfinder
     /// <em>except</em> at the two endpoints: a settlement's own hex is always
     /// land, even a coastal one's, so a fleet's <paramref name="from"/>
     /// (its home harbor) and <paramref name="to"/> (an
-    /// <see cref="Armies.ArmyMission.Attack"/>/<see cref="Armies.ArmyMission.Support"/>
-    /// target's centre) are exempt from the sea-only rule — the search still
+    /// <see cref="Armies.ArmyMission.Support"/> target's centre, or the shore building an
+    /// <see cref="Armies.ArmyMission.Attack"/>/<see cref="Armies.ArmyMission.Raid"/> is sent at) are exempt from the sea-only rule — the search still
     /// requires every hex in between to be real open sea, so a start with no
     /// adjacent sea at all or a target with no shoreline hex to beach on (see
     /// <see cref="World.Shoreline"/>) still fails to find a route. Training

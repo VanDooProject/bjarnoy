@@ -143,16 +143,16 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void The_catapult_has_a_positive_siege_power_and_nothing_else_does()
+    public void Only_the_catapult_and_the_ships_have_a_siege_power()
     {
-        // Only the Catapult contributes to SiegeResolver's building-damage
-        // math (issue #40 phase 5) — every other unit type is 0.
+        // Only the Catapult and the ships (fleet attacks hit a shore building) contribute to
+        // SiegeResolver's building-damage math — every other unit type is 0.
         foreach (var type in UnitCatalogue.AllTypes)
         {
             var definition = UnitCatalogue.Get(type);
-            if (type == UnitType.Catapult)
+            if (type == UnitType.Catapult || definition.Class == UnitClass.Ship)
             {
-                Assert.True(definition.SiegePower > 0, "the Catapult must have a positive siege power");
+                Assert.True(definition.SiegePower > 0, $"{type} must have a positive siege power");
             }
             else
             {

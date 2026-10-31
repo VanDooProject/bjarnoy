@@ -10,7 +10,7 @@ namespace Bjarnoy.Domain.Tests;
 /// <summary>
 /// Issue #450, departure half: a fleet leaves from and returns to its settlement's harbour hex
 /// (<see cref="Army.FleetAnchor(HexCoord, IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain})"/>), which is the
-/// Dockyard when the centre is inland. Only coastal targets are used here; arrival at inland targets is a separate change.
+/// Dockyard when the centre is inland. Fleet attacks at inland-centred targets are covered by <see cref="FleetShoreAttackTests"/>.
 /// </summary>
 public class FleetDepartureTests
 {
@@ -53,7 +53,7 @@ public class FleetDepartureTests
         Army.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], CoastalTarget, T0,
             Guid.CreateVersion7(), Strait, ArmyMission.Raid, Guid.CreateVersion7(),
-            targetClaimDiscs: [(CoastalTarget, 3)]);
+            targetBuildingCoord: CoastalTarget, targetClaimDiscs: [(CoastalTarget, 3)]);
 
     private static Bjarnoy.Domain.Movement.Movement MovementOf(Army army) => ((ArmyLocation.InTransit)army.Location).Movement;
 

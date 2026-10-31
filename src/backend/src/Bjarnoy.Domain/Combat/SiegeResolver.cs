@@ -99,7 +99,8 @@ public static class SiegeResolver
     /// </summary>
     /// <param name="attackerSurvivors">
     /// The attacking army's stacks that survived the battle (<see cref="BattlePlan.AttackerSurvivors"/>).
-    /// Only <see cref="UnitType.Catapult"/> stacks contribute; call this only
+    /// Every stack contributes its <see cref="UnitDefinition.SiegePower"/> (catapults and, as starting values,
+    /// ships; every other unit has none); call this only
     /// when the attacker actually won — an attacker that lost contributes no
     /// siege damage regardless of what it brought, and this method does not
     /// check the battle's winner itself (the caller already knows).
@@ -119,11 +120,16 @@ public static class SiegeResolver
     /// destruction as a real, intended consequence.
     /// </param>
     /// <param name="seed">Seeds the random-target fallback only; the same seed always picks the same target.</param>
+    /// <param name="randomFallback">
+    /// Whether to pick a random building when the requested one no longer stands (or none was requested). A fleet is
+    /// sent at exactly one shore building, so it passes <see langword="false"/>: if that building is gone, nothing is hit.
+    /// </param>
     public static SiegeOutcome Resolve(
         IReadOnlyList<UnitStack> attackerSurvivors,
         IReadOnlyList<PlacedBuilding> defenderBuildings,
         HexCoord? requestedTargetCoord,
-        int seed)
+        int seed,
+        bool randomFallback = true)
     {
         ArgumentNullException.ThrowIfNull(attackerSurvivors);
         ArgumentNullException.ThrowIfNull(defenderBuildings);
@@ -135,14 +141,13 @@ public static class SiegeResolver
         }
 
         var survivingSiegePower = attackerSurvivors
-            .Where(s => s.Type == UnitType.Catapult)
             .Sum(s => (long)UnitCatalogue.Get(s.Type).SiegePower * s.Count);
 
         var levelsDestroyed = LevelsDestroyed(survivingSiegePower);
         if (levelsDestroyed <= 0)
         {
-            // No catapults survived to fire (none were sent, or a
-            // 100%-catapult army that won by a hair still lost every one of
+            // No siege power survived to fire (no catapults or ships were sent, or
+            // a 100%-catapult army that won by a hair still lost every one of
             // them) — no damage happens.
             return SiegeOutcome.None;
         }
@@ -151,6 +156,11 @@ public static class SiegeResolver
         var index = requestedTargetCoord is { } coord
             ? buildings.FindIndex(b => b.Coord == coord)
             : -1;
+
+        if (index < 0 && !randomFallback)
+        {
+            return SiegeOutcome.None;
+        }
 
         if (index < 0)
         {
