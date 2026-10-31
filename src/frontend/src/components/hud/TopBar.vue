@@ -224,8 +224,14 @@ watch(
     drawerObserver?.disconnect();
     if (!el || typeof ResizeObserver === 'undefined') return;
     drawerObserver = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect) drawerHeight.value = rect.height;
+      // Border-box, not `contentRect`: `.hud-drawer-content` is padded
+      // (12px top/bottom + the bottom safe-area inset), and `contentRect`
+      // excludes padding, which sized the drawer that much too short and
+      // cut off its last row (same mistake as the bar's Finding #16 below).
+      const entry = entries[0];
+      if (!entry) return;
+      drawerHeight.value = entry.borderBoxSize?.[0]?.blockSize
+        ?? entry.target.getBoundingClientRect().height;
     });
     drawerObserver.observe(el);
   },
@@ -389,6 +395,9 @@ function onBarPointerCancel(e: PointerEvent) {
 function onBarLostPointerCapture(e: PointerEvent) {
   if (dragGestureEnabled.value) drawer.onLostPointerCapture(e);
 }
+function onBarTouchMove(e: TouchEvent) {
+  if (dragGestureEnabled.value) drawer.onTouchMove(e);
+}
 function onGripClick() {
   if (dragEnabled.value) drawer.toggle();
 }
@@ -451,6 +460,7 @@ const backdropStyle = computed(() => {
   <header
     ref="barRef"
     class="hud-bar"
+    :style="{ '--settlement-bubble-top': settlementBubbleTop }"
     :class="{
       'hud-bar--docked': docked,
       'hud-bar--bottom': dragEnabled && barPosition === 'bottom',
@@ -465,6 +475,7 @@ const backdropStyle = computed(() => {
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
     @lostpointercapture="onBarLostPointerCapture"
+    @touchmove="onBarTouchMove"
     @click.capture="onClickCapture"
   >
     <!-- The logo lives in the mobile settlement-bubble instead (below) —
@@ -578,6 +589,7 @@ const backdropStyle = computed(() => {
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
     @lostpointercapture="onBarLostPointerCapture"
+    @touchmove="onBarTouchMove"
     @click.capture="onClickCapture"
   >
     <!-- The collapsed bar (and its grip) stays pinned to the screen's own
@@ -594,8 +606,8 @@ const backdropStyle = computed(() => {
          touch (driven in JS from useHudDrawer's own gesture — see
          `drawerScrollRef`/onBarPointerMove above and its own comment on
          `scrollEl`). Not the ResizeObserver's own target — that stays on
-         `.hud-drawer-content` so its contentRect keeps reporting the
-         content's natural (unclipped) height, not this wrapper's capped one. -->
+         `.hud-drawer-content` so its border-box keeps reporting the
+         content's natural (unclipped) height, padding included, not this wrapper's capped one. -->
     <div ref="drawerScrollRef" class="hud-drawer-scroll">
       <div
         :id="drawerContentId"
@@ -1109,6 +1121,21 @@ const backdropStyle = computed(() => {
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* `.hud-drawer`'s own `touch-action: none` stops at this element: a
+     scroll container starts a fresh touch-action scope for its contents, so
+     without repeating it here a finger on overflowing drawer content is
+     claimed by the browser's native pan (`pointercancel`), and the drawer
+     can no longer be dragged closed by touch. Touch scrolling of this
+     element is driven from useHudDrawer instead (see `scrollEl` there);
+     wheel and `scrollIntoView` stay native. The chip layouts' drawers
+     (the rail sheet and the floating drawer) have no drag, so nothing
+     drives their scrolling from script: they opt back into native touch
+     scrolling below. */
+  touch-action: none;
+}
+.hud-drawer--rail .hud-drawer-scroll,
+.hud-drawer--floating .hud-drawer-scroll {
+  touch-action: auto;
 }
 .hud-drawer--bottom .hud-drawer-scroll {
   /* A flex column (not `column-reverse`, which would flip `scrollTop`

@@ -160,6 +160,39 @@
   real motion needs a recorded user approval there). It doesn't
   replace fixing real perf problems for slow devices.
 
+# in-game docs (/docs)
+- `/docs` and its pages are **player docs**: what a player needs to play — rules, numbers, what can be built where, what things look like.
+  write from the player's side ("you can build ... on ..."), not from the code's
+- technical/admin content is hidden from players: how the map generator lays things out (e.g. how bogs are created),
+  generation thresholds, art-pipeline notes ("drawn with the X art until its own is ready", "cut into seven pieces so ..."),
+  dev status notes. Put it in `DocsAdminNote` (`src/frontend/src/components/docs/DocsAdminNote.vue`); only admins see it,
+  behind the docs header toggle (`useDocsAdminNotes`). Never mix such a sentence into a player paragraph — give it its own
+  i18n key (e.g. `...artNote`, `...techNote`) and render it in a `DocsAdminNote` next to the player text
+- building links: the first mention in prose links (with icon and preview); the building in a table's first column always links
+- a docs page shows what the game actually draws: looks the generator never picks (e.g. the plain bog moss, retired in
+  `RETIRED_BOG_VARIANTS`) don't appear in pickers either
+- example maps (`BogIsland`, `WastedIsland`, `WallExample`) go above the per-tile entries they illustrate: the whole
+  first, then the pieces
+- a new page joins the shared page list `src/frontend/src/lib/docs/docsPages.ts` (hub group and order, art, header art
+  style, related pages with a reason each; hub, breadcrumb, previous/next and the Related footer all read it) and the
+  routes in `src/frontend/src/router/index.ts`, and gets en + de text in `src/frontend/src/i18n/locales/{en,de}/docs.json`
+- page art: no big picture on top of a page; the header shows the page's art as a small icon beside the title (pages
+  about one tile or building) or a faded backdrop (the others; phones always use the icon)
+
+# German text (de locale)
+- write German the way a native speaker writes a game's help pages — not a translation of the English sentence. Restructure
+  freely; keep the meaning (rules, numbers, conditions) exact
+- address the player with "du", active voice, short sentences. Avoid "Das Spiel ..." as a subject and passive chains
+  where a "du" sentence works: "Das Spiel warnt dich, wenn du einen setzt." → "Willst du dort trotzdem einen Turm bauen,
+  warnt dich das Spiel vorher."
+- avoid English calques and colon/semicolon chains: "hält das Land" → "beansprucht das Land", "Looks" → "Varianten",
+  "Zeig auf ein Hexfeld" → "Fahr mit der Maus über ein Feld"
+- keep terms consistent with the in-game names in `src/frontend/src/i18n/locales/de/catalogue.json` (e.g. Ziegelei, not
+  Lehmziegelei); "Feld" in rules text, "Kachel" only where the UI already uses it; "Armee", not "Heer" (lore text aside);
+  "Techbaum"
+- typography: „…" quotes, – as dash, correct spelling ("platzieren")
+- new or changed English text gets its German counterpart in the same commit, written to these rules, not machine-literal
+
 # code reuse
 - never implement the same behaviour twice or differently in two places
   (e.g. a component's mount + open/close animation wired one way in

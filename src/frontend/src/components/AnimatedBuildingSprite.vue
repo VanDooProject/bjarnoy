@@ -14,7 +14,14 @@ import type { AtlasFrameRect } from '../lib/map/atlas';
 import type { BuildingLayers } from '../lib/map/buildingArt';
 import { clipFrameIndex, clipTimingOf } from '../lib/map/clipPlayback';
 
-const props = defineProps<{ layers: BuildingLayers }>();
+const props = defineProps<{
+  layers: BuildingLayers;
+  /**
+   * Elapsed playback time in ms from a caller-owned clock (`useAnimationClock`, which holds still under reduced
+   * motion, Save-Data or an "animations off" setting). Without it the sprite runs its own timer.
+   */
+  elapsedMs?: number;
+}>();
 
 const canvasSize = computed(() => props.layers.base?.sourceSize ?? props.layers.top?.sourceSize ?? { w: 1, h: 1 });
 
@@ -60,7 +67,7 @@ let timer: ReturnType<typeof setInterval> | undefined;
 const currentTopFrame = computed<AtlasFrameRect | undefined>(() => {
   const clip = props.layers.clip;
   if (!clip || clip.frameRects.length === 0) return props.layers.top;
-  return clip.frameRects[clipFrameIndex(clipTimingOf(clip), elapsed.value)];
+  return clip.frameRects[clipFrameIndex(clipTimingOf(clip), props.elapsedMs ?? elapsed.value)];
 });
 
 const topStyle = computed(() => (currentTopFrame.value ? layerStyle(currentTopFrame.value) : null));
@@ -76,7 +83,7 @@ function startAnimation() {
   stopAnimation();
   elapsed.value = 0;
   const clip = props.layers.clip;
-  if (!clip || clip.frameRects.length <= 1) return;
+  if (props.elapsedMs !== undefined || !clip || clip.frameRects.length <= 1) return;
   const period = 1000 / clip.fps;
   timer = setInterval(() => {
     elapsed.value += period;

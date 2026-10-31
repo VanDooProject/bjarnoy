@@ -12,7 +12,7 @@ import {
   ravensRings,
   wisdomBuildTimeFactor,
 } from './buildingEconomy';
-import { buildingAllowedOnHex, cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
+import { buildingAllowedOnHex, cropAllowedHere, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
@@ -64,8 +64,8 @@ import {
 
 /**
  * Demo mode's client-only trade offer — mirrors the shape of the backend's
- * `TradeOfferResponse` closely enough that TradePanel.vue can read either
- * with the same template, without actually matching it field-for-field
+ * `TradeOfferResponse` closely enough that the trade UI (removed until trade is
+ * redesigned) could read either with the same template, without actually matching it field-for-field
  * (there's no id-per-poster-settlement notion of a shipment here — see
  * `WorldModel.acceptTradeOffer`'s doc comment for why).
  */
@@ -85,7 +85,7 @@ export interface DemoTradeOffer {
 /**
  * Demo-mode trade rejection, thrown by `WorldModel`'s trade methods —
  * mirrors `ApiError`'s `problem.rejection` closely enough that
- * TradePanel.vue can display both the same way (`err.rejection` here vs
+ * the trade UI (removed until trade is redesigned) could display both the same way (`err.rejection` here vs
  * `err.problem?.rejection` there) without a real HTTP round trip to reject.
  */
 export class DemoTradeError extends Error {
@@ -1801,6 +1801,8 @@ export class WorldModel {
     // shore, and nothing stands on a lake or on bog it has no business on (matches BuildingDefinition.AllowsHex).
     if (!type || !buildingAllowedOnHex(type, tile)) return false;
     if (tile.buildingType) return false;
+    // A type switched off for placement (the Quarry) is never placed anew (matches BuildRejection.NewPlacementDisabled).
+    if (newPlacementDisabled(type)) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes (and, for the Sawmill, only some variants — see
     // ringCatalogue.ts's EXCLUDED_VARIANTS_BY_TYPE) have a matching river-

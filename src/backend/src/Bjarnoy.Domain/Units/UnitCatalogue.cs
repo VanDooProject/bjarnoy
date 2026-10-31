@@ -16,7 +16,7 @@ namespace Bjarnoy.Domain.Units;
 /// Iron and the unlock ladder (<c>docs/design/economy.md</c> section 8): every unit except the
 /// <see cref="UnitType.Thrall"/> costs iron, so raising troops is gated by iron income. Each unit's
 /// Longhouse gate follows the building that trains it: Spearman with the Barracks (LH 5; the Thrall has no gate of its own, its Barracks is the gate), Axeman
-/// with the first bog-ore works (LH 6), Karve with the Dockyard (LH 8), Bowman with the Archery Range (LH 9),
+/// at LH 6, three levels after the bog-ore works open (LH 3), Karve with the Dockyard (LH 8), Bowman with the Archery Range (LH 9),
 /// Provisioner and Settler Crew with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
 /// Longship) at LH 20, where the Hammerschmiede boosts the bog-ore works.
 /// </remarks>

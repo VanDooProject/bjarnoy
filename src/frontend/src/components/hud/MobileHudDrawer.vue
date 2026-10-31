@@ -1,11 +1,9 @@
 <script setup lang="ts">
 // Content for the mobile-only pull-down drawer (see TopBar.vue's `drawer`
-// slot / composables/useHudDrawer.ts): the nav links HudNav shows inline on
-// desktop but has no room for on mobile. Mirrors HudNav.vue's own link
-// list/visibility rules rather than importing HudNav itself — HudNav is
-// desktop chrome living inside the collapsed bar (out of scope to
-// restructure here), this is a second, mobile-only surface for the same
-// destinations.
+// slot / composables/useHudDrawer.ts): the nav links HudNav shows on desktop
+// but has no room for on mobile. The entries themselves (list, visibility,
+// targets, unread badge) come from composables/useHudNavEntries.ts, the same
+// source HudNav.vue renders from.
 //
 // The resource list used to live here too, duplicating ResourceBar's own
 // pills still visible in the collapsed bar above — wasted space for the
@@ -24,16 +22,14 @@
 // account-creation nudge lands here on a `hasResourceBar` bar, where it has
 // no room to float.
 import { computed, onBeforeUnmount, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
-import { useReportsStore } from '../../stores/reports';
 import { useLogout } from '../../composables/useLogout';
-import { useLandingLink } from '../../composables/useLandingLink';
+import { useHudNavEntries, type HudNavEntry } from '../../composables/useHudNavEntries';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { profileLocation } from '../../lib/profileRoute';
-import { modalLocation } from '../../lib/modalRoute';
 import type { MessageSchema } from '../../i18n/schema';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -41,22 +37,15 @@ import ProfileNudge from '../onboarding/ProfileNudge.vue';
 const props = withDefaults(defineProps<{ hasResourceBar?: boolean }>(), { hasResourceBar: false });
 const emit = defineEmits<{ close: [] }>();
 
-const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const player = usePlayerStore();
-const reports = useReportsStore();
 const { logout } = useLogout();
-const showLandingLink = useLandingLink();
+const { entries } = useHudNavEntries();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-function go(path: string) {
-  router.push(path);
-  emit('close');
-}
-
-function goToModal(path: string) {
-  router.push(modalLocation(router, path));
+function onEntryClick(entry: HudNavEntry) {
+  entry.go();
   emit('close');
 }
 
@@ -91,45 +80,15 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
 
 <template>
   <nav class="drawer-links">
-    <button v-if="player.hasFoundedSettlement" class="link" :class="{ active: route.name === 'settlement' }" @click="go('/settlement')">
-      {{ t('hud.nav.settlement') }}
-    </button>
     <button
-      v-if="auth.isAuthenticated && player.hasFoundedSettlement"
+      v-for="entry in entries"
+      :key="entry.id"
       class="link"
-      :class="{ active: route.name === 'world' }"
-      @click="go('/world')"
+      :class="{ active: entry.active }"
+      @click="onEntryClick(entry)"
     >
-      {{ t('hud.nav.worldMap') }}
-    </button>
-    <button v-if="auth.isAuthenticated" class="link" :class="{ active: route.name === 'leaderboards' }" @click="goToModal('/leaderboards')">
-      {{ t('hud.nav.leaderboards') }}
-    </button>
-    <button
-      v-if="auth.isAuthenticated"
-      class="link"
-      :class="{ active: ['messages', 'conversation'].includes(String(route.name)) }"
-      @click="go('/messages')"
-    >
-      {{ t('hud.nav.messages') }}
-    </button>
-    <button class="link" :class="{ active: String(route.name).startsWith('report') }" @click="goToModal('/reports')">
-      {{ t('hud.nav.reports') }}
-      <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
-    </button>
-    <button class="link" :class="{ active: route.name === 'guild' }" @click="goToModal('/guild')">
-      {{ t('hud.nav.alliance') }}
-    </button>
-    <button class="link" :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }" @click="go('/docs')">
-      {{ t('hud.nav.docs') }}
-    </button>
-    <!-- Same rule as HudNav.vue's Landing link (composables/useLandingLink.ts):
-         hidden on the landing route itself and once the player has founded.
-         Finding #8: this drawer is shared by every page that shows HudNav,
-         docs pages included, so a player with nothing yet still has a way
-         back "home" on a phone. -->
-    <button v-if="showLandingLink" class="link" @click="go('/')">
-      {{ t('hud.nav.landing') }}
+      {{ t(entry.labelKey) }}
+      <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
     </button>
     <!-- The language switcher's only home at phone width — see
          LocaleSwitcher.vue's own comment on why no bar carries it there. -->

@@ -18,7 +18,7 @@ describe('buildTechTreeNodes', () => {
     expect(nodes).toHaveLength(Object.keys(TECH_TREE_LAYOUT).length);
     // every catalogue type is either laid out or absorbed into a merged card
     const absorbed = Object.values(MERGED_CARDS).flatMap((c) => c.absorbs);
-    for (const type of Object.keys(byType)) {
+    for (const type of Object.keys(byType).filter((t) => !HIDDEN_FROM_DOCS.includes(t))) {
       expect(type in TECH_TREE_LAYOUT || absorbed.includes(type), `${type} has a card`).toBe(true);
     }
   });
@@ -28,6 +28,23 @@ describe('buildTechTreeNodes', () => {
       expect(byType[type], `${type} should still be in the catalogue`).toBeTruthy();
       expect(byName.has(type), `${type} should not be drawn`).toBe(false);
     }
+  });
+
+  it('hides the quarry (no new one can be built) while it stays in the catalogue', () => {
+    expect(HIDDEN_FROM_DOCS).toContain('quarry');
+    expect(byName.has('quarry')).toBe(false);
+  });
+
+  it('lays out the storage row, the clay brickworks -> bog-ore works -> hammer forge row, and no blank row', () => {
+    const at = (type: string) => TECH_TREE_LAYOUT[type]!;
+    expect(at('storagehouse')).toEqual([1, 2]);
+    expect(at('greatstorehouse')).toEqual([2, 2]);
+    expect(at('meadery')).toEqual([3, 2]);
+    expect(at('claybrickworks')).toEqual([1, 3]);
+    expect(at('bogoreworks')).toEqual([2, 3]);
+    expect(at('hammerschmiede')).toEqual([3, 3]);
+    const rows = new Set(Object.values(TECH_TREE_LAYOUT).map(([, row]) => row));
+    expect([...rows].sort((a, b) => a - b)).toEqual(Array.from({ length: rows.size }, (_, i) => i));
   });
 
   it('shows Farm and Pumpkin Farm as one card behind the Reindeer Herder', () => {

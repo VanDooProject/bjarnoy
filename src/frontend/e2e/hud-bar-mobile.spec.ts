@@ -32,9 +32,9 @@ import { SettlementPage } from './pages';
 test.use({ mapLayers: { water: false } });
 
 /**
- * ResourceBar.vue mounts a second, hidden `.resource-bar` alongside the real
- * one purely to measure whether full notation would fit (`data-measure` on
- * its root) — off-screen (`position: fixed`, far outside the viewport) and
+ * ResourceBar.vue mounts hidden `.resource-bar` clones alongside the real
+ * one purely to measure whether a row would fit (`data-measure` on their
+ * roots: the collapsed phone row, and on desktop the full desktop row) — off-screen (`position: fixed`, far outside the viewport) and
  * `aria-hidden`/`inert`, but still real DOM sharing the same classes, so
  * every locator below that means "the pills the player actually sees" has
  * to exclude it explicitly or it silently doubles counts and pulls
@@ -447,8 +447,33 @@ test.describe('mobile HUD bar', () => {
     await expect(page).toHaveURL('/profile');
   });
 
+  // Regression: the drawer's resting height used to come from the content
+  // element's `contentRect` (padding excluded), so it opened ~24px + the
+  // bottom inset short and its last row ("Log out") was cut off until scrolled.
+  test('opened drawer shows its last row fully, without scrolling', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    await page.locator('.hud-grip').click();
+    const drawer = page.locator('.hud-drawer');
+    const logout = page.locator('[data-testid="drawer-account-logout"]');
+    await expect(logout).toBeVisible();
+    await expect.poll(() => drawer.evaluate((el) => el.getAnimations().length)).toBe(0);
+
+    const drawerBox = (await drawer.boundingBox())!;
+    const logoutBox = (await logout.boundingBox())!;
+    expect(logoutBox.y + logoutBox.height).toBeLessThanOrEqual(drawerBox.y + drawerBox.height);
+
+    const { scrollHeight, clientHeight, scrollTop } = await page
+      .locator('.hud-drawer-scroll')
+      .evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, scrollTop: el.scrollTop }));
+    expect(scrollTop).toBe(0);
+    expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
+  });
+
   // The anonymous trigger has no room in the bar itself: it floats as a chip
-  // below it (under the Trade toggle), and steps aside while the drawer is
+  // below it, and steps aside while the drawer is
   // open. Its entries (log in, world list) live only on that chip, not in
   // the drawer too.
   test('anonymous: the trigger floats below the bar, and the drawer does not repeat its entries', async ({ page }) => {
