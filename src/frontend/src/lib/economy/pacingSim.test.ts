@@ -74,8 +74,8 @@ describe('helpers', () => {
     expect(parseClock('garbage')).toBe(0);
   });
 
-  it('settler cost is 3x the training cost, with a fallback', () => {
-    expect(settlerCostFrom({ wood: 1, stone: 2, food: 3, iron: 4 })).toEqual({ wood: 3, stone: 6, food: 9, iron: 12 });
+  it('settler cost is 5x the training cost (one founding party), with a fallback', () => {
+    expect(settlerCostFrom({ wood: 1, stone: 2, food: 3, iron: 4 })).toEqual({ wood: 5, stone: 10, food: 15, iron: 20 });
     expect(settlerCostFrom(undefined)).toEqual(FALLBACK_SETTLER_COST);
   });
 });
