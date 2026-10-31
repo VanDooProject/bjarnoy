@@ -31,7 +31,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // which stays legacy for now.
   farm: 'farm',
   reindeerherder: 'reindeerherder',
-  tower: 'towerbuilding',
+  tower: 'stavetower',
   // The docs preview always shows the corrie landform, one of the two the
   // pack carves a quarry into — see the docs page's own variant picker for
   // the saddleback alternative (`quarry_saddleback`, resolved directly by
@@ -76,7 +76,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
@@ -174,13 +174,15 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
 /**
  * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
  * (`fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
- * placeholder art for now). Everything else is `buildingArt`.
+ * placeholder art for now), a tower on plain bog moss or on forest the stave tower made for that ground. Everything else is `buildingArt`.
  */
 export function buildingArtOnTile(
   type: string,
   level: number,
-  tile: { bog?: { kind: string; inDirections: readonly TileOrientation[]; outDirection: TileOrientation | null } },
+  tile: { terrain?: string; bog?: { kind: string; inDirections: readonly TileOrientation[]; outDirection: TileOrientation | null } },
 ): ArtRef | undefined {
+  if (type === 'tower' && tile.bog?.kind === 'bog') return buildingArtByFamily('stavetower_bog', level);
+  if (type === 'tower' && tile.terrain === 'forest') return buildingArtByFamily('stavetower_forest', level);
   if (type === 'fishinghut' && tile.bog?.kind === 'half') return buildingArtByFamily('fisherhut_lake', level);
   if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     const straight =

@@ -1889,11 +1889,20 @@ describe('WorldModel bog buildings', () => {
 
   it('refuses every grass building on bog ground (the PR3 open point)', () => {
     const { model, settlement, hex } = bogSettlement();
-    for (const type of ['farm', 'tower', 'storagehouse', 'townsquare', 'meadery', 'barracks', 'smithy', 'lumberjack', 'quarry'] as const) {
+    for (const type of ['farm', 'storagehouse', 'townsquare', 'meadery', 'barracks', 'smithy', 'lumberjack', 'quarry'] as const) {
       for (const i of [0, 1, 2, 3, 4, 5, 6]) {
         expect(model.placeBuilding(settlement.id, hex(i), type), `${type} on hex ${i}`).toBe(false);
       }
     }
+  });
+
+  it('places a tower on plain moss but on no other bog hex', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const i of [1, 2, 3, 4, 5, 6, 7]) {
+      expect(model.placeBuilding(settlement.id, hex(i), 'tower'), `tower on bog hex ${i}`).toBe(false);
+    }
+    expect(model.placeBuilding(settlement.id, hex(0), 'tower')).toBe(true);
+    expect(model.getTile(hex(0).q, hex(0).r).buildingType).toBe('tower');
   });
 
   it('refuses a new quarry even on a mountain hex inside the realm (new placement is switched off)', () => {

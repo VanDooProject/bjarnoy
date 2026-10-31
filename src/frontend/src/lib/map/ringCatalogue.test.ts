@@ -234,6 +234,17 @@ describe('buildingAllowedOnHex', () => {
     expect(buildingAllowedOnHex(type, { terrain: 'bog' })).toBe(false); // bog kind unknown
   });
 
+  it('the Tower stands on grass, sand, forest and plain moss, like the wall but never on water', () => {
+    for (const terrain of ['grass', 'sand', 'forest']) expect(buildingAllowedOnHex('tower', { terrain }), terrain).toBe(true);
+    expect(buildingAllowedOnHex('tower', bogHex('bog'))).toBe(true);
+    for (const kind of ALL_KINDS.filter((k) => k !== 'bog')) {
+      expect(buildingAllowedOnHex('tower', bogHex(kind)), `on ${kind}`).toBe(false);
+    }
+    expect(buildingAllowedOnHex('tower', { terrain: 'bog' })).toBe(false); // bog kind unknown
+    expect(buildingAllowedOnHex('tower', { terrain: 'mountain' })).toBe(false);
+    expect(buildingAllowedOnHex('tower', { terrain: 'sea', isCoastalWater: true })).toBe(false);
+  });
+
   it('the Hammer Forge stands on a creek and nothing else', () => {
     expect(buildingAllowedOnHex('hammerschmiede', bogHex('creek'))).toBe(true);
     for (const kind of ALL_KINDS.filter((k) => k !== 'creek')) {
@@ -265,7 +276,7 @@ describe('buildingAllowedOnHex', () => {
     for (const type of ['farm', 'tower', 'storagehouse', 'lumberjack', 'quarry', 'townsquare', 'sawmill', 'fishinghut', 'bogoreworks', 'claybrickworks']) {
       expect(buildingAllowedOnHex(type, bogHex('lake')), `${type} on a lake`).toBe(false);
     }
-    for (const type of ['farm', 'tower', 'storagehouse', 'lumberjack', 'quarry', 'townsquare', 'smithy', 'barracks', 'meadery', 'longhouse']) {
+    for (const type of ['farm', 'storagehouse', 'lumberjack', 'quarry', 'townsquare', 'smithy', 'barracks', 'meadery', 'longhouse']) {
       for (const kind of ALL_KINDS) expect(buildingAllowedOnHex(type, bogHex(kind)), `${type} on ${kind}`).toBe(false);
     }
   });
