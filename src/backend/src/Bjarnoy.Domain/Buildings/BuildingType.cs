@@ -170,7 +170,7 @@ public enum BuildingType
     DruidHut = 23,
 
     /// <summary>
-    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// Trains the civilian Provisioner/Settler half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>), plus a
     /// modest storage bonus. Behind a level-3 <see cref="StorageHouse"/> and

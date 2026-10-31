@@ -172,7 +172,7 @@ Bright boards, a goal readable in one line, one obvious thing to click. All thre
 
 - Your realm: **Bjornstad**, jarl "you", Lv 4, 1 of 3 settlements.
 - Rival realm: **Grimhold**, jarl Ulf, Lv 6.
-- Fleet: longship **Sea-Wolf**, settler crew, landfall 00:38:20.
+- Fleet: longship **Sea-Wolf**, settlers, landfall 00:38:20.
 - Sea: **Kettil Sea**.
 - Standing HUD resources: 4 820 (+240/h), 2 105 (+90/h), 9 340 (+615/h), 760 (+35/h).
 - Raid timer: 04:12.

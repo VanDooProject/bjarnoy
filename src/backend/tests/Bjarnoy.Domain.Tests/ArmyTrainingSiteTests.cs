@@ -62,7 +62,7 @@ public class ArmyTrainingSiteTests
     [Fact]
     public void Settlers_depart_from_the_cart_workshop()
     {
-        UnitStack[] units = [new(UnitType.SettlerCrew, 3)];
+        UnitStack[] units = [new(UnitType.Settler, 5)];
         var settlement = Found(units, (Barracks, BuildingType.Barracks), (Workshop, BuildingType.CartWorkshop));
 
         var decision = Move(settlement, units);

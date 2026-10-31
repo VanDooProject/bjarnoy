@@ -475,7 +475,7 @@ describe('trainingSite', () => {
     thrall: unit({ type: 'thrall', speed: 5, requiredBuildingType: 'barracks' }),
     spearman: unit({ type: 'spearman', speed: 4, requiredBuildingType: 'barracks' }),
     bowman: unit({ type: 'bowman', speed: 4, requiredBuildingType: 'archeryrange' }),
-    settlercrew: unit({ type: 'settlercrew', speed: 4, requiredBuildingType: 'cartworkshop' }),
+    settler: unit({ type: 'settler', speed: 4, requiredBuildingType: 'cartworkshop' }),
   };
   const barracks = { q: 2, r: 0, type: 'barracks' };
   const range = { q: -2, r: 0, type: 'archeryrange' };

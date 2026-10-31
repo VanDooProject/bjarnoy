@@ -23,7 +23,7 @@ const MODIFIERS: { [K in BuildingModifier['kind']]: [Extract<BuildingModifier, {
   borderAnchor: [[{ kind: 'borderAnchor' }, 'Border anchor']],
   trainsLandTroops: [[{ kind: 'trainsLandTroops' }, 'Trains land troops']],
   trainsShips: [[{ kind: 'trainsShips' }, 'Trains ships']],
-  trainsCivilianCrews: [[{ kind: 'trainsCivilianCrews' }, 'Trains provisioners/settler crews']],
+  trainsCivilians: [[{ kind: 'trainsCivilians' }, 'Trains provisioners and settlers']],
   terrainBoost: [[{ kind: 'terrainBoost', terrain: 'forest', percent: 20 }, 'Forest (+20%)']],
   coastal: [
     [{ kind: 'coastal' }, 'Coastal'],

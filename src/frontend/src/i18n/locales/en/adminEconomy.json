@@ -67,7 +67,7 @@
     "feasts": "Town Square feasts",
     "renownThreshold": "Renown for 2nd settlement",
     "renownNote": "Renown needed for the 2nd settlement; the live game uses 55 000 (doubling per further settlement).",
-    "settlerCrewNote": "Settler cost",
+    "settlerNote": "Settler cost",
     "live": "Live",
     "whatIf": "What-if",
     "production": "Production per hour on day {day}",

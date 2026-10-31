@@ -969,7 +969,7 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// Trains the civilian Provisioner/Settler half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>) — the basic
     /// melee/archer/ship split's shape, applied to the civilian line.

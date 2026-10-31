@@ -7,7 +7,7 @@ using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
 
-/// <summary>Settlement expansion via settler crews (issue #55): dispatch validation, arrival, and retargeting.</summary>
+/// <summary>Settlement expansion via settlers (issue #55): dispatch validation, arrival, and retargeting.</summary>
 public class ArmyFoundingTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
@@ -25,7 +25,7 @@ public class ArmyFoundingTests
             Name = "Bjornstad",
             Centre = Home,
             Buildings = [new PlacedBuilding(Home, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = garrison ?? [new UnitStack(UnitType.SettlerCrew, 3)],
+            Garrison = garrison ?? [new UnitStack(UnitType.Settler, 5)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000),
                 production, capacity, T0),
@@ -35,7 +35,7 @@ public class ArmyFoundingTests
     private static DispatchDecision DispatchFound(
         Settlement settlement,
         HexCoord destination,
-        // 3 SettlerCrews alone can carry only 3 * 40 = 120 food
+        // 5 Settlers alone can carry only 5 * 40 = 200 food
         // (UnitDefinition.FoodCarryCapacity) — a default above that rejects
         // every "should succeed" dispatch test with
         // ProvisionsExceedCarryCapacity before it ever reaches Found-specific
@@ -47,7 +47,7 @@ public class ArmyFoundingTests
         bool renownAndSlotAllowed = true) =>
         Army.PlanDispatch(
             settlement,
-            requested ?? [new UnitStack(UnitType.SettlerCrew, 3)],
+            requested ?? [new UnitStack(UnitType.Settler, 5)],
             provisions,
             [],
             destination,
@@ -59,7 +59,7 @@ public class ArmyFoundingTests
             renownAndSlotAllowed: renownAndSlotAllowed);
 
     [Fact]
-    public void Overland_founding_dispatch_succeeds_with_exactly_three_settler_crews()
+    public void Overland_founding_dispatch_succeeds_with_exactly_five_settlers()
     {
         var settlement = Found();
 
@@ -71,16 +71,16 @@ public class ArmyFoundingTests
     }
 
     [Theory]
-    [InlineData(2)]
     [InlineData(4)]
-    public void Founding_dispatch_is_rejected_when_settler_crew_count_is_not_exactly_three(int count)
+    [InlineData(6)]
+    public void Founding_dispatch_is_rejected_when_settler_count_is_not_exactly_five(int count)
     {
-        var settlement = Found(garrison: [new UnitStack(UnitType.SettlerCrew, count)]);
+        var settlement = Found(garrison: [new UnitStack(UnitType.Settler, count)]);
 
         var decision = DispatchFound(
-            settlement, new HexCoord(5, 0), requested: [new UnitStack(UnitType.SettlerCrew, count)]);
+            settlement, new HexCoord(5, 0), requested: [new UnitStack(UnitType.Settler, count)]);
 
-        Assert.Equal(DispatchRejection.WrongSettlerCrewCount, decision.Rejection);
+        Assert.Equal(DispatchRejection.WrongSettlerCount, decision.Rejection);
     }
 
     [Fact]
@@ -104,17 +104,17 @@ public class ArmyFoundingTests
     }
 
     [Fact]
-    public void Sea_founding_convoy_allows_ships_carrying_settler_crews()
+    public void Sea_founding_convoy_allows_ships_carrying_settlers()
     {
         var settlement = Found(garrison:
         [
-            new UnitStack(UnitType.SettlerCrew, 3),
-            new UnitStack(UnitType.Longship, 2),
+            new UnitStack(UnitType.Settler, 5),
+            new UnitStack(UnitType.Longship, 1),
         ]);
 
         var decision = DispatchFound(
             settlement, new HexCoord(5, 0),
-            requested: [new UnitStack(UnitType.SettlerCrew, 3), new UnitStack(UnitType.Longship, 2)],
+            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Longship, 1)],
             // A sea convoy is a fleet — needs a route over open water, same
             // as any other fleet dispatch test (see ArmyTests's
             // Fleet_dispatch_accepted_over_open_sea); the destination's own
@@ -126,27 +126,62 @@ public class ArmyFoundingTests
     }
 
     [Fact]
-    public void Sea_founding_convoy_is_rejected_when_ships_cannot_carry_every_settler_crew()
+    public void Overland_founding_dispatch_is_accepted_with_exactly_five_settlers_and_rejected_with_four_or_six()
+    {
+        foreach (var count in new[] { 4, 5, 6 })
+        {
+            var settlement = Found(garrison: [new UnitStack(UnitType.Settler, count)]);
+            var decision = DispatchFound(
+                settlement, new HexCoord(5, 0), requested: [new UnitStack(UnitType.Settler, count)]);
+
+            Assert.Equal(count == 5, decision.Accepted);
+            if (count != 5)
+            {
+                Assert.Equal(DispatchRejection.WrongSettlerCount, decision.Rejection);
+            }
+        }
+    }
+
+    [Fact]
+    public void Sea_founding_convoy_is_accepted_with_five_settlers_on_one_karve()
     {
         var settlement = Found(garrison:
         [
-            new UnitStack(UnitType.SettlerCrew, 3),
+            new UnitStack(UnitType.Settler, 5),
             new UnitStack(UnitType.Karve, 1),
         ]);
 
         var decision = DispatchFound(
             settlement, new HexCoord(5, 0),
-            requested: [new UnitStack(UnitType.SettlerCrew, 3), new UnitStack(UnitType.Karve, 1)]);
+            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Karve, 1)],
+            terrainAt: _ => Terrain.Sea);
 
-        Assert.Equal(DispatchRejection.InsufficientShipCapacityForSettlers, decision.Rejection);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]
-    public void Founding_dispatch_still_rejects_a_settler_crew_mixed_with_ordinary_land_units()
+    public void Sea_founding_convoy_is_accepted_with_five_settlers_on_one_longship()
     {
         var settlement = Found(garrison:
         [
-            new UnitStack(UnitType.SettlerCrew, 3),
+            new UnitStack(UnitType.Settler, 5),
+            new UnitStack(UnitType.Longship, 1),
+        ]);
+
+        var decision = DispatchFound(
+            settlement, new HexCoord(5, 0),
+            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Longship, 1)],
+            terrainAt: _ => Terrain.Sea);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Founding_dispatch_still_rejects_a_settler_mixed_with_ordinary_land_units()
+    {
+        var settlement = Found(garrison:
+        [
+            new UnitStack(UnitType.Settler, 5),
             new UnitStack(UnitType.Karve, 3),
             new UnitStack(UnitType.Spearman, 5),
         ]);
@@ -155,7 +190,7 @@ public class ArmyFoundingTests
             settlement, new HexCoord(5, 0),
             requested:
             [
-                new UnitStack(UnitType.SettlerCrew, 3),
+                new UnitStack(UnitType.Settler, 5),
                 new UnitStack(UnitType.Karve, 3),
                 new UnitStack(UnitType.Spearman, 5),
             ]);
@@ -184,13 +219,13 @@ public class ArmyFoundingTests
     {
         var settlement = Found(garrison:
         [
-            new UnitStack(UnitType.SettlerCrew, 3),
+            new UnitStack(UnitType.Settler, 5),
             new UnitStack(UnitType.Spearman, 4),
         ]);
 
         var decision = DispatchFound(
             settlement, new HexCoord(4, 0),
-            requested: [new UnitStack(UnitType.SettlerCrew, 3), new UnitStack(UnitType.Spearman, 4)]);
+            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Spearman, 4)]);
         var arrivesAt = ((ArmyLocation.InTransit)decision.Army!.Location).Movement.ArrivesAt;
 
         var arrival = Army.PlanFoundingArrival(decision.Army, arrivesAt, targetStillFoundable: true);
@@ -283,7 +318,7 @@ public class ArmyFoundingTests
 
         // Load barely enough for the original short trip; retargeting much
         // further away should now fail the round-trip food check.
-        var decision = DispatchFound(settlement, new HexCoord(2, 0), provisions: 3);
+        var decision = DispatchFound(settlement, new HexCoord(2, 0), provisions: 5);
         var army = decision.Army!;
 
         var result = Army.RetargetFounding(army, new HexCoord(50, 0), T0.AddMinutes(10), Home, AllGrass());

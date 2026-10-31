@@ -39,11 +39,11 @@ public enum UnitType
     Longship = 8,
 
     /// <summary>
-    /// Civilian coloniser (issue #55): three, standing together on an
+    /// Civilian coloniser (issue #55): five, standing together on an
     /// unclaimed hex, found a new settlement — see
     /// <see cref="Bjarnoy.Domain.Settlers.Founding"/>.
     /// </summary>
-    SettlerCrew = 9,
+    Settler = 9,
 
     /// <summary>
     /// Siege unit (endgame step 2b): sturdier and slower than the catapult, the same siege power;
@@ -65,7 +65,7 @@ public static class UnitTypeExtensions
         UnitType.Catapult => "catapult",
         UnitType.Karve => "karve",
         UnitType.Longship => "longship",
-        UnitType.SettlerCrew => "settlercrew",
+        UnitType.Settler => "settler",
         UnitType.Ram => "ram",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };

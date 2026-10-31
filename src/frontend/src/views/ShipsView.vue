@@ -12,7 +12,7 @@ import { resourceName, unitName } from '../i18n/catalogueNames';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import { favourAt } from '../lib/docs/shrineDocs';
 import { formatMinutes } from '../lib/docs/landMovementDocs';
-import { SHIP_CREW_CAPACITY, TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from '../lib/docs/shipDocs';
+import { SHIP_SETTLER_CAPACITY, TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from '../lib/docs/shipDocs';
 
 // The ships page: the dockyard, a table of the two ships and the rules for fleets at sea. Ship figures come from the
 // unit catalogue, the dockyard's from the building catalogue; the sea rules are mirrored in shipDocs.ts.
@@ -161,7 +161,7 @@ const loc = computed(() => String(locale.value));
 
     <DocsAdminNote class="block">
       <p>{{ $t('docs.ships.adminNote.route') }}</p>
-      <p>{{ $t('docs.ships.adminNote.sea', { karve: SHIP_CREW_CAPACITY.karve, longship: SHIP_CREW_CAPACITY.longship }) }}</p>
+      <p>{{ $t('docs.ships.adminNote.sea', { karve: SHIP_SETTLER_CAPACITY.karve, longship: SHIP_SETTLER_CAPACITY.longship }) }}</p>
     </DocsAdminNote>
   </DocsPageLayout>
 </template>

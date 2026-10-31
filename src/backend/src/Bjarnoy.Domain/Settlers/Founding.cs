@@ -6,48 +6,49 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Settlers;
 
 /// <summary>
-/// Settlement expansion (issue #55): the settler-crew unit, its escalating
+/// Settlement expansion (issue #55): the settler unit, its escalating
 /// training cost, the minimum-spacing rule a new settlement's hex must clear,
-/// and the pure "how many settler crews does founding need" constant every
+/// and the pure "how many settlers does founding need" constant every
 /// other piece of this feature (dispatch validation, arrival resolution)
 /// shares.
 /// </summary>
 public static class Founding
 {
     /// <summary>
-    /// Settler crews that must stand together on the target hex to found a
-    /// settlement — the Travian "3 settlers" pattern this issue explicitly
-    /// mirrors. Exactly this many, not "at least": a dispatch requesting a
+    /// Settlers that must stand together on the target hex to found a
+    /// settlement — five settlers, so one founding party is a real
+    /// investment. Exactly this many, not "at least": a dispatch requesting a
     /// different count is rejected outright (see
-    /// <see cref="Armies.Army.PlanDispatch"/>'s <see cref="Armies.DispatchRejection.WrongSettlerCrewCount"/>)
-    /// so arrival never has to decide what to do with a leftover crew.
+    /// <see cref="Armies.Army.PlanDispatch"/>'s <see cref="Armies.DispatchRejection.WrongSettlerCount"/>)
+    /// so arrival never has to decide what to do with a leftover settler.
     /// </summary>
-    public const int RequiredSettlerCrews = 3;
+    public const int RequiredSettlers = 5;
 
     /// <summary>
-    /// How many settler crews one ship can carry across open water (issue #55
+    /// How many settlers one ship can carry across open water (issue #55
     /// §2 "by sea") — there is no general ferry/transport mechanic in this
     /// codebase (troop system design doc, explicitly deferred); this is a
     /// narrow, founding-only exception: a <see cref="UnitType.Karve"/> or
     /// <see cref="UnitType.Longship"/> mixed into a
     /// <see cref="Armies.ArmyMission.Found"/> dispatch alongside
-    /// <see cref="UnitType.SettlerCrew"/> stacks is read as "the ships are
-    /// carrying the crews", not as an illegal mixed-class dispatch — see
+    /// <see cref="UnitType.Settler"/> stacks is read as "the ships are
+    /// carrying the settlers", not as an illegal mixed-class dispatch — see
     /// <see cref="Armies.Army.PlanDispatch"/>.
     /// </summary>
+    // Each ship carries exactly one founding party; a Longship must not carry two.
     public static int ShipCapacity(UnitType shipType) => shipType switch
     {
-        UnitType.Karve => 1,
-        UnitType.Longship => 2,
+        UnitType.Karve => RequiredSettlers,
+        UnitType.Longship => RequiredSettlers,
         _ => 0,
     };
 
     /// <summary>
-    /// Settler-crew training cost multiplier for a player who already holds
+    /// Settler training cost multiplier for a player who already holds
     /// <paramref name="existingSettlementCount"/> settlements (issue #55 §4):
     /// roughly doubles per settlement already held, Travian-style. Owning
     /// just the starting settlement (1) costs the catalogue's base price (×1)
-    /// to train crews for a 2nd; owning 2 costs ×2 for a 3rd; owning 3 costs
+    /// to train settlers for a 2nd; owning 2 costs ×2 for a 3rd; owning 3 costs
     /// ×4 for a 4th; and so on. <paramref name="existingSettlementCount"/> of
     /// 0 (defensive only — every player who can train anything already has a
     /// first settlement) is also ×1, not a division by zero.
@@ -55,8 +56,8 @@ public static class Founding
     public static double CostMultiplier(int existingSettlementCount) =>
         Math.Pow(2, Math.Max(0, existingSettlementCount - 1));
 
-    public static ResourceAmounts ScaledSettlerCrewCost(int existingSettlementCount) =>
-        UnitCatalogue.Get(UnitType.SettlerCrew).TrainingCost * CostMultiplier(existingSettlementCount);
+    public static ResourceAmounts ScaledSettlerCost(int existingSettlementCount) =>
+        UnitCatalogue.Get(UnitType.Settler).TrainingCost * CostMultiplier(existingSettlementCount);
 
     /// <summary>
     /// Whether <paramref name="target"/> clears the minimum-spacing rule

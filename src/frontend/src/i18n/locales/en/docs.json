@@ -49,14 +49,14 @@
         "wastedLands": "Utgard's own walls close the giants' ground."
       },
       "founding": {
-        "landMovement": "How fast settler crews cross each ground.",
-        "wildlifeCamps": "Strong camps can ambush crews on the way.",
+        "landMovement": "How fast settlers cross each ground.",
+        "wildlifeCamps": "Strong camps can ambush settlers on the way.",
         "bogLands": "Landing spots need bog within reach for clay and iron."
       },
       "landMovement": {
         "walls": "A wall hex stops every land army.",
         "wildlifeCamps": "Strong camps ambush armies that come close.",
-        "founding": "Settler crews cross the same grounds."
+        "founding": "Settlers cross the same grounds."
       },
       "ships": {
         "shrines": "Njörd's shrine makes your ships attack harder.",
@@ -242,7 +242,7 @@
       "cropmill": "Grinds a level-10 Farm's grain on a straight river tile — a millstone under the open sky, its waterwheel turning with the current. No Food of its own: it boosts every Farm within its level's range instead (a wider range and a bigger boost at higher levels) — not Pumpkin Farm, a different crop a mill doesn't grind.",
       "smithy": "The settlement's forge, with an anvil, on grass or sand behind a level-10 Barracks — the military line's capstone and the feeder of the Shrine of Thor. It produces nothing: it is where troops will be upgraded, a mechanic still to come.",
       "druidhut": "A turf-roofed roundhouse on grass behind a Town Square, with a ring of runestones — no effect of its own yet, but meant for a future favour or rune mechanic.",
-      "cartworkshop": "Builds the settlement's carts on grass behind a Town Square — trains provisioners and settler crews in place of the longhouse. No storage of its own.",
+      "cartworkshop": "Builds the settlement's carts on grass behind a Town Square — trains provisioners and settlers in place of the longhouse. No storage of its own.",
       "claybrickworks": "Digs and fires clay on bog moss — a pit, a drying rack and a kiln turning red earth into stone where no mountain stands.",
       "bogoreworks": "The iron producer, on plain bog moss (not a shore, creek or lake), behind a level-3 Clay Brickworks: from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake hex next to it adds 10% to its output, up to +50%.",
       "hammerschmiede": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works. No iron of its own: it raises every bog-ore works within its level's range instead (a wider range and a bigger boost at higher levels)."
@@ -731,6 +731,32 @@
       "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
       "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
       "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
+    },
+    "margins": {
+      "heading": "Bog margins (not used)",
+      "body": "The art set has five margin tiles for a bog meeting grass on one to five edges. The game doesn't place them: the soft moss edges with their peat rim are drawn by the map renderer along every bog edge against grass, forest and river banks, which needs no extra tile set and no placement rule. The tiles were replaced by those drawn edges for now and stay in the atlas in case that changes. Each has a plain look, a pools look and an ore seep look.",
+      "tiles": {
+        "bay": {
+          "name": "Bay",
+          "body": "Grass on one edge."
+        },
+        "shore": {
+          "name": "Shore",
+          "body": "Grass on two edges."
+        },
+        "half": {
+          "name": "Half",
+          "body": "Grass on three edges."
+        },
+        "tongue": {
+          "name": "Tongue",
+          "body": "Grass on four edges."
+        },
+        "spit": {
+          "name": "Spit",
+          "body": "Grass on five edges, the moss narrows to a spit."
+        }
+      }
     }
   },
   "animations": {
@@ -954,8 +980,8 @@
     },
     "more": {
       "heading": "More settlements",
-      "body": "Further settlements are founded by {count} Settler crews marching together. You train them at the {workshop}, which needs a {longhouse} of level {level} and a {square} of level {squareLevel}.",
-      "crew": {
+      "body": "Further settlements are founded by {count} settlers marching together. You train them at the {workshop}, which needs a {longhouse} of level {level} and a {square} of level {squareLevel}.",
+      "settler": {
         "defense": "Defence",
         "speed": "Speed",
         "food": "Carries food",
@@ -964,23 +990,23 @@
         "longhouse": "Longhouse level",
         "minutes": "{n} min"
       },
-      "provisions": "Each crew carries {food} food, {total} for all three. Load enough for the way there and back.",
-      "ambush": "On the way, overland crews can be ambushed by strong wildlife camps (see {camps}). How fast they cross each ground is on the {movement} page.",
+      "provisions": "Each settler carries {food} food, {total} for all five. Load enough for the way there and back.",
+      "ambush": "On the way, overland settlers can be ambushed by strong wildlife camps (see {camps}). How fast they cross each ground is on the {movement} page.",
       "campsLink": "Wildlife camps",
       "movementLink": "Land movement"
     },
     "renown": {
       "heading": "Renown and price",
-      "body": "Every settlement after the first has a price in renown and in crews. Your buildings earn renown in all your settlements together: 1 per building level per hour, and it never decays. Each settlement you hold doubles the renown asked for the next one and the price of its crews.",
+      "body": "Every settlement after the first has a price in renown and in settlers. Your buildings earn renown in all your settlements together: 1 per building level per hour, and it never decays. Each settlement you hold doubles the renown asked for the next one and the price of its settlers.",
       "columns": {
         "next": "You found",
         "renown": "Renown needed",
-        "perCrew": "Cost per crew",
-        "total": "Cost of {count} crews"
+        "perSettler": "Cost per settler",
+        "total": "Cost of {count} settlers"
       },
       "nth": "Settlement no. {n}",
       "order": "Costs are {resources}.",
-      "when": "The renown is checked when the crews set out.",
+      "when": "The renown is checked when the settlers set out.",
       "feasts": "A feast at the {square} earns renown on top of that. It runs {hours} hours, costs the same amount of wood, stone and food, and grows with the square's level.",
       "feast": {
         "level": "Town Square level",
@@ -990,19 +1016,18 @@
     },
     "where": {
       "heading": "Where a settlement can land",
-      "land": "On any land hex your crews can reach, except a giant's.",
+      "land": "On any land hex your settlers can reach, except a giant's.",
       "spacing": "At least {hexes} hexes beyond the claim border of every settlement in the world, yours and other players'.",
-      "twice": "This is checked when the crews set out and again when they arrive.",
-      "taken": "If someone else took the spot meanwhile, the crews wait there. You can send them on or recall them, and they head home on their own when their food runs low."
+      "twice": "This is checked when the settlers set out and again when they arrive.",
+      "taken": "If someone else took the spot meanwhile, the settlers wait there. You can send them on or recall them, and they head home on their own when their food runs low."
     },
     "new": {
       "heading": "A new settlement",
       "body": "It starts with a level 1 {longhouse}. Its claim reaches {claim1} hexes, {claim2} from level 2, and its stores hold {stock} each of wood, stone and food, and no iron.",
-      "garrison": "Every unit that travelled with the crews, other than the crews themselves, stays as its garrison."
+      "garrison": "Every unit that travelled with the settlers, other than the settlers themselves, stays as its garrison."
     },
     "adminNote": {
-      "sea": "Founding by sea exists in the rules but has no interface yet (issue #447).",
-      "provisions": "The expansion panel proposes 200 provisions by default, but three crews carry only {carried}."
+      "sea": "Founding by sea exists in the rules but has no interface yet (issue #447)."
     }
   },
   "landMovement": {
@@ -1156,7 +1181,7 @@
     },
     "adminNote": {
       "route": "Known gap (issue #450): a fleet cannot yet attack or raid a settlement whose centre is inland, even when that settlement's land reaches the shore.",
-      "sea": "Founding by sea (a Karve carries {karve} Settler crew, a Longship {longship}) exists in the rules but has no interface yet (issue #447)."
+      "sea": "Founding by sea (a Karve carries {karve} settlers, a Longship {longship}, one founding party each) exists in the rules but has no interface yet (issue #447)."
     }
   },
   "shrines": {
