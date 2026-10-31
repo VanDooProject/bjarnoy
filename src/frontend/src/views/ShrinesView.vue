@@ -112,7 +112,7 @@ const slotRows = [
       </div>
       <i18n-t keypath="docs.shrines.gods.costs" tag="p" class="muted" scope="global">
         <template #link>
-          <RouterLink to="/tech-tree">{{ $t('docs.shrines.gods.costsLink') }}</RouterLink>
+          <RouterLink to="/docs/tech-tree">{{ $t('docs.shrines.gods.costsLink') }}</RouterLink>
         </template>
       </i18n-t>
     </section>

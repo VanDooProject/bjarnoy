@@ -309,7 +309,7 @@ npx openapi-typescript http://localhost:5180/openapi/v1.json \
 ```
 
 `GET /api/v1/buildings` also has a frontend-only fallback: the tech-tree page
-(`/tech-tree`) needs to render without a backend in demo mode, so
+(`/docs/tech-tree`) needs to render without a backend in demo mode, so
 `src/frontend/src/data/building-catalogue.json` is a committed snapshot of
 that endpoint's response, regenerated the same way against a running backend:
 
