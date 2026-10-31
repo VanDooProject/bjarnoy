@@ -47,7 +47,7 @@ import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { claimRadiusForLevel } from '../lib/map/shoreline';
-import { HEX_TARGET_RADIUS_PX, ringBubbleAim } from '../lib/map/guidanceArrowGeometry';
+import { ARROW_TIP_GAP_PX, HEX_TARGET_RADIUS_PX, ringBubbleAim } from '../lib/map/guidanceArrowGeometry';
 import type { Tile } from '../lib/map/types';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
@@ -378,7 +378,11 @@ const ringError = ref<string | null>(null);
 const { categories: ringCategories, canBuildHere, offersBuilding, placeBuildingDemo } = useBuildRing(ringTile, ringCoord);
 // Every ring bubble's screen spot (the Build hub, categories, buildings), keyed by id - from RingMenu's own
 // `layout` emit, so the pointer aims at exactly where the bubble is actually drawn.
-const ringLaneSpots = ref<Record<string, { x: number; y: number }>>({});
+// Every bubble as a circle (RingMenu's `bubbles` emit): the spots the pointer aims at, and the circles it keeps clear of.
+const ringBubbles = ref<{ id: string; x: number; y: number; r: number }[]>([]);
+const ringLaneSpots = computed(() =>
+  Object.fromEntries(ringBubbles.value.filter((b) => b.id !== 'hub' && b.id !== 'back').map((b) => [b.id, { x: b.x, y: b.y }])),
+);
 
 const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
@@ -423,7 +427,7 @@ const hudInsetBottomPxLanding = computed(() =>
 );
 
 watch(ringScreen, (screen) => {
-  if (!screen) ringLaneSpots.value = {};
+  if (!screen) ringBubbles.value = [];
 });
 // Mirrors MapView.vue's own combined lock — the mobile queue drawer and the
 // HUD pull-down drawer (post-founding, HudNav's own) both float over the
@@ -554,17 +558,17 @@ const showLandfallBanner = computed(
 const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') !== 'terrain');
 
 /** The open ring's next guided step, with its label; null when the next guided building isn't offered on this hex. */
-function ringStepTarget(): { spot: { x: number; y: number }; label: string } | null {
+function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: string } | null {
   const type = nextGuidedType(world.hud.placedBuildingTypes);
   if (!type) return null;
   const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
   if (!step) return null;
   if (step.kind === 'building') {
-    return { spot: step.spot, label: t('landing.pointer.buildThis', { building: buildingName(type) }) };
+    return { id: step.id!, spot: step.spot, label: t('landing.pointer.buildThis', { building: buildingName(type) }) };
   }
-  if (step.kind === 'build') return { spot: step.spot, label: t('landing.pointer.openBuild') };
+  if (step.kind === 'build') return { id: 'build', spot: step.spot, label: t('landing.pointer.openBuild') };
   const category = ringCategories.value.find((c) => c.id === step.id);
-  return { spot: step.spot, label: t('landing.pointer.openCategory', { category: category?.label ?? '' }) };
+  return { id: step.id!, spot: step.spot, label: t('landing.pointer.openCategory', { category: category?.label ?? '' }) };
 }
 
 const pointerTarget = computed(() => {
@@ -575,14 +579,18 @@ const pointerTarget = computed(() => {
   if (showReturningLoginGate.value) return null;
   const ringStep = ringScreen.value ? ringStepTarget() : null;
   if (ringStep && ringScreen.value) {
-    // One rule for every ring bubble: the arrow comes in from outside the ring and its tip lands inside the bubble.
-    const aim = ringBubbleAim(ringScreen.value, ringStep.spot);
+    // One rule for every ring bubble: the tip rests just outside its rim, coming in from outside the ring, swung
+    // round only as far as it takes to stay on screen and off the other bubbles.
+    const target = ringBubbles.value.find((b) => b.id === ringStep.id)!;
+    const aim = ringBubbleAim(ringScreen.value, target, ringBubbles.value.filter((b) => b !== target), ringBounds.value);
     return {
       mode: 'screen' as const,
       screen: ringStep.spot,
       label: ringStep.label,
       angle: aim.angle,
       targetRadius: aim.targetRadius,
+      tipGap: aim.gap,
+      scale: aim.scale,
     };
   }
   if (!player.hasFoundedSettlement) {
@@ -595,6 +603,8 @@ const pointerTarget = computed(() => {
         : t('landing.pointer.anyGlowingPlot'),
       angle: 38,
       targetRadius: HEX_TARGET_RADIUS_PX,
+      tipGap: ARROW_TIP_GAP_PX,
+      scale: 1,
     };
   }
   if (!nextGuidedTargetCoord.value) return null;
@@ -611,6 +621,8 @@ const pointerTarget = computed(() => {
       : t('landing.pointer.nowBuildHere'),
     angle: oneDone ? 52 : 38,
     targetRadius: HEX_TARGET_RADIUS_PX,
+    tipGap: ARROW_TIP_GAP_PX,
+    scale: 1,
   };
 });
 
@@ -1014,6 +1026,8 @@ watch(
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
       :target-radius="pointerTarget.targetRadius"
+      :tip-gap="pointerTarget.tipGap"
+      :scale="pointerTarget.scale"
       clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
@@ -1055,7 +1069,7 @@ watch(
       @select="onRingSelect"
       @close="closeRing"
       @outside-pointer-down="closeRing"
-      @layout="ringLaneSpots = $event"
+      @bubbles="ringBubbles = $event"
     />
     </RingMenuHost>
   </div>

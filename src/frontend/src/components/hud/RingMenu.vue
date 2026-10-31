@@ -193,6 +193,9 @@ const emit = defineEmits<{
   // The screen spot of every current bubble (both lanes), by action, category or
   // building id — GuidancePointer.vue aims at the guided next step through them.
   layout: [spots: Record<string, { x: number; y: number }>];
+  // Every bubble as a circle (hub, both lanes, the back slot) with its id, so the guide arrow can keep clear of the
+  // ones it is not pointing at. The hub is `hub`, the back slot `back`.
+  bubbles: [circles: { id: string; x: number; y: number; r: number }[]];
   // The circle the open ring covers on screen (hub to the far edge of the
   // farthest bubble, outer lane included); re-emitted as the buildings lane
   // opens and closes. MapView hands it to the renderer so canvas markers
@@ -391,6 +394,20 @@ watch(
     for (const entry of inner) spots[entry.item.id] = { x: entry.x, y: entry.y };
     for (const entry of outer) spots[entry.building.id] = { x: entry.x, y: entry.y };
     emit('layout', spots);
+  },
+  { immediate: true },
+);
+
+watch(
+  [lane1, lane2, backSpot, layout],
+  () => {
+    const r1 = (layout.value.collapsed ? DOT : BUB1) / 2;
+    emit('bubbles', [
+      { id: 'hub', x: props.x, y: props.y, r: HUB / 2 },
+      ...lane1.value.map((e) => ({ id: e.item.id, x: e.x, y: e.y, r: r1 })),
+      ...(backSpot.value ? [{ id: 'back', x: backSpot.value.x, y: backSpot.value.y, r: BUB1 / 2 }] : []),
+      ...lane2.value.map((b) => ({ id: b.building.id, x: b.x, y: b.y, r: BUB2 / 2 })),
+    ]);
   },
   { immediate: true },
 );
