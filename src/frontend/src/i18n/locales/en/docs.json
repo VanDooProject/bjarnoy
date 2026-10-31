@@ -1020,6 +1020,7 @@
       "stream": "Stream",
       "streamNote": "flat, whatever ground it runs over",
       "wallEnd": "Open end of a wall",
+      "surcharge": "+{n}",
       "wallEndNote": "more than the ground",
       "wideRiver": "Wide river",
       "blocked": "Cannot be entered",

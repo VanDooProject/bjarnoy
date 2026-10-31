@@ -1020,6 +1020,7 @@
       "stream": "Bach",
       "streamNote": "pauschal, egal über welchem Gelände",
       "wallEnd": "Offenes Mauerende",
+      "surcharge": "+{n}",
       "wallEndNote": "mehr als der Boden",
       "wideRiver": "Breiter Fluss",
       "blocked": "Nicht betretbar",
