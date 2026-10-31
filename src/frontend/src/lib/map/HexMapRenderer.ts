@@ -4048,6 +4048,7 @@ export class HexMapRenderer {
           wallNeighbours: worldModel.wallNeighbourFlags(c),
           coastalWater: tile.terrain === 'sea',
           gate: tile.buildingType === 'palisadegate',
+          wasted: tile.wasted,
         });
         baseEntries.set(key, { texture: baseTextureFor(textures, tile, wallArt), coord: c });
         const wallTop = topTextureFor(textures, tile, wallArt);

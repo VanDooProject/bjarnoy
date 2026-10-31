@@ -146,6 +146,15 @@ export type TextureKey =
   | 'palisadegatepiece'
   | 'palisadeend'
   | 'palisadeendcoast'
+  // The wasted islands' counterparts (3D_assets hextile075-080 and the Jötun watchtower): a wasted wall hex draws the Utgard wall
+  // piece its neighbours decide, a wasted tower the Jötun watchtower. Texture-lookup keys like the palisade's.
+  | 'utgardwallstraight'
+  | 'utgardwallbend60'
+  | 'utgardwallbend120'
+  | 'utgardwallgatepiece'
+  | 'utgardwallend'
+  | 'utgardwallendcoast'
+  | 'jotunwatchtower'
   | CampFamily;
 
 type OrientationMap<T> = Record<TileOrientation, T>;
@@ -268,6 +277,14 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   palisadegatepiece: PALISADE_FAMILY.gate180,
   palisadeend: PALISADE_FAMILY.end,
   palisadeendcoast: PALISADE_FAMILY.end_coast,
+  // The Utgard walls (the palisade's stone twin on wasted islands, same six pieces and stages) and the Jötun watchtower.
+  utgardwallstraight: 'utgardwall_straight180',
+  utgardwallbend60: 'utgardwall_bend60',
+  utgardwallbend120: 'utgardwall_bend120',
+  utgardwallgatepiece: 'utgardwall_gate180',
+  utgardwallend: 'utgardwall_end',
+  utgardwallendcoast: 'utgardwall_end_coast',
+  jotunwatchtower: 'jotunwatchtower',
 };
 
 /** The texture key of each palisade piece. */
@@ -280,6 +297,16 @@ export const PALISADE_TEXTURE_KEY: Record<PalisadePiece, TextureKey> = {
   end_coast: 'palisadeendcoast',
 };
 
+/** The texture key of each Utgard wall piece: what a wasted wall hex draws in place of the palisade's. */
+export const UTGARD_WALL_TEXTURE_KEY: Record<PalisadePiece, TextureKey> = {
+  straight180: 'utgardwallstraight',
+  bend60: 'utgardwallbend60',
+  bend120: 'utgardwallbend120',
+  gate180: 'utgardwallgatepiece',
+  end: 'utgardwallend',
+  end_coast: 'utgardwallendcoast',
+};
+
 /** The land wall pieces: they stand on their hex's own ground (the sea end brings its own coastal base). */
 const LAND_WALL_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
   'palisadestraight',
@@ -287,6 +314,11 @@ const LAND_WALL_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
   'palisadebend120',
   'palisadegatepiece',
   'palisadeend',
+  'utgardwallstraight',
+  'utgardwallbend60',
+  'utgardwallbend120',
+  'utgardwallgatepiece',
+  'utgardwallend',
 ]);
 
 /**
@@ -295,10 +327,17 @@ const LAND_WALL_KEYS: ReadonlySet<TextureKey> = new Set<TextureKey>([
  * brings its own orientation). A hex the resolver cannot draw (no wall neighbour yet, or an admin-built branch) is an `end` (a sea end on
  * water) facing east: a post that is not joined to anything.
  */
-export function palisadeArtFor(input: { wallNeighbours: readonly boolean[]; coastalWater: boolean; gate: boolean }): RiverArt {
+export function palisadeArtFor(input: {
+  wallNeighbours: readonly boolean[];
+  coastalWater: boolean;
+  gate: boolean;
+  /** A wall on a wasted island: the Utgard wall's pieces instead of the palisade's. */
+  wasted?: boolean;
+}): RiverArt {
+  const keys = input.wasted ? UTGARD_WALL_TEXTURE_KEY : PALISADE_TEXTURE_KEY;
   const resolved = palisadeTileFor(input);
-  if (!isRefusal(resolved)) return { key: PALISADE_TEXTURE_KEY[resolved.piece], orientation: resolved.dir };
-  return { key: PALISADE_TEXTURE_KEY[input.coastalWater ? 'end_coast' : 'end'], orientation: 'E' };
+  if (!isRefusal(resolved)) return { key: keys[resolved.piece], orientation: resolved.dir };
+  return { key: keys[input.coastalWater ? 'end_coast' : 'end'], orientation: 'E' };
 }
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
@@ -1655,6 +1694,8 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.lakeProp && !tile.buildingType) return LAKE_PROP_KEY[tile.lakeProp];
   if (tile.buildingType === 'sawmill') return 'sawmillriver';
   if (tile.buildingType === 'bridge') return 'riverbridge';
+  // A tower on a wasted island is the Jötun watchtower.
+  if (tile.buildingType === 'tower' && tile.wasted) return 'jotunwatchtower';
   // A Fishing Hut on a bog lake's half shore has its own lake art; the Hammer Forge on a creek is the river hammer mill
   // (straight creek or bend), a placeholder until the bog-creek art exists.
   if (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half') return 'fisherhutlake';

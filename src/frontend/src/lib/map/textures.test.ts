@@ -1867,6 +1867,15 @@ describe('palisade art', () => {
     expect(palisadeArtFor({ wallNeighbours: flagsOf([0, 2, 4]), coastalWater: false, gate: false }).key).toBe('palisadeend');
   });
 
+  it('draws a wasted wall hex with the Utgard wall pieces and a wasted tower as the Jötun watchtower', () => {
+    expect(palisadeArtFor({ wallNeighbours: flagsOf([0, 3]), coastalWater: false, gate: false, wasted: true }).key).toBe('utgardwallstraight');
+    expect(palisadeArtFor({ wallNeighbours: flagsOf([0, 3]), coastalWater: false, gate: true, wasted: true }).key).toBe('utgardwallgatepiece');
+    expect(palisadeArtFor({ wallNeighbours: flagsOf([3]), coastalWater: true, gate: false, wasted: true }).key).toBe('utgardwallendcoast');
+    expect(palisadeArtFor({ wallNeighbours: flagsOf([0, 3]), coastalWater: false, gate: false }).key).toBe('palisadestraight');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'grass', buildingType: 'tower', wasted: true })).toBe('jotunwatchtower');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'grass', buildingType: 'tower' })).toBe('tower');
+  });
+
   it('draws a foundation from level000 and game levels 1-3 from level001-003, clamping to the richest rung the atlas has', () => {
     const textures = emptyTextures();
     const art = palisadeArtFor({ wallNeighbours: flagsOf([0, 3]), coastalWater: false, gate: false });
