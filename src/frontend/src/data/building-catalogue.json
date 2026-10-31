@@ -14770,7 +14770,12 @@
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
-      "prerequisites": []
+      "prerequisites": [
+        {
+          "type": "claybrickworks",
+          "level": 3
+        }
+      ]
     },
     {
       "type": "bogoreworks",

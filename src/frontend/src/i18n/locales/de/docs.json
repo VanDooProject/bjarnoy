@@ -241,7 +241,7 @@
       "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
       "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedlertrupps aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
-      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See): von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
+      "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See), hinter einer Ziegelei der Stufe 3: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
       "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
       "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder."
     },
@@ -371,6 +371,11 @@
     "defences": {
       "heading": "Utgards Wehranlagen",
       "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinunter zum Wasser.",
+      "example": {
+        "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, ein Mauerring mit einem Tor darum und Jötun-Wachtürme außerhalb des Rings.",
+        "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+        "caption": "Utgard steht hinter zwei Mauerringen. Der innere Ring ist mit Stufe 2 stärker als der äußere mit Stufe 1, und Wachtürme sichern das Land davor."
+      },
       "level": "Stufe",
       "watchtower": {
         "heading": "Jötun-Wachturm",
@@ -778,8 +783,7 @@
         "fork": "Mauern verzweigen sich nie: Kein Feld darf drei oder mehr Mauernachbarn haben.",
         "gate": "Ein Tor passt nur auf eine Gerade, die auf zwei gegenüberliegenden Seiten ein Mauerfeld hat. Das muss auch nach jedem späteren Bauen so bleiben.",
         "sea": "Ein Seeende berührt genau ein Mauerfeld an Land und kann nie ein Tor sein."
-      },
-      "example": "Ein Beispiel: eine Mauer, die an Land beginnt, gerade verläuft, ein Tor passiert, weiterläuft, um 120° abbiegt und im Meer ausläuft. Teil und Drehung jedes Feldes hat das Spiel allein aus der Lage der Felder ermittelt."
+      }
     },
     "example": {
       "alt": "Eine Beispielmauer aus {count} Feldern auf Gras, die im Meer endet."
@@ -1003,6 +1007,7 @@
     "title": "Bewegung an Land",
     "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
     "toc": {
+      "example": "Beispielroute",
       "cost": "Geländekosten",
       "pace": "Tempo",
       "food": "Nahrung",
@@ -1010,9 +1015,27 @@
       "sight": "Sicht",
       "bridges": "Brücken"
     },
+    "example": {
+      "heading": "Ein Marsch über die Insel",
+      "intro": "Eine Armee marschiert von ihrer Siedlung auf die andere Seite der Mauer. Die Route hat das Spiel selbst berechnet: Sie führt um das Moor und den Bergrücken herum, durch den Bach, über die Brücke ans andere Ufer des breiten Flusses und durch das Tor.",
+      "alt": "Eine Beispielinsel mit dem Weg einer Armee von ihrer Siedlung auf die andere Seite einer Mauer.",
+      "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "total": "Eine {unit}-Armee braucht für die ganze Route {time}.",
+      "names": {
+        "settlement": "Siedlung",
+        "bridge": "Brücke",
+        "wideRiver": "Breiter Fluss",
+        "stream": "Bach",
+        "wall": "Palisade",
+        "gate": "Palisaden-Tor",
+        "coast": "Küstenwasser",
+        "sea": "Offenes Wasser"
+      }
+    },
     "cost": {
       "heading": "Was ein Feld kostet",
       "body": "Jedes Feld, das eine Armee betritt, hat Kosten, die vom Gelände abhängen. Die Armee braucht für das Feld die Kosten geteilt durch ihr Tempo in Stunden. Ein Feld mit Kosten 2 dauert also doppelt so lang wie Gras.",
+      "summary": "Gras ist das schnellste Gelände. Sand und Wald bremsen eine Armee etwas, Moor deutlich. Einen Bach kannst du durchwaten, er kostet aber weit mehr als jedes Gelände. Ein breiter Fluss öffnet sich nur über eine Brücke, und Berge, Seen und das Meer kannst du gar nicht betreten.",
       "columns": {
         "ground": "Gelände",
         "cost": "Kosten"
