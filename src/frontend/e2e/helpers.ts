@@ -559,22 +559,43 @@ export async function buildThroughOpenRing(settlement: SettlementPage, category:
 }
 
 /**
- * The ring bubble under the guidance arrow's tip, by its accessible name or, for a building bubble, its text (null when the tip is over something else).
- * The tip is read off the arrow's own polygon through the SVG's screen transform, so it is where the arrow really is
- * (bob and rotation included), not a re-derivation of GuidancePointer's maths. The arrow is pointer-events: none, so
+ * Where the guidance arrow's tip rests relative to the ring bubbles: the bubble (or the hub) whose rim is nearest the
+ * tip, by its accessible name or text, how far the tip is from that rim in px (negative: inside it), and the ring
+ * bubble `elementFromPoint` finds under the tip (null when nothing). The tip is read off the arrow's own polygon
+ * through the SVG's screen transform, with the bob taken out, so it is where the arrow really rests (rotation and
+ * placement included), not a re-derivation of GuidancePointer's maths. The arrow is pointer-events: none, so
  * `elementFromPoint` sees what a finger would hit.
  */
-export async function bubbleUnderPointerTip(page: Page): Promise<string | null> {
+export async function bubbleNearestPointerTip(
+  page: Page,
+): Promise<{ nearest: string; rimDistance: number; under: string | null } | null> {
   return page.evaluate(() => {
     const polygon = document.querySelector<SVGPolygonElement>('[data-testid="guidance-pointer"] svg polygon');
     const svg = polygon?.ownerSVGElement;
     const ctm = polygon?.getScreenCTM();
-    if (!polygon || !svg || !ctm) return null;
+    const bob = document.querySelector<HTMLElement>('[data-testid="guidance-pointer"] .bob');
+    if (!polygon || !svg || !ctm || !bob) return null;
+    // The bob slides the arrow back along its shaft; the rest position is what the placement rule is about.
+    const bobbed = new DOMMatrix(getComputedStyle(bob).transform).f;
     const point = svg.createSVGPoint();
     point.x = 75;
-    point.y = 136;
+    point.y = 136 - bobbed / (110 / 150);
     const tip = point.matrixTransform(ctm);
-    const hit = document.elementFromPoint(tip.x, tip.y)?.closest('.ring-bubble');
-    return hit ? (hit.getAttribute('aria-label') ?? (hit.textContent ?? '').trim()) : null;
+    const name = (el: Element) => el.getAttribute('aria-label') ?? (el.textContent ?? '').trim();
+    // A lone Build bubble sits on the hub on a cramped ring: the two are one thing to the eye, the bigger rim counts.
+    const circles = [...document.querySelectorAll('.ring-bubble, .ring-hub')].map((el) => {
+      const box = el.getBoundingClientRect();
+      return { el, x: box.left + box.width / 2, y: box.top + box.height / 2, r: box.width / 2 };
+    });
+    let best: { nearest: string; rimDistance: number } | null = null;
+    for (const c of circles) {
+      if (c.el.classList.contains('ring-hub') && circles.some((o) => o !== c && Math.hypot(o.x - c.x, o.y - c.y) < 1)) continue;
+      const r = Math.max(...circles.filter((o) => Math.hypot(o.x - c.x, o.y - c.y) < 1).map((o) => o.r));
+      const rimDistance = Math.hypot(tip.x - c.x, tip.y - c.y) - r;
+      if (!best || rimDistance < best.rimDistance) best = { nearest: name(c.el), rimDistance };
+    }
+    if (!best) return null;
+    const hit = document.elementFromPoint(tip.x, tip.y)?.closest('.ring-bubble, .ring-hub');
+    return { ...best, under: hit ? name(hit) : null };
   });
 }
