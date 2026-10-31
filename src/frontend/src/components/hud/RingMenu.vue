@@ -43,7 +43,6 @@ import {
   BUB1,
   BUB2,
   CARD_W,
-  DOT,
   HUB,
   LANE1,
   LANE2,
@@ -375,7 +374,7 @@ const lane1 = computed(() =>
     };
   }),
 );
-/** ‹ BACK owns the reserved last slot, and stays full size even when the rest collapse to dots. */
+/** ‹ BACK owns the reserved last slot of the inner lane. */
 const backSpot = computed(() => (atRoot.value ? null : (layout.value.lane1[props.categories.length] ?? null)));
 
 const lane2 = computed(() => {
@@ -411,7 +410,7 @@ watch(
 watch(
   [lane1, lane2, backSpot, layout],
   () => {
-    const r1 = px(layout.value.collapsed ? DOT : BUB1) / 2;
+    const r1 = px(BUB1) / 2;
     emit('bubbles', [
       { id: 'hub', x: props.x, y: props.y, r: px(HUB) / 2 },
       ...lane1.value.map((e) => ({ id: e.item.id, x: e.x, y: e.y, r: r1 })),
@@ -423,13 +422,7 @@ watch(
 );
 
 const footprint = computed(() => {
-  const backIndex = atRoot.value ? -1 : props.categories.length;
-  const bubbles = layout.value.lane1.map((spot, i) => ({
-    x: spot.x,
-    y: spot.y,
-    // The reserved back slot stays full size even when the rest collapse to dots.
-    r: px(layout.value.collapsed && i !== backIndex ? DOT : BUB1) / 2,
-  }));
+  const bubbles = layout.value.lane1.map((spot) => ({ x: spot.x, y: spot.y, r: px(BUB1) / 2 }));
   if (lane2.value.length > 0) for (const b of lane2.value) bubbles.push({ x: b.x, y: b.y, r: px(BUB2) / 2 });
   return ringFootprint({ x: props.x, y: props.y }, bubbles, px(HUB) / 2);
 });
@@ -961,19 +954,17 @@ function onBackdropPointerDown(e: PointerEvent) {
         'is-locked': entry.state === 'locked',
         'is-waiting': entry.state === 'waiting',
         armed: armed === entry.item.id,
-        dot: layout.collapsed,
       }"
       :style="{
         left: `${entry.x}px`,
         top: `${entry.y}px`,
-        width: `${px(layout.collapsed ? DOT : BUB1)}px`,
-        height: `${px(layout.collapsed ? DOT : BUB1)}px`,
-        '--d': `${px(layout.collapsed ? DOT : BUB1)}px`,
+        width: `${px(BUB1)}px`,
+        height: `${px(BUB1)}px`,
+        '--d': `${px(BUB1)}px`,
         '--label-px': `${px(entry.item.label.length > 7 ? 8.2 : 9.2)}px`,
         '--tint': entry.color,
       }"
       :aria-disabled="entry.item.disabled || undefined"
-      :title="layout.collapsed ? entry.item.label : undefined"
       :aria-description="entry.item.disabled ? entry.item.hint : undefined"
       :aria-label="entry.item.label"
       @touchstart="onLaneTouchStart($event, entry.item)"
@@ -982,13 +973,13 @@ function onBackdropPointerDown(e: PointerEvent) {
       @mouseleave="hoverLane1 = null"
     >
       <!-- No whitespace between the label and the badges: it would end up in the label's text. -->
-      <template v-if="!layout.collapsed">{{ shown(entry.item.label, false) }}</template><span
-        v-if="!layout.collapsed && (entry.ban || entry.state)" class="ring-badge" :class="entry.ban ? 'ban' : entry.state" aria-hidden="true">
+      {{ shown(entry.item.label, false) }}<span
+        v-if="entry.ban || entry.state" class="ring-badge" :class="entry.ban ? 'ban' : entry.state" aria-hidden="true">
         <svg v-if="entry.state === 'locked'" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
         <svg v-else-if="entry.state === 'waiting'" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
         <svg v-else viewBox="0 0 12 12"><path d="M3 6h6" /></svg>
       </span><span
-        v-if="armed === entry.item.id && !entry.item.disabled && !layout.collapsed" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
+        v-if="armed === entry.item.id && !entry.item.disabled" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
     </button>
 
     <button
@@ -1295,17 +1286,6 @@ function onBackdropPointerDown(e: PointerEvent) {
 .ring-badge.waiting {
   background: #7a5410;
   color: #ffe2a8;
-}
-/* Two full lanes didn't fit: the spent inner lane shrinks to markers so the
-   buildings lane has somewhere to go, rather than the two overlapping. */
-.ring-bubble.dot {
-  padding: 0;
-  border: 1px solid rgba(0, 0, 0, 0.4);
-  background: color-mix(in oklab, var(--tint) 55%, transparent);
-  box-shadow: none;
-}
-.ring-bubble.dot.active {
-  background: var(--tint);
 }
 .ring-bubble.back {
   background: rgba(8, 18, 26, 0.92);

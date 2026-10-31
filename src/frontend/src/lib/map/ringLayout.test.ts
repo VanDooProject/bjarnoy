@@ -12,7 +12,6 @@ import {
   BUB2,
   CARD_H,
   CARD_W,
-  DOT,
   HUB,
   LANE1_MAX,
   layoutRing,
@@ -48,7 +47,7 @@ interface Circle {
 function circlesOf(layout: RingLayoutResult, x: number, y: number, scale = 1): Circle[] {
   return [
     { x, y, r: (HUB / 2) * scale },
-    ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: ((layout.collapsed ? DOT : BUB1) / 2) * scale })),
+    ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: (BUB1 / 2) * scale })),
     ...layout.lane2.map((s) => ({ x: s.x, y: s.y, r: (BUB2 / 2) * scale })),
   ];
 }
@@ -456,7 +455,7 @@ describe('ring layout note (flat onboarding ring)', () => {
 
       const circles = [
         { x: frame.x, y: frame.y, r: HUB / 2 },
-        ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: (layout.collapsed ? DOT : BUB1) / 2 })),
+        ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: BUB1 / 2 })),
       ];
       const gap = Math.min(
         ...circles.map((o) => {

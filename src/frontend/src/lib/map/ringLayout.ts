@@ -50,8 +50,6 @@ export const BUB1 = 52;
 export const BUB2 = 46;
 /** Hub (the tile itself) diameter. */
 export const HUB = 66;
-/** Diameter a spent inner lane collapses to when two full lanes don't fit. */
-export const DOT = 14;
 export const CARD_W = 200;
 /**
  * Measured, not nominal: with the build-slots row and a status footer the
@@ -347,8 +345,6 @@ export interface RingLayoutInput {
 export interface RingLayoutResult {
   lane1: Spot[];
   lane2: Spot[];
-  /** True when two full lanes didn't fit and the inner lane shrinks to dots. */
-  collapsed: boolean;
   showLane1Track: boolean;
   showLane2Track: boolean;
   /** Dashed line from the hub to a lane displaced away from the tile. */
@@ -359,8 +355,8 @@ export interface RingLayoutResult {
   mode: string;
   /**
    * Both lanes sit on arcs round the tile, at the ring's size, inside `area`: false when the
-   * inner lane is an unchecked circle, the buildings an unchecked arc or the inner lane collapsed
-   * to dots. `ringRoomFor` finds where the tile has to be, and how big the ring can be, for this
+   * inner lane is an unchecked circle, the buildings an unchecked arc.
+   * `ringRoomFor` finds where the tile has to be, and how big the ring can be, for this
    * to hold.
    */
   fits: boolean;
@@ -424,7 +420,6 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
   let lane2Full = true;
 
   let lane2Raw: Spot[] = [];
-  let collapsed = false;
   if (lane2Count > 0 && lane1Raw[parentIndex]) {
     const hub: Circle = { x, y, r: HUB / 2 };
     const parentAngle = lane1Raw[parentIndex].ang;
@@ -434,15 +429,9 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
       arcPlace(lane2Count, parentAngle, x, y, ringArea, BUB2, [LANE2, 140, 162], [90, 68, 50], avoid) ??
       arcPlace(lane2Count, base, x, y, ringArea, BUB2, [LANE2, 140, 162, 184], [120, 90, 68], avoid);
 
-    let spots = arcs([hub, ...laneCircles(BUB1 / 2)]);
-    if (!spots) {
-      lane2Full = false;
-      // Nowhere for two full lanes (a tile deep under a HUD panel): collapse the inner lane to
-      // dots rather than drawing both lanes on top of each other. The back slot stays full size -
-      // see RingMenu.vue.
-      spots = arcs([hub, ...laneCircles(DOT / 2)]);
-      collapsed = spots !== null;
-    }
+    const spots = arcs([hub, ...laneCircles(BUB1 / 2)]);
+    lane2Full = spots !== null;
+    // Nowhere for two lanes at this size: the caller shrinks the ring (`ringRoomFor`), never the shape.
     lane2Raw = spots ?? arcAnywhere(lane2Count, parentAngle, x, y, BUB2, LANE2, 90);
   }
 
@@ -496,14 +485,13 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
   return {
     lane1,
     lane2,
-    collapsed,
     showLane1Track,
     showLane2Track,
     leader,
     card,
     note,
     mode: placementMode(x, y, area),
-    fits: arc1 !== null && lane2Full && !collapsed,
+    fits: arc1 !== null && lane2Full,
   };
 }
 

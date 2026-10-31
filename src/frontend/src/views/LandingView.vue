@@ -1037,6 +1037,7 @@ watch(
       :target-radius="pointerTarget.targetRadius"
       :tip-gap="pointerTarget.tipGap"
       :scale="pointerTarget.scale"
+      :avoid="pointerTarget.mode === 'screen' ? ringBubbles : undefined"
       clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
