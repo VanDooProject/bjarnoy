@@ -442,6 +442,33 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('select')).toBeUndefined();
     });
 
+    it('puts the lock on a category whose every building is locked, and still opens it', async () => {
+      const wrapper = ring({
+        categories: [
+          ...CATEGORIES,
+          {
+            id: 'shrines',
+            label: 'Shrines',
+            color: 'var(--gold)',
+            buildings: [
+              { id: 'thor', label: 'Thor', lock: 'Requires longhouse 4' },
+              { id: 'freyja', label: 'Freyja', locks: ['Requires longhouse 5'] },
+            ],
+          },
+        ],
+      });
+      await bubble(wrapper, 'Build').trigger('click');
+      const shrines = bubble(wrapper, 'Shrines');
+      expect(shrines.classes()).toContain('is-locked');
+      expect(shrines.find('.ring-badge.locked').exists()).toBe(true);
+      // Only one of Defense's two buildings is locked: no lock on the category.
+      expect(bubble(wrapper, 'Defense').find('.ring-badge').exists()).toBe(false);
+      expect(bubble(wrapper, 'Housing').find('.ring-badge').exists()).toBe(false);
+
+      await shrines.trigger('click');
+      expect(labels(wrapper)).toEqual(expect.arrayContaining(['Thor', 'Freyja']));
+    });
+
     it('marks a building short on resources as waiting (clock badge), says what is missing, and refuses the click', async () => {
       const wrapper = ringWith(
         {
@@ -654,6 +681,7 @@ describe('RingMenu', () => {
 
       await hut.trigger('touchstart');
       expect(hut.classes()).toContain('armed');
+      expect(hut.classes()).not.toContain('blocked');
       expect(hut.find('[data-testid="ring-arm-badge"]').exists()).toBe(true);
       // The badge's digit is CSS, so the bubble's label is unchanged.
       expect(hut.text()).toBe('Hut');
@@ -673,7 +701,9 @@ describe('RingMenu', () => {
       const hut = bubble(wrapper, 'Hut');
       await hut.trigger('touchstart');
       expect(hut.classes()).toContain('armed');
-      // No "2" badge: a second tap would do nothing here.
+      // Armed for its card, but `blocked` drops the gold ring: a second tap would do nothing here.
+      expect(hut.classes()).toContain('blocked');
+      // No "2" badge either.
       expect(hut.find('[data-testid="ring-arm-badge"]').exists()).toBe(false);
       expect(wrapper.find('[data-testid="ring-tap-hint"]').exists()).toBe(false);
       expect(wrapper.get('[data-testid="ring-card-status"]').text()).toContain('Need 100 Wood · 80 Stone');
