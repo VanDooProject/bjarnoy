@@ -40,7 +40,7 @@ import {
 } from './markerOcclusion';
 import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { axialToOddQ, coordKey, hexDistance, hexesInRadius, neighbors, parseKey } from '../hex/coords';
+import { axialToOddQ, coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { formatCountdownShort } from '../hud/countdown';
@@ -486,8 +486,8 @@ export interface HexMapRendererOptions {
    *
    * 'world' mode: the same clamp around the hex disc of `previewRadius` at `previewCenter` (the showcase hero map).
    * The camera starts fitted to that disc, never zooms out past it, its centre stays inside the disc's bounding box,
-   * zooming in stops short of the world-to-settlement switch, the idle drift is off, and only hexes within
-   * `previewRenderRadius` (default `previewRadius`) of the centre are drawn.
+   * zooming in stops short of the world-to-settlement switch, and the idle drift is off. Hexes are not capped to the disc:
+   * the camera never sees past what its clamp allows, so everything in view is drawn and no cut-off edge can come into frame.
    */
   confineCamera?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
@@ -3453,14 +3453,6 @@ export class HexMapRenderer {
   }
 
   /** Every hex axial coord whose grid position falls within `rect` (world-space). */
-  /** A confined 'world' frame draws only the hexes within `previewDrawRadius` of `previewCenter`; every other mode passes through. */
-  private capToPreviewDisc(coords: AxialCoord[]): AxialCoord[] {
-    if (this.options.mode !== 'world' || !this.options.confineCamera) return coords;
-    const at = this.options.previewCenter ?? { q: 0, r: 0 };
-    const radius = previewDrawRadius(this.options);
-    return coords.filter((c) => hexDistance(at, c) <= radius);
-  }
-
   private coordsInRect(
     rect: { minX: number; minY: number; maxX: number; maxY: number },
     clipSources: FogSource[] | null,
@@ -3738,7 +3730,7 @@ export class HexMapRenderer {
     const fogActive = this.isFogActive();
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
     this.rebuildBounds = this.scanBoundsOfRect(rect);
-    const coords = this.capToPreviewDisc(this.coordsInRect(rect, this.scanClipSources(fogActive)));
+    const coords = this.coordsInRect(rect, this.scanClipSources(fogActive));
     const deepFogOnly =
       this.options.mode === 'world' && fogActive && fogDebugFlags.terrainCull && this.isEntirelyDeepFog(rect);
     this.deepFogOnly = deepFogOnly;

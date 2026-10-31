@@ -49,26 +49,21 @@ export const SHOWCASE_RENDER_RADIUS = 48;
 export const SHOWCASE_WORLD_SEA_MARGIN = 14;
 
 /**
- * The hero world map's cap: the hex disc `{ center, radius }` the camera is fitted to and confined to, and
- * `renderRadius`, how far hexes are drawn. The disc is centred on the village island's land (the mean of its
- * hexes) and reaches its farthest coast plus `SHOWCASE_WORLD_SEA_MARGIN` of sea, so the island the page talks about
- * fills the frame at the fit zoom and its neighbours (a hundred-plus hexes further out) stay out of it. The camera
- * centre may reach the disc's edge and the frame shows more than the disc along its longer axis (a phone's is taller than wide),
- * so what is drawn extends to three times the radius to keep the cut-off off screen.
+ * The hero world map's cap: the hex disc `{ center, radius }` the camera is fitted to and confined to. The disc is
+ * centred on the village island's land (the mean of its hexes) and reaches its farthest coast plus
+ * `SHOWCASE_WORLD_SEA_MARGIN` of sea, so the island the page talks about fills the frame at the fit zoom and its
+ * neighbours (a hundred-plus hexes further out) stay outside the disc. Everything the camera can see is drawn, so a
+ * neighbour reaching into the frame shows whole rather than cut off.
  */
-export function showcaseWorldFrame(
-  model: WorldModel,
-  site: AxialCoord,
-): { center: AxialCoord; radius: number; renderRadius: number } {
+export function showcaseWorldFrame(model: WorldModel, site: AxialCoord): { center: AxialCoord; radius: number } {
   const land = model.previewIslandTiles(site);
-  if (land.length === 0) return { center: site, radius: SHOWCASE_PREVIEW_RADIUS, renderRadius: SHOWCASE_RENDER_RADIUS };
+  if (land.length === 0) return { center: site, radius: SHOWCASE_PREVIEW_RADIUS };
   const center = {
     q: Math.round(land.reduce((sum, c) => sum + c.q, 0) / land.length),
     r: Math.round(land.reduce((sum, c) => sum + c.r, 0) / land.length),
   };
   const reach = land.reduce((far, c) => Math.max(far, hexDistance(center, c)), 0);
-  const radius = reach + SHOWCASE_WORLD_SEA_MARGIN;
-  return { center, radius, renderRadius: radius * 3 };
+  return { center, radius: reach + SHOWCASE_WORLD_SEA_MARGIN };
 }
 
 /** How far from `near` village sites are sampled, and the grid step between samples (bounds the scoring cost to a few hundred candidates). */

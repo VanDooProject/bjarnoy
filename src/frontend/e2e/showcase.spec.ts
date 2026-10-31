@@ -165,6 +165,39 @@ test.describe('showcase page', { tag: '@g2' }, () => {
     expect(Math.abs(stuck.y)).toBeGreaterThan(limit.y - 8);
   });
 
+  test('on a phone the hero map draws every hex in view, even panned into a corner of the cap', async ({ page }) => {
+    // A portrait frame shows far more hexes up/down than across; a fixed draw radius used to come into view
+    // there as a straight cut through the neighbouring island.
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    for (const [dx, dy] of [
+      [-3000, 3000],
+      [6000, 0],
+      [0, -6000],
+      [-6000, 0],
+    ] as const) {
+      await dragHero(page, dx, dy);
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+      const { hexCount, viewportHexCount } = await page.evaluate(() => {
+        const perf = (window as unknown as { __fogPerf: { hexCount: number; viewportHexCount: number } }).__fogPerf;
+        return { hexCount: perf.hexCount, viewportHexCount: perf.viewportHexCount };
+      });
+      expect(hexCount).toBe(viewportHexCount);
+    }
+  });
+
+  test('on a phone the hero map frame is as tall as the village frame', async ({ page }) => {
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto('/showcase');
+    await waitForBothMapsReady(page);
+
+    const hero = await page.locator('#hero .map-frame').boundingBox();
+    const village = await page.locator('#one-view .one-view-frame').boundingBox();
+    expect(hero?.height).toBe(village?.height);
+  });
+
   test('the wheel over the hero map scrolls the page and does not zoom the map', async ({ page }) => {
     await page.goto('/showcase');
     await waitForBothMapsReady(page);
