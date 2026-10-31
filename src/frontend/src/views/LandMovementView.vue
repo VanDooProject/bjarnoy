@@ -155,6 +155,7 @@ const tocLinks = computed(() =>
     <section id="pace" class="block">
       <h2>{{ $t('docs.landMovement.pace.heading') }}</h2>
       <p class="text">{{ $t('docs.landMovement.pace.body') }}</p>
+      <p class="text">{{ $t('docs.landMovement.pace.start') }}</p>
       <p v-if="spearman" class="text">{{ $t('docs.landMovement.pace.example', { unit: unitName('spearman'), minutes: spearman }) }}</p>
       <p v-if="units.loading" class="muted">{{ $t('docs.status.loading') }}</p>
       <div v-if="unitRows.length > 0" class="table-scroll">

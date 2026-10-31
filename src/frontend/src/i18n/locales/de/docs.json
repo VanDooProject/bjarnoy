@@ -1031,6 +1031,7 @@
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
       "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit.",
+      "start": "Deine Truppen ziehen aus dem Gebäude los, in dem sie ausgebildet wurden, und kehren dorthin zurück. Eine Armee aus mehreren Einheitentypen bricht vom Gebäude ihrer langsamsten Einheit auf.",
       "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
       "columns": {
         "unit": "Einheit",

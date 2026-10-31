@@ -1031,6 +1031,7 @@
     "pace": {
       "heading": "How fast armies move",
       "body": "Speed is counted in hexes per hour on grass. An army marches at the speed of its slowest unit.",
+      "start": "Your troops set out from the building that trained them and return there. An army of several unit types leaves from the building of its slowest unit.",
       "example": "Example: a {unit} crosses a grass hex in {minutes}.",
       "columns": {
         "unit": "Unit",
