@@ -20,16 +20,14 @@ import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
-  hasCatapultSelected,
-  hasSiegeUnitSelected,
+  canSiegeDamage,
+  hasSiegeEngineSelected,
   isHuntUnit,
-  isSiegeMissionUnit,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { buildingLabel } from '../../lib/units/battleReports';
 import HuntTargetSummary from './HuntTargetSummary.vue';
-import SiegeTargetSummary from './SiegeTargetSummary.vue';
 import { useArmyRows } from '../../composables/useArmyRows';
 
 const world = useWorldStore();
@@ -60,8 +58,6 @@ const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCoun
 function isRowSelectable(unit: string): boolean {
   // A hunt takes land units only, so ships are locked out from the start.
   if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType)) return false;
-  // A siege takes land units only too.
-  if (draft.value?.mission === 'siege' && !isSiegeMissionUnit(unit, catalogue.byType)) return false;
   return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
 }
 // Whether the garrison actually holds units of the class the current
@@ -69,7 +65,7 @@ function isRowSelectable(unit: string): boolean {
 // units can't mix" when there's something of the other class sitting right
 // there, greyed out, for them to wonder about.
 const hasLockedOutUnits = computed(() =>
-  draft.value?.mission === 'hunt' || draft.value?.mission === 'siege'
+  draft.value?.mission === 'hunt'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
     : selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
@@ -119,23 +115,17 @@ const hasDestination = computed(() =>
     ? !!draft.value.targetSettlementId
     : draft.value?.mission === 'hunt'
       ? !!draft.value.targetCamp
-      : draft.value?.mission === 'siege'
-        ? !!draft.value.targetWall
-        : routeLength.value > 0,
-);
-// A siege strikes the wall with its siege engines, so it needs at least one catapult or ram in the selection.
-const siegeReady = computed(
-  () => draft.value?.mission !== 'siege' || hasSiegeUnitSelected(draft.value.unitCounts, catalogue.byType),
+      : routeLength.value > 0,
 );
 const canConfirm = computed(
-  () => hasUnitsSelected.value && hasDestination.value && siegeReady.value && !draft.value?.submitting,
+  () => hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
 );
 
 function beginDispatch() {
   world.startDispatch();
 }
 
-function setMission(mission: 'move' | 'attack' | 'support' | 'hunt' | 'siege') {
+function setMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
   world.setDispatchMission(mission);
 }
 
@@ -172,13 +162,13 @@ function clearTarget() {
 // Catapult target-building picker (issue #40 phase 5): only worth showing
 // once a target settlement is chosen *and* the selection actually includes a
 // Catapult — a catapult-free attack does no siege damage regardless of what's
-// requested (see `hasCatapultSelected`'s own comment), so there is nothing
+// requested (see `hasSiegeEngineSelected`'s own comment), so there is nothing
 // for a preference to apply to. `GET /api/v1/settlements/{id}` carries no
 // ownership check (confirmed from SettlementEndpoints.cs — see the PR notes),
 // so the enemy's real layout can be fetched and offered as specific hexes to
 // pick from, rather than falling back to a mere building-type preference.
 const showBuildingPicker = computed(
-  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasCatapultSelected(draft.value.unitCounts),
+  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasSiegeEngineSelected(draft.value.unitCounts, catalogue.byType),
 );
 const targetBuildingRows = computed(() => {
   if (!draft.value?.targetSettlementId) return [];
@@ -188,6 +178,8 @@ const targetBuildingRows = computed(() => {
     r: b.r,
     label: buildingLabel(b.type),
     level: b.level,
+    // Whether the selected engines can damage this kind of building: rams breach walls and towers, catapults burn towers and the rest.
+    damageable: canSiegeDamage(draft.value?.unitCounts ?? {}, catalogue.byType, b.type),
   }));
 });
 const selectedBuildingLabel = computed(() => {
@@ -195,6 +187,14 @@ const selectedBuildingLabel = computed(() => {
   if (!coord) return null;
   const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
   return row ? `${row.label} (${t('hud.armyPanel.buildingLevelCoord', { level: row.level, q: coord.q, r: coord.r })})` : `(${coord.q}, ${coord.r})`;
+});
+// The preferred target can be set before the engines are (the ring's Siege action pre-selects a wall): say so when the selected
+// engines cannot damage it, since the siege would then do nothing.
+const selectedBuildingUnreachable = computed(() => {
+  const coord = draft.value?.targetBuildingCoord;
+  if (!coord) return false;
+  const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
+  return !!row && !row.damageable;
 });
 function pickBuildingTarget(q: number, r: number) {
   world.setDispatchTargetBuilding({ q, r });
@@ -412,13 +412,6 @@ async function confirmFieldOrderClick() {
           >
             {{ missionName('hunt') }}
           </button>
-          <button
-            v-if="draft.mission === 'siege'"
-            type="button"
-            class="mission-tab attack active"
-          >
-            {{ missionName('siege') }}
-          </button>
         </div>
 
         <template v-if="draft.mission === 'hunt'">
@@ -426,12 +419,6 @@ async function confirmFieldOrderClick() {
             {{ t('hud.huntTarget.instructions', { count: routeLength, waypointWord: t('hud.armyPanel.waypointWord', routeLength) }) }}
           </p>
           <HuntTargetSummary :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
-        </template>
-        <template v-else-if="draft.mission === 'siege'">
-          <p class="status-subtext instructions">
-            {{ t('hud.siegeTarget.instructions', { count: routeLength, waypointWord: t('hud.armyPanel.waypointWord', routeLength) }) }}
-          </p>
-          <SiegeTargetSummary :target="draft.targetWall" :unit-counts="draft.unitCounts" />
         </template>
         <p v-else-if="draft.mission === 'move'" class="status-subtext instructions">
           {{ t('hud.armyPanel.dispatchInstructions', {
@@ -482,10 +469,12 @@ async function confirmFieldOrderClick() {
             <p class="status-subtext building-picker-hint">
               {{ t('hud.armyPanel.buildingPickerHint') }}
             </p>
+            <p class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
             <div v-if="selectedBuildingLabel" class="target-selected">
               <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedBuildingLabel }}</strong></span>
               <button type="button" class="secondary change-target" @click="clearBuildingTarget">{{ t('hud.armyPanel.clear') }}</button>
             </div>
+            <p v-if="selectedBuildingUnreachable" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
             <template v-else>
               <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
               <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">
@@ -497,10 +486,14 @@ async function confirmFieldOrderClick() {
                   :key="`${b.q},${b.r}`"
                   type="button"
                   class="target-row"
+                  :class="{ 'out-of-reach': !b.damageable }"
+                  :disabled="!b.damageable"
+                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
+                  data-testid="building-target"
                   @click="pickBuildingTarget(b.q, b.r)"
                 >
                   <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
+                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
                 </button>
               </div>
               <p v-else class="status-subtext">{{ t('hud.armyPanel.noPreference') }}</p>
@@ -817,6 +810,10 @@ async function confirmFieldOrderClick() {
 }
 .target-row:hover {
   background: rgba(255, 197, 92, 0.08);
+}
+.target-row.out-of-reach {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .target-owner {
   color: var(--muted);

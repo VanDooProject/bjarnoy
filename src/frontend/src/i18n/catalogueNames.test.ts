@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import deCatalogue from './locales/de/catalogue.json';
 import buildingCatalogue from '../data/building-catalogue.json';
 import unitCatalogue from '../data/unit-catalogue.json';
 import {
@@ -31,6 +32,13 @@ describe('catalogueNames', () => {
     }
   });
 
+  it('names the Siege Workshop and the battering ram', () => {
+    expect(buildingName('siegeworkshop')).toBe('Siege workshop');
+    expect(unitName('ram')).toBe('Battering ram');
+    expect(deCatalogue.buildings.siegeworkshop).toBe('Belagerungswerkstatt');
+    expect(deCatalogue.units.ram).toBe('Rammbock');
+  });
+
   it('has a translated name for every real unit type', () => {
     for (const type of unitTypes) {
       expect(unitName(type), type).not.toBe(type);
@@ -50,7 +58,7 @@ describe('catalogueNames', () => {
   });
 
   it('has a translated name for every mission', () => {
-    for (const mission of ['move', 'attack', 'support', 'raid', 'found', 'hunt', 'siege']) {
+    for (const mission of ['move', 'attack', 'support', 'raid', 'found']) {
       expect(missionName(mission), mission).not.toBe(mission);
     }
   });

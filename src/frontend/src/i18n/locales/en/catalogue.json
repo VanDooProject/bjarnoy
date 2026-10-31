@@ -31,6 +31,7 @@
     "palisade": "Palisade",
     "palisadegate": "Palisade Gate",
     "bridge": "Bridge",
+    "siegeworkshop": "Siege workshop",
     "reindeerherder": "Reindeer Herder"
   },
   "units": {
@@ -94,8 +95,7 @@
     "support": "Support",
     "raid": "Raid",
     "found": "Found settlement",
-    "hunt": "Hunt",
-    "siege": "Siege"
+    "hunt": "Hunt"
   },
   "runes": {
     "types": {

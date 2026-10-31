@@ -1,6 +1,7 @@
 // Which wall hexes a player may besiege (endgame "Breaching walls"): the standing palisade or gate of another player's settlement
-// that is neither the player's own nor a friend's (same guild, or a guild at peace). The server decides for real
-// (NoWallAtDestination, CannotSiegeFriendlyWall); this only drives the ring menu's Siege action.
+// that is neither the player's own nor a friend's (same guild, or a guild at peace). A siege is an ordinary Attack on the wall's
+// settlement that names the wall hex as its preferred target building (only rams damage a wall); this only drives the ring
+// menu's Siege action.
 
 /** The tile facts the rule reads. A foundation (no level yet) is not a wall. */
 export interface WallTileFacts {
@@ -25,4 +26,21 @@ export function isHostileWallTile(
   if (!tile.ownerId || !tile.buildingLevel || tile.buildingLevel < 1) return false;
   if (ownerPlayerId === undefined || ownerPlayerId === playerId) return false;
   return ownerPlayerId === null || !friendlyUserIds.has(ownerPlayerId);
+}
+
+/**
+ * The dispatch the ring menu's Siege action opens on a rival wall hex: an Attack on the settlement the wall belongs to, with the wall
+ * hex as the preferred target building (the same draft state the target-building picker sets). `null` when the hex carries no
+ * settlement (nothing to attack).
+ */
+export function siegeAttackOptions(
+  tile: Pick<WallTileFacts, 'ownerId'>,
+  wall: { q: number; r: number },
+): { mission: 'attack'; targetSettlementId: string; targetBuildingCoord: { q: number; r: number } } | null {
+  if (!tile.ownerId) return null;
+  return {
+    mission: 'attack',
+    targetSettlementId: tile.ownerId,
+    targetBuildingCoord: { q: wall.q, r: wall.r },
+  };
 }

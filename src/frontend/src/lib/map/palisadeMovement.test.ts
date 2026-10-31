@@ -3,6 +3,7 @@ import { coordKey, type AxialCoord } from '../hex/coords';
 import { findPath, hoursFrom, HALF_OPEN_END_COST, type PathContext } from './hexPath';
 import { palisadeRestrictions, type PalisadeWalls } from './palisadeMovement';
 import type { Terrain } from './types';
+import { WorldModel } from './WorldModel';
 
 const OWNER = 'owner-a';
 

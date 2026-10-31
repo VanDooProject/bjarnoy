@@ -141,7 +141,7 @@
       "maxLevel": "Höchste Stufe",
       "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
       "siege": "Belagern",
-      "noSiegeUnitsAtHome": "Braucht ein Katapult oder einen Rammbock zu Hause"
+      "noRamAtHome": "Braucht einen Rammbock zu Hause"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -310,14 +310,12 @@
     },
     "missionAttack": "Angriff",
     "missionRaid": "Überfall",
-    "missionSiege": "Belagerung",
     "victory": "Sieg",
     "defeat": "Niederlage",
     "summaryLost": "{n} verloren",
     "summarySurvived": "{n} überlebt",
     "summaryLooted": "{n} erbeutet",
     "siegeDestroyedRazed": "{label} zerstört — Siedlung dem Erdboden gleichgemacht",
-    "siegeBreached": "{label} durchbrochen",
     "siegeDestroyed": "{label} zerstört",
     "siegeDamaged": "{label} beschädigt: Stufe {before} → {after}",
     "attackPower": "Angriffskraft",
@@ -358,8 +356,7 @@
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
     "inTransit": "Unterwegs",
-    "hunting": "Auf der Jagd",
-    "besieging": "Belagert"
+    "hunting": "Auf der Jagd"
   },
   "armyPanel": {
     "title": "Armeen",
@@ -392,10 +389,12 @@
     "searchSettlements": "Siedlungen zum {mission} suchen…",
     "noSettlementsFound": "Bisher keine weiteren Siedlungen gefunden.",
     "supportNote": "Der Gastgeber versorgt deine Truppen, sobald sie ankommen, aber sie brauchen weiterhin genug Proviant für die Rückreise, falls sie zurückgerufen werden.",
-    "buildingPickerHint": "Bevorzugtes Katapultziel — kann sich ändern, falls es beim Eintreffen deiner Armee nicht mehr dort steht.",
+    "buildingPickerHint": "Bevorzugtes Belagerungsziel — kann sich ändern, falls es beim Eintreffen deiner Armee nicht mehr dort steht.",
     "clear": "Löschen",
     "loadingEnemyLayout": "Feindliches Layout wird geladen…",
     "layoutLoadError": "Das Layout dieser Siedlung konnte nicht geladen werden — das Ziel wird bei der Ankunft zufällig gewählt.",
+    "engineReach": "Rammböcke brechen Mauern und Türme; Katapulte brennen Türme und alle anderen Gebäude nieder.",
+    "cannotDamage": "Deine gewählten Belagerungswaffen können das nicht beschädigen.",
     "buildingLevelCoord": "Stf {level} · ({q}, {r})",
     "noPreference": "Keine Präferenz — das Ziel wird bei der Ankunft zufällig gewählt.",
     "shipsOnly": "Schiffe",
@@ -450,13 +449,6 @@
     "retry": "Erneut versuchen",
     "pollErrorTitle": "Verbindungsproblem — neuer Versuch läuft",
     "dismiss": "Schließen"
-  },
-  "siegeTarget": {
-    "instructions": "Wähle Landeinheiten mit mindestens einem Katapult oder Rammbock, um diese Mauer zu belagern. Optionale Zwischenstopps: {count} {waypointWord}.",
-    "wall": "Mauer",
-    "wallHex": "Feld ({q}, {r})",
-    "note": "Die Armee kämpft zuerst gegen die Armeen des Mauerbesitzers, die auf oder neben der Mauer stehen; gewinnt sie, nehmen ihre überlebenden Belagerungswaffen der Mauer Stufen.",
-    "needsSiegeUnit": "Füge mindestens ein Katapult oder einen Rammbock hinzu: ohne kann die Armee die Mauer nicht brechen."
   },
   "huntTarget": {
     "instructions": "Wähle Landeinheiten für die Jagd auf dieses Lager. Optionale Zwischenstopps: {count} {waypointWord}.",

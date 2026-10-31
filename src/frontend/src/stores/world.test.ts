@@ -337,24 +337,26 @@ describe('useWorldStore startDispatchAt', () => {
     expect(store.dispatchDraft?.targetCamp).toBeNull();
   });
 
-  it('starts a Siege draft aimed at the wall hex, with no route waypoint', async () => {
+  it('starts an Attack draft on the wall owner with the wall hex as the preferred target building', async () => {
+    getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
     const store = await loadStoreModule(true);
 
-    store.startDispatchAt({ q: 2, r: 5 }, { mission: 'siege' });
+    store.startDispatchAt({ q: 2, r: 5 }, { mission: 'attack', targetSettlementId: 'rival-1', targetBuildingCoord: { q: 2, r: 5 } });
 
-    expect(store.dispatchDraft?.mission).toBe('siege');
-    expect(store.dispatchDraft?.targetWall).toEqual({ q: 2, r: 5 });
+    expect(store.dispatchDraft?.mission).toBe('attack');
+    expect(store.dispatchDraft?.targetSettlementId).toBe('rival-1');
+    expect(store.dispatchDraft?.targetBuildingCoord).toEqual({ q: 2, r: 5 });
     expect(store.dispatchDraft?.route).toEqual([]);
-    expect(store.dispatchDraft?.targetSettlementId).toBeNull();
   });
 
-  it('switching the mission drops a siege target', async () => {
+  it('switching the target settlement drops the preferred building again', async () => {
+    getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
     const store = await loadStoreModule(true);
-    store.startDispatchAt({ q: 2, r: 5 }, { mission: 'siege' });
+    store.startDispatchAt({ q: 2, r: 5 }, { mission: 'attack', targetSettlementId: 'rival-1', targetBuildingCoord: { q: 2, r: 5 } });
 
-    store.setDispatchMission('move');
+    store.setDispatchTarget('rival-2');
 
-    expect(store.dispatchDraft?.targetWall).toBeNull();
+    expect(store.dispatchDraft?.targetBuildingCoord).toBeNull();
   });
 
   it('cancels an in-progress field order draft, mutually exclusive with dispatch', async () => {

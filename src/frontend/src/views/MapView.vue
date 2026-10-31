@@ -57,8 +57,8 @@ import { motionEnabled } from '../lib/motion';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
-import { isHostileWallTile } from '../lib/map/siegeRules';
-import { classifyUnitSelection, isSiegeUnit, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { isHostileWallTile, siegeAttackOptions } from '../lib/map/siegeRules';
+import { breachesWalls, classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -369,7 +369,6 @@ function overlayTargets(selectedArmy: (typeof world.armies)[number] | undefined)
   if (draft) {
     add(draft.targetSettlementId, draft.mission);
     if (draft.mission === 'hunt') addCamp(draft.targetCamp ?? undefined);
-    if (draft.mission === 'siege') addCamp(draft.targetWall ?? undefined);
   }
   if (selectedArmy && !selectedArmy.movement?.isReturning) {
     add(selectedArmy.targetSettlementId, selectedArmy.mission);
@@ -725,8 +724,9 @@ function huntActions(tile: Tile): RingAction[] {
 }
 
 // Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is
-// neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. Needs a catapult or battering
-// ram at home; without one the bubble stays but is disabled with a hint, like the other army actions.
+// neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. It opens an Attack on the wall owner's
+// settlement with the wall hex as the preferred target building. Walls fall to battering rams only, so one must be at home; without
+// one the bubble stays but is disabled with a hint, like the other army actions.
 function siegeActions(tile: Tile): RingAction[] {
   if (
     DEMO_MODE
@@ -735,14 +735,14 @@ function siegeActions(tile: Tile): RingAction[] {
   ) {
     return [];
   }
-  const hasSiege = world.hud.garrison.some((g) => g.count > 0 && isSiegeUnit(g.unit, unitCatalogue.byType));
+  const hasRam = world.hud.garrison.some((g) => g.count > 0 && breachesWalls(g.unit, unitCatalogue.byType));
   return [
     {
       id: 'siege',
       label: t('hud.ringMenu.actions.siege'),
       color: 'var(--rival)',
-      disabled: !hasSiege,
-      hint: hasSiege ? undefined : t('hud.ringMenu.actions.noSiegeUnitsAtHome'),
+      disabled: !hasRam,
+      hint: hasRam ? undefined : t('hud.ringMenu.actions.noRamAtHome'),
     },
   ];
 }
@@ -906,6 +906,7 @@ const rootActions = computed<RingAction[]>(() => {
     if (
       tile.buildingType === 'longhouse'
       || tile.buildingType === 'archeryrange'
+      || tile.buildingType === 'siegeworkshop'
       || tile.buildingType === 'dockyard'
       || tile.buildingType === 'barracks'
       || tile.buildingType === 'cartworkshop'
@@ -1110,7 +1111,11 @@ async function onRingSelect(id: string) {
       closeRing();
       return;
     case 'siege':
-      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'siege' });
+      // The wall's own settlement is the Attack's target (the walls read stamps it on the tile) and the wall hex its preferred building.
+      if (selectedCoord.value && tile) {
+        const options = siegeAttackOptions(tile, selectedCoord.value);
+        if (options) world.startDispatchAt(selectedCoord.value, options);
+      }
       closeRing();
       return;
     case 'attack':

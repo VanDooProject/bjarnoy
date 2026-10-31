@@ -19,14 +19,12 @@ import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import HuntTargetSummary from './HuntTargetSummary.vue';
-import SiegeTargetSummary from './SiegeTargetSummary.vue';
 import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
-  hasCatapultSelected,
-  hasSiegeUnitSelected,
+  canSiegeDamage,
+  hasSiegeEngineSelected,
   isHuntUnit,
-  isSiegeMissionUnit,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
@@ -61,12 +59,10 @@ const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCoun
 function isRowSelectable(unit: string): boolean {
   // A hunt takes land units only, so ships are locked out from the start.
   if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType)) return false;
-  // A siege takes land units only too.
-  if (draft.value?.mission === 'siege' && !isSiegeMissionUnit(unit, catalogue.byType)) return false;
   return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
 }
 const hasLockedOutUnits = computed(() =>
-  draft.value?.mission === 'hunt' || draft.value?.mission === 'siege'
+  draft.value?.mission === 'hunt'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
     : selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
@@ -113,19 +109,13 @@ const hasDestination = computed(() =>
     ? !!draft.value.targetSettlementId
     : draft.value?.mission === 'hunt'
       ? !!draft.value.targetCamp
-      : draft.value?.mission === 'siege'
-        ? !!draft.value.targetWall
-        : routeLength.value > 0,
-);
-// A siege strikes the wall with its siege engines, so it needs at least one catapult or ram in the selection.
-const siegeReady = computed(
-  () => draft.value?.mission !== 'siege' || hasSiegeUnitSelected(draft.value.unitCounts, catalogue.byType),
+      : routeLength.value > 0,
 );
 const canConfirm = computed(
-  () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && siegeReady.value && !draft.value?.submitting,
+  () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
 );
 
-function setMission(mission: 'move' | 'attack' | 'support' | 'hunt' | 'siege') {
+function setMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
   world.setDispatchMission(mission);
 }
 
@@ -151,7 +141,7 @@ function clearTarget() {
 }
 
 const showBuildingPicker = computed(
-  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasCatapultSelected(draft.value.unitCounts),
+  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasSiegeEngineSelected(draft.value.unitCounts, catalogue.byType),
 );
 const targetBuildingRows = computed(() => {
   if (!draft.value?.targetSettlementId) return [];
@@ -161,6 +151,8 @@ const targetBuildingRows = computed(() => {
     r: b.r,
     label: buildingLabel(b.type),
     level: b.level,
+    // Whether the selected engines can damage this kind of building: rams breach walls and towers, catapults burn towers and the rest.
+    damageable: canSiegeDamage(draft.value?.unitCounts ?? {}, catalogue.byType, b.type),
   }));
 });
 const selectedBuildingLabel = computed(() => {
@@ -168,6 +160,14 @@ const selectedBuildingLabel = computed(() => {
   if (!coord) return null;
   const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
   return row ? `${row.label} (${t('hud.armyPanel.buildingLevelCoord', { level: row.level, q: coord.q, r: coord.r })})` : `(${coord.q}, ${coord.r})`;
+});
+// The preferred target can be set before the engines are (the ring's Siege action pre-selects a wall): say so when the selected
+// engines cannot damage it, since the siege would then do nothing.
+const selectedBuildingUnreachable = computed(() => {
+  const coord = draft.value?.targetBuildingCoord;
+  if (!coord) return false;
+  const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
+  return !!row && !row.damageable;
 });
 function pickBuildingTarget(q: number, r: number) {
   world.setDispatchTargetBuilding({ q, r });
@@ -213,9 +213,6 @@ const summaryText = computed(() => {
   if (draft.value.mission === 'hunt') {
     const camp = draft.value.targetCamp ? world.model.campAt(draft.value.targetCamp) : undefined;
     if (camp) return t('hud.dispatchSheet.toTarget', { name: campName(camp.family) });
-  }
-  if (draft.value.mission === 'siege' && draft.value.targetWall) {
-    return t('hud.dispatchSheet.toTarget', { name: t('hud.siegeTarget.wallHex', draft.value.targetWall) });
   }
   if (draft.value.mission !== 'move' && selectedTarget.value) {
     return t('hud.dispatchSheet.toTarget', { name: selectedTarget.value.name });
@@ -284,13 +281,9 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           <button v-if="draft.mission === 'hunt'" type="button" class="mission-tab attack active">
             {{ missionName('hunt') }}
           </button>
-          <button v-if="draft.mission === 'siege'" type="button" class="mission-tab attack active">
-            {{ missionName('siege') }}
-          </button>
         </div>
 
         <HuntTargetSummary v-if="draft.mission === 'hunt'" :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
-        <SiegeTargetSummary v-else-if="draft.mission === 'siege'" :target="draft.targetWall" :unit-counts="draft.unitCounts" />
         <template v-else-if="draft.mission !== 'move'">
           <div v-if="selectedTarget" class="target-selected">
             <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>
@@ -314,17 +307,29 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 
           <div v-if="showBuildingPicker" class="building-picker">
             <p class="status-subtext">{{ t('hud.armyPanel.buildingPickerHint') }}</p>
+            <p class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
             <div v-if="selectedBuildingLabel" class="target-selected">
               <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedBuildingLabel }}</strong></span>
               <button type="button" class="secondary change-target" @click="clearBuildingTarget">{{ t('hud.armyPanel.clear') }}</button>
             </div>
+            <p v-if="selectedBuildingUnreachable" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
             <template v-else>
               <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
               <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">{{ t('hud.armyPanel.layoutLoadError') }}</p>
               <div v-else-if="targetBuildingRows.length" class="target-list building-list">
-                <button v-for="b in targetBuildingRows" :key="`${b.q},${b.r}`" type="button" class="target-row" @click="pickBuildingTarget(b.q, b.r)">
+                <button
+                  v-for="b in targetBuildingRows"
+                  :key="`${b.q},${b.r}`"
+                  type="button"
+                  class="target-row"
+                  :class="{ 'out-of-reach': !b.damageable }"
+                  :disabled="!b.damageable"
+                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
+                  data-testid="building-target"
+                  @click="pickBuildingTarget(b.q, b.r)"
+                >
                   <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
+                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
                 </button>
               </div>
               <p v-else class="status-subtext">{{ t('hud.armyPanel.noPreference') }}</p>
@@ -576,6 +581,10 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
   font-size: 12px;
   text-align: left;
   cursor: pointer;
+}
+.target-row.out-of-reach {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .target-owner {
   color: var(--muted);

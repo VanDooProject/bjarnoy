@@ -5,17 +5,17 @@ import {
   buildAttackDispatchRequest,
   buildFieldOrderRequest,
   buildHuntDispatchRequest,
-  buildSiegeDispatchRequest,
-  hasSiegeUnitSelected,
-  isSiegeMissionUnit,
-  isSiegeUnit,
   isHuntUnit,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   canFieldOrderArmy,
   classifyUnitSelection,
   formatEta,
-  hasCatapultSelected,
+  breachesWalls,
+  canSiegeDamage,
+  hasSiegeEngineSelected,
+  selectedSiegeTargets,
+  siegeTargetKindOf,
   isFieldOrderMidMarch,
   isUnitSelectableFor,
   maxAffordableProvisions,
@@ -37,6 +37,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    siegeTargets: [],
     ...overrides,
   };
 }
@@ -133,22 +134,57 @@ describe('buildAttackDispatchRequest', () => {
   });
 });
 
-describe('hasCatapultSelected', () => {
-  it('is false when no catapults are in the selection', () => {
-    expect(hasCatapultSelected({ spearman: 5 })).toBe(false);
-    expect(hasCatapultSelected({})).toBe(false);
+describe('siege engines by target', () => {
+  const byType = {
+    spearman: unit({ type: 'spearman' }),
+    catapult: unit({ type: 'catapult', class: 'siege', siegeTargets: ['towers', 'buildings'] }),
+    ram: unit({ type: 'ram', class: 'siege', siegeTargets: ['walls', 'towers'] }),
+  };
+
+  it('sorts building types into walls, towers and the rest, like SiegeResolver.KindOf', () => {
+    expect(siegeTargetKindOf('palisade')).toBe('walls');
+    expect(siegeTargetKindOf('palisadegate')).toBe('walls');
+    expect(siegeTargetKindOf('tower')).toBe('towers');
+    expect(siegeTargetKindOf('bridge')).toBe('buildings');
+    expect(siegeTargetKindOf('longhouse')).toBe('buildings');
   });
 
-  it('is false when catapult count is zero', () => {
-    expect(hasCatapultSelected({ spearman: 5, catapult: 0 })).toBe(false);
+  it('has no siege engine when only ordinary units, or zero engines, are selected', () => {
+    expect(hasSiegeEngineSelected({ spearman: 5 }, byType)).toBe(false);
+    expect(hasSiegeEngineSelected({}, byType)).toBe(false);
+    expect(hasSiegeEngineSelected({ spearman: 5, catapult: 0, ram: 0 }, byType)).toBe(false);
   });
 
-  it('is true when at least one catapult is selected', () => {
-    expect(hasCatapultSelected({ spearman: 5, catapult: 2 })).toBe(true);
+  it('has one as soon as a catapult or a ram is selected', () => {
+    expect(hasSiegeEngineSelected({ spearman: 5, catapult: 2 }, byType)).toBe(true);
+    expect(hasSiegeEngineSelected({ ram: 1 }, byType)).toBe(true);
   });
 
-  it('is true for a battering ram too: rams join the building siege of an attack', () => {
-    expect(hasCatapultSelected({ spearman: 5, ram: 1 })).toBe(true);
+  it('collects what the selected engines can damage', () => {
+    expect([...selectedSiegeTargets({ ram: 1 }, byType)].sort()).toEqual(['towers', 'walls']);
+    expect([...selectedSiegeTargets({ catapult: 1 }, byType)].sort()).toEqual(['buildings', 'towers']);
+    expect([...selectedSiegeTargets({ catapult: 1, ram: 1 }, byType)].sort()).toEqual(['buildings', 'towers', 'walls']);
+    expect(selectedSiegeTargets({ spearman: 9 }, byType).size).toBe(0);
+  });
+
+  it('lets rams damage walls and towers only, catapults everything but walls', () => {
+    expect(canSiegeDamage({ ram: 1 }, byType, 'palisade')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'palisadegate')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'tower')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'bridge')).toBe(false);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'longhouse')).toBe(false);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'palisade')).toBe(false);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'tower')).toBe(true);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'bridge')).toBe(true);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'longhouse')).toBe(true);
+    expect(canSiegeDamage({ spearman: 3 }, byType, 'longhouse')).toBe(false);
+  });
+
+  it('says which unit types breach walls', () => {
+    expect(breachesWalls('ram', byType)).toBe(true);
+    expect(breachesWalls('catapult', byType)).toBe(false);
+    expect(breachesWalls('spearman', byType)).toBe(false);
+    expect(breachesWalls('nope', byType)).toBe(false);
   });
 });
 
@@ -429,53 +465,5 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('spearman', byType)).toBe(true);
     expect(isHuntUnit('longship', byType)).toBe(false);
     expect(isHuntUnit('unknown', byType)).toBe(false);
-  });
-});
-
-describe('buildSiegeDispatchRequest', () => {
-  const byType = {
-    spearman: unit({ type: 'spearman', class: 'infantry' }),
-    ram: unit({ type: 'ram', class: 'siege' }),
-    catapult: unit({ type: 'catapult', class: 'siege' }),
-    longship: unit({ type: 'longship', class: 'ship' }),
-  };
-
-  it('returns null without units, a wall target or a siege unit', () => {
-    expect(buildSiegeDispatchRequest({ ram: 0 }, [], 10, { q: 1, r: 2 }, byType)).toBeNull();
-    expect(buildSiegeDispatchRequest({ ram: 2 }, [], 10, null, byType)).toBeNull();
-    expect(buildSiegeDispatchRequest({ spearman: 9 }, [], 10, { q: 1, r: 2 }, byType)).toBeNull();
-  });
-
-  it('sends the wall hex as the destination with a siege mission and the route as waypoints', () => {
-    expect(
-      buildSiegeDispatchRequest({ ram: 2, spearman: 10, catapult: 0 }, [{ q: 0, r: 1 }], 40, { q: 4, r: -2 }, byType),
-    ).toEqual({
-      units: [
-        { unit: 'ram', count: 2 },
-        { unit: 'spearman', count: 10 },
-      ],
-      waypoints: [{ q: 0, r: 1 }],
-      destination: { q: 4, r: -2 },
-      provisions: 40,
-      mission: 'siege',
-    });
-    expect(buildSiegeDispatchRequest({ catapult: 1 }, [], 0, { q: 4, r: -2 }, byType)?.waypoints).toBeUndefined();
-  });
-
-  it('classifies siege engines, and lets only land units join a siege', () => {
-    expect(isSiegeUnit('ram', byType)).toBe(true);
-    expect(isSiegeUnit('catapult', byType)).toBe(true);
-    expect(isSiegeUnit('spearman', byType)).toBe(false);
-    expect(isSiegeUnit('unknown', byType)).toBe(false);
-    expect(hasSiegeUnitSelected({ spearman: 4, ram: 1 }, byType)).toBe(true);
-    expect(hasSiegeUnitSelected({ spearman: 4, ram: 0 }, byType)).toBe(false);
-    expect(isSiegeMissionUnit('ram', byType)).toBe(true);
-    expect(isSiegeMissionUnit('longship', byType)).toBe(false);
-  });
-
-  it('labels a besieging army', () => {
-    expect(armyStatusLabel({ atHome: false, supporting: false, movement: { isReturning: false }, mission: 'siege' })).toBe(
-      'Besieging',
-    );
   });
 });

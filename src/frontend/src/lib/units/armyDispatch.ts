@@ -112,52 +112,6 @@ export function buildHuntDispatchRequest(
   };
 }
 
-/**
- * Builds a `siege`-mission `DispatchArmyRequest` against another player's palisade or gate hex: the wall's hex is the
- * `destination` (the server walks to the passable hex next to it) and `route` holds only intermediate waypoints. `null`
- * without a siege unit (catapult or ram), a wall target, or any units. Land units only is enforced by the UI
- * (`isSiegeMissionUnit`) and by the server (`SiegeRequiresLandUnits`, `SiegeRequiresSiegeUnit`).
- */
-export function buildSiegeDispatchRequest(
-  unitCounts: Record<string, number>,
-  route: AxialCoord[],
-  provisions: number,
-  targetWall: AxialCoord | null,
-  byType: Record<string, UnitDefinitionResponse>,
-): DispatchArmyRequest | null {
-  const units = Object.entries(unitCounts)
-    .filter(([, count]) => count > 0)
-    .map(([unit, count]) => ({ unit, count }));
-  if (units.length === 0 || !targetWall || !hasSiegeUnitSelected(unitCounts, byType)) return null;
-
-  const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
-  return {
-    units,
-    waypoints: waypoints.length > 0 ? waypoints : undefined,
-    destination: { q: targetWall.q, r: targetWall.r },
-    provisions,
-    mission: 'siege',
-  };
-}
-
-/** Whether a unit type may join a siege: land units only, ships cannot breach a wall. */
-export function isSiegeMissionUnit(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
-  return isHuntUnit(type, byType);
-}
-
-/** Whether a unit type is a siege engine (catapult or ram): the units that strike a wall once the army wins its fight. */
-export function isSiegeUnit(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
-  return byType[type]?.class === 'siege';
-}
-
-/** True when `unitCounts` sends at least one siege engine; a siege mission needs one. */
-export function hasSiegeUnitSelected(
-  unitCounts: Record<string, number>,
-  byType: Record<string, UnitDefinitionResponse>,
-): boolean {
-  return Object.entries(unitCounts).some(([type, count]) => count > 0 && isSiegeUnit(type, byType));
-}
-
 /** Whether a unit type may join a hunt — land units only, ships cannot hunt. */
 export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
   const definition = byType[type];
@@ -271,14 +225,56 @@ export function isUnitSelectableFor(
   return selection === 'fleet' ? isShip : !isShip;
 }
 
+/** The kinds of building a siege engine can damage — mirrors `SiegeTargets` (`UnitDefinition.SiegeTargets`) in the backend. */
+export type SiegeTargetKind = 'walls' | 'towers' | 'buildings';
+
 /**
- * True when `unitCounts` sends at least one siege engine (Catapult or Ram) — the gate `ArmyPanel.vue`
- * uses to decide whether the "preferred target building" picker is even worth
- * showing (issue #40 phase 5): a catapult-free attack does no siege damage
+ * Which kind of siege target a building type is — mirrors `SiegeResolver.KindOf`: wall hexes (palisade, gate), the tower, and
+ * every other building (the Longhouse and bridges included).
+ */
+export function siegeTargetKindOf(buildingType: string): SiegeTargetKind {
+  if (buildingType === 'palisade' || buildingType === 'palisadegate') return 'walls';
+  if (buildingType === 'tower') return 'towers';
+  return 'buildings';
+}
+
+/** The kinds of building the selected siege engines (units with siege targets, count above zero) can damage together. */
+export function selectedSiegeTargets(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): Set<SiegeTargetKind> {
+  const kinds = new Set<SiegeTargetKind>();
+  for (const [type, count] of Object.entries(unitCounts)) {
+    if (count <= 0) continue;
+    for (const kind of byType[type]?.siegeTargets ?? []) kinds.add(kind as SiegeTargetKind);
+  }
+  return kinds;
+}
+
+/**
+ * True when `unitCounts` sends at least one siege engine (a catapult or a ram) — the gate `ArmyPanel.vue` uses to decide whether
+ * the "preferred target building" picker is even worth showing (issue #40 phase 5): an attack without one does no siege damage
  * regardless of what's requested, per `SiegeResolver.Resolve`.
  */
-export function hasCatapultSelected(unitCounts: Record<string, number>): boolean {
-  return (unitCounts.catapult ?? 0) > 0 || (unitCounts.ram ?? 0) > 0;
+export function hasSiegeEngineSelected(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): boolean {
+  return selectedSiegeTargets(unitCounts, byType).size > 0;
+}
+
+/** Whether the selected siege engines can damage a `buildingType` building: rams breach walls and towers, catapults the rest. */
+export function canSiegeDamage(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+  buildingType: string,
+): boolean {
+  return selectedSiegeTargets(unitCounts, byType).has(siegeTargetKindOf(buildingType));
+}
+
+/** Whether a unit type is a ram-like engine: one that can breach walls. */
+export function breachesWalls(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
+  return byType[type]?.siegeTargets?.includes('walls') ?? false;
 }
 
 /**
@@ -413,6 +409,5 @@ export function armyStatusLabel(
   }
   if (army.movement?.isReturning) return i18n.global.t('hud.armyStatus.returning');
   if (army.mission === 'hunt') return i18n.global.t('hud.armyStatus.hunting');
-  if (army.mission === 'siege') return i18n.global.t('hud.armyStatus.besieging');
   return i18n.global.t('hud.armyStatus.inTransit');
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHostileWallTile } from './siegeRules';
+import { isHostileWallTile, siegeAttackOptions } from './siegeRules';
 
 const wall = { buildingType: 'palisade', buildingLevel: 2, ownerId: 's-enemy' };
 const none = new Set<string>();
@@ -38,5 +38,19 @@ describe('isHostileWallTile', () => {
   it('is false without a known owner', () => {
     expect(isHostileWallTile({ ...wall, ownerId: undefined }, 'enemy', 'me', none)).toBe(false);
     expect(isHostileWallTile(wall, undefined, 'me', none)).toBe(false);
+  });
+});
+
+describe('siegeAttackOptions', () => {
+  it('opens an Attack on the wall owner with the wall hex as the preferred target building', () => {
+    expect(siegeAttackOptions(wall, { q: 4, r: -2 })).toEqual({
+      mission: 'attack',
+      targetSettlementId: 's-enemy',
+      targetBuildingCoord: { q: 4, r: -2 },
+    });
+  });
+
+  it('has nothing to attack on a hex without a settlement', () => {
+    expect(siegeAttackOptions({}, { q: 4, r: -2 })).toBeNull();
   });
 });

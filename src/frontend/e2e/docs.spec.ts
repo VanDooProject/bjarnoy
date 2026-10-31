@@ -746,7 +746,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    // Sieges are player content now: catapults take one level per won siege, three levels per wall hex.
+    // Sieges are player content now: rams take one level per won siege, three levels per wall hex.
     const sieges = page.locator("#sieges");
     await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
     await expect(sieges.locator("li")).toHaveCount(5);
