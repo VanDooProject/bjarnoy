@@ -1403,19 +1403,19 @@ const RIVER_COLOR = 0x4fa8d8;
 const LAVA_COLOR = 0xe8702a;
 
 /**
- * How a giant's 7-hex footprint reads on the flat world map: its ground stays as it is, and a light outline runs
- * around the footprint, coloured after the giant's art: snow white for the giant mountain, lava orange for the
- * volcano, the runes' cyan for the shrine and the Utgard tower.
+ * How a giant's 7-hex footprint reads on the flat world map: its ground stays as it is, and the giants that do
+ * something get a light outline around the footprint, coloured after their art: lava orange for the volcano, the
+ * runes' cyan for the shrine and the Utgard tower. The giant mountain has no function of its own, so it gets none
+ * (hovering it still highlights the footprint).
  */
-const WORLD_GIANT_OUTLINE: Record<GiantFamily, number> = {
-  giantmountain: 0xeef2f4,
+const WORLD_GIANT_OUTLINE: Partial<Record<GiantFamily, number>> = {
   giantvolcano: 0xe8702a,
   giantshrine: 0x6fe3e0,
   giantutgard: 0x6fe3e0,
 };
 
-/** The world-map outline colour around a giant's footprint. */
-export function worldGiantOutline(family: GiantFamily): number {
+/** The world-map outline colour around a giant's footprint, or `undefined` for a giant drawn without one. */
+export function worldGiantOutline(family: GiantFamily): number | undefined {
   return WORLD_GIANT_OUTLINE[family];
 }
 
@@ -4326,8 +4326,10 @@ export class HexMapRenderer {
     }
 
     for (const { anchor, family } of giants.values()) {
+      const color = worldGiantOutline(family);
+      if (color === undefined) continue;
       const outline = giantFootprintOutline(anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y]);
-      this.terrainFlat.poly(outline).stroke({ width: 2.5, color: worldGiantOutline(family), alpha: 0.8, join: 'round' });
+      this.terrainFlat.poly(outline).stroke({ width: 2.5, color, alpha: 0.8, join: 'round' });
     }
   }
 

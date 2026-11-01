@@ -1104,8 +1104,14 @@ describe('world-map wasted lands', () => {
 });
 
 describe('world-map giants', () => {
-  it('outlines the giant mountain, volcano and runestone giants each in their own colour', () => {
-    const outlines = (['giantmountain', 'giantvolcano', 'giantshrine'] as const).map(worldGiantOutline);
-    expect(new Set(outlines).size).toBe(3);
+  it('outlines the volcano and the runestone giants in their own colours', () => {
+    expect(worldGiantOutline('giantvolcano')).toBeDefined();
+    expect(worldGiantOutline('giantshrine')).toBeDefined();
+    expect(worldGiantOutline('giantutgard')).toBeDefined();
+    expect(worldGiantOutline('giantvolcano')).not.toBe(worldGiantOutline('giantshrine'));
+  });
+
+  it('draws no outline around the giant mountain, which has no function of its own', () => {
+    expect(worldGiantOutline('giantmountain')).toBeUndefined();
   });
 });
