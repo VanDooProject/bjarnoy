@@ -72,6 +72,13 @@ export interface WaterDebugFlags {
    * it. Goes away with the split itself once the art pack ships split.
    */
   legacyTileSplit: boolean;
+  /**
+   * Bog lakes, settlement view (§ "Bog lakes — gusts in step with the forest"): the darker band of fine ripples that travels over the lake
+   * water with the forests' wind gust. Calm between gusts.
+   */
+  bogLakeRuffle: boolean;
+  /** Bog lakes: sparse small bright sparkles that flicker inside the gust band. */
+  bogLakeGlints: boolean;
 }
 
 export const waterDebugFlags: WaterDebugFlags = {
@@ -86,6 +93,8 @@ export const waterDebugFlags: WaterDebugFlags = {
   legacyWaveSquiggles: true,
   showWaterMask: false,
   legacyTileSplit: true,
+  bogLakeRuffle: true,
+  bogLakeGlints: true,
 };
 
 /**
@@ -168,6 +177,9 @@ export interface WaterDebugTuning {
    * offsetting one in time does.
    */
   causticFinePhase: number;
+  /** Multipliers on the bog lake gust's ruffle and glints (1 is what ships). Only used while the matching flag is on. */
+  bogLakeRuffleStrength: number;
+  bogLakeGlintStrength: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -184,6 +196,8 @@ export const waterDebugTuning: WaterDebugTuning = {
   // A little over half the coarse net's ~30s breathing period, so the two are
   // close to opposed rather than merely unequal.
   causticFinePhase: 17,
+  bogLakeRuffleStrength: 1,
+  bogLakeGlintStrength: 1,
 };
 
 /**

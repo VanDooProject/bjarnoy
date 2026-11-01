@@ -39,6 +39,8 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   legacyWaveSquiggles: 'World map: Graphics wave squiggles',
   showWaterMask: 'Debug: show the raw water mask',
   legacyTileSplit: 'Split unsplit tall art in code',
+  bogLakeRuffle: 'Bog lakes: gust ruffle band',
+  bogLakeGlints: 'Bog lakes: gust glints',
 };
 
 // Brackets the shipped values on both sides, so "is this too wide / too still"
@@ -63,6 +65,8 @@ const CAUSTIC_PHASE = { min: 0, max: 30, step: 0.5 };
 // Down to a third, where the net thins out to a few big loops, and up to 2.5x,
 // where the ribbons start to touch and the water reads as a lace rather than a
 // network. Both ends are worth being able to reach.
+// Multipliers on the shipped (deliberately subtle) lake gust; 1.00 is what ships.
+const BOG_LAKE_STRENGTH = { min: 0, max: 3, step: 0.05 };
 const CAUSTIC_DENSITY = { min: 0.3, max: 2.5, step: 0.05 };
 
 /**
@@ -90,6 +94,8 @@ const SLIDERS: {
   { key: 'causticFineBrightness', label: 'Fine net: brightness', needs: 'fineCaustics', range: CAUSTIC_BRIGHTNESS, format: times },
   { key: 'causticFineDensity', label: 'Fine net: density', needs: 'fineCaustics', range: CAUSTIC_DENSITY, format: times },
   { key: 'causticFinePhase', label: 'Fine net: phase shift', needs: 'fineCaustics', range: CAUSTIC_PHASE, format: (v) => `${v.toFixed(1)} s` },
+  { key: 'bogLakeRuffleStrength', label: 'Bog lake ruffle: strength', needs: 'bogLakeRuffle', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'bogLakeGlintStrength', label: 'Bog lake glints: strength', needs: 'bogLakeGlints', range: BOG_LAKE_STRENGTH, format: times },
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
 ];
 
