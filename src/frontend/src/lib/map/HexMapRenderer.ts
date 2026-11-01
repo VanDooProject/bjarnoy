@@ -41,7 +41,7 @@ import {
 import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { axialToOddQ, coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
-import { hatchStripes, isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
+import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { formatCountdownShort } from '../hud/countdown';
 import {
@@ -1403,33 +1403,20 @@ const RIVER_COLOR = 0x4fa8d8;
 const LAVA_COLOR = 0xe8702a;
 
 /**
- * How a giant's 7-hex footprint reads on the flat world map: its ground stays, hatched with the giant's colour, and
- * a faint outline runs around it, coloured after the giant's art. The snowy giant mountain is hatched snow white
- * with a grey rim; the
- * volcano is dark rock with its anchor hex as the lava core; the shrine's runestones stand on grass and the
- * Utgard tower is dark stone, both rimmed in their runes' cyan glow.
+ * How a giant's 7-hex footprint reads on the flat world map: its ground stays as it is, and a light outline runs
+ * around the footprint, coloured after the giant's art: snow white for the giant mountain, lava orange for the
+ * volcano, the runes' cyan for the shrine and the Utgard tower.
  */
-const WORLD_GIANT_STYLE: Record<GiantFamily, { fill: number; core?: number; outline: number }> = {
-  giantmountain: { fill: 0xeef2f4, outline: 0x9aa0a2 },
-  giantvolcano: { fill: 0x5a3226, core: 0xe8702a, outline: 0xe8702a },
-  giantshrine: { fill: 0x7b8f6a, outline: 0x6fe3e0 },
-  giantutgard: { fill: 0x3c5856, outline: 0x6fe3e0 },
+const WORLD_GIANT_OUTLINE: Record<GiantFamily, number> = {
+  giantmountain: 0xeef2f4,
+  giantvolcano: 0xe8702a,
+  giantshrine: 0x6fe3e0,
+  giantutgard: 0x6fe3e0,
 };
-
-/** The world-map giant hatch: stripes half the period wide, a quarter of a hex apart, running diagonally. */
-const GIANT_HATCH_PERIOD = TILE_W / 4;
-const GIANT_HATCH_DIR = { x: Math.SQRT1_2, y: Math.SQRT1_2 };
-const GIANT_HATCH_ALPHA = 0.6;
-
-/** The world-map hatch colour of one hex of a giant's footprint (`isAnchor`: the footprint's centre hex). */
-export function worldGiantFill(family: GiantFamily, isAnchor: boolean): number {
-  const style = WORLD_GIANT_STYLE[family];
-  return (isAnchor ? style.core : undefined) ?? style.fill;
-}
 
 /** The world-map outline colour around a giant's footprint. */
 export function worldGiantOutline(family: GiantFamily): number {
-  return WORLD_GIANT_STYLE[family].outline;
+  return WORLD_GIANT_OUTLINE[family];
 }
 
 /** The world-map stroke colour of a river tile: lava on a wasted island, water everywhere else. */
@@ -4330,27 +4317,17 @@ export class HexMapRenderer {
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      // A giant's footprint is filled in its own colours instead of the ground under it (few hexes, so the
-      // Tile lookup for its family is cheap).
       this.terrainFlat.poly(flat).fill({ color: worldHexFill(terrain, worldModel.isWastedLandAt(c.q, c.r)) });
-      // A giant's footprint keeps its ground and gets a hatch of the giant's colour over it (few hexes, so the
-      // Tile lookup for its family is cheap).
+      // A giant's footprint gets outlined once all fills are down (few hexes, so the Tile lookup for its family is cheap).
       const anchor = worldModel.giantAnchorAt(c);
       const family = anchor ? (worldModel.getTile(c.q, c.r).giant?.family as GiantFamily | undefined) : undefined;
-      if (anchor && family) {
-        const color = worldGiantFill(family, anchor.q === c.q && anchor.r === c.r);
-        const hex = top.map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-        for (const stripe of hatchStripes(hex, GIANT_HATCH_PERIOD, GIANT_HATCH_DIR.x, GIANT_HATCH_DIR.y)) {
-          this.terrainFlat.poly(stripe.flatMap((p) => [p.x, p.y])).fill({ color, alpha: GIANT_HATCH_ALPHA });
-        }
-        giants.set(coordKey(anchor), { anchor, family });
-      }
+      if (anchor && family) giants.set(coordKey(anchor), { anchor, family });
       fogPerfStats.terrainDrawnCount++;
     }
 
     for (const { anchor, family } of giants.values()) {
       const outline = giantFootprintOutline(anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y]);
-      this.terrainFlat.poly(outline).stroke({ width: 2, color: worldGiantOutline(family), alpha: 0.5, join: 'round' });
+      this.terrainFlat.poly(outline).stroke({ width: 2.5, color: worldGiantOutline(family), alpha: 0.8, join: 'round' });
     }
   }
 
