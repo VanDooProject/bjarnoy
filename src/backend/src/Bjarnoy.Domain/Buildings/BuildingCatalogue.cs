@@ -887,8 +887,8 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the siege engines (catapult and battering ram; <see cref="Units.UnitDefinition.RequiredBuildingType"/>), the only siege engine that breaches walls
-    /// (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
+    /// Trains the siege engines, catapult and battering ram (<see cref="Units.UnitDefinition.RequiredBuildingType"/>); the ram is the only engine that
+    /// breaches walls (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
     /// mirror <see cref="ArcheryRange"/> one tier up: wood and stone costs about 1.6 times higher (buildings cost no iron), a slightly longer build.
     /// </summary>
     private static BuildingDefinition SiegeWorkshop(int level) => new()
