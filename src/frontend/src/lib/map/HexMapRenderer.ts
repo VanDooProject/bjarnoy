@@ -79,7 +79,7 @@ import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
 import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
-import { riverPathFor } from './riverPath';
+import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -4291,7 +4291,9 @@ export class HexMapRenderer {
 
     for (const c of coords) {
       const river = worldModel.getRiverTile(c.q, c.r);
-      if (!river) continue;
+      // A bog carries its river on as creek, lake-mouth and creek-spring bog tiles (no river tile there).
+      const bog = river ? undefined : worldModel.getBogTile(c.q, c.r);
+      if (!river && !bog) continue;
 
       if (
         fogActive &&
@@ -4302,10 +4304,17 @@ export class HexMapRenderer {
         continue;
       }
 
-      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
-      const { segments, springDot } = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      let drawing: RiverDrawing | null;
+      if (river) {
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
+        drawing = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      } else {
+        drawing = bogCreekPathFor(c, bog!, TILE_W, TILE_H);
+      }
+      if (!drawing) continue;
+      const { segments, springDot } = drawing;
       // A stream is half a river's width: draw its line thinner.
-      const streamScale = river.width === 'stream' ? 0.55 : 1;
+      const streamScale = river?.width === 'stream' ? 0.55 : 1;
 
       for (const { from, control, to } of segments) {
         // Double stroke, same "wide soft casing under a crisp line" trick
