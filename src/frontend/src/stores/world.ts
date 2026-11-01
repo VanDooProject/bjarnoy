@@ -1441,6 +1441,12 @@ export const useWorldStore = defineStore('world', {
       await api.recallArmy(armyId, this.ownerId ?? undefined);
       await this.refreshArmies();
     },
+    /** Live mode: the host sends a guest army stationed at the selected settlement home, then refreshes so the row disappears. Throws `ApiError` on rejection (e.g. no route home). */
+    async sendGuestHomeLive(armyId: string) {
+      if (!this.selectedSettlementId) return;
+      await api.sendGuestHome(this.selectedSettlementId, armyId, this.ownerId ?? undefined);
+      await this.refreshArmies();
+    },
     /**
      * Issue #156 phase 1: enters waypoint-editing mode for a field order on
      * an army already out in the field — "move on" if it's standing at its

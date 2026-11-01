@@ -1532,9 +1532,9 @@ export interface ArmySummary {
 
 /**
  * Mirrors `GuestArmySummary` (issue #40 phase 4) — a Support army as its
- * *host* settlement sees it: counts only, since the host cannot command a
- * guest garrison (no recall/action buttons on this view — only the owner,
- * reading their own settlement's `armies`, can recall it). `ownerSettlementId`
+ * *host* settlement sees it: counts only, with no route or provisions (the host can only send a
+ * guest home, via `sendGuestHome`; its owner recalls it from their own
+ * settlement's `armies`). `ownerSettlementId`
  * is the guest's home, not its current location (which is always the
  * settlement `getSettlementGuests` was asked about).
  */

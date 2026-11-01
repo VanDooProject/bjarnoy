@@ -192,6 +192,9 @@
     "garrison": "Garrison",
     "garrisonEmpty": "No units standing here yet.",
     "guests": "Guests",
+    "sendHome": "Send home",
+    "sendingHome": "Sending home…",
+    "sendHomeError": "Couldn't send the army home.",
     "unknownSettlement": "Unknown settlement"
   },
   "queueDrawer": {
