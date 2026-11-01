@@ -73,7 +73,7 @@ describe('LEGACY_TALL_KEYS', () => {
     // The distinction this set exists to make. Keying the split on "is it
     // legacy" instead would put sand — the most common terrain on any coastline
     // — through a second, empty sprite it does not need, on every coastal hex.
-    for (const flat of ['water', 'coastalwater', 'sand', 'fishinghut', 'tower', 'towerforest', 'towerbog']) {
+    for (const flat of ['water', 'coastalwater', 'sand', 'fishinghut', 'tower', 'towersand', 'towerforest', 'towerbog']) {
       expect(LEGACY_TALL_KEYS.has(flat)).toBe(false);
     }
   });

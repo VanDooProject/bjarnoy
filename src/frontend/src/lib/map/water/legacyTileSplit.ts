@@ -41,7 +41,7 @@ import { TILE_ART_NATIVE_H, TILE_ART_NATIVE_W, TILE_ART_TOPFACE_Y_FRAC } from '.
  * measurement would put sand, the most common terrain on any coastline, through
  * a split it does not need.
  *
- * The tower is not in it: the stave tower families (`stavetower`, `stavetower_forest`, `stavetower_bog`) ship split into base and top
+ * The tower is not in it: the stave tower families (`stavetower`, `stavetower_sand`, `stavetower_forest`, `stavetower_bog`) ship split into base and top
  * like every other proper tile, so `topTextureFor` finds their top half and they never reach the legacy path.
  *
  * This set is the only *performance* filter here; the predicate for splitting at

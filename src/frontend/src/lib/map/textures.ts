@@ -140,7 +140,8 @@ export type TextureKey =
   // like the Sawmill's river keys these are texture-lookup keys, not wire building types.
   | 'fisherhutlake'
   | 'hammerschmiedebend'
-  // The stave tower on a forest hex and on plain bog moss: texture-lookup keys, the wire type is `tower`.
+  // The stave tower on sand, on a forest hex and on plain bog moss: texture-lookup keys, the wire type is `tower`.
+  | 'towersand'
   | 'towerforest'
   | 'towerbog'
   // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
@@ -211,9 +212,10 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // composite (still in the pack, no longer referenced) had no per-level
   // art at all. See buildingArt.ts's matching docs-page choice.
   fishinghut: 'fisherhut',
-  // The stave tower (3D_assets hextile143) on grass or sand; on forest and plain bog moss it replaces the tile, so each ground has its own art
-  // (hextile148 and hextile147), picked by `textureKeyFor`.
+  // The stave tower replaces the tile it stands on, so each ground has its own art, picked by `textureKeyFor`: grass (3D_assets
+  // hextile143), sand (hextile149), forest (hextile148) and plain bog moss (hextile147).
   tower: 'stavetower',
+  towersand: 'stavetower_sand',
   towerforest: 'stavetower_forest',
   towerbog: 'stavetower_bog',
   dockyard: 'dockyard',
@@ -1735,9 +1737,10 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.buildingType === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
   }
-  // A tower replaces the tile it stands on, so its art depends on the ground: plain bog moss and forest have their own, grass and sand share `tower`.
+  // A tower replaces the tile it stands on, so its art depends on the ground: sand, forest and plain bog moss have their own, grass is `tower`.
   if (tile.buildingType === 'tower' && tile.bog?.kind === 'bog') return 'towerbog';
   if (tile.buildingType === 'tower' && tile.terrain === 'forest') return 'towerforest';
+  if (tile.buildingType === 'tower' && tile.terrain === 'sand') return 'towersand';
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
   if (tile.bog) return bogTextureKey(tile.bog);
