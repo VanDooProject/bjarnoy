@@ -209,7 +209,7 @@ Pixel-measured against the vendored art (bg_assets_hextile edba233). Directions 
 
 Texture keys: `bog`, `lake`, `bogcreek`, `bogcreekbend`, `bogcreekspring`, `lakeinlet`, `lakeshore`, `lakehalf`,
 `lakemouth`. `normalizeBogFrames` renames `variantNNN` to contiguous variants; lake variants above 3 (fish weir,
-both boats) are dropped. The variant is `tile.variant % variants.length`.
+both boats) are dropped. The variant is `tile.variant % variants.length`, over the looks the game shows: look 0 (the bare plain hex) is retired for the moss and every creek, spring, inlet, shore, half and mouth family (`RETIRED_BOG_VARIANTS`), so those hexes always draw a decorated look; the open lake keeps its plain water.
 
 ## Buildings
 

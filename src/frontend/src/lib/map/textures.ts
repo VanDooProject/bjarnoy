@@ -1855,12 +1855,20 @@ function tileOrientationFor(tile: Tile, riverArt?: RiverArt): TileOrientation {
 /**
  * Bog looks the game no longer shows, per family: a hex never draws one, its variant is spread over the family's other
  * looks instead. The art pack still has them, so every look keeps its slot index.
- * `bog` 0 is the plain moss: bare green with nothing on it, so bog ground always draws one of its decorated looks
- * (a building on the moss keeps the plain base, it never reads these tops). `bog` 6 is the peat cuttings: its stepped
- * peat bank stands on the moss as a hard-edged slab.
+ * Look 0 of every bog ground and water-edge family (moss, creeks, springs, inlets, shores, halves, mouths) is the plain
+ * hex: bare green with nothing on it, so those hexes always draw one of their decorated looks (a building on the moss
+ * keeps the plain base, it never reads these tops). The open lake keeps its plain look: plain water is just water.
+ * `bog` 6 is the peat cuttings: its stepped peat bank stands on the moss as a hard-edged slab.
  */
 export const RETIRED_BOG_VARIANTS: Readonly<Partial<Record<TextureKey, ReadonlySet<number>>>> = {
   bog: new Set([0, 6]),
+  bogcreek: new Set([0]),
+  bogcreekbend: new Set([0]),
+  bogcreekspring: new Set([0]),
+  lakeinlet: new Set([0]),
+  lakeshore: new Set([0]),
+  lakehalf: new Set([0]),
+  lakemouth: new Set([0]),
 };
 
 /** A bog family's variant slot for a tile: its hashed variant, wrapped onto the looks the family shows (creeks have 2, shores 1-2, ...), skipping retired ones. Exported for the tests. */
