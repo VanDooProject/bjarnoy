@@ -5,7 +5,7 @@
 // (isoDepthKey sorting by row alone, ignoring the half-row offset odd
 // columns get from isoGridPosition).
 import { describe, expect, it } from 'vitest';
-import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints, type Point } from './geometry';
+import { hatchStripes, isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints, type Point } from './geometry';
 import { hexesInRadius, type AxialCoord } from './coords';
 
 const W = 168;
@@ -123,5 +123,34 @@ describe('isoDepthKey', () => {
     const nextRowDown: AxialCoord = { q: 0, r: 1 };
     expect(isoDepthKey(nextRowDown)).toBeGreaterThan(isoDepthKey(farColumnSameRow));
     expect(isoDepthKey(farColumnSameRow)).toBeGreaterThan(isoDepthKey(nearRow));
+  });
+});
+
+describe('hatchStripes', () => {
+  const area = (poly: Point[]) =>
+    Math.abs(poly.reduce((s, p, i) => s + p.x * poly[(i + 1) % poly.length]!.y - poly[(i + 1) % poly.length]!.x * p.y, 0)) / 2;
+  const square: Point[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 },
+  ];
+
+  it('covers half the polygon, in stripes as wide as the gaps between them', () => {
+    const stripes = hatchStripes(square, 20, 1, 0);
+    expect(stripes).toHaveLength(5);
+    for (const stripe of stripes) expect(area(stripe)).toBeCloseTo(1000, 6);
+  });
+
+  it('anchors the stripes to the plane, so a neighbouring polygon continues them', () => {
+    const shifted = square.map((p) => ({ x: p.x + 100, y: p.y }));
+    expect(Math.min(...hatchStripes(shifted, 20, 1, 0)[0]!.map((p) => p.x))).toBeCloseTo(100, 6);
+  });
+
+  it('covers about half a hex when hatched diagonally', () => {
+    const hex = isoTopPoints(168, 96);
+    const total = hatchStripes(hex, 42, Math.SQRT1_2, Math.SQRT1_2).reduce((s, p) => s + area(p), 0);
+    expect(total / area(hex)).toBeGreaterThan(0.4);
+    expect(total / area(hex)).toBeLessThan(0.6);
   });
 });

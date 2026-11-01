@@ -220,3 +220,42 @@ export function isoDepthKey(c: AxialCoord): number {
   const effectiveRow = row * 2 + (col & 1 ? 1 : 0);
   return effectiveRow * 100000 + col;
 }
+
+/** Keeps the part of convex polygon `poly` where `n·p >= c` (one Sutherland–Hodgman pass). */
+function clipHalfPlane(poly: Point[], nx: number, ny: number, c: number): Point[] {
+  const out: Point[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!;
+    const b = poly[(i + 1) % poly.length]!;
+    const da = nx * a.x + ny * a.y - c;
+    const db = nx * b.x + ny * b.y - c;
+    if (da >= 0) out.push(a);
+    if (da >= 0 !== db >= 0) {
+      const t = da / (da - db);
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    }
+  }
+  return out;
+}
+
+/**
+ * The stripes of a hatch fill inside convex polygon `poly`: bands `period / 2` wide with `period / 2` gaps, running
+ * across direction `(nx, ny)` (a unit vector; the bands are perpendicular to it). The bands are anchored to the plane,
+ * not to the polygon, so neighbouring polygons hatched the same way continue each other's stripes seamlessly.
+ */
+export function hatchStripes(poly: Point[], period: number, nx: number, ny: number): Point[][] {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const p of poly) {
+    const d = nx * p.x + ny * p.y;
+    if (d < min) min = d;
+    if (d > max) max = d;
+  }
+  const stripes: Point[][] = [];
+  for (let k = Math.floor(min / period); k * period < max; k++) {
+    const lo = k * period;
+    const band = clipHalfPlane(clipHalfPlane(poly, nx, ny, lo), -nx, -ny, -(lo + period / 2));
+    if (band.length >= 3) stripes.push(band);
+  }
+  return stripes;
+}
