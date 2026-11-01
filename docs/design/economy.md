@@ -197,6 +197,10 @@ play.
   So LH 3–6 allow 1, LH 7 allows 2, LH 9 allows 3, …, and LH 29–30 allow 13.
   The tech tree shows only the first unlock (LH 3); the rule is shown where
   a tower is placed, not as extra tech-tree cards.
+- **Where a tower stands:** on grass, sand, forest or plain bog moss (not a
+  bog shore, creek, spring or lake). It replaces the tile it stands on; its
+  art keeps that ground round it, so each ground has its own version of the
+  tower.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
