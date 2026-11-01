@@ -3,7 +3,7 @@
 //
 // For every `_base` frame of the non-showcase atlas pages that repeats a plain
 // water tile (see dryMaskCore.ts) it computes a half-resolution mask of the
-// pixels that are not plain water, and packs all masks into one RGBA PNG (R = shadow, A = dry).
+// pixels that are not plain water, and packs all masks into one grey+alpha PNG (alpha = dry).
 // The result is computed once per build / dev-server start and cached.
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -20,7 +20,7 @@ import {
   bestReference,
   cellSourceRect,
   cropHalf,
-  artMasksHalf,
+  dryMaskHalf,
   orientationOf,
   type DryMaskFrame,
   type SourceRect,
@@ -88,7 +88,7 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
     referencesByOrientation.set(orientation, [...(referencesByOrientation.get(orientation) ?? []), canvas]);
   }
 
-  const cells: { name: string; rect: ReturnType<typeof cellSourceRect>; dry: Uint8Array; shadow: Uint8Array }[] = [];
+  const cells: { name: string; rect: ReturnType<typeof cellSourceRect>; dry: Uint8Array }[] = [];
   for (const [name, { canvas, trim }] of bases) {
     if (REFERENCE_FRAME_RE.test(name)) continue;
     const orientation = orientationOf(name);
@@ -97,8 +97,7 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
     const best = bestReference(canvas, references);
     if (!best || best.ratio < WATER_MATCH_MIN_RATIO) continue;
     const rect = cellSourceRect(trim);
-    const masks = artMasksHalf(canvas, references[best.index]);
-    cells.push({ name, rect, dry: cropHalf(masks.dry, rect), shadow: cropHalf(masks.shadow, rect) });
+    cells.push({ name, rect, dry: cropHalf(dryMaskHalf(canvas, references[best.index]), rect) });
   }
 
   // Shelf packing, tallest first.
@@ -121,21 +120,19 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
   }
   const height = Math.max(1, y + shelfH);
 
-  // RGBA: R = shadow, G = B = 0, A = dry. Decoded without premultiplying (waterDryMask.ts), so R survives where A is 0.
-  const raw = new Uint8Array(ATLAS_WIDTH * height * 4);
+  // Grey+alpha: grey 0, alpha = dry.
+  const raw = new Uint8Array(ATLAS_WIDTH * height * 2);
   for (const cell of cells) {
     const { x: cx, y: cy } = frames[cell.name];
     const w = cell.rect.sw >> 1;
     const h = cell.rect.sh >> 1;
     for (let row = 0; row < h; row++) {
       for (let col = 0; col < w; col++) {
-        const o = ((cy + row) * ATLAS_WIDTH + cx + col) * 4;
-        raw[o] = cell.shadow[row * w + col];
-        raw[o + 3] = cell.dry[row * w + col];
+        raw[((cy + row) * ATLAS_WIDTH + cx + col) * 2 + 1] = cell.dry[row * w + col];
       }
     }
   }
-  const png = await sharp(raw, { raw: { width: ATLAS_WIDTH, height, channels: 4 } })
+  const png = await sharp(raw, { raw: { width: ATLAS_WIDTH, height, channels: 2 } })
     .png({ compressionLevel: 9 })
     .toBuffer();
   return { url: `data:image/png;base64,${png.toString('base64')}`, width: ATLAS_WIDTH, height, frames };

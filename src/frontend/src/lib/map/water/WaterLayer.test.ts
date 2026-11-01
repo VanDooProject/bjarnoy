@@ -282,17 +282,6 @@ describe('WaterLayer', () => {
     expect(foam).toContain('(1.0 - dry)');
   });
 
-  it('dims caustics and darkens foam by the shadow channel of the art mask', () => {
-    expect(WATER_FRAGMENT).toContain('float shade = dryS.r;');
-    expect(WATER_FRAGMENT).toContain('float quiet = (1.0 - dry) * (1.0 - shade)');
-    expect(WATER_FRAGMENT).toContain('const float SHADOW_FOAM = 0.45;');
-    const foamColor = WATER_FRAGMENT.split('\n').find((line) => line.includes('vec3 foamColor ='));
-    expect(foamColor).toContain('(1.0 - SHADOW_FOAM * shade)');
-    // Darkened colour only: the foam's alpha is not scaled by the shade.
-    const foam = WATER_FRAGMENT.split('\n').find((line) => line.includes('float foam ='));
-    expect(foam).not.toContain('shade');
-  });
-
   it('binds the "nothing is dry" placeholder until a dry mask is set, and the given texture after', () => {
     const layer = new WaterLayer('settlement', TILE_W, TILE_H);
     const resources = layer.mesh.shader!.resources as Record<string, unknown>;

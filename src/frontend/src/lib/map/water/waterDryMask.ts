@@ -5,8 +5,7 @@
 // packs them into one atlas (`virtual:water-dry-masks`). This file draws those
 // masks, placed where the tile art is drawn, into one render texture covering
 // the water mask's world rect. The water shader samples it with the same UVs as
-// the water mask: A keeps caustics and foam off whatever is dry, R dims them in
-// the soft shadows the art paints on the water.
+// the water mask and keeps caustics and foam off whatever is dry.
 import { Container, ImageSource, Matrix, Rectangle, RenderTexture, Sprite, Texture, type Renderer } from 'pixi.js';
 import { REFERENCE_FRAME_RE, SOURCE_H, SOURCE_W, type DryMaskFrame, type WaterDryMasksData } from './dryMaskCore';
 
@@ -65,13 +64,9 @@ function loadMasks(): Promise<LoadedMasks> {
   masksPromise ??= (async () => {
     const { default: data } = await import('virtual:water-dry-masks');
     const blob = await (await fetch(data.url)).blob();
-    // The PNG is RGBA with R = shadow, A = dry. Both the bitmap decode ('none') and the GPU upload ('no-premultiply-alpha',
-    // Pixi's default would set UNPACK_PREMULTIPLY_ALPHA) keep the values raw: premultiplying would scale R by A and erase the
-    // shadow wherever nothing is dry.
+    // 'none': keep the PNG's values as they are; Pixi premultiplies on upload, so the mask lands in the alpha channel (and rgb).
     const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
-    const atlas = new Texture({
-      source: new ImageSource({ resource: bitmap, scaleMode: 'linear', addressMode: 'clamp-to-edge', alphaMode: 'no-premultiply-alpha' }),
-    });
+    const atlas = new Texture({ source: new ImageSource({ resource: bitmap, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
     return { data, atlas, cells: new Map() };
   })();
   masksPromise.catch(() => {
@@ -134,8 +129,6 @@ export class WaterDryLayer {
     let used = 0;
     const place = (texture: Texture, worldRect: WorldRect, tint: number) => {
       const sprite = (this.pool[used] ??= new Sprite());
-      // 'max' (blend equation MAX, WebGL2 / EXT_blend_minmax / WebGPU): overlapping sprites union dry and shadow independently.
-      sprite.blendMode = 'max';
       sprite.texture = texture;
       sprite.tint = tint;
       sprite.position.set(worldRect.x, worldRect.y);
@@ -149,7 +142,7 @@ export class WaterDryLayer {
       if (REFERENCE_FRAME_RE.test(name)) continue;
       const frame = masks.data.frames[name];
       if (frame) place(cellTexture(masks, name, frame), dryCellWorldRect(entry, frame, tileWidth), 0xffffff);
-      // Sea-hex art that is not plain water and has no mask: all of it is dry. Black tint keeps R (shadow) 0 and the art's own alpha as A (dry).
+      // Sea-hex art that is not plain water and has no mask: all of it is dry. Black tint keeps rgb 0 and the art's own alpha, which is what the shader reads.
       else place(entry.texture, artCanvasWorldRect(entry, tileWidth), 0x000000);
     }
     for (let i = used; i < this.pool.length; i++) {
