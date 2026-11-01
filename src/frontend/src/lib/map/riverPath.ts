@@ -26,10 +26,13 @@ export interface RiverDrawing {
   springDot?: Point;
 }
 
-/** Direction `d`'s shared edge is polygon edge `(3 - d) mod 6` — see types.ts's derivation comment. */
+/** Direction `d`'s shared edge is polygon edge `(3 - d) mod 6` (edge i runs `top[i]..top[i+1]`) — see types.ts's derivation comment. */
+export function topFaceEdgeIndex(direction: TileOrientation): number {
+  return (3 - TILE_ORIENTATIONS.indexOf(direction) + 6) % 6;
+}
+
 function edgeMidpoint(top: Point[], direction: TileOrientation): Point {
-  const dirIndex = TILE_ORIENTATIONS.indexOf(direction);
-  const edgeIndex = (3 - dirIndex + 6) % 6;
+  const edgeIndex = topFaceEdgeIndex(direction);
   const a = top[edgeIndex]!;
   const b = top[(edgeIndex + 1) % 6]!;
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
