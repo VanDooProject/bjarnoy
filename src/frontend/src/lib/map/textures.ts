@@ -206,9 +206,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   lumberjack: 'lumberjack',
   storagehouse: 'storagebuilding',
   archeryrange: 'archeryrange',
-  // TODO(art): the Siege Workshop has no atlas family yet, so it is deliberately absent here and draws as bare terrain (the same
-  // fallback the Quarry takes). Expected family `siegeworkshop` (frames `siegeworkshop_<DIR>_level000..004`, DIR in E NE NW W SW SE):
-  // add `siegeworkshop: 'siegeworkshop'` here, and the same entry to buildingArt.ts, when the owner's render lands in the atlas.
+  // The Siege Workshop (3D_assets hextile147): hall, mangonel and ram on the grass base.
+  siegeworkshop: 'siegeworkshop',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
   // Uses the leveled `fisherhut` art family now — the legacy 'fishinghutbuilding'
