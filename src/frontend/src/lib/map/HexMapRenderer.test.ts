@@ -25,6 +25,8 @@ import {
   type TextureLoadDeps,
   clientToCanvasPoint,
   waterMaskTerrainFor,
+  worldGiantFill,
+  worldGiantOutline,
   worldHexFill,
   worldRiverColor,
 } from './HexMapRenderer';
@@ -1099,5 +1101,31 @@ describe('world-map wasted lands', () => {
   it('draws a lava stream in another colour than a river', () => {
     expect(worldRiverColor({ wasted: true })).not.toBe(worldRiverColor({ wasted: false }));
     expect(worldRiverColor({})).toBe(worldRiverColor({ wasted: false }));
+  });
+});
+
+describe('world-map giants', () => {
+  const FAMILIES = ['giantmountain', 'giantvolcano', 'giantshrine', 'giantutgard'] as const;
+
+  it('fills each giant kind in its own colour, apart from the ground it stands on', () => {
+    const fills = FAMILIES.map((f) => worldGiantFill(f, false));
+    expect(new Set(fills).size).toBe(FAMILIES.length);
+    for (const fill of fills) {
+      for (const terrain of ['grass', 'forest', 'mountain'] as const) {
+        expect(fill).not.toBe(worldHexFill(terrain, false));
+        expect(fill).not.toBe(worldHexFill(terrain, true));
+      }
+    }
+  });
+
+  it("marks the volcano's anchor as its lava core, and no other giant's", () => {
+    expect(worldGiantFill('giantvolcano', true)).not.toBe(worldGiantFill('giantvolcano', false));
+    for (const family of ['giantmountain', 'giantshrine', 'giantutgard'] as const) {
+      expect(worldGiantFill(family, true)).toBe(worldGiantFill(family, false));
+    }
+  });
+
+  it('outlines each footprint in a colour that stands out from its fill', () => {
+    for (const family of FAMILIES) expect(worldGiantOutline(family)).not.toBe(worldGiantFill(family, false));
   });
 });
