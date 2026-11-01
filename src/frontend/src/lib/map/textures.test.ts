@@ -1633,6 +1633,21 @@ describe('bog art', () => {
     expect(bogVariantIn('lake', { variant: 0 } as Tile, tops)).toBe(0);
   });
 
+  it('never draws the bare plain look of a bog water-edge family (creek, spring, inlet, shore, half, mouth)', () => {
+    const keys = ['bogcreek', 'bogcreekbend', 'bogcreekspring', 'lakeinlet', 'lakeshore', 'lakehalf', 'lakemouth'] as const;
+    for (const key of keys) {
+      // Plain look plus the family's decorated ones (1-2, as shipped).
+      for (const looks of [2, 3]) {
+        const tops = Array.from({ length: looks }, (_, i) => `${key}_W_${i}`);
+        for (let v = 0; v < 100; v++) {
+          expect(bogVariantIn(key, { variant: v } as Tile, tops), `${key} ${looks} looks, variant ${v}`).not.toBe(0);
+        }
+      }
+      // Only the plain frame loaded: nothing else to draw.
+      expect(bogVariantIn(key, { variant: 4 } as Tile, [`${key}_W`])).toBe(0);
+    }
+  });
+
   it('gives every bog family its own key and family, all of them terrain keys', () => {
     for (const key of BOG_TEXTURE_KEYS) expect(KEY_FAMILY[key], key).toBeDefined();
     expect(KEY_FAMILY.bog).toBe('bog');
