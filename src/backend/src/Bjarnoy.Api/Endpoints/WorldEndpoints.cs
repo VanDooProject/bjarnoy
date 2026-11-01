@@ -305,7 +305,7 @@ public static class WorldEndpoints
                 .Where(w => explored.Contains(new HexCoord(w.CentreQ, w.CentreR)))
                 .Select(w => new WallResponse(
                     w.Q, w.R, w.Type.ToWireName(), w.Level, w.SettlementId,
-                    w.UserId == SystemUserIds.Abandoned ? null : w.UserId)),
+                    w.UserId == SystemUserIds.Abandoned ? null : w.UserId, w.OutsideRealm)),
         ];
 
         return TypedResults.Ok(response);

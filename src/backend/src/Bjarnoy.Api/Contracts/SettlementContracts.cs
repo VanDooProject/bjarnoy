@@ -82,7 +82,28 @@ public sealed record ResourceLine(double Wood, double Stone, double Food, double
 /// for anything else; the tile's own <c>orientation</c> from
 /// <c>GET /worlds/{id}/tiles</c> covers it.
 /// </param>
-public sealed record PlacedBuildingResponse(int Q, int R, string Type, int Level, string? Orientation = null);
+/// <param name="OutsideRealmSince">
+/// Game instant the building's hex stopped being inside the player's realm (<c>docs/design/economy.md</c> section 5,
+/// "Buildings outside the realm decay"): from then on it has no function and loses levels. Null while it is inside.
+/// </param>
+/// <param name="NextLevelLossInSeconds">
+/// Seconds until the building loses its next level while it stays outside the realm
+/// (<see cref="OutsideRealmSince"/> plus <see cref="BuildingCatalogue.DecayInterval(BuildingType)"/>, which the server advances by
+/// every level lost). Null while the building is inside, while the world's clock is frozen, and in a rival's fog-gated view.
+/// </param>
+public sealed record PlacedBuildingResponse(
+    int Q, int R, string Type, int Level, string? Orientation = null,
+    DateTimeOffset? OutsideRealmSince = null, double? NextLevelLossInSeconds = null)
+{
+    /// <summary>The response for a stored building, with the realm decay fields filled from it.</summary>
+    /// <param name="gameNow">The settlement's game time now, for <see cref="NextLevelLossInSeconds"/>; null leaves that out.</param>
+    public static PlacedBuildingResponse From(
+        PlacedBuilding b, string? orientation = null, DateTimeOffset? gameNow = null, bool freezesTime = false) => new(
+        b.Coord.Q, b.Coord.R, b.Type.ToWireName(), b.Level, orientation, b.OutsideRealmSince,
+        b.OutsideRealmSince is { } since && gameNow is { } now && !freezesTime
+            ? Math.Max(0, (since + BuildingCatalogue.DecayInterval(b.Type) - now).TotalSeconds)
+            : null);
+}
 
 /// <param name="State">
 /// <c>"building"</c> while under construction, <c>"waiting"</c> while queued
@@ -274,8 +295,7 @@ public sealed record SettlementResponse(
                 domain.WaitingOrders.Count(),
                 Settlement.DefaultMaxOrdersPerHex),
             [.. domain.Buildings.Select(b =>
-                new PlacedBuildingResponse(
-                    b.Coord.Q, b.Coord.R, b.Type.ToWireName(), b.Level, OrientationFor(b.Type, b.Coord)))],
+                PlacedBuildingResponse.From(b, OrientationFor(b.Type, b.Coord), gameNow, clock.FreezesTime))],
             [.. domain.Queue.Select(o => new BuildOrderResponse(
                 o.Id,
                 o.Coord.Q,

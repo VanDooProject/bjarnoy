@@ -58,6 +58,36 @@ public static class BuildingCatalogue
         _ => 0,
     };
 
+    /// <summary>The shortest time a building outside the realm takes from its top level to gone.</summary>
+    public static readonly TimeSpan MinDecayTime = TimeSpan.FromDays(7);
+
+    /// <summary>The longest time a building outside the realm takes from its top level to gone.</summary>
+    public static readonly TimeSpan MaxDecayTime = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// How long a building with <paramref name="maxLevel"/> levels takes from its top level to gone once the realm no longer
+    /// reaches it (<c>docs/design/economy.md</c> section 5): <paramref name="maxLevel"/> x 24 hours, never less than
+    /// <see cref="MinDecayTime"/> and never more than <see cref="MaxDecayTime"/>.
+    /// </summary>
+    public static TimeSpan DecayTimeToGone(int maxLevel)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxLevel, 1);
+        var time = TimeSpan.FromHours(24.0 * maxLevel);
+        return time < MinDecayTime ? MinDecayTime : time > MaxDecayTime ? MaxDecayTime : time;
+    }
+
+    /// <summary>The time a <paramref name="type"/> outside the realm takes from its top level to gone (<see cref="DecayTimeToGone(int)"/> of its max level).</summary>
+    public static TimeSpan DecayTimeToGone(BuildingType type) => DecayTimeToGone(MaxLevelFor(type));
+
+    /// <summary>One level of a building with <paramref name="maxLevel"/> levels is lost every this long outside the realm: its <see cref="DecayTimeToGone(int)"/> divided by <paramref name="maxLevel"/>.</summary>
+    public static TimeSpan DecayInterval(int maxLevel) => DecayTimeToGone(maxLevel) / maxLevel;
+
+    /// <summary>One level of a <paramref name="type"/> outside the realm is lost every this long (<see cref="DecayInterval(int)"/> of its max level).</summary>
+    public static TimeSpan DecayInterval(BuildingType type) => DecayInterval(MaxLevelFor(type));
+
+    /// <summary>Whether a <paramref name="type"/> outside the realm decays: every building does except the Longhouse, which makes the realm.</summary>
+    public static bool Decays(BuildingType type) => type != BuildingType.Longhouse;
+
     /// <summary>What a settlement can store before it builds a storage house.</summary>
     public static ResourceAmounts BaseStorageCapacity { get; } = ResourceAmounts.Uniform(500);
 
@@ -446,7 +476,8 @@ public static class BuildingCatalogue
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
-        var placed = buildings.Where(b => b.Level >= 1).ToList();
+        // A building outside the realm has no function: it neither produces nor boosts nor stores (PlacedBuilding.IsFunctioning).
+        var placed = buildings.Where(b => b.Level >= 1 && b.IsFunctioning).ToList();
 
         // Radius-boost sources standing among these buildings, with their
         // level's percent/range already resolved once rather than per

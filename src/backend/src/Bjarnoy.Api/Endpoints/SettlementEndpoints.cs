@@ -260,7 +260,7 @@ public static class SettlementEndpoints
         [
             .. entity.Buildings
                 .Where(b => isOwnSettlement || explored.Contains(new HexCoord(b.Q, b.R)))
-                .Select(b => new PlacedBuildingResponse(b.Q, b.R, b.Type.ToWireName(), b.Level)),
+                .Select(b => PlacedBuildingResponse.From(b.ToPlacedBuilding())),
         ];
 
         return TypedResults.Ok(new SettlementViewResponse(
@@ -834,6 +834,8 @@ public static class SettlementEndpoints
             "Not enough resources (some may be reserved for queued construction).",
         TrainRejection.InvalidCount => "Count must be at least 1.",
         TrainRejection.SettlementNotCoastal => "Ships can only be trained at a settlement that claims a shoreline hex.",
+        TrainRejection.BuildingOutsideRealm =>
+            "The building that trains this unit stands outside your realm and has no function until your realm reaches it again.",
         _ => "Refused.",
     };
 }

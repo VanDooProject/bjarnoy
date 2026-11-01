@@ -634,4 +634,5 @@ public sealed record CampStateResponse(
 /// <param name="Type">"palisade" or "palisadegate".</param>
 /// <param name="SettlementId">The settlement the wall belongs to.</param>
 /// <param name="OwnerUserId">The owning account; null for an anonymous settlement (owned by the shared abandoned user).</param>
-public sealed record WallResponse(int Q, int R, string Type, int Level, Guid SettlementId, Guid? OwnerUserId);
+public sealed record WallResponse(
+    int Q, int R, string Type, int Level, Guid SettlementId, Guid? OwnerUserId, bool OutsideRealm = false);

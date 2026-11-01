@@ -15,7 +15,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
@@ -951,6 +951,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("Level")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Q")
                         .HasColumnType("INTEGER");

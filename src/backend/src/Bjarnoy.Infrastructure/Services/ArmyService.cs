@@ -106,6 +106,9 @@ public sealed class ArmyService(
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly SettlementService _settlementService = settlementService;
+
+    /// <summary>Settlements a siege changed during the settle in progress; <see cref="SettleAndFoldAsync"/> reconciles their realm once the settle is saved.</summary>
+    private readonly HashSet<Guid> _realmDirty = [];
     private readonly RenownService _renownService = renownService;
     private readonly AuthService _authService = authService;
     private readonly FieldBattleService _fieldBattleService = fieldBattleService;
@@ -798,6 +801,27 @@ public sealed class ArmyService(
     private async Task<ArmySettleOutcome> SettleAndFoldAsync(
         ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        var outcome = await SettleAndFoldCoreAsync(army, now, cancellationToken).ConfigureAwait(false);
+
+        // A siege that cut down a tower moved the defender's realm: save what the settle did, then bring the realm state of every
+        // settlement of that player up to date, so buildings the tower chained in stop working at once.
+        if (_realmDirty.Count > 0)
+        {
+            var dirty = _realmDirty.ToList();
+            _realmDirty.Clear();
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var settlementId in dirty)
+            {
+                await _settlementService.ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return outcome;
+    }
+
+    private async Task<ArmySettleOutcome> SettleAndFoldCoreAsync(
+        ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
+    {
         var domain = army.ToDomain();
 
         // In-flight interception (issue #206) is checked before any
@@ -976,6 +1000,11 @@ public sealed class ArmyService(
         var battle = arrival.Battle!;
 
         defenderEntity.ApplyDomain(arrival.DefenderSettlement);
+
+        if (arrival.Siege is { Applied: true })
+        {
+            _realmDirty.Add(targetId);
+        }
 
         // Attribute the guest side's pooled share of the battle back onto
         // the actual guest Army records — the second half of the same

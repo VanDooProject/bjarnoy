@@ -186,6 +186,13 @@ if (migrationCommand == MigrationCommandKind.None)
         builder.Services.AddHostedService<CampAggressionHostedService>();
     }
 
+    // Buildings outside the realm decay: the sweep that applies the realm state to settlements nobody is looking at
+    // (SettlementService.SweepRealmStateAsync). Tests that drive it by hand switch the timer off with RealmSweep:Enabled=false.
+    if (builder.Configuration.GetValue("RealmSweep:Enabled", true))
+    {
+        builder.Services.AddHostedService<RealmStateHostedService>();
+    }
+
     // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
     // Tests that drive LeaderboardService by hand switch the timer off with
