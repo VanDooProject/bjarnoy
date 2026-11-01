@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampOffset, shouldOpenOnRelease, splitDrawerDragDelta } from './drawerDrag';
+import { clampOffset, releaseVelocity, shouldOpenOnRelease, splitDrawerDragDelta } from './drawerDrag';
 
 describe('clampOffset', () => {
   it('clamps to [0, height]', () => {
@@ -40,6 +40,37 @@ describe('shouldOpenOnRelease', () => {
 
   it('is always closed for a zero-height drawer', () => {
     expect(shouldOpenOnRelease(0, 0, 2, ratio, flick)).toBe(false);
+  });
+});
+
+describe('releaseVelocity', () => {
+  it('measures a gesture shorter than the window from its first sample', () => {
+    // 20px in 5ms, released straight away
+    expect(releaseVelocity([{ t: 0, offset: 0 }, { t: 5, offset: 20 }], 5, 100)).toBe(4);
+  });
+
+  it('is zero when the drawer stood still for the whole window before release', () => {
+    // a fast 20px drag, then held for 200ms
+    expect(releaseVelocity([{ t: 0, offset: 0 }, { t: 5, offset: 20 }], 205, 100)).toBe(0);
+  });
+
+  it('only counts the movement inside the window', () => {
+    // 100px long ago, then 10px in the last 100ms
+    const samples = [
+      { t: 0, offset: 0 },
+      { t: 50, offset: 100 },
+      { t: 200, offset: 110 },
+    ];
+    expect(releaseVelocity(samples, 200, 100)).toBeCloseTo(0.1);
+  });
+
+  it('is negative towards closed', () => {
+    expect(releaseVelocity([{ t: 0, offset: 300 }, { t: 10, offset: 280 }], 10, 100)).toBe(-2);
+  });
+
+  it('is zero with no movement sample or no elapsed time', () => {
+    expect(releaseVelocity([{ t: 0, offset: 0 }], 50, 100)).toBe(0);
+    expect(releaseVelocity([{ t: 0, offset: 0 }, { t: 0, offset: 20 }], 0, 100)).toBe(0);
   });
 });
 
