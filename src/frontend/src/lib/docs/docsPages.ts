@@ -12,6 +12,7 @@ export type DocsPageId =
   | 'shrines'
   | 'walls'
   | 'founding'
+  | 'realm'
   | 'landMovement'
   | 'ships'
   | 'wildlifeCamps'
@@ -89,7 +90,9 @@ export const DOCS_GROUPS: DocsGroupEntry[] = [
     page('walls', '/docs/walls', 'palisade_gate180_SE_level002', 'icon', ['landMovement', 'techTree', 'wastedLands']),
   ]),
   group('move', [
-    page('founding', '/docs/founding', 'cartworkshop_SE_level004', 'backdrop', ['landMovement', 'wildlifeCamps', 'bogLands']),
+    page('founding', '/docs/founding', 'cartworkshop_SE_level004', 'backdrop', ['landMovement', 'wildlifeCamps', 'realm']),
+    // The realm starts at the longhouse (`greathall`), so the page shows it.
+    page('realm', '/docs/realm', 'greathall_SE_level003', 'backdrop', ['founding', 'walls', 'wildlifeCamps']),
     page('landMovement', '/docs/land-movement', 'riverbridge_SE_level004', 'backdrop', ['walls', 'wildlifeCamps', 'founding']),
     page('ships', '/docs/ships', 'dockyard_SE_level007', 'backdrop', ['shrines', 'walls', 'wildlifeCamps']),
   ]),
