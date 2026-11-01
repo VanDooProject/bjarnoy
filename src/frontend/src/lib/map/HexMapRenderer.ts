@@ -638,6 +638,11 @@ export interface ArmyOverlayData {
  * What `drawArmyOverlay` actually placed on screen on its most recent frame
  * — read back via `lastArmyOverlayFrame()`.
  *
+ * Recorded when the overlay is rebuilt, which is not always inside a rendered
+ * tick (`rebuildAll` also runs from atlas-load callbacks), so it can run ahead
+ * of the canvas by one frame: anything that judges the pixels waits for
+ * `whenFrameRendered()` first.
+ *
  * Not a test-only hook (nothing in the draw path branches on whether anyone
  * reads it): it is the same "ask the renderer where it really put things"
  * accessor `hexCenterScreen` already is, and it is the only honest way to
