@@ -205,6 +205,10 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   density PR: 273 of the 482 green islands of seeds 1-8 at radius 1000 have landing spots (338 have a candidate), after giving the
   spawned river an outlet in every drainage basin and growing the guarantee's lakes only onto shore-fit tiles (258 before; see
   `bog.md`, "On the denser terrain").
+- More bog, spread over the whole island (owner decision): after the normal bogs, while some land of an island is still more than 18
+  hexes from a bog, another bog is placed aimed at that land — on a river passing there if there is one, otherwise as the source of a
+  new river. *Planned.*
+- The 20% rule is lifted for these gap-fill bogs: about a third of all bogs may start a river. *Planned.*
 
 ## Wildlife camps
 
