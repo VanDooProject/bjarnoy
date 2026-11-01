@@ -189,8 +189,4 @@ describe('showcaseWorldFrame', () => {
     const foreign = [...model.listIslands()].filter((i) => hexDistance(frame.center, i) <= frame.radius && !landKeys.has(`${i.q},${i.r}`));
     expect(foreign).toEqual([]);
   });
-
-  it('draws further out than the camera fits, so the cut-off stays off screen', () => {
-    expect(frame.renderRadius).toBeGreaterThan(frame.radius);
-  });
 });

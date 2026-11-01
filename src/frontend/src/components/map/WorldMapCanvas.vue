@@ -9,11 +9,10 @@ const props = defineProps<{
   worldModel: WorldModel;
   playerId: string;
   // The capped frame (the showcase hero): the same shared HexMapRenderer options SettlementCanvas passes for its preview.
-  // `previewCenter`/`previewRadius` is the disc the camera is fitted to and confined to, `previewRenderRadius` how far
-  // the hexes are drawn; `confineCamera` switches the cap on. See HexMapRendererOptions.
+  // `previewCenter`/`previewRadius` is the disc the camera is fitted to and confined to; `confineCamera` switches the cap on.
+  // See HexMapRendererOptions.
   previewCenter?: AxialCoord;
   previewRadius?: number;
-  previewRenderRadius?: number;
   confineCamera?: boolean;
   // A page-scroll host: a plain wheel scrolls the page, a vertical touch swipe too. See HexMapRendererOptions.allowPageScroll.
   allowPageScroll?: boolean;
@@ -29,7 +28,6 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   playerId: props.playerId,
   previewCenter: props.previewCenter,
   previewRadius: props.previewRadius,
-  previewRenderRadius: props.previewRenderRadius,
   confineCamera: props.confineCamera,
   allowPageScroll: props.allowPageScroll,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),

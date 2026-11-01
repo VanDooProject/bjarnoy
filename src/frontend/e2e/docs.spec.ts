@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { ScrollableView } from "./pages";
 
@@ -13,6 +13,24 @@ import { ScrollableView } from "./pages";
  * back to the bundled `data/building-catalogue.json` snapshot with no
  * backend, which is exactly what `npm run test:e2e` runs against.
  */
+
+/**
+ * Art drawn with a CSS `aspect-ratio` (`.atlas-sprite`, `.animated-building`) whose rendered box drifts more than 2% from
+ * that ratio, i.e. a box that a max-height or a fixed size squashed or stretched. Empty when every picture keeps its shape.
+ */
+async function aspectMismatches(art: Locator) {
+  return art.evaluateAll((els) =>
+    els.flatMap((el) => {
+      const [w, h] = getComputedStyle(el).aspectRatio.split("/").map(Number);
+      const box = el.getBoundingClientRect();
+      if (!w || !h || box.height === 0) return [];
+      const drift = Math.abs(box.width / box.height - w / h) / (w / h);
+      return drift > 0.02
+        ? [`${box.width.toFixed(0)}x${box.height.toFixed(0)} vs ${w}/${h}`]
+        : [];
+    }),
+  );
+}
 
 /**
  * The wasted-lands island toy is an admin note: hidden from players, shown to
@@ -228,18 +246,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
 
     const sprites = page.locator(".wasted-lands .atlas-sprite");
     expect(await sprites.count()).toBeGreaterThan(0);
-    const mismatches = await sprites.evaluateAll((els) =>
-      els.flatMap((el) => {
-        const [w, h] = getComputedStyle(el).aspectRatio.split("/").map(Number);
-        const box = el.getBoundingClientRect();
-        if (!w || !h || box.height === 0) return [];
-        const drift = Math.abs(box.width / box.height - w / h) / (w / h);
-        return drift > 0.02
-          ? [`${box.width.toFixed(0)}x${box.height.toFixed(0)} vs ${w}/${h}`]
-          : [];
-      }),
-    );
-    expect(mismatches).toEqual([]);
+    expect(await aspectMismatches(sprites)).toEqual([]);
   });
   test("wildlife camps page scrolls and shows guarded art only for kept rotations", async ({
     page,
@@ -693,6 +700,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         .locator('a.card[data-page="walls"] .atlas-sprite')
         .boundingBox();
       expect(herder!.width).toBeGreaterThanOrEqual(tile!.width - 2);
+      // Regression: the 84px box used to clamp the 2:3 canvas's height, squashing the herder flat.
+      expect(
+        await aspectMismatches(page.locator(".groups .animated-building")),
+      ).toEqual([]);
 
       await page.getByRole("link", { name: /^Bog lands/ }).click();
       await expect(page).toHaveURL(/\/docs\/bog-lands$/);
@@ -875,6 +886,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(
       page.locator(".walls .tile .thumb .animated-building"),
     ).toHaveCount(6);
+    // Regression: the thumb box used to clamp the pieces' height, squashing them flat.
+    expect(
+      await aspectMismatches(page.locator(".walls .animated-building")),
+    ).toEqual([]);
     for (const id of [
       "straight180",
       "bend60",
