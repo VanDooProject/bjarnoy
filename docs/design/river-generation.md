@@ -439,12 +439,13 @@ determinism) and the `green_island_valley_stream` scenario of the shared golden 
 
 ### Mountain ranges and forest patches (terrain)
 
-At island scale, single-hex rockiness noise gave salt-and-pepper mountains. `TerrainAt`/`terrainAt` now make a
-hex mountain when its depth is under `MountainThreshold` and `MountainField` beats `MountainRockiness`
-(unchanged knob, default 0.72): a ridged (`1 - |2n - 1|`) coarse value noise (wavelength 10, seed `+5`) so the
-crests are long winding lines, blended 88/12 with a fine wavelength-2.5 term (`+7`) so a range's edge is not a
-smooth blob. Forest versus grass uses the old `+2` noise at wavelength 6 (patches of a few to tens of hexes).
-Wasted terrain is unchanged.
+Green islands: `terrainAt`/`TerrainAt` make a hex mountain when `chainMountainAt` says so (depth at most 0.8): a chain
+along the island's spine (`spineAt`: arc length `s`, signed distance `d`, half-width `w` in the coast-warped island
+space), with passes where a 1D width profile drops, a rough rim, a second parallel chain on islands wider than 26 and
+tapered spur arms off the massifs. Every other hex is forest when the grove field (`groveForestAt`: round groves on a
+jittered 9.5 hex grid, blended with a warped noise) beats 0.43, else grass. Both use only `+ - * /` and `sqrt` (no
+trigonometry) and the seed salts 601..633, so the C# and TypeScript twins agree bit for bit. Wasted terrain keeps the
+plain `mountainThreshold`/`mountainRockiness`/`forestRockiness` noise rule.
 
 ## Bigger islands, more rivers
 
