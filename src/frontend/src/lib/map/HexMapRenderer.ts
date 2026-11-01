@@ -1530,9 +1530,11 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // terrainTop (see riverTexturesFor), so riverLayer is simply never added
   // to the scene graph there (rebuildRivers is never called for that mode
   // either, so it always stays empty).
+  // The bog lake gust sits right on the ground art it shades, under `bogEdges`: the bog edge fringe paints moss over the rim of a lake
+  // tile, and the lake mask (baked from the tile art alone) can't know that, so anything drawn later has to cover the gust, not take it.
   return mode === 'world'
-    ? ['water', 'terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'rivers', 'bogLake', ...rest]
-    : ['terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'water', 'bogLake', ...rest];
+    ? ['water', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
+    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
 /**

@@ -98,19 +98,22 @@ void main() {
     acc.a = acc.a + shade * (1.0 - acc.a);
   }
 
-  // Glints: sparse points in a jittered grid, each flickering on its own beat; only inside the band.
+  // Glints: sun glitter on the gust-roughened water. Short horizontal streaks (a bright core in a soft halo) in a jittered grid, each
+  // fading in and out on its own beat, only inside the band — so they ride with the gust and the calm water between gusts has none.
   if (uGlints > 0.0) {
-    float cell = 18.0;
+    float cell = 12.0;
     vec2 id = floor(w / cell);
     float h = hash21(id + 7.31);
-    float keep = step(0.84, h);
+    float keep = step(0.55, h);
     vec2 centre = (id + 0.2 + 0.6 * vec2(hash21(id + 1.7), hash21(id + 3.9))) * cell;
-    float dist = length((w - centre) * vec2(1.0, 1.6));
-    float spot = 1.0 - smoothstep(0.9, 3.4, dist);
-    float beat = 0.5 + 0.5 * sin(uTime * (3.0 + 5.0 * hash21(id + 5.5)) + h * 40.0);
-    float flicker = beat * beat * beat;
-    float g = keep * spot * flicker * uGlints * env * env * lake * 0.9;
-    vec3 glintColor = vec3(0.82, 0.92, 1.0);
+    vec2 d = (w - centre) / vec2(7.0, 2.0);
+    float r = length(d);
+    float core = 1.0 - smoothstep(0.15, 0.55, r);
+    float halo = 1.0 - smoothstep(0.4, 1.0, r);
+    float beat = 0.5 + 0.5 * sin(uTime * (2.0 + 3.0 * hash21(id + 5.5)) + h * 40.0);
+    float flicker = smoothstep(0.35, 0.9, beat);
+    float g = clamp(keep * flicker * env * lake * uGlints * (0.95 * core + 0.35 * halo), 0.0, 1.0);
+    vec3 glintColor = vec3(0.86, 0.94, 1.0);
     acc.rgb = acc.rgb * (1.0 - g) + glintColor * g;
     acc.a = acc.a + g * (1.0 - acc.a);
   }

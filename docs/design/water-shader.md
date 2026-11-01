@@ -1019,7 +1019,7 @@ lake entries are collected next to the sea's `waterDryEntries`, by frame name (t
 the open water is `lake`).
 
 **Layering.** `BogLakeLayer.mesh` is a world-space quad over that rect (UVs matching the render texture), its own `WorldLayerName`
-`bogLake`, between `water` and `borders` in settlement mode (so above `terrainBase`, below `terrainTop`): the lily pads, boats and the fish
+`bogLake`, directly above `terrainBase` and under `bogEdges` in settlement mode (the bog edge fringe paints moss over a lake tile's rim, which the lake mask can't know, so the fringe has to cover the gust; everything in `terrainTop` does too): the lily pads, boats and the fish
 weir, which sit in the top layer, draw over it. World mode never shows it. Output is a premultiplied overlay, same blending as `WaterLayer`.
 
 **Switches.** Hidden with `waterDebugFlags.water` (this is what the e2e `mapLayers: { water: false }` opt-out flips), follows
