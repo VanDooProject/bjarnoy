@@ -1793,6 +1793,19 @@ describe('WorldModel wasted-island reveal', () => {
     expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('sea');
   });
 
+  it('answers isWastedLandAt from the current reveal state after a flip', () => {
+    const model = new WorldModel(WASTED_SEED);
+    model.setWastedRevealed(true);
+    expect(model.isWastedLandAt(wastedForest.q, wastedForest.r)).toBe(true);
+    expect(model.isWastedLandAt(0, 0)).toBe(false);
+
+    model.setWastedRevealed(false);
+    expect(model.isWastedLandAt(wastedForest.q, wastedForest.r)).toBe(false);
+
+    model.setWastedRevealed(true);
+    expect(model.isWastedLandAt(wastedForest.q, wastedForest.r)).toBe(true);
+  });
+
   it('never wipes green-island state (buildings, ownership, giant tags) on reveal', () => {
     // Seed 20260824 (the app's demo seed until the island-density change): the landfall nearest the origin, and a
     // giant-placeable anchor near it whose footprint includes a Forest hex (found by

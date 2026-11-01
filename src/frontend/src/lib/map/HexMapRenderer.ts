@@ -163,6 +163,24 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   lake: 0x27445e, // dark slate blue, the bog water's own colour
 };
 
+/**
+ * A revealed wasted island's flat world-map colours, picked from its tile art's top faces
+ * (`wasteland`, `deadforest`, `blacksand`, `mountaintile_jagged`): ash-brown ground, darker under the
+ * dead trees, grey black sand, lighter jagged rock. Keyed by the hex's wire terrain, which stays
+ * grass/forest/sand/mountain on a wasted island (see `Tile.wasted`).
+ */
+const WORLD_WASTED_FILL: Partial<Record<Terrain, number>> = {
+  grass: 0x47403c,
+  forest: 0x302c29,
+  sand: 0x646772,
+  mountain: 0x6b625a,
+};
+
+/** A world-map hex's flat fill: the wasted palette on a revealed wasted island, else the terrain's own. */
+export function worldHexFill(terrain: Terrain, wasted: boolean): number {
+  return (wasted ? WORLD_WASTED_FILL[terrain] : undefined) ?? WORLD_TERRAIN_FILL[terrain];
+}
+
 // zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()
 // method, "playful" style — the one shown in docs/design/img/worldmap.png)
 // is the source of truth for the sea: short scattered wave squiggles, never
@@ -1380,6 +1398,13 @@ const WHEEL_IDLE_MS = 180;
 const ROUTE_COLOR = 0x5ab0e6;
 /** World-map river stroke colour — a sibling tone to ROUTE_COLOR, tuned to read against WORLD_TERRAIN_FILL's grass/forest. */
 const RIVER_COLOR = 0x4fa8d8;
+/** World-map lava stream colour (a wasted island's rivers): the glow of the lavastream art. */
+const LAVA_COLOR = 0xe8702a;
+
+/** The world-map stroke colour of a river tile: lava on a wasted island, water everywhere else. */
+export function worldRiverColor(river: Pick<RiverTile, 'wasted'>): number {
+  return river.wasted ? LAVA_COLOR : RIVER_COLOR;
+}
 /** An army already turned around and heading home. */
 const RETURNING_COLOR = 0x8fa3af;
 /** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL's "someone else's" reading. */
@@ -4272,7 +4297,7 @@ export class HexMapRenderer {
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[terrain] });
+      this.terrainFlat.poly(flat).fill({ color: worldHexFill(terrain, worldModel.isWastedLandAt(c.q, c.r)) });
       fogPerfStats.terrainDrawnCount++;
     }
   }
@@ -4315,6 +4340,7 @@ export class HexMapRenderer {
       const { segments, springDot } = drawing;
       // A stream is half a river's width: draw its line thinner.
       const streamScale = river?.width === 'stream' ? 0.55 : 1;
+      const color = river ? worldRiverColor(river) : RIVER_COLOR;
 
       for (const { from, control, to } of segments) {
         // Double stroke, same "wide soft casing under a crisp line" trick
@@ -4324,14 +4350,14 @@ export class HexMapRenderer {
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 5 * streamScale, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
+          .stroke({ width: 5 * streamScale, color, alpha: 0.35, cap: 'round', join: 'round' });
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 2.2 * streamScale, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
+          .stroke({ width: 2.2 * streamScale, color, alpha: 0.95, cap: 'round', join: 'round' });
       }
       if (springDot) {
-        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color: RIVER_COLOR, alpha: 0.95 });
+        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color, alpha: 0.95 });
       }
     }
   }
