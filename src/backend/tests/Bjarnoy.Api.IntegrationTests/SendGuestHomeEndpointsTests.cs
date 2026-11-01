@@ -283,7 +283,6 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
         _factory.Time.Advance(TimeSpan.FromHours(1));
         var withoutGuest = await FoodAsync() - afterSend;
 
-        var r = (await client.GetFromJsonAsync<SettlementResponse>($"/api/v1/settlements/{hostId}", SqliteApiFixture.StrictJson, Ct))!.Resources;
         // Stock is floored to whole units on each side of the subtraction.
         Assert.InRange(withoutGuest - withGuest, guest.TotalUpkeepPerHour - 2, guest.TotalUpkeepPerHour + 2);
     }
