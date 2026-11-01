@@ -1149,7 +1149,9 @@ export class WorldModel {
     const home = this.getTile(settlement.q, settlement.r);
     home.ownerId = settlement.id;
     home.buildingType = 'longhouse';
-    home.buildingLevel = 1;
+    // The settlement's own level (live polls raise it, a rival's comes from its summary), never a fixed 1:
+    // the world-settlements poll re-claims every settlement on the island next to the settlement poll.
+    home.buildingLevel = settlement.level;
     this.syncClaim(settlement);
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
