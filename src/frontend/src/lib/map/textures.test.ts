@@ -225,6 +225,10 @@ describe('KEY_FAMILY new building families (map fix #1)', () => {
     expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
   });
 
+  it('maps the Siege Workshop to its own art family (3D_assets hextile147)', () => {
+    expect(KEY_FAMILY.siegeworkshop).toBe('siegeworkshop');
+  });
+
   it('quarry is deliberately left unmapped — its art depends on the mountain shape it is carved into', () => {
     expect(KEY_FAMILY.quarry).toBeUndefined();
   });
