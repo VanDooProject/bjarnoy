@@ -213,7 +213,7 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // art at all. See buildingArt.ts's matching docs-page choice.
   fishinghut: 'fisherhut',
   // The stave tower replaces the tile it stands on, so each ground has its own art, picked by `textureKeyFor`: grass (3D_assets
-  // hextile143), sand (hextile149), forest (hextile148) and plain bog moss (hextile147).
+  // hextile148), sand (hextile151), forest (hextile150) and plain bog moss (hextile149).
   tower: 'stavetower',
   towersand: 'stavetower_sand',
   towerforest: 'stavetower_forest',
