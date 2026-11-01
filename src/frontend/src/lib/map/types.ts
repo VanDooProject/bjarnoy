@@ -374,6 +374,11 @@ export interface Tile {
     | 'siegeworkshop';
   buildingLevel?: number;
   /**
+   * The building on this hex stands outside its owner's realm (`PlacedBuildingResponse.outsideRealmSince` is set): it has no
+   * function, a gate or bridge there is open to every army. Set and cleared with `buildingType` by `WorldModel`.
+   */
+  buildingOutsideRealm?: boolean;
+  /**
    * A decoration on this open-lake hex, drawn because of a building nearby (`lakeProps.ts`): a fish weir or fishing boat
    * next to a lake Fishing Hut, an ore boat next to a bog-ore works. Render-only and derived, like `bog`; set and cleared by
    * `WorldModel` whenever the buildings around a lake change, never by the server.

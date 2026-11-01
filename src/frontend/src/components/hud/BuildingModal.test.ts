@@ -221,3 +221,59 @@ describe('BuildingModal actions', () => {
     expect(wrapper.emitted('upgrade')).toHaveLength(1);
   });
 });
+
+describe('BuildingModal outside the realm', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    flags.demo = false;
+  });
+
+  const farm = (): Tile => ({ q: 4, r: 0, terrain: 'grass', buildingType: 'farm', buildingLevel: 5 }) as Tile;
+
+  function placeOutside(world: ReturnType<typeof useWorldStore>, seconds: number | null) {
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.buildings = [
+      { q: 4, r: 0, type: 'farm', level: 5, outsideRealmSince: '2026-11-01T10:00:00Z', nextLevelLossInSeconds: seconds },
+    ];
+  }
+
+  it('shows one line with the time to the next lost level and offers no upgrade', () => {
+    const world = useWorldStore();
+    rich(world);
+    placeOutside(world, 26 * 3600);
+    const wrapper = mountModal(farm());
+
+    const line = wrapper.get('[data-testid="outside-realm"]').text();
+    expect(line).toContain('Outside your realm');
+    expect(line).toContain('no function');
+    expect(line).toContain('loses a level in 1 day, 2 hours');
+    expect(wrapper.find('.actions').exists()).toBe(false);
+    expect(wrapper.find('.stats').exists()).toBe(false);
+  });
+
+  it('still says it has no function when the server gave no time', () => {
+    const world = useWorldStore();
+    placeOutside(world, null);
+
+    expect(mountModal(farm()).get('[data-testid="outside-realm"]').text()).toContain('no function');
+  });
+
+  it('shows nothing of it for a building inside the realm', () => {
+    const world = useWorldStore();
+    rich(world);
+    world.hud.buildings = [{ q: 4, r: 0, type: 'farm', level: 5 }];
+    const wrapper = mountModal(farm());
+
+    expect(wrapper.find('[data-testid="outside-realm"]').exists()).toBe(false);
+    expect(wrapper.find('.actions').exists()).toBe(true);
+  });
+
+  it('hides the Town Square feast while the square is outside the realm', () => {
+    const world = useWorldStore();
+    rich(world);
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.buildings = [{ q: 2, r: 1, type: 'townsquare', level: 3, outsideRealmSince: '2026-11-01T10:00:00Z', nextLevelLossInSeconds: 3600 }];
+
+    expect(mountModal(townSquare(3)).find('[data-testid="feast"]').exists()).toBe(false);
+  });
+});

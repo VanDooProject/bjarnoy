@@ -307,6 +307,14 @@ export interface PlacedBuildingResponse {
   level: number;
   /** Which art-pack rotation to render with — set only for a building whose art has a fixed connection to something around it (e.g. the fishing hut's dock). */
   orientation?: string | null;
+  /**
+   * Game instant the building's hex stopped being inside the player's realm — from then on it has no function and loses levels
+   * (docs/design/economy.md section 5, "Buildings outside the realm decay"). Null/absent while it is inside. The server owns the
+   * rule; the client only shows it (`lib/map/realmDecay.ts`).
+   */
+  outsideRealmSince?: string | null;
+  /** Seconds until the next level is lost while outside the realm; null while inside, with a frozen world clock, or in a rival's view. */
+  nextLevelLossInSeconds?: number | null;
 }
 
 export interface BuildOrderResponse {
@@ -443,6 +451,8 @@ export interface WorldWall {
   level: number;
   settlementId: string;
   ownerUserId: string | null;
+  /** The wall's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
+  outsideRealm?: boolean;
 }
 
 /**

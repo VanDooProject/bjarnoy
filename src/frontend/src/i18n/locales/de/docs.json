@@ -223,7 +223,7 @@
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
       "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte. Erreicht ein Rohstoff das Lagerlimit, stoppt seine Produktion – ein volles Lager verschenkt also Ertrag.",
-      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit.",
+      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit. Gebäude, die dein Reich nicht mehr erreicht, arbeiten nicht mehr und verlieren mit der Zeit Stufen, bis dein Reich sie wieder erreicht. Auf Stufe 0 sind sie weg.",
       "fishinghut": "Ein Steg über flachem Wasser, von dem aus du Untiefen befischst, die ein Bauernhof nie erreichen könnte. Die Hütte steht auch auf Pfählen am Halbufer eines Moorsees.",
       "pumpkinfarm": "Eine zweite Ernte für Gras: Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Sie lässt sich nur auf einer Insel mit Kürbisboden bauen (den Boden jeder Insel bestimmt das Spiel, nicht du). Das ist der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
       "shrineofthor": "Für Thor auf Gras errichtet, hinter einer Waffenschmiede der Stufe 5. Die Gunst des Kriegsgottes stärkt den Angriff deiner Landeinheiten (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
@@ -831,7 +831,7 @@
       "body": "Mauern wirken nur auf Landarmeen. Flotten sind nicht betroffen.",
       "rules": {
         "block": "Ein Mauerfeld sperrt jede Landarmee, auch deine eigene. Es zählen nur fertige Felder: Eine Baustelle sperrt nicht.",
-        "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten.",
+        "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten. Liegt ein Tor außerhalb des Reichs seines Besitzers, hat es keine Wirkung und lässt jede Armee durch.",
         "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, doch der Schritt kostet 3 mehr als der Boden darunter. Armeen nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
         "sea": "Eine Mauer, die in einem Seeende ausläuft, schließt an der Küste ab. Hört eine Mauer an Land neben offenem Meer einfach auf, ist das anders: Ihr halb offenes Ende ist dann der Weg hindurch.",
         "natural": "Berge können Landarmeen gar nicht überqueren, breite Flüsse nur über eine Brücke. Reicht eine Mauer bis an einen von beiden heran, ist sie dort verschlossen, mit oder ohne Brücke.",
@@ -903,7 +903,7 @@
         "standsOn": "Steht auf",
         "unlock": "Freigeschaltet ab"
       },
-      "perHour": "Alle Angaben gelten pro Stunde und ohne Bonus von Nachbarfeldern, Mühlen oder Schreinen.",
+      "perHour": "Alle Angaben gelten pro Stunde und ohne Bonus von Nachbarfeldern, Mühlen oder Schreinen. Nur Gebäude in deinem Reich liefern etwas: Eines außerhalb steht still und verliert Stufen, bis dein Reich es wieder erreicht.",
       "longhouseUnlock": "Von Anfang an",
       "notes": {
         "pumpkinfarm": "Nur auf einer Insel mit Kürbisboden",
@@ -1131,7 +1131,7 @@
       "rules": {
         "where": "Eine Brücke passt auf ein gerades oder gebogenes Feld eines breiten Flusses, egal welches Gelände darunter liegt. Auf einer Quelle, einer Gabelung oder einer Mündung kannst du keine bauen, auf einem Bach auch nicht (den durchwaten Armeen ohnehin), und auf einer öden Insel ebenso wenig.",
         "site": "Eine Baustelle öffnet den Fluss nicht. Erst eine fertige Brücke ab Stufe 1 zählt. Mit jeder Stufe geht die Überquerung schneller, bis die Armeen bei der Königsbrücke so schnell hinüberkommen wie über das Gelände selbst.",
-        "guarded": "Die Wehrbrücke verhält sich wie ein Mauertor: Sie lässt die Armeen ihres Besitzers und seiner Freunde durch und hält alle anderen auf.",
+        "guarded": "Die Wehrbrücke verhält sich wie ein Mauertor: Sie lässt die Armeen ihres Besitzers und seiner Freunde durch und hält alle anderen auf. Liegt sie außerhalb des Reichs ihres Besitzers, hat sie keine Wirkung und steht jeder Armee offen.",
         "siege": "Katapulte (Rammböcke nicht) können eine Brücke niederbrennen, und zwar eine Stufe pro gewonnener Belagerung, egal wie viele Katapulte überleben. Eine Wehrbrücke fällt dabei zuerst zur Königsbrücke zurück und steht danach allen offen, auch den Angreifern. Ein Damm, der einmal niedergebrannt ist, ist weg, und der Fluss ist wieder dicht.",
         "walls": "Brücken ändern nichts an Mauern: Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, ob mit oder ohne Brücke. Mehr dazu unter {walls}.",
         "fleets": "Brücken betreffen nur Landarmeen. Schiffe bleiben unberührt."

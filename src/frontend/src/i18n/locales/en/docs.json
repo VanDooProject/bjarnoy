@@ -225,7 +225,7 @@
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest, on grass. A resource stops being produced once it reaches the storage limit, so a full store wastes output.",
-      "tower": "A watch built on grass or sand at the border, pushing the claimed ground further out. A tower only claims ground, and only sees, while it is chained to one of your longhouses: it has to stand on ground that a longhouse or another connected tower claims. If a tower in the chain falls, every tower beyond it is cut off and claims nothing until the link is rebuilt. Cut-off towers do not count against your tower limit.",
+      "tower": "A watch built on grass or sand at the border, pushing the claimed ground further out. A tower only claims ground, and only sees, while it is chained to one of your longhouses: it has to stand on ground that a longhouse or another connected tower claims. If a tower in the chain falls, every tower beyond it is cut off and claims nothing until the link is rebuilt. Cut-off towers do not count against your tower limit. Buildings the realm no longer reaches stop working and lose levels over time until your realm reaches them again; at level 0 they are gone.",
       "fishinghut": "A dock over shallow water, fishing the shallows a farm never could. It also stands on stilts on the half shore of a bog lake.",
       "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player) — the bonus crop a \"more fertile\" island unlocks.",
       "shrineofthor": "Raised to Thor on grass, behind a level-5 Smithy — the war god's favour raises the attack of your land units (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
@@ -831,7 +831,7 @@
       "body": "Walls are about land armies. Fleets are not affected.",
       "rules": {
         "block": "A wall hex blocks every land army, your own included. Only standing hexes count: a construction site does not block.",
-        "gate": "A gate lets the owner's armies through, and those of the owner's guild and of guilds at peace with it, as quickly as the ground under it. Everyone else is stopped.",
+        "gate": "A gate lets the owner's armies through, and those of the owner's guild and of guilds at peace with it, as quickly as the ground under it. Everyone else is stopped. A gate outside its owner's realm has no function and lets every army through.",
         "end": "A land end is half open: any army can cross it, but the step costs 3 more than the ground under it, so armies only take it when there is no open way round. If it touches a mountain or a wide river it is a sealed end and blocks like any wall hex.",
         "sea": "A wall that ends in the sea end seals at the coast. A wall that merely stops on land next to open sea does not: its half-open end is the way through.",
         "natural": "Land armies cannot cross mountains at all, and wide rivers only over a bridge. A wall run up to either one is sealed there anyway, bridge or not.",
@@ -903,7 +903,7 @@
         "standsOn": "Stands on",
         "unlock": "Unlocks at"
       },
-      "perHour": "All figures are per hour, before any boost from neighbours, mills or shrines.",
+      "perHour": "All figures are per hour, before any boost from neighbours, mills or shrines. Only buildings inside your realm produce; one outside it stands idle and loses levels until your realm reaches it again.",
       "longhouseUnlock": "From the start",
       "notes": {
         "pumpkinfarm": "Only on an island with pumpkin soil",
@@ -1131,7 +1131,7 @@
       "rules": {
         "where": "A bridge fits on a straight or bending wide river hex, whatever ground lies under it. It does not fit on a spring, a fork or a mouth, on a stream (armies wade streams anyway) or on a wasted island.",
         "site": "A building site does not open the river. Only a finished bridge, level 1 or more, counts. Each level makes the crossing quicker, up to the king’s bridge, where armies cross as fast as over the ground itself.",
-        "guarded": "The guarded bridge works like a wall gate: it lets through its owner’s armies and their friends’ and stops everyone else.",
+        "guarded": "The guarded bridge works like a wall gate: it lets through its owner’s armies and their friends’ and stops everyone else. Outside its owner's realm it has no function and is open to every army.",
         "siege": "Catapults can burn a bridge down (rams cannot), one level per won siege, however many catapults survive. A guarded bridge therefore falls to the king’s bridge first and is then open to everyone, attackers included. A causeway burnt down once is gone, and the river is shut again.",
         "walls": "A bridge does not change walls: a wall that runs up to a wide river is sealed there, with or without a bridge. See {walls}.",
         "fleets": "Bridges matter only to land armies. Ships are not affected."
