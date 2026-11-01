@@ -1799,7 +1799,7 @@ public sealed class SettlementService(
             {
                 var giants = await LoadGiantIndexAsync(world.Id, cancellationToken).ConfigureAwait(false);
                 var due = await PlayerRealms.DueForRealmStepAsync(
-                    _dbContext, world.Id, giants, clock.ToGameTime(wall), cancellationToken).ConfigureAwait(false);
+                    _dbContext, world.Id, giants, clock.ToGameTime(wall), world.SpeedFactor, cancellationToken).ConfigureAwait(false);
                 foreach (var id in due)
                 {
                     if (await ApplyRealmStateAsync(id, cancellationToken).ConfigureAwait(false))

@@ -1,6 +1,7 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Movement;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
@@ -23,7 +24,7 @@ public class RealmDecayTests
 
     private static PlacedBuilding Tower => new(new HexCoord(3, 0), BuildingType.Tower, 2);
 
-    private static Settlement Make(IReadOnlyList<PlacedBuilding> buildings, IReadOnlyList<BuildOrder>? queue = null)
+    private static Settlement Make(IReadOnlyList<PlacedBuilding> buildings, IReadOnlyList<BuildOrder>? queue = null, double stock = 100_000)
     {
         var (production, capacity) = BuildingCatalogue.Totals(buildings, null);
         return new Settlement
@@ -31,7 +32,7 @@ public class RealmDecayTests
             Id = Id,
             Name = "A",
             Centre = Centre,
-            Resources = ResourcePool.Create(ResourceAmounts.Uniform(100_000), production, capacity, T0),
+            Resources = ResourcePool.Create(ResourceAmounts.Uniform(stock), production, capacity, T0),
             Buildings = buildings,
             Queue = queue ?? [],
         };
@@ -118,15 +119,155 @@ public class RealmDecayTests
         Assert.Same(s, applied);
     }
 
-    [Fact]
-    public void A_foundation_outside_the_realm_has_no_level_to_lose_and_is_left_alone()
+    private static BuildOrder OrderAt(HexCoord coord, BuildingType type, int target, bool waiting = false) => new()
     {
-        var s = Make([Longhouse, new PlacedBuilding(Far, BuildingType.Lumberjack, 0)]);
+        Id = Guid.CreateVersion7(),
+        Type = type,
+        TargetLevel = target,
+        Coord = coord,
+        QueuedAt = T0,
+        BaseDuration = TimeSpan.FromHours(1),
+        StartedAt = waiting ? null : T0,
+        CompletesAt = waiting ? null : T0.AddHours(1),
+    };
 
-        var (applied, changed) = s.ApplyRealmState(Realm(s), T0.AddDays(100));
+    [Fact]
+    public void A_foundation_outside_the_realm_is_cancelled_and_refunded_like_an_ordinary_cancel()
+    {
+        var order = OrderAt(Far, BuildingType.Lumberjack, 1);
+        var plain = Make([Longhouse, new PlacedBuilding(Far, BuildingType.Lumberjack, 0)], [order]);
+        var expected = plain.CancelBuild(order.Id, T0).Settlement!;
 
-        Assert.False(changed);
-        Assert.Equal(0, applied.Buildings.Single(b => b.Type == BuildingType.Lumberjack).Level);
+        var (applied, changed) = plain.ApplyRealmState(Realm(plain), T0);
+
+        Assert.True(changed);
+        Assert.DoesNotContain(applied.Buildings, b => b.Coord == Far);
+        Assert.Empty(applied.Queue);
+        Assert.Equal(expected.Resources.Stock, applied.Resources.Stock);
+    }
+
+    [Fact]
+    public void A_queued_upgrade_is_cancelled_and_refunded_when_its_building_leaves_the_realm()
+    {
+        var upgrade = OrderAt(Far, BuildingType.Lumberjack, 6);
+        var waiting = OrderAt(Far, BuildingType.Lumberjack, 7, waiting: true);
+        var s = Make([Longhouse, new PlacedBuilding(Far, BuildingType.Lumberjack, 5)], [upgrade, waiting], stock: 100);
+        var refund = BuildingCatalogue.Get(BuildingType.Lumberjack, 6).Cost;
+
+        var (applied, _) = s.ApplyRealmState(Realm(s), T0);
+
+        Assert.Empty(applied.Queue);
+        Assert.Equal(5, applied.Buildings.Single(b => b.Coord == Far).Level);
+        Assert.Equal(s.Resources.Stock.Wood + refund.Wood, applied.Resources.Stock.Wood, 6);
+    }
+
+    [Fact]
+    public void Queued_training_is_cancelled_and_refunded_when_the_last_training_building_leaves_the_realm()
+    {
+        var barracks = new PlacedBuilding(Far, BuildingType.Barracks, 3);
+        var training = new TrainingOrder { Id = Guid.CreateVersion7(), UnitType = UnitType.Thrall, Count = 4, StartedAt = T0, PerUnitDuration = TimeSpan.FromMinutes(10) };
+        var s = Make([Longhouse, barracks], stock: 100) with { TrainingQueue = [training] };
+        var refund = UnitCatalogue.Get(UnitType.Thrall).TrainingCost * 4;
+
+        var (applied, _) = s.ApplyRealmState(Realm(s), T0);
+
+        Assert.Empty(applied.TrainingQueue);
+        Assert.Equal(s.Resources.Stock.Wood + refund.Wood, applied.Resources.Stock.Wood, 6);
+    }
+
+    [Fact]
+    public void Training_stays_while_another_barracks_still_works()
+    {
+        var out1 = new PlacedBuilding(Far, BuildingType.Barracks, 3);
+        var inside = new PlacedBuilding(new HexCoord(1, 0), BuildingType.Barracks, 3);
+        var training = new TrainingOrder { Id = Guid.CreateVersion7(), UnitType = UnitType.Thrall, Count = 4, StartedAt = T0, PerUnitDuration = TimeSpan.FromMinutes(10) };
+        var s = Make([Longhouse, inside, out1]) with { TrainingQueue = [training] };
+
+        var (applied, _) = s.ApplyRealmState(Realm(s), T0);
+
+        Assert.Single(applied.TrainingQueue);
+    }
+
+    [Fact]
+    public void A_rune_slotted_in_a_shrine_that_decays_away_stays_on_the_hex()
+    {
+        var shrine = new PlacedBuilding(Far, BuildingType.ShrineOfThor, 1);
+        var rune = new RuneInstance { Id = Guid.CreateVersion7(), Type = RuneType.Fehu, Rarity = RuneRarity.Carved, SlottedAt = Far };
+        var s = Make([Longhouse, shrine]) with { Runes = [rune] };
+        var realm = Realm(s);
+        var (marked, _) = s.ApplyRealmState(realm, T0);
+
+        var (gone, _) = marked.ApplyRealmState(realm, T0 + BuildingCatalogue.DecayTimeToGone(BuildingType.ShrineOfThor));
+
+        Assert.DoesNotContain(gone.Buildings, b => b.Coord == Far);
+        Assert.Equal(Far, Assert.Single(gone.Runes).SlottedAt);
+    }
+
+    [Fact]
+    public void A_dockyard_outside_the_realm_is_no_fleet_home()
+    {
+        var dock = new HexCoord(1, 0);
+        Func<HexCoord, Terrain> inland = _ => Terrain.Grass;
+
+        Assert.Equal(dock, Bjarnoy.Domain.Armies.Army.FleetAnchor(Centre, [new PlacedBuilding(dock, BuildingType.Dockyard, 1)], inland));
+        Assert.Equal(Centre, Bjarnoy.Domain.Armies.Army.FleetAnchor(Centre, [new PlacedBuilding(dock, BuildingType.Dockyard, 1, T0)], inland));
+    }
+
+    // --- decay speed --------------------------------------------------------------------------------------------------------------
+
+    private static double Hours(int maxLevel, double speed) => BuildingCatalogue.DecayTimeToGone(maxLevel, speed).TotalHours;
+
+    [Fact]
+    public void The_bounds_shrink_with_world_speed_on_a_log_scale()
+    {
+        var (min1, max1) = BuildingCatalogue.DecayBounds(1);
+        var (min30, max30) = BuildingCatalogue.DecayBounds(30);
+        var (min100, max100) = BuildingCatalogue.DecayBounds(100);
+        var (min500, max500) = BuildingCatalogue.DecayBounds(500);
+
+        Assert.Equal(168, min1.TotalHours, 6);
+        Assert.Equal(720, max1.TotalHours, 6);
+        Assert.Equal(3.8, min30.TotalHours, 1);
+        Assert.Equal(2.4, max30.TotalDays, 1);
+        Assert.Equal(1, min100.TotalHours, 6);
+        Assert.Equal(24, max100.TotalHours, 6);
+        Assert.Equal(min100, min500);
+        Assert.Equal(max100, max500);
+    }
+
+    [Theory]
+    // wall (3 levels): clamped to the minimum
+    [InlineData(3, 1, 168.0)]
+    [InlineData(3, 30, 3.8)]
+    [InlineData(3, 100, 1.0)]
+    // tower (10 levels)
+    [InlineData(10, 1, 240.0)]
+    [InlineData(10, 30, 8.0)]
+    [InlineData(10, 100, 2.4)]
+    // 30 levels
+    [InlineData(30, 1, 720.0)]
+    [InlineData(30, 30, 24.0)]
+    [InlineData(30, 100, 7.2)]
+    // 40 levels: clamped to the maximum at 1x
+    [InlineData(40, 1, 720.0)]
+    [InlineData(40, 30, 32.0)]
+    [InlineData(40, 100, 9.6)]
+    public void Time_to_gone_follows_max_level_over_world_speed_inside_the_bounds(int maxLevel, double speed, double expectedHours)
+    {
+        Assert.Equal(expectedHours, Hours(maxLevel, speed), 1);
+    }
+
+    [Fact]
+    public void Decay_runs_at_the_world_speed()
+    {
+        var (cut, realm) = LumberjackAfterTowerFell(level: 5);
+        var fast = BuildingCatalogue.DecayInterval(BuildingType.Lumberjack, 30);
+        var (marked, _) = cut.ApplyRealmState(realm, T0, speedFactor: 30);
+
+        var (later, _) = marked.ApplyRealmState(realm, T0 + fast * 2.5, speedFactor: 30);
+
+        Assert.Equal(3, later.Buildings.Single(b => b.Type == BuildingType.Lumberjack).Level);
+        Assert.True(fast < Interval(BuildingType.Lumberjack));
     }
 
     // --- decay ------------------------------------------------------------------------------------------------------------------

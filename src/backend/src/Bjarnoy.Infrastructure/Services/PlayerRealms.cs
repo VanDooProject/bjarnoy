@@ -59,7 +59,7 @@ public static class PlayerRealms
     /// so the periodic sweep only loads the settlements it has to change.
     /// </summary>
     public static async Task<IReadOnlyList<Guid>> DueForRealmStepAsync(
-        GameDbContext dbContext, Guid worldId, IGiantIndex giants, DateTimeOffset now, CancellationToken cancellationToken)
+        GameDbContext dbContext, Guid worldId, IGiantIndex giants, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken)
     {
         var rows = await dbContext.Settlements
             .AsNoTracking()
@@ -84,7 +84,7 @@ public static class PlayerRealms
         return
         [
             .. settlements
-                .Where(s => s.Buildings.Any(b => RealmDecay.StepFor(b, realms[s.Id], giants, now).IsDue))
+                .Where(s => s.Buildings.Any(b => RealmDecay.StepFor(b, realms[s.Id], giants, now, speedFactor).IsDue))
                 .Select(s => s.Id),
         ];
     }

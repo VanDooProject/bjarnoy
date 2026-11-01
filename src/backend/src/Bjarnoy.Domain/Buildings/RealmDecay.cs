@@ -14,6 +14,9 @@ public enum RealmStepKind
     /// <summary>The realm reaches the hex again: clear the mark. Levels already lost stay lost.</summary>
     ReturnToRealm,
 
+    /// <summary>A level-0 foundation stands outside the realm: cancel its orders (refunded) and remove it.</summary>
+    CancelFoundation,
+
     /// <summary>Still outside and at least one level-loss interval has passed.</summary>
     Decay,
 }
@@ -48,10 +51,11 @@ public static class RealmDecay
 
     /// <summary>
     /// What has to happen to <paramref name="building"/> at <paramref name="now"/>: it just left the realm, the realm reaches it
-    /// again, or it has been outside for whole level-loss intervals (levels lost = floor(elapsed / interval)). A level-0 foundation
-    /// has no level to lose and no function to stop, so it is left as it is.
+    /// again, or it has been outside for whole level-loss intervals (levels lost = floor(elapsed / interval), the interval taken
+    /// at the world's <paramref name="speedFactor"/>). A level-0 foundation outside the realm is cancelled.
     /// </summary>
-    public static RealmStep StepFor(PlacedBuilding building, ConnectedRealm realm, IGiantIndex giants, DateTimeOffset now)
+    public static RealmStep StepFor(
+        PlacedBuilding building, ConnectedRealm realm, IGiantIndex giants, DateTimeOffset now, double speedFactor = 1.0)
     {
         if (IsInside(building, realm, giants))
         {
@@ -60,7 +64,7 @@ public static class RealmDecay
 
         if (building.Level < 1)
         {
-            return RealmStep.None;
+            return new RealmStep(RealmStepKind.CancelFoundation);
         }
 
         if (building.OutsideRealmSince is not { } since)
@@ -68,7 +72,7 @@ public static class RealmDecay
             return new RealmStep(RealmStepKind.LeaveRealm);
         }
 
-        var interval = BuildingCatalogue.DecayInterval(building.Type);
+        var interval = BuildingCatalogue.DecayInterval(building.Type, speedFactor);
         var lost = (int)Math.Min(int.MaxValue, Math.Max(0, (now - since).Ticks / interval.Ticks));
         return lost > 0 ? new RealmStep(RealmStepKind.Decay, lost) : RealmStep.None;
     }

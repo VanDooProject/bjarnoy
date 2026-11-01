@@ -88,7 +88,7 @@ public sealed record ResourceLine(double Wood, double Stone, double Food, double
 /// </param>
 /// <param name="NextLevelLossInSeconds">
 /// Seconds until the building loses its next level while it stays outside the realm
-/// (<see cref="OutsideRealmSince"/> plus <see cref="BuildingCatalogue.DecayInterval(BuildingType)"/>, which the server advances by
+/// (<see cref="OutsideRealmSince"/> plus <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/> at the world speed, which the server advances by
 /// every level lost). Null while the building is inside, while the world's clock is frozen, and in a rival's fog-gated view.
 /// </param>
 public sealed record PlacedBuildingResponse(
@@ -98,10 +98,11 @@ public sealed record PlacedBuildingResponse(
     /// <summary>The response for a stored building, with the realm decay fields filled from it.</summary>
     /// <param name="gameNow">The settlement's game time now, for <see cref="NextLevelLossInSeconds"/>; null leaves that out.</param>
     public static PlacedBuildingResponse From(
-        PlacedBuilding b, string? orientation = null, DateTimeOffset? gameNow = null, bool freezesTime = false) => new(
+        PlacedBuilding b, string? orientation = null, DateTimeOffset? gameNow = null, bool freezesTime = false,
+        double speedFactor = 1.0) => new(
         b.Coord.Q, b.Coord.R, b.Type.ToWireName(), b.Level, orientation, b.OutsideRealmSince,
         b.OutsideRealmSince is { } since && gameNow is { } now && !freezesTime
-            ? Math.Max(0, (since + BuildingCatalogue.DecayInterval(b.Type) - now).TotalSeconds)
+            ? Math.Max(0, (since + BuildingCatalogue.DecayInterval(b.Type, speedFactor) - now).TotalSeconds)
             : null);
 }
 
@@ -295,7 +296,7 @@ public sealed record SettlementResponse(
                 domain.WaitingOrders.Count(),
                 Settlement.DefaultMaxOrdersPerHex),
             [.. domain.Buildings.Select(b =>
-                PlacedBuildingResponse.From(b, OrientationFor(b.Type, b.Coord), gameNow, clock.FreezesTime))],
+                PlacedBuildingResponse.From(b, OrientationFor(b.Type, b.Coord), gameNow, clock.FreezesTime, speedFactor))],
             [.. domain.Queue.Select(o => new BuildOrderResponse(
                 o.Id,
                 o.Coord.Q,

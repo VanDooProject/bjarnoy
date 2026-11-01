@@ -1295,7 +1295,7 @@ public sealed class ArmyService(
             return null;
         }
 
-        return candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard) ? candidate : null;
+        return candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.OutsideRealmSince == null) ? candidate : null;
     }
 
     /// <summary>

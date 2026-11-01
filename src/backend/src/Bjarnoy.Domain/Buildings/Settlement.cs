@@ -12,7 +12,7 @@ namespace Bjarnoy.Domain.Buildings;
 /// A building standing on a hex. <paramref name="OutsideRealmSince"/> is the game instant the hex stopped being inside the
 /// player's realm (<c>docs/design/economy.md</c> section 5, "Buildings outside the realm decay"), or <see langword="null"/>
 /// while it is inside: a building with a value there has no function (<see cref="IsFunctioning"/>) and loses a level every
-/// <see cref="BuildingCatalogue.DecayInterval(BuildingType)"/>. Only <see cref="Settlement.ApplyRealmState"/> sets or clears it.
+/// <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/>. Only <see cref="Settlement.ApplyRealmState"/> sets or clears it.
 /// </summary>
 public readonly record struct PlacedBuilding(HexCoord Coord, BuildingType Type, int Level, DateTimeOffset? OutsideRealmSince = null)
 {
@@ -1920,7 +1920,7 @@ public sealed record Settlement
     /// <see cref="PlanBuild"/> uses); the Longhouse is always inside and never decays. A building that just left the realm gets
     /// <see cref="PlacedBuilding.OutsideRealmSince"/> = <paramref name="now"/> and stops functioning at once. One that is back
     /// inside has it cleared: levels already lost stay lost, the partial progress towards the next loss is dropped. One that is
-    /// still outside loses <c>floor(elapsed / <see cref="BuildingCatalogue.DecayInterval(BuildingType)"/>)</c> levels, and
+    /// still outside loses <c>floor(elapsed / <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/>)</c> levels, and
     /// <see cref="PlacedBuilding.OutsideRealmSince"/> advances by the intervals consumed so a later call never counts them again;
     /// a building that reaches level 0 is removed together with every order queued on its hex. A level-0 foundation has no level
     /// to lose and is left as it is.
@@ -1943,18 +1943,24 @@ public sealed record Settlement
         var giantIndex = giants ?? World.GiantIndex.Empty;
         var buildings = Buildings.ToList();
         var removed = new HashSet<HexCoord>();
+        var leaving = new List<PlacedBuilding>();
+        var foundations = new HashSet<HexCoord>();
         var changed = false;
         var functionChanged = false;
 
         for (var i = 0; i < buildings.Count; i++)
         {
             var building = buildings[i];
-            var step = RealmDecay.StepFor(building, realm, giantIndex, now);
+            var step = RealmDecay.StepFor(building, realm, giantIndex, now, speedFactor);
             switch (step.Kind)
             {
                 case RealmStepKind.LeaveRealm:
                     buildings[i] = building with { OutsideRealmSince = now };
                     functionChanged = true;
+                    leaving.Add(building);
+                    break;
+                case RealmStepKind.CancelFoundation:
+                    foundations.Add(building.Coord);
                     break;
                 case RealmStepKind.ReturnToRealm:
                     buildings[i] = building with { OutsideRealmSince = null };
@@ -1967,7 +1973,7 @@ public sealed record Settlement
                     buildings[i] = building with
                     {
                         Level = building.Level - step.LevelsLost,
-                        OutsideRealmSince = building.OutsideRealmSince + BuildingCatalogue.DecayInterval(building.Type) * step.LevelsLost,
+                        OutsideRealmSince = building.OutsideRealmSince + BuildingCatalogue.DecayInterval(building.Type, speedFactor) * step.LevelsLost,
                     };
                     break;
                 default:
@@ -1993,8 +1999,52 @@ public sealed record Settlement
 
         var updated = this with { Buildings = buildings, Queue = queue, Resources = resources };
 
+        // What leaving the realm cancels (docs/design/economy.md section 5): queued upgrades and foundations on the hex, refunded by
+        // the ordinary cancel; queued training of a unit whose training building no longer functions anywhere, refunded in full.
+        foreach (var coord in leaving.Select(b => b.Coord).Concat(foundations))
+        {
+            foreach (var order in updated.Queue.Where(o => o.Coord == coord).ToList())
+            {
+                updated = updated.CancelBuild(order.Id, now, speedFactor).Settlement ?? updated;
+            }
+        }
+
+        if (foundations.Count > 0)
+        {
+            updated = updated with { Buildings = [.. updated.Buildings.Where(b => !(foundations.Contains(b.Coord) && b.Level < 1))] };
+        }
+
+        if (leaving.Count > 0)
+        {
+            updated = updated.CancelUnservedTraining(leaving.Select(b => b.Type).ToHashSet(), now);
+        }
+
         // Dropped orders may have held construction slots: let the head of the waiting queue take them now.
-        return removed.Count == 0 ? (updated, true) : (updated.PromoteWaitingOrders(now, speedFactor).Settlement, true);
+        return (updated.PromoteWaitingOrders(now, speedFactor).Settlement, true);
+    }
+
+    /// <summary>
+    /// Cancels and refunds in full (cost x count x cost multiplier) the queued training of every unit whose training building is one of
+    /// <paramref name="buildingTypes"/> and has no functioning building left (<see cref="PlacedBuilding.IsFunctioning"/>).
+    /// </summary>
+    private Settlement CancelUnservedTraining(IReadOnlySet<BuildingType> buildingTypes, DateTimeOffset now)
+    {
+        var resources = Resources;
+        var kept = new List<TrainingOrder>();
+        foreach (var order in TrainingQueue)
+        {
+            var definition = UnitCatalogue.Get(order.UnitType);
+            if (buildingTypes.Contains(definition.RequiredBuildingType) && HighestLevelOf(definition.RequiredBuildingType) < 1)
+            {
+                resources = resources.Deposit(definition.TrainingCost * order.Count * order.CostMultiplier, now);
+            }
+            else
+            {
+                kept.Add(order);
+            }
+        }
+
+        return kept.Count == TrainingQueue.Count ? this : this with { TrainingQueue = kept, Resources = resources };
     }
 
     private Settlement WithBuildings(
