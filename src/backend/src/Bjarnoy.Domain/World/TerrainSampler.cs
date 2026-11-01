@@ -1069,6 +1069,12 @@ public sealed class TerrainSampler
     /// </summary>
     public static readonly double[] SandVariantWeights = { 0.45, 0.11, 0.11, 0.11, 0.02, 0.02, 0.06, 0.01, 0.11 };
 
+    /// <summary>
+    /// Weights of the living mountain's four shapes, by <see cref="MountainShape"/> index: Cone, Table, Saddleback, Corrie. The
+    /// flat-topped Table is a rare accent; the other three share the rest — mirrors the frontend's <c>MOUNTAIN_SHAPE_WEIGHTS</c>.
+    /// </summary>
+    public static readonly double[] MountainShapeWeights = { 0.37, 0.03, 0.3, 0.3 };
+
     /// <summary>Wavelength (hexes) of the taiga/birch biome noise — mirrors <c>FOREST_BIOME_SCALE</c>.</summary>
     public const double ForestBiomeScale = 14;
 
@@ -1169,6 +1175,11 @@ public sealed class TerrainSampler
         if (terrain == Terrain.Sand)
         {
             return WeightedIndex(hash, SandVariantWeights);
+        }
+
+        if (terrain == Terrain.Mountain)
+        {
+            return WeightedIndex(hash, MountainShapeWeights);
         }
 
         var index = (int)(hash * count);
