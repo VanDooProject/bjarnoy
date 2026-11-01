@@ -125,15 +125,16 @@ public sealed record WorldGenerationOptions
     public double BeachThreshold { get; init; } = 0.9;
 
     /// <summary>
-    /// Fraction of an island's radius within which terrain is allowed to rise to
-    /// mountain, so ridges form inland rather than on the coast.
+    /// Wasted islands only: fraction of an island's radius within which terrain is allowed to rise to
+    /// mountain, so ridges form inland rather than on the coast. Green islands use the chain rule
+    /// (<see cref="TerrainSampler.ChainMountainAt"/>).
     /// </summary>
     public double MountainThreshold { get; init; } = 0.4;
 
-    /// <summary>Rockiness above which an inland hex becomes mountain.</summary>
+    /// <summary>Wasted islands only: rockiness above which an inland hex becomes mountain.</summary>
     public double MountainRockiness { get; init; } = 0.72;
 
-    /// <summary>Rockiness above which a lowland hex is forest rather than grass.</summary>
+    /// <summary>Wasted islands only: rockiness above which a lowland hex is forest rather than grass (green islands use the grove rule).</summary>
     public double ForestRockiness { get; init; } = 0.52;
 
     /// <summary>
