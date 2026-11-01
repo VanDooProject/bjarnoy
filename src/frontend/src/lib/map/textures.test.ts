@@ -38,7 +38,7 @@ import {
 import { PALISADE_FAMILY } from './palisadeTiles';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { BogTile, RiverTile, Tile } from './types';
-import { findAtlasClip, findAtlasFrame, swayFramesPerColumn, type AtlasClip, type LoadedAtlas } from './atlas';
+import { findAtlasClip, findAtlasFrame, swayFramesPerColumn, swayPeriodFrames, type AtlasClip, type LoadedAtlas } from './atlas';
 import { clipFrameIndex, clipTimingOf, sharedClockPlayback } from './clipPlayback';
 
 /** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
@@ -2223,6 +2223,7 @@ describe('biome forest art', () => {
       const clip = textures.animTop.forest!.E[1]!;
       expect(clip.sharedClock).toBe(true);
       expect(clip.framesPerColumn).toBe(2);
+      expect(clip.swayPeriod).toBe(8);
     });
 
     it('classifyFamilyClips ignores a malformed sway but keeps shared_clock; no new fields means no shared clock', () => {
@@ -2236,6 +2237,11 @@ describe('biome forest art', () => {
       expect(run({}).sharedClock).toBeUndefined();
       expect(swayFramesPerColumn({ sway: { wavelength: 6, frames_per_column: 0 } })).toBe(0);
       expect(swayFramesPerColumn({})).toBe(0);
+      expect(swayPeriodFrames({ sway: { wavelength: 6, frames_per_column: 4 } })).toBe(16);
+      expect(swayPeriodFrames({ sway: { wavelength: 6, frames_per_column: 0 } })).toBe(0);
+      expect(swayPeriodFrames({})).toBe(0);
+      expect(run({ shared_clock: true, sway: { wavelength: 6, frames_per_column: 4 } })).toMatchObject({ swayPeriod: 16 });
+      expect(run({ shared_clock: true }).swayPeriod).toBeUndefined();
     });
 
     it('the forest fallback (no new fields) is shared-clock with a column offset of 0', () => {

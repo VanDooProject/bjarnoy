@@ -37,6 +37,7 @@ import {
   unloadAtlasCategory,
   type AtlasClip,
   swayFramesPerColumn,
+  swayPeriodFrames,
   type AtlasPack,
   type AtlasPageProgress,
   type LoadedAtlas,
@@ -906,6 +907,8 @@ export interface TileAnimClip {
   sharedClock?: boolean;
   /** Frames of per-map-column phase shift of a sway clip (`AtlasClip.sway.frames_per_column`); 0/absent = every column in step. Only used with `sharedClock`. */
   framesPerColumn?: number;
+  /** Frames in one gust period of a sway clip (`atlas.ts`'s `swayPeriodFrames`); absent = unknown (the whole clip counts as one period). Only used with `sharedClock`. */
+  swayPeriod?: number;
 }
 
 /**
@@ -922,9 +925,9 @@ export function classifyFamilyClips<T>(
   clips: AtlasClip[],
   resolveFrame: (name: string) => T | undefined,
   levelOf?: (clip: AtlasClip) => number | undefined,
-): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T; sharedClock?: boolean; framesPerColumn?: number }>> {
+): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T; sharedClock?: boolean; framesPerColumn?: number; swayPeriod?: number }>> {
   const byOrientation = emptyOrientationMap<
-    Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T; sharedClock?: boolean; framesPerColumn?: number }>
+    Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: T; sharedClock?: boolean; framesPerColumn?: number; swayPeriod?: number }>
   >(() => new Map());
   for (const clip of clips) {
     const level = levelOf ? levelOf(clip) : ANIM_LEVEL_RE.exec(clip.name) ? Number(ANIM_LEVEL_RE.exec(clip.name)![1]) : undefined;
@@ -949,7 +952,7 @@ export function classifyFamilyClips<T>(
       playback: clip.playback,
       pause: clip.pause ?? 0,
       rest,
-      ...(clip.shared_clock === true ? { sharedClock: true, framesPerColumn: swayFramesPerColumn(clip) } : {}),
+      ...(clip.shared_clock === true ? { sharedClock: true, framesPerColumn: swayFramesPerColumn(clip), ...(swayPeriodFrames(clip) > 0 ? { swayPeriod: swayPeriodFrames(clip) } : {}) } : {}),
     });
   }
   return byOrientation;

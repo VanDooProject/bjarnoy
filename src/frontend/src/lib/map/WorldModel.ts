@@ -354,6 +354,13 @@ export class WorldModel {
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
   /**
+   * The hexes `syncClaim` last gave each settlement (its claim, plus any
+   * hex it only kept because a building of its own stands there) — what the
+   * release step walks, so a shrinking realm only visits ground it owned
+   * before, never the whole (procedural, unbounded) world.
+   */
+  private claimedKeys = new Map<string, Set<string>>();
+  /**
    * The level of each settlement's standing Odin Statue (absent: none) — what
    * Ravens (`ravensRingsFor`, extra fog-vision rings) and Wisdom
    * (`wisdomFactor`, shorter builds) read. Updated alongside `settlementTowers`.
@@ -1142,11 +1149,10 @@ export class WorldModel {
     const home = this.getTile(settlement.q, settlement.r);
     home.ownerId = settlement.id;
     home.buildingType = 'longhouse';
-    home.buildingLevel = 1;
-    for (const c of this.claimedHexes(settlement)) {
-      const tile = this.getTile(c.q, c.r);
-      if (!tile.ownerId) tile.ownerId = settlement.id;
-    }
+    // The settlement's own level (live polls raise it, a rival's comes from its summary), never a fixed 1:
+    // the world-settlements poll re-claims every settlement on the island next to the settlement poll.
+    home.buildingLevel = settlement.level;
+    this.syncClaim(settlement);
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
@@ -1388,10 +1394,11 @@ export class WorldModel {
    * (rather than cached), which is what makes a giant that only becomes
    * fully enclosed later (a Tower completing the enclosure) start being
    * included the next time this runs, with no separate "did a giant just
-   * get enclosed" tracking needed — every caller here only ever *adds*
-   * ownership (`if (!tile.ownerId) tile.ownerId = ...`), never removes it,
-   * so a hex excluded on an earlier call and included on a later one is
-   * exactly the one-way claiming this model already promises elsewhere.
+   * get enclosed" tracking needed. It only answers "what is claimed now";
+   * `syncClaim` is the one place that turns the answer into tile ownership,
+   * both ways: ground a burnt or razed Tower (or a Tower that lost levels)
+   * no longer claims is released again, like `Settlement.ClaimDiscsFor` on
+   * the server.
    */
   private claimedHexes(settlement: Settlement): AxialCoord[] {
     const discs = this.claimDiscsFor(settlement);
@@ -1406,6 +1413,36 @@ export class WorldModel {
       }
     }
     return hexes;
+  }
+
+  /**
+   * Brings tile ownership in line with `claimedHexes(settlement)` — the one
+   * claim rule every caller shares. Claims every unowned hex of the current
+   * claim; releases every hex the settlement owned from an earlier sync that
+   * the claim no longer covers, unless a building stands on it (the server
+   * keeps buildings standing outside the claim, and `applyServerSnapshot`
+   * owns the hex of every building it renders, walls included). Never
+   * touches another settlement's hexes and never the explored set.
+   */
+  private syncClaim(settlement: Settlement): void {
+    const id = settlement.id;
+    const claimed = new Set<string>();
+    for (const c of this.claimedHexes(settlement)) {
+      const key = coordKey(c);
+      claimed.add(key);
+      const tile = this.getTile(c.q, c.r);
+      if (!tile.ownerId) tile.ownerId = id;
+    }
+    const owned = new Set(claimed);
+    for (const key of this.claimedKeys.get(id) ?? []) {
+      if (claimed.has(key)) continue;
+      const { q, r } = parseKey(key);
+      const tile = this.getTile(q, r);
+      if (tile.ownerId !== id) continue;
+      if (tile.buildingType) owned.add(key);
+      else tile.ownerId = undefined;
+    }
+    this.claimedKeys.set(id, owned);
   }
 
   /** Whether `at` is inside this settlement's claimed territory — see `claimedHexes`. */
@@ -1534,14 +1571,12 @@ export class WorldModel {
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
-    // Re-claim whenever the centre disc grew (a longhouse level-up) or the
-    // set of Tower satellite discs changed (a new/levelled-up tower) — not
+    // Re-sync the claim (below, once the buildings are rendered) whenever the
+    // centre disc grew (a longhouse level-up) or the set of Tower satellite
+    // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    if (levelIncreased || towersChanged || ravensChanged) {
-      for (const c of this.claimedHexes(settlement)) {
-        const tile = this.getTile(c.q, c.r);
-        if (!tile.ownerId) tile.ownerId = settlementId;
-      }
+    const claimChanged = levelIncreased || towersChanged || ravensChanged;
+    if (claimChanged) {
       for (const c of this.exploredHexesFor(settlement)) {
         this.explored.add(coordKey(c));
       }
@@ -1622,6 +1657,9 @@ export class WorldModel {
         tile.buildingLevel = undefined;
       }
     }
+    // After the building pass: a fallen tower's own hex has to be empty before
+    // the release step may take it back.
+    if (claimChanged) this.syncClaim(settlement);
     this.renderedBuildingCoords.set(settlementId, nowRendered);
     this.wallRevision++;
   }
@@ -1925,10 +1963,7 @@ export class WorldModel {
       const towers = this.settlementTowers.get(settlementId) ?? [];
       towers.push({ q: at.q, r: at.r, level: 1 });
       this.settlementTowers.set(settlementId, towers);
-      for (const c of this.claimedHexes(settlement)) {
-        const claimed = this.getTile(c.q, c.r);
-        if (!claimed.ownerId) claimed.ownerId = settlementId;
-      }
+      this.syncClaim(settlement);
     }
     return true;
   }
@@ -1937,15 +1972,16 @@ export class WorldModel {
    * Issue #16 ring menu "tear down": demo-mode only — the backend
    * (`Bjarnoy.Domain.Buildings`) has no raze endpoint yet, so live mode
    * disables this action rather than pretending to support it (see
-   * SettlementView.vue's ring-menu wiring). Clears the building but leaves
-   * the hex claimed by the settlement — claiming stays one-way here, the
-   * same as `applyServerSnapshot`'s live-mode reads, so razing a Tower never
-   * shrinks the border its satellite disc already opened up.
+   * SettlementView.vue's ring-menu wiring). Clears the building. The hex
+   * stays with the settlement while it is inside its claim; razing a Tower
+   * drops its satellite disc and the border shrinks (`syncClaim`), the same
+   * as a burnt tower on the server.
    */
   razeBuilding(settlementId: string, at: AxialCoord): boolean {
     const tile = this.getTile(at.q, at.r);
     if (tile.ownerId !== settlementId || !tile.buildingType || tile.buildingType === 'longhouse') return false;
-    if (tile.buildingType === 'tower') {
+    const wasTower = tile.buildingType === 'tower';
+    if (wasTower) {
       const towers = this.settlementTowers.get(settlementId);
       if (towers) {
         const index = towers.findIndex((t) => t.q === at.q && t.r === at.r);
@@ -1956,6 +1992,8 @@ export class WorldModel {
     if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
+    const settlement = this.settlements.get(settlementId);
+    if (settlement && wasTower) this.syncClaim(settlement);
     this.wallRevision++;
     return true;
   }
@@ -2328,10 +2366,7 @@ export class WorldModel {
       return true;
     }
 
-    for (const c of this.claimedHexes(settlement)) {
-      const claimed = this.getTile(c.q, c.r);
-      if (!claimed.ownerId) claimed.ownerId = settlementId;
-    }
+    this.syncClaim(settlement);
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
