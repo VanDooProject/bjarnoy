@@ -971,6 +971,7 @@ export const useWorldStore = defineStore('world', {
         rates: { ...response.resources.ratePerHour },
         capacity: { ...response.resources.capacity },
         buildings: response.buildings,
+        realm: response.realm,
       });
       this.hud.buildings = response.buildings;
       // An optimistic build still waiting for its answer (W3) must outlive a
@@ -1259,18 +1260,14 @@ export const useWorldStore = defineStore('world', {
       if (this.worldId) usePlayerStore().enterWorld(this.worldId, null);
     },
     /**
-     * Live mode: pulls every settlement in the world (not just this
-     * player's) into the model, data-only — no tile is painted here.
-     * Registered with the settlement's own id as its `ownerId`, which can
-     * never equal the local player's id, so it always renders as a rival
-     * once a caller claims its territory (`WorldModel.claimTerritory` /
-     * `claimTerritoryOnIsland` / `claimAllTerritory`) — the world map claims
-     * everyone (matching `prototypes/worldmap`'s `marks`), while the
-     * landing/settlement preview only claims the island it's showing.
-     */
-    /**
      * Registers a batch of `SettlementSummary` rows into the local
-     * `WorldModel`, data-only — shared by `refreshWorldSettlements` (the
+     * `WorldModel`, data-only — no tile is painted here (a caller claims
+     * territory afterwards: `claimTerritory` / `claimTerritoryOnIsland` /
+     * `claimAllTerritory`). The player's own settlements (`mine`) are
+     * registered with the local player's id as `ownerId`, so they group with
+     * the selected settlement's realm and render as the player's own; every
+     * other settlement keeps its own id as `ownerId`, which can never equal
+     * the player's id, so it renders as a rival. Shared by `refreshWorldSettlements` (the
      * fog-gated world list) and `refreshPlotSuggestion` (a suggestion's own
      * `islandSettlements`), so the two don't duplicate this loop.
      */
@@ -1279,7 +1276,7 @@ export const useWorldStore = defineStore('world', {
         if (summary.id === this.selectedSettlementId) continue;
         this.model.registerSettlement({
           id: summary.id,
-          ownerId: summary.id,
+          ownerId: summary.mine ? (this.ownerId ?? summary.id) : summary.id,
           ownerName: summary.ownerName,
           name: summary.name,
           q: summary.q,
