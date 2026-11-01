@@ -91,8 +91,7 @@ export const DOCS_GROUPS: DocsGroupEntry[] = [
   ]),
   group('move', [
     page('founding', '/docs/founding', 'cartworkshop_SE_level004', 'backdrop', ['landMovement', 'wildlifeCamps', 'realm']),
-    // The realm starts at the longhouse (`greathall`), so the page shows it.
-    page('realm', '/docs/realm', 'greathall_SE_level003', 'backdrop', ['founding', 'walls', 'wildlifeCamps']),
+    page('realm', '/docs/realm', 'stavetower_SE_level003', 'backdrop', ['founding', 'walls', 'wildlifeCamps']),
     page('landMovement', '/docs/land-movement', 'riverbridge_SE_level004', 'backdrop', ['walls', 'wildlifeCamps', 'founding']),
     page('ships', '/docs/ships', 'dockyard_SE_level007', 'backdrop', ['shrines', 'walls', 'wildlifeCamps']),
   ]),
