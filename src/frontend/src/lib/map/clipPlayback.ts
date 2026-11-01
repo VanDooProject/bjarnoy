@@ -113,3 +113,27 @@ export function sharedClockPlayback(
   const playedMs = (cycles * cycleSteps + shifted + Math.max(0, clockSteps - whole) + 1e-6) * stepMs;
   return { playedMs, frame: clipFrameIndex(clip, playedMs) };
 }
+
+/**
+ * The playback state a clip on its own clock (a building's wheel, a flag) starts in so identical tiles are out of phase: a start step
+ * `floor(h * cycleSteps)` into the clip's full cycle (the `pause` tail and a pingpong's way back included). `h` in `[0, 1)` is the tile's hash;
+ * `h = 0` is frame 0 at 0 ms.
+ */
+export function phasedStart(clip: ClipTiming, h: number): { playedMs: number; frame: number } {
+  if (clip.frameCount <= 0) return { playedMs: 0, frame: 0 };
+  const steps = Math.min(stepsPerCycle(clip) - 1, Math.max(0, Math.floor(h * stepsPerCycle(clip))));
+  const playedMs = steps * (1000 / clip.fps);
+  return { playedMs, frame: frameIndexAtStep(clip, steps) };
+}
+
+/**
+ * Extra `sharedClockPlayback` frame offset that desyncs the content of a long shared-clock clip without breaking its gust phase: `k * swayPeriod`
+ * with `k = floor(h * frameCount / swayPeriod)`. A whole number of sway periods leaves `frame mod swayPeriod` (the trees) untouched while
+ * whatever runs on the full clip (a camp's animals, 48 frames over a 16-frame sway) lands elsewhere. No offset (0) unless `swayPeriod` is a
+ * positive integer that divides `frameCount` into more than one period.
+ */
+export function swayPeriodOffset(frameCount: number, swayPeriod: number | undefined, h: number): number {
+  if (!swayPeriod || !Number.isInteger(swayPeriod) || swayPeriod <= 0 || swayPeriod >= frameCount || frameCount % swayPeriod !== 0) return 0;
+  const periods = frameCount / swayPeriod;
+  return Math.min(periods - 1, Math.max(0, Math.floor(h * periods))) * swayPeriod;
+}

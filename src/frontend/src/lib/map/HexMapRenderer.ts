@@ -117,7 +117,8 @@ import { PinchTracker } from './pinchGesture';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { animationPreference } from '../perf/animationPreference';
 import { antialiasPreference } from '../perf/antialiasPreference';
-import { advanceClipFrame, clipTimingOf, sharedClockPlayback } from './clipPlayback';
+import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
+import { hash2 } from './worldGenerator';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -364,6 +365,9 @@ function createSpriteLayer(): SpriteLayer {
   container.sortableChildren = true;
   return { pool: [], active: new Map(), container };
 }
+
+/** Salt of the per-tile hash that sets each animated tile's start phase (`syncTopAnim`). */
+const TILE_ANIM_PHASE_SALT = 40503;
 
 /** One hex's live `buildings-anim` playback state — see `syncTopAnim`/`advanceTopAnimations`. */
 interface TopAnimState {
@@ -4705,15 +4709,20 @@ export class HexMapRenderer {
       this.topOverlayPool.push(existing.overlay);
     }
     const overlay = anim.rest !== undefined ? (this.topOverlayPool.pop() ?? new Sprite()) : undefined;
-    // A shared-clock clip (terrain wind sway) joins the global clock mid-cycle so neighbouring tiles stay in phase; others start at frame 0.
-    // A sway clip also shifts by its map column (the integer `col` isoGridPosition places the tile by) so the gust wave is continuous across tiles.
+    // Every tile gets its own deterministic phase `h` so identical animated tiles (all sawmills' wheels) are visibly out of step.
+    // A shared-clock clip (terrain wind sway) joins the global clock mid-cycle so neighbouring tiles stay in phase; it shifts by its map column
+    // (the integer `col` isoGridPosition places the tile by) so the gust wave is continuous across tiles, plus whole sway periods (see
+    // `swayPeriodOffset`) so a long clip's animals desync while its trees keep the forests' wind phase. Others start at their phase in the cycle.
+    const { col, row } = axialToOddQ(coord);
+    const h = hash2(col, row, TILE_ANIM_PHASE_SALT);
+    const timing = clipTimingOf({ ...anim, frameRects: anim.textures });
     const start = anim.sharedClock
       ? sharedClockPlayback(
-          clipTimingOf({ ...anim, frameRects: anim.textures }),
+          timing,
           this.animClockMs,
-          (anim.framesPerColumn ?? 0) * axialToOddQ(coord).col,
+          (anim.framesPerColumn ?? 0) * col + swayPeriodOffset(anim.textures.length, anim.swayPeriod, h),
         )
-      : { playedMs: 0, frame: 0 };
+      : phasedStart(timing, h);
     const initial = topAnimTextures(anim, start.frame);
     sprite.texture = initial.base;
     if (overlay) overlay.texture = initial.overlay!;
