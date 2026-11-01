@@ -206,6 +206,13 @@ play.
   does not count against the tower limit while cut off; once it is connected
   again it counts, even if that puts you over the limit (you then can't build
   more towers).
+- **Buildings outside the realm decay.** A building whose hex is no longer
+  inside the realm has no function: it stops producing and gives no bonus; a
+  palisade still blocks, but a gate or bridge outside the realm is open to
+  everyone. It loses a level at a steady pace until the realm reaches it
+  again; at level 0 it is gone and the hex is free. Each building type takes
+  max level × 24 hours to go from its top level to gone, but never less than 7
+  days or more than 30. Longhouses never decay: they make the realm.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
