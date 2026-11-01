@@ -52,6 +52,24 @@ export interface DryEntry {
   y: number;
 }
 
+/**
+ * The dry layer's entries from the terrain rebuild's base entries: every sea hex's base art, at the sprite's top-left
+ * (`origin`). Skips a hex without art — the sprite layer draws nothing there either, e.g. a revealed wasted coast while
+ * its atlas pack is still loading (or failed to) — and legacy-split crops, which are land.
+ */
+export function seaDryEntries<C>(
+  entries: Iterable<{ texture: Texture | undefined; coord: C; crop?: unknown }>,
+  isSea: (coord: C) => boolean,
+  origin: (coord: C) => { x: number; y: number },
+): DryEntry[] {
+  const out: DryEntry[] = [];
+  for (const { texture, coord, crop } of entries) {
+    if (!texture || crop || !isSea(coord)) continue;
+    out.push({ texture, ...origin(coord) });
+  }
+  return out;
+}
+
 interface LoadedMasks {
   data: WaterDryMasksData;
   atlas: Texture;

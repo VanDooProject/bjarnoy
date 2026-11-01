@@ -73,7 +73,7 @@ import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './marker
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
-import { WaterDryLayer, type DryEntry } from './water/waterDryMask';
+import { WaterDryLayer, seaDryEntries, type DryEntry } from './water/waterDryMask';
 import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
 import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
@@ -4270,12 +4270,14 @@ export class HexMapRenderer {
 
     // The base art of every sea hex, for the water shader's dry mask. Placed
     // exactly as syncSpriteLayer places the sprite.
-    this.waterDryEntries = [];
-    for (const { texture, coord, crop } of baseEntries.values()) {
-      if (crop || worldModel.getTile(coord.q, coord.r).terrain !== 'sea') continue;
-      const grid = isoGridPosition(coord, TILE_W, TILE_H);
-      this.waterDryEntries.push({ texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET });
-    }
+    this.waterDryEntries = seaDryEntries(
+      baseEntries.values(),
+      (c) => worldModel.getTile(c.q, c.r).terrain === 'sea',
+      (c) => {
+        const grid = isoGridPosition(c, TILE_W, TILE_H);
+        return { x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET };
+      },
+    );
     this.refreshWaterDry();
   }
 
