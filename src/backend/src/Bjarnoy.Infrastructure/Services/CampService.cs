@@ -75,18 +75,27 @@ public sealed class CampService(GameDbContext dbContext)
             .Where(s => s.WorldId == worldId)
             .Select(s => new
             {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
+                s.IslandId,
                 s.CentreQ,
                 s.CentreR,
                 Buildings = s.Buildings.Select(b => new { b.Q, b.R, b.Type, b.Level }).ToList(),
             })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        var rows = settlements
+            .Select(s => new PlayerRealms.Row(
+                s.Id, s.UserId, s.OwnerId, s.IslandId, new HexCoord(s.CentreQ, s.CentreR),
+                [.. s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]))
+            .ToList();
+        var realms = PlayerRealms.Resolve(rows);
+
         var realm = new RealmIndex();
-        foreach (var settlement in settlements)
+        foreach (var row in rows)
         {
-            realm.Add(
-                new HexCoord(settlement.CentreQ, settlement.CentreR),
-                [.. settlement.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]);
+            realm.Add(realms[row.Id].DiscsOf(row.Id), row.Buildings);
         }
 
         return realm;

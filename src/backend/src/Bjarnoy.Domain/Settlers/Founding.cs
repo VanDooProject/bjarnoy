@@ -101,7 +101,21 @@ public static class Founding
     /// A same-island neighbour's centre and buildings, as needed by
     /// <see cref="CheckSpacing"/>'s phase 2 (<see cref="Settlement.ClaimDiscsFor"/>).
     /// </summary>
-    public readonly record struct NeighbourSnapshot(HexCoord Centre, IReadOnlyList<PlacedBuilding> Buildings);
+    /// <param name="Centre">The neighbour's longhouse hex.</param>
+    /// <param name="Buildings">What stands in it.</param>
+    /// <param name="Discs">
+    /// The neighbour's connected claim discs when its player's other settlements on the island are known
+    /// (<see cref="ConnectedRealm.DiscsOf"/>: a tower can be connected through a sibling settlement). <see langword="null"/>
+    /// resolves the neighbour alone (<see cref="Settlement.ClaimDiscsFor"/>).
+    /// </param>
+    public readonly record struct NeighbourSnapshot(
+        HexCoord Centre,
+        IReadOnlyList<PlacedBuilding> Buildings,
+        IReadOnlyList<(HexCoord Centre, int Radius)>? Discs = null)
+    {
+        /// <summary>The neighbour's claim discs: <see cref="Discs"/> when known, else its own connected ones.</summary>
+        public IEnumerable<(HexCoord Centre, int Radius)> ClaimDiscs => Discs ?? Settlement.ClaimDiscsFor(Centre, Buildings);
+    }
 
     public enum SpacingVerdict
     {
@@ -142,7 +156,7 @@ public static class Founding
                 return SpacingVerdict.TooClose;
             }
 
-            var withinRealTerritory = Settlement.ClaimDiscsFor(neighbour.Centre, neighbour.Buildings)
+            var withinRealTerritory = neighbour.ClaimDiscs
                 .Any(disc => disc.Centre.DistanceTo(candidate) <= disc.Radius + safetyMargin);
             if (withinRealTerritory)
             {

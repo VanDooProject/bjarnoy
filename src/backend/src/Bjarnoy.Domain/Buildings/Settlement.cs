@@ -345,25 +345,26 @@ public sealed record Settlement
     /// <see cref="Settlement"/>) can still run the exact same union check;
     /// <c>SettlementService.FoundAsync</c>'s founding-time spacing check is
     /// exactly such a caller — see that method's remarks. A tower at any
-    /// level (including a level-0 foundation stub, which yields a
-    /// zero-radius disc — harmless, since that hex is already claimed by
-    /// construction) is included.
+    /// level that is connected to a longhouse (<see cref="ConnectedRealm"/>) is
+    /// included; a cut-off tower, and a level-0 foundation stub, claim nothing.
     /// </summary>
     public static IEnumerable<(HexCoord Centre, int Radius)> ClaimDiscsFor(
         HexCoord centre, IReadOnlyList<PlacedBuilding> buildings)
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
-        var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        yield return (centre, ClaimRadiusForLonghouseLevel(longhouseLevel));
-        foreach (var building in buildings)
-        {
-            if (building.Type == BuildingType.Tower)
-            {
-                yield return (building.Coord, TowerClaimRadius(building.Level));
-            }
-        }
+        // The chain rule (ConnectedRealm): a tower only claims while it is connected to a longhouse. With only this one
+        // settlement known, the longhouse here is the only one that can connect it; callers that know the player's other
+        // settlements on the island resolve the whole realm instead (ConnectedRealm.Resolve / DiscsOf).
+        var self = new RealmSettlement(Guid.Empty, centre, buildings);
+        return ConnectedRealm.Resolve([self]).DiscsOf(Guid.Empty);
     }
+
+    /// <summary>
+    /// This settlement as the chain rule sees it, for <see cref="ConnectedRealm.Resolve"/> alongside the same player's other
+    /// settlements on the island.
+    /// </summary>
+    public RealmSettlement AsRealmSettlement() => new(Id, Centre, Buildings);
 
     /// <summary>This settlement's own claim discs — <see cref="ClaimDiscsFor"/> applied to its own <see cref="Centre"/>/<see cref="Buildings"/>.</summary>
     public IEnumerable<(HexCoord Centre, int Radius)> ClaimDiscs => ClaimDiscsFor(Centre, Buildings);
@@ -1058,6 +1059,12 @@ public sealed record Settlement
     /// of soil. The caller resolves this once from the island's centre
     /// (<c>SettlementService.QueueBuildAsync</c>, <see cref="TerrainSampler.SoilAt"/>).
     /// </param>
+    /// <param name="realm">
+    /// This settlement together with the same player's other settlements on its island, resolved by the chain rule
+    /// (<see cref="ConnectedRealm"/>): the hex has to lie inside the realm's connected discs, and only connected towers count
+    /// against the tower limit. <see langword="null"/> resolves this settlement alone. When given, it must contain this
+    /// settlement in its current state.
+    /// </param>
     /// <param name="giants">
     /// This island's giant index (the territory rule), or
     /// <see langword="null"/> for a world with no giants on hand. A hex
@@ -1117,9 +1124,11 @@ public sealed record Settlement
         Palisades.PalisadeLayout? palisades = null,
         bool isWideRiverAt = false,
         bool onWastedIsland = false,
-        World.IEndgameSiteIndex? endgameSites = null)
+        World.IEndgameSiteIndex? endgameSites = null,
+        ConnectedRealm? realm = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
+        var connected = realm ?? ConnectedRealm.Resolve([AsRealmSettlement()]);
         if (giantIndex.TryGetGiant(coord, out _))
         {
             return BuildDecision.Rejected(BuildRejection.HexOccupiedByGiant);
@@ -1136,7 +1145,7 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.HexOccupiedByEndgameSite);
         }
 
-        if (!Claims(coord, giantIndex))
+        if (!Territory.Claims(connected.AllDiscs, coord, giantIndex))
         {
             return BuildDecision.Rejected(BuildRejection.HexNotInSettlement);
         }
@@ -1291,10 +1300,10 @@ public sealed record Settlement
         // counted by distinct hex across standing buildings and queued orders.
         if (type == BuildingType.Tower && baseLevel == 0)
         {
-            var towerHexes = Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
-                .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord))
-                .Distinct()
-                .Count();
+            // Only connected towers count (ConnectedRealm): a cut-off tower claims nothing and does not use up the limit.
+            var towerHexes = connected.CountConnected(
+                Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
+                    .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord)));
             if (towerHexes >= BuildingCatalogue.MaxTowers(LonghouseLevel))
             {
                 return BuildDecision.Rejected(BuildRejection.TowerLimitReached);
@@ -1686,7 +1695,8 @@ public sealed record Settlement
         Func<HexCoord, Terrain>? terrainAt = null,
         World.IGiantIndex? giants = null,
         World.BogTileKind? bogKindAt = null,
-        Palisades.PalisadeLayout? palisades = null)
+        Palisades.PalisadeLayout? palisades = null,
+        ConnectedRealm? realm = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -1694,7 +1704,7 @@ public sealed record Settlement
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexOccupiedByGiant);
         }
 
-        if (!Claims(coord, giantIndex))
+        if (!Territory.Claims((realm ?? ConnectedRealm.Resolve([AsRealmSettlement()])).AllDiscs, coord, giantIndex))
         {
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexNotInSettlement);
         }

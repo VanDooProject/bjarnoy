@@ -197,6 +197,15 @@ play.
   So LH 3–6 allow 1, LH 7 allows 2, LH 9 allows 3, …, and LH 29–30 allow 13.
   The tech tree shows only the first unlock (LH 3); the rule is shown where
   a tower is placed, not as extra tech-tree cards.
+- **Towers have to be chained to a longhouse.** A tower claims its ground only
+  while it is connected: it stands on ground claimed by one of your
+  longhouses, or by a tower that is itself connected. All of your longhouses
+  on an island count, so a chain that a longhouse reaches from either end stays
+  connected when a tower in the middle falls. A cut-off tower claims nothing and
+  sees nothing until the link is rebuilt; it still counts for prerequisites. It
+  does not count against the tower limit while cut off; once it is connected
+  again it counts, even if that puts you over the limit (you then can't build
+  more towers).
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't

@@ -135,12 +135,13 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         }
 
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
+        var realms = await PlayerRealms.ForWorldAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var bog = await WorldTerrain.OverlayAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var walls = await WorldBridges.RouteIndexAsync(
             _dbContext, worldId, new TerrainSampler(army.Settlement!.World!.ToGenerationOptions()).WithBogOverlay(bog).TerrainAt,
             rivers.IsWide, cancellationToken).ConfigureAwait(false);
-        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls);
+        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls, realms);
         return true;
     }
 
@@ -218,12 +219,14 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         ArmyEntity armyA, Army domainA, Movement movementA,
         ArmyEntity armyB, Army domainB, Movement movementB,
         HexCoord hex, DateTimeOffset at, IGiantIndex giants, IReadOnlyDictionary<HexCoord, Terrain> bog,
-        RiverIndex rivers, LandRouteIndex walls)
+        RiverIndex rivers, LandRouteIndex walls, IReadOnlyDictionary<Guid, ConnectedRealm> realms)
     {
         var claimA = FieldBattleResolver.ClaimAt(
-            hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), armyA.Settlement.Buildings.Select(b => b.ToPlacedBuilding()).ToList(), giants);
+            hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), armyA.Settlement.Buildings.Select(b => b.ToPlacedBuilding()).ToList(), giants,
+            realms.GetValueOrDefault(armyA.Settlement.Id), armyA.Settlement.Id);
         var claimB = FieldBattleResolver.ClaimAt(
-            hex, new HexCoord(armyB.Settlement!.CentreQ, armyB.Settlement.CentreR), armyB.Settlement.Buildings.Select(b => b.ToPlacedBuilding()).ToList(), giants);
+            hex, new HexCoord(armyB.Settlement!.CentreQ, armyB.Settlement.CentreR), armyB.Settlement.Buildings.Select(b => b.ToPlacedBuilding()).ToList(), giants,
+            realms.GetValueOrDefault(armyB.Settlement.Id), armyB.Settlement.Id);
 
         var seed = BitConverter.ToInt32(ClaimId(armyA.Id, armyB.Id, at).ToByteArray(), 0);
 
