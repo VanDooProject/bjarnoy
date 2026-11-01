@@ -96,9 +96,9 @@ public sealed record UnitDefinition
     /// Which building type this unit trains at — the Longhouse for every
     /// civilian, <see cref="BuildingType.Barracks"/> for the basic melee
     /// land roster (Spearman, Axeman, Berserker),
-    /// <see cref="BuildingType.ArcheryRange"/> for the archer land roster
-    /// (Bowman, Catapult), <see cref="BuildingType.SiegeWorkshop"/> for the
-    /// battering ram, <see cref="BuildingType.Dockyard"/> for
+    /// <see cref="BuildingType.ArcheryRange"/> for the archer
+    /// (Bowman), <see cref="BuildingType.SiegeWorkshop"/> for the siege
+    /// engines (Catapult, Ram), <see cref="BuildingType.Dockyard"/> for
     /// ships. Defaults to the Longhouse.
     /// </summary>
     public BuildingType RequiredBuildingType { get; init; } = BuildingType.Longhouse;
