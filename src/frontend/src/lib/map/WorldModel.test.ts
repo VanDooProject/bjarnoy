@@ -139,6 +139,62 @@ describe('WorldModel.registerSettlement / claimTerritory', () => {
     expect(model.countBuildings(home.id)).toBe(1);
     expect(model.countBuildings(away.id)).toBe(0);
   });
+
+  // Regression: the settlement poll (applyServerSnapshot) and the world-settlements
+  // poll (claimTerritoryOnIsland -> claimTerritory) run side by side; claimTerritory
+  // used to reset the home tile to level 1, so the own longhouse flipped between its
+  // level-1 art and its real level every poll.
+  it('claimTerritory keeps the longhouse level a live snapshot set', () => {
+    const model = new WorldModel();
+    const own = model.registerSettlement({
+      id: 'own-1',
+      ownerId: 'player-1',
+      ownerName: 'Ulf',
+      name: "Ulf's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'island-home',
+    });
+    model.claimTerritory(own.id);
+
+    const empty = { wood: 0, stone: 0, food: 0, iron: 0 };
+    model.applyServerSnapshot(own.id, {
+      level: 15,
+      resources: empty,
+      rates: empty,
+      capacity: empty,
+      buildings: [{ q: 0, r: 0, type: 'longhouse', level: 15 }],
+    });
+    expect(model.getTile(0, 0).buildingLevel).toBe(15);
+
+    model.claimTerritoryOnIsland('island-home');
+    expect(model.getTile(0, 0).buildingLevel).toBe(15);
+  });
+
+  it('claimTerritory draws a rival longhouse at the level its summary reports', () => {
+    const model = new WorldModel();
+    const rival = model.registerSettlement({
+      id: 'rival-7',
+      ownerId: 'rival-7',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: 0,
+      r: 0,
+      level: 7,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'island-1',
+    });
+
+    model.claimTerritory(rival.id);
+    expect(model.getTile(0, 0).buildingType).toBe('longhouse');
+    expect(model.getTile(0, 0).buildingLevel).toBe(7);
+  });
 });
 
 // Regression coverage for the guided onboarding checklist (zip 6a follow-up):
