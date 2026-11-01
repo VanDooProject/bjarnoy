@@ -790,6 +790,8 @@ describe('baseTextureFor wasted mountain/giant base', () => {
       },
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       baseIndexed: {},
       top: {},
       animTop: {},
@@ -941,6 +943,8 @@ describe('riverTexturesFor lava-island shapes', () => {
       base: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       baseIndexed: {},
       top: {},
       animTop: {},
@@ -1081,6 +1085,8 @@ describe('riverTexturesFor river-art variants', () => {
       base: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       baseIndexed: {},
       top: {},
       animTop: {},
@@ -1209,6 +1215,7 @@ describe('mergeTileTextures terrain ownership', () => {
       top: { wasteland: full },
       animTop: {},
       wastedCoastalBase: emptyWastedCoastalBase,
+      wastedCoastalTop: emptyWastedCoastalBase,
       lavaRiverBase: {},
       lavaRiverTop: {},
       giants: {},
@@ -1220,6 +1227,7 @@ describe('mergeTileTextures terrain ownership', () => {
       top: { wasteland: stale, hut: stale },
       animTop: {},
       wastedCoastalBase: emptyWastedCoastalBase,
+      wastedCoastalTop: emptyWastedCoastalBase,
       lavaRiverBase: {},
       lavaRiverTop: {},
       giants: {},
@@ -1244,15 +1252,18 @@ describe('mergeTileTextures terrain ownership', () => {
       ({ base: {}, baseIndexed: {}, top: {}, animTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
 
     const populatedWastedCoastal = { ...emptyOrientationArrayMap(), E: ['blacksandcoast_E'] };
+    const populatedWastedCoastalTop = { ...emptyOrientationArrayMap(), E: ['blacksandcoast_E_boat'] };
     const a = {
       ...baseFixture(),
       wastedCoastalBase: emptyOrientationArrayMap(),
+      wastedCoastalTop: emptyOrientationArrayMap(),
       lavaRiverBase: {},
       lavaRiverTop: {},
     } as unknown as TileTextures;
     const b = {
       ...baseFixture(),
       wastedCoastalBase: populatedWastedCoastal,
+      wastedCoastalTop: populatedWastedCoastalTop,
       lavaRiverBase: { straight: 'lava-base' },
       lavaRiverTop: { straight: 'lava-top' },
     } as unknown as TileTextures;
@@ -1261,6 +1272,7 @@ describe('mergeTileTextures terrain ownership', () => {
 
     // a had nothing yet -> falls back to b's.
     expect(merged.wastedCoastalBase.E).toEqual(['blacksandcoast_E']);
+    expect(merged.wastedCoastalTop.E).toEqual(['blacksandcoast_E_boat']);
     expect(merged.lavaRiverBase.straight).toBe('lava-base');
     expect(merged.lavaRiverTop.straight).toBe('lava-top');
 
@@ -1269,11 +1281,13 @@ describe('mergeTileTextures terrain ownership', () => {
     const aWithWasted = {
       ...baseFixture(),
       wastedCoastalBase: { ...emptyOrientationArrayMap(), E: ['from-a'] },
+      wastedCoastalTop: { ...emptyOrientationArrayMap(), E: ['top-from-a'] },
       lavaRiverBase: { straight: 'a-lava-base' },
       lavaRiverTop: { straight: 'a-lava-top' },
     } as unknown as TileTextures;
     const merged2 = mergeTileTextures(aWithWasted, b);
     expect(merged2.wastedCoastalBase.E).toEqual(['from-a']);
+    expect(merged2.wastedCoastalTop.E).toEqual(['top-from-a']);
     expect(merged2.lavaRiverBase.straight).toBe('a-lava-base');
     expect(merged2.lavaRiverTop.straight).toBe('a-lava-top');
   });
@@ -1302,6 +1316,8 @@ describe('level-1-first loading: sparse top/baseIndexed arrays', () => {
       animTop: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       riverBase: {} as TileTextures['riverBase'],
       riverTop: {} as TileTextures['riverTop'],
       lavaRiverBase: {},
@@ -1410,6 +1426,8 @@ describe('wildlife camps', () => {
       animTop: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       riverBase: {},
       riverTop: {},
       lavaRiverBase: {},
@@ -1687,6 +1705,8 @@ describe('bog buildings and lake decorations', () => {
       base: {},
       coastalBase: map(() => []),
       wastedCoastalBase: map(() => []),
+      coastalTop: map(() => []),
+      wastedCoastalTop: map(() => []),
       baseIndexed: {},
       top: {},
       animTop: {},
@@ -1859,6 +1879,8 @@ describe('palisade art', () => {
       animTop: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       riverBase: {} as TileTextures['riverBase'],
       riverTop: {} as TileTextures['riverTop'],
       lavaRiverBase: {},
@@ -2031,6 +2053,8 @@ describe('endgame site art', () => {
       animTop: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       riverBase: {} as TileTextures['riverBase'],
       riverTop: {} as TileTextures['riverTop'],
       lavaRiverBase: {},
@@ -2419,5 +2443,80 @@ describe('river bridge art', () => {
         expect(baseTextureFor(textures, tile, art)).toBe(textures.baseIndexed.riverbridge![art.orientation][level]);
       }
     });
+  });
+});
+
+// Coastal water's variants are split like any other tile: the water with the submerged part of a prop in `_base`, the prop
+// above the water (the boat, the rock) as the top frame. Both layers have to draw, or the props vanish and only their
+// underwater shadow is left.
+describe('coastal water props', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  const fakeTexture = (name: string) => ({ label: name }) as unknown as Texture;
+
+  /** A `terrain`-atlas stand-in for a coastal family: the plain look and `variantCount` prop looks, each a top + base, every camera. */
+  function coastalAtlas(family: string, variantCount: number, split = true): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    const add = (name: string, layer: 'base' | 'top') => {
+      atlas.textures[name] = fakeTexture(name);
+      atlas.frameMeta[name] = { family, layer };
+    };
+    for (const o of ORIENTATIONS) {
+      const looks = [`${family}_${o}`, ...Array.from({ length: variantCount }, (_, v) => `${family}_${o}_variant${String(v).padStart(3, '0')}`)];
+      for (const look of looks) {
+        add(look, 'top');
+        if (split) add(`${look}_base`, 'base');
+      }
+    }
+    return atlas;
+  }
+  const label = (texture: Texture | undefined) => (texture as unknown as { label: string } | undefined)?.label;
+  const coastal = (extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'sea', isCoastalWater: true, orientation: 'SE', ...extra });
+
+  it('draws a coastal variant as its base under its prop', () => {
+    const textures = buildTileTextures([coastalAtlas('coastalwatertile', 2)]);
+
+    expect(label(baseTextureFor(textures, coastal({ variant: 1 })))).toBe('coastalwatertile_SE_variant000_base');
+    expect(label(topTextureFor(textures, coastal({ variant: 1 })))).toBe('coastalwatertile_SE_variant000');
+    expect(label(baseTextureFor(textures, coastal({ variant: 2 })))).toBe('coastalwatertile_SE_variant001_base');
+    expect(label(topTextureFor(textures, coastal({ variant: 2 })))).toBe('coastalwatertile_SE_variant001');
+  });
+
+  it('draws the wasted coast (blacksandcoast) the same way', () => {
+    const textures = buildTileTextures([coastalAtlas('blacksandcoast', 3)]);
+    const tile = coastal({ wasted: true, variant: 3 });
+
+    expect(label(baseTextureFor(textures, tile))).toBe('blacksandcoast_SE_variant002_base');
+    expect(label(topTextureFor(textures, tile))).toBe('blacksandcoast_SE_variant002');
+  });
+
+  it('draws an unsplit pack (one picture per variant) as the base, with no prop on top', () => {
+    const textures = buildTileTextures([coastalAtlas('coastalwatertile', 2, false)]);
+
+    expect(label(baseTextureFor(textures, coastal({ variant: 1 })))).toBe('coastalwatertile_SE_variant000');
+    expect(topTextureFor(textures, coastal({ variant: 1 }))).toBeUndefined();
+  });
+
+  it('puts no coastal prop on open sea or under a building on the coast', () => {
+    const textures = buildTileTextures([coastalAtlas('coastalwatertile', 2)]);
+
+    expect(topTextureFor(textures, { q: 0, r: 0, terrain: 'sea', orientation: 'SE', variant: 1 })).toBeUndefined();
+    expect(topTextureFor(textures, coastal({ variant: 1, buildingType: 'fishinghut', buildingLevel: 1 }))).toBeUndefined();
+  });
+
+  // The vendored atlas (a gitignored submodule: absent where it was not checked out, then the check is skipped).
+  const manifests = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/terrain-*.json', {
+    eager: true,
+    import: 'default',
+  }) as Record<string, { frames: Record<string, unknown> }>;
+  const vendored = Object.keys(manifests).length > 0;
+
+  it.skipIf(!vendored)('the vendored coastal water ships its props as top frames over per-variant bases', () => {
+    const frames = new Set(Object.values(manifests).flatMap((m) => Object.keys(m.frames)));
+    for (const o of ORIENTATIONS) {
+      for (const look of [`coastalwatertile_${o}_variant000`, `coastalwatertile_${o}_variant001`]) {
+        expect(frames).toContain(look);
+        expect(frames).toContain(`${look}_base`);
+      }
+    }
   });
 });
