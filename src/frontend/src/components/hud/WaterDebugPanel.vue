@@ -35,7 +35,6 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   fineCaustics: 'Caustics: fine highlight net',
   causticShadows: 'Caustics: drifting dark blobs',
   shorelineFoam: 'Shoreline foam',
-  propTileMute: 'Quieten the shader over boat/rock tiles',
   seaBody: 'Sea body (world map; off = CSS gradient)',
   legacyWaveSquiggles: 'World map: Graphics wave squiggles',
   showWaterMask: 'Debug: show the raw water mask',

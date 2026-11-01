@@ -779,7 +779,7 @@ describe('WorldModel.riverMouthHexKeys / riverRevision', () => {
       riverTile({ q: 5, r: 6 }, 'straight'),
       riverTile({ q: 7, r: 8 }, 'bend'),
     ]);
-    // Same packing as buildingHexKeys (and the bake worker's hexKey).
+    // Same packing as the bake worker's hexKey.
     const key = (q: number, r: number) => ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
     expect(model.riverMouthHexKeys().sort()).toEqual([key(1, 2), key(3, 4)].sort());
   });

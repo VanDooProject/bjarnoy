@@ -45,13 +45,6 @@ export interface WaterDebugFlags {
   causticShadows: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;
-  /**
-   * Quieten the shader over the coastal water tiles whose art carries a prop — a
-   * beached boat or a rock (§4.4b): the surface pattern goes, and the foam
-   * narrows to a quarter of its width rather than disappearing. Off draws both
-   * straight across the prop, which is the artifact this exists to fix.
-   */
-  propTileMute: boolean;
   /** Shader sea body under the world map (§4.1); off lets WorldMapCanvas's CSS gradient show through. Never drawn in settlement mode — the painted water tiles are the sea body there. */
   seaBody: boolean;
   /**
@@ -89,7 +82,6 @@ export const waterDebugFlags: WaterDebugFlags = {
   fineCaustics: true,
   causticShadows: true,
   shorelineFoam: true,
-  propTileMute: true,
   seaBody: true,
   legacyWaveSquiggles: true,
   showWaterMask: false,
@@ -124,7 +116,9 @@ export interface WaterDebugTuning {
   /**
    * How close to the shore the caustic ribbons are allowed to come, in hexes.
    * Inside it they are simply absent — cut, not faded, since a half-strength
-   * ribbon reads as a smudge and a belt of them reads as a second coastline. The
+   * ribbon reads as a smudge and a belt of them reads as a second coastline.
+   * The default (0.25) lets them end just under the foam band, whose default
+   * width is `foamWidthHexes` 0.3. The
    * cut line wanders by CAUSTIC_CULL_JITTER_TILES either side of this so it
    * isn't a clean offset curve of the coast.
    *
@@ -180,7 +174,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   foamWidthHexes: 0.3,
   foamSurge: 0.18,
   waveSpeed: 1,
-  causticCullHexes: 0.35,
+  causticCullHexes: 0.25,
   causticThickness: 1,
   causticBrightness: 1,
   causticDensity: 1,
