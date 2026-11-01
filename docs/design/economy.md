@@ -298,7 +298,7 @@ for friend and foe, a half-open end and a sealed end), the dispatch is refused w
 land route is left, and the range tint applies the same rules for the selected
 settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Siege.** A wall hex falls to **battering rams only**: a won Attack or Raid that names the wall hex
+**Siege.** On land a wall hex falls to **battering rams only** (a fleet can hit a wall's sea end, see below): a won Attack or Raid that names the wall hex
 as `TargetBuildingCoord` takes **one level** off it, however many rams survive
 (`SiegeResolver.LevelsTakenFrom`, the same rule as a bridge): a level-3 palisade needs three won
 sieges to be breached, and the hex is gone at level 0. Catapults do nothing to a wall. There is no
@@ -306,18 +306,26 @@ separate siege mission: the in-game "Siege" action on a rival wall opens an Atta
 settlement with the wall hex as the preferred target building. Which engine damages which
 building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolver.CanDamage`):
 
-| Target | Rams | Catapults | Levels per won siege |
-|---|---|---|---|
-| Wall hex (Palisade, Palisade Gate) | yes | no | 1 |
-| Tower | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
-| Bridge | no | yes | 1 |
-| Every other building (Longhouse included) | no | yes | `LevelsDestroyed` |
+| Target | Rams | Catapults | Ships (shore only) | Levels per won siege |
+|---|---|---|---|---|
+| Wall hex (Palisade, Palisade Gate) | yes | no | yes | 1 |
+| Tower | yes | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
+| Bridge | no | yes | yes | 1 |
+| Every other building (Longhouse included) | no | yes | yes | `LevelsDestroyed` |
 
 Only the surviving engines that can damage the target count towards its levels. A named target
 the surviving engines cannot damage takes no damage (the report has no siege line). Without a
 named target, or when it is gone, the pick is random (seeded) among the buildings the surviving
 engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
 (section 8, the iron ladder).
+
+**Fleets.** A fleet Attack or Raid is always sent at one building on the target's shore: a building inside the target's
+claim on a shoreline land hex or on a sea hex (Dockyard, Fishing Hut, Shrine of Njörd, a wall's sea end). Without one the
+dispatch is refused (`FleetTargetBuildingRequired`, `FleetTargetBuildingNotOnShore`). The fleet's route ends at that
+building's hex, the battle against the settlement's garrison is fought there, and the target's Longhouse may be inland.
+A won fight damages only that building, by `LevelsDestroyed` of the surviving ships' siege power (Karve 10, Longship 20,
+starting values to be tuned; catapult 40), walls and bridges one level as above. A fleet has no random fallback: if the
+building is gone when it arrives, the battle still happens and nothing is damaged.
 
 **Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
 burns walls yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
