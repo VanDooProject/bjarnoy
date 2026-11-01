@@ -201,6 +201,15 @@ play.
   bog shore, creek, spring or lake). It replaces the tile it stands on; its
   art keeps that ground round it, so each ground has its own version of the
   tower.
+- **How a tower claims:** a tower claims every hex within its level of
+  itself (level 1 its neighbours, level 2 two rings, …), centred on the
+  tower. It has to be built inside the realm, which includes ground another
+  tower claimed, so towers can chain out across an island. A tower claims
+  nothing while it is under construction (a level-0 stub claims only its own
+  hex, which is already inside the realm); its ground joins the realm when
+  level 1 finishes.
+- **Giants are claimed whole:** a giant's seven hexes join the realm only when
+  the claim covers all seven; a claim that reaches some of them takes none.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
