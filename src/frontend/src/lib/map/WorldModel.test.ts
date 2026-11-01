@@ -2711,3 +2711,82 @@ describe('WorldModel chained towers', () => {
     expect(model.placeBuilding(settlement.id, another, 'tower')).toBe(false);
   });
 });
+
+// Live mode: the server sends the realm it resolved (SettlementResponse.realm); the model uses it instead of resolving locally.
+describe('WorldModel server-resolved realm', () => {
+  const setup = () => {
+    const model = new WorldModel(20260825);
+    const { settlement: a, at } = foundLandedSettlement(model);
+    a.level = 2;
+    const along = (k: number) => ({ q: at.q + k, r: at.r });
+    // A different ownerId: local grouping can never link B to A, only the server's realm does.
+    const b = model.registerSettlement({
+      id: 'b',
+      ownerId: 'other-owner-id',
+      ownerName: a.ownerName,
+      name: 'B',
+      q: along(9).q,
+      r: along(9).r,
+      level: 2,
+      resources: a.resources,
+      rates: a.rates,
+      foundedAt: 0,
+    });
+    const snap = (
+      target: typeof a,
+      towers: { q: number; r: number }[],
+      realm?: { settlementId: string; discs: { q: number; r: number; radius: number }[] }[],
+    ) =>
+      model.applyServerSnapshot(target.id, {
+        level: target.level,
+        resources: target.resources,
+        rates: target.rates,
+        capacity: { wood: 0, stone: 0, food: 0, iron: 0 },
+        buildings: towers.map((t) => ({ q: t.q, r: t.r, type: 'tower', level: 2 })),
+        realm,
+      });
+    const owner = (c: { q: number; r: number }) => model.getTile(c.q, c.r).ownerId;
+    // A land hex inside the disc of radius `radius` around `centre` but outside every other given disc.
+    const landOnlyIn = (centre: { q: number; r: number }, radius: number, others: { q: number; r: number; radius: number }[]) =>
+      hexesInRadius(centre, radius).find(
+        (c) => model.isLand(c.q, c.r) && others.every((o) => hexDistance(o, c) > o.radius) && !model.getTile(c.q, c.r).buildingType,
+      )!;
+    return { model, a, b, at, along, snap, owner, landOnlyIn };
+  };
+
+  it("claims a tower's ground for A when the server lists the tower's disc, and releases it once the realm drops it", () => {
+    const { a, at, along, snap, owner, landOnlyIn } = setup();
+    const home = { ...at, radius: 3 };
+    const tower = { ...along(5), radius: 2 };
+    const probe = landOnlyIn(tower, 2, [home]);
+    snap(a, [along(5)]);
+    expect(owner(probe)).toBeUndefined(); // locally the tower is cut off
+
+    snap(a, [along(5)], [{ settlementId: a.id, discs: [home, tower] }]);
+    expect(owner(probe)).toBe(a.id);
+
+    snap(a, [along(5)], [{ settlementId: a.id, discs: [home] }]);
+    expect(owner(probe)).toBeUndefined();
+  });
+
+  it("claims B's server-given connected disc for B, and releases it when B leaves the realm", () => {
+    const { model, a, b, at, along, snap, owner, landOnlyIn } = setup();
+    const aDisc = { ...at, radius: 3 };
+    const bHome = { ...along(9), radius: 3 };
+    // The disc geometry need not be a real chain: any land outside both longhouse discs works as B's connected tower.
+    const towerHex = hexesInRadius(at, 12).find((c) => model.isLand(c.q, c.r) && hexDistance(c, at) > 3 && hexDistance(c, along(9)) > 3)!;
+    const bTower = { ...towerHex, radius: 0 };
+    const probe = landOnlyIn(bTower, 0, [aDisc, bHome]);
+
+    snap(a, [], [
+      { settlementId: a.id, discs: [aDisc] },
+      { settlementId: b.id, discs: [bHome, bTower] },
+    ]);
+    expect(owner(probe)).toBe(b.id);
+    expect(model.claimDiscsOf(b.id)).toEqual([bHome, bTower]);
+
+    snap(a, [], [{ settlementId: a.id, discs: [aDisc] }]);
+    expect(owner(probe)).toBeUndefined();
+    expect(model.claimDiscsOf(b.id)).toEqual([{ ...bHome }]);
+  });
+});

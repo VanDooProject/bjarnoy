@@ -25,7 +25,7 @@ import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
 import { claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
-import { resolveRealm, type ConnectedRealm } from './realmChain';
+import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import {
   DEFAULT_GENERATION,
@@ -360,10 +360,17 @@ export class WorldModel {
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
   /**
-   * The settlements the chain rule resolves together (`realmChain.ts`): one player's settlements on one island, keyed by
-   * `realmGroupKey`. Kept up to date by `registerSettlement`, the only place a settlement enters the model.
+   * The settlements the chain rule resolves together locally (`realmChain.ts`): one player's settlements on one island, keyed
+   * by `realmGroupKey`. Kept up to date by `registerSettlement`, the only place a settlement enters the model. Demo mode (and
+   * live settlements without a server realm) read the realm from here.
    */
   private realmGroups = new Map<string, Map<string, Settlement>>();
+  /**
+   * Live mode: the realm the server resolved (`applyServerSnapshot`'s `realm`), per member settlement id; every member id maps
+   * to the same entry object. `signature` detects a changed realm. Takes precedence over `realmGroups` in `realmOf` and
+   * `realmMembers`.
+   */
+  private serverRealms = new Map<string, { ids: string[]; realm: ConnectedRealm; signature: string }>();
   /**
    * The hexes `syncClaim` last gave each settlement (its claim, plus any
    * hex it only kept because a building of its own stands there) — what the
@@ -1336,8 +1343,20 @@ export class WorldModel {
     return claimRadiusForLevel(settlement.level);
   }
 
-  /** The settlements `settlement`'s chain rule is resolved with: the same player's settlements on the same island (itself included). */
+  /**
+   * The settlements `settlement`'s chain rule is resolved with (itself included): the members of the server's realm when it
+   * sent one (live), else the same player's settlements on the same island.
+   */
   private realmMembers(settlement: Settlement): Settlement[] {
+    const server = this.serverRealms.get(settlement.id);
+    if (server) {
+      const members = server.ids.flatMap((id) => {
+        const m = this.settlements.get(id);
+        return m ? [m] : [];
+      });
+      if (!members.some((m) => m.id === settlement.id)) members.push(settlement);
+      return members;
+    }
     const group = this.realmGroups.get(realmGroupKey(settlement));
     const members = group ? [...group.values()] : [];
     if (!members.some((m) => m.id === settlement.id)) members.push(settlement);
@@ -1346,10 +1365,12 @@ export class WorldModel {
 
   /**
    * The chain rule (`realmChain.ts`, mirrors the backend's `ConnectedRealm`) for `settlement` and the same player's other
-   * settlements on its island: which towers are connected to a longhouse and so claim and see. Every claim and every tower's
-   * vision reads its answer from here.
+   * settlements on its island: which towers are connected to a longhouse and so claim and see. Live: the realm the server
+   * resolved; otherwise resolved locally. Every claim and every tower's vision reads its answer from here.
    */
   private realmOf(settlement: Settlement): ConnectedRealm {
+    const server = this.serverRealms.get(settlement.id);
+    if (server) return server.realm;
     return resolveRealm(
       this.realmMembers(settlement).map((m) => ({
         id: m.id,
@@ -1610,7 +1631,10 @@ export class WorldModel {
    * is silently skipped rather than stored as an unrecognized string. A type
    * with no distinct sprite in the art pack (Lumberjack, Quarry) is still
    * safe to place — `textures.ts`'s `baseTextureFor` falls back to the
-   * tile's bare terrain rather than throwing.
+   * tile's bare terrain rather than throwing. `realm` (live) is the realm the
+   * server resolved for this settlement: when it changes, it replaces the
+   * local chain resolution for every member and the claim is re-derived,
+   * including for settlements that left the realm.
    */
   applyServerSnapshot(
     settlementId: string,
@@ -1620,10 +1644,27 @@ export class WorldModel {
       rates: Resources;
       capacity: Resources;
       buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
+      realm?: ReadonlyArray<{ settlementId: string; discs: readonly ClaimDisc[] }>;
     },
   ) {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return;
+
+    let realmChanged = false;
+    let leftRealm: string[] = [];
+    if (snapshot.realm) {
+      const signature = JSON.stringify(snapshot.realm);
+      const old = this.serverRealms.get(settlementId);
+      if (old?.signature !== signature) {
+        realmChanged = true;
+        const oldIds = old?.ids ?? [];
+        for (const id of oldIds) this.serverRealms.delete(id);
+        const ids = snapshot.realm.map((m) => m.settlementId);
+        const entry = { ids, realm: realmFromDiscs(snapshot.realm), signature };
+        for (const id of ids) this.serverRealms.set(id, entry);
+        leftRealm = oldIds.filter((id) => !ids.includes(id));
+      }
+    }
 
     const previousTowers = this.settlementTowers.get(settlementId) ?? [];
     const towers = snapshot.buildings
@@ -1646,7 +1687,7 @@ export class WorldModel {
     // centre disc grew (a longhouse level-up) or the set of Tower satellite
     // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    const claimChanged = levelIncreased || towersChanged || ravensChanged;
+    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged;
     if (claimChanged) this.exploreRealm(settlement);
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
@@ -1726,7 +1767,14 @@ export class WorldModel {
     }
     // After the building pass: a fallen tower's own hex has to be empty before
     // the release step may take it back.
-    if (claimChanged) this.syncClaim(settlement);
+    if (claimChanged) {
+      this.syncClaim(settlement);
+      // Settlements that left the realm are no longer covered by `syncClaim`'s members: re-derive (release) their ground too.
+      for (const id of leftRealm) {
+        const gone = this.settlements.get(id);
+        if (gone) this.syncOwnClaim(gone);
+      }
+    }
     this.renderedBuildingCoords.set(settlementId, nowRendered);
     this.wallRevision++;
   }

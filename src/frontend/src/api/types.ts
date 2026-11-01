@@ -395,6 +395,19 @@ export interface QuestResponse {
   reward: ResourceLine;
 }
 
+/** One connected claim disc of a realm, exactly as the server resolves it. */
+export interface ClaimDiscResponse {
+  q: number;
+  r: number;
+  radius: number;
+}
+
+/** One settlement of the caller's realm with its connected claim discs (longhouse disc first, then each connected tower's disc). */
+export interface RealmMemberResponse {
+  settlementId: string;
+  discs: ClaimDiscResponse[];
+}
+
 export interface SettlementResponse {
   id: string;
   worldId: string;
@@ -420,6 +433,8 @@ export interface SettlementResponse {
   /** The onboarding quests, in presentation order. */
   quests: QuestResponse[];
   world: WorldClockResponse;
+  /** Every settlement of the selected settlement's realm (itself first) with its connected claim discs; only the caller's own. */
+  realm: RealmMemberResponse[];
 }
 
 export interface SettlementSummary {
@@ -430,6 +445,8 @@ export interface SettlementSummary {
   r: number;
   longhouseLevel: number;
   islandId: string;
+  /** Whether the settlement belongs to the caller. */
+  mine: boolean;
 }
 
 /**
