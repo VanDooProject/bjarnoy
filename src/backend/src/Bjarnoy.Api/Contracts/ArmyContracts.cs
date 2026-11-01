@@ -209,8 +209,9 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supp
 
 /// <summary>
 /// A guest (<see cref="ArmyMission.Support"/>) army as the host settlement
-/// sees it (issue #40 phase 4 §5) — counts only, since the host cannot
-/// command it; the owner's own view is the ordinary <see cref="ArmyResponse"/>
+/// sees it (issue #40 phase 4 §5) — counts only, since the host sees
+/// no route or provisions (it can only send the army home, via
+/// <c>SendGuestArmyHome</c>); the owner's own view is the ordinary <see cref="ArmyResponse"/>
 /// via <see cref="ArmySummary"/> on their own settlement's army list.
 /// </summary>
 public sealed record GuestArmySummary(
