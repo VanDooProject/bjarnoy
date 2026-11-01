@@ -1131,23 +1131,25 @@ export function chainMountainAt(q: number, r: number, t: number, seed: number, s
     0.8 * (valueNoise(x, y, seed + RIM_NOISE_SALT, 3.5) - 0.5) + 0.2 * (valueNoise(x, y, seed + RIM_NOISE_FINE_SALT, 2.2) - 0.5);
   const crests: [number, number, number, number][] = [[0, 0, 0.36, 6.5]];
   if (sp.w > SECOND_CREST_MIN_WIDTH) crests.push([1, sp.id < 0.5 ? 0.55 : -0.55, 0.5, 4.5]);
+  // every arm roll is keyed on the island too, so islands don't share their arm layout
   const idRoll = Math.floor(sp.id * 1e5);
   for (const [crest, offFrac, pass, maxHalf] of crests) {
     const c = crestAt(sp, seed, crest, offFrac, pass, maxHalf, sp.s);
     if (Math.abs(sp.d - c.off) < c.half * (1 + 0.8 * fine)) return true;
     // spur arms: rooted every ~ARM_SPACING hexes along the crest at a massif, tapering away from it at an angle
+    const armRow = crest + 2 * idRoll;
     const k0 = Math.floor(sp.s / ARM_SPACING);
     for (let kk = k0 - 2; kk <= k0 + 2; kk++) {
-      if (hash2(kk, crest, seed + ARM_ROOT_SALT + idRoll) < ARM_SLOT_EMPTY_BELOW) continue;
-      const s0 = (kk + 0.2 + 0.6 * hash2(kk, crest, seed + ARM_POSITION_SALT)) * ARM_SPACING;
+      if (hash2(kk, armRow, seed + ARM_ROOT_SALT) < ARM_SLOT_EMPTY_BELOW) continue;
+      const s0 = (kk + 0.2 + 0.6 * hash2(kk, armRow, seed + ARM_POSITION_SALT)) * ARM_SPACING;
       const root = crestAt(sp, seed, crest, offFrac, pass, maxHalf, s0);
       if (root.half < 2.5) continue; // arms only off a massif, never off a pass
-      const side = hash2(kk, crest, seed + ARM_SIDE_SALT) < 0.5 ? -1 : 1;
+      const side = hash2(kk, armRow, seed + ARM_SIDE_SALT) < 0.5 ? -1 : 1;
       // angle from the crest normal (up to about 0.8 rad) as a rational rotation: sin/cos of 2*atan(u)
-      const u = (hash2(kk, crest, seed + ARM_TILT_SALT) - 0.5) * 0.85;
+      const u = (hash2(kk, armRow, seed + ARM_TILT_SALT) - 0.5) * 0.85;
       const sinT = (2 * u) / (1 + u * u);
       const cosT = (1 - u * u) / (1 + u * u);
-      const armLen = 4 + 8 * hash2(kk, crest, seed + ARM_LENGTH_SALT);
+      const armLen = 4 + 8 * hash2(kk, armRow, seed + ARM_LENGTH_SALT);
       const ax = s0;
       const ay = root.off + side * root.half * 0.6;
       const bx = ax + sinT * (armLen + root.half * 0.4);

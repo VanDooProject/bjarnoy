@@ -1024,29 +1024,31 @@ public sealed class TerrainSampler
                 return true;
             }
 
-            // spur arms: rooted every ~ArmSpacing hexes along the crest at a massif, tapering away from it at an angle
+            // spur arms: rooted every ~ArmSpacing hexes along the crest at a massif, tapering away from it at an angle;
+            // every arm roll is keyed on the island too, so islands don't share their arm layout
+            var armRow = crest + (2 * idRoll);
             var k0 = (int)Math.Floor(sp.S / ArmSpacing);
             for (var kk = k0 - 2; kk <= k0 + 2; kk++)
             {
-                if (ValueNoise.Hash2(kk, crest, seed + ArmRootSalt + idRoll) < ArmSlotEmptyBelow)
+                if (ValueNoise.Hash2(kk, armRow, seed + ArmRootSalt) < ArmSlotEmptyBelow)
                 {
                     continue;
                 }
 
-                var s0 = (kk + 0.2 + (0.6 * ValueNoise.Hash2(kk, crest, seed + ArmPositionSalt))) * ArmSpacing;
+                var s0 = (kk + 0.2 + (0.6 * ValueNoise.Hash2(kk, armRow, seed + ArmPositionSalt))) * ArmSpacing;
                 var root = CrestAt(sp, crest, offFrac, pass, maxHalf, s0);
                 if (root.Half < 2.5)
                 {
                     continue; // arms only off a massif, never off a pass
                 }
 
-                var side = ValueNoise.Hash2(kk, crest, seed + ArmSideSalt) < 0.5 ? -1 : 1;
+                var side = ValueNoise.Hash2(kk, armRow, seed + ArmSideSalt) < 0.5 ? -1 : 1;
 
                 // angle from the crest normal (up to about 0.8 rad) as a rational rotation: sin/cos of 2*atan(u)
-                var u = (ValueNoise.Hash2(kk, crest, seed + ArmTiltSalt) - 0.5) * 0.85;
+                var u = (ValueNoise.Hash2(kk, armRow, seed + ArmTiltSalt) - 0.5) * 0.85;
                 var sinT = (2 * u) / (1 + (u * u));
                 var cosT = (1 - (u * u)) / (1 + (u * u));
-                var armLen = 4 + (8 * ValueNoise.Hash2(kk, crest, seed + ArmLengthSalt));
+                var armLen = 4 + (8 * ValueNoise.Hash2(kk, armRow, seed + ArmLengthSalt));
                 var ax = s0;
                 var ay = root.Off + (side * root.Half * 0.6);
                 var bx = ax + (sinT * (armLen + (root.Half * 0.4)));
