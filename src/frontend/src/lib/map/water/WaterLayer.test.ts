@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BufferImageSource, Texture } from 'pixi.js';
 import { WaterLayer } from './WaterLayer';
 import { WATER_FRAGMENT } from './waterShader';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
@@ -48,23 +49,11 @@ describe('WaterLayer', () => {
     Object.assign(waterDebugTuning, DEFAULT_TUNING);
   });
 
-  it('carries the prop-tile mute flag onto its uniform', () => {
-    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
-    layer.tick(0);
-    expect(uniformsOf(layer).uPropMute).toBe(1);
-
-    waterDebugFlags.propTileMute = false;
-    layer.tick(16);
-    expect(uniformsOf(layer).uPropMute).toBe(0);
-  });
-
-  it('never mutes on the world map, which draws no coastal art to protect', () => {
-    // World mode skips sea tiles entirely, so there is no boat or rock on
-    // screen there — muting would only thin the foam on a fifth of every
-    // coastline for nothing.
-    const layer = new WaterLayer('world', TILE_W, TILE_H);
-    layer.tick(0);
-    expect(uniformsOf(layer).uPropMute).toBe(0);
+  it('ends the caustics inside the foam band', () => {
+    // The ribbons end inside the foam band, never short of it: the keep-off
+    // plus the per-ribbon spread (0.1) stays inside the foam width (0.3).
+    expect(waterDebugTuning.causticCullHexes + 0.1).toBeLessThanOrEqual(waterDebugTuning.foamWidthHexes * 0.7);
+    expect(waterDebugTuning.causticCullHexes).toBeLessThan(waterDebugTuning.foamWidthHexes);
   });
 
   it("clamps the caustics' keep-off distance to the range the mask can express", () => {
@@ -282,20 +271,40 @@ describe('WaterLayer', () => {
     expect(u.uCausticBlobs).toBe(1);
   });
 
-  it('shrinks the foam band and its ragged edge by the same factor over a prop tile', () => {
+  it('keeps caustics and foam off the art dry mask', () => {
     // A regression guard on GLSL, which is the honest place for it: there is no
-    // CPU-side copy of this arithmetic to test, and the bug it guards was
-    // invisible to every uniform-level assertion.
-    //
-    // uFoamNoise is an *absolute* displacement in tile widths, so when the band
-    // narrows over a boat or rock the displacement has to narrow with it. It
-    // did not, and at a quarter width the 0.09-tile edge noise was over a third
-    // of the band's whole reach: measured on screen the foam swung back onto
-    // the rock on every positive excursion of the noise, which is exactly the
-    // artifact the narrowing exists to remove.
-    const reach = WATER_FRAGMENT.split('\n').find((line) => line.includes('float reach ='));
-    expect(reach).toBeDefined();
-    expect(reach).toContain('uFoamNoise * shrink * edge');
+    // CPU-side copy of this arithmetic to test. The shader samples the dry mask
+    // texture, and both the caustic layers (via `quiet`) and the foam multiply
+    // by what is left of it.
+    expect(WATER_FRAGMENT).toContain('uniform sampler2D uWaterDry;');
+    expect(WATER_FRAGMENT).toContain('float quiet = (1.0 - dry)');
+    const foam = WATER_FRAGMENT.split('\n').find((line) => line.includes('float foam ='));
+    expect(foam).toContain('(1.0 - dry)');
+  });
+
+  it('dims caustics and darkens foam by the shadow channel of the art mask', () => {
+    expect(WATER_FRAGMENT).toContain('float shade = dryS.r;');
+    expect(WATER_FRAGMENT).toContain('float quiet = (1.0 - dry) * (1.0 - shade)');
+    expect(WATER_FRAGMENT).toContain('const float SHADOW_FOAM = 0.45;');
+    const foamColor = WATER_FRAGMENT.split('\n').find((line) => line.includes('vec3 foamColor ='));
+    expect(foamColor).toContain('(1.0 - SHADOW_FOAM * shade)');
+    // Darkened colour only: the foam's alpha is not scaled by the shade.
+    const foam = WATER_FRAGMENT.split('\n').find((line) => line.includes('float foam ='));
+    expect(foam).not.toContain('shade');
+  });
+
+  it('binds the "nothing is dry" placeholder until a dry mask is set, and the given texture after', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const resources = layer.mesh.shader!.resources as Record<string, unknown>;
+    const placeholder = resources.uWaterDry;
+    expect(placeholder).toBeDefined();
+
+    const texture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1 }) });
+    layer.setDryTexture(texture);
+    expect(resources.uWaterDry).toBe(texture.source);
+
+    layer.setDryTexture(null);
+    expect(resources.uWaterDry).toBe(placeholder);
   });
 
   it('never draws a sea body in settlement mode — the painted water tiles are it', () => {
@@ -429,19 +438,16 @@ describe('WaterLayer', () => {
       expect(uniformsOf(layer)).toEqual(before);
     });
 
-    it('flips uPropMute and uSeaBody on the next tick after switching', () => {
+    it('flips uSeaBody on the next tick after switching', () => {
       // Sanity check that setMode changes real rendered behaviour, not just
-      // the three foam uniforms it directly writes — the mode-dependent
-      // branches in tick() key off the same private field.
+      // the three foam uniforms it directly writes.
       const layer = new WaterLayer('world', TILE_W, TILE_H);
       layer.tick(0);
       expect(uniformsOf(layer).uSeaBody).toBe(1);
-      expect(uniformsOf(layer).uPropMute).toBe(0);
 
       layer.setMode('settlement');
       layer.tick(16);
       expect(uniformsOf(layer).uSeaBody).toBe(0);
-      expect(uniformsOf(layer).uPropMute).toBe(1);
     });
   });
 });

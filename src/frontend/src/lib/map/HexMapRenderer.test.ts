@@ -957,18 +957,18 @@ describe('waterMaskTerrainFor', () => {
     { q: 1, r: 0, terrain: 'bog' },
   ]);
 
-  it.each(['settlement', 'world'] as const)('counts a bog lake as land in %s mode', (mode) => {
-    const terrain = waterMaskTerrainFor(world, mode);
+  it('counts a bog lake as land', () => {
+    const terrain = waterMaskTerrainFor(world);
     expect(world.isLand(0, 0)).toBe(false);
     expect(terrain.isLand(0, 0)).toBe(true);
     expect(terrain.isLand(1, 0)).toBe(true);
   });
 
-  it.each(['settlement', 'world'] as const)('still counts the sea as water in %s mode', (mode) => {
-    expect(waterMaskTerrainFor(world, mode).isLand(5, 5)).toBe(false);
+  it('still counts the sea as water', () => {
+    expect(waterMaskTerrainFor(world).isLand(5, 5)).toBe(false);
   });
 
-  it.each(['settlement', 'world'] as const)('answers noFoam for a river mouth only, in %s mode', (mode) => {
+  it('answers noFoam for a river mouth only', () => {
     const rivers = new StaticWorldModel([
       { q: 0, r: 0, terrain: 'grass' },
       { q: 1, r: 0, terrain: 'grass' },
@@ -977,7 +977,7 @@ describe('waterMaskTerrainFor', () => {
       { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null },
       { q: 1, r: 0, shape: 'straight', inDirections: ['NE'], outDirection: 'SW' },
     ]);
-    const terrain = waterMaskTerrainFor(rivers, mode);
+    const terrain = waterMaskTerrainFor(rivers);
     expect(terrain.noFoam!(0, 0)).toBe(true);
     expect(terrain.noFoam!(1, 0)).toBe(false);
     expect(terrain.noFoam!(5, 5)).toBe(false);

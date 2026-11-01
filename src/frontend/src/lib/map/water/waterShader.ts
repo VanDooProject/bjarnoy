@@ -66,6 +66,7 @@ out vec4 finalColor;
 uniform sampler2D uWaterMask;
 uniform sampler2D uWaterTaint;
 uniform sampler2D uWaterNoFoam;
+uniform sampler2D uWaterDry;
 
 uniform float uTime;
 uniform float uWaveTime;
@@ -118,8 +119,6 @@ uniform float uCausticBlobSoft;
 uniform float uCausticBlobAlpha;
 uniform vec3 uCausticBlobColor;
 uniform float uFarReach;
-uniform float uPropMute;
-uniform float uPropFoamScale;
 uniform vec3 uTaintShallowColor;
 uniform vec3 uTaintDeepColor;
 uniform vec3 uTaintFoamColor;
@@ -448,18 +447,27 @@ float blobField(vec2 ground, float t, float offshore) {
 // The mask's channels, named. R: the **signed** near distance, 0.5 exactly on
 // the coastline, below it land and above it water. G: unsigned distance from
 // land over the far range, which is all the wave coast-fade needs. B: per-hex
-// seed. A: the prop-tile mute, 1 over a coastal tile carrying a boat or a rock
-// and ramping to 0 just outside it.
+// seed. A: unused.
 //
 // Nothing here branches on a *step* in the mask. Every channel is a continuous
 // ramp, and that is deliberate: sampled with linear filtering, a 0/255 step's
 // crossing is decided by the texel raster rather than by the hexagon the art
 // draws — which is what made the foam's inner edge wobble around the tile edge
 // instead of sitting on it, back when the shader picked a side off a coverage
-// bit. Both R and A are continuous across their boundaries, so filtering places
-// them within a fraction of a texel of the real edge.
+// bit. R is continuous across the coastline, so filtering places it within a
+// fraction of a texel of the real edge.
 vec4 sampleMask() {
   return texture(uWaterMask, vUV);
+}
+
+// The art dry mask (docs/design/water-shader.md §4.4b): 1 where the painted
+// tile art under the water is not plain water (rock, boat, dock, hut, their
+// reflections), 0 elsewhere, in the alpha channel; the red channel is the shade
+// the art paints on the water (a soft shadow, darker than plain water but not
+// dry), 1 at full shade. A render texture over the same world rect as the
+// mask, so it takes the same UVs.
+vec4 sampleDryMask() {
+  return texture(uWaterDry, vUV);
 }
 
 // The tainted-water field (docs/design/water-shader.md's "Tainted water"
@@ -483,11 +491,15 @@ float sampleNoFoam() {
 // on R, so the coastline the mask believes in reads as a crisp line you can
 // lay over the painted art and see any disagreement immediately. This is what
 // the throwaway spike existed for, kept as a permanent option.
-vec4 maskDebugColor(vec4 m) {
+vec4 maskDebugColor(vec4 m, vec4 dryS) {
   float contour = step(0.5, fract(m.r * 8.0));
-  vec3 col = vec3(m.r * contour, m.g, m.a);
+  // Dry in blue, shade in red (added to the contour bands).
+  vec3 col = vec3(max(m.r * contour, dryS.r), m.g, dryS.a);
   return vec4(col, 0.85);
 }
+
+// How much of its colour the foam loses in full shade (§4.4b shadow channel): darker, but still clearly foam.
+const float SHADOW_FOAM = 0.45;
 
 void main() {
   vec4 m = sampleMask();
@@ -503,7 +515,7 @@ void main() {
   vec2 vGround = vec2(vWorld.x, vWorld.y / uGroundSquash);
 
   if (uShowMask > 0.5) {
-    vec4 dbg = maskDebugColor(m);
+    vec4 dbg = maskDebugColor(m, sampleDryMask());
     finalColor = vec4(dbg.rgb * dbg.a, dbg.a);
     return;
   }
@@ -517,23 +529,15 @@ void main() {
   // On land, only the foam's short reach onto the beach has anything to draw.
   if (!water && (uShorelineFoam < 0.5 || -dist > uFoamWidth * uFoamLandReach)) discard;
 
-  // --- §4.4 prop-tile mute -------------------------------------------------
-  // Two of the three coastal water variants paint a solid object sitting in the
-  // water: a beached boat, a rock. A drifting surface pattern running across one
-  // reads as painted onto the object rather than flowing around it, so over
-  // those tiles the shader quietens down: the surface pattern goes entirely and
-  // the foam narrows to uPropFoamScale of its width.
-  //
-  // Narrowed rather than removed, because removing it was worse than the artifact.
-  // Foam is the coastline's outline as much as it is water, and taking it off one
-  // hex leaves a bare stretch of shore that the eye finds immediately — much
-  // faster than it finds a ribbon crossing a rock. A thin line still closes the
-  // outline while leaving the prop its own patch of still water.
-  //
-  // A is baked as a ramp (1 on the tile, 0 just past it) rather than a per-hex
-  // flag, so the handover is a soft edge rather than a hexagon stamped into the
-  // coast.
-  float mute = m.a * uPropMute;
+  // --- §4.4b art dry mask --------------------------------------------------
+  // Pixels of the painted tile art that are not plain water (a rock, a boat, a
+  // dock, a hut, their reflections). Caustics and foam are drawn only on water,
+  // so both are multiplied by what is left of this.
+  vec4 dryS = sampleDryMask();
+  float dry = dryS.a;
+  // The soft shadows the art paints on the water: light through clear water does not appear in shade, so caustics are dimmed
+  // by it, and foam is darkened by it (SHADOW_FOAM).
+  float shade = dryS.r;
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
@@ -601,20 +605,19 @@ void main() {
       // keep-off sits past where R saturates.
       float offshore = m.g * uFarReach;
       // Caustics read as sunlight through clear water, and tainted water
-      // isn't clear — so the field is faded out by taint exactly like it
-      // already is over a muted prop tile, the two multiplied together
-      // rather than picking one.
+      // isn't clear — so the field is faded out by taint, multiplied with the
+      // art dry mask rather than picking one.
       // Kept faintly rather than switched off: with the taint wash under them
       // a few dim ribbons stop tainted water reading as a flat fill.
-      float quiet = (1.0 - mute) * (1.0 - 0.75 * taint);
+      float quiet = (1.0 - dry) * (1.0 - shade) * (1.0 - 0.75 * taint);
 
       // Three layers, dark to light, in that order: the shadows are depth *in*
       // the water, so both light nets draw over them, and the fine net is the
       // highlight on top of the coarse one.
       if (uCausticBlobs > 0.5) {
-        float shade = blobField(vGround, uWaveTime, offshore) * uCausticBlobAlpha * quiet;
-        if (shade > 0.004) {
-          acc = vec4(uCausticBlobColor * shade, shade) + acc * (1.0 - shade);
+        float blob = blobField(vGround, uWaveTime, offshore) * uCausticBlobAlpha * quiet;
+        if (blob > 0.004) {
+          acc = vec4(uCausticBlobColor * blob, blob) + acc * (1.0 - blob);
         }
       }
 
@@ -648,7 +651,7 @@ void main() {
         // separate wave-taint colour would just be one more thing to keep in
         // step with the foam's.
         vec3 crestColor = mix(uWaveColor, uTaintFoamColor, taint);
-        float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha * mix(1.0, 0.4, taint) * (1.0 - mute);
+        float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha * mix(1.0, 0.4, taint);
         acc = vec4(crestColor * crest, crest) + acc * (1.0 - crest);
       }
     }
@@ -674,8 +677,7 @@ void main() {
   // the four noise fields below is dead work. It was ungated, so a third of a
   // tile's worth of foam was costing four fbm-scale evaluations on every water
   // pixel of the viewport, and open sea is most of a settlement view. The bound
-  // is deliberately loose (it ignores the prop-tile narrowing, which can only
-  // make the real band smaller) so it can never clip the band it is skipping.
+  // is deliberately loose (full surge, full noise) so it can never clip the band it is skipping.
   float foamReach = uFoamWidth * (1.0 + uFoamSurge) + uFoamNoise;
   // River mouths carry no foam: skip the block (and its noise) where the
   // field has fully suppressed it, and scale the result by what is left of it
@@ -700,12 +702,7 @@ void main() {
     // interpolates across. That is why the band read as drawn rather than as
     // water — its only variation was per-hex and discontinuous.
     float surgePhase = uTime * uSurgeRate + (noise(np * 0.22) + noise(np * 1.6)) * 6.2831853;
-    // ...and narrows to uPropFoamScale of itself over a prop tile, so the
-    // coastline keeps an unbroken outline while the boat or rock keeps its own
-    // patch of still water. One factor, applied to the ragged edge below as
-    // well: it is the whole band that shrinks, not only its centre line.
-    float shrink = mix(1.0, uPropFoamScale, mute);
-    float width = uFoamWidth * (1.0 + uFoamSurge * sin(surgePhase)) * shrink;
+    float width = uFoamWidth * (1.0 + uFoamSurge * sin(surgePhase));
 
     // Shore proximity: a *plateau* at 1 from the coastline out to
     // uFoamInner of the band, then a falloff to 0 at its edge. The plateau is
@@ -731,13 +728,10 @@ void main() {
     // Two octaves: the coarse one tears the boundary at the scale of a cove, the
     // fine one at the scale of the band's own width. uFoamNoise is in tile
     // widths — an absolute displacement rather than a fraction of the band — so
-    // it takes the same \`shrink\` the width does. Left absolute it swamped the
-    // narrowed band over a prop tile: measured, 0.08 tiles of wander on a
-    // 0.15-tile band, which undid most of the narrowing and put the foam back on
-    // the rock on every positive excursion.
+    // it is not scaled by the width.
     float edge = (fbm(np + uFoamWind * uTime) - 0.5) * 2.0
                + (noise(np * 4.0 + uFoamWind * uTime * 2.2) - 0.5);
-    float reach = max(width + uFoamNoise * shrink * edge, width * uFoamInner + 0.001);
+    float reach = max(width + uFoamNoise * edge, width * uFoamInner + 0.001);
 
     float shore = dist >= 0.0
       ? 1.0 - smoothstep(width * uFoamInner, reach, dist)
@@ -759,8 +753,9 @@ void main() {
     // dims a little further than they do — foam is brighter than open water
     // to begin with, so it needs more of a pull to stop reading as clean surf
     // against a dead coast.
-    vec3 foamColor = mix(uFoamColor, uTaintFoamColor, taint);
-    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y) * mix(1.0, 0.55, taint) * (1.0 - noFoam);
+    // Foam in the art's shadow darkens (colour only, alpha stays) by up to SHADOW_FOAM, so it reads as lying in the shade.
+    vec3 foamColor = mix(uFoamColor, uTaintFoamColor, taint) * (1.0 - SHADOW_FOAM * shade);
+    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y) * mix(1.0, 0.55, taint) * (1.0 - noFoam) * (1.0 - dry);
     acc = vec4(foamColor * foam, foam) + acc * (1.0 - foam);
   }
 

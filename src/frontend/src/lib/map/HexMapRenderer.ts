@@ -73,8 +73,9 @@ import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './marker
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
+import { WaterDryLayer, type DryEntry } from './water/waterDryMask';
 import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
-import { hasWaterProp, type TerrainLookup, type WaterMask } from './water/waterMask';
+import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
@@ -1504,19 +1505,13 @@ export function wheelPassesToPage(o: {
  * them. This is also what the bake worker already answers (its
  * seed-only `isLandFor` never sees a bog lake), so both bake paths agree.
  */
-export function waterMaskTerrainFor(worldModel: WorldModel, mode: HexMapRendererOptions['mode']): TerrainLookup {
+export function waterMaskTerrainFor(worldModel: WorldModel): TerrainLookup {
   const isLand = (q: number, r: number) => worldModel.isLandOrLake(q, r);
   const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
   // River mouths carry no sea foam (both modes draw foam). The worker gets the
   // same hexes as a list (`riverMouthHexKeys`), so both bake paths agree.
   const noFoam = (q: number, r: number) => worldModel.getRiverTile(q, r)?.shape === 'mouth';
-  if (mode !== 'settlement') return { isLand, isWastedLand, noFoam };
-  return {
-    isLand,
-    hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
-    isWastedLand,
-    noFoam,
-  };
+  return { isLand, isWastedLand, noFoam };
 }
 
 /**
@@ -1843,6 +1838,10 @@ export class HexMapRenderer {
   // here because which view this is decides whether it draws a sea body at all
   // (§4.1), and `options` isn't in scope for a field initialiser.
   private waterLayer: WaterLayer;
+  // The art dry mask (docs/design/water-shader.md §4.4b): where the sea-hex art is not plain water. Settlement mode only.
+  private waterDry = new WaterDryLayer();
+  private waterDryEntries: DryEntry[] = [];
+  private waterDryLoadStarted = false;
   // The world rect the current water mask was baked over — `null` until the
   // first bake. Re-baked only when the viewport leaves it (§2.2), not per
   // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
@@ -3952,10 +3951,6 @@ export class HexMapRenderer {
         tileHeight: TILE_H,
         seed: worldModel.seed,
         generation: worldModel.generation,
-        // Only settlement mode reads the prop channel (WaterLayer sets
-        // uPropMute nowhere else), so only it pays for the list — and the
-        // list, not a lookup, is what lets that mode bake off-thread at all.
-        buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
         wastedRevealed: worldModel.isWastedRevealed(),
         // Both modes draw sea foam, so both need the mouths.
         noFoamHexes: worldModel.riverMouthHexKeys(),
@@ -3998,29 +3993,38 @@ export class HexMapRenderer {
     this.waterMaskRegionBuilt = region;
     this.waterMaskWastedRevealed = wastedRevealed;
     this.waterMaskRiverRevision = riverRevision;
+    this.refreshWaterDry();
+  }
+
+  /**
+   * Redraws the art dry mask over the water mask's region and binds it to the
+   * water shader. Runs when a mask is applied or the sea hexes' art changes,
+   * not per frame. Waits for the (lazily decoded) mask atlas on first use.
+   */
+  private refreshWaterDry() {
+    const region = this.waterMaskRegionBuilt;
+    const renderer = this.app?.renderer;
+    if (this.options.mode !== 'settlement' || !region || !renderer) return;
+    if (!this.waterDry.ready) {
+      if (!this.waterDryLoadStarted) {
+        this.waterDryLoadStarted = true;
+        this.waterDry.load().then(
+          () => this.refreshWaterDry(),
+          (err) => console.warn('HexMapRenderer: water dry masks failed to load', err),
+        );
+      }
+      return;
+    }
+    this.waterLayer.setDryTexture(this.waterDry.draw(renderer, region.rect, this.waterDryEntries, TILE_W));
   }
 
   /**
    * What the bake is allowed to ask about terrain — the *fallback* path's
    * lookup, used only where there is no worker to bake on (jsdom, a browser
    * that refuses a module worker).
-   *
-   * World mode hands over an `isLand`-only lookup rather than the WorldModel
-   * itself. `TerrainLookup.getTile`/`hasProp` exist solely to spot the
-   * coastal-water prop tiles the A channel mutes (`hasWaterProp`), and
-   * `WaterLayer.tick` only ever sets `uPropMute` in settlement mode — world
-   * mode draws no sea tiles, so there is no painted boat or rock to protect.
-   * Omitting both is the documented way to say so: it zeroes the A channel,
-   * which is what the world-mode shader reads anyway, and drops both a second
-   * WorldModel lookup per texel and the extra distance transform the prop ramp
-   * would need.
-   *
-   * Settlement mode answers through `hasProp` rather than `getTile` so the
-   * fallback asks the same question the worker does, terrain-only, instead of
-   * materialising a `Tile` per water texel.
    */
   private waterMaskTerrain(): TerrainLookup {
-    return waterMaskTerrainFor(this.options.worldModel, this.options.mode);
+    return waterMaskTerrainFor(this.options.worldModel);
   }
 
   /**
@@ -4276,6 +4280,16 @@ export class HexMapRenderer {
 
     this.syncSpriteLayer(this.terrainBase, baseEntries);
     this.syncSpriteLayer(this.terrainTop, topEntries);
+
+    // The base art of every sea hex, for the water shader's dry mask. Placed
+    // exactly as syncSpriteLayer places the sprite.
+    this.waterDryEntries = [];
+    for (const { texture, coord, crop } of baseEntries.values()) {
+      if (crop || worldModel.getTile(coord.q, coord.r).terrain !== 'sea') continue;
+      const grid = isoGridPosition(coord, TILE_W, TILE_H);
+      this.waterDryEntries.push({ texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET });
+    }
+    this.refreshWaterDry();
   }
 
   // zip 7: world-map islands are flat coloured hexes, not tile art — see
@@ -6193,6 +6207,9 @@ export class HexMapRenderer {
     this.options.mode = mode;
     this.idleDrift = mode === 'world';
     this.waterLayer.setMode(mode);
+    // World mode draws no sea tiles, so nothing is dry there.
+    this.waterDryEntries = [];
+    if (mode === 'world') this.waterLayer.setDryTexture(null);
     // Reinsert every layer in the new mode's order — addChild only moves a
     // single already-parented child to the end, it doesn't reorder the rest
     // (see worldLayerOrder's own doc comment on why the water mesh's
@@ -6239,6 +6256,7 @@ export class HexMapRenderer {
     this.blackFogLayer.destroy();
     this.whiteMistLayer.destroy();
     this.waterLayer.destroy();
+    this.waterDry.destroy();
     // The cached bog edge contexts are only borrowed by the pooled Graphics, so the stage teardown below won't free them.
     this.clearBogEdgeCache();
     this.app?.destroy(false, { children: true });

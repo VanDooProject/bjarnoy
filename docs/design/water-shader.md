@@ -140,9 +140,9 @@ An RGBA8 texture over a world-space rect:
 | **R** | The **signed** near distance from the coastline, `0.5 + d / (2 * NEAR_SPAN_TILES)`. 0.5 is exactly the coastline, below it is land, above it is water. |
 | **G** | Unsigned distance from the nearest land, **in ground space**, normalised over `FOAM_REACH_TILES` — the far field, read by §4.2's wave coast-fade and §4.2b's caustic keep-off. |
 | **B** | Per-hex pseudo-random seed, as fog v2's B channel does (`demoFogMask.ts`'s `noiseSeed`). **Nothing samples it any more** — see §4.3 on why a per-hex value is the wrong shape for anything the foam does — and it is kept for the debug view and for whatever wants a per-hex constant next. |
-| **A** | The prop-tile mute (§4.4b): `1` over a coastal water tile whose art carries a boat or a rock, ramping to `0` over `PROP_MUTE_FADE_TILES` outside it. |
+| **A** | Unused, baked as 255. What the shader must keep off in the painted art is not a mask channel any more: it is the art dry mask (§4.4b), a separate texture. |
 
-All four channels are spoken for, so the tainted-water field around a revealed
+The mask's RGBA bytes are spoken for, so the tainted-water field around a revealed
 wasted island (§4.4c) is a **second, single-purpose bake** — `WaterMask.taint`,
 uploaded as its own texture — rather than a fifth channel squeezed in here.
 
@@ -161,11 +161,6 @@ edge, and interpolation *helps* instead of blurring a silhouette.
 `NEAR_SPAN_TILES` is 0.6 either way, which spends the byte where the foam is —
 about 0.8 world units per level, against the ~2 a single channel spanning the
 whole `FOAM_REACH` would give.
-
-A is a *ramp* for the same reason, not a per-hex flag. It exists to quieten the
-shader over a tile, and a switch with a hexagonal edge puts a hexagonal hole in
-the foam collar — which is much more visible than whatever it was protecting.
-See §4.4b.
 
 **G is baked in ground space too.** The raster transform runs with its y axis
 weighted by `1 / squash²`, so a step in y costs what it covers on the ground
@@ -557,6 +552,11 @@ stops looking like the boundary of the water and starts looking like the
 brightest part of a texture. A band of plain water against the coast reads as
 the surface only catching the light once there is some depth under it.
 
+The keep-off is short on purpose: `causticCullHexes` is 0.1 and
+`CAUSTIC_CULL_SPREAD_TILES` 0.1, so every ribbon ends 0.1 to 0.2 tiles out, inside the foam band
+(`foamWidthHexes` 0.3, breathing with the surge), never short of it. At 0.25 the ends showed as a strip of plain water before the foam. What keeps ribbons
+off rocks, boats and buildings is not this distance but the art dry mask (§4.4b).
+
 **Cut, not faded.** The first version ramped them in over half a hex, and the
 ramp itself became the artifact: a whole belt of ribbons at half strength, and a
 half-strength ribbon does not read as a ribbon further away, it reads as a
@@ -801,12 +801,8 @@ On top of that:
   fraction, and with both constants below 1 the real displacement came out around
   a fiftieth of a tile: one or two screen pixels. That is the answer to "why does
   the band read as a drawn stroke" — it had no structure at any scale between
-  per-hex and sub-pixel. A ragged edge does have to be re-checked when the band
-  narrows (§4.4b takes it to a quarter over a prop tile) — and re-checking it is
-  how the prop-tile regression was found: the clamp keeping the reach outside the
-  plateau bounds the *inner* edge, and nothing was bounding the outer one. It is
-  scaled by the same factor as the width now, so the raggedness stays in
-  proportion to the band it is tearing.
+  per-hex and sub-pixel. The foam is drawn at this full width everywhere; over painted
+  objects it is cut by the art dry mask (§4.4b), not narrowed.
 - **Surge**: the band's width breathes, `width = FOAM_WIDTH * (1 + FOAM_SURGE *
   sin(t * SURGE_RATE + coarseNoise(p) + hexScaleNoise(p)))`. Two scales of
   de-synchronisation — about seven hexes for the swell, about one for the
@@ -851,68 +847,101 @@ already provides.
 term is a `smoothstep` over it, and GLSL leaves `smoothstep` undefined when its
 two edges coincide.
 
-### 4.4b Prop-tile mute — `uPropMute`
+### 4.4b Art dry mask — `uWaterDry`
 
-Two of the three `coastalwatertile_*` variants aren't plain water. `variant000`
-paints a beached boat, `variant001` a rock — both lit and shaded as solid objects
-sitting *in* the water. `worldGenerator`'s weights make them 10% each of the
-coastline, the plain tile the other 80%.
+The water mesh draws caustics and foam over the painted water tiles. Several of
+those tiles are not plain water: `coastalwatertile` variants paint a beached boat
+or a rock, and the fishing hut, dockyard, palisade ends, shrine, packice and
+their reflections stand *in* the water. A surface pattern running across one of
+those reads as painted onto the object rather than flowing around it. So the
+shader keeps caustics and foam off every pixel of the art that is not plain
+water.
 
-A drifting surface pattern running across one of those objects reads as painted
-*onto* it rather than flowing around it, which is exactly the illusion the prop
-is there to create. So over those tiles the shader quietens down: the mask bakes
-A as 1 over the hex, the surface pattern is multiplied out by it, and the foam
-**narrows to `PROP_FOAM_SCALE` (a quarter) of its width**.
+**The mask comes from the art itself, at build time**, per pixel, not from a
+per-hex flag: a hexagonal hole in a coastline is far more visible than the prop
+it protects, and a per-hex rule cannot follow a boat's outline anyway.
 
-Narrowed, not removed. Removing it was the first attempt and it was worse than
-the artifact it fixed: foam is the coastline's *outline* as much as it is water,
-so a bare stretch of shore is found by the eye immediately — much faster than it
-finds a ribbon crossing a rock. A thinner line still closes the outline while
-leaving the boat or rock its own patch of still water.
+*Build* (`build/waterDryMasks.ts`, a Vite plugin serving `virtual:water-dry-masks`;
+the pure per-frame maths is `dryMaskCore.ts`):
 
-**And the ragged edge narrows with it.** `uFoamNoise` is an *absolute*
-displacement in tile widths (§4.3), so it has to be multiplied by the same factor
-the width is — one `shrink`, applied to both. Left absolute it swamped the very
-band it was decorating: 0.09 tiles of wander either side of a 0.15-tile band, so
-on every positive excursion of the noise the foam reached ~0.23 tiles and went
-straight back onto the rock. That is the whole reason a half looked like it
-worked better than a quarter for a while: at a half the mean width was wide
-enough to hide the fact that the narrowing was only happening to the mean.
+1. Take every non-showcase atlas page and every `_base` frame (the half drawn
+   *under* the water mesh; `top` frames are drawn above it and never need
+   masking), placed on the full 200x300 source canvas through its
+   `spriteSourceSize`. WebP pages are lossless, so the atlas pixels equal the
+   source PNGs.
+2. The reference frames are the plain water tiles
+   (`coastalwatertile|watertile|taintedwater|blacksandcoast|icecoast` + orientation
+   + `_base`). For each other `_base` frame with an orientation token, compare it
+   with every reference of the **same orientation**: a pixel is "the same" when
+   both are opaque and no RGB channel differs by more than **6**
+   (`SAME_PIXEL_EPS`). The ratio is the share of the reference's opaque pixels
+   the frame repeats; the best reference wins.
+3. A frame whose best ratio is **0.4** or more (`WATER_MATCH_MIN_RATIO`) is
+   water-based art and gets a mask. Measured over the vendored art, water-based
+   frames score 0.57 and up (coastal variants 0.86 to 1.0, huts about 0.8,
+   palisade ends 0.77 to 0.89, dockyards up to 0.74, the shrine about 0.57,
+   packice about 0.72), every land tile 0.14 or less. Reference frames get no mask.
+4. Dry = art opaque **and** (reference transparent **or** RGB differs by more
+   than **20**, `DRY_PIXEL_EPS`). Colour does not matter: a blue sail is dry
+   because it differs from the reference pixel at that spot, not because of its
+   hue. 20 rather than the 6 of step 2: the soft ambient shadow the art casts on
+   the water around an object is a few dithered levels darker, and at 6 it came
+   out as a speckled dry halo, which cut dark blotchy holes into the foam. At 20
+   only the object and its contact shadow are dry.
+5. The 0/1 map is closed (grown by 2 source pixels, shrunk by 1) — which fills
+   the pinholes the dithering leaves inside an object and leaves the mask one
+   pixel outside its outline, so the shader stops just outside it — and box-downsampled 2x2 to **half resolution**, which
+   makes the edge soft. All cells are shelf-packed into one RGBA PNG (A is the dry
+   mask, R the shadow channel below, G and B 0) that the module exports as a data URL, with each frame's cell
+   rect and the source rect it covers. Computed once per build or dev-server
+   start.
 
-With the edge scaled too, a quarter is a quarter along the whole band rather than
-only at its centre line, and the earlier reading that a quarter was "too thin to
-survive the art" — 3–4 screen pixels on a north-facing edge, on one tile the
-whole band up on the beach — was measuring the unscaled noise, not the width.
+6. **Shadow channel.** The soft shadows the art paints on the water are darker
+   than the plain water but within the 20 of step 4, so they are not dry. Light
+   through clear water does not appear in shade, so they must dim the caustics
+   and darken the foam. Per source pixel where art and reference are both opaque
+   and the pixel is not dry: `d = max(0, lumRef - lumArt) / max(lumRef, 1)` with
+   Rec.709 luma, `shadow = clamp(d / 0.25, 0, 1)` (`SHADOW_FULL_DARKENING`: 25%
+   darker is full shade; softer shadows scale linearly). Dry and brighter pixels
+   are 0 (dry already gates the former). The map is box-blurred by 2 source
+   pixels (`SHADOW_BLUR_RADIUS`; the render is dithered, raw per-pixel darkening
+   is speckled), cleared below the top face's front edges like dry, and
+   box-downsampled 2x2 like dry. It is stored in the red channel
+   (`artMasksHalf` returns `{ dry, shadow }`).
 
-Three details are load-bearing:
+*Runtime* (`waterDryMask.ts`, `WaterDryLayer`): the module is imported lazily.
+For every sea hex's base art in settlement mode the renderer draws, into one
+render texture covering the water mask's world rect (one pixel per world
+unit, long side capped at 2048, linear filtering), the frame's mask cell at the
+art sprite's position plus the cell's source rect scaled by `tileWidth / 200`.
+Frame names come from `Texture.label`, which Pixi's `Spritesheet` sets to the
+frame key. The texture is redrawn when the water mask is applied or the terrain
+base entries change, not every frame, and bound as `uWaterDry`, sampled with the
+same `vUV` as the water mask. Overlapping sprites must union both channels
+independently, so the sprites use blend mode `'max'` (blend equation MAX with
+ONE/ONE factors: WebGL2, `EXT_blend_minmax` on WebGL1, WebGPU `max`). The mask
+atlas texture is created with `alphaMode: 'no-premultiply-alpha'` (on top of
+`createImageBitmap(..., { premultiplyAlpha: 'none' })`): Pixi's default would
+premultiply on upload, scaling R by A and erasing the shadow wherever nothing
+is dry. With tint `0xffffff` and alpha 1 the batcher outputs the sampled RGBA
+unchanged. World mode, and the time before the masks have
+loaded, bind a 1x1 texture of zeros: nothing is dry.
 
-- **The ramp, not the hex.** A per-hex boolean cuts the foam collar off at a
-  hexagon edge, and a hexagonal hole in a coastline is far more visible than the
-  prop it is protecting — the same failure mode `isNearLand` has in the wave
-  field, and the reason §4.2's coast fade is continuous too. A is a smoothstep
-  from 1 on the tile to 0 `PROP_MUTE_FADE_TILES` (0.4 tiles) outside it.
-  Smoothstep rather than linear so the *rate* also goes to zero at the far end:
-  a linear ramp meets the unmuted water at a corner, and a corner in a
-  multiplier applied to a bright band is visible as a ring even though the value
-  is continuous there. The fade is 0.2 tiles, cut back from 0.4 — measured, the
-  longer one left 30% of one island's coastline at reduced width and another 31%
-  part way there, because a single prop reaches over 1.8 hex edges of coast.
-- **The sea body is not muted.** It is a flat colour with no motion in it, so
-  there is nothing for the prop to be at odds with; muting it would only punch a
-  hole in the world map's water.
-- **Settlement mode only.** World mode draws no sea tiles at all
-  (`rebuildTerrainFlat` skips them; the sea there is §4.1's body), so there is no
-  boat or rock on screen to protect — and honouring the mute would thin the foam
-  on a fifth of every coastline for nothing. Gated on the mode in `WaterLayer`,
-  the same way `uSeaBody` and `uCaustics` are, rather than in the mask: the bake
-  stays mode-agnostic.
+*Fallback for unknown art*: art on a sea hex that is neither a reference nor has
+a mask cell (anything not water-based) is drawn into the render texture with its
+own alpha, tinted black, so all of its opaque pixels count as fully dry (A =
+art alpha, R = 0: no shadow). Reference
+frames draw nothing.
 
-The bake needs the whole tile, not just its terrain, so `TerrainLookup` gains an
-optional `getTile` — optional because a caller without one gets A all-zero
-(nothing muted), and because `waterMask.test.ts` should still be able to pass a
-bare `isLand`. `WorldModel` already satisfies it. `hasWaterProp` mirrors
-`baseTextureFor`'s own conditions, building included: a fishing hut or dockyard
-replaces the coastal tile with its own art, so there is no prop left to protect.
+The shader reads `vec4 dryS = texture(uWaterDry, vUV);` with `dry = dryS.a` and
+`shade = dryS.r`, and multiplies the caustics (all three layers: blobs, coarse
+net, fine net) by `(1.0 - dry) * (1.0 - shade)` and the foam by `(1.0 - dry)`;
+the foam keeps its full width and edge noise. In shade the foam's colour (not
+its alpha) is also darkened by `(1.0 - SHADOW_FOAM * shade)`, `SHADOW_FOAM =
+0.45`: at full shade it keeps 55% of its brightness, still clearly foam. The
+debug view (`showWaterMask`) shows dry in blue and shade in red. The sea body (§4.1)
+is not masked (it is a flat colour with nothing at odds with the art), and the
+world-mode wave arcs are not either, since world mode has no painted sea tiles.
 
 ### 4.4c Tainted water (wasted islands)
 
@@ -923,7 +952,7 @@ The shader knew nothing about them, so the open sea *around* one of those
 islands stayed the ordinary blue (`#3860b1`), with bright white foam, waves and
 caustics — a lit, living sea wrapped around a dead shore.
 
-The mask's four channels (R/G/B/A above) are all spoken for, so this is a
+The mask's channels (R/G/B above) are spoken for, so this is a
 **second single-purpose bake**, `taint`: one byte per texel, `1.0` in water
 within `TAINT_INNER_TILES` (1 tile) of wasted land, fading smoothly to `0` by
 `TAINT_REACH_TILES` (2.5 tiles) — comfortably past `FOAM_REACH_TILES`, so the
@@ -935,7 +964,7 @@ tile wide, well past the texel-raster error the refine pass exists to correct
 on the third-of-a-tile foam band.
 
 `TerrainLookup` gains an optional `isWastedLand?(q, r)`, the same optional
-shape as `hasProp`/`getTile`: a caller that omits it, or one that never
+shape: a caller that omits it, or one that never
 answers true over the baked region, gets an all-zero `taint` array — which is
 also why every mask baked for a world with no wasted islands (or one not yet
 revealed) stays byte-identical to what shipped before this existed. Reveal
@@ -943,8 +972,7 @@ gating is the caller's job, not the bake's: the worker's `isWastedLand` is
 `wastedRevealed && terrainAt(q, r, world) === 'sea' && wastedTerrainAt(q, r,
 world) !== 'sea'`, mirroring `WorldModel.isWastedLandAt` (now public, so the
 renderer's own inline fallback can ask it directly without materialising a
-`Tile` per water texel — the same reasoning `hasProp` exists for the A
-channel).
+`Tile` per water texel).
 
 `WaterLayer` uploads `taint` as a second texture, `uWaterTaint` — single
 channel (`r8unorm`, no premultiply-alpha concern at all, since there's no
@@ -966,9 +994,9 @@ distance also reads this:
   for "white water", not two to keep in step) by `taint`; alpha scaled by
   `mix(1.0, 0.4, taint)`.
 - **Caustics**: multiplied by `(1.0 - taint)`, folded into the same `quiet`
-  factor the prop-tile mute already uses (`quiet = (1.0 - mute) * (1.0 -
+  factor the art dry mask uses (`quiet = (1.0 - dry) * (1.0 - 0.75 *
   taint)`) — sunlight-through-clear-water ribbons don't belong on water that
-  isn't clear, the same reasoning that already mutes them over a prop tile.
+  isn't clear.
 
 ### 4.4 Uniforms
 
@@ -976,6 +1004,7 @@ distance also reads this:
 sampler2D uWaterMask
 sampler2D uWaterTaint              taint field (§4.4c), single channel
 sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
+sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; A = dry mask, R = shadow; caustics *= (1 - A)(1 - R), foam *= 1 - A, foam colour *= 1 - 0.45 R
 vec3  uTaintShallowColor, uTaintDeepColor, uTaintFoamColor
 float uTime, uWaveTime            base clock; wave clock, scaled by waveSpeed
 float uSeaBody, uMidWaterWaves, uShorelineFoam, uCaustics   0/1
@@ -995,15 +1024,12 @@ float uCausticBlobScale           reciprocal of the blob cell size
 float uCausticBlobDensity         fraction of cells carrying a blob
 float uCausticBlobAlpha;  vec3 uCausticBlobColor
 float uFarReach                   what G is normalised over, so G decodes to tiles
-float uPropMute                   0/1: honour the mask's A channel (§4.4b)
-float uPropFoamScale              width the foam keeps over a prop tile
 vec3  uFoamColor
 float uFoamWidth                  water-side reach, in tile widths
 float uFoamInner                  plateau, as a fraction of the width
 float uFoamLandReach              land-side reach, as a fraction of the width
 vec2  uFoamAlpha                  inner line, outer lace
-float uFoamNoise                  edge displacement, in tile widths — scaled by
-                                  the same factor as the width over a prop tile
+float uFoamNoise                  edge displacement, in tile widths
 float uFoamNoiseScale, uFoamSurge, uSurgeRate;  vec2 uFoamWind
 vec2  uCoastRange                 the mask's two ramps, in tile widths, so the
                                   shader can work in one signed distance
@@ -1038,8 +1064,6 @@ export interface WaterDebugFlags {
   causticShadows: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;       // default true
-  /** Quieten the shader over the boat/rock coastal tiles (§4.4b): no surface pattern, quarter-width foam (edge noise included). */
-  propTileMute: boolean;        // default true
   /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
   seaBody: boolean;             // default true
   /** The world map's Graphics wave squiggles (waveLayer) — its surface pattern of record. */
@@ -1057,7 +1081,7 @@ export interface WaterDebugTuning {
   foamSurge: number;       // 0.18 — well under half; the surge is meant to be
                            //        felt rather than seen.
   waveSpeed: number;       // 1
-  causticCullHexes: number; // 0.35 — the *closest* a ribbon may come to shore;
+  causticCullHexes: number; // 0.1 — the *closest* a ribbon may come to shore;
                             //        each one takes its own distance from here
                             //        up to + CAUSTIC_CULL_SPREAD_TILES
                             //        (§4.2b); clamped to FOAM_REACH_TILES, past

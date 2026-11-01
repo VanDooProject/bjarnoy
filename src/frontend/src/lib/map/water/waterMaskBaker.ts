@@ -15,8 +15,6 @@ export interface AsyncBakeInput {
   tileHeight: number;
   seed: number;
   generation: WorldGenerationConstants;
-  /** Hexes carrying a building, for the prop channel — see BakeRequest. Omitted in world mode, which does not read that channel. */
-  buildingHexes?: number[];
   /** See `BakeRequest.wastedRevealed`. */
   wastedRevealed?: boolean;
   /** River-mouth hexes whose surroundings carry no foam — see `BakeRequest.noFoamHexes`. */
@@ -98,7 +96,6 @@ export class WaterMaskBaker {
       tileHeight: input.tileHeight,
       seed: input.seed,
       generation: input.generation,
-      buildingHexes: input.buildingHexes,
       wastedRevealed: input.wastedRevealed,
       noFoamHexes: input.noFoamHexes,
     };
