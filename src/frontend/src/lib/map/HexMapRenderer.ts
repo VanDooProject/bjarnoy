@@ -64,6 +64,7 @@ import {
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { attachFramePacing } from './framePacing';
+import { splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
@@ -1833,6 +1834,10 @@ export class HexMapRenderer {
   // frames between rebuilds during a drag.
   private deepFogOnly = false;
   private borderLayer = new Graphics();
+  // Settlement mode: one Graphics per bordered hex holding that hex's FRONT border edges, parented to `terrainTop` at
+  // the hex's depth key + BORDER_FRONT_Z so they draw over the hex's own topping (+0.5 is its animation overlay) but
+  // under the toppings of the hexes in front. Pooled like the bog edge graphics; unused ones are hidden on rebuild.
+  private borderFrontPool: Graphics[] = [];
   private riverLayer = new Graphics();
   private hoverLayer = new Graphics();
   // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
@@ -4863,6 +4868,11 @@ export class HexMapRenderer {
   private rebuildBorders(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {
     const { worldModel, mode, playerId } = this.options;
     this.borderLayer.clear();
+    let frontUsed = 0;
+    // Hide the pooled front-edge graphics up front: every early return below leaves them hidden.
+    const hideUnusedFront = () => {
+      for (let i = frontUsed; i < this.borderFrontPool.length; i++) this.borderFrontPool[i].visible = false;
+    };
     fogPerfStats.borderedHexCount = 0;
 
     if (deepFogOnly) {
@@ -4870,10 +4880,14 @@ export class HexMapRenderer {
       // reach this viewport, so nothing in it is explored — there is no
       // border to draw and no per-hex loop worth running over what can be
       // thousands of hexes in a low-zoom world-map viewport.
+      hideUnusedFront();
       return;
     }
 
-    if (!fogDebugFlags.realmBorders) return;
+    if (!fogDebugFlags.realmBorders) {
+      hideUnusedFront();
+      return;
+    }
 
     for (const c of coords) {
       if (fogActive && !worldModel.isExplored(c.q, c.r)) continue;
@@ -4901,16 +4915,29 @@ export class HexMapRenderer {
       // drew a solid mesh over the whole realm instead of a border around it.
       this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
 
-      for (const edge of outerEdgesOf(worldModel, c, tile.ownerId)) {
-        const a = top[edge[0]];
-        const b = top[edge[1]];
-        this.borderLayer.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
-        this.borderLayer
-          .moveTo(a.x, a.y)
-          .lineTo(b.x, b.y)
-          .stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+      // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
+      // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
+      const { back, front } = splitBorderEdges(outerEdgesOf(worldModel, c, tile.ownerId));
+      if (mode === 'settlement') {
+        strokeBorderEdges(this.borderLayer, top, back, color);
+        if (front.length > 0) {
+          let g = this.borderFrontPool[frontUsed];
+          if (!g) {
+            g = new Graphics();
+            this.borderFrontPool.push(g);
+            this.terrainTop.container.addChild(g);
+          }
+          frontUsed++;
+          g.clear();
+          g.visible = true;
+          g.zIndex = isoDepthKey(c) + BORDER_FRONT_Z;
+          strokeBorderEdges(g, top, front, color);
+        }
+      } else {
+        strokeBorderEdges(this.borderLayer, top, [...back, ...front], color);
       }
     }
+    hideUnusedFront();
   }
 
   private rebuildMarkers() {
@@ -6161,6 +6188,19 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
 // the realm's true outer edges get a border stroke, not every claimed
 // hex's full hexagon outline.
 const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
+
+/** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
+const BORDER_FRONT_Z = 0.6;
+
+/** The two overlapping strokes (wide faint under thin solid) that fake the border glow, for the given corner-index edges. */
+function strokeBorderEdges(g: Graphics, top: { x: number; y: number }[], edges: readonly [number, number][], color: number) {
+  for (const edge of edges) {
+    const a = top[edge[0]];
+    const b = top[edge[1]];
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+  }
+}
 
 /** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
 function outerEdgesOf(worldModel: WorldModel, c: AxialCoord, ownerId: string): [number, number][] {
