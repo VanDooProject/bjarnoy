@@ -2,6 +2,7 @@ using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bjarnoy.Infrastructure.World;
@@ -134,6 +135,12 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         var sources = new List<FogVisionSource>();
         var discs = new List<ExploredDisc>();
         var ravensBySettlement = new Dictionary<Guid, int>();
+
+        // A tower that is cut off from every longhouse of the player's realm on its island (ConnectedRealm) sees nothing: only
+        // connected towers add vision and explored rings, the way only they claim ground.
+        var realms = PlayerRealms.Resolve(settlements.Select(s => new PlayerRealms.Row(
+            s.Id, s.UserId, s.OwnerId, s.IslandId, new HexCoord(s.CentreQ, s.CentreR),
+            [.. s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))])));
         foreach (var settlement in settlements)
         {
             var domain = settlement.ToDomain();
@@ -148,6 +155,11 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             foreach (var tower in settlement.Buildings.Where(b => b.Type == BuildingType.Tower))
             {
                 var towerCoord = new HexCoord(tower.Q, tower.R);
+                if (!realms[settlement.Id].IsTowerConnected(settlement.Id, towerCoord))
+                {
+                    continue;
+                }
+
                 sources.Add(FogVisionRadii.ToTowerVisionSource(towerCoord, tower.Level, ravens));
                 discs.Add(new ExploredDisc(towerCoord, FogVisionRadii.TowerExploredRadius(tower.Level) + ravens));
             }

@@ -193,19 +193,7 @@ public sealed class ArmyService(
             var target = await _dbContext.Settlements
                 .AsNoTracking()
                 .Where(s => s.Id == targetId && s.WorldId == settlement.WorldId)
-                .Select(s => new
-                {
-                    s.CentreQ,
-                    s.CentreR,
-                    LonghouseLevel = s.Buildings
-                        .Where(b => b.Type == BuildingType.Longhouse)
-                        .Select(b => (int?)b.Level)
-                        .Max() ?? 0,
-                    Towers = s.Buildings
-                        .Where(b => b.Type == BuildingType.Tower)
-                        .Select(b => new { b.Q, b.R, b.Level })
-                        .ToList(),
-                })
+                .Select(s => new { s.CentreQ, s.CentreR })
                 .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
             if (target is null)
@@ -216,16 +204,10 @@ public sealed class ArmyService(
 
             effectiveDestination = new HexCoord(target.CentreQ, target.CentreR);
 
-            // Mirrors Settlement.ClaimDiscs: the centre disc (Settlement.ClaimRadius)
-            // plus one satellite disc per Tower, centred on that tower's own
-            // hex, not the settlement's centre.
-            var centreClaimRadius = Settlement.ClaimRadiusForLonghouseLevel(target.LonghouseLevel);
-            targetClaimDiscs =
-            [
-                (effectiveDestination, centreClaimRadius),
-                .. target.Towers.Select(t =>
-                    (new HexCoord(t.Q, t.R), Settlement.TowerClaimRadius(t.Level))),
-            ];
+            // The target's connected claim discs (ConnectedRealm): its centre disc plus the discs of the towers that
+            // are chained to a longhouse of the target's player on that island.
+            var targetRealm = await PlayerRealms.ForStoredSettlementAsync(_dbContext, targetId, cancellationToken).ConfigureAwait(false);
+            targetClaimDiscs = targetRealm?.DiscsOf(targetId) ?? [];
         }
         else
         {
@@ -985,7 +967,8 @@ public sealed class ArmyService(
         var seed = Random.Shared.Next();
         var arrival = Army.SettleArrival(
             domain, defenderEntity.ToDomain(), defenderEntity.World.SpeedFactor, now, seed, guestDefenderStacks,
-            landAttackBonusPercent, shipAttackBonusPercent);
+            landAttackBonusPercent, shipAttackBonusPercent,
+            await PlayerRealms.ForStoredSettlementAsync(_dbContext, defenderEntity.Id, cancellationToken).ConfigureAwait(false));
 
         // Guaranteed true: the caller only reaches this method when the
         // outbound leg's ArrivesAt has already passed for a not-yet-returning

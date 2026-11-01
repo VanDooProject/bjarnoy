@@ -589,11 +589,16 @@ public sealed record Army
     /// phase 3.
     /// </para>
     /// </remarks>
+    /// <param name="defenderRealm">
+    /// The defender's chain-rule realm (<see cref="ConnectedRealm"/>, including the player's other settlements on the island),
+    /// or <see langword="null"/> to resolve the defender alone. Only connected towers count for the defence bonus.
+    /// </param>
     public static ArmyArrivalResult SettleArrival(
         Army army, Settlement defenderSettlement, double defenderSpeedFactor, DateTimeOffset now, int seed,
         IReadOnlyList<UnitStack>? guestDefenderStacks = null,
         double landAttackBonusPercent = 0,
-        double shipAttackBonusPercent = 0)
+        double shipAttackBonusPercent = 0,
+        ConnectedRealm? defenderRealm = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(defenderSettlement);
@@ -624,11 +629,9 @@ public sealed record Army
         // ordinary garrison starvation between reads.
         var settledDefender = defenderSettlement.SettleTo(battleInstant, defenderSpeedFactor).Settlement;
 
-        var towerLevel = settledDefender.Buildings
-            .Where(b => b.Type == BuildingType.Tower)
-            .Select(b => b.Level)
-            .DefaultIfEmpty(0)
-            .Max();
+        // Only a tower connected to a longhouse (ConnectedRealm) adds its defence bonus; a cut-off one claims and defends nothing.
+        var towerLevel = (defenderRealm ?? ConnectedRealm.Resolve([settledDefender.AsRealmSettlement()]))
+            .HighestConnectedTowerLevel(settledDefender.Id, settledDefender.Buildings);
         var defenseBonusPercent = BuildingCatalogue.TowerDefenseBonusPercent(towerLevel);
 
         var lootAvailable = settledDefender.Resources.At(battleInstant);
