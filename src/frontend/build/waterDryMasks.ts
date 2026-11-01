@@ -1,5 +1,7 @@
-// Vite plugin: builds the water shader's art "dry" masks (docs/design/water-shader.md §4.4b)
-// from the vendored tile atlas and serves them as `virtual:water-dry-masks`.
+// Vite plugin: builds the water shader's masks from the vendored tile atlas and serves them as virtual modules.
+//
+// `virtual:water-dry-masks` — the art "dry" masks (docs/design/water-shader.md §4.4b).
+// `virtual:river-water-masks` — the river water masks (§4.4d), same data shape.
 //
 // For every `_base` frame of the non-showcase atlas pages that repeats a plain
 // water tile (see dryMaskCore.ts) it computes a half-resolution mask of the
@@ -10,6 +12,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import type { Plugin } from 'vite';
+import { hasRiverWater, riverMaskHalf, riverTexelCount, RIVER_MASK_MIN_TEXELS } from '../src/lib/map/water/riverMaskCore.ts';
 import {
   REFERENCE_FRAME_RE,
   SOURCE_H,
@@ -25,8 +28,8 @@ import {
   type WaterDryMasksData,
 } from '../src/lib/map/water/dryMaskCore.ts';
 
-const VIRTUAL_ID = 'virtual:water-dry-masks';
-const RESOLVED_ID = '\0' + VIRTUAL_ID;
+const DRY_ID = 'virtual:water-dry-masks';
+const RIVER_ID = 'virtual:river-water-masks';
 const ATLAS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../vendor/bg_assets_hextile/atlas');
 /** Width of the packed mask atlas in texels. */
 const ATLAS_WIDTH = 2048;
@@ -45,8 +48,18 @@ interface Manifest {
 }
 
 /** Every non-showcase page's `_base` frames (the ones drawn under the water mesh), as full 200x300 RGBA canvases. */
-async function loadBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; trim: SourceRect }>> {
-  const result = new Map<string, { canvas: Uint8Array; trim: SourceRect }>();
+export function loadBaseCanvases(): Promise<Map<string, BaseCanvas>> {
+  baseCanvases ??= readBaseCanvases();
+  return baseCanvases;
+}
+let baseCanvases: Promise<Map<string, BaseCanvas>> | null = null;
+export interface BaseCanvas {
+  canvas: Uint8Array;
+  trim: SourceRect;
+}
+
+async function readBaseCanvases(): Promise<Map<string, BaseCanvas>> {
+  const result = new Map<string, BaseCanvas>();
   const pages = readdirSync(ATLAS_DIR).filter((f) => f.endsWith('.json') && !f.includes('showcase'));
   for (const jsonName of pages) {
     const manifest = JSON.parse(readFileSync(join(ATLAS_DIR, jsonName), 'utf8')) as Manifest;
@@ -81,7 +94,7 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
     referencesByOrientation.set(orientation, [...(referencesByOrientation.get(orientation) ?? []), canvas]);
   }
 
-  const cells: { name: string; rect: ReturnType<typeof cellSourceRect>; mask: Uint8Array }[] = [];
+  const cells: MaskCell[] = [];
   for (const [name, { canvas, trim }] of bases) {
     if (REFERENCE_FRAME_RE.test(name)) continue;
     const orientation = orientationOf(name);
@@ -93,6 +106,29 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
     cells.push({ name, rect, mask: cropHalf(dryMaskHalf(canvas, references[best.index]), rect) });
   }
 
+  return packMasks(cells);
+}
+
+/** Computes every river water mask and packs them into one PNG. */
+export async function buildRiverWaterMasks(): Promise<WaterDryMasksData> {
+  const bases = await loadBaseCanvases();
+  const cells: MaskCell[] = [];
+  for (const [name, { canvas, trim }] of bases) {
+    if (!hasRiverWater(name) || riverTexelCount(canvas) < RIVER_MASK_MIN_TEXELS) continue;
+    const rect = cellSourceRect(trim);
+    cells.push({ name, rect, mask: cropHalf(riverMaskHalf(canvas), rect) });
+  }
+  return packMasks(cells);
+}
+
+interface MaskCell {
+  name: string;
+  rect: ReturnType<typeof cellSourceRect>;
+  mask: Uint8Array;
+}
+
+/** Shelf-packs the cells into one grey+alpha PNG whose alpha is the mask. */
+async function packMasks(cells: MaskCell[]): Promise<WaterDryMasksData> {
   // Shelf packing, tallest first.
   cells.sort((a, b) => b.rect.sh - a.rect.sh);
   const frames: Record<string, DryMaskFrame> = {};
@@ -135,17 +171,18 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
 }
 
 export function waterDryMasksPlugin(): Plugin {
-  let cached: Promise<WaterDryMasksData> | null = null;
+  const cache = new Map<string, Promise<WaterDryMasksData>>();
+  const builders: Record<string, () => Promise<WaterDryMasksData>> = { [DRY_ID]: buildWaterDryMasks, [RIVER_ID]: buildRiverWaterMasks };
   return {
     name: 'water-dry-masks',
     resolveId(id) {
-      return id === VIRTUAL_ID ? RESOLVED_ID : null;
+      return Object.hasOwn(builders, id) ? '\0' + id : null;
     },
     async load(id) {
-      if (id !== RESOLVED_ID) return null;
-      cached ??= buildWaterDryMasks();
-      const data = await cached;
-      return `export default ${JSON.stringify(data)};`;
+      const virtualId = id.startsWith('\0') ? id.slice(1) : '';
+      if (!Object.hasOwn(builders, virtualId)) return null;
+      if (!cache.has(virtualId)) cache.set(virtualId, builders[virtualId]());
+      return `export default ${JSON.stringify(await cache.get(virtualId))};`;
     },
   };
 }
