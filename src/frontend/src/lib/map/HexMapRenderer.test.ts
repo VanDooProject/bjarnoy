@@ -25,6 +25,8 @@ import {
   type TextureLoadDeps,
   clientToCanvasPoint,
   waterMaskTerrainFor,
+  worldHexFill,
+  worldRiverColor,
 } from './HexMapRenderer';
 import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
@@ -1079,5 +1081,23 @@ describe('wheelPassesToPage', () => {
   it('never passes on a host that did not opt into page scroll', () => {
     expect(wheelPassesToPage({ ...base, allowPageScroll: false })).toBe(false);
     expect(wheelPassesToPage({ ...base, allowPageScroll: false, lockCamera: true })).toBe(false);
+  });
+});
+
+describe('world-map wasted lands', () => {
+  it('fills a revealed wasted hex from the wasted palette, not the green island colours', () => {
+    for (const terrain of ['grass', 'forest', 'sand', 'mountain'] as const) {
+      expect(worldHexFill(terrain, true)).not.toBe(worldHexFill(terrain, false));
+    }
+  });
+
+  it('keeps the four wasted terrains apart from each other', () => {
+    const fills = (['grass', 'forest', 'sand', 'mountain'] as const).map((t) => worldHexFill(t, true));
+    expect(new Set(fills).size).toBe(4);
+  });
+
+  it('draws a lava stream in another colour than a river', () => {
+    expect(worldRiverColor({ wasted: true })).not.toBe(worldRiverColor({ wasted: false }));
+    expect(worldRiverColor({})).toBe(worldRiverColor({ wasted: false }));
   });
 });

@@ -299,6 +299,8 @@ export class WorldModel {
    * a stale sea answer for a now-revealed hex.
    */
   private wastedRevealed = false;
+  /** `isWastedLandAt`'s answers while revealed, by `terrainKey` (each one costs two terrain samples); cleared on every reveal flip. */
+  private wastedLand = new Map<number, boolean>();
   /**
    * Whether this world has the frozen isles admin flag on (see the
    * backend's `WorldEntity.FrozenIslesEnabled`). A simple field with no
@@ -760,9 +762,14 @@ export class WorldModel {
    */
   isWastedLandAt(q: number, r: number): boolean {
     if (!this.wastedRevealed) return false;
-    const world = { seed: this.seed, generation: this.generation };
-    if (terrainAt(q, r, world) !== 'sea') return false;
-    return wastedTerrainAt(q, r, world) !== 'sea';
+    const k = terrainKey(q, r);
+    let wasted = this.wastedLand.get(k);
+    if (wasted === undefined) {
+      const world = { seed: this.seed, generation: this.generation };
+      wasted = terrainAt(q, r, world) === 'sea' && wastedTerrainAt(q, r, world) !== 'sea';
+      this.wastedLand.set(k, wasted);
+    }
+    return wasted;
   }
 
   /**
@@ -791,6 +798,7 @@ export class WorldModel {
   setWastedRevealed(revealed: boolean) {
     if (this.wastedRevealed === revealed) return;
     this.wastedRevealed = revealed;
+    this.wastedLand.clear();
     const world = { seed: this.seed, generation: this.generation };
     const isGreenSea = (q: number, r: number) => terrainAt(q, r, world) === 'sea';
     for (const key of this.terrain.keys()) {
