@@ -67,10 +67,9 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
 
     /// <summary>An unclaimed settlement — owned only by its own client-local <paramref name="ownerId"/>.</summary>
     private static SettlementEntity MakeSettlement(
-        Guid worldId, Guid islandId, string ownerId, int centreQ, int centreR)
+        DateTimeOffset now, Guid worldId, Guid islandId, string ownerId, int centreQ, int centreR)
     {
         var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
-        var now = DateTimeOffset.UtcNow;
         var entity = new SettlementEntity
         {
             WorldId = worldId,
@@ -110,8 +109,8 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
             var (q, r) = Enumerable.Range(-300, 601)
                 .SelectMany(r => Enumerable.Range(-300, 601).Select(q => (q, r)))
                 .First(c => Enumerable.Range(0, 4).All(d => sampler.TerrainAt(new HexCoord(c.q + d, c.r)) == Terrain.Grass));
-            var mine = MakeSettlement(wId, islandId, mineOwnerId, q, r);
-            var rival = MakeSettlement(wId, islandId, rivalOwnerId, q + 3, r);
+            var mine = MakeSettlement(_factory.Time.GetUtcNow(), wId, islandId, mineOwnerId, q, r);
+            var rival = MakeSettlement(_factory.Time.GetUtcNow(), wId, islandId, rivalOwnerId, q + 3, r);
             db.Settlements.AddRange(mine, rival);
             await db.SaveChangesAsync(Ct);
             return (wId, mine.Id, rival.Id);
@@ -119,7 +118,7 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
         return (worldId, mineId, mineOwnerId, rivalId, rivalOwnerId);
     }
 
-    private async Task<Guid> PlantGuestArmyAsync(Guid hostSettlementId, Guid guestHomeSettlementId)
+    private async Task<Guid> PlantGuestArmyAsync(Guid hostSettlementId, Guid guestHomeSettlementId, int count = 5)
     {
         var now = _factory.Time.GetUtcNow();
         var army = new ArmyEntity
@@ -134,7 +133,7 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
             Path = [new HexPoint(0, 0)],
             CumulativeHours = [0],
             IsReturning = false,
-            Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 5 }],
+            Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = count }],
         };
         return await WithDbAsync(async db =>
         {
@@ -251,5 +250,41 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
         var again = await client.PostAsync(SendHome(hostId, armyId), content: null, Ct);
 
         Assert.Equal(HttpStatusCode.NotFound, again.StatusCode);
+    }
+
+    /// <summary>
+    /// A guest is fed from the host's food (SettlementService passes its
+    /// stacks into the settle as upkeep). Once the host sends it home the
+    /// food stock must grow faster by exactly that upkeep.
+    /// </summary>
+    [Fact]
+    public async Task The_hosts_food_upkeep_drops_by_the_guests_upkeep_once_it_is_sent_home()
+    {
+        using var client = Client();
+        var (_, hostId, hostOwnerId, guestHomeId, _) = await TwoSettlementsAsync();
+        var armyId = await PlantGuestArmyAsync(hostId, guestHomeId, count: 400);
+
+        SetOwner(client, hostOwnerId);
+        var guest = Assert.Single((await client.GetFromJsonAsync<List<GuestArmySummary>>(
+            $"/api/v1/settlements/{hostId}/guests", SqliteApiFixture.StrictJson, Ct))!);
+        Assert.True(guest.TotalUpkeepPerHour >= 50, "the guest must cost enough to show up in whole food units");
+
+        async Task<double> FoodAsync() =>
+            (await client.GetFromJsonAsync<SettlementResponse>(
+                $"/api/v1/settlements/{hostId}", SqliteApiFixture.StrictJson, Ct))!.Resources.Stock.Food;
+
+        var start = await FoodAsync();
+        _factory.Time.Advance(TimeSpan.FromHours(1));
+        var withGuest = await FoodAsync() - start;
+
+        var sent = await client.PostAsync(SendHome(hostId, armyId), content: null, Ct);
+        Assert.Equal(HttpStatusCode.NoContent, sent.StatusCode);
+        var afterSend = await FoodAsync();
+        _factory.Time.Advance(TimeSpan.FromHours(1));
+        var withoutGuest = await FoodAsync() - afterSend;
+
+        var r = (await client.GetFromJsonAsync<SettlementResponse>($"/api/v1/settlements/{hostId}", SqliteApiFixture.StrictJson, Ct))!.Resources;
+        // Stock is floored to whole units on each side of the subtraction.
+        Assert.InRange(withoutGuest - withGuest, guest.TotalUpkeepPerHour - 2, guest.TotalUpkeepPerHour + 2);
     }
 }
