@@ -811,6 +811,55 @@ describe('useWorldStore refreshWorldSettlements (rival walls)', () => {
     expect(store.model.getTile(4, 1).buildingType).toBe('palisade');
   });
 
+  // Regression: startHudSync runs this poll next to refreshLiveSettlement; its
+  // re-claim of the island used to reset the own longhouse tile to level 1, so
+  // after onboarding the hall flipped between level-1 art and its real level.
+  it('leaves the own longhouse at the level the settlement poll reported', async () => {
+    getSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-1',
+      longhouseLevel: 15,
+      resources: {
+        stock: { wood: 0, stone: 0, food: 0, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+        reserved: { wood: 0, stone: 0, food: 0, iron: 0 },
+      },
+      buildings: [{ q: 0, r: 0, type: 'longhouse', level: 15 }],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+    });
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 6, r: 0, longhouseLevel: 7, islandId: 'island-home' },
+    ]);
+    listWalls.mockReset().mockResolvedValue([]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.model.registerSettlement({
+      id: 'settlement-1',
+      ownerId: 'player-1',
+      ownerName: 'Ulf',
+      name: "Ulf's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: Date.now(),
+      islandId: 'island-home',
+    });
+    store.model.claimTerritory('settlement-1');
+    store.selectedSettlementId = 'settlement-1';
+
+    await store.refreshLiveSettlement();
+    expect(store.model.getTile(0, 0).buildingLevel).toBe(15);
+
+    await store.refreshWorldSettlements();
+    expect(store.model.getTile(0, 0).buildingLevel).toBe(15);
+    expect(store.model.getTile(6, 0).buildingLevel).toBe(7);
+  });
+
   it('keeps the settlements refresh and the last wall set when the walls read fails', async () => {
     listSettlements.mockReset().mockResolvedValue([
       { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-near' },
