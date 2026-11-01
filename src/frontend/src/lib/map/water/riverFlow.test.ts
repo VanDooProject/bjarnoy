@@ -77,14 +77,17 @@ describe('computeRiverFlow on a synthetic straight channel', () => {
 
 // --- real art ---------------------------------------------------------------------------------------------------------
 
-/** Polygon edges the water of a frame touches (enough seed texels). */
+/** Polygon edges the water of a frame touches (enough water texels within the seed reach). */
 function touchedEdges(f: Omit<RiverFlowInput, 'outEdge'>): number[] {
   const edges: number[] = [];
   for (let e = 0; e < 6; e++) {
-    const dist = riverGeodesicDistance({ ...f, outEdge: e }, e);
-    let seeds = 0;
-    for (const d of dist) if (d === 0) seeds++;
-    if (seeds >= 8) edges.push(e);
+    let near = 0;
+    for (let y = 0; y < f.ch; y++) {
+      for (let x = 0; x < f.cw; x++) {
+        if (f.mask[y * f.cw + x]! >= WATER_THRESHOLD && distToEdge(f, e, x + 0.5, y + 0.5) <= SEED_REACH) near++;
+      }
+    }
+    if (near >= 8) edges.push(e);
   }
   return edges;
 }
@@ -181,12 +184,50 @@ describe.skipIf(!vendoredArt)('computeRiverFlow on the vendored art', () => {
     const edges = touchedEdges(f);
     expect(edges.length).toBe(3);
     // The single outflow is the narrow edge: fewest seed texels.
-    const seedCount = (e: number) => riverGeodesicDistance({ ...f, outEdge: e }, e).reduce((n, d) => n + (d === 0 ? 1 : 0), 0);
+    const seedCount = (e: number) => {
+      let n = 0;
+      for (let y = 0; y < f.ch; y++) for (let x = 0; x < f.cw; x++) if (f.mask[y * f.cw + x]! >= WATER_THRESHOLD && distToEdge(f, e, x + 0.5, y + 0.5) <= SEED_REACH) n++;
+      return n;
+    };
     const out = [...edges].sort((a, b) => seedCount(a) - seedCount(b))[0]!;
     for (const arm of edges.filter((e) => e !== out)) {
       const result = streamline(f, out, startNear(f, arm));
       expect(result.reached, `arm ${arm} -> ${out}: ${JSON.stringify(result)}`).toBe(true);
       expect(result.maxOffWater).toBeLessThanOrEqual(3);
     }
+  }, 120_000);
+});
+
+describe('computeRiverFlow when the art stops short of the out edge', () => {
+  it('seeds from the water closest to the edge', () => {
+    // The channel ends 8 texels below the top edge, as the delta frame's trimmed canvas does.
+    const mask = new Uint8Array(CW * CH);
+    for (let y = 8; y < CH; y++) for (let x = 40; x < 60; x++) mask[y * CW + x] = 255;
+    const flow = computeRiverFlow(input(mask, TOP));
+    for (const y of [12, 22, 32]) expect(dirAt(flow, 50, y).y, `y=${y}`).toBeLessThan(-0.9);
+  });
+});
+
+describe.skipIf(!vendoredArt)('computeRiverFlow on the river delta', () => {
+  it('flows the delta funnel towards the sea edge although the art stops short of it', async () => {
+    const f = await riverFrameInput('rivertile_delta_W_base');
+    // The delta's river comes in on edge 4 and the sea lies behind edge 1.
+    const flow = computeRiverFlow({ ...f, outEdge: 1 });
+    let withDirection = 0;
+    for (let i = 0; i < f.cw * f.ch; i++) if (flow[i * 4 + 3] === 255 && (flow[i * 4] !== 128 || flow[i * 4 + 1] !== 128)) withDirection++;
+    expect(withDirection).toBeGreaterThan(400);
+    // Averaged over the funnel (the water splits around the two sand islets, so single texels point left or right).
+    let sum = 0;
+    let n = 0;
+    for (let y = 8; y < 48; y++) {
+      for (let x = 0; x < f.cw; x++) {
+        const d = dirAt(flow, x, y, f.cw);
+        if (Math.hypot(d.x, d.y) > 0.5) {
+          sum += d.y;
+          n++;
+        }
+      }
+    }
+    expect(sum / n).toBeLessThan(-0.5);
   }, 120_000);
 });

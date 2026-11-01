@@ -14,7 +14,11 @@ export const WATER_THRESHOLD = 128;
 export const NON_WATER_COST = 40;
 /** Texels from the bank over which the flow intensity ramps from 0 to 1. */
 export const BANK_FADE_TEXELS = 4;
-/** Texels from the out edge segment within which water texels seed the distance field. */
+/**
+ * Texels from the out edge segment within which water texels seed the distance field, counted from the water closest to the
+ * edge: a frame's art can stop a few texels short of the edge it flows out of (the river delta's trimmed canvas), and then the
+ * water nearest the edge seeds.
+ */
 export const SEED_REACH = 2;
 /**
  * Extra cost of travelling along the bank: the cost of a water texel is `1 + BANK_PENALTY * max(0, 1 - bankDistance / BANK_PENALTY_REACH)`.
@@ -163,14 +167,20 @@ function geodesic(input: RiverFlowInput, passable: Uint8Array, bank: Float32Arra
   const b = polygon[(edge + 1) % polygon.length]!;
   const dist = new Float64Array(cw * ch).fill(Infinity);
   const heap = new Heap();
+  const edgeDistance = new Float64Array(cw * ch).fill(Infinity);
+  let nearest = Infinity;
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
       const p = y * cw + x;
       if (!passable[p] || mask[p]! < WATER_THRESHOLD) continue;
-      if (distToSegment(x + 0.5, y + 0.5, a, b) <= SEED_REACH) {
-        dist[p] = 0;
-        heap.push(0, p);
-      }
+      edgeDistance[p] = distToSegment(x + 0.5, y + 0.5, a, b);
+      nearest = Math.min(nearest, edgeDistance[p]!);
+    }
+  }
+  for (let p = 0; p < edgeDistance.length; p++) {
+    if (edgeDistance[p]! <= nearest + SEED_REACH) {
+      dist[p] = 0;
+      heap.push(0, p);
     }
   }
   // Fast marching (the heap-driven upwind eikonal solver): like Dijkstra, but the distance of a texel comes from both axis
