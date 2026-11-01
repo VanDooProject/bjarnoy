@@ -260,6 +260,9 @@ public sealed class PlotReservationService(
             .Where(s => s.WorldId == worldId)
             .Select(s => new
             {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
                 s.IslandId,
                 s.CentreQ,
                 s.CentreR,
@@ -268,13 +271,17 @@ public sealed class PlotReservationService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return rows
+        var settlementRows = rows
+            .Select(r => new PlayerRealms.Row(
+                r.Id, r.UserId, r.OwnerId, r.IslandId, new HexCoord(r.CentreQ, r.CentreR),
+                [.. r.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]))
+            .ToList();
+        var realms = PlayerRealms.Resolve(settlementRows);
+
+        return settlementRows
             .GroupBy(r => r.IslandId)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(r => new Founding.NeighbourSnapshot(
-                    new HexCoord(r.CentreQ, r.CentreR),
-                    r.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()))
-                    .ToList());
+                g => g.Select(r => new Founding.NeighbourSnapshot(r.Centre, r.Buildings, realms[r.Id].DiscsOf(r.Id))).ToList());
     }
 }

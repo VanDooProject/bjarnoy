@@ -9,20 +9,20 @@ import DocsToc from '../components/docs/DocsToc.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
-import { resourceName, unitName } from '../i18n/catalogueNames';
+import { resourceName } from '../i18n/catalogueNames';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import {
   FEAST_HOURS,
-  FOUNDING_CREWS,
   MINIMUM_SPACING,
-  crewCostMultiplier,
+  settlerCostMultiplier,
   feastCost,
   feastRenown,
   foundingStock,
   renownRequired,
 } from '../lib/docs/foundingDocs';
+import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 
-// The founding page: your first settlement, the crews, renown and spacing that gate the next ones, and what a new
+// The founding page: your first settlement, the settlers, renown and spacing that gate the next ones, and what a new
 // settlement starts with. Unit and building figures come from the catalogues; the settler rules are mirrored in
 // foundingDocs.ts.
 
@@ -37,16 +37,16 @@ onMounted(() => {
 
 const RESOURCES = ['wood', 'stone', 'food', 'iron'] as const;
 
-const crew = computed(() => units.byType.settlercrew);
-const loaded = computed(() => !!crew.value && !!buildings.byType.cartworkshop?.length && !!buildings.byType.longhouse?.length);
+const settler = computed(() => units.byType.settler);
+const loaded = computed(() => !!settler.value && !!buildings.byType.cartworkshop?.length && !!buildings.byType.longhouse?.length);
 
 const workshop = computed(() => ({
   longhouse: buildings.byType.cartworkshop?.[0]?.requiredLonghouseLevel ?? 0,
   needs: prerequisitesOf(buildings.byType, 'cartworkshop'),
 }));
 
-const crewFacts = computed(() => {
-  const c = crew.value;
+const settlerFacts = computed(() => {
+  const c = settler.value;
   if (!c) return null;
   return {
     defense: c.defense,
@@ -56,24 +56,23 @@ const crewFacts = computed(() => {
     minutes: Math.round(c.trainingSeconds / 60),
     longhouse: c.requiredLonghouseLevel,
     cost: RESOURCES.map((r) => n(c.trainingCost[r])).join(' / '),
-    crews: FOUNDING_CREWS,
-    carried: FOUNDING_CREWS * c.foodCarryCapacity,
+    carried: SETTLERS_PER_FOUNDING * c.foodCarryCapacity,
   };
 });
 
-/** One row per settlement you could found next: what you hold, the renown asked and what the crews cost. */
+/** One row per settlement you could found next: what you hold, the renown asked and what the settlers cost. */
 const priceRows = computed(() => {
-  const c = crew.value;
+  const c = settler.value;
   if (!c) return [];
   return [1, 2, 3, 4].map((held) => {
-    const factor = crewCostMultiplier(held);
+    const factor = settlerCostMultiplier(held);
     return {
       held,
       number: held + 1,
       factor,
       renown: renownRequired(held + 1),
-      perCrew: RESOURCES.map((r) => n(c.trainingCost[r] * factor)).join(' / '),
-      total: RESOURCES.map((r) => n(c.trainingCost[r] * factor * FOUNDING_CREWS)).join(' / '),
+      perSettler: RESOURCES.map((r) => n(c.trainingCost[r] * factor)).join(' / '),
+      total: RESOURCES.map((r) => n(c.trainingCost[r] * factor * SETTLERS_PER_FOUNDING)).join(' / '),
     };
   });
 });
@@ -114,34 +113,33 @@ const tocLinks = computed(() =>
         <template #level>{{ workshop.longhouse }}</template>
         <template #square><BuildingLink type="townsquare" /></template>
         <template #squareLevel>{{ workshop.needs.find((p) => p.type === 'townsquare')?.level }}</template>
-        <template #crew>{{ unitName('settlercrew') }}</template>
-        <template #count>{{ FOUNDING_CREWS }}</template>
+        <template #count>{{ SETTLERS_PER_FOUNDING }}</template>
       </i18n-t>
-      <div v-if="crewFacts" class="table-scroll">
-        <table class="small" data-testid="crew-table">
+      <div v-if="settlerFacts" class="table-scroll">
+        <table class="small" data-testid="settler-table">
           <thead>
             <tr>
-              <th>{{ $t('docs.founding.more.crew.defense') }}</th>
-              <th>{{ $t('docs.founding.more.crew.speed') }}</th>
-              <th>{{ $t('docs.founding.more.crew.food') }}</th>
-              <th>{{ $t('docs.founding.more.crew.upkeep') }}</th>
-              <th>{{ $t('docs.founding.more.crew.time') }}</th>
-              <th>{{ $t('docs.founding.more.crew.longhouse') }}</th>
+              <th>{{ $t('docs.founding.more.settler.defense') }}</th>
+              <th>{{ $t('docs.founding.more.settler.speed') }}</th>
+              <th>{{ $t('docs.founding.more.settler.food') }}</th>
+              <th>{{ $t('docs.founding.more.settler.upkeep') }}</th>
+              <th>{{ $t('docs.founding.more.settler.time') }}</th>
+              <th>{{ $t('docs.founding.more.settler.longhouse') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>{{ crewFacts.defense }}</td>
-              <td>{{ crewFacts.speed }}</td>
-              <td>{{ crewFacts.food }}</td>
-              <td>{{ crewFacts.upkeep }}</td>
-              <td>{{ $t('docs.founding.more.crew.minutes', { n: crewFacts.minutes }) }}</td>
-              <td>{{ crewFacts.longhouse }}</td>
+              <td>{{ settlerFacts.defense }}</td>
+              <td>{{ settlerFacts.speed }}</td>
+              <td>{{ settlerFacts.food }}</td>
+              <td>{{ settlerFacts.upkeep }}</td>
+              <td>{{ $t('docs.founding.more.settler.minutes', { n: settlerFacts.minutes }) }}</td>
+              <td>{{ settlerFacts.longhouse }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="text">{{ $t('docs.founding.more.provisions', { food: crewFacts?.food ?? 0, total: crewFacts?.carried ?? 0 }) }}</p>
+      <p class="text">{{ $t('docs.founding.more.provisions', { food: settlerFacts?.food ?? 0, total: settlerFacts?.carried ?? 0 }) }}</p>
       <i18n-t keypath="docs.founding.more.ambush" tag="p" class="text" scope="global">
         <template #camps>
           <DocsPageLink to="/docs/wildlife-camps">{{ $t('docs.founding.more.campsLink') }}</DocsPageLink>
@@ -161,15 +159,15 @@ const tocLinks = computed(() =>
             <tr>
               <th>{{ $t('docs.founding.renown.columns.next') }}</th>
               <th>{{ $t('docs.founding.renown.columns.renown') }}</th>
-              <th>{{ $t('docs.founding.renown.columns.perCrew') }}</th>
-              <th>{{ $t('docs.founding.renown.columns.total', { count: FOUNDING_CREWS }) }}</th>
+              <th>{{ $t('docs.founding.renown.columns.perSettler') }}</th>
+              <th>{{ $t('docs.founding.renown.columns.total', { count: SETTLERS_PER_FOUNDING }) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in priceRows" :key="row.held" :data-settlement="row.number">
               <th scope="row" class="name">{{ $t('docs.founding.renown.nth', { n: row.number }) }}</th>
               <td class="value">{{ n(row.renown) }}</td>
-              <td class="value">{{ row.perCrew }}</td>
+              <td class="value">{{ row.perSettler }}</td>
               <td class="value">{{ row.total }}</td>
             </tr>
           </tbody>
@@ -225,7 +223,6 @@ const tocLinks = computed(() =>
 
     <DocsAdminNote class="block">
       <p>{{ $t('docs.founding.adminNote.sea') }}</p>
-      <p>{{ $t('docs.founding.adminNote.provisions', { carried: crewFacts?.carried ?? 0 }) }}</p>
     </DocsAdminNote>
   </DocsPageLayout>
 </template>

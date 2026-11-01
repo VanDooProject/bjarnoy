@@ -94,6 +94,46 @@ export function advanceClipFrame(
  * frameCount at the same moment whenever it was spawned, and the gust wave is continuous across tiles. The caller then advances
  * every state by the same per-tick delta (`advanceClipFrame`), which keeps them in lockstep.
  */
-export function sharedClockPlayback(clip: ClipTiming, clockMs: number): { playedMs: number; frame: number } {
-  return { playedMs: clockMs, frame: clipFrameIndex(clip, clockMs) };
+export function sharedClockPlayback(
+  clip: ClipTiming,
+  clockMs: number,
+  frameOffset = 0,
+): { playedMs: number; frame: number } {
+  // `frameOffset` (whole frames; a sway clip's `framesPerColumn * column`, may be negative) shows the global frame that many steps behind,
+  // wrapping in the clip's cycle (including a `pause` tail) like any other clip.
+  if (frameOffset === 0) return { playedMs: clockMs, frame: clipFrameIndex(clip, clockMs) };
+  const stepMs = 1000 / clip.fps;
+  const cycleSteps = stepsPerCycle(clip);
+  // Shift in whole frame-steps (not ms) so float error can't tip the floor onto the neighbouring frame; keep the sub-step remainder.
+  const clockSteps = clockMs / stepMs;
+  const whole = Math.floor(clockSteps + 1e-9);
+  const shifted = (((whole - frameOffset) % cycleSteps) + cycleSteps) % cycleSteps;
+  // Keep playedMs on the clock's own cycle count (>= 0, same magnitude) so `advanceClipFrame` continues it seamlessly.
+  const cycles = Math.floor(whole / cycleSteps);
+  const playedMs = (cycles * cycleSteps + shifted + Math.max(0, clockSteps - whole) + 1e-6) * stepMs;
+  return { playedMs, frame: clipFrameIndex(clip, playedMs) };
+}
+
+/**
+ * The playback state a clip on its own clock (a building's wheel, a flag) starts in so identical tiles are out of phase: a start step
+ * `floor(h * cycleSteps)` into the clip's full cycle (the `pause` tail and a pingpong's way back included). `h` in `[0, 1)` is the tile's hash;
+ * `h = 0` is frame 0 at 0 ms.
+ */
+export function phasedStart(clip: ClipTiming, h: number): { playedMs: number; frame: number } {
+  if (clip.frameCount <= 0) return { playedMs: 0, frame: 0 };
+  const steps = Math.min(stepsPerCycle(clip) - 1, Math.max(0, Math.floor(h * stepsPerCycle(clip))));
+  const playedMs = steps * (1000 / clip.fps);
+  return { playedMs, frame: frameIndexAtStep(clip, steps) };
+}
+
+/**
+ * Extra `sharedClockPlayback` frame offset that desyncs the content of a long shared-clock clip without breaking its gust phase: `k * swayPeriod`
+ * with `k = floor(h * frameCount / swayPeriod)`. A whole number of sway periods leaves `frame mod swayPeriod` (the trees) untouched while
+ * whatever runs on the full clip (a camp's animals, 48 frames over a 16-frame sway) lands elsewhere. No offset (0) unless `swayPeriod` is a
+ * positive integer that divides `frameCount` into more than one period.
+ */
+export function swayPeriodOffset(frameCount: number, swayPeriod: number | undefined, h: number): number {
+  if (!swayPeriod || !Number.isInteger(swayPeriod) || swayPeriod <= 0 || swayPeriod >= frameCount || frameCount % swayPeriod !== 0) return 0;
+  const periods = frameCount / swayPeriod;
+  return Math.min(periods - 1, Math.max(0, Math.floor(h * periods))) * swayPeriod;
 }

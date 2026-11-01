@@ -295,8 +295,8 @@ public sealed record Army
         // against different terrain/pathfinder tables.
         //
         // ArmyMission.Found gets one narrow exception (issue #55 §2 "by
-        // sea"): Ship stacks alongside UnitType.SettlerCrew stacks are read
-        // as "the ships are carrying the crews" rather than an illegal mix —
+        // sea"): Ship stacks alongside UnitType.Settler stacks are read
+        // as "the ships are carrying the settlers" rather than an illegal mix —
         // there is still no general ferry mechanic, so any other non-Ship
         // class alongside Ship remains rejected even for Found.
         var requestedClasses = normalisedRequest
@@ -309,7 +309,7 @@ public sealed record Army
             && nonShipClasses.Count > 0
             && nonShipClasses.SetEquals([UnitClass.Civilian])
             && normalisedRequest.Where(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Civilian)
-                .All(s => s.Type == UnitType.SettlerCrew);
+                .All(s => s.Type == UnitType.Settler);
 
         bool isFleet;
         if (isSettlerEmbark)
@@ -342,12 +342,12 @@ public sealed record Army
 
         if (isFoundingConvoy)
         {
-            var settlerCrews = normalisedRequest
-                .Where(s => s.Type == UnitType.SettlerCrew)
+            var settlerCount = normalisedRequest
+                .Where(s => s.Type == UnitType.Settler)
                 .Sum(s => s.Count);
-            if (settlerCrews != Founding.RequiredSettlerCrews)
+            if (settlerCount != Founding.RequiredSettlers)
             {
-                return DispatchDecision.Rejected(DispatchRejection.WrongSettlerCrewCount);
+                return DispatchDecision.Rejected(DispatchRejection.WrongSettlerCount);
             }
 
             if (isFleet)
@@ -355,7 +355,7 @@ public sealed record Army
                 var shipCapacity = normalisedRequest
                     .Where(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship)
                     .Sum(s => Founding.ShipCapacity(s.Type) * s.Count);
-                if (settlerCrews > shipCapacity)
+                if (settlerCount > shipCapacity)
                 {
                     return DispatchDecision.Rejected(DispatchRejection.InsufficientShipCapacityForSettlers);
                 }
@@ -469,8 +469,11 @@ public sealed record Army
         }
 
         // A fleet leaves from (and returns to) its settlement's harbour hex, which is the centre only when the
-        // centre itself touches the sea (see FleetAnchor); a land army always uses the centre.
-        var origin = isFleet ? FleetAnchor(settlement, terrainAt) : settlement.Centre;
+        // centre itself touches the sea (see FleetAnchor); a land army leaves from the building that trained its
+        // slowest unit (see TrainingSite).
+        var origin = isFleet
+            ? FleetAnchor(settlement, terrainAt)
+            : TrainingSite(settlement.Centre, settlement.Buildings, settlementDecision.Stacks!);
         List<HexCoord> stops = [origin, .. waypoints, routeDestination];
         List<HexCoord> fullPath = [origin];
 
@@ -580,11 +583,16 @@ public sealed record Army
     /// phase 3.
     /// </para>
     /// </remarks>
+    /// <param name="defenderRealm">
+    /// The defender's chain-rule realm (<see cref="ConnectedRealm"/>, including the player's other settlements on the island),
+    /// or <see langword="null"/> to resolve the defender alone. Only connected towers count for the defence bonus.
+    /// </param>
     public static ArmyArrivalResult SettleArrival(
         Army army, Settlement defenderSettlement, double defenderSpeedFactor, DateTimeOffset now, int seed,
         IReadOnlyList<UnitStack>? guestDefenderStacks = null,
         double landAttackBonusPercent = 0,
-        double shipAttackBonusPercent = 0)
+        double shipAttackBonusPercent = 0,
+        ConnectedRealm? defenderRealm = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(defenderSettlement);
@@ -615,11 +623,9 @@ public sealed record Army
         // ordinary garrison starvation between reads.
         var settledDefender = defenderSettlement.SettleTo(battleInstant, defenderSpeedFactor).Settlement;
 
-        var towerLevel = settledDefender.Buildings
-            .Where(b => b.Type == BuildingType.Tower)
-            .Select(b => b.Level)
-            .DefaultIfEmpty(0)
-            .Max();
+        // Only a tower connected to a longhouse (ConnectedRealm) adds its defence bonus; a cut-off one claims and defends nothing.
+        var towerLevel = (defenderRealm ?? ConnectedRealm.Resolve([settledDefender.AsRealmSettlement()]))
+            .HighestConnectedTowerLevel(settledDefender.Id, settledDefender.Buildings);
         var defenseBonusPercent = BuildingCatalogue.TowerDefenseBonusPercent(towerLevel);
 
         var lootAvailable = settledDefender.Resources.At(battleInstant);
@@ -810,10 +816,40 @@ public sealed record Army
 
     /// <summary>
     /// The hex this army starts from and walks back to: <see cref="FleetAnchor(HexCoord, IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain})"/>
-    /// for a fleet, the settlement <paramref name="centre"/> for a land army.
+    /// for a fleet, <see cref="TrainingSite"/> for a land army.
     /// </summary>
     public HexCoord HomeHex(HexCoord centre, IEnumerable<PlacedBuilding> buildings, Func<HexCoord, Terrain> terrainAt) =>
-        IsFleet ? FleetAnchor(centre, buildings, terrainAt) : centre;
+        IsFleet ? FleetAnchor(centre, buildings, terrainAt) : TrainingSite(centre, buildings, Stacks);
+
+    /// <summary>
+    /// The hex a land army leaves from and returns to: the building that trained its slowest unit type (ties: lowest
+    /// <see cref="UnitType"/>). With several of that building the one nearest <paramref name="centre"/> (ties by Q,
+    /// then R); with none (demolished) or no units, the centre.
+    /// </summary>
+    public static HexCoord TrainingSite(HexCoord centre, IEnumerable<PlacedBuilding> buildings, IEnumerable<UnitStack> stacks)
+    {
+        ArgumentNullException.ThrowIfNull(buildings);
+        ArgumentNullException.ThrowIfNull(stacks);
+
+        var slowest = stacks
+            .Where(s => s.Count > 0)
+            .Select(s => s.Type)
+            .OrderBy(t => UnitCatalogue.Get(t).Speed).ThenBy(t => (int)t)
+            .Cast<UnitType?>()
+            .FirstOrDefault();
+        if (slowest is not { } type)
+        {
+            return centre;
+        }
+
+        var required = UnitCatalogue.Get(type).RequiredBuildingType;
+        return buildings
+            .Where(b => b.Type == required)
+            .Select(b => b.Coord)
+            .OrderBy(c => c.DistanceTo(centre)).ThenBy(c => c.Q).ThenBy(c => c.R)
+            .Cast<HexCoord?>()
+            .FirstOrDefault() ?? centre;
+    }
 
     /// <summary>
     /// The hex a <see cref="ArmyMission.Hunt"/> route ends on: the camp's own hex when a land army can stand on it,
@@ -967,8 +1003,8 @@ public sealed record Army
 
         var targetHex = inTransit.Movement.Path[^1];
 
-        // Exactly RequiredSettlerCrews were required at dispatch (PlanDispatch's
-        // WrongSettlerCrewCount rejection), so every SettlerCrew stack present
+        // Exactly RequiredSettlers were required at dispatch (PlanDispatch's
+        // WrongSettlerCount rejection), so every Settler stack present
         // is consumed entire; whatever else travelled along (ships that
         // carried them, any escort) is what the new settlement starts with —
         // "undefended except for any escort units that travelled with the
@@ -977,7 +1013,7 @@ public sealed record Army
         // sailed settlers over with no other escort ends up with the ships
         // themselves as the only "defenders", exactly as reasonable a v1
         // reading of "leaves it undefended except escorts" as any other.
-        var garrisonForNewSettlement = army.Stacks.Where(s => s.Type != UnitType.SettlerCrew).ToList();
+        var garrisonForNewSettlement = army.Stacks.Where(s => s.Type != UnitType.Settler).ToList();
 
         return new FoundingArrivalResult(
             Arrived: true, ShouldFound: true, Army: null, GarrisonForNewSettlement: garrisonForNewSettlement, FoundedAt: targetHex);
@@ -1794,14 +1830,14 @@ public enum DispatchRejection
 
     /// <summary>
     /// An <see cref="ArmyMission.Found"/> dispatch did not name exactly
-    /// <see cref="Founding.RequiredSettlerCrews"/>
-    /// <see cref="UnitType.SettlerCrew"/> — too few to found, or more than the
+    /// <see cref="Founding.RequiredSettlers"/>
+    /// <see cref="UnitType.Settler"/> — too few to found, or more than the
     /// mission consumes (issue #55 §1).
     /// </summary>
-    WrongSettlerCrewCount,
+    WrongSettlerCount,
 
     /// <summary>
-    /// An <see cref="ArmyMission.Found"/> sea convoy named more settler crews
+    /// An <see cref="ArmyMission.Found"/> sea convoy named more settlers
     /// than its ships can carry — see <see cref="Founding.ShipCapacity"/>.
     /// </summary>
     InsufficientShipCapacityForSettlers,

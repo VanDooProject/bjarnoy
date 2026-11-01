@@ -245,15 +245,14 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
 
   // Standing towers plus still-queued new-tower orders (live mode only — demo
   // mode places instantly), counted by distinct hex like Settlement.PlanBuild
-  // does, so a queued tower already uses up its slot.
+  // does, so a queued tower already uses up its slot. Only connected towers
+  // count (WorldModel.connectedTowerCount): a tower cut off from every
+  // longhouse claims nothing and does not use up the limit.
   function towersHeld(): number {
     const id = world.selectedSettlementId;
     if (!id) return 0;
-    const hexes = new Set(world.model.towerCoords(id).map((c) => `${c.q},${c.r}`));
-    for (const order of world.hud.queue) {
-      if (order.building === 'tower') hexes.add(`${order.q},${order.r}`);
-    }
-    return hexes.size;
+    const queued = world.hud.queue.filter((order) => order.building === 'tower').map((order) => ({ q: order.q, r: order.r }));
+    return world.model.connectedTowerCount(id, queued);
   }
 
   // Shrines held by the selected settlement (standing plus queued new-shrine

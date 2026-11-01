@@ -1,6 +1,7 @@
 import { FEAST_HOURS, RENOWN_BASE_THRESHOLD, feastCost, feastRenown } from './feasts';
 import type { BuildingDefinitionResponse, BuildingPrerequisiteResponse, ResourceLine } from '../../api/types';
 import { additionalStorageHouseRequirement } from '../map/buildingEconomy';
+import { SETTLERS_PER_FOUNDING } from '../founding';
 
 // Deterministic minute-step pacing model of ONE settlement, generic over
 // whatever building catalogue it is handed (live or bundled snapshot). It is
@@ -21,7 +22,7 @@ export type ProfileId = 'active' | 'checkins4' | 'checkins2' | 'always24';
 export const BASE_STORAGE_CAPACITY = 500;
 /** BuildingCatalogue.FoundingStock: what a new settlement starts with. */
 export const FOUNDING_STOCK: ResourceLine = { wood: 700, stone: 700, food: 700, iron: 0 };
-/** Fallback for 3 x SettlerCrew.trainingCost when the unit catalogue has no settlercrew row. */
+/** Fallback for 5 x Settler.trainingCost when the unit catalogue has no settler row. */
 export const FALLBACK_SETTLER_COST: ResourceLine = { wood: 600, stone: 450, food: 300, iron: 300 };
 export const DEFAULT_PRODUCER_COUNTS: Record<string, number> = { lumberjack: 3, quarry: 3, reindeerherder: 3 };
 
@@ -144,14 +145,14 @@ export function productionOnDay(result: PacingResult, day: number): number | nul
   return result.series.rate.wood[i] + result.series.rate.stone[i] + result.series.rate.food[i];
 }
 
-/** Default settler cost: 3 x the SettlerCrew training cost, or the fallback when unavailable. */
+/** Default settler cost: 5 x the Settler training cost, or the fallback when unavailable. */
 export function settlerCostFrom(trainingCost: ResourceLine | null | undefined): ResourceLine {
   if (!trainingCost) return { ...FALLBACK_SETTLER_COST };
   return {
-    wood: trainingCost.wood * 3,
-    stone: trainingCost.stone * 3,
-    food: trainingCost.food * 3,
-    iron: trainingCost.iron * 3,
+    wood: trainingCost.wood * SETTLERS_PER_FOUNDING,
+    stone: trainingCost.stone * SETTLERS_PER_FOUNDING,
+    food: trainingCost.food * SETTLERS_PER_FOUNDING,
+    iron: trainingCost.iron * SETTLERS_PER_FOUNDING,
   };
 }
 

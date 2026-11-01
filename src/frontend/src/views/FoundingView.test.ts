@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The founding page: the crew and price tables are computed from the unit catalogue and the settler rules, and the sea-founding note stays admin-only.
+// The founding page: the settler and price tables are computed from the unit catalogue and the settler rules, and the sea-founding note stays admin-only.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
@@ -42,27 +42,27 @@ beforeEach(() => {
 });
 
 describe('FoundingView', () => {
-  it('prices the 2nd to 5th settlement: renown, and crew cost doubling with each settlement held', async () => {
+  it('prices the 2nd to 5th settlement: renown, and settler cost doubling with each settlement held', async () => {
     const wrapper = await mountPage();
 
     const row = (n: number) => wrapper.get(`[data-settlement="${n}"]`).findAll('th, td').map((c) => c.text());
-    expect(row(2)).toEqual(['Settlement no. 2', '55,000', '200 / 150 / 100 / 100', '600 / 450 / 300 / 300']);
-    expect(row(3)).toEqual(['Settlement no. 3', '110,000', '400 / 300 / 200 / 200', '1,200 / 900 / 600 / 600']);
+    expect(row(2)).toEqual(['Settlement no. 2', '55,000', '120 / 90 / 60 / 60', '600 / 450 / 300 / 300']);
+    expect(row(3)).toEqual(['Settlement no. 3', '110,000', '240 / 180 / 120 / 120', '1,200 / 900 / 600 / 600']);
     expect(row(5)[1]).toBe('440,000');
-    expect(row(5)[2]).toBe('1,600 / 1,200 / 800 / 800');
+    expect(row(5)[2]).toBe('960 / 720 / 480 / 480');
     wrapper.unmount();
   });
 
-  it('describes the Settler crew from the unit catalogue and the Cart Workshop from the building catalogue', async () => {
+  it('describes the Settler from the unit catalogue and the Cart Workshop from the building catalogue', async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.get('[data-testid=crew-table] tbody tr').findAll('td').map((td) => td.text())).toEqual(['3', '4', '40', '1', '40 min', '10']);
+    expect(wrapper.get('[data-testid=settler-table] tbody tr').findAll('td').map((td) => td.text())).toEqual(['3', '4', '40', '1', '24 min', '10']);
     const more = wrapper.get('#more').text();
-    expect(more).toContain('3 Settler crews');
+    expect(more).toContain('5 settlers');
     expect(more).toContain('Cart Workshop');
     expect(more).toContain('level 10');
     expect(more).toContain('Town Square of level 3');
-    expect(more).toContain('Each crew carries 40 food, 120 for all three');
+    expect(more).toContain('Each settler carries 40 food, 200 for all five');
     wrapper.unmount();
   });
 

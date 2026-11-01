@@ -1086,6 +1086,12 @@ const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
 const COASTAL_WATER_VARIANT_WEIGHTS = [0.8, 0.1, 0.1];
 
 /**
+ * Weights of the living mountain's four shapes, by `MountainShape` index: cone, table, saddleback, corrie. The flat-topped table is
+ * a rare accent (owner decision); the other three share the rest. Mirrors `TerrainSampler.MountainShapeWeights`.
+ */
+export const MOUNTAIN_SHAPE_WEIGHTS = [0.37, 0.03, 0.3, 0.3];
+
+/**
  * Top-variant weights for a wasted island's land, per green terrain it stands
  * in for — its own art set, so it can't borrow `VARIANT_COUNTS` (grass's 4
  * would never reach wasteland's two lava variants). Wasteland is plain,
@@ -1168,6 +1174,20 @@ function weightedIndex(h: number, weights: number[]): number {
 }
 
 /**
+ * The variant a non-coastal hex of `terrain` rolls from its `[0, 1)` hash: weighted for forest, sand and mountain (the shape),
+ * uniform over `VARIANT_COUNTS` for everything else. The one place this is decided, so `variantAt`, `variantForTerrain` and
+ * `generateTile` cannot drift apart. Mirrors `TerrainSampler.VariantAt`.
+ */
+function landVariantIndex(terrain: Terrain, h: number): number {
+  if (terrain === 'forest') return forestVariantIndex(h);
+  if (terrain === 'sand') return weightedIndex(h, SAND_VARIANT_WEIGHTS);
+  if (terrain === 'mountain') return weightedIndex(h, MOUNTAIN_SHAPE_WEIGHTS);
+  const count = VARIANT_COUNTS[terrain] ?? 1;
+  if (count <= 1) return 0;
+  return Math.min(count - 1, Math.floor(h * count));
+}
+
+/**
  * Seed-stable variant index for a hex, in `[0, N)` where `N` is however many
  * variants the art pack has for that terrain (1 — i.e. always variant 0 —
  * for anything not listed). Capping the range this way *is* the fallback: a
@@ -1177,13 +1197,7 @@ function weightedIndex(h: number, weights: number[]): number {
 export function variantAt(q: number, r: number, world: WorldSeed): number {
   const h = hash2(q, r, world.seed + 31);
   if (isCoastalWater(q, r, world)) return weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
-  const terrain = terrainAt(q, r, world);
-  if (terrain === 'forest') return forestVariantIndex(h);
-  if (terrain === 'sand') return weightedIndex(h, SAND_VARIANT_WEIGHTS);
-  const count = VARIANT_COUNTS[terrain] ?? 1;
-  if (count <= 1) return 0;
-  const index = Math.floor(h * count);
-  return index >= count ? count - 1 : index;
+  return landVariantIndex(terrainAt(q, r, world), h);
 }
 
 /**
@@ -1192,12 +1206,7 @@ export function variantAt(q: number, r: number, world: WorldSeed): number {
  * cannot answer for them.
  */
 export function variantForTerrain(q: number, r: number, world: WorldSeed, terrain: Terrain): number {
-  if (terrain === 'forest') return forestVariantIndex(hash2(q, r, world.seed + 31));
-  if (terrain === 'sand') return weightedIndex(hash2(q, r, world.seed + 31), SAND_VARIANT_WEIGHTS);
-  const count = VARIANT_COUNTS[terrain] ?? 1;
-  if (count <= 1) return 0;
-  const index = Math.floor(hash2(q, r, world.seed + 31) * count);
-  return index >= count ? count - 1 : index;
+  return landVariantIndex(terrain, hash2(q, r, world.seed + 31));
 }
 
 /**
@@ -1353,13 +1362,8 @@ export function generateTile(q: number, r: number, world: WorldSeed, sample?: Te
   let variant: number;
   if (coastal) {
     variant = weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
-  } else if (terrain === 'forest') {
-    variant = forestVariantIndex(h);
-  } else if (terrain === 'sand') {
-    variant = weightedIndex(h, SAND_VARIANT_WEIGHTS);
   } else {
-    const count = VARIANT_COUNTS[terrain] ?? 1;
-    variant = count <= 1 ? 0 : Math.min(count - 1, Math.floor(h * count));
+    variant = landVariantIndex(terrain, h);
   }
 
   const tile: Tile = {

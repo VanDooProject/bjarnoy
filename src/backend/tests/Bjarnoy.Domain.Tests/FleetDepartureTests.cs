@@ -189,7 +189,7 @@ public class FleetDepartureTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = settlement.Id,
-            Stacks = [new UnitStack(UnitType.Karve, 2), new UnitStack(UnitType.SettlerCrew, 3)],
+            Stacks = [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Settler, 5)],
             Location = new ArmyLocation.InTransit(movement),
             Provisions = 100,
             Mission = ArmyMission.Found,
@@ -231,7 +231,7 @@ public class FleetDepartureTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = settlement.Id,
-            Stacks = [new UnitStack(UnitType.Karve, 2), new UnitStack(UnitType.SettlerCrew, 3)],
+            Stacks = [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Settler, 5)],
             Location = new ArmyLocation.InTransit(movement),
             Provisions = 100,
             Mission = ArmyMission.Found,

@@ -416,7 +416,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  // Settlement expansion (issue #55): settler-crew founding convoys ride the
+  // Settlement expansion (issue #55): settler founding convoys ride the
   // same generic army-dispatch endpoints the troop system's backend exposes
   // (dispatchArmy/getSettlementArmies/getArmy/recallArmy below); only the
   // founding-specific retarget and renown reads are new here.

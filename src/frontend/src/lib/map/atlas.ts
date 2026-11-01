@@ -99,6 +99,32 @@ export interface AtlasClip {
    * yet); `rest` above is what every clip that exists today uses.
    */
   rest_by_camera?: Record<string, string>;
+  /** True for a clip every tile must play on the one global clock (a wind-sway clip), so a gust stays continuous across tiles. */
+  shared_clock?: boolean;
+  /**
+   * Gust-wave metadata of a sway clip: the art is rendered so a tree's phase is `frame / N - s / wavelength` (s = position along screen-right in
+   * render units), so a tile in map column k must show frame `(g - k * frames_per_column) mod N`. Read it through `swayFramesPerColumn`.
+   */
+  sway?: { wavelength: number; frames_per_column: number };
+}
+
+/** The clip's `sway.frames_per_column` when it is a non-negative integer, else 0 (no per-column offset: a malformed `sway` is ignored). */
+export function swayFramesPerColumn(clip: Pick<AtlasClip, 'sway'>): number {
+  const n = (clip.sway as { frames_per_column?: unknown } | undefined)?.frames_per_column;
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+/**
+ * A sway clip's period in frames: `round(frames_per_column * wavelength / 1.5)` (16 for frames_per_column 4, wavelength 6). Returns it only when it is a
+ * positive integer, else 0 (no period known: the caller treats the whole clip as one period).
+ */
+export function swayPeriodFrames(clip: Pick<AtlasClip, 'sway'>): number {
+  const sway = clip.sway as { wavelength?: unknown; frames_per_column?: unknown } | undefined;
+  const w = sway?.wavelength;
+  const f = sway?.frames_per_column;
+  if (typeof w !== 'number' || typeof f !== 'number' || !Number.isFinite(w) || !Number.isFinite(f)) return 0;
+  const p = Math.round((f * w) / 1.5);
+  return Number.isInteger(p) && p > 0 ? p : 0;
 }
 
 // Exported (only) so atlas.test.ts can build synthetic manifests for the

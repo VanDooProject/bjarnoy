@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advanceClipFrame, clipFrameIndex, clipTimingOf, type ClipTiming } from './clipPlayback';
+import { advanceClipFrame, clipFrameIndex, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset, type ClipTiming } from './clipPlayback';
 
 const loop: ClipTiming = { frameCount: 4, fps: 4, playback: 'loop', pause: 0 };
 const loopWithPause: ClipTiming = {
@@ -122,5 +122,73 @@ describe('advanceClipFrame', () => {
     expect(advanceClipFrame(lightning, state, 10)).toBeUndefined();
     expect(advanceClipFrame(lightning, state, 80)).toBe(1);
     expect(advanceClipFrame(lightning, state, 1)).toBeUndefined();
+  });
+});
+
+describe('phasedStart', () => {
+  const wheel: ClipTiming = { frameCount: 8, fps: 10, playback: 'loop', pause: 0 };
+
+  it('starts at frame 0 for h = 0 and is deterministic per h', () => {
+    expect(phasedStart(wheel, 0)).toEqual({ playedMs: 0, frame: 0 });
+    expect(phasedStart(wheel, 0.4)).toEqual(phasedStart(wheel, 0.4));
+  });
+
+  it('gives different tiles different start frames, consistent with clipFrameIndex', () => {
+    const frames = [0.05, 0.2, 0.4, 0.6, 0.8, 0.99].map((h) => phasedStart(wheel, h).frame);
+    expect(new Set(frames).size).toBeGreaterThan(4);
+    for (const h of [0.3, 0.7]) {
+      const s = phasedStart(wheel, h);
+      expect(s.frame).toBe(clipFrameIndex(wheel, s.playedMs));
+    }
+  });
+
+  it('spans the pause tail in the cycle (the start can land in the hold)', () => {
+    const paused: ClipTiming = { ...wheel, pause: 0.4 }; // 4 hold steps, 12 total
+    const s = phasedStart(paused, 0.99);
+    expect(s.playedMs).toBeCloseTo(11 * 100);
+    expect(s.frame).toBe(7);
+  });
+
+  it('covers the whole there-and-back cycle of a pingpong', () => {
+    const pp: ClipTiming = { ...wheel, playback: 'pingpong' }; // 14 steps
+    expect(phasedStart(pp, 0.99).frame).toBe(1);
+    expect(phasedStart(pp, 0.5).frame).toBe(clipFrameIndex(pp, 700));
+  });
+});
+
+describe('shared-clock sway phase with swayPeriodOffset', () => {
+  const camp: ClipTiming = { frameCount: 48, fps: 8, playback: 'loop', pause: 0 };
+  const forest: ClipTiming = { frameCount: 16, fps: 8, playback: 'loop', pause: 0 };
+  const fpc = 4;
+  const frameAt = (clip: ClipTiming, clockMs: number, col: number, offset: number) => {
+    const s = sharedClockPlayback(clip, clockMs, fpc * col + offset);
+    return advanceClipFrame(clip, s, 0) ?? s.frame;
+  };
+
+  it('keeps the tree phase (frame mod 16) equal to the forest at every clock time, while the full frame differs by a multiple of 16', () => {
+    const kA = swayPeriodOffset(48, 16, 0.05);
+    const kB = swayPeriodOffset(48, 16, 0.9);
+    expect(kA).toBe(0);
+    expect(kB).toBe(32);
+    for (let t = 0; t < 12000; t += 137) {
+      const a = frameAt(camp, t, 5, kA);
+      const b = frameAt(camp, t, 5, kB);
+      const f = frameAt(forest, t, 5, 0);
+      expect(a % 16).toBe(f);
+      expect(b % 16).toBe(f);
+      expect((b - a + 48) % 16).toBe(0);
+      expect(a).not.toBe(b);
+    }
+  });
+
+  it('leaves the offset unchanged when the period equals the clip (forests) or does not divide it', () => {
+    expect(swayPeriodOffset(16, 16, 0.9)).toBe(0);
+    expect(swayPeriodOffset(48, 10, 0.9)).toBe(0);
+    expect(swayPeriodOffset(48, undefined, 0.9)).toBe(0);
+    expect(swayPeriodOffset(48, 0, 0.9)).toBe(0);
+  });
+
+  it('picks k in {0, 1, 2} for a 48-frame clip with period 16', () => {
+    expect([0, 0.34, 0.67, 0.999].map((h) => swayPeriodOffset(48, 16, h))).toEqual([0, 16, 32, 32]);
   });
 });

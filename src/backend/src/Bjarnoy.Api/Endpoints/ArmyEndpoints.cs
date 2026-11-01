@@ -3,6 +3,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -595,10 +596,10 @@ public static class ArmyEndpoints
                     "A fleet must be sent at one building on the target settlement's shore.",
                 DispatchRejection.FleetTargetBuildingNotOnShore =>
                     "That building is not on the target settlement's shore, so a fleet cannot reach it.",
-                DispatchRejection.WrongSettlerCrewCount =>
-                    "A founding mission requires exactly 3 settler crews, no more, no fewer.",
+                DispatchRejection.WrongSettlerCount =>
+                    $"A founding mission requires exactly {Founding.RequiredSettlers} settlers, no more, no fewer.",
                 DispatchRejection.InsufficientShipCapacityForSettlers =>
-                    "The ships in this convoy cannot carry this many settler crews (Karve: 1, Longship: 2).",
+                    $"The ships in this convoy cannot carry this many settlers (each ship carries {Founding.ShipCapacity(UnitType.Karve)}).",
                 DispatchRejection.RenownOrSettlementSlotRequirementNotMet =>
                     "Not enough renown for another settlement yet, or founding requires a real account.",
                 DispatchRejection.TargetHexNotFoundable =>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Settlement expansion (issue #55): renown, training settler crews, and
+// Settlement expansion (issue #55): renown, training settlers, and
 // dispatching/recalling/retargeting a founding convoy.
 //
 // Deliberately a small, self-contained panel that polls the API directly
@@ -24,6 +24,7 @@ import { api } from '../../api/client';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import { SETTLERS_PER_FOUNDING } from '../../lib/founding';
 import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
 
 const world = useWorldStore();
@@ -39,22 +40,21 @@ const convoys = ref<ArmySummary[]>([]);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
-const settlerCrewCount = computed(
-  () => settlement.value?.garrison.find((g) => g.unit === 'settlercrew')?.count ?? 0,
+const settlerCount = computed(
+  () => settlement.value?.garrison.find((g) => g.unit === 'settler')?.count ?? 0,
 );
 const foundingConvoys = computed(() => convoys.value.filter((a) => a.mission === 'found'));
 
 // Founding-dispatch form.
 const destQ = ref(0);
 const destR = ref(0);
-// The founding convoy is always 3 settler crews (`SETTLER_CREWS_PER_CONVOY`);
+// The founding convoy is always 5 settlers (`SETTLERS_PER_FOUNDING`);
 // the backend rejects provisions above their combined `foodCarryCapacity`
 // (`ProvisionsExceedCarryCapacity`), so the form defaults to and is capped at
 // that total, read from the unit catalogue rather than hard-coded.
-const SETTLER_CREWS_PER_CONVOY = 3;
 const unitCatalogue = useUnitCatalogueStore();
 const maxProvisions = computed(
-  () => (unitCatalogue.byType['settlercrew']?.foodCarryCapacity ?? 0) * SETTLER_CREWS_PER_CONVOY,
+  () => (unitCatalogue.byType['settler']?.foodCarryCapacity ?? 0) * SETTLERS_PER_FOUNDING,
 );
 const provisionsInput = ref<number | null>(null);
 const provisions = computed(() =>
@@ -96,12 +96,12 @@ onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
 
-async function trainSettlerCrews() {
+async function trainSettlers() {
   if (!world.selectedSettlementId) return;
   busy.value = true;
   error.value = null;
   try {
-    await api.trainUnits(world.selectedSettlementId, { unit: 'settlercrew', count: 3 });
+    await api.trainUnits(world.selectedSettlementId, { unit: 'settler', count: SETTLERS_PER_FOUNDING });
     await refresh();
   } catch (e) {
     error.value = apiErrorMessage(e, t('hud.expansionPanel.trainingFailed'));
@@ -116,7 +116,7 @@ async function dispatchFounding() {
   error.value = null;
   try {
     await api.dispatchArmy(world.selectedSettlementId, {
-      units: [{ unit: 'settlercrew', count: 3 }],
+      units: [{ unit: 'settler', count: SETTLERS_PER_FOUNDING }],
       destination: { q: destQ.value, r: destR.value },
       provisions: provisions.value,
       mission: 'found',
@@ -208,11 +208,11 @@ watch(visible, (isVisible) => {
     </div>
 
     <div class="expansion-row">
-      <span>{{ t('hud.expansionPanel.settlerCrewsInGarrison') }}</span>
-      <strong>{{ settlerCrewCount }}</strong>
+      <span>{{ t('hud.expansionPanel.settlersInGarrison') }}</span>
+      <strong>{{ settlerCount }}</strong>
     </div>
-    <button type="button" class="expansion-button" :disabled="busy" @click="trainSettlerCrews">
-      {{ t('hud.expansionPanel.trainSettlerCrews') }}
+    <button type="button" class="expansion-button" :disabled="busy" @click="trainSettlers">
+      {{ t('hud.expansionPanel.trainSettlers') }}
     </button>
 
     <template v-if="renown">
@@ -222,7 +222,7 @@ watch(visible, (isVisible) => {
       </div>
     </template>
 
-    <div v-if="settlerCrewCount >= 3 && renown?.canFoundAnother" class="expansion-form">
+    <div v-if="settlerCount >= SETTLERS_PER_FOUNDING && renown?.canFoundAnother" class="expansion-form">
       <div class="expansion-form-row">
         <label>{{ t('hud.expansionPanel.targetHex') }}</label>
         <input v-model.number="destQ" type="number" aria-label="Target Q" />

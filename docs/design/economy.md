@@ -139,7 +139,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
-| 18 | Siege Workshop (trains the battering ram) | Archery Range 3 |
+| 18 | Siege Workshop (trains the catapult and the battering ram) | Archery Range 3 |
 | 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
 | 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
@@ -197,6 +197,15 @@ play.
   So LH 3–6 allow 1, LH 7 allows 2, LH 9 allows 3, …, and LH 29–30 allow 13.
   The tech tree shows only the first unlock (LH 3); the rule is shown where
   a tower is placed, not as extra tech-tree cards.
+- **Towers have to be chained to a longhouse.** A tower claims its ground only
+  while it is connected: it stands on ground claimed by one of your
+  longhouses, or by a tower that is itself connected. All of your longhouses
+  on an island count, so a chain that a longhouse reaches from either end stays
+  connected when a tower in the middle falls. A cut-off tower claims nothing and
+  sees nothing until the link is rebuilt; it still counts for prerequisites. It
+  does not count against the tower limit while cut off; once it is connected
+  again it counts, even if that puts you over the limit (you then can't build
+  more towers).
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
@@ -307,7 +316,7 @@ building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolv
 Only the surviving engines that can damage the target count towards its levels. A named target
 the surviving engines cannot damage takes no damage (the report has no siege line). Without a
 named target, or when it is gone, the pick is random (seeded) among the buildings the surviving
-engines can damage; if there are none, no siege happens. Rams are trained at the Siege Workshop
+engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
 (section 8, the iron ladder).
 
 **Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
@@ -367,7 +376,7 @@ shuts the river again.
 A new settlement needs:
 
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
-2. 3 Settler Crews (the crew cost doubles per settlement already held);
+2. 5 Settlers (the settler cost doubles per settlement already held);
 3. **renown**: +1 per building level per hour, across all settlements
    (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
    ×2 per settlement.
@@ -545,7 +554,7 @@ sources have to line up with the unit unlocks:
 | When | Iron source | Units it has to carry |
 |---|---|---|
 | LH 1–2 | Longhouse trickle only (2–4 iron/h) | Thrall (no iron) |
-| from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler Crew, Provisioner |
+| from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler, Provisioner |
 | LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
 So bog ground and the bog-ore works are needed by about LH 3, not as a
@@ -554,7 +563,7 @@ them so the levels match. *Implemented:*
 
 - the Thrall costs no iron (it was 15); every other unit still does (Spearman
   40, Axeman 60, Bowman 50, Berserker 120, Provisioner 20, Karve 100,
-  Longship 220, Settler Crew 100, Catapult 250);
+  Longship 220, Settler 60, Catapult 250);
 - each unit's Longhouse gate follows the building that trains it:
 
   | Unit | Trained at | Longhouse gate (was) |
@@ -564,8 +573,8 @@ them so the levels match. *Implemented:*
   | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
   | Karve | Dockyard | 8 (5) |
   | Bowman | Archery Range | 9 (4) |
-  | Provisioner, Settler Crew | Cart Workshop | 10 (4, 5) |
-  | Berserker, Catapult, Longship | Barracks, Archery Range, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
+  | Provisioner, Settler | Cart Workshop | 10 (4, 5) |
+  | Berserker, Catapult, Longship | Barracks, Siege Workshop, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
   | Ram | Siege Workshop | 20: after the Berserker, like the Catapult |
 
   (Berserker still needs the Axeman, Catapult the Berserker, Longship the
@@ -607,7 +616,7 @@ Iron before the works (Longhouse 1 and 2) is the Longhouse trickle alone
 (2/h per level). From Longhouse 3 the works carry it, so the Barracks' first
 Spearmen (LH 5) are paid from works income, and every other unit is
 affordable the moment its gate opens, because its gate opens with or after
-the works: Axeman at LH 6, Karve at LH 8, Settler Crew and Provisioner at
+the works: Axeman at LH 6, Karve at LH 8, Settler and Provisioner at
 LH 10, the elite units at LH 20 (income 2 800/h against a Catapult's 250).
 The table is the Economy lab's own default setup re-run for the LH 3 unlock
 (three Lumberjacks, Quarries and Reindeer Herders, three bog-ore works, two

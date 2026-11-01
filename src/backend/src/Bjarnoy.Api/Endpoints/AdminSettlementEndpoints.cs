@@ -173,7 +173,7 @@ public static class AdminSettlementEndpoints
         // The editor paints the whole claimed territory, not just the
         // occupied hexes: an empty buildable hex is exactly what an admin
         // wants to click on, and terrain is what decides whether anything
-        // may go there. The full union of discs (Settlement.ClaimDiscs), not
+        // may go there. The full union of the realm's connected discs (ConnectedRealm.AllDiscs), not
         // just the centre disc: PlaceBuilding below accepts a new building
         // anywhere Settlement.Claims already reaches — including inside an
         // existing tower's own satellite disc, chaining allowed — so this
@@ -182,7 +182,7 @@ public static class AdminSettlementEndpoints
         // the same territory rule PlaceBuilding enforces (Territory.Claims):
         // a giant only paints as claimable once every one of its 7 footprint
         // hexes is covered by this settlement's discs.
-        var discs = domain.ClaimDiscs.ToList();
+        var discs = (await settlements.LoadRealmAsync(entity, domain, cancellationToken)).AllDiscs.ToList();
         IReadOnlyList<AdminSettlementHexResponse> hexes =
         [
             .. discs

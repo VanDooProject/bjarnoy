@@ -191,6 +191,17 @@
   real motion needs a recorded user approval there). It doesn't
   replace fixing real perf problems for slow devices.
 
+# dev docs and player docs
+- the **dev docs** (also called MD docs) are the Markdown files under `docs/design/`: the full rules, numbers, formulas and
+  technical detail. The **player docs** are the in-game `/docs` pages (https://bjarnoy.velarix.space/docs, below): the same
+  rules, much shallower, with almost no technical detail
+- a change to a rule, a number or what can be built where updates the dev docs in the same PR (the gameplay-wishes rule above
+  still applies to new wishes: ask before writing them down)
+- keep the two in sync: when one changes, check the other says the same (at the player docs' depth) and update it in the same PR
+- when they don't match (one says something the other contradicts, or a player page states a rule the dev docs don't have),
+  tell me and let me decide which is right. Don't pick one silently. Only stop the work for it when the answer decides the
+  implementation; otherwise report it and carry on
+
 # in-game docs (/docs)
 - `/docs` and its pages are **player docs**: what a player needs to play — rules, numbers, what can be built where, what things look like.
   write from the player's side ("you can build ... on ..."), not from the code's

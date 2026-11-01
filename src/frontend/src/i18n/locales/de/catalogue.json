@@ -45,7 +45,7 @@
     "ram": "Rammbock",
     "karve": "Karve",
     "longship": "Langschiff",
-    "settlercrew": "Siedlertrupp"
+    "settler": "Siedler"
   },
   "giants": {
     "giantmountain": "Riesenberg",

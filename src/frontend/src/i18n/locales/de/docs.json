@@ -49,14 +49,14 @@
         "wastedLands": "Utgards eigene Mauern riegeln das Land der Riesen ab."
       },
       "founding": {
-        "landMovement": "Wie schnell Siedlertrupps jedes Feld überqueren.",
-        "wildlifeCamps": "Starke Lager können Trupps unterwegs überfallen.",
+        "landMovement": "Wie schnell Siedler jedes Feld überqueren.",
+        "wildlifeCamps": "Starke Lager können Siedler unterwegs überfallen.",
         "bogLands": "Landeplätze brauchen Moor in Reichweite für Lehm und Eisen."
       },
       "landMovement": {
         "walls": "Ein Mauerfeld hält jede Landarmee auf.",
         "wildlifeCamps": "Starke Lager überfallen Armeen, die ihnen zu nahe kommen.",
-        "founding": "Siedlertrupps ziehen über dieselben Böden."
+        "founding": "Siedler ziehen über dieselben Böden."
       },
       "ships": {
         "shrines": "Njörds Schrein lässt deine Schiffe härter zuschlagen.",
@@ -125,7 +125,7 @@
       },
       "founding": {
         "title": "Siedlungen gründen",
-        "description": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann."
+        "description": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann."
       },
       "landMovement": {
         "title": "Bewegung an Land",
@@ -223,29 +223,29 @@
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
       "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte. Erreicht ein Rohstoff das Lagerlimit, stoppt seine Produktion – ein volles Lager verschenkt also Ertrag.",
-      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt.",
+      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit.",
       "fishinghut": "Ein Steg über flachem Wasser, von dem aus du Untiefen befischst, die ein Bauernhof nie erreichen könnte. Die Hütte steht auch auf Pfählen am Halbufer eines Moorsees.",
       "pumpkinfarm": "Eine zweite Ernte für Gras: Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Sie lässt sich nur auf einer Insel mit Kürbisboden bauen (den Boden jeder Insel bestimmt das Spiel, nicht du). Das ist der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
       "shrineofthor": "Für Thor auf Gras errichtet, hinter einer Waffenschmiede der Stufe 5. Die Gunst des Kriegsgottes stärkt den Angriff deiner Landeinheiten (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineoffreyja": "Für Freyja auf Gras errichtet. Ihre Gunst steigert die Nahrungsproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineofullr": "Für Ullr auf Gras errichtet. Seine Gunst steigert die Holzproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einer Werft der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
-      "archeryrange": "Bildet auf Gras oder Sand die Fernkämpfer der Landarmee aus: Bogenschützen und, sobald eine in der Kaserne ausgebildete Berserker-Linie steht, Katapulte. Sie übernimmt das anstelle des Langhauses.",
+      "archeryrange": "Bildet auf Gras oder Sand die Bogenschützen der Landarmee aus. Sie übernimmt das anstelle des Langhauses.",
       "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus, anstelle des Langhauses.",
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Sie setzt voraus, dass sowohl das Langhaus als auch das Lagerhaus dieser Siedlung auf Stufe 15 stehen.",
-      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker – anstelle des Langhauses. Den Rest des Truppenspektrums (Bogenschützen, Katapulte) bildet der Schießplatz aus. Beide bilden nie dieselbe Einheit aus.",
+      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker – anstelle des Langhauses. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
       "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
       "meadery": "Züchtet Bienen auf Gras hinter einem Bauernhof der Stufe 5 – Bienenkörbe, eine Honigpresse und ein Metkeller. Sie hat noch keine eigene Wirkung, der Met ist für einen künftigen Moralbonus gedacht.",
       "townsquare": "Der eigene Marktplatz des Dorfes auf Gras. Er hat noch keine eigene Wirkung, ist aber als künftige Voraussetzung oder künftiger Bonus vorgesehen.",
       "cropmill": "Mahlt auf einem geraden Flussfeld das Getreide eines Bauernhofs, der bis Stufe 10 ausgebaut ist – ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Sie erzeugt keine eigene Nahrung, sondern steigert jeden Bauernhof im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus. Die Kürbisfarm profitiert nicht davon: Kürbisse sind eine andere Feldfrucht, die eine Mühle nicht mahlt.",
       "smithy": "Die Schmiede der Siedlung mit Amboss, auf Gras oder Sand hinter einer Kaserne der Stufe 10. Sie ist der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: Hier sollen später einmal Truppen aufgewertet werden, die Mechanik dafür kommt noch.",
       "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
-      "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedlertrupps aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
+      "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedler aus, anstelle des Langhauses. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
       "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See), hinter einer Ziegelei der Stufe 3: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
       "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
       "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder.",
-      "siegeworkshop": "Bildet auf Gras oder Sand Rammböcke aus, anstelle des Langhauses. Wird ab Langhaus 18 hinter einem Schießplatz der Stufe 3 freigeschaltet. Rammböcke sind die einzige Waffe, die Mauern bricht (Türme treffen sie auch); Katapulte, am Schießplatz ausgebildet, brennen Türme und alle anderen Gebäude nieder."
+      "siegeworkshop": "Bildet auf Gras anstelle des Langhauses die Belagerungswaffen aus: Katapulte, sobald eine in der Kaserne ausgebildete Berserker-Linie steht, und Rammböcke. Du schaltest sie ab Langhaus 18 frei, wenn ein Schießplatz der Stufe 3 steht. Nur Rammböcke brechen Mauern (Türme treffen sie auch); Katapulte brennen Türme und alle anderen Gebäude nieder."
     },
     "table": {
       "level": "Stufe",
@@ -967,7 +967,7 @@
   },
   "founding": {
     "title": "Siedlungen gründen",
-    "intro": "Siedlertruppen aus der Wagnerei und wo eine neue Siedlung landen kann.",
+    "intro": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann.",
     "toc": {
       "first": "Erste Siedlung",
       "more": "Weitere Siedlungen",
@@ -981,8 +981,8 @@
     },
     "more": {
       "heading": "Weitere Siedlungen",
-      "body": "Neue Siedlungen gründen {count} Siedlertrupps, die gemeinsam losziehen. Du bildest sie in der {workshop} aus. Sie braucht ein {longhouse} auf Stufe {level} und einen {square} auf Stufe {squareLevel}.",
-      "crew": {
+      "body": "Neue Siedlungen gründen {count} Siedler, die gemeinsam losziehen. Du bildest sie in der {workshop} aus. Sie braucht ein {longhouse} auf Stufe {level} und einen {square} auf Stufe {squareLevel}.",
+      "settler": {
         "defense": "Verteidigung",
         "speed": "Tempo",
         "food": "Trägt Nahrung",
@@ -991,23 +991,23 @@
         "longhouse": "Langhaus-Stufe",
         "minutes": "{n} Min."
       },
-      "provisions": "Jeder Trupp trägt {food} Nahrung, alle drei zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
-      "ambush": "Unterwegs können starke Wildtierlager deine Trupps überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
+      "provisions": "Jeder Siedler trägt {food} Nahrung, alle fünf zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
+      "ambush": "Unterwegs können starke Wildtierlager deine Siedler überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
       "campsLink": "Wildtierlager",
       "movementLink": "Bewegung an Land"
     },
     "renown": {
       "heading": "Ruhm und Preis",
-      "body": "Jede Siedlung nach der ersten kostet Ruhm und Trupps. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird, und ebenso der Preis ihrer Trupps.",
+      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird, und ebenso der Preis ihrer Siedler.",
       "columns": {
         "next": "Du gründest",
         "renown": "Nötiger Ruhm",
-        "perCrew": "Kosten pro Trupp",
-        "total": "Kosten für {count} Trupps"
+        "perSettler": "Kosten pro Siedler",
+        "total": "Kosten für {count} Siedler"
       },
       "nth": "Siedlung Nr. {n}",
       "order": "Die Kosten sind {resources}.",
-      "when": "Der Ruhm wird geprüft, wenn die Trupps aufbrechen.",
+      "when": "Der Ruhm wird geprüft, wenn die Siedler aufbrechen.",
       "feasts": "Ein Fest auf dem {square} bringt zusätzlich Ruhm. Es dauert {hours} Stunden, kostet gleich viel Holz, Stein und Nahrung und wird mit der Stufe des Platzes größer.",
       "feast": {
         "level": "Stufe des Dorfplatzes",
@@ -1017,19 +1017,18 @@
     },
     "where": {
       "heading": "Wo eine Siedlung landen kann",
-      "land": "Auf jedem Landfeld, das deine Trupps erreichen können, nur nicht auf einem Riesen.",
+      "land": "Auf jedem Landfeld, das deine Siedler erreichen können, nur nicht auf einem Riesen.",
       "spacing": "Mindestens {hexes} Felder jenseits der Gebietsgrenze jeder Siedlung der Welt, egal ob deiner eigenen oder der anderer Spieler.",
       "twice": "Das wird beim Aufbruch geprüft und noch einmal bei der Ankunft.",
-      "taken": "Hat inzwischen jemand anderes den Platz besetzt, warten die Trupps dort. Du kannst sie weiterschicken oder zurückrufen, und sie kehren von allein heim, wenn ihnen die Nahrung ausgeht."
+      "taken": "Hat inzwischen jemand anderes den Platz besetzt, warten die Siedler dort. Du kannst sie weiterschicken oder zurückrufen, und sie kehren von allein heim, wenn ihnen die Nahrung ausgeht."
     },
     "new": {
       "heading": "Eine neue Siedlung",
       "body": "Sie startet mit einem {longhouse} auf Stufe 1. Es beansprucht {claim1} Felder, ab Stufe 2 sind es {claim2}. Das Lager enthält je {stock} Holz, Stein und Nahrung, aber kein Eisen.",
-      "garrison": "Alle Einheiten, die mit den Trupps gezogen sind, bleiben als Besatzung dort, nur die Trupps selbst nicht."
+      "garrison": "Alle Einheiten, die mit den Siedlern gezogen sind, bleiben als Besatzung dort, nur die Siedler selbst nicht."
     },
     "adminNote": {
-      "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447).",
-      "provisions": "Das Expansionspanel schlägt standardmäßig 200 Proviant vor, drei Trupps tragen aber nur {carried}."
+      "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },
   "landMovement": {
@@ -1083,6 +1082,7 @@
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
       "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit.",
+      "start": "Deine Truppen ziehen aus dem Gebäude los, in dem sie ausgebildet wurden, und kehren dorthin zurück. Eine Armee aus mehreren Einheitentypen bricht vom Gebäude ihrer langsamsten Einheit auf.",
       "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
       "columns": {
         "unit": "Einheit",
@@ -1183,7 +1183,7 @@
       "shrinesLink": "Schreine"
     },
     "adminNote": {
-      "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedlertrupp, ein Langschiff {longship}) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
+      "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedler, ein Langschiff {longship}, also je eine ganze Gründungsgruppe) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },
   "shrines": {
