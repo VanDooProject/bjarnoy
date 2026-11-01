@@ -513,13 +513,17 @@ public static class WorldEndpoints
 
         var suggestion = result.Suggestion!;
 
+        var callerIdClaim = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        var callerUserId = Guid.TryParse(callerIdClaim, out var parsedCallerId) ? parsedCallerId : (Guid?)null;
+
         var islandSettlementEntities = await settlements.GetForIslandAsync(suggestion.IslandId, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
-            .. islandSettlementEntities.Select(s => new SettlementSummary(
-                s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-                s.IslandId)),
+            .. islandSettlementEntities.Select(s => SettlementSummary.From(
+                s,
+                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId))),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(
