@@ -38,6 +38,8 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   seaBody: 'Sea body (world map; off = CSS gradient)',
   legacyWaveSquiggles: 'World map: Graphics wave squiggles',
   showWaterMask: 'Debug: show the raw water mask',
+  riverFlow: 'River flow streaks (settlement)',
+  showRiverFlow: 'Debug: show river flow direction',
   legacyTileSplit: 'Split unsplit tall art in code',
 };
 
@@ -90,6 +92,8 @@ const SLIDERS: {
   { key: 'causticFineBrightness', label: 'Fine net: brightness', needs: 'fineCaustics', range: CAUSTIC_BRIGHTNESS, format: times },
   { key: 'causticFineDensity', label: 'Fine net: density', needs: 'fineCaustics', range: CAUSTIC_DENSITY, format: times },
   { key: 'causticFinePhase', label: 'Fine net: phase shift', needs: 'fineCaustics', range: CAUSTIC_PHASE, format: (v) => `${v.toFixed(1)} s` },
+  { key: 'riverBrightness', label: 'River flow: brightness', needs: 'riverFlow', range: CAUSTIC_BRIGHTNESS, format: times },
+  { key: 'riverSpeed', label: 'River flow: speed', needs: 'riverFlow', range: WAVE_SPEED, format: times },
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
 ];
 

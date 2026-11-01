@@ -264,6 +264,18 @@ const CAUSTIC_BLOB_SOFT = 0.18;
 const CAUSTIC_BLOB_ALPHA = 0.42;
 const CAUSTIC_BLOB_COLOR = 0x0d1728;
 
+/**
+ * River flow streaks (docs/design/water-shader.md §4.4d). Pattern units are `RIVER_SCALE` per world unit: one noise cell along
+ * the flow is a sixth of a tile, so a streak is about that long. The streaks advance a third of a tile (`RIVER_SPEED` pattern
+ * units) per `RIVER_CYCLE_SECONDS`, i.e. half a tile per second. The advance per cycle is short on purpose: the flow direction
+ * turns along a bend, and sliding the pattern further per cycle shears it into swirls.
+ */
+export const RIVER_COLOR = 0xcce9ff;
+export const RIVER_ALPHA = 0.35;
+export const RIVER_CYCLE_SECONDS = 2 / 3;
+const RIVER_SCALE_PER_TILE = 6;
+const RIVER_SPEED_TILES_PER_CYCLE = 1 / 3;
+
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
 }
@@ -304,6 +316,15 @@ function placeholderDryTexture(): Texture {
     source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
   });
   return sharedPlaceholderDryTexture;
+}
+
+let sharedPlaceholderRiverFlowTexture: Texture | null = null;
+/** A 1x1 "no river here" flow texture (alpha 0, which is what the shader reads), bound in world mode and before the flow cells are ready. */
+function placeholderRiverFlowTexture(): Texture {
+  sharedPlaceholderRiverFlowTexture ??= new Texture({
+    source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
+  });
+  return sharedPlaceholderRiverFlowTexture;
 }
 
 let sharedPlaceholderNoFoamTexture: Texture | null = null;
@@ -360,6 +381,7 @@ export class WaterLayer {
     const [taintDeepR, taintDeepG, taintDeepB] = hexToRgb01(TAINT_DEEP_COLOR);
     const [taintFoamR, taintFoamG, taintFoamB] = hexToRgb01(TAINT_FOAM_COLOR);
     const [blobR, blobG, blobB] = hexToRgb01(CAUSTIC_BLOB_COLOR);
+    const [riverR, riverG, riverB] = hexToRgb01(RIVER_COLOR);
 
     this.uniforms = new UniformGroup({
       uTime: { value: 0, type: 'f32' },
@@ -412,6 +434,13 @@ export class WaterLayer {
       uCausticBlobSoft: { value: CAUSTIC_BLOB_SOFT, type: 'f32' },
       uCausticBlobAlpha: { value: CAUSTIC_BLOB_ALPHA, type: 'f32' },
       uCausticBlobColor: { value: new Float32Array([blobR, blobG, blobB]), type: 'vec3<f32>' },
+      uRiverFlowOn: { value: 0, type: 'f32' },
+      uShowRiverFlow: { value: 0, type: 'f32' },
+      uRiverCycle: { value: 1 / RIVER_CYCLE_SECONDS, type: 'f32' },
+      uRiverSpeed: { value: RIVER_SPEED_TILES_PER_CYCLE * RIVER_SCALE_PER_TILE, type: 'f32' },
+      uRiverAlpha: { value: RIVER_ALPHA, type: 'f32' },
+      uRiverColor: { value: new Float32Array([riverR, riverG, riverB]), type: 'vec3<f32>' },
+      uRiverScale: { value: RIVER_SCALE_PER_TILE / tileWidth, type: 'f32' },
       // What the mask's far channel is normalised over, so the shader can decode
       // G back into tile widths the same way uNearSpan decodes R.
       uFarReach: { value: FOAM_REACH_TILES, type: 'f32' },
@@ -441,6 +470,7 @@ export class WaterLayer {
           uWaterTaint: placeholderTaintTexture().source,
           uWaterNoFoam: placeholderNoFoamTexture().source,
           uWaterDry: placeholderDryTexture().source,
+          uRiverFlow: placeholderRiverFlowTexture().source,
         },
       }),
     });
@@ -564,6 +594,14 @@ export class WaterLayer {
   }
 
   /**
+   * Binds the river flow texture (`RiverFlowLayer.texture`), over the same world rect as the water mask. `null` goes back to
+   * the 1x1 "no river" texture. The texture is owned by the caller, not destroyed here.
+   */
+  setRiverFlowTexture(texture: Texture | null): void {
+    this.mesh.shader!.resources.uRiverFlow = (texture ?? placeholderRiverFlowTexture()).source;
+  }
+
+  /**
    * Hides the layer without discarding its mask — for the states §3.6 lists
    * where water must not draw at all (landing-page preview, and a `deepFogOnly`
    * rebuild where the whole viewport is under opaque mist and this would be
@@ -635,6 +673,11 @@ export class WaterLayer {
     u.uFoamWidth = waterDebugTuning.foamWidthHexes * (this.mode === 'world' ? FOAM_WIDTH_WORLD_SCALE : 1);
     u.uFoamSurge = waterDebugTuning.foamSurge;
     u.uShowMask = waterDebugFlags.showWaterMask ? 1 : 0;
+    // River flow is a settlement-view effect: the world map draws no tile art, so there is no flow texture to read there.
+    u.uRiverFlowOn = waterDebugFlags.riverFlow ? 1 : 0;
+    u.uShowRiverFlow = waterDebugFlags.showRiverFlow ? 1 : 0;
+    u.uRiverAlpha = RIVER_ALPHA * waterDebugTuning.riverBrightness;
+    u.uRiverSpeed = RIVER_SPEED_TILES_PER_CYCLE * RIVER_SCALE_PER_TILE * waterDebugTuning.riverSpeed;
 
     this.mesh.visible = waterDebugFlags.water && this.hasMask && !this.suppressed;
   }

@@ -84,40 +84,29 @@ function cellTexture(masks: LoadedMasks, name: string, frame: DryMaskFrame): Tex
   return texture;
 }
 
+/** One sprite drawn into a mask render texture: a texture, the world rect it covers, and a tint. */
+export interface MaskPlacement {
+  texture: Texture;
+  rect: WorldRect;
+  tint: number;
+}
+
 /**
- * Owns the dry-mask render texture and the sprites drawn into it.
- *
- * `draw` runs when the water mask is applied or the terrain base entries
- * change, never per frame.
+ * A render texture over a world rect, filled with sprites placed in world space: the shared drawing half of the dry mask
+ * and the river flow layer (`riverFlowLayer.ts`). The water shader samples it with the water mask's UVs.
  */
-export class WaterDryLayer {
+export class MaskRenderTarget {
   private readonly container = new Container();
   private pool: Sprite[] = [];
   private target: RenderTexture | null = null;
-  private masks: LoadedMasks | null = null;
 
-  /** The masks are lazily decoded; resolves when `draw` can use them. */
-  async load(): Promise<void> {
-    this.masks = await loadMasks();
-  }
-
-  get ready(): boolean {
-    return this.masks !== null;
-  }
-
-  /** The render texture the water shader samples, or null before the first `draw`. */
+  /** The render texture, or null before the first `render`. */
   get texture(): Texture | null {
     return this.target;
   }
 
-  /**
-   * Rebuilds the render texture over `rect` (the water mask's world rect) from
-   * `entries`, the base art of every sea hex. Returns the (possibly new)
-   * texture to bind.
-   */
-  draw(renderer: Renderer, rect: { minX: number; minY: number; maxX: number; maxY: number }, entries: readonly DryEntry[], tileWidth: number): Texture | null {
-    const masks = this.masks;
-    if (!masks) return this.target;
+  /** Clears the target and draws `placements` into it over `rect`. Returns the (possibly new) texture to bind. */
+  render(renderer: Renderer, rect: { minX: number; minY: number; maxX: number; maxY: number }, placements: readonly MaskPlacement[]): Texture {
     const { width, height, scale } = dryRenderTargetSize(rect.maxX - rect.minX, rect.maxY - rect.minY);
     if (!this.target) {
       this.target = RenderTexture.create({ width, height, resolution: 1, scaleMode: 'linear' });
@@ -127,7 +116,7 @@ export class WaterDryLayer {
     }
 
     let used = 0;
-    const place = (texture: Texture, worldRect: WorldRect, tint: number) => {
+    for (const { texture, rect: worldRect, tint } of placements) {
       const sprite = (this.pool[used] ??= new Sprite());
       sprite.texture = texture;
       sprite.tint = tint;
@@ -136,14 +125,6 @@ export class WaterDryLayer {
       sprite.height = worldRect.h;
       if (!sprite.parent) this.container.addChild(sprite);
       used++;
-    };
-    for (const entry of entries) {
-      const name = entry.texture.label ?? '';
-      if (REFERENCE_FRAME_RE.test(name)) continue;
-      const frame = masks.data.frames[name];
-      if (frame) place(cellTexture(masks, name, frame), dryCellWorldRect(entry, frame, tileWidth), 0xffffff);
-      // Sea-hex art that is not plain water and has no mask: all of it is dry. Black tint keeps rgb 0 and the art's own alpha, which is what the shader reads.
-      else place(entry.texture, artCanvasWorldRect(entry, tileWidth), 0x000000);
     }
     for (let i = used; i < this.pool.length; i++) {
       if (this.pool[i].parent) this.container.removeChild(this.pool[i]);
@@ -160,5 +141,54 @@ export class WaterDryLayer {
     this.pool = [];
     this.target?.destroy(true);
     this.target = null;
+  }
+}
+
+/**
+ * Owns the dry-mask render texture and the sprites drawn into it.
+ *
+ * `draw` runs when the water mask is applied or the terrain base entries
+ * change, never per frame.
+ */
+export class WaterDryLayer {
+  private readonly target = new MaskRenderTarget();
+  private masks: LoadedMasks | null = null;
+
+  /** The masks are lazily decoded; resolves when `draw` can use them. */
+  async load(): Promise<void> {
+    this.masks = await loadMasks();
+  }
+
+  get ready(): boolean {
+    return this.masks !== null;
+  }
+
+  /** The render texture the water shader samples, or null before the first `draw`. */
+  get texture(): Texture | null {
+    return this.target.texture;
+  }
+
+  /**
+   * Rebuilds the render texture over `rect` (the water mask's world rect) from
+   * `entries`, the base art of every sea hex. Returns the (possibly new)
+   * texture to bind.
+   */
+  draw(renderer: Renderer, rect: { minX: number; minY: number; maxX: number; maxY: number }, entries: readonly DryEntry[], tileWidth: number): Texture | null {
+    const masks = this.masks;
+    if (!masks) return this.target.texture;
+    const placements: MaskPlacement[] = [];
+    for (const entry of entries) {
+      const name = entry.texture.label ?? '';
+      if (REFERENCE_FRAME_RE.test(name)) continue;
+      const frame = masks.data.frames[name];
+      if (frame) placements.push({ texture: cellTexture(masks, name, frame), rect: dryCellWorldRect(entry, frame, tileWidth), tint: 0xffffff });
+      // Sea-hex art that is not plain water and has no mask: all of it is dry. Black tint keeps rgb 0 and the art's own alpha, which is what the shader reads.
+      else placements.push({ texture: entry.texture, rect: artCanvasWorldRect(entry, tileWidth), tint: 0x000000 });
+    }
+    return this.target.render(renderer, rect, placements);
+  }
+
+  destroy(): void {
+    this.target.destroy();
   }
 }

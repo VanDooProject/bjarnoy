@@ -296,6 +296,41 @@ describe('WaterLayer', () => {
     expect(resources.uWaterDry).toBe(placeholder);
   });
 
+  it('binds the "no river" placeholder until a river flow texture is set, and the given texture after', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const resources = layer.mesh.shader!.resources as Record<string, unknown>;
+    const placeholder = resources.uRiverFlow;
+    expect(placeholder).toBeDefined();
+    expect(WATER_FRAGMENT).toContain('uniform sampler2D uRiverFlow;');
+
+    const texture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    layer.setRiverFlowTexture(texture);
+    expect(resources.uRiverFlow).toBe(texture.source);
+
+    layer.setRiverFlowTexture(null);
+    expect(resources.uRiverFlow).toBe(placeholder);
+  });
+
+  it('maps the river flow flags and knobs onto their uniforms', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const u = uniformsOf(layer);
+    layer.tick(0);
+    expect(u.uRiverFlowOn).toBe(1);
+    expect(u.uShowRiverFlow).toBe(0);
+    const alpha = u.uRiverAlpha as number;
+    const speed = u.uRiverSpeed as number;
+
+    waterDebugFlags.riverFlow = false;
+    waterDebugFlags.showRiverFlow = true;
+    waterDebugTuning.riverBrightness = 2;
+    waterDebugTuning.riverSpeed = 0.5;
+    layer.tick(16);
+    expect(u.uRiverFlowOn).toBe(0);
+    expect(u.uShowRiverFlow).toBe(1);
+    expect(u.uRiverAlpha).toBeCloseTo(alpha * 2, 9);
+    expect(u.uRiverSpeed).toBeCloseTo(speed * 0.5, 9);
+  });
+
   it('never draws a sea body in settlement mode — the painted water tiles are it', () => {
     const layer = new WaterLayer('settlement', TILE_W, TILE_H);
     waterDebugFlags.seaBody = true;
