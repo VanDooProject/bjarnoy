@@ -350,15 +350,26 @@ public sealed class SettlementService(
             .Where(s => s.WorldId == worldId && s.IslandId == islandId)
             .Select(s => new
             {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
+                s.IslandId,
                 s.CentreQ,
                 s.CentreR,
                 Buildings = s.Buildings.Select(b => new { b.Q, b.R, b.Type, b.Level }).ToList(),
             })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        var snapshots = neighbours.Select(n => new Founding.NeighbourSnapshot(
-            new HexCoord(n.CentreQ, n.CentreR),
-            n.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()));
+        // A neighbour's towers can be connected through another settlement of the same player (the chain rule), so its
+        // claim discs come from the whole realm, not from the one settlement alone.
+        var neighbourRows = neighbours
+            .Select(n => new PlayerRealms.Row(
+                n.Id, n.UserId, n.OwnerId, n.IslandId, new HexCoord(n.CentreQ, n.CentreR),
+                [.. n.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]))
+            .ToList();
+        var neighbourRealms = PlayerRealms.Resolve(neighbourRows);
+        var snapshots = neighbourRows.Select(n => new Founding.NeighbourSnapshot(
+            n.Centre, n.Buildings, neighbourRealms[n.Id].DiscsOf(n.Id)));
 
         switch (Founding.CheckSpacing(coord, snapshots, MinimumSpacing, FoundingSafetyMargin))
         {
@@ -896,7 +907,8 @@ public sealed class SettlementService(
         var bogKind = await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false);
         var result = settled.PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
-            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants, bogKind);
+            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants, bogKind,
+            realm: await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false));
 
         if (!result.Accepted)
         {
@@ -1046,6 +1058,14 @@ public sealed class SettlementService(
             .OrderBy(s => s.Id)
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// The chain-rule realm (<see cref="ConnectedRealm"/>) of <paramref name="settled"/> and the same player's other
+    /// settlements on its island: which towers are connected and which ground the player's realm covers.
+    /// </summary>
+    public Task<ConnectedRealm> LoadRealmAsync(
+        SettlementEntity entity, Settlement settled, CancellationToken cancellationToken = default) =>
+        PlayerRealms.ForSettlementAsync(_dbContext, entity, settled, cancellationToken);
+
     /// <summary>Queues a build, charging for it up front.</summary>
     public async Task<BuildResult> QueueBuildAsync(
         Guid settlementId,
@@ -1125,7 +1145,8 @@ public sealed class SettlementService(
                 ? await WorldPalisades.NearAsync(_dbContext, settlement.WorldId, coord, sampler.TerrainAt, cancellationToken).ConfigureAwait(false)
                 : null,
             isWideRiverAt: bridgeSite.IsWide,
-            onWastedIsland: bridgeSite.OnWastedIsland);
+            onWastedIsland: bridgeSite.OnWastedIsland,
+            realm: await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false));
 
         if (!decision.Accepted)
         {
@@ -1267,7 +1288,8 @@ public sealed class SettlementService(
         // isn't actually claimed (its footprint isn't fully covered) must
         // not count as this settlement's shoreline either.
         var trainGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var discs = settled.ClaimDiscs.ToList();
+        var discs = (await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false))
+            .DiscsOf(settled.Id).ToList();
         var hasShoreline = discs
             .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
             .Distinct()

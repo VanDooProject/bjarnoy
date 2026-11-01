@@ -17627,8 +17627,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass",
-        "sand"
+        "grass"
       ],
       "requiresCoastalWater": false,
       "alsoOnCoastalWater": false,
@@ -17666,8 +17665,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass",
-        "sand"
+        "grass"
       ],
       "requiresCoastalWater": false,
       "alsoOnCoastalWater": false,
@@ -17700,8 +17698,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass",
-        "sand"
+        "grass"
       ],
       "requiresCoastalWater": false,
       "alsoOnCoastalWater": false,
@@ -17734,8 +17731,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass",
-        "sand"
+        "grass"
       ],
       "requiresCoastalWater": false,
       "alsoOnCoastalWater": false,
@@ -17768,8 +17764,7 @@
         "iron": 0
       },
       "allowedTerrain": [
-        "grass",
-        "sand"
+        "grass"
       ],
       "requiresCoastalWater": false,
       "alsoOnCoastalWater": false,

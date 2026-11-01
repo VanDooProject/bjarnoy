@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  previewGroundCoords,
   attentionPulseFrame,
   clampAnimationDeltaMs,
   fadeAlphaAt,
@@ -24,6 +25,8 @@ import {
   type TextureLoadDeps,
   clientToCanvasPoint,
   waterMaskTerrainFor,
+  worldHexFill,
+  worldRiverColor,
 } from './HexMapRenderer';
 import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
@@ -284,6 +287,28 @@ describe('previewDrawRadius', () => {
   it('draws a wider radius than the camera fits, but never a narrower one', () => {
     expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 34 })).toBe(34);
     expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 5 })).toBe(13);
+  });
+});
+
+// The landing/onboarding preview drew the bog edge border for every bog hex in view, including ones past the island
+// crop whose ground art is never drawn, so their outlines floated over the empty backdrop. Terrain and bog edges now
+// both take this one crop.
+describe('previewGroundCoords', () => {
+  const center = { q: 0, r: 0 };
+  const crop = hexesInRadius(center, 2);
+  const world = { previewCropTiles: vi.fn(() => crop) };
+
+  it('keeps only the hexes of the island crop, so nothing past it is drawn or outlined', () => {
+    const kept = previewGroundCoords(hexesInRadius(center, 6), world, { previewCenter: center, previewRadius: 2 });
+    expect(kept).toHaveLength(crop.length);
+    expect(kept).not.toContainEqual({ q: 5, r: 0 });
+    expect(world.previewCropTiles).toHaveBeenCalledWith(center, 2);
+  });
+
+  it('keeps the whole drawn disc, sea included, with previewSea', () => {
+    const options = { previewCenter: center, previewRadius: 2, previewRenderRadius: 4, previewSea: true };
+    const kept = previewGroundCoords(hexesInRadius(center, 6), world, options);
+    expect(kept).toHaveLength(hexesInRadius(center, 4).length);
   });
 });
 
@@ -1056,5 +1081,23 @@ describe('wheelPassesToPage', () => {
   it('never passes on a host that did not opt into page scroll', () => {
     expect(wheelPassesToPage({ ...base, allowPageScroll: false })).toBe(false);
     expect(wheelPassesToPage({ ...base, allowPageScroll: false, lockCamera: true })).toBe(false);
+  });
+});
+
+describe('world-map wasted lands', () => {
+  it('fills a revealed wasted hex from the wasted palette, not the green island colours', () => {
+    for (const terrain of ['grass', 'forest', 'sand', 'mountain'] as const) {
+      expect(worldHexFill(terrain, true)).not.toBe(worldHexFill(terrain, false));
+    }
+  });
+
+  it('keeps the four wasted terrains apart from each other', () => {
+    const fills = (['grass', 'forest', 'sand', 'mountain'] as const).map((t) => worldHexFill(t, true));
+    expect(new Set(fills).size).toBe(4);
+  });
+
+  it('draws a lava stream in another colour than a river', () => {
+    expect(worldRiverColor({ wasted: true })).not.toBe(worldRiverColor({ wasted: false }));
+    expect(worldRiverColor({})).toBe(worldRiverColor({ wasted: false }));
   });
 });

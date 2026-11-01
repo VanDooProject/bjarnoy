@@ -139,7 +139,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
-| 18 | Siege Workshop (trains the battering ram) | Archery Range 3 |
+| 18 | Siege Workshop (trains the catapult and the battering ram) | Archery Range 3 |
 | 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
 | 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
@@ -201,15 +201,15 @@ play.
   bog shore, creek, spring or lake). It replaces the tile it stands on; its
   art keeps that ground round it, so each ground has its own version of the
   tower.
-- **How a tower claims:** a tower claims every hex within its level of
-  itself (level 1 its neighbours, level 2 two rings, …), centred on the
-  tower. It has to be built inside the realm, which includes ground another
-  tower claimed, so towers can chain out across an island. A tower claims
-  nothing while it is under construction (a level-0 stub claims only its own
-  hex, which is already inside the realm); its ground joins the realm when
-  level 1 finishes.
-- **Giants are claimed whole:** a giant's seven hexes join the realm only when
-  the claim covers all seven; a claim that reaches some of them takes none.
+- **Towers have to be chained to a longhouse.** A tower claims its ground only
+  while it is connected: it stands on ground claimed by one of your
+  longhouses, or by a tower that is itself connected. All of your longhouses
+  on an island count, so a chain that a longhouse reaches from either end stays
+  connected when a tower in the middle falls. A cut-off tower claims nothing and
+  sees nothing until the link is rebuilt; it still counts for prerequisites. It
+  does not count against the tower limit while cut off; once it is connected
+  again it counts, even if that puts you over the limit (you then can't build
+  more towers).
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
@@ -320,7 +320,7 @@ building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolv
 Only the surviving engines that can damage the target count towards its levels. A named target
 the surviving engines cannot damage takes no damage (the report has no siege line). Without a
 named target, or when it is gone, the pick is random (seeded) among the buildings the surviving
-engines can damage; if there are none, no siege happens. Rams are trained at the Siege Workshop
+engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
 (section 8, the iron ladder).
 
 **Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
@@ -578,7 +578,7 @@ them so the levels match. *Implemented:*
   | Karve | Dockyard | 8 (5) |
   | Bowman | Archery Range | 9 (4) |
   | Provisioner, Settler | Cart Workshop | 10 (4, 5) |
-  | Berserker, Catapult, Longship | Barracks, Archery Range, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
+  | Berserker, Catapult, Longship | Barracks, Siege Workshop, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
   | Ram | Siege Workshop | 20: after the Berserker, like the Catapult |
 
   (Berserker still needs the Axeman, Catapult the Berserker, Longship the

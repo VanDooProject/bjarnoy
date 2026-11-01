@@ -17,11 +17,19 @@ public sealed class RealmIndex
     public static RealmIndex Empty { get; } = new();
 
     /// <summary>Adds one settlement: its claim discs (<see cref="Settlement.ClaimDiscsFor"/>) and its standing buildings.</summary>
-    public RealmIndex Add(HexCoord centre, IReadOnlyList<PlacedBuilding> buildings)
+    public RealmIndex Add(HexCoord centre, IReadOnlyList<PlacedBuilding> buildings) =>
+        Add(Settlement.ClaimDiscsFor(centre, buildings), buildings);
+
+    /// <summary>
+    /// Adds one settlement with its already-resolved connected claim discs (<see cref="ConnectedRealm.DiscsOf"/>: towers can
+    /// be connected through another settlement of the same player) and its standing buildings.
+    /// </summary>
+    public RealmIndex Add(IEnumerable<(HexCoord Centre, int Radius)> discs, IReadOnlyList<PlacedBuilding> buildings)
     {
+        ArgumentNullException.ThrowIfNull(discs);
         ArgumentNullException.ThrowIfNull(buildings);
 
-        _discs.AddRange(Settlement.ClaimDiscsFor(centre, buildings));
+        _discs.AddRange(discs);
         foreach (var building in buildings)
         {
             _buildings.Add(building.Coord);

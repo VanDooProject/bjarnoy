@@ -36,7 +36,8 @@ public class FieldBattleResolverTests
     public void ClaimAt_uses_the_specific_towers_own_halved_bonus_inside_its_disc()
     {
         var centre = new HexCoord(0, 0);
-        var tower = new PlacedBuilding(new HexCoord(10, 0), BuildingType.Tower, Level: 4);
+        // Inside the longhouse's reach, so the tower is connected and claims (the chain rule).
+        var tower = new PlacedBuilding(new HexCoord(2, 0), BuildingType.Tower, Level: 4);
         var buildings = new[] { tower };
 
         var claim = FieldBattleResolver.ClaimAt(tower.Coord, centre, buildings);
@@ -64,6 +65,23 @@ public class FieldBattleResolverTests
         Assert.True(claim.Claims);
         // Highest tower level 6 -> TowerDefenseBonusPercent(6) = 30, halved = 15.
         Assert.Equal(15.0, claim.DefenseBonusPercent);
+    }
+
+    [Fact]
+    public void ClaimAt_central_disc_bonus_ignores_a_cut_off_tower_and_counts_it_once_connected()
+    {
+        var centre = new HexCoord(0, 0);
+        var longhouse = new PlacedBuilding(centre, BuildingType.Longhouse, Level: 3);
+        var hex = new HexCoord(0, 2);
+
+        var cutOff = FieldBattleResolver.ClaimAt(
+            hex, centre, [longhouse, new PlacedBuilding(new HexCoord(40, 0), BuildingType.Tower, Level: 5)]);
+        var connected = FieldBattleResolver.ClaimAt(
+            hex, centre, [longhouse, new PlacedBuilding(new HexCoord(-1, 0), BuildingType.Tower, Level: 5)]);
+
+        Assert.True(cutOff.Claims);
+        Assert.Equal(0.0, cutOff.DefenseBonusPercent);
+        Assert.Equal(BuildingCatalogue.TowerDefenseBonusPercent(5) * 0.5, connected.DefenseBonusPercent);
     }
 
     [Fact]

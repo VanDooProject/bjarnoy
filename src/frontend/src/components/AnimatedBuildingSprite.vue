@@ -107,7 +107,6 @@ onBeforeUnmount(stopAnimation);
   position: relative;
   width: 100%;
   max-width: 100%;
-  max-height: 100%;
 }
 .layer {
   position: absolute;

@@ -388,9 +388,12 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             var domain = entity.ToDomain();
 
             var line = HexLine(centre, candidateCoord);
-            var towerCoords = new[] { 0.4, 0.7, 0.95 }
-                .Select(fraction => line[(int)Math.Round(fraction * (line.Length - 1))])
-                .Distinct()
+            // Each tower stands inside the previous one's disc (the first within the founding longhouse's own radius of 2), so the
+            // whole chain is connected and claims (the chain rule).
+            var towerCoords = Enumerable.Range(0, line.Length)
+                .Select(step => 2 + (step * 9))
+                .TakeWhile(index => index < line.Length - 1)
+                .Select(index => line[index])
                 .ToList();
 
             domain = domain with

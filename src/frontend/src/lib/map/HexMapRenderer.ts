@@ -40,7 +40,7 @@ import {
 } from './markerOcclusion';
 import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { axialToOddQ, coordKey, hexDistance, hexesInRadius, neighbors, parseKey } from '../hex/coords';
+import { axialToOddQ, coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { formatCountdownShort } from '../hud/countdown';
@@ -64,6 +64,7 @@ import {
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { attachFramePacing } from './framePacing';
+import { splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
@@ -78,7 +79,7 @@ import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
 import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
-import { riverPathFor } from './riverPath';
+import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -161,6 +162,24 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   bog: 0x5b6234, // the moss: duller and yellower than the grass, like the art
   lake: 0x27445e, // dark slate blue, the bog water's own colour
 };
+
+/**
+ * A revealed wasted island's flat world-map colours, picked from its tile art's top faces
+ * (`wasteland`, `deadforest`, `blacksand`, `mountaintile_jagged`): ash-brown ground, darker under the
+ * dead trees, grey black sand, lighter jagged rock. Keyed by the hex's wire terrain, which stays
+ * grass/forest/sand/mountain on a wasted island (see `Tile.wasted`).
+ */
+const WORLD_WASTED_FILL: Partial<Record<Terrain, number>> = {
+  grass: 0x47403c,
+  forest: 0x302c29,
+  sand: 0x646772,
+  mountain: 0x6b625a,
+};
+
+/** A world-map hex's flat fill: the wasted palette on a revealed wasted island, else the terrain's own. */
+export function worldHexFill(terrain: Terrain, wasted: boolean): number {
+  return (wasted ? WORLD_WASTED_FILL[terrain] : undefined) ?? WORLD_TERRAIN_FILL[terrain];
+}
 
 // zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()
 // method, "playful" style — the one shown in docs/design/img/worldmap.png)
@@ -490,8 +509,8 @@ export interface HexMapRendererOptions {
    *
    * 'world' mode: the same clamp around the hex disc of `previewRadius` at `previewCenter` (the showcase hero map).
    * The camera starts fitted to that disc, never zooms out past it, its centre stays inside the disc's bounding box,
-   * zooming in stops short of the world-to-settlement switch, the idle drift is off, and only hexes within
-   * `previewRenderRadius` (default `previewRadius`) of the centre are drawn.
+   * zooming in stops short of the world-to-settlement switch, and the idle drift is off. Hexes are not capped to the disc:
+   * the camera never sees past what its clamp allows, so everything in view is drawn and no cut-off edge can come into frame.
    */
   confineCamera?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
@@ -944,6 +963,28 @@ export function previewDrawRadius(options: { previewRadius?: number; previewRend
 }
 
 /**
+ * The settlement-mode preview's (no settlement yet: the landing page, onboarding) ground crop of `coords`.
+ * landing-page-defects.md L5: a small radius crop around `previewCenter` (deliberate framing, matching the mockup's own
+ * scale) intersected with landmass membership, so a *foreign* island a world seed placed nearby within that radius
+ * doesn't bleed in, and water isn't drawn (`previewCropTiles` only returns land). `previewSea` widens it to the whole
+ * drawn disc, so the sea there draws its own tile art. This is also exactly the tile set `settlementCameraOrigin`'s
+ * locked-preview branch (L4) fits the camera to; the two must agree. `previewCropTiles` is cached per centre inside
+ * WorldModel, so this is cheap on every rebuild.
+ */
+export function previewGroundCoords(
+  coords: AxialCoord[],
+  worldModel: Pick<WorldModel, 'previewCropTiles'>,
+  options: { previewCenter?: AxialCoord; previewSea?: boolean; previewRadius?: number; previewRenderRadius?: number },
+): AxialCoord[] {
+  const center = options.previewCenter ?? { q: 0, r: 0 };
+  const radius = previewDrawRadius(options);
+  const keys = new Set(
+    (options.previewSea ? hexesInRadius(center, radius) : worldModel.previewCropTiles(center, radius)).map(coordKey),
+  );
+  return coords.filter((c) => keys.has(coordKey(c)));
+}
+
+/**
  * Client (viewport) point -> canvas layout pixels. `rect` is the canvas's
  * `getBoundingClientRect()`, `layout` its `offsetWidth/Height`: they differ
  * only under a CSS `zoom` on an ancestor, where the rect is in zoomed pixels
@@ -1357,6 +1398,13 @@ const WHEEL_IDLE_MS = 180;
 const ROUTE_COLOR = 0x5ab0e6;
 /** World-map river stroke colour — a sibling tone to ROUTE_COLOR, tuned to read against WORLD_TERRAIN_FILL's grass/forest. */
 const RIVER_COLOR = 0x4fa8d8;
+/** World-map lava stream colour (a wasted island's rivers): the glow of the lavastream art. */
+const LAVA_COLOR = 0xe8702a;
+
+/** The world-map stroke colour of a river tile: lava on a wasted island, water everywhere else. */
+export function worldRiverColor(river: Pick<RiverTile, 'wasted'>): number {
+  return river.wasted ? LAVA_COLOR : RIVER_COLOR;
+}
 /** An army already turned around and heading home. */
 const RETURNING_COLOR = 0x8fa3af;
 /** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL's "someone else's" reading. */
@@ -1833,6 +1881,10 @@ export class HexMapRenderer {
   // frames between rebuilds during a drag.
   private deepFogOnly = false;
   private borderLayer = new Graphics();
+  // Settlement mode: one Graphics per bordered hex holding that hex's FRONT border edges, parented to `terrainTop` at
+  // the hex's depth key + BORDER_FRONT_Z so they draw over the hex's own topping (+0.5 is its animation overlay) but
+  // under the toppings of the hexes in front. Pooled like the bog edge graphics; unused ones are hidden on rebuild.
+  private borderFrontPool: Graphics[] = [];
   private riverLayer = new Graphics();
   private hoverLayer = new Graphics();
   // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
@@ -3457,14 +3509,6 @@ export class HexMapRenderer {
   }
 
   /** Every hex axial coord whose grid position falls within `rect` (world-space). */
-  /** A confined 'world' frame draws only the hexes within `previewDrawRadius` of `previewCenter`; every other mode passes through. */
-  private capToPreviewDisc(coords: AxialCoord[]): AxialCoord[] {
-    if (this.options.mode !== 'world' || !this.options.confineCamera) return coords;
-    const at = this.options.previewCenter ?? { q: 0, r: 0 };
-    const radius = previewDrawRadius(this.options);
-    return coords.filter((c) => hexDistance(at, c) <= radius);
-  }
-
   private coordsInRect(
     rect: { minX: number; minY: number; maxX: number; maxY: number },
     clipSources: FogSource[] | null,
@@ -3742,7 +3786,13 @@ export class HexMapRenderer {
     const fogActive = this.isFogActive();
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
     this.rebuildBounds = this.scanBoundsOfRect(rect);
-    const coords = this.capToPreviewDisc(this.coordsInRect(rect, this.scanClipSources(fogActive)));
+    const coords = this.coordsInRect(rect, this.scanClipSources(fogActive));
+    // The ground and everything drawn straight onto it (the bog edge border) share one crop, so nothing outlines a hex
+    // the preview never draws.
+    const groundCoords =
+      this.options.mode === 'settlement' && !this.settlement()
+        ? previewGroundCoords(coords, this.options.worldModel, this.options)
+        : coords;
     const deepFogOnly =
       this.options.mode === 'world' && fogActive && fogDebugFlags.terrainCull && this.isEntirelyDeepFog(rect);
     this.deepFogOnly = deepFogOnly;
@@ -3756,7 +3806,7 @@ export class HexMapRenderer {
       fogPerfStats.terrainDrawnCount = 0;
       fogPerfStats.terrainCulledCount = 0;
     } else {
-      this.rebuildTerrain(coords, fogActive);
+      this.rebuildTerrain(groundCoords, fogActive);
     }
     fogPerfStats.terrainMs = performance.now() - phaseStart;
 
@@ -3767,7 +3817,7 @@ export class HexMapRenderer {
     }
 
     phaseStart = performance.now();
-    this.rebuildBogEdges(coords);
+    this.rebuildBogEdges(groundCoords);
     fogPerfStats.bogEdgesMs = performance.now() - phaseStart;
 
     phaseStart = performance.now();
@@ -4028,42 +4078,10 @@ export class HexMapRenderer {
     };
     const baseEntries = new Map<string, Entry>();
     const topEntries = new Map<string, Entry>();
-    const settlement = this.settlement();
-    const preview = !settlement;
-    const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
-    // landing-page-defects.md L5: culled by `previewCropTiles` — a small
-    // radius crop around `previewCenter` (deliberate framing, matching the
-    // mockup's own scale, not itself a bug) intersected with landmass
-    // membership, so a *foreign* island a world seed happened to place
-    // nearby within that same radius no longer bleeds in (computed once per
-    // rebuild here, then checked per-hex via a Set — not re-flooded per
-    // hex; `previewCropTiles`/`previewIslandTiles` are cached per centre
-    // inside WorldModel, so this is cheap even though rebuildTerrain runs
-    // on every camera change). This is also exactly the tile set
-    // `settlementCameraOrigin`'s locked-preview branch (L4) fits the camera
-    // to — the two must agree, or the framing goes wrong again (see that
-    // method's own comment).
-    const previewTileKeys = preview
-      ? new Set(
-          (this.options.previewSea
-            ? hexesInRadius(previewCenter, previewDrawRadius(this.options))
-            : worldModel.previewCropTiles(previewCenter, previewDrawRadius(this.options))
-          ).map((c) => coordKey(c)),
-        )
-      : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
-      // zip 6a: before a settlement exists, this is the landing page's
-      // preview — a small crop of one island, not a slice of the whole
-      // (unfogged) world. Water isn't drawn at all (matching how world mode
-      // treats sea — see rebuildTerrainFlat) and membership in
-      // `previewTileKeys` already excludes it (`previewCropTiles` only ever
-      // returns land), so this one check replaces the old sea check and the
-      // old (membership-blind) radius check both. `previewSea` widens the set
-      // to the whole drawn disc, so the sea there draws its own tile art.
-      if (preview && !previewTileKeys!.has(coordKey(c))) continue;
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
       // scouted ring, instead of the tile popping into existence only once
@@ -4279,7 +4297,7 @@ export class HexMapRenderer {
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[terrain] });
+      this.terrainFlat.poly(flat).fill({ color: worldHexFill(terrain, worldModel.isWastedLandAt(c.q, c.r)) });
       fogPerfStats.terrainDrawnCount++;
     }
   }
@@ -4298,7 +4316,9 @@ export class HexMapRenderer {
 
     for (const c of coords) {
       const river = worldModel.getRiverTile(c.q, c.r);
-      if (!river) continue;
+      // A bog carries its river on as creek, lake-mouth and creek-spring bog tiles (no river tile there).
+      const bog = river ? undefined : worldModel.getBogTile(c.q, c.r);
+      if (!river && !bog) continue;
 
       if (
         fogActive &&
@@ -4309,10 +4329,18 @@ export class HexMapRenderer {
         continue;
       }
 
-      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
-      const { segments, springDot } = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      let drawing: RiverDrawing | null;
+      if (river) {
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
+        drawing = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      } else {
+        drawing = bogCreekPathFor(c, bog!, TILE_W, TILE_H);
+      }
+      if (!drawing) continue;
+      const { segments, springDot } = drawing;
       // A stream is half a river's width: draw its line thinner.
-      const streamScale = river.width === 'stream' ? 0.55 : 1;
+      const streamScale = river?.width === 'stream' ? 0.55 : 1;
+      const color = river ? worldRiverColor(river) : RIVER_COLOR;
 
       for (const { from, control, to } of segments) {
         // Double stroke, same "wide soft casing under a crisp line" trick
@@ -4322,14 +4350,14 @@ export class HexMapRenderer {
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 5 * streamScale, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
+          .stroke({ width: 5 * streamScale, color, alpha: 0.35, cap: 'round', join: 'round' });
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 2.2 * streamScale, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
+          .stroke({ width: 2.2 * streamScale, color, alpha: 0.95, cap: 'round', join: 'round' });
       }
       if (springDot) {
-        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color: RIVER_COLOR, alpha: 0.95 });
+        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color, alpha: 0.95 });
       }
     }
   }
@@ -4863,6 +4891,11 @@ export class HexMapRenderer {
   private rebuildBorders(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {
     const { worldModel, mode, playerId } = this.options;
     this.borderLayer.clear();
+    let frontUsed = 0;
+    // Hide the pooled front-edge graphics up front: every early return below leaves them hidden.
+    const hideUnusedFront = () => {
+      for (let i = frontUsed; i < this.borderFrontPool.length; i++) this.borderFrontPool[i].visible = false;
+    };
     fogPerfStats.borderedHexCount = 0;
 
     if (deepFogOnly) {
@@ -4870,10 +4903,14 @@ export class HexMapRenderer {
       // reach this viewport, so nothing in it is explored — there is no
       // border to draw and no per-hex loop worth running over what can be
       // thousands of hexes in a low-zoom world-map viewport.
+      hideUnusedFront();
       return;
     }
 
-    if (!fogDebugFlags.realmBorders) return;
+    if (!fogDebugFlags.realmBorders) {
+      hideUnusedFront();
+      return;
+    }
 
     for (const c of coords) {
       if (fogActive && !worldModel.isExplored(c.q, c.r)) continue;
@@ -4901,16 +4938,29 @@ export class HexMapRenderer {
       // drew a solid mesh over the whole realm instead of a border around it.
       this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
 
-      for (const edge of outerEdgesOf(worldModel, c, tile.ownerId)) {
-        const a = top[edge[0]];
-        const b = top[edge[1]];
-        this.borderLayer.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
-        this.borderLayer
-          .moveTo(a.x, a.y)
-          .lineTo(b.x, b.y)
-          .stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+      // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
+      // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
+      const { back, front } = splitBorderEdges(outerEdgesOf(worldModel, c, tile.ownerId));
+      if (mode === 'settlement') {
+        strokeBorderEdges(this.borderLayer, top, back, color);
+        if (front.length > 0) {
+          let g = this.borderFrontPool[frontUsed];
+          if (!g) {
+            g = new Graphics();
+            this.borderFrontPool.push(g);
+            this.terrainTop.container.addChild(g);
+          }
+          frontUsed++;
+          g.clear();
+          g.visible = true;
+          g.zIndex = isoDepthKey(c) + BORDER_FRONT_Z;
+          strokeBorderEdges(g, top, front, color);
+        }
+      } else {
+        strokeBorderEdges(this.borderLayer, top, [...back, ...front], color);
       }
     }
+    hideUnusedFront();
   }
 
   private rebuildMarkers() {
@@ -6161,6 +6211,19 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
 // the realm's true outer edges get a border stroke, not every claimed
 // hex's full hexagon outline.
 const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
+
+/** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
+const BORDER_FRONT_Z = 0.6;
+
+/** The two overlapping strokes (wide faint under thin solid) that fake the border glow, for the given corner-index edges. */
+function strokeBorderEdges(g: Graphics, top: { x: number; y: number }[], edges: readonly [number, number][], color: number) {
+  for (const edge of edges) {
+    const a = top[edge[0]];
+    const b = top[edge[1]];
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+  }
+}
 
 /** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
 function outerEdgesOf(worldModel: WorldModel, c: AxialCoord, ownerId: string): [number, number][] {

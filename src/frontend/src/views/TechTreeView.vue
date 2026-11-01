@@ -454,7 +454,7 @@ function formatAmount(value: number): string {
    shadow padding): the showcase picture and the layered base/top render both
    come from a 2:3 canvas with the tile floor at its bottom, so filling the
    width bottom-anchored puts the floor on the same line for every level. Any
-   shorter and `max-height` squashes the full-canvas layered render, so the
+   shorter and the full-canvas layered render sticks out above the box, so the
    tile jumps where a building's levels switch from one source to the other. */
 .thumb {
   display: flex;
