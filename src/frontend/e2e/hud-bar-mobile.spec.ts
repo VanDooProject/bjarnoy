@@ -25,7 +25,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { loginTestUser } from './helpers';
+import { loginTestUser, openHudDrawer } from './helpers';
 import { SettlementPage } from './pages';
 
 // DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
@@ -930,7 +930,7 @@ test('a short phone can scroll the open drawer down to reach the profile nudge',
   // profile nudge (showProfileNudge in MobileHudDrawer.vue) needs nothing
   // further set up here; the anonymous, no-nickname founding above already
   // satisfies its other conditions too.
-  await page.locator('.hud-grip').click();
+  await openHudDrawer(page);
   const nudge = page.locator('.hud-drawer [data-testid="profile-nudge"]');
   await expect(nudge).toBeVisible();
 
