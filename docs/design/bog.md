@@ -15,7 +15,7 @@ this sits among the open work, see §11 there.
 |---|---|
 | `bog` (moss ground, several decorated variants) | a new land terrain with its own base tile (its own `Terrain` value, not a grass variant) |
 | `bogcreek`, `bogcreek_bend`, `bogcreek_spring` | creeks: water crossings on bog ground with a river's profile, so they join rivers seamlessly. They do **not** count as rivers for the Sawmill or Crop Mill: those buildings' art has grass banks, which don't match bog ground. The **Hammer Forge** does stand on a bog creek (below). |
-| `boglake`, `boglake_inlet`, `boglake_shore`, `boglake_half`, `boglake_mouth` | bog lakes: open water plus shore tiles with 1, 2 or 3 water edges |
+| `boglake`, `boglake_inlet`, `boglake_shore`, `boglake_half`, `boglake_mouth` | bog lakes: open water plus shore tiles with 1, 2 or 3 water edges; wind gusts travel over the lake water in step with the forests (see [Bog lakes — gusts in step with the forest](water-shader.md#44d-bog-lakes--gusts-in-step-with-the-forest)) |
 | `bogoreworks` | **Bog-ore works**, the iron producer (7 levels: diggings to bloomery) |
 | `fisherhut_lake` | the **Fishing Hut** on stilts on a half-shore: the same building as the coastal one, with lake art |
 | `claybrickworks` (existing, re-rendered) | **Clay Brickworks** now stands on bog ground; the grass version is dropped |

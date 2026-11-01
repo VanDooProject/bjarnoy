@@ -100,16 +100,16 @@ void main() {
 
   // Glints: sparse points in a jittered grid, each flickering on its own beat; only inside the band.
   if (uGlints > 0.0) {
-    float cell = 15.0;
+    float cell = 18.0;
     vec2 id = floor(w / cell);
     float h = hash21(id + 7.31);
-    float keep = step(0.9, h);
+    float keep = step(0.84, h);
     vec2 centre = (id + 0.2 + 0.6 * vec2(hash21(id + 1.7), hash21(id + 3.9))) * cell;
     float dist = length((w - centre) * vec2(1.0, 1.6));
-    float spot = 1.0 - smoothstep(0.4, 1.7, dist);
+    float spot = 1.0 - smoothstep(0.9, 3.4, dist);
     float beat = 0.5 + 0.5 * sin(uTime * (3.0 + 5.0 * hash21(id + 5.5)) + h * 40.0);
     float flicker = beat * beat * beat;
-    float g = keep * spot * flicker * uGlints * env * env * lake * 0.8;
+    float g = keep * spot * flicker * uGlints * env * env * lake * 0.9;
     vec3 glintColor = vec3(0.82, 0.92, 1.0);
     acc.rgb = acc.rgb * (1.0 - g) + glintColor * g;
     acc.a = acc.a + g * (1.0 - acc.a);
