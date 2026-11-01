@@ -87,7 +87,7 @@ public class UnitCatalogueTests
     public void A_basic_melee_unit_needs_a_barracks_when_a_building_lookup_is_supplied()
     {
         // Spearman is the basic melee slice of the roster — gated on
-        // Barracks, not ArcheryRange (which now only trains Bowman/Catapult).
+        // Barracks, not ArcheryRange (which now only trains the Bowman).
 
         // No buildingLevelOf lookup: old longhouse-only behavior, unaffected
         // by the new training-building gate.
@@ -131,8 +131,8 @@ public class UnitCatalogueTests
     public void The_basic_melee_and_thrall_roster_requires_a_barracks()
     {
         // Barracks (BuildingType.Barracks) trains the basic melee slice of
-        // the land roster plus Thrall; ArcheryRange keeps the archer/siege
-        // slice (Bowman, Catapult), and Cart Workshop trains the rest of the
+        // the land roster plus Thrall; ArcheryRange keeps the archer
+        // (Bowman), SiegeWorkshop the siege engines (Catapult, Ram), and Cart Workshop trains the rest of the
         // civilian roster (Provisioner, Settler). Documents that split
         // so a future roster change updates this test deliberately rather
         // than by accident.
@@ -269,8 +269,8 @@ public class UnitCatalogueTests
 
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.ArcheryRange, t)));
         Assert.True(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.ArcheryRange, t)));
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.ArcheryRange, t)));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
     }
 
     [Fact]

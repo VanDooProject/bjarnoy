@@ -24,8 +24,8 @@ namespace Bjarnoy.Domain.Units;
 /// <see cref="BuildingType.Barracks"/> and <see cref="BuildingType.ArcheryRange"/>
 /// split the land-army roster with no overlap by <see cref="UnitDefinition.RequiredBuildingType"/>:
 /// Barracks trains the core line (Thrall, Spearman, Axeman, Berserker),
-/// ArcheryRange trains the ranged/siege specialists (Bowman, Catapult), and the
-/// <see cref="BuildingType.SiegeWorkshop"/> the battering ram — no
+/// ArcheryRange trains the archer (Bowman), and the
+/// <see cref="BuildingType.SiegeWorkshop"/> the siege engines (Catapult, Ram) — no
 /// unit is ever trainable from two of them.
 /// </remarks>
 public static class UnitCatalogue
@@ -170,7 +170,7 @@ public static class UnitCatalogue
             TrainingDuration = TimeSpan.FromHours(1),
             RequiredLonghouseLevel = 20,
             RequiredUnitType = UnitType.Berserker,
-            RequiredBuildingType = BuildingType.ArcheryRange,
+            RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
         [UnitType.Ram] = new UnitDefinition
         {

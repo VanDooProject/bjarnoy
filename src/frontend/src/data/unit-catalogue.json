@@ -113,7 +113,7 @@
       "trainingSeconds": 3600,
       "requiredLonghouseLevel": 20,
       "requiredUnitType": "berserker",
-      "requiredBuildingType": "archeryrange",
+      "requiredBuildingType": "siegeworkshop",
       "siegeTargets": ["towers", "buildings"]
     },
     {
