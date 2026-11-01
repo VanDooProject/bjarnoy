@@ -213,8 +213,8 @@ const CAUSTIC_CULL_SOFTEN_TILES = 0.03;
  * it is one line; a per-ribbon distance means there is no line at all, and loops
  * that fall entirely inside their own keep-off are gone rather than clipped.
  *
- * 0.1 tiles is small against the 0.25 default keep-off on purpose: the
- * ribbons end just under the foam band (default width 0.3 tiles) instead of a
+ * 0.1 tiles, the same as the default keep-off: the
+ * ribbons end 0.1 to 0.2 tiles out, inside the foam band (default width 0.3 tiles), not a
  * visible gap before it, and the spread is only what breaks up a shared cut
  * line. Not wider, though — the mask's far field saturates at 1.5 tiles.
  */
