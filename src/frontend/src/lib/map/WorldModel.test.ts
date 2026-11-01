@@ -378,6 +378,108 @@ describe('WorldModel border-anchoring (watchtower)', () => {
   });
 });
 
+// Regression: the server derives the realm fresh from what stands
+// (Settlement.ClaimDiscsFor), so a burnt or levelled-down Tower gives its
+// ground back. The model used to only ever add `ownerId`, leaving the gold
+// border around ground nobody claims any more.
+describe('WorldModel realm shrinks when a tower falls', () => {
+  type Hex = { q: number; r: number };
+  const setup = () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const edge = hexRing(at, radius)[0];
+    const snap = (buildings: { q: number; r: number; type: string; level: number }[]) =>
+      model.applyServerSnapshot(settlement.id, {
+        level: settlement.level,
+        resources: settlement.resources,
+        rates: settlement.rates,
+        capacity: settlement.capacity ?? { wood: 0, stone: 0, food: 0, iron: 0 },
+        buildings,
+      });
+    const owned = (c: Hex) => model.getTile(c.q, c.r).ownerId === settlement.id;
+    // Ground a tower at `tower` of level `level` claims that the longhouse disc does not.
+    const exclusive = (tower: Hex, level: number) =>
+      hexesInRadius(tower, level).filter((c) => hexDistance(at, c) > radius);
+    return { model, settlement, at, radius, edge, snap, owned, exclusive };
+  };
+
+  it('releases the ground only a vanished tower claimed, keeps what the longhouse disc covers', () => {
+    const { at, radius, edge, snap, owned, exclusive } = setup();
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 2 }]);
+    const outer = exclusive(edge, 2).filter(owned);
+    expect(outer.length).toBeGreaterThan(0);
+
+    snap([]);
+
+    expect(outer.some(owned)).toBe(false);
+    for (const c of hexesInRadius(at, radius)) expect(owned(c)).toBe(true);
+  });
+
+  it('a building standing on a released hex keeps its owner', () => {
+    const { edge, snap, owned, exclusive } = setup();
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 2 }]);
+    const outer = exclusive(edge, 2).filter(owned);
+    const farmAt = outer[outer.length - 1];
+
+    snap([{ q: farmAt.q, r: farmAt.r, type: 'farm', level: 1 }]);
+
+    expect(owned(farmAt)).toBe(true);
+    expect(outer.filter((c) => c.q !== farmAt.q || c.r !== farmAt.r).some(owned)).toBe(false);
+  });
+
+  it('a tower losing a level (2 to 1) releases only its outer ring', () => {
+    const { edge, snap, owned, exclusive } = setup();
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 2 }]);
+    const ring2 = exclusive(edge, 2).filter((c) => hexDistance(edge, c) === 2);
+    const inner = exclusive(edge, 1);
+    expect(ring2.some(owned)).toBe(true);
+
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 1 }]);
+
+    expect(ring2.some(owned)).toBe(false);
+    expect(inner.every(owned)).toBe(true);
+  });
+
+  it('demo razeBuilding of a tower shrinks the border', () => {
+    const { model, settlement, at, owned } = setup();
+    settlement.level = 3; // the first tower unlocks at longhouse 3, which also widens the disc
+    const radius = model.borderRadius(settlement);
+    const edge = findLandBorderEdge(model, at, radius);
+    expect(model.placeBuilding(settlement.id, edge, 'tower')).toBe(true);
+    const outer = hexesInRadius(edge, 1).filter((c) => hexDistance(at, c) > radius && owned(c));
+    expect(outer.length).toBeGreaterThan(0);
+
+    expect(model.razeBuilding(settlement.id, edge)).toBe(true);
+
+    expect(outer.some(owned)).toBe(false);
+    expect(owned(at)).toBe(true);
+  });
+
+  it('explored ground stays explored after the realm shrinks', () => {
+    const { model, edge, snap, exclusive } = setup();
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 3 }]);
+    const seen = exclusive(edge, 3).filter((c) => model.isExplored(c.q, c.r));
+    expect(seen.length).toBeGreaterThan(0);
+
+    snap([]);
+
+    expect(seen.every((c) => model.isExplored(c.q, c.r))).toBe(true);
+  });
+
+  it("never clears hexes another settlement owns", () => {
+    const { model, edge, snap, owned, exclusive } = setup();
+    const theirs = exclusive(edge, 2)[0];
+    model.getTile(theirs.q, theirs.r).ownerId = 'neighbour';
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 2 }]);
+    expect(owned(theirs)).toBe(false);
+
+    snap([]);
+
+    expect(model.getTile(theirs.q, theirs.r).ownerId).toBe('neighbour');
+  });
+});
+
 describe('WorldModel applyServerSnapshot renders every backend building type', () => {
   it('places a lumberjack and a quarry from a snapshot, not just the pre-existing types', () => {
     const model = new WorldModel(20260825);
