@@ -298,8 +298,11 @@ function placeholderTaintTexture(): Texture {
 }
 
 let sharedPlaceholderDryTexture: Texture | null = null;
-/** A 1x1 "nothing is dry" texture (alpha 0, which is what the shader reads), bound in world mode and before the art masks are ready. */
-function placeholderDryTexture(): Texture {
+/**
+ * A 1x1 fully clear texture (alpha 0): "nothing is dry" for the water shader, "no lake water" for the bog lake shader. Bound in world mode
+ * and before the art masks are ready.
+ */
+export function placeholderDryTexture(): Texture {
   sharedPlaceholderDryTexture ??= new Texture({
     source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
   });

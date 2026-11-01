@@ -29,6 +29,18 @@ describe('BogLakeLayer', () => {
     Object.assign(waterDebugTuning, DEFAULT_TUNING);
   });
 
+  it('declares the lake mask sampler when the shader is built, and binds the baked mask to it', () => {
+    // Regression: a sampler first assigned in setLake is never bound by Pixi, so the shader read texture unit 0 and the gust shaded the
+    // whole quad over the lakes' bounding rect (the bog moss around the lake too), not just the lake water.
+    const layer = new BogLakeLayer(TILE_W);
+    expect(layer.mesh.shader!.resources.uLakeMask).toBeDefined();
+    const mask = lakeTexture();
+    layer.setLake(mask, { minX: 0, minY: 0, maxX: 1, maxY: 1 });
+    expect(layer.mesh.shader!.resources.uLakeMask).toBe(mask.source);
+    layer.setLake(null, null);
+    expect(layer.mesh.shader!.resources.uLakeMask).not.toBe(mask.source);
+  });
+
   it('is hidden until there is a lake, and puts the quad on the lakes\' rect', () => {
     const layer = new BogLakeLayer(TILE_W);
     layer.tick(0);

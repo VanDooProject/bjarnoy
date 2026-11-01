@@ -4,6 +4,7 @@ import { GlProgram, Mesh, MeshGeometry, Shader, UniformGroup, type Texture } fro
 import { BOG_LAKE_FRAGMENT, BOG_LAKE_VERTEX } from './bogLakeShader';
 import { GUST_PEAK_PHASE, gustTime } from './bogLakeGust';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
+import { placeholderDryTexture } from './WaterLayer';
 
 let sharedGlProgram: GlProgram | null = null;
 function bogLakeGlProgram(): GlProgram {
@@ -37,7 +38,13 @@ export class BogLakeLayer {
     });
     this.mesh = new Mesh({
       geometry: this.geometry,
-      shader: new Shader({ glProgram: bogLakeGlProgram(), resources: { bogLakeUniforms: this.uniforms } }),
+      shader: new Shader({ glProgram: bogLakeGlProgram(), resources: {
+          bogLakeUniforms: this.uniforms,
+          // Declared up front: Pixi binds only the resources a shader is built with, so a sampler first assigned in setLake would never be
+          // bound and would read whatever texture unit 0 holds — the gust then shades the whole quad, bog and all, not just the lake.
+          uLakeMask: placeholderDryTexture().source,
+        },
+      }),
     });
     this.mesh.eventMode = 'none';
     this.mesh.visible = false;
@@ -49,8 +56,8 @@ export class BogLakeLayer {
    */
   setLake(texture: Texture | null, rect: { minX: number; minY: number; maxX: number; maxY: number } | null): void {
     this.hasLake = texture !== null && rect !== null;
-    if (!texture || !rect) return;
-    this.mesh.shader!.resources.uLakeMask = texture.source;
+    this.mesh.shader!.resources.uLakeMask = (texture ?? placeholderDryTexture()).source;
+    if (!rect) return;
     const { minX, minY, maxX, maxY } = rect;
     const positions = this.geometry.getBuffer('aPosition');
     positions.data.set([minX, minY, maxX, minY, maxX, maxY, minX, maxY]);
