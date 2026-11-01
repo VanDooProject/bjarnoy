@@ -60,6 +60,7 @@ const tocLinks = computed(() =>
       <ul class="rules">
         <li>{{ $t('docs.realm.towers.rules.inside') }}</li>
         <li>{{ $t('docs.realm.towers.rules.chain') }}</li>
+        <li>{{ $t('docs.realm.towers.rules.cut') }}</li>
         <li>{{ $t('docs.realm.towers.rules.built') }}</li>
       </ul>
       <RealmExample />

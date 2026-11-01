@@ -1052,6 +1052,7 @@
       "rules": {
         "inside": "A tower has to stand inside your realm. Build one at the border and the border moves out round it.",
         "chain": "A tower may also stand on ground only another tower has claimed. Its rings then reach further still, so a realm grows tower by tower across an island.",
+      "cut": "A tower only claims while it is chained to one of your longhouses through towers that are themselves chained. If a tower in the chain falls, the towers beyond it claim and see nothing until the link is rebuilt, unless another of your longhouses on the island still reaches them. A cut-off tower does not count against your tower limit.",
         "built": "A tower claims land once it stands. A tower still under construction adds nothing."
       }
     },
