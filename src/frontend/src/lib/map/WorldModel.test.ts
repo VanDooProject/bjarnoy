@@ -2499,3 +2499,146 @@ describe('overlayRevision', () => {
     expect(model.overlayRevision).toBeGreaterThan(before);
   });
 });
+
+// The chain rule (docs/design/economy.md section 5, "Towers have to be chained to a longhouse"; realmChain.ts mirrors the
+// backend's ConnectedRealm): a tower claims and sees only while it is connected to one of the player's longhouses.
+describe('WorldModel chained towers', () => {
+  type Hex = { q: number; r: number };
+  // Longhouse level 2 claims radius 3; a level-2 tower claims radius 2 (a straight line of towers every 2 hexes chains).
+  const setup = () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    settlement.level = 2;
+    const along = (k: number, from: Hex = at): Hex => ({ q: from.q + k, r: from.r });
+    const snap = (target: { id: string; level: number; resources: typeof settlement.resources; rates: typeof settlement.rates }, towers: Hex[], level = 2) =>
+      model.applyServerSnapshot(target.id, {
+        level: target.level,
+        resources: target.resources,
+        rates: target.rates,
+        capacity: { wood: 0, stone: 0, food: 0, iron: 0 },
+        buildings: towers.map((t) => ({ q: t.q, r: t.r, type: 'tower', level })),
+      });
+    const owner = (c: Hex) => model.getTile(c.q, c.r).ownerId;
+    return { model, settlement, at, along, snap, owner };
+  };
+
+  it('a straight chain from the longhouse claims all the way out', () => {
+    const { settlement, along, snap, owner } = setup();
+    snap(settlement, [along(3), along(5), along(7)]);
+    expect(owner(along(9))).toBe(settlement.id);
+    expect(owner(along(10))).toBeUndefined();
+  });
+
+  it('a chain broken in the middle drops the far side and its vision', () => {
+    const { model, settlement, along, snap, owner } = setup();
+    snap(settlement, [along(3), along(5), along(7)]);
+    expect(owner(along(9))).toBe(settlement.id);
+    expect(model.visionDiscsFor(settlement)).toHaveLength(4);
+
+    snap(settlement, [along(3), along(7)]);
+
+    expect(owner(along(9))).toBeUndefined();
+    expect(owner(along(8))).toBeUndefined();
+    expect(owner(along(5))).toBe(settlement.id);
+    expect(model.visionDiscsFor(settlement)).toHaveLength(2);
+    expect(model.claimDiscsOf(settlement.id).some((d) => d.q === along(7).q)).toBe(false);
+  });
+
+  it('reconnecting the chain claims the far side again', () => {
+    const { settlement, along, snap, owner } = setup();
+    snap(settlement, [along(3), along(7)]);
+    expect(owner(along(9))).toBeUndefined();
+
+    snap(settlement, [along(3), along(5), along(7)]);
+
+    expect(owner(along(9))).toBe(settlement.id);
+  });
+
+  it("a second settlement of the same player on the island keeps a chain reached from the far end", () => {
+    const { model, settlement, along, snap, owner } = setup();
+    const second = model.registerSettlement({
+      id: 'second',
+      ownerId: settlement.ownerId,
+      ownerName: settlement.ownerName,
+      name: 'Second',
+      q: along(10).q,
+      r: along(10).r,
+      level: 2,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      foundedAt: 0,
+    });
+    snap(settlement, [along(3)]);
+    snap(second, [along(7)]); // the middle tower at 5 is gone: only the second longhouse reaches this one
+
+    expect(model.claimDiscsOf(second.id).some((d) => d.q === along(7).q)).toBe(true);
+    expect(owner(along(8))).toBe(second.id);
+  });
+
+  it("a broken link re-syncs the player's other settlement, whose tower was chained through it", () => {
+    const { model, settlement, along, snap, owner } = setup();
+    const second = model.registerSettlement({
+      id: 'second',
+      ownerId: settlement.ownerId,
+      ownerName: settlement.ownerName,
+      name: 'Second',
+      q: along(20).q,
+      r: along(20).r,
+      level: 2,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      foundedAt: 0,
+    });
+    // The second settlement's tower at 5 stands on ground the first one's tower at 3 claims.
+    snap(settlement, [along(3)]);
+    snap(second, [along(5)]);
+    expect(owner(along(7))).toBe(second.id);
+
+    snap(settlement, []); // the first settlement's tower burns
+
+    expect(owner(along(7))).toBeUndefined();
+    expect(model.claimDiscsOf(second.id).some((d) => d.q === along(5).q)).toBe(false);
+  });
+
+  it("another player's longhouse never connects your towers", () => {
+    const { model, settlement, along, snap, owner } = setup();
+    const rival = model.registerSettlement({
+      id: 'rival',
+      ownerId: 'rival',
+      ownerName: 'Rival',
+      name: 'Rivalhold',
+      q: along(8).q,
+      r: along(8).r,
+      level: 2,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      foundedAt: 0,
+    });
+    snap(settlement, [along(8)]); // stands next to the rival's longhouse, 8 hexes from our own
+
+    expect(model.claimDiscsOf(settlement.id).some((d) => d.q === along(8).q)).toBe(false);
+    expect(model.claimDiscsOf(rival.id)).toHaveLength(1);
+    expect(owner(along(9))).toBeUndefined();
+  });
+
+  it('only connected towers count against the tower limit, and a build is allowed while one is cut off', () => {
+    const { model, settlement, at, along, snap } = setup();
+    settlement.level = 3; // allows exactly one tower
+    snap(settlement, [along(7)]);
+    expect(model.connectedTowerCount(settlement.id)).toBe(0);
+
+    const spot = hexesInRadius(at, 3).find(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    )!;
+    expect(model.placeBuilding(settlement.id, spot, 'tower')).toBe(true);
+    expect(model.connectedTowerCount(settlement.id)).toBe(1);
+
+    // Reconnected, the far tower counts again, even over the limit; nothing more can be built.
+    snap(settlement, [spot, along(3), along(5), along(7)]);
+    expect(model.connectedTowerCount(settlement.id)).toBe(4);
+    const another = hexesInRadius(at, 3).find(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    )!;
+    expect(model.placeBuilding(settlement.id, another, 'tower')).toBe(false);
+  });
+});
