@@ -887,7 +887,7 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the battering ram (<see cref="Units.UnitDefinition.RequiredBuildingType"/>), the only siege engine that breaches walls
+    /// Trains the siege engines (catapult and battering ram; <see cref="Units.UnitDefinition.RequiredBuildingType"/>), the only siege engine that breaches walls
     /// (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
     /// mirror <see cref="ArcheryRange"/> one tier up: wood and stone costs about 1.6 times higher (buildings cost no iron), a slightly longer build.
     /// </summary>
@@ -897,7 +897,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 220, Stone: 160, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(10, level),
-        AllowedTerrain = SandOrGrass,
+        AllowedTerrain = Grass,
     };
 
     // Same shape as FishingHut: RequiresCoastalWater rather than
