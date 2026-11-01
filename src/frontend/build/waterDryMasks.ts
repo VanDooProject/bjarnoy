@@ -4,6 +4,7 @@
 // For every `_base` frame of the non-showcase atlas pages that repeats a plain
 // water tile (see dryMaskCore.ts) it computes a half-resolution mask of the
 // pixels that are not plain water, and packs all masks into one grey+alpha PNG.
+// Bog lake frames (`boglake*`) get a *wet* mask instead (the lake water, for the bog lake gust shader), packed into a second atlas.
 // The result is computed once per build / dev-server start and cached.
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -11,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import type { Plugin } from 'vite';
 import {
+  LAKE_FRAME_RE,
+  LAKE_REFERENCE_FRAME_RE,
   REFERENCE_FRAME_RE,
   SOURCE_H,
   SOURCE_W,
@@ -19,8 +22,10 @@ import {
   cellSourceRect,
   cropHalf,
   dryMaskHalf,
+  lakeWetMaskHalf,
   orientationOf,
   type DryMaskFrame,
+  type MaskAtlasData,
   type SourceRect,
   type WaterDryMasksData,
 } from '../src/lib/map/water/dryMaskCore.ts';
@@ -71,29 +76,14 @@ async function loadBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; tri
   return result;
 }
 
-/** Computes every dry mask and packs them into one PNG. Exported for the build log and tooling. */
-export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
-  const bases = await loadBaseCanvases();
-  const referencesByOrientation = new Map<string, Uint8Array[]>();
-  for (const [name, { canvas }] of bases) {
-    if (!REFERENCE_FRAME_RE.test(name)) continue;
-    const orientation = orientationOf(name)!;
-    referencesByOrientation.set(orientation, [...(referencesByOrientation.get(orientation) ?? []), canvas]);
-  }
+interface MaskCell {
+  name: string;
+  rect: ReturnType<typeof cellSourceRect>;
+  mask: Uint8Array;
+}
 
-  const cells: { name: string; rect: ReturnType<typeof cellSourceRect>; mask: Uint8Array }[] = [];
-  for (const [name, { canvas, trim }] of bases) {
-    if (REFERENCE_FRAME_RE.test(name)) continue;
-    const orientation = orientationOf(name);
-    const references = orientation ? referencesByOrientation.get(orientation) : undefined;
-    if (!references) continue;
-    const best = bestReference(canvas, references);
-    if (!best || best.ratio < WATER_MATCH_MIN_RATIO) continue;
-    const rect = cellSourceRect(trim);
-    cells.push({ name, rect, mask: cropHalf(dryMaskHalf(canvas, references[best.index]), rect) });
-  }
-
-  // Shelf packing, tallest first.
+/** Shelf-packs `cells` (tallest first) into one grey+alpha PNG whose alpha is the mask. */
+async function packMaskAtlas(cells: MaskCell[]): Promise<MaskAtlasData> {
   cells.sort((a, b) => b.rect.sh - a.rect.sh);
   const frames: Record<string, DryMaskFrame> = {};
   let x = 0;
@@ -132,6 +122,41 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
     .png({ compressionLevel: 9 })
     .toBuffer();
   return { url: `data:image/png;base64,${png.toString('base64')}`, width: ATLAS_WIDTH, height, frames };
+}
+
+/** Computes every dry mask and every bog lake wet mask and packs them into two PNGs. Exported for the build log and tooling. */
+export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
+  const bases = await loadBaseCanvases();
+  const referencesByOrientation = new Map<string, Uint8Array[]>();
+  const lakeReferences = new Map<string, Uint8Array>();
+  for (const [name, { canvas }] of bases) {
+    if (LAKE_REFERENCE_FRAME_RE.test(name)) lakeReferences.set(orientationOf(name)!, canvas);
+    if (!REFERENCE_FRAME_RE.test(name)) continue;
+    const orientation = orientationOf(name)!;
+    referencesByOrientation.set(orientation, [...(referencesByOrientation.get(orientation) ?? []), canvas]);
+  }
+
+  const dryCells: MaskCell[] = [];
+  const lakeCells: MaskCell[] = [];
+  for (const [name, { canvas, trim }] of bases) {
+    const orientation = orientationOf(name);
+    // Bog lakes: the family name decides, not a match ratio (a mouth tile is half creek and still has lake water).
+    if (LAKE_FRAME_RE.test(name)) {
+      const reference = orientation ? lakeReferences.get(orientation) : undefined;
+      if (!reference) continue;
+      const rect = cellSourceRect(trim);
+      lakeCells.push({ name, rect, mask: cropHalf(lakeWetMaskHalf(canvas, reference), rect) });
+      continue;
+    }
+    if (REFERENCE_FRAME_RE.test(name)) continue;
+    const references = orientation ? referencesByOrientation.get(orientation) : undefined;
+    if (!references) continue;
+    const best = bestReference(canvas, references);
+    if (!best || best.ratio < WATER_MATCH_MIN_RATIO) continue;
+    const rect = cellSourceRect(trim);
+    dryCells.push({ name, rect, mask: cropHalf(dryMaskHalf(canvas, references[best.index]), rect) });
+  }
+  return { ...(await packMaskAtlas(dryCells)), lake: await packMaskAtlas(lakeCells) };
 }
 
 export function waterDryMasksPlugin(): Plugin {
