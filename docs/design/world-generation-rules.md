@@ -15,6 +15,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Bog and lakes, bog buildings, landing spots with bog in reach | Implemented (bog PR, bog buildings PR); see [`bog.md`](./bog.md) |
 | Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps in the bog PR) |
 | Island density: about twice the islands, same island sizes, no fused islands | Implemented (island-density PR) |
+| Mountain chains with passes, grove forests | Planned |
 
 ## World and islands
 
@@ -134,6 +135,15 @@ radius 4000):
 | **0.5, gap rule** | 103 | 123 | 147 | 106 | 99 | 115 | 115.5 |
 
 Every one of them keeps the 24-hex gap from green land and from each other.
+
+## Mountains and forests
+
+*Planned.*
+
+- Mountains form chains along the island with passes between the massifs, so land armies can always path through;
+  short ridges branch off the massifs.
+- Forest grows as round groves; mixed with a broader forest pattern so groves gather into larger woods in some areas
+  and leave open meadow in others.
 
 ## Rivers and streams
 
