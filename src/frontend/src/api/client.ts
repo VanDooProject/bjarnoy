@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config';
 import { clientFingerprint } from '../lib/clientFingerprint';
+import { checkBuildHeader } from '../lib/appUpdate';
 import type {
   AcceptTradeOfferRequest,
   ActivitySummaryResponse,
@@ -129,7 +130,9 @@ export class ApiError extends Error {
  */
 async function fetchOrThrow(method: string, path: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(`${API_BASE_URL}${path}`, init);
+    const response = await fetch(`${API_BASE_URL}${path}`, init);
+    checkBuildHeader(response.headers.get('X-App-Build'));
+    return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const wrapped = new ApiError(0, undefined, method, path);

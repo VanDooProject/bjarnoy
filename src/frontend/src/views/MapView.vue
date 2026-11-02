@@ -32,6 +32,7 @@ import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { WORLD_HASH } from '../lib/mapModeRoute';
+import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
@@ -137,6 +138,36 @@ const showFogDebug = useFogDebug();
 const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
+
+// Settlement mode keeps its camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
+// lands on the same spot. Read once, before the first camera change rewrites the hash; a missing or
+// invalid hash leaves the default framing.
+const initialCameraView = mode.value === 'settlement' ? parseCameraHash(route.hash) : null;
+const CAMERA_HASH_DEBOUNCE_MS = 300;
+let cameraHashTimer: ReturnType<typeof setTimeout> | undefined;
+function onCameraChange() {
+  clearTimeout(cameraHashTimer);
+  cameraHashTimer = setTimeout(writeCameraHash, CAMERA_HASH_DEBOUNCE_MS);
+}
+function writeCameraHash() {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer || mode.value !== 'settlement' || route.path !== '/settlement') return;
+  // Not router.replace: that would run the route watchers; vue-router keeps its own state in history.state.
+  const hash = serializeCameraHash(renderer.cameraView);
+  history.replaceState(history.state, '', `${location.pathname}${location.search}${hash}`);
+}
+onUnmounted(() => clearTimeout(cameraHashTimer));
+// Once the renderer has mounted and framed the settlement itself, the hash's view wins over that default.
+if (initialCameraView) {
+  const stopRestore = watch(
+    () => canvasRef.value?.renderer,
+    (renderer) => {
+      if (!renderer) return;
+      renderer.restoreCameraView(initialCameraView.coord, initialCameraView.zoom);
+      stopRestore();
+    },
+  );
+}
 function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
 }
@@ -1276,6 +1307,7 @@ async function upgrade() {
       @waypoint-move="onWaypointMove"
       @waypoint-tap="onWaypointTap"
       @zoom-mode-change="onZoomModeChange"
+      @camera-change="onCameraChange"
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
       <!-- First in the stack on purpose: it is the one panel that answers

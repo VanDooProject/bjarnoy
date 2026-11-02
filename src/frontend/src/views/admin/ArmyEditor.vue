@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { AdminArmyResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -29,6 +30,19 @@ interface Draft {
 
 const drafts = reactive<Record<string, Draft>>({});
 const openId = ref<string | null>(null);
+
+function editedFields(d: Draft): string {
+  return JSON.stringify([d.stacks, d.provisions, d.arriveInMinutes, d.q, d.r]);
+}
+
+// An open draft that differs from what the army currently is.
+useUnsavedInput(() =>
+  armies.value.some((entry) => {
+    const draft = drafts[entry.army.id];
+    if (!draft) return false;
+    return editedFields(draft) !== editedFields(draftFor(entry));
+  }),
+);
 
 function draftFor(entry: AdminArmyResponse): Draft {
   return {

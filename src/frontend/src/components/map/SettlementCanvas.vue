@@ -68,6 +68,8 @@ const emit = defineEmits<{
   // Docs/design/zoom-transition.md: a wheel/pinch zoom crossed the enter- or
   // exit-threshold — see HexMapRendererOptions.onZoomModeChange.
   'zoom-mode-change': [mode: RenderMode];
+  // The camera moved — see HexMapRendererOptions.onCameraChange. Only wired for hosts that listen.
+  'camera-change': [];
 }>();
 
 const container = ref<HTMLElement | null>(null);
@@ -93,6 +95,7 @@ const { renderer, loadState, mountError, retry: retryMount } = useHexMapRenderer
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
   onWaypointTap: (index) => emit('waypoint-tap', index),
   onZoomModeChange: (mode) => emit('zoom-mode-change', mode),
+  onCameraChange: () => emit('camera-change'),
 });
 
 // FogDebugPanel (SettlementView.vue, ?debug=1) needs to force a rebuild

@@ -52,7 +52,7 @@ test.describe('pinch-to-zoom on touch', { tag: '@g3' }, () => {
       gap = nextGap;
       if (!page.url().includes('#world')) break;
     }
-    await expect(page).toHaveURL(/\/settlement$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/, { timeout: 10_000 });
   });
 
   test('a pinch never opens the ring menu, even one that ends within click-slop distance', async ({ page }) => {

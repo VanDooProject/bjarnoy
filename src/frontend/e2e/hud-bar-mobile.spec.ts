@@ -849,7 +849,7 @@ test('bottom docking never covers the onboarding completion banner', async ({ pa
     ctaBox!.y < barBox!.y + barBox!.height && barBox!.y < ctaBox!.y + ctaBox!.height;
   expect(overlaps, 'completion CTA overlaps the HUD bar').toBe(false);
   await cta.click();
-  await expect(page).toHaveURL(/\/settlement$/);
+  await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
 });
 
 // Group E (f): a bottom-docked bar must not cover the queue handle — finding

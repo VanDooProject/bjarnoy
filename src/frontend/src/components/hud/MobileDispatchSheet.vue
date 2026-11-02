@@ -28,6 +28,7 @@ import {
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 
 const world = useWorldStore();
 const auth = useAuthStore();
@@ -40,6 +41,8 @@ const fieldDraft = computed(() => world.fieldOrderDraft);
 // exclusive at the store level — see startDispatch/startFieldOrder — this
 // is just a defensive tie-break for the template below).
 const isFieldOrder = computed(() => !draft.value && !!fieldDraft.value);
+// An open order being composed would be lost by a reload.
+useUnsavedInput(() => !!draft.value || !!fieldDraft.value);
 
 // Dispatch opens the sheet expanded (units still need picking); a field
 // order opens collapsed (route only, and the free "move on" hex is usually

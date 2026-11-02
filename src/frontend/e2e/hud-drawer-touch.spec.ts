@@ -105,7 +105,7 @@ test.describe('mobile HUD drawer, touch', () => {
     await touchDrag(page, start.x, start.y, openBar.y + openBar.height + 4);
     await expectDrawerClosed(page);
     // The drag must not have turned into a tap on the button it started on.
-    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
   });
 
   test('a touch tap on the grip still toggles, and the first tap inside after a touch drag navigates', async ({ page }) => {

@@ -1,5 +1,6 @@
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
+import { buildIdPlugin } from './build/buildId.ts'
 import { waterDryMasksPlugin } from './build/waterDryMasks.ts'
 
 // When the Aspire AppHost starts this dev server (`AddNpmApp("frontend", ...,
@@ -24,7 +25,7 @@ const aspirePort = process.env.PORT ? Number(process.env.PORT) : undefined;
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue(), waterDryMasksPlugin()],
+  plugins: [vue(), waterDryMasksPlugin(), buildIdPlugin()],
   server: {
     ...(aspirePort ? { port: aspirePort, strictPort: true } : {}),
     ...(apiProxyTarget
