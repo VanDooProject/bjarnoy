@@ -14,7 +14,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
+import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { AxialCoord } from '../../lib/hex/coords';
@@ -50,20 +50,9 @@ const hovered = ref<{ coord: AxialCoord; rotation: number } | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer } = useHexMapRenderer(canvas, container, {
-  mode: 'settlement',
+const { renderer } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
-  playerId: 'docs',
   previewCenter: { q: 0, r: 0 },
-  lockCamera: true,
-  // The locked preview sits inline in this scrolling docs article, not
-  // beside static hero copy the way the landing page's own locked preview
-  // does — a wheel/touch gesture over it should scroll the page, not be
-  // eaten for a zoom/pan the locked camera already ignores anyway. The
-  // canvas's own `touch-action: pan-y` (below) is this same intent from the
-  // CSS side.
-  allowPageScroll: true,
-  hideSettlementBadge: true,
   onHoverChange: (info: HoverInfo | null) => {
     hovered.value = info ? { coord: info.coord, rotation: rotation.value } : null;
   },
@@ -182,7 +171,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div ref="container" class="map-host">
-      <canvas ref="canvas" />
+      <canvas ref="canvas" class="docs-map-canvas" />
     </div>
 
     <p class="caption" data-testid="island-caption">{{ captionText }}</p>
@@ -262,19 +251,6 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   background: radial-gradient(ellipse at 50% 40%, #1a2a33 0%, #0b1116 75%);
   border: 1px solid var(--panel-border);
-}
-.map-host canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  /* This preview's camera is locked (no pan/pinch-zoom) and `allowPageScroll`
-     tells the renderer not to eat a wheel/touch gesture for zoom either — this
-     is that same intent for the browser's own default touch handling, so a
-     one-finger drag here scrolls the article instead of doing nothing.
-     (SettlementCanvas.vue's real, pannable map uses `touch-action: none`
-     instead — the opposite tradeoff, for the opposite reason.) */
-  touch-action: pan-y;
-  cursor: default;
 }
 .caption {
   margin: 0;

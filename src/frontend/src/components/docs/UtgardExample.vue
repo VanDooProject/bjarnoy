@@ -6,7 +6,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
+import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import {
@@ -36,15 +36,9 @@ const hovered = ref<HoverInfo | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-useHexMapRenderer(canvas, container, {
-  mode: 'settlement',
+useDocsMapRenderer(canvas, container, {
   worldModel: world,
-  playerId: 'docs',
   previewCenter: UTGARD_CENTRE,
-  lockCamera: true,
-  // Inline in a scrolling article: a wheel/touch gesture over the map scrolls the page (see WastedIsland.vue).
-  allowPageScroll: true,
-  hideSettlementBadge: true,
   onHoverChange: (info: HoverInfo | null) => {
     hovered.value = info;
   },
@@ -60,7 +54,7 @@ const captionText = computed(() => {
 <template>
   <div class="utgard-example" data-testid="utgard-example">
     <div ref="container" class="map-host" role="img" :aria-label="$t('docs.wastedLands.defences.example.alt')">
-      <canvas ref="canvas" />
+      <canvas ref="canvas" class="docs-map-canvas" />
     </div>
     <p class="caption" data-testid="utgard-example-caption">{{ captionText }}</p>
     <p class="note">{{ $t('docs.wastedLands.defences.example.caption') }}</p>
@@ -82,13 +76,6 @@ const captionText = computed(() => {
   border-radius: 10px;
   background: radial-gradient(ellipse at 50% 40%, #2a1d1a 0%, #0b0a0c 75%);
   border: 1px solid var(--panel-border);
-}
-.map-host canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  touch-action: pan-y;
-  cursor: default;
 }
 .caption {
   margin: 0;

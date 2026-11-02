@@ -223,7 +223,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     const caption = page.getByTestId("island-caption");
     await expect(caption).toHaveText("Point at a hex to see what it is.");
 
-    // Hovering the island (its locked preview camera fits the whole island
+    // Hovering the island (its camera starts fitted to the whole island
     // to the canvas, so its own centre — the Utgard shrine, still living at
     // stage 0 — is a safe bet for "somewhere on the island") swaps the
     // caption away from the hint text and to the actual translated name, not
