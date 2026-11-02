@@ -97,11 +97,17 @@ export async function gotoWorldMap(page: Page): Promise<void> {
  * Clicks a secondary HUD destination (Leaderboards, Messages, Reports,
  * Alliance, Docs, Landing) on a desktop-width bar: those entries live in the
  * avatar's dropdown — the account menu when logged in, the returning-player
- * menu otherwise — not inline in `.hud-nav`. `label` is the visible row text
+ * menu otherwise — except Docs, which sits inline in `.hud-nav` on a wide bar. `label` is the visible row text
  * (a Reports row may carry an unread count after it). One helper so no spec
  * has to know where the entries live; phone specs use the drawer instead.
  */
 export async function clickHudMenuEntry(page: Page, label: string): Promise<void> {
+  // Docs sits inline on a wide enough bar (lib/breakpoints.ts's HUD_NAV_ROOMY_QUERY).
+  const inline = page.locator('.hud-nav > a.link', { hasText: label });
+  if (await inline.isVisible()) {
+    await inline.click();
+    return;
+  }
   const account = page.getByTestId('account-menu-trigger');
   const trigger = (await account.isVisible()) ? account : page.getByTestId('returning-player-trigger');
   await trigger.click();
