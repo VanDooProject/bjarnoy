@@ -126,4 +126,11 @@ describe('BOG_LAKE_FRAGMENT', () => {
     expect(BOG_LAKE_FRAGMENT).toContain('out vec4 finalColor;');
     expect(BOG_LAKE_FRAGMENT).toContain('const float GUST_WAVELENGTH = 6.0;');
   });
+
+  it('uses none of the words GLSL ES 3.00 reserves as an identifier', () => {
+    // Regression: a local named `patch` compiled under GLSL ES 1.00 but is a reserved word in 3.00 (WebGL 2), where the shader failed.
+    const reserved = ['patch', 'sample', 'common', 'partition', 'active', 'filter', 'input', 'output', 'superp', 'resource', 'buffer', 'shared', 'subroutine', 'noperspective', 'centroid', 'smooth', 'flat', 'invariant'];
+    const declared = [...BOG_LAKE_FRAGMENT.matchAll(/\b(?:float|vec[234]|int|bool)\s+(\w+)/g)].map((m) => m[1]);
+    expect(declared.filter((name) => reserved.includes(name))).toEqual([]);
+  });
 });

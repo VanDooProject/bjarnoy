@@ -102,9 +102,9 @@ void main() {
   // Cat's paws: matte darker patches where the wind roughens the surface, with a fine grain inside. Bottom of the stack.
   if (uCatsPaws > 0.0) {
     float n = fbm((w + drift * 1.5) * vec2(0.02, 0.03));
-    float patch = smoothstep(0.42, 0.55, n) * env;
+    float paws = smoothstep(0.42, 0.55, n) * env;
     float grain = vnoise(w * vec2(0.6, 0.25) + vec2(-t * 9.0, 0.0));
-    acc = vec4(vec3(0.0), clamp(uCatsPaws * patch * (0.26 + 0.1 * grain), 0.0, 1.0));
+    acc = vec4(vec3(0.0), clamp(uCatsPaws * paws * (0.26 + 0.1 * grain), 0.0, 1.0));
   }
 
   // Soft sheen: a broad, almost featureless lightening that sweeps across with the gust.
