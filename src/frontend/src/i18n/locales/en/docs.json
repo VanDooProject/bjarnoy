@@ -526,8 +526,7 @@
       "calm": "Calm: after any fight a camp is calm for 24 hours. It regrows but does not attack.",
       "leveling": "Leveling: every 10th clear of a camp, by any player, raises its level by 1, up to 100. It never drops back. Its guard range stays as rolled, so a farmed camp gets tougher but does not claim more land.",
       "ambush": "Ambush: a strong camp that is not calm and still has adults or alphas ambushes armies that enter its range. Beaten armies retreat home; either way the camp is calm for 24 hours.",
-      "leftover": "Leftover loot: what your army cannot carry stays at the camp for the next hunter. A hunt on a barely regrown camp pays little, and a hunt on an empty camp only picks up the leftover.",
-      "worldMap": "World map: as a premium player you see the camps of the islands you have seen part of as a paw symbol, strong camps in red. Other players see no camps on the world map."
+      "leftover": "Leftover loot: what your army cannot carry stays at the camp for the next hunter. A hunt on a barely regrown camp pays little, and a hunt on an empty camp only picks up the leftover."
     },
     "camps": {
       "heading": "The camps",

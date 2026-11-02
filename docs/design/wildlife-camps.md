@@ -239,6 +239,8 @@ under "Camps".
 
 On the world map, premium players see every standing camp of the islands they have seen part of, as a paw
 symbol (strong camps red). Other players see no camps on the world map.
+The paws are drawn under the fog like the ground they stand on, so a camp under the never-scouted mist stays
+hidden there; the camp data itself only reaches the client for seen islands (see State and API).
 
 ### State and API
 

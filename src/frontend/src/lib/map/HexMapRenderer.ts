@@ -2009,8 +2009,8 @@ export class HexMapRenderer {
   // so the view doesn't jump.
   private cameraAnim: { from: Camera; to: Camera; startedAt: number; durationMs: number } | null = null;
   private markerLayer = new Graphics();
-  // World mode's camp paws (drawCampPaws): above the never-scouted mist, unlike markerLayer, because a premium player
-  // sees every camp of an island they have seen part of, explored or not.
+  // World mode's camp paws (drawCampPaws): under both fog layers, like the terrain they mark, so the fog covers them
+  // the way it covers the ground (markerLayer sits above the out-of-sight fog).
   private campPawLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
@@ -2543,7 +2543,7 @@ export class HexMapRenderer {
     // troop/settlement labels read as veiled by it rather than floating in
     // front; whiteMistLayer (never-scouted) sits over everything, since
     // nothing should show through ground that's never been seen at all.
-    app.stage.addChild(this.world, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh, this.campPawLayer);
+    app.stage.addChild(this.world, this.campPawLayer, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
 
     app.ticker.add(this.onTick);
     // See framePacing.ts: a loop whose frames outlast the vsync interval otherwise starves input and timers.
@@ -5212,10 +5212,10 @@ export class HexMapRenderer {
   }
 
   /**
-   * World mode: a paw symbol for every standing camp (`worldCampMarkers`) inside the viewport, fog or not: the model
-   * only holds the camps of islands the player has seen part of (the server's cutoff), and all of those show. Drawn in
-   * screen pixels (campPawLayer, like markerLayer, does not scale with the camera; it sits above the mist), so it stays readable zoomed out; a dark rim keeps it
-   * legible over any terrain.
+   * World mode: a paw symbol for every standing camp (`worldCampMarkers`) inside the viewport. The model only holds the
+   * camps of islands the player has seen part of (the server's cutoff); the paws sit under the fog (campPawLayer), so
+   * the fog covers them like the ground. Drawn in screen pixels (campPawLayer, like markerLayer, does not scale with the
+   * camera), so it stays readable zoomed out; a dark rim keeps it legible over any terrain.
    */
   private drawCampPaws() {
     if (!this.options.showCampMarkers) return;

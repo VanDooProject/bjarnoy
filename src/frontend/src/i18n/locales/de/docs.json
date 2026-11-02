@@ -526,8 +526,7 @@
       "calm": "Ruhe: Nach jedem Kampf ist ein Lager 24 Stunden lang ruhig. Es wächst weiter nach, greift aber nicht an.",
       "leveling": "Aufstieg: Jede 10. Räumung eines Lagers, egal durch welchen Spieler, hebt seine Stufe um 1, höchstens bis 100. Die Stufe sinkt nie wieder. Die Reichweite bleibt, wie sie ausgewürfelt wurde: Ein abgefarmtes Lager wird also stärker, beansprucht aber nicht mehr Land.",
       "ambush": "Hinterhalt: Ein starkes Lager, das nicht ruhig ist und noch Alttiere oder Alphas hat, überfällt Armeen, die in seine Reichweite kommen. Geschlagene Armeen ziehen sich nach Hause zurück. In jedem Fall ist das Lager danach 24 Stunden ruhig.",
-      "leftover": "Restbeute: Was deine Armee nicht tragen kann, bleibt im Lager für den nächsten Jäger liegen. Eine Jagd auf ein kaum nachgewachsenes Lager bringt wenig, und bei einem leeren Lager sammelst du nur die Restbeute ein.",
-      "worldMap": "Weltkarte: Mit Premium siehst du die Lager der Inseln, von denen du schon etwas gesehen hast, als Pfotensymbol – starke Lager sind rot. Andere Spieler sehen auf der Weltkarte keine Lager."
+      "leftover": "Restbeute: Was deine Armee nicht tragen kann, bleibt im Lager für den nächsten Jäger liegen. Eine Jagd auf ein kaum nachgewachsenes Lager bringt wenig, und bei einem leeren Lager sammelst du nur die Restbeute ein."
     },
     "camps": {
       "heading": "Die Lager",

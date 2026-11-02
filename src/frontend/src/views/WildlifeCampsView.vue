@@ -155,7 +155,6 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
         <li>{{ $t('docs.wildlifeCamps.rules.leveling') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.ambush') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.leftover') }}</li>
-        <li>{{ $t('docs.wildlifeCamps.rules.worldMap') }}</li>
       </ul>
     </section>
 
