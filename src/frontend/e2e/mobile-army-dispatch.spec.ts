@@ -3,7 +3,7 @@ import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
-import { layoutOverflow, loginTestUser, waitForMapReady } from './helpers';
+import { layoutOverflow, loginTestUser, openHudDrawer, waitForMapReady } from './helpers';
 
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
@@ -53,7 +53,7 @@ async function seedGarrison(page: Page) {
  * for a logged-in player, so callers log in before founding.
  */
 async function gotoWorldViaDrawer(page: Page) {
-  await page.locator('.hud-grip').click();
+  await openHudDrawer(page);
   await page.locator('.hud-drawer .drawer-links button', { hasText: 'World map' }).click();
   await page.waitForURL('**/world');
   await waitForMapReady(page);

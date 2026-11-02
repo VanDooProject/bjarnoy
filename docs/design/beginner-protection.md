@@ -203,11 +203,16 @@ something already built; this issue is where that gets designed:
   tower-territory work (#155, merged into `main`) settled that no static
   constant can soundly account for towers at all, because chaining (a
   tower built inside another tower's own satellite disc, and so on) has
-  no fixed ceiling to derive one from. `SettlementService.FoundAsync`
+  no fixed ceiling to derive one from. Only *connected* towers claim
+  ground (docs/design/economy.md section 5, "Towers have to be chained
+  to a longhouse"): a tower cut off from every longhouse of its player
+  on the island contributes no disc. `SettlementService.FoundAsync`
   itself now runs the identical two-phase shape for exactly this reason:
   phase 1 is `MinimumSpacing` (the same cheap, tower-blind 13), phase 2 is
-  a live check against `Settlement.ClaimDiscsFor(centre, buildings)` —
-  each nearby settlement's *actual current* buildings, towers included —
+  a live check against each nearby settlement's connected claim discs
+  (`Settlement.ClaimDiscsFor(centre, buildings)`, or `ConnectedRealm` when
+  the player's other settlements on the island are known) — each
+  settlement's *actual current* buildings, connected towers included —
   plus `SettlementService.FoundingSafetyMargin` (2 tiles) added on top of
   each disc's real computed edge.
 
@@ -216,7 +221,7 @@ something already built; this issue is where that gets designed:
   is trying to found on, this runs across every candidate `StartPosition`
   being considered for suggestion) — before a candidate that clears phase
   one is actually offered, it's verified against
-  `Settlement.ClaimDiscsFor` for every settlement within some generous
+  the same connected claim discs for every settlement within some generous
   distance, with the **same `FoundingSafetyMargin`, plus a little more on
   top for the new player's comfort specifically** — landing exactly on
   the last legally-open hex, one tile outside a neighbour's real border,

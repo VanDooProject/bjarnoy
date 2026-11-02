@@ -123,15 +123,11 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
 
         // --- Guided build 1: Reindeer Herder on the grass hex, via the REAL ring menu -----
         await LiveFrontendTestHelpers.ClickHexAsync(page, grassTile.Q, grassTile.R);
-        var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Reindeer Herder" });
-        await Assertions.Expect(farmBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await farmBubble.ClickAsync();
+        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, "Resource", "Reindeer Herder");
 
         // --- Guided build 2: Lumberjack on the forest hex, via the ring menu ---
         await LiveFrontendTestHelpers.ClickHexAsync(page, forestTile.Q, forestTile.R);
-        var lumberjackBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Lumberjack" });
-        await Assertions.Expect(lumberjackBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await lumberjackBubble.ClickAsync();
+        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, "Resource", "Lumberjack");
 
         // Both queued against the real backend; startHudSync()'s poll picks
         // them up with no reload/click once the sped-up world resolves them

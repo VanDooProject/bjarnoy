@@ -22,3 +22,19 @@ export async function forceRebuild(page, { x = 720, y = 450 } = {}) {
   await page.mouse.up();
   await page.waitForTimeout(400);
 }
+
+// HudNav's "World map" button only renders for an authenticated player
+// (HudNav.vue: `auth.isAuthenticated && player.hasFoundedSettlement`), and
+// demo mode is anonymous, so a script that clicks it without this times out
+// waiting for a button that never appears. Same session the e2e suite fakes
+// (e2e/pages/AdminAuthFixture.ts, `loginAsPlayer`): a seeded refresh token
+// plus `/auth/refresh` and `/auth/me` answered with a player. Call it before
+// the page's first navigation - the init script only applies to later ones.
+export async function loginDemoPlayer(page, userName = 'screenshot-player') {
+  const user = { id: 'user-1', userName, role: 'player', status: 'active', displayName: userName };
+  await page.addInitScript((token) => localStorage.setItem('bjarnoy.refreshToken', token), `seed-refresh-${userName}`);
+  await page.route('**/api/v1/auth/refresh', (route) =>
+    route.fulfill({ json: { accessToken: 'screenshot-access-token', refreshToken: 'screenshot-refresh-token', user } }),
+  );
+  await page.route('**/api/v1/auth/me', (route) => route.fulfill({ json: user }));
+}

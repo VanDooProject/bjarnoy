@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
@@ -132,6 +133,12 @@ public class SettlementEntity
     /// <summary>Bitmask of claimed onboarding quests (<see cref="Settlement.ClaimedQuests"/>).</summary>
     public int ClaimedQuests { get; set; }
 
+    /// <summary>Whether a hunt was ever dispatched from here (<see cref="Settlement.HuntStarted"/>).</summary>
+    public bool HuntStarted { get; set; }
+
+    /// <summary>Whether the garrison ever held the quest troops (<see cref="Settlement.TroopsTrained"/>).</summary>
+    public bool TroopsTrained { get; set; }
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
@@ -142,6 +149,16 @@ public class SettlementEntity
     /// <summary>Maps a removed type that was merged into another onto its successor.</summary>
     private static BuildingType Merged(BuildingType type) =>
         type == BuildingType.FisherHut ? BuildingType.FishingHut : type;
+
+    /// <summary>
+    /// The hex <paramref name="army"/> departs from and returns to: <see cref="Army.HomeHex"/> over this settlement's centre
+    /// and (loaded) <see cref="Buildings"/>. The one place that maps stored settlement columns to an army's home hex.
+    /// </summary>
+    public HexCoord HomeHexFor(Army army, Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+        return army.HomeHex(new HexCoord(CentreQ, CentreR), Buildings.Select(b => b.ToPlacedBuilding()), terrainAt);
+    }
 
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Settlement ToDomain() => new()
@@ -211,6 +228,8 @@ public class SettlementEntity
             : null,
         PendingFeastRenown = PendingFeastRenown,
         ClaimedQuests = ClaimedQuests,
+        HuntStarted = HuntStarted,
+        TroopsTrained = TroopsTrained,
         Runes =
         [
             .. Runes.OrderBy(r => r.Id).Select(r => new RuneInstance
@@ -257,6 +276,8 @@ public class SettlementEntity
         FeastRenownGain = settlement.Feast?.RenownGain ?? 0;
         PendingFeastRenown = settlement.PendingFeastRenown;
         ClaimedQuests = settlement.ClaimedQuests;
+        HuntStarted = settlement.HuntStarted;
+        TroopsTrained = settlement.TroopsTrained;
 
         SyncBuildings(settlement);
         SyncQueue(settlement);
@@ -442,6 +463,9 @@ public class PlacedBuildingEntity
     public BuildingType Type { get; set; }
 
     public int Level { get; set; }
+
+    /// <summary>The domain value of this building (stored columns as they are, no catalogue clamp).</summary>
+    public PlacedBuilding ToPlacedBuilding() => new(new HexCoord(Q, R), Type, Level);
 }
 
 /// <summary>A build in progress. Completes by clock; nothing advances it.</summary>

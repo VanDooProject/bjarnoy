@@ -1,14 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  previewGroundCoords,
   attentionPulseFrame,
   clampAnimationDeltaMs,
   fadeAlphaAt,
   hoverSubjectFor,
+  isIslandNearViewport,
   isWaypointTap,
+  wheelPassesToPage,
   landfallBurstFrames,
   loadProgressFraction,
   plotRippleFrames,
+  previewDrawRadius,
   previewFitZoom,
+  confineCamera,
+  worldConfineFrame,
   previewIslandBounds,
   READY_LOAD_STATE,
   startTextureLoad,
@@ -17,7 +23,15 @@ import {
   worldLayerOrder,
   type MapLoadState,
   type TextureLoadDeps,
+  clientToCanvasPoint,
+  waterMaskTerrainFor,
+  worldGiantOutline,
+  worldHexFill,
+  worldCampMarkers,
+  worldPawHalfSize,
+  worldRiverColor,
 } from './HexMapRenderer';
+import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
 import type { TileTextures } from './textures';
@@ -123,11 +137,20 @@ describe('worldLayerOrder', () => {
     // strokes) — settlement mode draws rivers as sprite tile art baked into
     // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
     // 'rivers' to its own order.
-    const expectedLength = { world: 10, settlement: 9 } as const;
+    const expectedLength = { world: 11, settlement: 10 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);
       expect(order).toHaveLength(expectedLength[mode]);
+    }
+  });
+
+  it('draws the bog/grass edge right over the ground art, under everything else in settlement mode', () => {
+    // bogEdge.ts: the border only touches the ground, so the water mesh, realm
+    // borders, hover outline and every topping (reeds, trees, buildings) draw over it.
+    expect(indexIn('settlement', 'bogEdges')).toBe(indexIn('settlement', 'terrainBase') + 1);
+    for (const above of ['water', 'borders', 'hover', 'terrainTop']) {
+      expect(indexIn('settlement', 'bogEdges')).toBeLessThan(indexIn('settlement', above));
     }
   });
 
@@ -171,6 +194,18 @@ describe('hoverSubjectFor', () => {
     });
     // A giant still wins over a camp (a camp is never on a giant footprint; the precedence is defensive).
     expect(hoverSubjectFor({ ...tileOf('grass'), camp, giant }, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
+  });
+
+  it('names an Utgard wall piece and a watchtower with their level, a gate apart from a plain wall', () => {
+    const wall = { ring: 'inner' as const, piece: 'straight180' as const, dir: 'NW' as const, isGate: false, level: 1 };
+    expect(hoverSubjectFor({ ...tileOf('grass'), utgardWall: wall }, undefined)).toEqual({ kind: 'utgardwall', gate: false, level: 1 });
+    expect(hoverSubjectFor({ ...tileOf('grass'), utgardWall: { ...wall, piece: 'gate180', isGate: true, level: 0 } }, undefined)).toEqual({
+      kind: 'utgardwall',
+      gate: true,
+      level: 0,
+    });
+    expect(hoverSubjectFor({ ...tileOf('sea'), utgardWall: { ...wall, piece: 'end_coast' } }, undefined).kind).toBe('utgardwall');
+    expect(hoverSubjectFor({ ...tileOf('grass'), jotunTower: { orientation: 'SE', level: 2 } }, undefined)).toEqual({ kind: 'jotuntower', level: 2 });
   });
 
   it('carries the live camp state and the effective level, and drops a removed camp', () => {
@@ -251,6 +286,40 @@ describe('previewIslandBounds', () => {
 // contract change here is the fix, not incidental — the tests below were
 // updated to match rather than left calling a signature that no longer
 // exists.
+describe('previewDrawRadius', () => {
+  it('defaults to the fit radius, so the landing page and docs islands are unchanged', () => {
+    expect(previewDrawRadius({})).toBe(PREVIEW_ISLAND_RADIUS);
+    expect(previewDrawRadius({ previewRadius: 13 })).toBe(13);
+  });
+
+  it('draws a wider radius than the camera fits, but never a narrower one', () => {
+    expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 34 })).toBe(34);
+    expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 5 })).toBe(13);
+  });
+});
+
+// The landing/onboarding preview drew the bog edge border for every bog hex in view, including ones past the island
+// crop whose ground art is never drawn, so their outlines floated over the empty backdrop. Terrain and bog edges now
+// both take this one crop.
+describe('previewGroundCoords', () => {
+  const center = { q: 0, r: 0 };
+  const crop = hexesInRadius(center, 2);
+  const world = { previewCropTiles: vi.fn(() => crop) };
+
+  it('keeps only the hexes of the island crop, so nothing past it is drawn or outlined', () => {
+    const kept = previewGroundCoords(hexesInRadius(center, 6), world, { previewCenter: center, previewRadius: 2 });
+    expect(kept).toHaveLength(crop.length);
+    expect(kept).not.toContainEqual({ q: 5, r: 0 });
+    expect(world.previewCropTiles).toHaveBeenCalledWith(center, 2);
+  });
+
+  it('keeps the whole drawn disc, sea included, with previewSea', () => {
+    const options = { previewCenter: center, previewRadius: 2, previewRenderRadius: 4, previewSea: true };
+    const kept = previewGroundCoords(hexesInRadius(center, 6), world, options);
+    expect(kept).toHaveLength(hexesInRadius(center, 4).length);
+  });
+});
+
 describe('previewFitZoom', () => {
   // A regular hexagonal blob of tile centres, all land — stands in for "some
   // symmetric island of the given radius" wherever a test only cares about
@@ -862,5 +931,218 @@ describe('startTextureLoad', () => {
     await expect(terrainReady).rejects.toThrow('terrain atlas boom');
     await done; // never itself throws — the failure is only ever observed via terrainReady.
     expect(states).toEqual([{ phase: 'terrain' }]);
+  });
+});
+
+describe('clientToCanvasPoint', () => {
+  it('is a plain offset when the canvas is laid out 1:1', () => {
+    const rect = { left: 100, top: 50, width: 800, height: 500 };
+    expect(clientToCanvasPoint({ x: 300, y: 250 }, rect, { width: 800, height: 500 })).toEqual({ x: 200, y: 200 });
+  });
+
+  it('undoes a CSS zoom on an ancestor (docs pages on big monitors)', () => {
+    // 800x500 layout px under `zoom: 1.2` -> rect and pointer in zoomed pixels.
+    const rect = { left: 120, top: 60, width: 960, height: 600 };
+    const p = clientToCanvasPoint({ x: 120 + 480, y: 60 + 300 }, rect, { width: 800, height: 500 });
+    expect(p.x).toBeCloseTo(400);
+    expect(p.y).toBeCloseTo(250);
+  });
+
+  it('falls back to 1:1 for a canvas with no layout size', () => {
+    const rect = { left: 10, top: 10, width: 0, height: 0 };
+    expect(clientToCanvasPoint({ x: 30, y: 40 }, rect, { width: 0, height: 0 })).toEqual({ x: 20, y: 30 });
+  });
+});
+
+describe('waterMaskTerrainFor', () => {
+  // A bog lake beside moss, both well inland. The lake is water to the game, but the water mask
+  // must call it land: it is drawn by its own art, and the sea's shader (shore foam above all)
+  // used to ring every lake in white on the inline bake path.
+  const world = new StaticWorldModel([
+    { q: 0, r: 0, terrain: 'lake' },
+    { q: 1, r: 0, terrain: 'bog' },
+  ]);
+
+  it('counts a bog lake as land', () => {
+    const terrain = waterMaskTerrainFor(world);
+    expect(world.isLand(0, 0)).toBe(false);
+    expect(terrain.isLand(0, 0)).toBe(true);
+    expect(terrain.isLand(1, 0)).toBe(true);
+  });
+
+  it('still counts the sea as water', () => {
+    expect(waterMaskTerrainFor(world).isLand(5, 5)).toBe(false);
+  });
+
+  it('answers noFoam for a river mouth only', () => {
+    const rivers = new StaticWorldModel([
+      { q: 0, r: 0, terrain: 'grass' },
+      { q: 1, r: 0, terrain: 'grass' },
+    ]);
+    rivers.setRivers([
+      { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null },
+      { q: 1, r: 0, shape: 'straight', inDirections: ['NE'], outDirection: 'SW' },
+    ]);
+    const terrain = waterMaskTerrainFor(rivers);
+    expect(terrain.noFoam!(0, 0)).toBe(true);
+    expect(terrain.noFoam!(1, 0)).toBe(false);
+    expect(terrain.noFoam!(5, 5)).toBe(false);
+    // The worker is handed the same hexes as a list.
+    expect(rivers.riverMouthHexKeys()).toHaveLength(1);
+  });
+});
+
+describe('isIslandNearViewport', () => {
+  const viewport = { width: 1000, height: 600 };
+
+  it('keeps an island centred on screen', () => {
+    expect(isIslandNearViewport({ x: 500, y: 300 }, viewport, 100)).toBe(true);
+  });
+
+  it('keeps an island whose centre is off screen but within its reach of the edge', () => {
+    expect(isIslandNearViewport({ x: -90, y: 300 }, viewport, 100)).toBe(true);
+    expect(isIslandNearViewport({ x: 500, y: 690 }, viewport, 100)).toBe(true);
+  });
+
+  it('culls an island further than its reach past any edge', () => {
+    expect(isIslandNearViewport({ x: -101, y: 300 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 1101, y: 300 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 500, y: -101 }, viewport, 100)).toBe(false);
+    expect(isIslandNearViewport({ x: 500, y: 701 }, viewport, 100)).toBe(false);
+  });
+
+  it('culls nothing before the viewport has a size', () => {
+    expect(isIslandNearViewport({ x: 99999, y: 99999 }, { width: 0, height: 0 }, 100)).toBe(true);
+  });
+});
+
+describe('confineCamera', () => {
+  const bounds = { minX: -100, maxX: 100, minY: -50, maxY: 50 };
+
+  it('keeps a camera that is inside the bounds and above the minimum zoom untouched', () => {
+    expect(confineCamera({ x: 10, y: -20, zoom: 1.5 }, bounds, 0.5)).toEqual({ x: 10, y: -20, zoom: 1.5 });
+  });
+
+  it('pulls a centre outside the bounds back to the nearest edge, per axis', () => {
+    expect(confineCamera({ x: 900, y: 0, zoom: 1 }, bounds, 0.5)).toEqual({ x: 100, y: 0, zoom: 1 });
+    expect(confineCamera({ x: -900, y: 400, zoom: 1 }, bounds, 0.5)).toEqual({ x: -100, y: 50, zoom: 1 });
+  });
+
+  it('raises a zoom below the minimum and keeps one above it', () => {
+    expect(confineCamera({ x: 0, y: 0, zoom: 0.1 }, bounds, 0.5).zoom).toBe(0.5);
+    expect(confineCamera({ x: 0, y: 0, zoom: 3 }, bounds, 0.5).zoom).toBe(3);
+  });
+
+  it('does not mutate the input camera', () => {
+    const camera = { x: 900, y: 900, zoom: 0.1 };
+    confineCamera(camera, bounds, 0.5);
+    expect(camera).toEqual({ x: 900, y: 900, zoom: 0.1 });
+  });
+});
+
+describe('worldConfineFrame', () => {
+  const viewport = { width: 800, height: 600 };
+
+  it('starts on the middle of the disc, zoomed so the whole disc fits the viewport', () => {
+    const { camera, limits } = worldConfineFrame({ q: 5, r: -3 }, 20, viewport);
+    expect(camera.zoom).toBe(limits.minZoom);
+    expect(camera.x).toBeCloseTo((limits.bounds.minX + limits.bounds.maxX) / 2);
+    expect(camera.y).toBeCloseTo((limits.bounds.minY + limits.bounds.maxY) / 2);
+    // fitted: the disc's extent at that zoom fills (but does not overflow) one axis of the viewport
+    const w = (limits.bounds.maxX - limits.bounds.minX) * camera.zoom;
+    const h = (limits.bounds.maxY - limits.bounds.minY) * camera.zoom;
+    expect(w).toBeLessThanOrEqual(viewport.width);
+    expect(h).toBeLessThanOrEqual(viewport.height);
+  });
+
+  it('a bigger disc fits at a smaller zoom, and the same disc fits larger on a bigger viewport', () => {
+    const small = worldConfineFrame({ q: 0, r: 0 }, 10, viewport).limits.minZoom;
+    const big = worldConfineFrame({ q: 0, r: 0 }, 40, viewport).limits.minZoom;
+    expect(big).toBeLessThan(small);
+    expect(worldConfineFrame({ q: 0, r: 0 }, 40, { width: 1600, height: 1200 }).limits.minZoom).toBeGreaterThan(big);
+  });
+
+  it('its limits confine a far-away camera back onto the disc and floor the zoom', () => {
+    const { limits } = worldConfineFrame({ q: 0, r: 0 }, 20, viewport);
+    const far = confineCamera({ x: 1e6, y: -1e6, zoom: 0.0001 }, limits.bounds, limits.minZoom);
+    expect(far).toEqual({ x: limits.bounds.maxX, y: limits.bounds.minY, zoom: limits.minZoom });
+  });
+});
+
+describe('wheelPassesToPage', () => {
+  const base = { allowPageScroll: true, engaged: false, modifier: false, lockCamera: false };
+
+  it('scrolls the page on a plain wheel until the user has pressed on the map', () => {
+    expect(wheelPassesToPage(base)).toBe(true);
+    expect(wheelPassesToPage({ ...base, engaged: true })).toBe(false);
+  });
+
+  it('zooms on ctrl/meta + wheel at any time', () => {
+    expect(wheelPassesToPage({ ...base, modifier: true })).toBe(false);
+  });
+
+  it('always scrolls the page when the camera is locked, engaged or not', () => {
+    expect(wheelPassesToPage({ ...base, lockCamera: true, engaged: true })).toBe(true);
+    expect(wheelPassesToPage({ ...base, lockCamera: true, modifier: true })).toBe(true);
+  });
+
+  it('never passes on a host that did not opt into page scroll', () => {
+    expect(wheelPassesToPage({ ...base, allowPageScroll: false })).toBe(false);
+    expect(wheelPassesToPage({ ...base, allowPageScroll: false, lockCamera: true })).toBe(false);
+  });
+});
+
+describe('world-map wasted lands', () => {
+  it('fills a revealed wasted hex from the wasted palette, not the green island colours', () => {
+    for (const terrain of ['grass', 'forest', 'sand', 'mountain'] as const) {
+      expect(worldHexFill(terrain, true)).not.toBe(worldHexFill(terrain, false));
+    }
+  });
+
+  it('keeps the four wasted terrains apart from each other', () => {
+    const fills = (['grass', 'forest', 'sand', 'mountain'] as const).map((t) => worldHexFill(t, true));
+    expect(new Set(fills).size).toBe(4);
+  });
+
+  it('draws a lava stream in another colour than a river', () => {
+    expect(worldRiverColor({ wasted: true })).not.toBe(worldRiverColor({ wasted: false }));
+    expect(worldRiverColor({})).toBe(worldRiverColor({ wasted: false }));
+  });
+});
+
+describe('world-map giants', () => {
+  it('outlines the volcano and the runestone giants in their own colours', () => {
+    expect(worldGiantOutline('giantvolcano')).toBeDefined();
+    expect(worldGiantOutline('giantshrine')).toBeDefined();
+    expect(worldGiantOutline('giantutgard')).toBeDefined();
+    expect(worldGiantOutline('giantvolcano')).not.toBe(worldGiantOutline('giantshrine'));
+  });
+
+  it('draws no outline around the giant mountain, which has no function of its own', () => {
+    expect(worldGiantOutline('giantmountain')).toBeUndefined();
+  });
+});
+
+describe('worldCampMarkers', () => {
+  const strong = { q: 1, r: 2, strong: true, removed: false };
+  const weak = { q: 3, r: 4, strong: false, removed: false };
+
+  it('draws nothing for a player who is not premium', () => {
+    expect(worldCampMarkers([strong, weak], false)).toEqual([]);
+  });
+
+  it('skips a removed camp', () => {
+    expect(worldCampMarkers([{ ...strong, removed: true }, weak], true).map((m) => [m.q, m.r])).toEqual([[3, 4]]);
+  });
+
+  it('colours a strong camp red and a weak one neutral', () => {
+    const [strongMarker, weakMarker] = worldCampMarkers([strong, weak], true);
+    expect(strongMarker).toEqual({ q: 1, r: 2, color: 0xe2705f });
+    expect(weakMarker).toEqual({ q: 3, r: 4, color: 0xe8e2d0 });
+  });
+
+  it('keeps the paw readable when zoomed far out and bounded when zoomed in', () => {
+    expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(8);
+    expect(worldPawHalfSize(100)).toBeLessThanOrEqual(14);
   });
 });

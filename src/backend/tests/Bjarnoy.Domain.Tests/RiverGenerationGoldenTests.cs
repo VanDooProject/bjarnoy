@@ -63,6 +63,26 @@ public class RiverGenerationGoldenTests
         }
     }
 
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public void Every_green_island_mouth_in_the_fixture_is_a_delta(Scenario scenario)
+    {
+        Assert.SkipWhen(scenario.Wasted, "lava rivers keep their own mouths");
+        var tiles = scenario.Tiles.Select(t => new HexCoord(t[0].GetInt32(), t[1].GetInt32())).ToHashSet();
+        var sampler = new TerrainSampler(TestWorlds.Options(scenario.WorldSeed));
+        var mouths = scenario.Rivers.Where(r => r.Shape == "mouth").ToList();
+        Assert.NotEmpty(mouths);
+        foreach (var mouth in mouths)
+        {
+            var where = $"{scenario.Name}: mouth ({mouth.Q},{mouth.R})";
+            Assert.Equal("river", mouth.Width);
+            var inflow = Assert.Single(mouth.InDirections);
+            var direction = (int)Enum.GetValues<TileOrientation>().Single(o => o.ToWireName() == inflow);
+            var ahead = new HexCoord(mouth.Q, mouth.R) + HexCoord.Directions[(direction + 3) % 6];
+            Assert.False(tiles.Contains(ahead) || sampler.IsLand(ahead), $"{where}: no sea straight ahead of the inflow");
+        }
+    }
+
     private static string WidthWireName(RiverWidth width) => width switch
     {
         RiverWidth.River => "river",

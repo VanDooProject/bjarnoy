@@ -99,6 +99,32 @@ export interface AtlasClip {
    * yet); `rest` above is what every clip that exists today uses.
    */
   rest_by_camera?: Record<string, string>;
+  /** True for a clip every tile must play on the one global clock (a wind-sway clip), so a gust stays continuous across tiles. */
+  shared_clock?: boolean;
+  /**
+   * Gust-wave metadata of a sway clip: the art is rendered so a tree's phase is `frame / N - s / wavelength` (s = position along screen-right in
+   * render units), so a tile in map column k must show frame `(g - k * frames_per_column) mod N`. Read it through `swayFramesPerColumn`.
+   */
+  sway?: { wavelength: number; frames_per_column: number };
+}
+
+/** The clip's `sway.frames_per_column` when it is a non-negative integer, else 0 (no per-column offset: a malformed `sway` is ignored). */
+export function swayFramesPerColumn(clip: Pick<AtlasClip, 'sway'>): number {
+  const n = (clip.sway as { frames_per_column?: unknown } | undefined)?.frames_per_column;
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+/**
+ * A sway clip's period in frames: `round(frames_per_column * wavelength / 1.5)` (16 for frames_per_column 4, wavelength 6). Returns it only when it is a
+ * positive integer, else 0 (no period known: the caller treats the whole clip as one period).
+ */
+export function swayPeriodFrames(clip: Pick<AtlasClip, 'sway'>): number {
+  const sway = clip.sway as { wavelength?: unknown; frames_per_column?: unknown } | undefined;
+  const w = sway?.wavelength;
+  const f = sway?.frames_per_column;
+  if (typeof w !== 'number' || typeof f !== 'number' || !Number.isFinite(w) || !Number.isFinite(f)) return 0;
+  const p = Math.round((f * w) / 1.5);
+  return Number.isInteger(p) && p > 0 ? p : 0;
 }
 
 // Exported (only) so atlas.test.ts can build synthetic manifests for the
@@ -412,8 +438,8 @@ function evictOnReject(key: string, promise: Promise<LoadedAtlas>): void {
  * from 1, `total` is the category's page count known up front (`pages.length`,
  * fixed before the loop starts) — a best-effort progress signal for
  * HexMapRenderer's loading-state overlay (see `MapLoadState.progress`).
- * Sequential (one `Assets.load` at a time, same as before this was added),
- * so this is exact, not an estimate.
+ * Pages are counted in page order (see `loadPages` on when their downloads
+ * overlap), so this is exact, not an estimate.
  */
 export type AtlasPageProgress = (loaded: number, total: number) => void;
 
@@ -474,9 +500,28 @@ async function loadPages(
   const clips: Record<string, AtlasClip> = {};
   const aliases: Record<string, AtlasAliasEntry> = {};
 
+  // Without `onPartial` nothing is drawn until every page is in, so the
+  // pages are fetched and decoded all at once rather than one after another:
+  // one at a time, the category costs the sum of every page's round trip and
+  // decode (the terrain atlas's six pages took 7-10 s on a busy 4-core
+  // machine, with the landing page's "Loading map" overlay and the guided
+  // pointer waiting on all of it), where at once it costs about the slowest
+  // page. With `onPartial` the pages stay one at a time, so the first page's
+  // bytes are not shared with the rest and its art shows as early as it can.
+  // Each early start gets a no-op catch so a page that fails while an earlier
+  // one is still awaited is not reported as an unhandled rejection; the
+  // failure still surfaces when the loop reaches that page.
+  const prefetched = onPartial
+    ? null
+    : pages.map(({ webpUrl }) => {
+        const load = Assets.load<Texture>(webpUrl);
+        load.catch(() => {});
+        return load;
+      });
+
   let loaded = 0;
-  for (const { manifest, webpUrl } of pages) {
-    const pageTexture = await Assets.load<Texture>(webpUrl);
+  for (const [i, { manifest, webpUrl }] of pages.entries()) {
+    const pageTexture = await (prefetched ? prefetched[i] : Assets.load<Texture>(webpUrl));
     const sheet = new Spritesheet(pageTexture, manifest);
     await sheet.parse();
     Object.assign(textures, sheet.textures);

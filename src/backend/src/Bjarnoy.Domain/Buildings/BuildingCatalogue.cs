@@ -36,7 +36,7 @@ public static class BuildingCatalogue
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and
     /// Storage House 25 (the bog-ore works too); military/civic buildings and the mills (the Hammerschmiede too) 20; Tower and
-    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3. Unknown/removed types return 0.
+    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3; Bridge 4; Siege Workshop 5. Unknown/removed types return 0.
     /// </summary>
     public static int MaxLevelFor(BuildingType type) => type switch
     {
@@ -53,6 +53,8 @@ public static class BuildingCatalogue
             or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord
             or BuildingType.OdinStatue => 5,
         BuildingType.Palisade or BuildingType.PalisadeGate => 3,
+        BuildingType.Bridge => 4,
+        BuildingType.SiegeWorkshop => 5,
         _ => 0,
     };
 
@@ -113,10 +115,11 @@ public static class BuildingCatalogue
             [BuildingType.Farm] = 4,
             [BuildingType.PumpkinFarm] = 4,
             [BuildingType.Barracks] = 5,
-            [BuildingType.BogOreWorks] = 6,
+            [BuildingType.BogOreWorks] = 3,
             [BuildingType.TownSquare] = 6,
             [BuildingType.Palisade] = 7,
             [BuildingType.PalisadeGate] = 7,
+            [BuildingType.Bridge] = 7,
             [BuildingType.Dockyard] = 8,
             [BuildingType.ArcheryRange] = 9,
             [BuildingType.CartWorkshop] = 10,
@@ -124,6 +127,7 @@ public static class BuildingCatalogue
             [BuildingType.DruidHut] = 12,
             [BuildingType.Smithy] = 15,
             [BuildingType.GreatStorehouse] = 15,
+            [BuildingType.SiegeWorkshop] = 18,
             [BuildingType.Sawmill] = 20,
             [BuildingType.CropMill] = 20,
             [BuildingType.Hammerschmiede] = 20,
@@ -133,6 +137,16 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfThor] = 25,
             [BuildingType.OdinStatue] = 25,
         };
+
+    /// <summary>
+    /// Buildings that can no longer be placed anew while their type, art and numbers stay: the Quarry is switched off for now.
+    /// Quarries already standing (or queued) in a saved world keep producing and upgrading —
+    /// <see cref="Settlement.PlanBuild"/> only refuses a level-1 order (<see cref="BuildRejection.NewPlacementDisabled"/>).
+    /// </summary>
+    public static IReadOnlySet<BuildingType> NewPlacementDisabled { get; } = new HashSet<BuildingType>
+    {
+        BuildingType.Quarry,
+    };
 
     /// <summary>
     /// The Longhouse level <paramref name="type"/> unlocks at (1 for the
@@ -203,7 +217,7 @@ public static class BuildingCatalogue
     /// </para>
     /// <para>
     /// Storage House, Quarry, Clay Brickworks, Lumberjack, Reindeer Herder,
-    /// Tower and Town Square gate nothing on their own way in: Quarry needs a Mountain hex, and
+    /// Tower and Town Square need nothing standing before them: Quarry needs a Mountain hex, and
     /// <see cref="World.WorldGenerator"/> does not guarantee one within reach
     /// of a starting position — anything behind a Quarry would be unreachable
     /// for an unlucky map roll rather than merely expensive.
@@ -217,9 +231,12 @@ public static class BuildingCatalogue
             [BuildingType.Barracks] = [new(BuildingType.Tower, 3)],
             [BuildingType.Palisade] = [new(BuildingType.Tower, 5)],
             [BuildingType.PalisadeGate] = [new(BuildingType.Tower, 5)],
+            [BuildingType.Bridge] = [new(BuildingType.TownSquare, 1)],
             [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 5)],
             [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 5)],
+            [BuildingType.SiegeWorkshop] = [new(BuildingType.ArcheryRange, 3)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
+            [BuildingType.BogOreWorks] = [new(BuildingType.ClayBrickworks, 3)],
             [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
             [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 5)],
             [BuildingType.Smithy] = [new(BuildingType.Barracks, 10)],
@@ -290,7 +307,9 @@ public static class BuildingCatalogue
             BuildingType.OdinStatue => Shrine(type, level),
             BuildingType.GreatStorehouse => GreatStorehouse(level),
             BuildingType.Palisade or BuildingType.PalisadeGate => PalisadeHex(type, level),
+            BuildingType.Bridge => BridgeHex(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
+            BuildingType.SiegeWorkshop => SiegeWorkshop(level),
             BuildingType.Dockyard => Dockyard(level),
             BuildingType.Barracks => Barracks(level),
             // Grass qualifies terrain-wise, but only a hex that is itself a
@@ -790,7 +809,7 @@ public static class BuildingCatalogue
     /// the gate is refused there by <see cref="Palisades.PalisadeRules"/>). Unlocks at LH 7 behind a level-5 Tower; no production,
     /// storage or claim of its own.
     /// </summary>
-    // TODO(docs/design/economy.md section 5): siege and fire take a level off a wall hex at a time until it is gone; nothing does yet.
+    // TODO(docs/design/economy.md section 5): fire takes a level off a wall hex at a time until it is gone; nothing burns walls yet.
     private static BuildingDefinition PalisadeHex(BuildingType type, int level) => new()
     {
         Type = type,
@@ -800,6 +819,34 @@ public static class BuildingCatalogue
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
         AlsoOnCoastalWater = true,
         AlsoOnBogKinds = PlainBogOnly,
+    };
+
+    /// <summary>
+    /// Wood, stone, food, iron and build minutes of each bridge level, spelled out per level (no cost growth): wood-heavy, stone from
+    /// level 3, no iron (<c>docs/design/economy.md</c> section 5).
+    /// </summary>
+    private static readonly (ResourceAmounts Cost, TimeSpan Duration)[] BridgeLevels =
+    [
+        (new ResourceAmounts(Wood: 120, Stone: 0, Food: 20, Iron: 0), TimeSpan.FromMinutes(10)),
+        (new ResourceAmounts(Wood: 220, Stone: 0, Food: 30, Iron: 0), TimeSpan.FromMinutes(20)),
+        (new ResourceAmounts(Wood: 380, Stone: 160, Food: 40, Iron: 0), TimeSpan.FromMinutes(45)),
+        (new ResourceAmounts(Wood: 660, Stone: 340, Food: 60, Iron: 0), TimeSpan.FromMinutes(90)),
+    ];
+
+    /// <summary>
+    /// The bridge over a wide river hex (<c>docs/design/economy.md</c> section 5): it stands on the river tile itself (grass, forest or
+    /// sand under it), on a Straight, Bend or Bend60 tile only (<see cref="BuildingDefinition.RequiresRiverShape"/>; any river art
+    /// variant, the bridge swaps it for the plain channel). <see cref="Settlement.PlanBuild"/> additionally requires the tile to be a wide
+    /// river and the island not wasted. Unlocks at LH 7 behind a level-1 Town Square; no production, storage or claim of its own.
+    /// </summary>
+    private static BuildingDefinition BridgeHex(int level) => new()
+    {
+        Type = BuildingType.Bridge,
+        Level = level,
+        Cost = BridgeLevels[level - 1].Cost,
+        BuildDuration = BridgeLevels[level - 1].Duration,
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
+        RequiresRiverShape = SawmillRiverShapes,
     };
 
     /// <summary>
@@ -839,15 +886,27 @@ public static class BuildingCatalogue
         // Archery Range), behind a level-5 Barracks.
     };
 
+    /// <summary>
+    /// Trains the siege engines, catapult and battering ram (<see cref="Units.UnitDefinition.RequiredBuildingType"/>); the ram is the only engine that
+    /// breaches walls (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
+    /// mirror <see cref="ArcheryRange"/> one tier up: wood and stone costs about 1.6 times higher (buildings cost no iron), a slightly longer build.
+    /// </summary>
+    private static BuildingDefinition SiegeWorkshop(int level) => new()
+    {
+        Type = BuildingType.SiegeWorkshop,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 220, Stone: 160, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(10, level),
+        AllowedTerrain = Grass,
+    };
+
     // Same shape as FishingHut: RequiresCoastalWater rather than
     // AllowedTerrain, the hex under it stays Terrain.Sea. No production or
     // storage of its own — it trains the ship roster in place of the
     // Longhouse (see Units.UnitDefinition.RequiredBuildingType).
     //
-    // Deferred follow-up, not implemented here: ships departing a fleet
-    // should render from the Dockyard's own hex rather than the settlement
-    // centre — that needs an Army/pathing rendering change out of scope for
-    // this pass.
+    // When the settlement centre is inland, fleets depart from and return to
+    // the Dockyard's hex (see Army.FleetAnchor).
     private static BuildingDefinition Dockyard(int level) => new()
     {
         Type = BuildingType.Dockyard,
@@ -910,7 +969,7 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// Trains the civilian Provisioner/Settler half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>) — the basic
     /// melee/archer/ship split's shape, applied to the civilian line.

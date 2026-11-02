@@ -6,6 +6,7 @@ import {
   claimRadiusForLevel,
   hasShoreline,
   hasShorelineInTerritory,
+  isShoreBuildingHex,
   towerClaimRadiusForLevel,
   type ClaimDisc,
   type TerrainLookup,
@@ -173,3 +174,20 @@ function neighborsOf(c: { q: number; r: number }) {
   ];
   return dirs.map((d) => ({ q: c.q + d.q, r: c.r + d.r }));
 }
+
+describe('isShoreBuildingHex', () => {
+  // Land at q >= 0, sea at q < 0: (0,0) touches the sea, (1,0) is inland, (-1,0) is a sea hex.
+  const coast: TerrainLookup = { isLand: (q) => q >= 0 };
+
+  it('is true for a shoreline land hex', () => {
+    expect(isShoreBuildingHex({ q: 0, r: 0 }, coast)).toBe(true);
+  });
+
+  it('is true for a sea hex (coastal-water buildings such as the Dockyard)', () => {
+    expect(isShoreBuildingHex({ q: -1, r: 0 }, coast)).toBe(true);
+  });
+
+  it('is false for an inland land hex', () => {
+    expect(isShoreBuildingHex({ q: 2, r: 0 }, coast)).toBe(false);
+  });
+});

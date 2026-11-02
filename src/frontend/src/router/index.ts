@@ -138,6 +138,8 @@ export const router = createRouter({
       path: '/docs',
       name: 'docs',
       component: () => import('../views/DocsView.vue'),
+      // Draws showcase art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
     },
     {
       // Public marketing/portfolio page — lives inside the game app (not a
@@ -151,7 +153,7 @@ export const router = createRouter({
       beforeEnter: () => startAtlasManifestLoad(),
     },
     {
-      path: '/tech-tree',
+      path: '/docs/tech-tree',
       name: 'tech-tree',
       component: () => import('../views/TechTreeView.vue'),
       // Computes its art synchronously at setup — see atlasGuard.ts.
@@ -186,9 +188,46 @@ export const router = createRouter({
       beforeEnter: () => awaitShowcaseManifests(),
     },
     {
+      path: '/docs/production',
+      name: 'production-docs',
+      component: () => import('../views/ResourceProductionView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/shrines',
+      name: 'shrines-docs',
+      component: () => import('../views/ShrinesView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/founding',
+      name: 'founding-docs',
+      component: () => import('../views/FoundingView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/land-movement',
+      name: 'land-movement-docs',
+      component: () => import('../views/LandMovementView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/ships',
+      name: 'ships-docs',
+      component: () => import('../views/ShipsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
       path: '/docs/walls',
       name: 'walls-docs',
       component: () => import('../views/WallsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => startAtlasManifestLoad(),
     },
     {
       path: '/admin',

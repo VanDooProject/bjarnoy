@@ -19,7 +19,7 @@ import {
   isUnitAvailable,
   totalTrainingCost,
 } from '../../lib/units/trainingEconomy';
-import { claimDiscs, hasShorelineInTerritory } from '../../lib/map/shoreline';
+import { hasShorelineInTerritory } from '../../lib/map/shoreline';
 
 const emit = defineEmits<{ close: []; trained: [] }>();
 
@@ -63,10 +63,11 @@ const longhouseLevel = computed(() => world.hud.level);
 const isCoastal = computed<boolean | null>(() => {
   const settlement = world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined;
   if (!settlement) return null;
-  const towers = world.hud.buildings
-    .filter((b) => b.type === 'tower')
-    .map((b) => ({ q: b.q, r: b.r, level: b.level }));
-  const discs = claimDiscs({ q: settlement.q, r: settlement.r }, longhouseLevel.value, towers);
+  // `model` is markRaw, so the buildings and level are read here only to re-run this when a poll changes them. The discs
+  // themselves come from the model: only towers connected to a longhouse claim ground (`WorldModel.claimDiscsOf`).
+  void world.hud.buildings;
+  void longhouseLevel.value;
+  const discs = world.model.claimDiscsOf(settlement.id);
   // Giant-aware, same as `WorldModel`'s own territory painting: a hex that
   // only geometrically overlaps a disc but belongs to a giant whose 7-hex
   // footprint isn't fully covered by these discs must not count toward

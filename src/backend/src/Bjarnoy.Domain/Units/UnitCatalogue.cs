@@ -16,16 +16,17 @@ namespace Bjarnoy.Domain.Units;
 /// Iron and the unlock ladder (<c>docs/design/economy.md</c> section 8): every unit except the
 /// <see cref="UnitType.Thrall"/> costs iron, so raising troops is gated by iron income. Each unit's
 /// Longhouse gate follows the building that trains it: Spearman with the Barracks (LH 5; the Thrall has no gate of its own, its Barracks is the gate), Axeman
-/// with the first bog-ore works (LH 6), Karve with the Dockyard (LH 8), Bowman with the Archery Range (LH 9),
-/// Provisioner and Settler Crew with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
+/// at LH 6, three levels after the bog-ore works open (LH 3), Karve with the Dockyard (LH 8), Bowman with the Archery Range (LH 9),
+/// Provisioner and Settler with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
 /// Longship) at LH 20, where the Hammerschmiede boosts the bog-ore works.
 /// </remarks>
 /// <remarks>
 /// <see cref="BuildingType.Barracks"/> and <see cref="BuildingType.ArcheryRange"/>
 /// split the land-army roster with no overlap by <see cref="UnitDefinition.RequiredBuildingType"/>:
 /// Barracks trains the core line (Thrall, Spearman, Axeman, Berserker),
-/// ArcheryRange trains the ranged/siege specialists (Bowman, Catapult) — no
-/// unit is ever trainable from both.
+/// ArcheryRange trains the archer (Bowman), and the
+/// <see cref="BuildingType.SiegeWorkshop"/> the siege engines (Catapult, Ram) — no
+/// unit is ever trainable from two of them.
 /// </remarks>
 public static class UnitCatalogue
 {
@@ -124,19 +125,16 @@ public static class UnitCatalogue
             RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
-        [UnitType.SettlerCrew] = new UnitDefinition
+        [UnitType.Settler] = new UnitDefinition
         {
-            Type = UnitType.SettlerCrew,
+            Type = UnitType.Settler,
             Class = UnitClass.Civilian,
             Attack = 0,
             Defense = 3,
             // Ordinary land-army pace so it neither bottlenecks nor outruns
             // an escort of infantry (issue #55) — the same figure the
-            // Spearman/Axeman/Bowman/Provisioner line already uses. A sea
-            // convoy travels at the carrying ship's (faster) speed instead —
-            // Army.TotalSpeed/PlanDispatch take the slowest stack, and no
-            // ship is ever slower than 4 — so this only ever paces an
-            // overland march.
+            // Spearman/Axeman/Bowman/Provisioner line already uses. Speed 4
+            // paces overland marches; sea movement is a separate follow-up.
             Speed = 4,
             CarryCapacity = 0,
             FoodCarryCapacity = 40,
@@ -145,8 +143,8 @@ public static class UnitCatalogue
             // per-existing-settlement multiplier (issue #55 §4) — deliberately
             // steep even at the base rate, mirroring Travian's settlers being
             // one of the most expensive units in the game.
-            TrainingCost = new ResourceAmounts(Wood: 200, Stone: 150, Food: 100, Iron: 100),
-            TrainingDuration = TimeSpan.FromMinutes(40),
+            TrainingCost = new ResourceAmounts(Wood: 120, Stone: 90, Food: 60, Iron: 60),
+            TrainingDuration = TimeSpan.FromMinutes(24),
             RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
@@ -167,11 +165,32 @@ public static class UnitCatalogue
             // commitment, not a throwaway raid. Revisit alongside a real
             // combat balancing pass, same as UpkeepPerHour/Attack/Defense above.
             SiegePower = 40,
+            SiegeTargets = SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 200, Food: 40, Iron: 250),
             TrainingDuration = TimeSpan.FromHours(1),
             RequiredLonghouseLevel = 20,
             RequiredUnitType = UnitType.Berserker,
-            RequiredBuildingType = BuildingType.ArcheryRange,
+            RequiredBuildingType = BuildingType.SiegeWorkshop,
+        },
+        [UnitType.Ram] = new UnitDefinition
+        {
+            Type = UnitType.Ram,
+            Class = UnitClass.Siege,
+            Attack = 10,
+            Defense = 30,
+            Speed = 1.0,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 0,
+            UpkeepPerHour = 3,
+            // Same siege power as the catapult (the same SiegeResolver.LevelsDestroyed), more staying power, slower. It
+            // is the wall breaker: walls and towers, nothing else; the catapult covers the rest.
+            SiegePower = 40,
+            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers,
+            TrainingCost = new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150),
+            TrainingDuration = TimeSpan.FromHours(1),
+            RequiredLonghouseLevel = 20,
+            RequiredUnitType = UnitType.Berserker,
+            RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
         [UnitType.Karve] = new UnitDefinition
         {
@@ -183,6 +202,10 @@ public static class UnitCatalogue
             CarryCapacity = 200,
             FoodCarryCapacity = 100,
             UpkeepPerHour = 2,
+            // Starting value, to be tuned: a won fleet attack damages the building it was sent at by
+            // SiegeResolver.LevelsDestroyed over the surviving ships' summed SiegePower (catapult: 40).
+            SiegePower = 10,
+            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
             RequiredLonghouseLevel = 8,
@@ -198,6 +221,9 @@ public static class UnitCatalogue
             CarryCapacity = 80,
             FoodCarryCapacity = 60,
             UpkeepPerHour = 3,
+            // Starting value, to be tuned (see Karve).
+            SiegePower = 20,
+            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 200, Food: 60, Iron: 220),
             TrainingDuration = TimeSpan.FromHours(1.5),
             RequiredLonghouseLevel = 20,

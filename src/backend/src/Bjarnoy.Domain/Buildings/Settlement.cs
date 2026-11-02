@@ -113,10 +113,50 @@ public sealed record Settlement
     public int ClaimedQuests { get; init; }
 
     /// <summary>
+    /// Whether this settlement has ever dispatched an army with
+    /// <see cref="ArmyMission.Hunt"/> (starting the attack counts; winning is not
+    /// required). An event rather than state derivable from the settlement, so it
+    /// is persisted; it completes the onboarding quest <c>hunt1</c>.
+    /// </summary>
+    public bool HuntStarted { get; init; }
+
+    /// <summary>
+    /// Whether this settlement ever had at least <see cref="TroopsTrainedThreshold"/>
+    /// fighting land units in its home garrison. Latches true the first time and never
+    /// goes back (see <see cref="WithQuestLatches"/>), so the onboarding quest
+    /// <c>spearmen5</c> stays completed after the troops leave or die, and <c>hunt1</c>
+    /// unlocks without the player having to claim anything.
+    /// </summary>
+    public bool TroopsTrained { get; init; }
+
+    /// <summary>Fighting land units in the garrison that latch <see cref="TroopsTrained"/>.</summary>
+    public const int TroopsTrainedThreshold = 5;
+
+    /// <summary>
+    /// This settlement with its persisted quest latches (<see cref="TroopsTrained"/>)
+    /// brought up to date with the current <see cref="Garrison"/>; returns the same
+    /// instance when nothing changes. Call wherever the domain settles or changes the
+    /// garrison and the result is persisted.
+    /// </summary>
+    public Settlement WithQuestLatches() =>
+        !TroopsTrained && FightingLandUnitCount >= TroopsTrainedThreshold
+            ? this with { TroopsTrained = true }
+            : this;
+
+    /// <summary>
     /// How many completed resource producers stand here (queued orders do not
     /// count — <see cref="Buildings"/> only holds finished buildings).
     /// </summary>
     public int ProducerCount => Buildings.Count(b => Quests.IsProducer(b.Type));
+
+    /// <summary>
+    /// How many fighting land units stand in the home <see cref="Garrison"/>: every
+    /// unit whose class is neither <see cref="UnitClass.Civilian"/> nor
+    /// <see cref="UnitClass.Ship"/>. Completes the onboarding quest <c>spearmen5</c>.
+    /// </summary>
+    public int FightingLandUnitCount => Garrison
+        .Where(g => UnitCatalogue.Get(g.Type).Class is not (UnitClass.Civilian or UnitClass.Ship))
+        .Sum(g => g.Count);
 
     /// <summary>The level of the standing Town Square (0 when there is none).</summary>
     public int TownSquareLevel =>
@@ -305,25 +345,26 @@ public sealed record Settlement
     /// <see cref="Settlement"/>) can still run the exact same union check;
     /// <c>SettlementService.FoundAsync</c>'s founding-time spacing check is
     /// exactly such a caller — see that method's remarks. A tower at any
-    /// level (including a level-0 foundation stub, which yields a
-    /// zero-radius disc — harmless, since that hex is already claimed by
-    /// construction) is included.
+    /// level that is connected to a longhouse (<see cref="ConnectedRealm"/>) is
+    /// included; a cut-off tower, and a level-0 foundation stub, claim nothing.
     /// </summary>
     public static IEnumerable<(HexCoord Centre, int Radius)> ClaimDiscsFor(
         HexCoord centre, IReadOnlyList<PlacedBuilding> buildings)
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
-        var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        yield return (centre, ClaimRadiusForLonghouseLevel(longhouseLevel));
-        foreach (var building in buildings)
-        {
-            if (building.Type == BuildingType.Tower)
-            {
-                yield return (building.Coord, TowerClaimRadius(building.Level));
-            }
-        }
+        // The chain rule (ConnectedRealm): a tower only claims while it is connected to a longhouse. With only this one
+        // settlement known, the longhouse here is the only one that can connect it; callers that know the player's other
+        // settlements on the island resolve the whole realm instead (ConnectedRealm.Resolve / DiscsOf).
+        var self = new RealmSettlement(Guid.Empty, centre, buildings);
+        return ConnectedRealm.Resolve([self]).DiscsOf(Guid.Empty);
     }
+
+    /// <summary>
+    /// This settlement as the chain rule sees it, for <see cref="ConnectedRealm.Resolve"/> alongside the same player's other
+    /// settlements on the island.
+    /// </summary>
+    public RealmSettlement AsRealmSettlement() => new(Id, Centre, Buildings);
 
     /// <summary>This settlement's own claim discs — <see cref="ClaimDiscsFor"/> applied to its own <see cref="Centre"/>/<see cref="Buildings"/>.</summary>
     public IEnumerable<(HexCoord Centre, int Radius)> ClaimDiscs => ClaimDiscsFor(Centre, Buildings);
@@ -591,10 +632,13 @@ public sealed record Settlement
             || guestDeaths.Count > 0 || rateIsStale || promotedAny || droppedAny || feastEnded;
         if (!changed)
         {
-            return new SettleResult(this, Changed: false, [], [], [], []);
+            // A settlement whose garrison already holds the troops (seeded, admin-set)
+            // but was never latched still has to persist the latch.
+            var latched = WithQuestLatches();
+            return new SettleResult(latched, Changed: !ReferenceEquals(latched, this), [], [], [], []);
         }
 
-        var settled = this with
+        var settled = (this with
         {
             Buildings = buildings,
             Garrison = garrison,
@@ -603,7 +647,7 @@ public sealed record Settlement
             Resources = resources,
             Feast = feast,
             PendingFeastRenown = pendingRenown,
-        };
+        }).WithQuestLatches();
 
         return new SettleResult(settled, Changed: true, completedBuilds, completedTraining, deaths, guestDeaths);
     }
@@ -1015,6 +1059,12 @@ public sealed record Settlement
     /// of soil. The caller resolves this once from the island's centre
     /// (<c>SettlementService.QueueBuildAsync</c>, <see cref="TerrainSampler.SoilAt"/>).
     /// </param>
+    /// <param name="realm">
+    /// This settlement together with the same player's other settlements on its island, resolved by the chain rule
+    /// (<see cref="ConnectedRealm"/>): the hex has to lie inside the realm's connected discs, and only connected towers count
+    /// against the tower limit. <see langword="null"/> resolves this settlement alone. When given, it must contain this
+    /// settlement in its current state.
+    /// </param>
     /// <param name="giants">
     /// This island's giant index (the territory rule), or
     /// <see langword="null"/> for a world with no giants on hand. A hex
@@ -1031,6 +1081,10 @@ public sealed record Settlement
     /// build instant, plus Fenrir's brood always, so a cleared camp's hex is buildable under its
     /// ground's normal rules.
     /// </param>
+    /// <param name="endgameSites">
+    /// The world's endgame sites (Utgard wall hexes, Jötun watchtowers), or <see langword="null"/> for a caller with none on hand. A hex
+    /// holding one is refused (<see cref="BuildRejection.HexOccupiedByEndgameSite"/>), checked right after the camp rule.
+    /// </param>
     /// <param name="bogKindAt">
     /// What kind of bog tile stands on <paramref name="coord"/> (plain moss, shore, creek, ...), or <see langword="null"/>
     /// when it is not bog. Only the buildings with a <see cref="BuildingDefinition.RequiresBogKind"/> (bog-ore works, Clay
@@ -1041,6 +1095,14 @@ public sealed record Settlement
     /// terrain lookup for their neighbours. Only a <see cref="BuildingType.Palisade"/> or <see cref="BuildingType.PalisadeGate"/> cares: the
     /// placement rules (<see cref="Palisades.PalisadeRules.CanPlace"/>) read it, together with this settlement's own walls and queued wall
     /// orders. <see langword="null"/> means no other wall is known.
+    /// </param>
+    /// <param name="isWideRiverAt">
+    /// Whether the river tile on <paramref name="coord"/> is a wide river (<c>RiverIndex.IsWide</c>: impassable to a land army). Only a
+    /// <see cref="BuildingType.Bridge"/> cares: streams are already passable, so it is refused there
+    /// (<see cref="BuildRejection.BridgeNeedsWideRiver"/>).
+    /// </param>
+    /// <param name="onWastedIsland">
+    /// Whether <paramref name="coord"/> lies on a wasted (lava) island, where no bridge is built. Only a <see cref="BuildingType.Bridge"/> cares.
     /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
@@ -1059,9 +1121,14 @@ public sealed record Settlement
         World.IGiantIndex? giants = null,
         World.ICampIndex? camps = null,
         World.BogTileKind? bogKindAt = null,
-        Palisades.PalisadeLayout? palisades = null)
+        Palisades.PalisadeLayout? palisades = null,
+        bool isWideRiverAt = false,
+        bool onWastedIsland = false,
+        World.IEndgameSiteIndex? endgameSites = null,
+        ConnectedRealm? realm = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
+        var connected = realm ?? ConnectedRealm.Resolve([AsRealmSettlement()]);
         if (giantIndex.TryGetGiant(coord, out _))
         {
             return BuildDecision.Rejected(BuildRejection.HexOccupiedByGiant);
@@ -1073,7 +1140,12 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.HexOccupiedByCamp);
         }
 
-        if (!Claims(coord, giantIndex))
+        if ((endgameSites ?? World.EndgameSiteIndex.Empty).IsSite(coord))
+        {
+            return BuildDecision.Rejected(BuildRejection.HexOccupiedByEndgameSite);
+        }
+
+        if (!Territory.Claims(connected.AllDiscs, coord, giantIndex))
         {
             return BuildDecision.Rejected(BuildRejection.HexNotInSettlement);
         }
@@ -1120,6 +1192,12 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.UnknownBuildingLevel);
         }
 
+        // A type switched off for placement (the Quarry) can still be levelled where it already stands (baseLevel > 0).
+        if (baseLevel == 0 && BuildingCatalogue.NewPlacementDisabled.Contains(type))
+        {
+            return BuildDecision.Rejected(BuildRejection.NewPlacementDisabled);
+        }
+
         if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
@@ -1135,6 +1213,21 @@ public sealed record Settlement
             if (definition.ExcludedRiverVariants?.Contains(riverVariantAt) == true)
             {
                 return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+            }
+        }
+
+        // A bridge only spans a wide river: its shape was checked above (spring, confluence and mouth are refused as terrain), and
+        // streams are passable already. A wasted island has no bridges.
+        if (type == BuildingType.Bridge)
+        {
+            if (onWastedIsland)
+            {
+                return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+            }
+
+            if (!isWideRiverAt)
+            {
+                return BuildDecision.Rejected(BuildRejection.BridgeNeedsWideRiver);
             }
         }
 
@@ -1207,10 +1300,10 @@ public sealed record Settlement
         // counted by distinct hex across standing buildings and queued orders.
         if (type == BuildingType.Tower && baseLevel == 0)
         {
-            var towerHexes = Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
-                .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord))
-                .Distinct()
-                .Count();
+            // Only connected towers count (ConnectedRealm): a cut-off tower claims nothing and does not use up the limit.
+            var towerHexes = connected.CountConnected(
+                Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
+                    .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord)));
             if (towerHexes >= BuildingCatalogue.MaxTowers(LonghouseLevel))
             {
                 return BuildDecision.Rejected(BuildRejection.TowerLimitReached);
@@ -1602,7 +1695,8 @@ public sealed record Settlement
         Func<HexCoord, Terrain>? terrainAt = null,
         World.IGiantIndex? giants = null,
         World.BogTileKind? bogKindAt = null,
-        Palisades.PalisadeLayout? palisades = null)
+        Palisades.PalisadeLayout? palisades = null,
+        ConnectedRealm? realm = null)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -1610,7 +1704,7 @@ public sealed record Settlement
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexOccupiedByGiant);
         }
 
-        if (!Claims(coord, giantIndex))
+        if (!Territory.Claims((realm ?? ConnectedRealm.Resolve([AsRealmSettlement()])).AllDiscs, coord, giantIndex))
         {
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexNotInSettlement);
         }
@@ -1737,7 +1831,7 @@ public sealed record Settlement
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, garrison, guestStacks ?? []), capacity, now);
 
-        return AdminGarrisonEditResult.Accept(this with { Garrison = garrison, Resources = resources });
+        return AdminGarrisonEditResult.Accept((this with { Garrison = garrison, Resources = resources }).WithQuestLatches());
     }
 
     /// <summary>
@@ -2071,8 +2165,8 @@ public sealed record Settlement
     /// class.
     /// </param>
     /// <param name="costMultiplier">
-    /// Multiplies the catalogue's flat per-unit cost (issue #55 §4: settler
-    /// crews cost more the more settlements the player already holds — see
+    /// Multiplies the catalogue's flat per-unit cost (issue #55 §4: settlers
+    /// cost more the more settlements the player already holds — see
     /// <see cref="Settlers.Founding.CostMultiplier"/>). 1.0 for every ordinary
     /// unit; the caller (<c>SettlementService.TrainUnitsAsync</c>) is the one
     /// that knows how many settlements the owning player holds, so it

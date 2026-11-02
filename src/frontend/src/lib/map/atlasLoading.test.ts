@@ -17,6 +17,7 @@ vi.mock('pixi.js', () => {
   return { Assets: { load: vi.fn(async (url: string) => ({ url })), unload: vi.fn(async () => {}) }, Spritesheet, Texture: {} };
 });
 
+import { Assets } from 'pixi.js';
 import {
   atlasManifestVersion,
   categorySearchOrder,
@@ -28,6 +29,7 @@ import {
   preloadAtlasManifests,
   preloadShowcaseManifests,
   startBackgroundAtlasLoad,
+  unloadAtlasCategory,
   type AtlasManifest,
   type AtlasPageIndex,
 } from './atlas';
@@ -179,6 +181,70 @@ describe('loadAtlasCategory onPartial', () => {
     const onPartial = vi.fn();
     await loadAtlasCategory('buildings-level1', undefined, onPartial);
     expect(onPartial).not.toHaveBeenCalled();
+  });
+});
+
+describe('loadAtlasCategory page downloads', () => {
+  // Pages whose Assets.load stays pending until the test resolves them, so
+  // the test can see how many were started before any of them finished.
+  const pending = new Map<string, () => void>();
+  function holdPageLoads() {
+    vi.mocked(Assets.load).mockImplementation(
+      (url: unknown) => new Promise((resolve) => pending.set(url as string, () => resolve({ url } as never))),
+    );
+    return pending;
+  }
+  async function releaseAll(pending: Map<string, () => void>, done: Promise<unknown>) {
+    let settled = false;
+    void done.finally(() => (settled = true));
+    while (!settled) {
+      for (const [url, resolve] of pending) {
+        pending.delete(url);
+        resolve();
+      }
+      await flush();
+    }
+  }
+  afterEach(async () => {
+    // A failed assertion leaves pages pending; let them finish so the unload below can settle.
+    for (const resolve of pending.values()) resolve();
+    pending.clear();
+    vi.mocked(Assets.load).mockReset().mockImplementation(async (url) => ({ url }) as never);
+    await unloadAtlasCategory('terrain');
+  });
+
+  // The landing page's "Loading map" overlay and its guided pointer wait on
+  // the whole terrain atlas: fetched one page after another it cost the sum
+  // of every page's round trip and decode (7-10 s on a busy machine), which
+  // is what kept the pointer hidden past the e2e's wait.
+  it('starts every page of a category at once when nothing draws the pages early', async () => {
+    await unloadAtlasCategory('terrain');
+    const pending = holdPageLoads();
+    const pages = discoveredPages('terrain');
+    expect(pages.length).toBeGreaterThan(1);
+
+    const progress: number[] = [];
+    const done = loadAtlasCategory('terrain', (loaded) => progress.push(loaded));
+    await flush();
+    expect(pending.size).toBe(pages.length);
+    expect(progress).toEqual([]);
+
+    await releaseAll(pending, done);
+    const atlas = await done;
+    // Still merged and counted in page order.
+    expect(progress).toEqual(pages.map((_, i) => i + 1));
+    const lastPageFrame = Object.keys(MANIFESTS[pages.at(-1)!.path].frames)[0];
+    expect(atlas.textures[lastPageFrame]).toBeDefined();
+  });
+
+  it('still downloads one page at a time when each page is drawn as it arrives', async () => {
+    await unloadAtlasCategory('terrain');
+    const pending = holdPageLoads();
+    const done = loadAtlasCategory('terrain', undefined, () => {});
+    await flush();
+    expect(pending.size).toBe(1);
+    await releaseAll(pending, done);
+    expect(vi.mocked(Assets.load)).toHaveBeenCalledTimes(discoveredPages('terrain').length);
   });
 });
 

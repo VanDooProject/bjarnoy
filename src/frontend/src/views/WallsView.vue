@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
+import { useDocsAdminNotes } from '../composables/useDocsAdminNotes';
 import WallExample from '../components/docs/WallExample.vue';
 import WallMovementDiagram from '../components/docs/WallMovementDiagram.vue';
 import WallPiece from '../components/docs/WallPiece.vue';
 import { findAtlasFrame } from '../lib/map/atlas';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
-import { PALISADE_PIECES, WALL_GROUNDS, stagesOf } from '../lib/docs/palisadeDocs';
+import { PALISADE_PIECES, WALL_GROUNDS, usePieceStages } from '../lib/docs/palisadeDocs';
+import { WALL_SIEGE } from '../lib/docs/wallSiegeDocs';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -29,68 +32,32 @@ const NAME_KEY: Record<PalisadePiece, string> = {
   end_coast: 'seaEnd',
 };
 
-const hasFrame = (name: string) => !!findAtlasFrame('buildings-static', name);
+const { stages, stageOf, pick } = usePieceStages((name) => !!findAtlasFrame('buildings-static', name));
 
-const PIECES = PALISADE_PIECES.map((piece) => ({
-  piece,
-  id: `piece-${piece}`,
-  key: NAME_KEY[piece],
-  stages: stagesOf(piece, hasFrame),
-}));
+const PIECES = PALISADE_PIECES.map((piece) => ({ piece, id: `piece-${piece}`, key: NAME_KEY[piece] }));
 
-const view = reactive(
-  Object.fromEntries(
-    PIECES.map((p) => [p.piece, { stage: p.stages.at(-1) ?? 0, dir: 'SE' as TileOrientation }]),
-  ) as Record<PalisadePiece, { stage: number; dir: TileOrientation }>,
-);
+const dirs = reactive(Object.fromEntries(PIECES.map((p) => [p.piece, 'SE'])) as Record<PalisadePiece, TileOrientation>);
 
 function stageLabel(stage: number): string {
   return stage === 0 ? t('docs.walls.stages.construction') : t('docs.walls.stages.level', { n: stage });
 }
 
-const STRAIGHT_STAGE = PIECES[0]!.stages.at(-1) ?? 0;
+const straightStage = computed(() => stageOf('straight180'));
 
-const tocLinks = [
-  ...PIECES.map((p) => ({ href: `#${p.id}`, label: t(`docs.walls.pieces.${p.key}.name`) })),
+const { visible: adminNotes } = useDocsAdminNotes();
+const tocLinks = computed(() => [
   { href: '#choosing', label: t('docs.walls.choosing.heading') },
   { href: '#where', label: t('docs.walls.where.heading') },
   { href: '#movement', label: t('docs.walls.movement.heading') },
-  { href: '#not-built', label: t('docs.walls.notBuilt.heading') },
-];
+  { href: '#sieges', label: t('docs.walls.sieges.heading') },
+  ...PIECES.map((p) => ({ href: `#${p.id}`, label: t(`docs.walls.pieces.${p.key}.name`) })),
+  ...(adminNotes.value ? [{ href: '#not-built', label: t('docs.walls.notBuilt.heading') }] : []),
+]);
 </script>
 
 <template>
   <DocsPageLayout class="walls" :title="$t('docs.walls.title')" caption="DOCS · WALLS" :intro="$t('docs.walls.intro')">
     <DocsToc :links="tocLinks" />
-
-    <h2 class="group-heading">{{ $t('docs.walls.pieces.heading') }}</h2>
-    <p class="group-body">{{ $t('docs.walls.pieces.body') }}</p>
-
-    <DocsTileEntry
-      v-for="p in PIECES"
-      :id="p.id"
-      :key="p.piece"
-      :title="$t(`docs.walls.pieces.${p.key}.name`)"
-      :level="3"
-    >
-      <template #thumb>
-        <WallPiece :piece="p.piece" :dir="view[p.piece].dir" :stage="view[p.piece].stage" />
-      </template>
-      <p>{{ $t(`docs.walls.pieces.${p.key}.body`) }}</p>
-      <template #pickers>
-        <DocsPicker
-          v-if="p.stages.length > 1"
-          v-model="view[p.piece].stage"
-          :label="$t('docs.walls.stage')"
-          :options="p.stages.map((stage) => ({ value: stage, label: stageLabel(stage) }))"
-        />
-        <DocsPicker
-          v-model="view[p.piece].dir"
-          :label="$t('docs.walls.camera')"
-          :options="TILE_ORIENTATIONS.map((dir) => ({ value: dir, label: dir }))"
-        />
-      </template>
-    </DocsTileEntry>
 
     <section id="choosing" class="block">
       <h2>{{ $t('docs.walls.choosing.heading') }}</h2>
@@ -100,7 +67,6 @@ const tocLinks = [
         <li>{{ $t('docs.walls.choosing.rules.gate') }}</li>
         <li>{{ $t('docs.walls.choosing.rules.sea') }}</li>
       </ul>
-      <p class="group-body">{{ $t('docs.walls.choosing.example') }}</p>
       <WallExample />
     </section>
 
@@ -110,7 +76,7 @@ const tocLinks = [
       <div class="grounds">
         <figure v-for="ground in WALL_GROUNDS" :key="ground.id" class="ground" :data-ground="ground.id">
           <div class="ground-art">
-            <WallPiece piece="straight180" dir="SE" :stage="STRAIGHT_STAGE" :ground="ground.id" />
+            <WallPiece piece="straight180" dir="SE" :stage="straightStage" :ground="ground.id" />
           </div>
           <figcaption>{{ $t(`docs.walls.where.grounds.${ground.id}`) }}</figcaption>
         </figure>
@@ -126,15 +92,59 @@ const tocLinks = [
         <li>{{ $t('docs.walls.movement.rules.end') }}</li>
         <li>{{ $t('docs.walls.movement.rules.sea') }}</li>
         <li>{{ $t('docs.walls.movement.rules.natural') }}</li>
+        <li>{{ $t('docs.walls.movement.rules.rivers') }}</li>
         <li>{{ $t('docs.walls.movement.rules.fleets') }}</li>
       </ul>
       <WallMovementDiagram />
     </section>
 
-    <section id="not-built" class="block">
+    <section id="sieges" class="block">
+      <h2>{{ $t('docs.walls.sieges.heading') }}</h2>
+      <p class="group-body">{{ $t('docs.walls.sieges.body') }}</p>
+      <ul class="rules">
+        <li>{{ $t('docs.walls.sieges.rules.who') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.target') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.level', { levels: WALL_SIEGE.levels }) }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.ships') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.gone') }}</li>
+        <li>{{ $t('docs.walls.sieges.rules.rebuild') }}</li>
+      </ul>
+    </section>
+
+    <h2 class="group-heading">{{ $t('docs.walls.pieces.heading') }}</h2>
+    <p class="group-body">{{ $t('docs.walls.pieces.body') }}</p>
+
+    <DocsTileEntry
+      v-for="p in PIECES"
+      :id="p.id"
+      :key="p.piece"
+      :title="$t(`docs.walls.pieces.${p.key}.name`)"
+      :level="3"
+    >
+      <template #thumb>
+        <WallPiece :piece="p.piece" :dir="dirs[p.piece]" :stage="stageOf(p.piece)" />
+      </template>
+      <p>{{ $t(`docs.walls.pieces.${p.key}.body`) }}</p>
+      <template #pickers>
+        <DocsPicker
+          v-if="stages[p.piece].length > 1"
+          :model-value="stageOf(p.piece)"
+          :label="$t('docs.walls.stage')"
+          :options="stages[p.piece].map((stage) => ({ value: stage, label: stageLabel(stage) }))"
+          @update:model-value="pick(p.piece, $event)"
+        />
+        <DocsPicker
+          v-model="dirs[p.piece]"
+          :label="$t('docs.walls.camera')"
+          :options="TILE_ORIENTATIONS.map((dir) => ({ value: dir, label: dir }))"
+        />
+      </template>
+    </DocsTileEntry>
+
+    <DocsAdminNote id="not-built" as="section" class="block">
       <h2>{{ $t('docs.walls.notBuilt.heading') }}</h2>
       <p class="group-body">{{ $t('docs.walls.notBuilt.body') }}</p>
-    </section>
+    </DocsAdminNote>
   </DocsPageLayout>
 </template>
 

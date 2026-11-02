@@ -43,7 +43,7 @@ The generator has to follow the art's map rules, or tiles are missing:
 
 On top of that, the economy needs one thing: **bog ground in reach of every
 start**. The Clay Brickworks on bog is the start's stone source (LH 1), and
-the bog-ore works on bog are its iron source (from about LH 6). A mountain
+the bog-ore works on bog are its iron source (from LH 3). A mountain
 is *not* needed at the start; where one is in reach, the Quarry is an
 alternative stone source.
 
@@ -209,7 +209,7 @@ Pixel-measured against the vendored art (bg_assets_hextile edba233). Directions 
 
 Texture keys: `bog`, `lake`, `bogcreek`, `bogcreekbend`, `bogcreekspring`, `lakeinlet`, `lakeshore`, `lakehalf`,
 `lakemouth`. `normalizeBogFrames` renames `variantNNN` to contiguous variants; lake variants above 3 (fish weir,
-both boats) are dropped. The variant is `tile.variant % variants.length`.
+both boats) are dropped. The variant is `tile.variant % variants.length`, over the looks the game shows: look 0 (the bare plain hex) is retired for the moss and every creek, spring, inlet, shore, half and mouth family (`RETIRED_BOG_VARIANTS`), so those hexes always draw a decorated look; the open lake keeps its plain water.
 
 ## Buildings
 
@@ -218,8 +218,8 @@ both boats) are dropped. The variant is `tile.variant % variants.length`.
 `buildingEconomy.ts`; `BogBuildingTests.cs` and the frontend tests pin them.
 
 - **Bog-ore works** (`bogoreworks`): the iron producer, on **plain bog moss** only
-  (`BogTileKind.Bog`: not a shore, mouth, creek, spring or lake). Unlocks at LH 6 with no
-  feeder, max level 25, storage-capped like the other producers. 7 art levels (level000-006);
+  (`BogTileKind.Bog`: not a shore, mouth, creek, spring or lake). Unlocks at LH 3 behind a level-3 Clay
+  Brickworks, max level 25, storage-capped like the other producers. 7 art levels (level000-006);
   game level `L` shows art level `min(L, 6)`, the same clamp every producer uses. Iron P₁ is
   **20/h**, tuned in the Economy lab (`economy.md` §8), growing 1.20 per level. Terrain boost:
   +10% per neighbouring bog, creek or lake hex (any bog kind), capped at +50%.

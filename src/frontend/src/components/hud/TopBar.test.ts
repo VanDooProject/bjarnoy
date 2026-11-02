@@ -415,4 +415,114 @@ describe('TopBar', () => {
       wrapper.unmount();
     });
   });
+
+  // Phone screenshot: LandingView's founded bar was a full-width band whose
+  // only content was the "Name your jarl" trigger, hugging the very top edge
+  // (its nudge glow/dot clipped by the viewport). `floating` drops the band
+  // for chips on a portrait phone.
+  describe('floating (portrait phone, `floating` prop)', () => {
+    beforeEach(() => {
+      stubMediaQueries([HUD_COMPACT_QUERY]);
+    });
+
+    it('drops the band and publishes no top inset, so the map reclaims the space', async () => {
+      hudBarHeightPx.value = 64;
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--floating');
+      expect(wrapper.get('.hud-drawer').classes()).toContain('hud-drawer--floating');
+      expect(hudBarHeightPx.value).toBe(0);
+      expect(isHudRail.value).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('ignores the bottom docking preference', async () => {
+      useHudPrefsStore().setBarPosition('bottom');
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--bottom');
+      expect(isHudBarAtBottom.value).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('joins the settlement bubble to the menu button, 16px from the top and side edges', async () => {
+      useWorldStore().hud.settlementName = 'Unnamed realm';
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      const bubble = wrapper.get('.settlement-bubble');
+      expect(bubble.attributes('style')).toContain('top: 16px');
+      expect(bubble.attributes('style')).toContain('left: 16px');
+      expect(bubble.classes()).toContain('settlement-bubble--floating');
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--rail-joined');
+      wrapper.unmount();
+    });
+
+    it('the menu button toggles the drawer by tap, and a pull does nothing', async () => {
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      const fire = (type: string, clientY: number) =>
+        wrapper.get('.hud-bar').element.dispatchEvent(
+          Object.assign(new Event(type, { bubbles: true }), { clientY, pointerId: 1, isPrimary: true, pointerType: 'touch' }),
+        );
+      fire('pointerdown', 10);
+      fire('pointermove', 200);
+      fire('pointerup', 200);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('false');
+
+      await wrapper.get('.hud-grip').trigger('click');
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('true');
+      expect(isHudDrawerOpen.value).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('sizes the open drawer to the content element\'s border-box, not its padding-less contentRect', async () => {
+      stubCompactMediaQuery(true);
+      const callbacks: Array<(entries: unknown[]) => void> = [];
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(cb: (entries: unknown[]) => void) { callbacks.push(cb); }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      });
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+
+      const content = wrapper.get('.hud-drawer-content').element;
+      // Padded content: 300px of border-box, only 276px of contentRect.
+      const entry = {
+        target: content,
+        contentRect: { height: 276 },
+        borderBoxSize: [{ blockSize: 300, inlineSize: 390 }],
+      };
+      for (const cb of callbacks) cb([entry]);
+      await wrapper.get('.hud-grip').trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-drawer').attributes('style')).toContain('height: 300px');
+      wrapper.unmount();
+    });
+
+    it('keeps the band without the prop, on desktop, docked, and in landscape rail', async () => {
+      const cases: Array<[string[], Record<string, unknown>]> = [
+        [[HUD_COMPACT_QUERY], {}],
+        [[], { floating: true }],
+        [[HUD_COMPACT_QUERY], { floating: true, docked: true }],
+        [[HUD_COMPACT_QUERY, HUD_RAIL_QUERY], { floating: true }],
+      ];
+      for (const [queries, props] of cases) {
+        stubMediaQueries(queries);
+        const wrapper = mountTopBar(props, DRAWER_SLOT);
+        await wrapper.vm.$nextTick();
+        expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--floating');
+        wrapper.unmount();
+      }
+    });
+  });
 });

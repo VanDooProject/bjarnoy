@@ -98,6 +98,8 @@ public sealed class WorldGenerator
                 IReadOnlyList<BogTile> bogTiles = [];
                 IReadOnlyList<Giant> giants;
                 IReadOnlyList<Camp> camps;
+                IReadOnlyList<UtgardWall> utgardWalls = [];
+                IReadOnlyList<JotunTower> jotunTowers = [];
                 IReadOnlyList<HexCoord> startPositions;
                 if (wasted)
                 {
@@ -106,6 +108,8 @@ public sealed class WorldGenerator
                     giants = GiantGenerator.Generate(
                         tiles, land, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet(), wasted: true);
                     camps = CampGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, wasted: true);
+                    // Utgard's wall rings and the Jötun watchtowers, after giants and camps (they keep clear of both).
+                    (utgardWalls, jotunTowers) = EndgameGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, camps);
                     startPositions = [];
                 }
                 else
@@ -127,7 +131,9 @@ public sealed class WorldGenerator
                     // The water camps (the whale road) come after the land ones, from their own pass: they sit on
                     // open sea 6-10 hexes off the coast, hold no land and so never cost a start position.
                     camps = [.. camps, .. CampGenerator.GenerateWhaleRoads(tiles, _sampler, _options, index)];
-                    startPositions = FindStartPositions(tiles, terrainLand, giants, camps, BogTerrain.PlainBog(bogTiles), _options.BogReach);
+                    startPositions = FindStartPositions(
+                        tiles, terrainLand, giants, camps, BogTerrain.PlainBog(bogTiles), _options.BogReach,
+                        riverTiles.Select(t => t.Coord).ToHashSet());
                 }
 
                 built[i] = new GeneratedIsland
@@ -141,6 +147,8 @@ public sealed class WorldGenerator
                     BogTiles = bogTiles,
                     Giants = giants,
                     Camps = camps,
+                    UtgardWalls = utgardWalls,
+                    JotunTowers = jotunTowers,
                     IsWasted = wasted,
                 };
             });
@@ -378,6 +386,9 @@ public sealed class WorldGenerator
     /// footprint hex outright, since that distance would be 0 or 1.
     /// </remarks>
     /// <remarks>
+    /// River hexes (<paramref name="riverTiles"/>, narrow or wide) are never start positions.
+    /// </remarks>
+    /// <remarks>
     /// Wildlife camps are placed before this runs (<see cref="CampGenerator"/>), and a spot
     /// within <c>GuardRange + StartPositionMargin</c> hex steps of a <em>strong</em> camp is
     /// dropped.
@@ -393,13 +404,21 @@ public sealed class WorldGenerator
         IReadOnlyList<Giant> giants,
         IReadOnlyList<Camp> camps,
         IReadOnlySet<HexCoord> plainBog,
-        int bogReach)
+        int bogReach,
+        IReadOnlySet<HexCoord>? riverTiles = null)
     {
         var candidates = new List<(HexCoord Coord, int Score)>();
 
         foreach (var tile in tiles)
         {
             if (land[tile] != Terrain.Grass)
+            {
+                continue;
+            }
+
+            // Never on a river hex: a settlement standing in a river is wrong, and on a wide river hex a land army
+            // could not even walk home (HexPathfinder.LandStepCost), so every land dispatch would be refused.
+            if (riverTiles is not null && riverTiles.Contains(tile))
             {
                 continue;
             }

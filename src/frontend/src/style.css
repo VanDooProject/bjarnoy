@@ -245,9 +245,7 @@ button {
     opacity: 0.6;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .floating-art > :not(.floating-art-shadow),
-  .floating-art-shadow {
-    animation: none;
-  }
+html[data-hud-motion='reduced'] .floating-art > :not(.floating-art-shadow),
+html[data-hud-motion='reduced'] .floating-art-shadow {
+  animation: none;
 }

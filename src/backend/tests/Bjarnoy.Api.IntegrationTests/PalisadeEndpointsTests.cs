@@ -5,6 +5,7 @@ using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Movement;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -164,6 +165,9 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         Assert.Equal("HexOccupied", await (await Build("palisade", centre)).RejectionAsync(Ct));
     }
 
+    private const int DispatchedSpearmen = 2;
+    private const int DispatchedProvisions = 20;
+
     [Fact]
     public async Task A_dispatch_into_a_walled_in_target_is_refused_for_another_player_and_goes_through_the_gate_for_the_wall_owner()
     {
@@ -187,6 +191,23 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
             int? Steps(HexCoord from, HexCoord to) =>
                 HexPathfinder.FindPath(from, to, sampler.TerrainAt, true, index.IsRiver, index.IsWide)?.Count;
 
+            // The food the dispatch below needs for the round trip, worked out the way Army.PlanDispatch does: hex count alone is not
+            // enough, since forest and river crossings are slow and the generated rivers can make the nearest plain hex a long walk.
+            var spearman = UnitCatalogue.Get(UnitType.Spearman);
+            double? RoundTripFood(HexCoord home, HexCoord to)
+            {
+                var there = HexPathfinder.FindPath(home, to, sampler.TerrainAt, true, index.IsRiver, index.IsWide);
+                var back = HexPathfinder.FindPath(to, home, sampler.TerrainAt, true, index.IsRiver, index.IsWide);
+                if (there is not { Count: > 0 } || back is not { Count: > 0 })
+                {
+                    return null;
+                }
+
+                double Hours(IReadOnlyList<HexCoord> path) => HexPathfinder.CumulativeHours(
+                    path, sampler.TerrainAt, spearman.Speed, true, worldEntity.SpeedFactor, index.IsRiver, index.IsWide)[^1];
+                return (Hours(there) + Hours(back)) * spearman.UpkeepPerHour * DispatchedSpearmen;
+            }
+
             foreach (var p in island.StartPositions
                 .Where(p => new HexCoord(p.Q, p.R).DistanceTo(ownerHex) >= SettlementService.MinimumSpacing)
                 .OrderBy(p => new HexCoord(p.Q, p.R).DistanceTo(ownerHex)))
@@ -196,7 +217,8 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
                     .Where(c => c.DistanceTo(ownerHex) >= 3 && c.DistanceTo(from) >= 3)
                     .OrderBy(c => Math.Max(c.DistanceTo(ownerHex), c.DistanceTo(from)))
                     .Take(300)
-                    .FirstOrDefault(c => Steps(ownerHex, c) is <= 18 && Steps(from, c) is <= 18);
+                    .FirstOrDefault(c => Steps(ownerHex, c) is <= 18 && Steps(from, c) is <= 18 &&
+                        RoundTripFood(ownerHex, c) <= DispatchedProvisions && RoundTripFood(from, c) <= DispatchedProvisions);
                 if (best != default)
                 {
                     plot = p;
@@ -214,7 +236,8 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
 
         var ring = target.Neighbours();
 
-        DispatchArmyRequest ToTarget() => new([new UnitCountRequest("spearman", 2)], null, new HexPointRequest(target.Q, target.R), 20);
+        DispatchArmyRequest ToTarget() =>
+            new([new UnitCountRequest("spearman", DispatchedSpearmen)], null, new HexPointRequest(target.Q, target.R), DispatchedProvisions);
         async Task<HttpResponseMessage> DispatchAsync(Player who)
         {
             Authorize(client, who.Auth.AccessToken);

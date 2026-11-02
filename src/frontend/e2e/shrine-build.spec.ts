@@ -28,6 +28,8 @@ test('building a shrine from the ring menu places it without a rendering error',
   // first, which is what a player would have to do, rather than weakening
   // the gate for the test.
   await settlement.setSettlementLevel(25);
+  // The Shrine of Thor also needs a level-5 smithy standing (BuildingCatalogue.cs Prerequisites).
+  await settlement.standBuildings([{ type: 'smithy', level: 5 }]);
 
   // Same approach as settlement-interactions.spec.ts's build test: ask the
   // model for a real empty, owned, grass hex (grass is what carries the new

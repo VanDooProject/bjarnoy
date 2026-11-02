@@ -18,7 +18,7 @@ describe('buildTechTreeNodes', () => {
     expect(nodes).toHaveLength(Object.keys(TECH_TREE_LAYOUT).length);
     // every catalogue type is either laid out or absorbed into a merged card
     const absorbed = Object.values(MERGED_CARDS).flatMap((c) => c.absorbs);
-    for (const type of Object.keys(byType)) {
+    for (const type of Object.keys(byType).filter((t) => !HIDDEN_FROM_DOCS.includes(t))) {
       expect(type in TECH_TREE_LAYOUT || absorbed.includes(type), `${type} has a card`).toBe(true);
     }
   });
@@ -28,6 +28,23 @@ describe('buildTechTreeNodes', () => {
       expect(byType[type], `${type} should still be in the catalogue`).toBeTruthy();
       expect(byName.has(type), `${type} should not be drawn`).toBe(false);
     }
+  });
+
+  it('hides the quarry (no new one can be built) while it stays in the catalogue', () => {
+    expect(HIDDEN_FROM_DOCS).toContain('quarry');
+    expect(byName.has('quarry')).toBe(false);
+  });
+
+  it('lays out the storage row, the clay brickworks -> bog-ore works -> hammer forge row, and no blank row', () => {
+    const at = (type: string) => TECH_TREE_LAYOUT[type]!;
+    expect(at('storagehouse')).toEqual([1, 2]);
+    expect(at('greatstorehouse')).toEqual([2, 2]);
+    expect(at('meadery')).toEqual([3, 2]);
+    expect(at('claybrickworks')).toEqual([1, 3]);
+    expect(at('bogoreworks')).toEqual([2, 3]);
+    expect(at('hammerschmiede')).toEqual([3, 3]);
+    const rows = new Set(Object.values(TECH_TREE_LAYOUT).map(([, row]) => row));
+    expect([...rows].sort((a, b) => a - b)).toEqual(Array.from({ length: rows.size }, (_, i) => i));
   });
 
   it('shows Farm and Pumpkin Farm as one card behind the Reindeer Herder', () => {
@@ -53,13 +70,26 @@ describe('buildTechTreeNodes', () => {
       { text: 'LH 7', kind: 'longhouse' },
       { text: 'Tower 5', kind: 'building' },
     ]);
-    expect(wall.gives).toBe('Blocks every army');
+    expect(wall.gives).toBe('Blocks every land army (a lone end is half open)');
     expect(wall.category).toBe('military');
     // The Gate is a separate type with the same gate and prerequisite, merged into the card.
     expect(byType.palisadegate).toBeTruthy();
     expect(unlockLevel(byType.palisadegate!)).toBe(7);
     expect(prerequisitesOf(byType, 'palisadegate')).toEqual(prerequisitesOf(byType, 'palisade'));
     expect(byType.palisade).toHaveLength(3);
+  });
+
+  it('shows the Bridge behind a level-1 Town Square, unlocking at LH 7, with its four levels', () => {
+    const bridge = byName.get('bridge')!;
+    expect(bridge.label).toBe('Bridge');
+    expect(bridge.chips).toEqual([
+      { text: 'LH 7', kind: 'longhouse' },
+      { text: 'Town square 1', kind: 'building' },
+    ]);
+    expect(bridge.gives).toBe('Opens a wide river to land armies');
+    expect(bridge.category).toBe('logistics');
+    expect(byType.bridge).toHaveLength(4);
+    expect(prerequisitesOf(byType, 'bridge')).toEqual([{ type: 'townsquare', level: 1 }]);
   });
 
   it('draws the Odin Statue behind the Druid Hut, with both favours on the card', () => {
@@ -99,7 +129,7 @@ describe('buildTechTreeNodes', () => {
   });
 
   it('describes what a building gives from the shared stats helper', () => {
-    expect(byName.get('lumberjack')!.gives).toBe('+40 wood/h');
+    expect(byName.get('lumberjack')!.gives).toBe('+40 Wood/h');
     expect(byName.get('storagehouse')!.gives).toBe('+600 storage capacity');
     expect(byName.get('barracks')!.gives).toBe('Trains land troops');
   });

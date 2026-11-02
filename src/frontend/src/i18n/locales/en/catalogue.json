@@ -30,6 +30,8 @@
     "odinstatue": "Odin Statue",
     "palisade": "Palisade",
     "palisadegate": "Palisade Gate",
+    "bridge": "Bridge",
+    "siegeworkshop": "Siege workshop",
     "reindeerherder": "Reindeer Herder"
   },
   "units": {
@@ -40,9 +42,10 @@
     "berserker": "Berserker",
     "provisioner": "Provisioner",
     "catapult": "Catapult",
+    "ram": "Battering ram",
     "karve": "Karve",
     "longship": "Longship",
-    "settlercrew": "Settler Crew"
+    "settler": "Settler"
   },
   "giants": {
     "giantmountain": "Giant mountain",
@@ -211,5 +214,10 @@
       "adult": "Humpback",
       "alpha": "Old bull"
     }
+  },
+  "endgame": {
+    "utgardwall": "Utgard wall",
+    "utgardgate": "Utgard gate",
+    "jotunwatchtower": "Jötun watchtower"
   }
 }

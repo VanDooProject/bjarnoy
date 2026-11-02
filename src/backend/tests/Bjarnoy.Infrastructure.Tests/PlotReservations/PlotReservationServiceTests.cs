@@ -193,6 +193,39 @@ public class PlotReservationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_stored_start_position_on_a_river_hex_is_never_suggested_or_offered_as_an_alternative()
+    {
+        // Worlds generated before WorldGenerator.FindStartPositions skipped rivers still store such plots; a
+        // settlement on a wide river hex can't send any land army out (no way home), so they are filtered here.
+        var worldId = AddWorld();
+        var islandId = AddIsland(worldId, 0, 0, 0, (0, 0), (3, 0), (6, 0));
+        var island = _dbContext.Islands.Local.Single(i => i.Id == islandId);
+        island.RiverTiles = [new RiverTileRecord(0, 0, 0, [], null, 0), new RiverTileRecord(3, 0, 0, [], null, 0)];
+        await _dbContext.SaveChangesAsync(Ct);
+        var service = CreateService();
+
+        var result = await service.GetOrRefreshAsync(worldId, "owner-1", "ip-1", "fp-1", Ct);
+
+        Assert.True(result.Accepted);
+        Assert.Equal(new HexCoord(6, 0), result.Suggestion!.Plot);
+        Assert.Empty(result.Suggestion.Alternatives);
+    }
+
+    [Fact]
+    public async Task An_island_whose_only_start_positions_are_on_rivers_offers_no_plot()
+    {
+        var worldId = AddWorld();
+        var islandId = AddIsland(worldId, 0, 0, 0, (0, 0));
+        _dbContext.Islands.Local.Single(i => i.Id == islandId).RiverTiles = [new RiverTileRecord(0, 0, 0, [], null, 1)];
+        await _dbContext.SaveChangesAsync(Ct);
+        var service = CreateService();
+
+        var result = await service.GetOrRefreshAsync(worldId, "owner-1", "ip-1", "fp-1", Ct);
+
+        Assert.Equal(PlotSuggestionRejection.NoPlotAvailable, result.Rejection);
+    }
+
+    [Fact]
     public async Task No_islands_yields_NoPlotAvailable()
     {
         var worldId = AddWorld();

@@ -55,6 +55,9 @@ const copyDef = (d: BuildingDefinitionResponse): BuildingDefinitionResponse => (
   prerequisites: d.prerequisites.map((p) => ({ ...p })),
 });
 
+/** Types whose per-level cost and time are spelled out in the catalogue (BuildingCatalogue.BridgeLevels), not grown from level 1: copied as is. */
+const SPELLED_OUT_TYPES: ReadonlySet<string> = new Set(['bridge']);
+
 /** A new catalogue with every level regenerated from its type's level 1. Types without a level 1 are copied as is. */
 export function applyWhatIf(
   byType: Record<string, BuildingDefinitionResponse[]>,
@@ -63,7 +66,7 @@ export function applyWhatIf(
   const out: Record<string, BuildingDefinitionResponse[]> = {};
   for (const [type, defs] of Object.entries(byType)) {
     const first = defs.find((d) => d.level === 1);
-    if (!first) {
+    if (!first || SPELLED_OUT_TYPES.has(type)) {
       out[type] = defs.map(copyDef);
       continue;
     }

@@ -40,7 +40,7 @@ public sealed record TrainingOrder
     /// <summary>
     /// Cost multiplier actually charged for this batch, on top of the
     /// catalogue's flat per-unit <see cref="UnitDefinition.TrainingCost"/>
-    /// (issue #55 §4: settler-crew training escalates per settlement the
+    /// (issue #55 §4: settler training escalates per settlement the
     /// player already holds — see
     /// <see cref="Settlers.Founding.CostMultiplier"/>). 1.0 for every
     /// ordinary unit. Set once by <see cref="Settlement.PlanTrain"/> and must

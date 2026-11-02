@@ -8,9 +8,7 @@
     "playCta": "Jetzt spielen",
     "docsCta": "Dokumentation lesen",
     "seed": "Welt-Seed {seed}",
-    "reroll": "Neue Welt",
-    "explore": "Karte erkunden",
-    "exploreDone": "Fertig"
+    "reroll": "Neue Welt"
   },
   "oneView": {
     "title": "Eine Ansicht — Karte und Dorf",

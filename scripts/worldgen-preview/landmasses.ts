@@ -22,7 +22,29 @@ export interface Landmass {
 
 const key = (q: number, r: number) => `${q},${r}`;
 
-export function findLandmasses(world: WorldSeed, wasted = false, collectTiles = false): { landmasses: Landmass[]; shapes: IslandShape[] } {
+type Found = { landmasses: Landmass[]; shapes: IslandShape[] };
+
+/**
+ * The flood fill over a whole world is the expensive part of every preview layer (rivers, bog, camps and the
+ * stats footer all start from it), and a world is fully determined by seed + generation constants. Memoise the
+ * last few worlds so layers and repeated renders of one world share a single scan. Callers must treat the result
+ * as read-only. An entry that collected tile lists also serves callers that did not ask for them.
+ */
+const FOUND_CACHE_SIZE = 4;
+const foundCache = new Map<string, { collected: boolean; found: Found }>();
+
+export function findLandmasses(world: WorldSeed, wasted = false, collectTiles = false): Found {
+  const cacheKey = JSON.stringify([world.seed, world.generation, wasted]);
+  const hit = foundCache.get(cacheKey);
+  if (hit && (hit.collected || !collectTiles)) return hit.found;
+  const found = scanLandmasses(world, wasted, collectTiles);
+  foundCache.delete(cacheKey);
+  foundCache.set(cacheKey, { collected: collectTiles, found });
+  if (foundCache.size > FOUND_CACHE_SIZE) foundCache.delete(foundCache.keys().next().value!);
+  return found;
+}
+
+function scanLandmasses(world: WorldSeed, wasted: boolean, collectTiles: boolean): Found {
   const isLand = wasted
     ? (q: number, r: number) => wastedTerrainAt(q, r, world) !== 'sea'
     : (q: number, r: number) => terrainAt(q, r, world) !== 'sea';

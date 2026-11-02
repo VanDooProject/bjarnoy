@@ -290,7 +290,7 @@ public sealed class SettlementService(
         // Founding is restricted to the plots the generator already vetted, so
         // the terrain rules are enforced once at world creation rather than
         // re-derived per request.
-        if (!island.StartPositions.Any(p => p.Q == coord.Q && p.R == coord.R))
+        if (!island.FoundableStartPositions().Any(p => p.Q == coord.Q && p.R == coord.R))
         {
             return new FoundingResult(FoundingRejection.NotAStartPosition);
         }
@@ -350,15 +350,26 @@ public sealed class SettlementService(
             .Where(s => s.WorldId == worldId && s.IslandId == islandId)
             .Select(s => new
             {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
+                s.IslandId,
                 s.CentreQ,
                 s.CentreR,
                 Buildings = s.Buildings.Select(b => new { b.Q, b.R, b.Type, b.Level }).ToList(),
             })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        var snapshots = neighbours.Select(n => new Founding.NeighbourSnapshot(
-            new HexCoord(n.CentreQ, n.CentreR),
-            n.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()));
+        // A neighbour's towers can be connected through another settlement of the same player (the chain rule), so its
+        // claim discs come from the whole realm, not from the one settlement alone.
+        var neighbourRows = neighbours
+            .Select(n => new PlayerRealms.Row(
+                n.Id, n.UserId, n.OwnerId, n.IslandId, new HexCoord(n.CentreQ, n.CentreR),
+                [.. n.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]))
+            .ToList();
+        var neighbourRealms = PlayerRealms.Resolve(neighbourRows);
+        var snapshots = neighbourRows.Select(n => new Founding.NeighbourSnapshot(
+            n.Centre, n.Buildings, neighbourRealms[n.Id].DiscsOf(n.Id)));
 
         switch (Founding.CheckSpacing(coord, snapshots, MinimumSpacing, FoundingSafetyMargin))
         {
@@ -444,7 +455,7 @@ public sealed class SettlementService(
     }
 
     /// <summary>
-    /// Founds a new settlement from a settler-crew convoy's arrival (issue
+    /// Founds a new settlement from a settler convoy's arrival (issue
     /// #55 §5) — the second-and-onward-settlement counterpart to
     /// <see cref="FoundAsync"/>'s first-settlement flow, reusing the same
     /// starting shape (a Lv 1 Longhouse, <see cref="BuildingCatalogue.FoundingStock"/>)
@@ -896,7 +907,8 @@ public sealed class SettlementService(
         var bogKind = await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false);
         var result = settled.PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
-            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants, bogKind);
+            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants, bogKind,
+            realm: await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false));
 
         if (!result.Accepted)
         {
@@ -1046,6 +1058,14 @@ public sealed class SettlementService(
             .OrderBy(s => s.Id)
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// The chain-rule realm (<see cref="ConnectedRealm"/>) of <paramref name="settled"/> and the same player's other
+    /// settlements on its island: which towers are connected and which ground the player's realm covers.
+    /// </summary>
+    public Task<ConnectedRealm> LoadRealmAsync(
+        SettlementEntity entity, Settlement settled, CancellationToken cancellationToken = default) =>
+        PlayerRealms.ForSettlementAsync(_dbContext, entity, settled, cancellationToken);
+
     /// <summary>Queues a build, charging for it up front.</summary>
     public async Task<BuildResult> QueueBuildAsync(
         Guid settlementId,
@@ -1084,6 +1104,12 @@ public sealed class SettlementService(
         var terrain = sampler.TerrainAt(coord);
         var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
+        // A bridge is the one building that stands on a wide river: it needs the raw tile (a stream's shape too, so PlanBuild can name
+        // the stream), whether the tile is wide, and whether its island is a wasted one.
+        var bridgeSite = type == BuildingType.Bridge
+            ? await BridgeSiteAsync(settlement.WorldId, coord, cancellationToken).ConfigureAwait(false)
+            : default;
+        riverShapeAt = bridgeSite.Shape ?? riverShapeAt;
         // Only meaningful when there's a river shape to begin with — see
         // Settlement.PlanBuild's riverVariantAt doc comment.
         var riverVariantAt = riverShapeAt is { } shapeAt ? sampler.RiverVariantAt(coord, shapeAt) : RiverVariant.Plain;
@@ -1113,10 +1139,14 @@ public sealed class SettlementService(
             islandSoil: islandSoil,
             giants: buildGiants,
             camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false),
+            endgameSites: await LoadEndgameSiteIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false),
             bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false),
             palisades: type is BuildingType.Palisade or BuildingType.PalisadeGate
                 ? await WorldPalisades.NearAsync(_dbContext, settlement.WorldId, coord, sampler.TerrainAt, cancellationToken).ConfigureAwait(false)
-                : null);
+                : null,
+            isWideRiverAt: bridgeSite.IsWide,
+            onWastedIsland: bridgeSite.OnWastedIsland,
+            realm: await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false));
 
         if (!decision.Accepted)
         {
@@ -1258,18 +1288,19 @@ public sealed class SettlementService(
         // isn't actually claimed (its footprint isn't fully covered) must
         // not count as this settlement's shoreline either.
         var trainGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var discs = settled.ClaimDiscs.ToList();
+        var discs = (await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false))
+            .DiscsOf(settled.Id).ToList();
         var hasShoreline = discs
             .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
             .Distinct()
             .Where(coord => Territory.Claims(discs, coord, trainGiants))
             .Any(sampler.IsShoreline);
 
-        // Settler-crew training escalates per settlement the owning player
+        // Settler training escalates per settlement the owning player
         // already holds (issue #55 §4) — every other unit type trains at the
         // catalogue's flat cost (multiplier 1.0).
         var costMultiplier = 1.0;
-        if (unitType == UnitType.SettlerCrew)
+        if (unitType == UnitType.Settler)
         {
             var existingSettlementCount = await GetSettlementCountAsync(settlement.UserId, settlement.WorldId, cancellationToken)
                 .ConfigureAwait(false);
@@ -1529,6 +1560,29 @@ public sealed class SettlementService(
     }
 
     /// <summary>
+    /// What a bridge's placement rule needs to know about <paramref name="coord"/>: the shape of the river tile standing there whatever its
+    /// width (<see langword="null"/> when there is none), whether that tile is a wide river (<see cref="RiverIndex.IsWide"/>), and whether
+    /// the island it lies on is a wasted one.
+    /// </summary>
+    private async Task<(RiverTileShape? Shape, bool IsWide, bool OnWastedIsland)> BridgeSiteAsync(
+        Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    {
+        var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        if (rivers.TileAt(coord) is not { } tile)
+        {
+            return (null, false, false);
+        }
+
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => new { i.IsWasted, i.RiverTiles })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var wasted = islands.Any(i => i.IsWasted && i.RiverTiles.Any(t => t.Q == coord.Q && t.R == coord.R));
+        return (tile.Shape, rivers.IsWide(coord), wasted);
+    }
+
+    /// <summary>
     /// Which gods already have a standing shrine somewhere on
     /// <paramref name="islandId"/>, at a hex other than
     /// (<paramref name="settlementId"/>, <paramref name="coord"/>) — spanning
@@ -1601,6 +1655,19 @@ public sealed class SettlementService(
     /// </summary>
     public Task<ICampIndex> LoadCampIndexAsync(Guid worldId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
         _campService.LoadBlockingIndexAsync(worldId, now, cancellationToken);
+
+    /// <summary>The world's Utgard wall hexes (rubble included) and Jötun watchtowers as one lookup for the build rule.</summary>
+    public async Task<IEndgameSiteIndex> LoadEndgameSiteIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId && i.IsWasted)
+            .Select(i => new { i.UtgardWalls, i.JotunTowers })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return new EndgameSiteIndex(islands.SelectMany(i =>
+            i.UtgardWalls.Select(w => new HexCoord(w.Q, w.R)).Concat(i.JotunTowers.Select(t => new HexCoord(t.Q, t.R)))));
+    }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements

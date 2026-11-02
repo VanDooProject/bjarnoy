@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// Desktop: the full "Demo mode — progress isn't saved" banner at the top
-// edge. Phones: demo mode only ever runs on a developer's own machine (the
-// deployed build talks to the API), so it gets a small "Demo" tag tucked in
-// the bottom-left corner instead of a pill that competed with the HUD bar,
-// the settlement bubble and the onboarding overlays for the top rows. It
-// sits just above a bottom-docked bar, and hides while the pull-down drawer
-// is open. The full sentence stays in its `title`.
+// Demo mode only ever runs on a developer's own machine (the deployed build
+// talks to the API), so it is a small tag tucked in the bottom-left corner
+// at every width, never a banner competing with the HUD for the top rows:
+// a top-centre banner on desktop covered the middle resource pills. Desktop
+// spells out "Demo mode — progress isn't saved", a phone just "Demo" (the
+// full sentence stays in its `title`). It sits just above a bottom-docked
+// bar, and hides while the phone's pull-down drawer is open.
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { DEMO_MODE } from '../config';
@@ -20,7 +20,6 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 
 const badgeStyle = computed(() => {
-  if (!isCompact.value) return undefined;
   const barBelow = isHudBarMounted.value && isHudBarAtBottom.value ? hudBarHeightPx.value : 0;
   return { bottom: `calc(${barBelow + 2}px + env(safe-area-inset-bottom, 0px))` };
 });
@@ -31,7 +30,6 @@ const showBadge = computed(() => DEMO_MODE && !(isCompact.value && isHudDrawerOp
   <div
     v-if="showBadge"
     class="demo-badge"
-    :class="{ 'demo-badge--compact': isCompact }"
     :style="badgeStyle"
     :title="t('demoModeBadge.title')"
   >
@@ -42,32 +40,20 @@ const showBadge = computed(() => DEMO_MODE && !(isCompact.value && isHudDrawerOp
 <style scoped>
 .demo-badge {
   position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  padding: 4px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--shell);
-  background: var(--gold);
-  border-radius: 0 0 8px 8px;
-  pointer-events: none;
-}
-.demo-badge--compact {
-  top: auto;
   left: 2px;
-  transform: none;
   /* Under every overlay on the map; it is a developer's reminder, nothing
-     a tap should ever land on. */
+     a click or tap should ever land on. */
   z-index: 5;
   padding: 0 5px;
   font-size: 8.5px;
+  font-weight: 600;
   line-height: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--shell);
+  background: var(--gold);
   border-radius: 4px;
   opacity: 0.75;
+  pointer-events: none;
 }
 </style>

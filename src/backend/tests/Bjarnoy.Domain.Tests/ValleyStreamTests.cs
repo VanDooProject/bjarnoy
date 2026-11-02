@@ -17,7 +17,7 @@ public class ValleyStreamTests
     private const int Seed = 6;
 
     /// <summary>One where the nearest reachable hex across the ring is a river tile, so the stream joins it.</summary>
-    private const int JoiningSeed = 12;
+    private const int JoiningSeed = 89;
 
     private static readonly HexCoord Origin = new(0, 0);
 

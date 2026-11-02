@@ -36,8 +36,9 @@ public sealed class PalisadeMovementTests
         Enumerable.Range(fromR, toR - fromR + 1)
             .Select(r => new StandingWall(new HexCoord(3, r), r == gateAtR, Owner));
 
-    private static PalisadeIndex Index(IReadOnlyDictionary<HexCoord, Terrain> terrain, IEnumerable<StandingWall> walls) =>
-        new(walls, h => terrain.GetValueOrDefault(h, Terrain.Sea), _ => false);
+    private static PalisadeIndex Index(
+        IReadOnlyDictionary<HexCoord, Terrain> terrain, IEnumerable<StandingWall> walls, Func<Guid, Guid, bool>? areFriends = null) =>
+        new(walls, h => terrain.GetValueOrDefault(h, Terrain.Sea), _ => false, areFriends);
 
     private static IReadOnlyList<HexCoord>? Route(
         IReadOnlyDictionary<HexCoord, Terrain> terrain, PalisadeIndex walls, Guid walker, bool landUnit = true)
@@ -87,6 +88,24 @@ public sealed class PalisadeMovementTests
     }
 
     [Fact]
+    public void A_gate_of_a_friend_opens_but_a_plain_wall_of_a_friend_does_not()
+    {
+        var terrain = Strip();
+        terrain[new HexCoord(3, 4)] = Terrain.Mountain;
+        bool Friends(Guid a, Guid b) => (a == Owner && b == Stranger) || (a == Stranger && b == Owner);
+        var gate = new StandingWall(new HexCoord(3, 0), IsGate: true, Stranger);
+        var withGate = Index(terrain, [.. Column(-3, 3).Where(w => w.Coord.R != 0), gate], Friends);
+        Assert.NotNull(Route(terrain, withGate, Owner));
+
+        // A friend's plain wall hex still blocks everyone.
+        var plainWall = Index(terrain, Column(-3, 3).Select(w => w with { OwnerKey = Stranger }), Friends);
+        Assert.Null(Route(terrain, plainWall, Owner));
+
+        // Without the friendship the same gate stays shut.
+        Assert.Null(Route(terrain, Index(terrain, [.. Column(-3, 3).Where(w => w.Coord.R != 0), gate]), Owner));
+    }
+
+    [Fact]
     public void A_gate_of_another_owner_is_a_wall()
     {
         var terrain = Strip();
@@ -100,7 +119,7 @@ public sealed class PalisadeMovementTests
     }
 
     [Fact]
-    public void A_half_open_end_is_crossed_by_every_army_at_a_flat_3()
+    public void A_half_open_end_is_crossed_by_every_army_at_the_ground_cost_plus_3()
     {
         // The wall runs r -3..2; below it (3,3) is sea (not in the strip), so the tip (3,2) touches no mountain or wide river.
         var terrain = Strip();
@@ -121,13 +140,35 @@ public sealed class PalisadeMovementTests
             var hours = HexPathfinder.CumulativeHours(
                 path, h => terrain.GetValueOrDefault(h, Terrain.Sea), hexesPerHour: 1.0,
                 blocked: rules.Blocked, friendlyGate: rules.FriendlyGate, halfOpen: rules.HalfOpen);
-            Assert.Equal(HexPathfinder.HalfOpenEndCost, hours[tip] - hours[tip - 1]);
+            // Grass under the tip: the ground's 1.0 plus the end's 3.
+            Assert.Equal(1.0 + HexPathfinder.HalfOpenEndCost, hours[tip] - hours[tip - 1], 9);
+            Assert.Equal(4.0, hours[tip] - hours[tip - 1], 9);
             Assert.Equal(3.0, HexPathfinder.HalfOpenEndCost);
         }
     }
 
     [Fact]
-    public void A_half_open_end_on_bog_costs_3_in_place_of_the_bog_cost_and_a_wall_on_bog_blocks()
+    public void A_half_open_end_on_forest_costs_the_forest_plus_3()
+    {
+        var terrain = Strip();
+        terrain.Remove(new HexCoord(3, 3));
+        terrain[new HexCoord(3, 2)] = Terrain.Forest;
+        var walls = Index(terrain, Column(-3, 2));
+        Assert.True(walls.IsHalfOpen(new HexCoord(3, 2)));
+
+        var path = Route(terrain, walls, Stranger);
+        Assert.NotNull(path);
+        var tip = path!.ToList().IndexOf(new HexCoord(3, 2));
+        Assert.True(tip > 0);
+        var rules = walls.ForOwner(Stranger)!;
+        var hours = HexPathfinder.CumulativeHours(
+            path, h => terrain.GetValueOrDefault(h, Terrain.Sea), hexesPerHour: 1.0,
+            blocked: rules.Blocked, friendlyGate: rules.FriendlyGate, halfOpen: rules.HalfOpen);
+        Assert.Equal(1.3 + 3.0, hours[tip] - hours[tip - 1], 9);
+    }
+
+    [Fact]
+    public void A_half_open_end_on_bog_costs_the_bog_plus_3_and_a_wall_on_bog_blocks()
     {
         var terrain = Strip();
         terrain.Remove(new HexCoord(3, 3));
@@ -222,5 +263,36 @@ public sealed class PalisadeMovementTests
     public void No_standing_wall_means_no_wall_rules()
     {
         Assert.Null(Index(Strip(), []).ForOwner(Owner));
+    }
+
+    // Utgard's walls feed the same index under EndgameRules.JotnarOwnerKey (WorldPalisades.IndexAsync), level 1 or more only.
+    private static IEnumerable<StandingWall> Utgard(int fromR, int toR, int? gateAtR = null) =>
+        Enumerable.Range(fromR, toR - fromR + 1)
+            .Select(r => new StandingWall(new HexCoord(3, r), r == gateAtR, EndgameRules.JotnarOwnerKey));
+
+    [Fact]
+    public void A_standing_utgard_wall_stops_a_land_army_and_a_breached_hex_lets_it_through()
+    {
+        var terrain = Strip();
+        terrain[new HexCoord(3, 4)] = Terrain.Mountain;
+
+        Assert.Null(Route(terrain, Index(terrain, Utgard(-3, 3)), Stranger));
+
+        // Level 0 hexes are left out of the index: the wall has a gap at r = 0.
+        var breached = Utgard(-3, 3).Where(w => w.Coord.R != 0);
+        var path = Route(terrain, Index(terrain, breached), Stranger);
+        Assert.NotNull(path);
+        Assert.Contains(new HexCoord(3, 0), path!);
+    }
+
+    [Fact]
+    public void A_jotnar_gate_stays_shut_for_players_however_friendly_they_are_with_each_other()
+    {
+        var terrain = Strip();
+        terrain[new HexCoord(3, 4)] = Terrain.Mountain;
+        var walls = Index(terrain, Utgard(-3, 3, gateAtR: 0), areFriends: (a, b) => a != EndgameRules.JotnarOwnerKey && b != EndgameRules.JotnarOwnerKey);
+
+        Assert.Null(Route(terrain, walls, Stranger));
+        Assert.Null(Route(terrain, walls, Owner));
     }
 }

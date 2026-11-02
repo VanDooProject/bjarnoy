@@ -7,7 +7,7 @@ namespace Bjarnoy.Domain.Tests;
 
 /// <summary>
 /// <c>src/shared/terrain-checksum-golden.json</c>: SHA-256 digests of the terrain,
-/// orientation and variant of every hex on a coarse lattice over the default world,
+/// orientation, variant and forest kind of every hex on a coarse lattice over the default world,
 /// generated from the frontend's <c>worldGenerator.ts</c> by
 /// <c>scripts/regen-goldens/terrain-checksum-golden.ts</c>. The scan below is the C#
 /// twin of <c>src/frontend/src/lib/map/testing/terrainChecksums.ts</c> and must walk the
@@ -33,16 +33,16 @@ internal static class TerrainChecksumFixture
             .Single(e => e.GetProperty("seed").GetInt32() == seed)
             .GetProperty(kind).GetString()!;
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (string, string, string)> Computed = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (string, string, string, string)> Computed = new();
 
     /// <summary>
     /// Digests of (terrain letters, orientation indices, variant digits) for <paramref name="seed"/>;
     /// computed once per seed, since several tests read different parts of it.
     /// </summary>
-    public static (string Terrain, string Orientation, string Variant) Compute(int seed) =>
+    public static (string Terrain, string Orientation, string Variant, string ForestKind) Compute(int seed) =>
         Computed.GetOrAdd(seed, ComputeCore);
 
-    private static (string, string, string) ComputeCore(int seed)
+    private static (string, string, string, string) ComputeCore(int seed)
     {
         var options = WorldGenerationOptions.ForSeed(seed);
         var sampler = new TerrainSampler(options);
@@ -52,6 +52,7 @@ internal static class TerrainChecksumFixture
         var terrain = new StringBuilder();
         var orientation = new StringBuilder();
         var variant = new StringBuilder();
+        var forestKind = new StringBuilder();
 
         for (var q = -extent; q <= extent; q += stride)
         {
@@ -63,13 +64,15 @@ internal static class TerrainChecksumFixture
                     continue;
                 }
 
-                terrain.Append(sampler.TerrainAt(coord).ToWireName()[0]);
+                var t = sampler.TerrainAt(coord);
+                terrain.Append(t.ToWireName()[0]);
                 orientation.Append((int)sampler.OrientationAt(coord));
                 variant.Append(sampler.VariantAt(coord));
+                forestKind.Append(t == Terrain.Forest ? char.ToLowerInvariant(sampler.ForestKindAt(coord).ToString()[0]) : '-');
             }
         }
 
-        return (Digest(terrain), Digest(orientation), Digest(variant));
+        return (Digest(terrain), Digest(orientation), Digest(variant), Digest(forestKind));
     }
 
     private static string Digest(StringBuilder text) =>

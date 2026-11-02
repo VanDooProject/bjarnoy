@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Movement;
+using Bjarnoy.Domain.Palisades;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
@@ -255,9 +256,13 @@ public sealed record IslandResponse(
     IReadOnlyList<GiantResponse> Giants,
     bool Wasted,
     IReadOnlyList<CampResponse> Camps,
-    IReadOnlyList<BogTileResponse> BogTiles)
+    IReadOnlyList<BogTileResponse> BogTiles,
+    IReadOnlyList<UtgardWallResponse> UtgardWalls,
+    IReadOnlyList<JotunTowerResponse> JotunTowers)
 {
-    public static IslandResponse From(IslandEntity island)
+    /// <param name="island">The stored island.</param>
+    /// <param name="includeCamps">Whether the island's camps ship; false answers an empty list (the island is not one the caller has seen).</param>
+    public static IslandResponse From(IslandEntity island, bool includeCamps = true)
     {
         ArgumentNullException.ThrowIfNull(island);
 
@@ -272,9 +277,46 @@ public sealed record IslandResponse(
             [.. island.RiverTiles.Select(RiverTileResponse.From)],
             [.. island.Giants.Select(GiantResponse.From)],
             island.IsWasted,
-            [.. island.Camps.Select(CampResponse.From)],
-            [.. island.BogTiles.Select(BogTileResponse.From)]);
+            [.. (includeCamps ? island.Camps : []).Select(CampResponse.From)],
+            [.. island.BogTiles.Select(BogTileResponse.From)],
+            [.. island.UtgardWalls.Select(UtgardWallResponse.From)],
+            [.. island.JotunTowers.Select(JotunTowerResponse.From)]);
     }
+}
+
+/// <summary>
+/// One hex of an Utgard wall ring — see <see cref="Bjarnoy.Domain.World.UtgardWall"/> and <c>docs/design/endgame.md</c>.
+/// Ships with the wasted island, so it stays hidden until the endboss triggers like the island itself.
+/// </summary>
+/// <param name="Ring"><c>inner</c> or <c>outer</c>.</param>
+/// <param name="Piece">
+/// The wall piece: <c>straight180</c>, <c>bend60</c>, <c>bend120</c>, <c>gate180</c>, <c>end</c> or <c>end_coast</c> (a sea hex);
+/// the atlas family is <c>utgardwall_&lt;piece&gt;</c>.
+/// </param>
+/// <param name="Orientation">The art file's camera wire name.</param>
+/// <param name="Level">2 full, 1 damaged, 0 breached rubble.</param>
+public sealed record UtgardWallResponse(int Q, int R, string Ring, string Piece, string Orientation, bool IsGate, int Level)
+{
+    public static UtgardWallResponse From(UtgardWallRecord wall) => FromDomain(new UtgardWall(
+        new HexCoord(wall.Q, wall.R), (UtgardRing)wall.Ring, (PalisadePiece)wall.Piece, (TileOrientation)wall.Dir, wall.IsGate, wall.Level));
+
+    public static UtgardWallResponse FromDomain(UtgardWall wall) => new(
+        wall.Coord.Q,
+        wall.Coord.R,
+        wall.Ring == UtgardRing.Inner ? "inner" : "outer",
+        PalisadeRules.FamilyOf(wall.Piece)["palisade_".Length..],
+        wall.Dir.ToWireName(),
+        wall.IsGate,
+        wall.Level);
+}
+
+/// <summary>A Jötun watchtower — see <see cref="Bjarnoy.Domain.World.JotunTower"/>. Hidden with its wasted island until the endboss triggers.</summary>
+/// <param name="Orientation">The tile's own orientation wire name.</param>
+public sealed record JotunTowerResponse(int Q, int R, string Orientation)
+{
+    public static JotunTowerResponse From(JotunTowerRecord tower) => new(tower.Q, tower.R, ((TileOrientation)tower.Orientation).ToWireName());
+
+    public static JotunTowerResponse FromDomain(JotunTower tower) => new(tower.Coord.Q, tower.Coord.R, tower.Orientation.ToWireName());
 }
 
 /// <summary>
@@ -530,6 +572,7 @@ public sealed record CampGarrisonResponse(int Young, int Adult, int Alpha)
 /// A wildlife camp's live state at the world's game time (<c>GET /worlds/{id}/camps</c>) — see
 /// <c>docs/design/wildlife-camps.md</c>, "State and API". Settled lazily from the stored snapshot; reading never writes.
 /// </summary>
+/// <param name="Orientation">The tile's own orientation wire name, so a client can add a camp it first learns about here.</param>
 /// <param name="Level">The rolled level (sets <paramref name="GuardRange"/>).</param>
 /// <param name="EffectiveLevel">Rolled level plus one per 10 clears, at most 100; what the garrison and loot scale with.</param>
 /// <param name="Garrison">Beasts alive now (regrown from the snapshot).</param>
@@ -544,6 +587,7 @@ public sealed record CampStateResponse(
     int Q,
     int R,
     string Family,
+    string Orientation,
     int Level,
     int EffectiveLevel,
     bool Strong,
@@ -572,6 +616,7 @@ public sealed record CampStateResponse(
             camp.Coord.Q,
             camp.Coord.R,
             camp.Family,
+            camp.Orientation.ToWireName(),
             camp.Level,
             effectiveLevel,
             camp.Strong,
@@ -586,3 +631,12 @@ public sealed record CampStateResponse(
             ResourceAmountsResponse.From(state.Leftover));
     }
 }
+
+/// <summary>
+/// One standing wall hex of another player's settlement (<c>GET /worlds/{id}/walls</c>): enough for the client to draw the
+/// palisade piece, hit-test it for the siege action and tell friendly walls from hostile ones.
+/// </summary>
+/// <param name="Type">"palisade" or "palisadegate".</param>
+/// <param name="SettlementId">The settlement the wall belongs to.</param>
+/// <param name="OwnerUserId">The owning account; null for an anonymous settlement (owned by the shared abandoned user).</param>
+public sealed record WallResponse(int Q, int R, string Type, int Level, Guid SettlementId, Guid? OwnerUserId);

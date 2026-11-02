@@ -129,10 +129,8 @@ function subtextFor(row: ChecklistRow): string {
   animation: checklist-tick 1.6s ease-in-out infinite;
   transform-origin: center;
 }
-@media (prefers-reduced-motion: reduce) {
-  .tray-item.current {
-    animation: none;
-  }
+html[data-hud-motion='reduced'] .tray-item.current {
+  animation: none;
 }
 .tray-item.current .name,
 .tray-item.current .sub {

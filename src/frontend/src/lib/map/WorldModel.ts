@@ -12,16 +12,20 @@ import {
   ravensRings,
   wisdomBuildTimeFactor,
 } from './buildingEconomy';
-import { buildingAllowedOnHex, cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
+import { buildingAllowedOnHex, cropAllowedHere, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
+import type { StandingBridges } from './bridgeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
+import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
+import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
-import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
+import { claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
+import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import {
   DEFAULT_GENERATION,
@@ -41,7 +45,7 @@ import {
   type WorldGenerationConstants,
   type WorldSeed,
 } from './worldGenerator';
-import { generateRiversWithBogs } from './riverGenerator';
+import { generateRiversWithBogs, isWideRiverTile } from './riverGenerator';
 import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps, type LakeProp, type LakePropBuilding } from './lakeProps';
 import {
@@ -63,8 +67,8 @@ import {
 
 /**
  * Demo mode's client-only trade offer — mirrors the shape of the backend's
- * `TradeOfferResponse` closely enough that TradePanel.vue can read either
- * with the same template, without actually matching it field-for-field
+ * `TradeOfferResponse` closely enough that the trade UI (removed until trade is
+ * redesigned) could read either with the same template, without actually matching it field-for-field
  * (there's no id-per-poster-settlement notion of a shipment here — see
  * `WorldModel.acceptTradeOffer`'s doc comment for why).
  */
@@ -84,7 +88,7 @@ export interface DemoTradeOffer {
 /**
  * Demo-mode trade rejection, thrown by `WorldModel`'s trade methods —
  * mirrors `ApiError`'s `problem.rejection` closely enough that
- * TradePanel.vue can display both the same way (`err.rejection` here vs
+ * the trade UI (removed until trade is redesigned) could display both the same way (`err.rejection` here vs
  * `err.problem?.rejection` there) without a real HTTP round trip to reject.
  */
 export class DemoTradeError extends Error {
@@ -241,7 +245,7 @@ export function floodFillLandmass(
  * Good for |q|, |r| < 32768 — about 2000 times the radius of any world the
  * generator places islands in, and far past what a player could pan to.
  */
-function terrainKey(q: number, r: number): number {
+export function terrainKey(q: number, r: number): number {
   return ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
 }
 
@@ -251,7 +255,10 @@ function decodeTerrainKey(key: number): { q: number; r: number } {
   return { q: ((u >>> 16) & 0xffff) - 0x8000, r: (u & 0xffff) - 0x8000 };
 }
 
-
+/** Which settlements share one realm for the chain rule: the same player's settlements on the same island. */
+function realmGroupKey(settlement: Settlement): string {
+  return `${settlement.ownerId}|${settlement.islandId ?? ''}`;
+}
 
 export class WorldModel {
   readonly seed: number;
@@ -292,6 +299,8 @@ export class WorldModel {
    * a stale sea answer for a now-revealed hex.
    */
   private wastedRevealed = false;
+  /** `isWastedLandAt`'s answers while revealed, by `terrainKey` (each one costs two terrain samples); cleared on every reveal flip. */
+  private wastedLand = new Map<number, boolean>();
   /**
    * Whether this world has the frozen isles admin flag on (see the
    * backend's `WorldEntity.FrozenIslesEnabled`). A simple field with no
@@ -311,8 +320,22 @@ export class WorldModel {
   private islandFootprintCache = new Map<string, AxialCoord[]>();
   /** previewIslandTiles()'s cache, keyed by `previewCenter` — see there for why this needs to exist at all. */
   private previewIslandTilesCache = new Map<string, AxialCoord[]>();
+  /** `previewIslandFlood`'s cache — null for a centre whose flood fill hit its bound. */
+  private previewIslandFloodCache = new Map<string, AxialCoord[] | null>();
   /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
   private riverTiles = new Map<string, RiverTile>();
+  /**
+   * Bumped whenever the river set changes (`setRiverTiles`, `addRiverTiles`).
+   * The renderer records it when it bakes the water mask — whose no-foam field
+   * depends on where the river mouths are — and rebakes when it has moved,
+   * the same way it does for `isWastedRevealed`.
+   */
+  riverRevision = 0;
+  /**
+   * Bumped whenever bog or giant hexes are added or replaced (`addBogTiles`, `setBogTiles`, `tagGiantHex`). The
+   * renderer keys its cached bog edge geometry on it (`rebuildBogEdges`): a hex's edges depend on its neighbours.
+   */
+  overlayRevision = 0;
   /** The island bogland known so far (live mode: every island at once; demo mode: island by island), by coordinate — see `setBogTiles`. */
   private bogByHex = new Map<string, BogTile>();
   /** The lake decorations (fish weir, boats) the buildings on the shores ask for, by coordinate — see `lakeProps.ts` and `recomputeLakeProps`. */
@@ -336,6 +359,25 @@ export class WorldModel {
    * `applyServerSnapshot` (live mode) and `placeBuilding` (demo mode).
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
+  /**
+   * The settlements the chain rule resolves together locally (`realmChain.ts`): one player's settlements on one island, keyed
+   * by `realmGroupKey`. Kept up to date by `registerSettlement`, the only place a settlement enters the model. Demo mode (and
+   * live settlements without a server realm) read the realm from here.
+   */
+  private realmGroups = new Map<string, Map<string, Settlement>>();
+  /**
+   * Live mode: the realm the server resolved (`applyServerSnapshot`'s `realm`), per member settlement id; every member id maps
+   * to the same entry object. `signature` detects a changed realm. Takes precedence over `realmGroups` in `realmOf` and
+   * `realmMembers`.
+   */
+  private serverRealms = new Map<string, { ids: string[]; realm: ConnectedRealm; signature: string }>();
+  /**
+   * The hexes `syncClaim` last gave each settlement (its claim, plus any
+   * hex it only kept because a building of its own stands there) — what the
+   * release step walks, so a shrinking realm only visits ground it owned
+   * before, never the whole (procedural, unbounded) world.
+   */
+  private claimedKeys = new Map<string, Set<string>>();
   /**
    * The level of each settlement's standing Odin Statue (absent: none) — what
    * Ravens (`ravensRingsFor`, extra fog-vision rings) and Wisdom
@@ -370,6 +412,8 @@ export class WorldModel {
    * `findLandfall` and the build rule read it without materialising tiles.
    */
   private campByHex = new Map<string, NonNullable<Tile['camp']> & { q: number; r: number }>();
+  /** Utgard wall hexes by hex (see `setUtgardWalls`), kept beside `Tile.utgardWall` so the movement rules read them without materialising tiles. */
+  private utgardWallByHex = new Map<string, NonNullable<Tile['utgardWall']>>();
 
   constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
@@ -409,6 +453,7 @@ export class WorldModel {
    */
   setRiverTiles(tiles: RiverTile[]) {
     this.riverTiles = new Map(tiles.map((t) => [coordKey(t), t]));
+    this.riverRevision++;
   }
 
   /**
@@ -424,6 +469,7 @@ export class WorldModel {
     for (const tile of tiles) {
       this.riverTiles.set(coordKey(tile), tile);
     }
+    this.riverRevision++;
   }
 
   getRiverTile(q: number, r: number): RiverTile | undefined {
@@ -440,6 +486,7 @@ export class WorldModel {
     for (const tile of this.bogByHex.values()) this.terrain.delete(terrainKey(tile.q, tile.r));
     for (const tile of this.bogByHex.values()) this.tiles.delete(coordKey(tile));
     this.bogByHex = new Map();
+    this.overlayRevision++;
     this.addBogTiles(tiles);
     this.lakePropsDirty = true;
   }
@@ -451,6 +498,7 @@ export class WorldModel {
    */
   private addBogTiles(tiles: BogTile[]) {
     if (tiles.length === 0) return;
+    this.overlayRevision++;
     const world = { seed: this.seed, generation: this.generation };
     for (const bog of tiles) {
       const key = coordKey(bog);
@@ -462,6 +510,7 @@ export class WorldModel {
     }
     this.islandFootprintCache.clear();
     this.previewIslandTilesCache.clear();
+    this.previewIslandFloodCache.clear();
     this.lakePropsDirty = true;
   }
 
@@ -508,6 +557,7 @@ export class WorldModel {
   private decorateBogTile(tile: Tile, bog: BogTile, world: WorldSeed) {
     const terrain: Terrain = bog.kind === 'lake' ? 'lake' : 'bog';
     tile.terrain = terrain;
+    delete tile.forestKind;
     tile.bog = bog;
     tile.isCoastalWater = false;
     tile.orientation = defaultOrientation(tile.q, tile.r, world);
@@ -637,16 +687,23 @@ export class WorldModel {
     const cached = this.previewIslandTilesCache.get(key);
     if (cached) return cached;
 
-    const tiles =
-      floodFillLandmass(center, (c) => this.isLandOrLake(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS) ??
-      this.previewIslandFallback(center);
+    const tiles = this.previewIslandFlood(center) ?? this.previewIslandFallback(center, PREVIEW_ISLAND_RADIUS);
     this.previewIslandTilesCache.set(key, tiles);
     return tiles;
   }
 
-  /** The pre-L5 rule, kept only as `previewIslandTiles`'s safety-bound fallback (see there). */
-  private previewIslandFallback(center: AxialCoord): AxialCoord[] {
-    return hexesInRadius(center, PREVIEW_ISLAND_RADIUS).filter((c) => this.isLandOrLake(c.q, c.r));
+  /** The flood fill behind `previewIslandTiles`, or null when it hit `PREVIEW_ISLAND_FLOOD_MAX_RADIUS`; cached per centre, the null included. */
+  private previewIslandFlood(center: AxialCoord): AxialCoord[] | null {
+    const key = coordKey(center);
+    if (this.previewIslandFloodCache.has(key)) return this.previewIslandFloodCache.get(key)!;
+    const tiles = floodFillLandmass(center, (c) => this.isLandOrLake(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS);
+    this.previewIslandFloodCache.set(key, tiles);
+    return tiles;
+  }
+
+  /** The pre-L5 rule (land within `radius`, no membership check), kept only as the safety-bound fallback (see `previewIslandTiles`). */
+  private previewIslandFallback(center: AxialCoord, radius: number): AxialCoord[] {
+    return hexesInRadius(center, radius).filter((c) => this.isLandOrLake(c.q, c.r));
   }
 
   /**
@@ -670,8 +727,14 @@ export class WorldModel {
    * doesn't check membership, so a foreign island within the same radius
    * shows up too. Only the intersection gets both right.
    */
-  previewCropTiles(center: AxialCoord): AxialCoord[] {
-    return this.previewIslandTiles(center).filter((c) => hexDistance(center, c) <= PREVIEW_ISLAND_RADIUS);
+  previewCropTiles(center: AxialCoord, radius = PREVIEW_ISLAND_RADIUS): AxialCoord[] {
+    // The cached flood fill is radius-independent (membership only, bounded by PREVIEW_ISLAND_FLOOD_MAX_RADIUS), so a wider crop never sees a truncated set.
+    // When the flood fill hit its bound (an island reaching more than PREVIEW_ISLAND_FLOOD_MAX_RADIUS from `center`), the
+    // fallback disc must be this crop's own radius: `previewIslandTiles`' fallback is the landing radius, which would shrink a
+    // wider crop (the showcase frame's SHOWCASE_RENDER_RADIUS) to the landing page's few hexes.
+    const flood = this.previewIslandFlood(center);
+    if (!flood) return this.previewIslandFallback(center, radius);
+    return flood.filter((c) => hexDistance(center, c) <= radius);
   }
 
   /**
@@ -706,9 +769,14 @@ export class WorldModel {
    */
   isWastedLandAt(q: number, r: number): boolean {
     if (!this.wastedRevealed) return false;
-    const world = { seed: this.seed, generation: this.generation };
-    if (terrainAt(q, r, world) !== 'sea') return false;
-    return wastedTerrainAt(q, r, world) !== 'sea';
+    const k = terrainKey(q, r);
+    let wasted = this.wastedLand.get(k);
+    if (wasted === undefined) {
+      const world = { seed: this.seed, generation: this.generation };
+      wasted = terrainAt(q, r, world) === 'sea' && wastedTerrainAt(q, r, world) !== 'sea';
+      this.wastedLand.set(k, wasted);
+    }
+    return wasted;
   }
 
   /**
@@ -737,6 +805,7 @@ export class WorldModel {
   setWastedRevealed(revealed: boolean) {
     if (this.wastedRevealed === revealed) return;
     this.wastedRevealed = revealed;
+    this.wastedLand.clear();
     const world = { seed: this.seed, generation: this.generation };
     const isGreenSea = (q: number, r: number) => terrainAt(q, r, world) === 'sea';
     for (const key of this.terrain.keys()) {
@@ -748,6 +817,7 @@ export class WorldModel {
     }
     this.islandFootprintCache.clear();
     this.previewIslandTilesCache.clear();
+    this.previewIslandFloodCache.clear();
   }
 
   isWastedRevealed(): boolean {
@@ -807,6 +877,7 @@ export class WorldModel {
       if (this.wastedRevealed) {
         if (this.isWastedLandAt(q, r)) {
           tile.wasted = true;
+          delete tile.forestKind; // wasted forest stays deadforest
           tile.variant = wastedVariantAt(q, r, { seed: this.seed, generation: this.generation }, tile.terrain);
         } else if (tile.terrain === 'sea' && tile.isCoastalWater) {
           // Coastal water bordering wasted land also renders as wasted
@@ -936,30 +1007,24 @@ export class WorldModel {
   }
 
   /**
-   * Every hex known to carry a building, packed with the terrain cache's own
-   * key — for the water mask's prop channel (`hasWaterProp`).
-   *
-   * A list rather than a lookup, because the consumer is the bake worker,
-   * which has the world seed but none of this model's live state. Whether a
-   * coastal-water hex shows a prop is otherwise pure (sea, coastal, variant),
-   * so the buildings are the only thing that has to cross, and there are a few
-   * dozen of them against the several hundred thousand texels that would
-   * otherwise each have to ask this thread.
-   *
-   * Walks `tiles`, which holds every hex materialised so far. That is a
-   * superset of the placed buildings and bounded by where the player has
-   * looked, and it is walked once per bake rather than once per texel.
+   * Packed keys (`terrainKey`) of every river-mouth hex, for the water-mask
+   * bake: the worker cannot derive rivers from the seed, so the few of them cross as a list, and the sea's
+   * shoreline foam is suppressed around each.
    */
-  buildingHexKeys(): number[] {
+  riverMouthHexKeys(): number[] {
     const keys: number[] = [];
-    for (const tile of this.tiles.values()) {
-      if (tile.buildingType) keys.push(terrainKey(tile.q, tile.r));
+    for (const tile of this.riverTiles.values()) {
+      if (tile.shape === 'mouth') keys.push(terrainKey(tile.q, tile.r));
     }
     return keys;
   }
 
-  /** Everything an island's picture is made of: land and the bog lakes among it (not the sea). */
-  private isLandOrLake(q: number, r: number): boolean {
+  /**
+   * Everything an island's picture is made of: land and the bog lakes among it (not the sea).
+   * Also what the water mask calls land: a bog lake is drawn by its own art, never by the sea's
+   * water shader, so the shader (foam included) must stop at the sea's coast.
+   */
+  isLandOrLake(q: number, r: number): boolean {
     return this.isLand(q, r) || this.terrainOf(q, r) === 'lake';
   }
 
@@ -971,7 +1036,7 @@ export class WorldModel {
 
   /**
    * Whether `at` would satisfy the backend's own start-position rule
-   * (`WorldGenerator.FindStartPositions`): a Grass hex with at least one
+   * (`WorldGenerator.FindStartPositions`): a Grass hex off any river with at least one
    * Forest and two Grass neighbours, no sea within two hexes, and plain bog within `BOG_REACH`. Demo mode
    * has no backend to ask for a real start position — `findLandfall` uses
    * this to steer clear of a coastal sliver of sand or a lone tile at an
@@ -981,6 +1046,9 @@ export class WorldModel {
   private isGoodStartCandidate(at: AxialCoord): boolean {
     const tile = this.getTile(at.q, at.r);
     if (tile.terrain !== 'grass') return false;
+    // Never on a river hex (narrow or wide) — `WorldGenerator.FindStartPositions` skips them: a settlement in a river is
+    // wrong, and on a wide one a land army has no way home.
+    if (this.getRiverTile(at.q, at.r)) return false;
 
     let forest = 0;
     let grass = 0;
@@ -1066,7 +1134,13 @@ export class WorldModel {
    * island(s) the caller actually wants rendered.
    */
   registerSettlement(settlement: Settlement): Settlement {
+    const previous = this.settlements.get(settlement.id);
+    if (previous) this.realmGroups.get(realmGroupKey(previous))?.delete(previous.id);
     this.settlements.set(settlement.id, settlement);
+    const key = realmGroupKey(settlement);
+    const group = this.realmGroups.get(key) ?? new Map<string, Settlement>();
+    group.set(settlement.id, settlement);
+    this.realmGroups.set(key, group);
     return settlement;
   }
 
@@ -1081,11 +1155,10 @@ export class WorldModel {
     const home = this.getTile(settlement.q, settlement.r);
     home.ownerId = settlement.id;
     home.buildingType = 'longhouse';
-    home.buildingLevel = 1;
-    for (const c of this.claimedHexes(settlement)) {
-      const tile = this.getTile(c.q, c.r);
-      if (!tile.ownerId) tile.ownerId = settlement.id;
-    }
+    // The settlement's own level (live polls raise it, a rival's comes from its summary), never a fixed 1:
+    // the world-settlements poll re-claims every settlement on the island next to the settlement poll.
+    home.buildingLevel = settlement.level;
+    this.syncClaim(settlement);
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
@@ -1246,13 +1319,57 @@ export class WorldModel {
     return claimRadiusForLevel(settlement.level);
   }
 
-  /** Every claim disc — the centre disc plus one per standing Tower — making up this settlement's full claimed territory. */
-  private claimDiscsFor(settlement: Settlement) {
-    return claimDiscs(
-      { q: settlement.q, r: settlement.r },
-      settlement.level,
-      this.settlementTowers.get(settlement.id) ?? [],
+  /**
+   * The settlements `settlement`'s chain rule is resolved with (itself included): the members of the server's realm when it
+   * sent one (live), else the same player's settlements on the same island.
+   */
+  private realmMembers(settlement: Settlement): Settlement[] {
+    const server = this.serverRealms.get(settlement.id);
+    if (server) {
+      const members = server.ids.flatMap((id) => {
+        const m = this.settlements.get(id);
+        return m ? [m] : [];
+      });
+      if (!members.some((m) => m.id === settlement.id)) members.push(settlement);
+      return members;
+    }
+    const group = this.realmGroups.get(realmGroupKey(settlement));
+    const members = group ? [...group.values()] : [];
+    if (!members.some((m) => m.id === settlement.id)) members.push(settlement);
+    return members;
+  }
+
+  /**
+   * The chain rule (`realmChain.ts`, mirrors the backend's `ConnectedRealm`) for `settlement` and the same player's other
+   * settlements on its island: which towers are connected to a longhouse and so claim and see. Live: the realm the server
+   * resolved; otherwise resolved locally. Every claim and every tower's vision reads its answer from here.
+   */
+  private realmOf(settlement: Settlement): ConnectedRealm {
+    const server = this.serverRealms.get(settlement.id);
+    if (server) return server.realm;
+    return resolveRealm(
+      this.realmMembers(settlement).map((m) => ({
+        id: m.id,
+        q: m.q,
+        r: m.r,
+        level: m.level,
+        towers: this.settlementTowers.get(m.id) ?? [],
+      })),
     );
+  }
+
+  /**
+   * Every claim disc — the centre disc plus one per standing Tower that is connected to a longhouse (`realmOf`) — making up
+   * this settlement's full claimed territory. A cut-off tower claims nothing.
+   */
+  private claimDiscsFor(settlement: Settlement) {
+    return this.realmOf(settlement).discsOf(settlement.id);
+  }
+
+  /** `claimDiscsFor` by id — the discs of this settlement's claim that count (connected towers only); empty for an unknown id. */
+  claimDiscsOf(settlementId: string): ClaimDisc[] {
+    const settlement = this.settlements.get(settlementId);
+    return settlement ? this.claimDiscsFor(settlement) : [];
   }
 
   /**
@@ -1269,9 +1386,11 @@ export class WorldModel {
     // Odin's Ravens widen the claim's own disc and every tower's alike
     // (`FogVisionRadii.ToVisionSource`/`ToTowerVisionSource`'s `bonusRings`).
     const ravens = this.ravensRingsFor(settlement.id);
+    // A tower cut off from every longhouse of the player's realm sees nothing (and gets no Ravens rings either).
+    const realm = this.realmOf(settlement);
     return [
       { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) + ravens },
-      ...(this.settlementTowers.get(settlement.id) ?? []).map((t) => ({
+      ...(this.settlementTowers.get(settlement.id) ?? []).filter((t) => realm.isTowerConnected(settlement.id, t)).map((t) => ({
         q: t.q,
         r: t.r,
         radius: Math.max(0, t.level) + ravens,
@@ -1327,10 +1446,11 @@ export class WorldModel {
    * (rather than cached), which is what makes a giant that only becomes
    * fully enclosed later (a Tower completing the enclosure) start being
    * included the next time this runs, with no separate "did a giant just
-   * get enclosed" tracking needed — every caller here only ever *adds*
-   * ownership (`if (!tile.ownerId) tile.ownerId = ...`), never removes it,
-   * so a hex excluded on an earlier call and included on a later one is
-   * exactly the one-way claiming this model already promises elsewhere.
+   * get enclosed" tracking needed. It only answers "what is claimed now";
+   * `syncClaim` is the one place that turns the answer into tile ownership,
+   * both ways: ground a burnt or razed Tower (or a Tower that lost levels)
+   * no longer claims is released again, like `Settlement.ClaimDiscsFor` on
+   * the server.
    */
   private claimedHexes(settlement: Settlement): AxialCoord[] {
     const discs = this.claimDiscsFor(settlement);
@@ -1347,9 +1467,55 @@ export class WorldModel {
     return hexes;
   }
 
+  /**
+   * Brings tile ownership in line with `claimedHexes(settlement)` — the one
+   * claim rule every caller shares. Claims every unowned hex of the current
+   * claim; releases every hex the settlement owned from an earlier sync that
+   * the claim no longer covers, unless a building stands on it (the server
+   * keeps buildings standing outside the claim, and `applyServerSnapshot`
+   * owns the hex of every building it renders, walls included). Never
+   * touches another settlement's hexes and never the explored set.
+   */
+  private syncClaim(settlement: Settlement): void {
+    // A broken or restored link can change another settlement of the same player's towers too, so the whole realm re-syncs.
+    for (const member of this.realmMembers(settlement)) this.syncOwnClaim(member);
+  }
+
+  /** `syncClaim` for one settlement. */
+  private syncOwnClaim(settlement: Settlement): void {
+    const id = settlement.id;
+    const claimed = new Set<string>();
+    for (const c of this.claimedHexes(settlement)) {
+      const key = coordKey(c);
+      claimed.add(key);
+      const tile = this.getTile(c.q, c.r);
+      if (!tile.ownerId) tile.ownerId = id;
+    }
+    const owned = new Set(claimed);
+    for (const key of this.claimedKeys.get(id) ?? []) {
+      if (claimed.has(key)) continue;
+      const { q, r } = parseKey(key);
+      const tile = this.getTile(q, r);
+      if (tile.ownerId !== id) continue;
+      if (tile.buildingType) owned.add(key);
+      else tile.ownerId = undefined;
+    }
+    this.claimedKeys.set(id, owned);
+  }
+
+  /** Marks everything the realm's vision reaches as explored (nothing ever leaves `explored`), for every settlement of the realm. */
+  private exploreRealm(settlement: Settlement): void {
+    for (const member of this.realmMembers(settlement)) {
+      for (const c of this.exploredHexesFor(member)) {
+        this.explored.add(coordKey(c));
+      }
+    }
+  }
+
   /** Whether `at` is inside this settlement's claimed territory — see `claimedHexes`. */
   private claims(settlement: Settlement, at: AxialCoord): boolean {
-    const discs = this.claimDiscsFor(settlement);
+    // The realm is shared: ground claimed by another connected disc of the same player's settlements on the island counts too.
+    const discs = this.realmOf(settlement).allDiscs;
     return claimsWithGiants(discs, at, (coord) => this.giantAnchorAt(coord));
   }
 
@@ -1441,7 +1607,10 @@ export class WorldModel {
    * is silently skipped rather than stored as an unrecognized string. A type
    * with no distinct sprite in the art pack (Lumberjack, Quarry) is still
    * safe to place — `textures.ts`'s `baseTextureFor` falls back to the
-   * tile's bare terrain rather than throwing.
+   * tile's bare terrain rather than throwing. `realm` (live) is the realm the
+   * server resolved for this settlement: when it changes, it replaces the
+   * local chain resolution for every member and the claim is re-derived,
+   * including for settlements that left the realm.
    */
   applyServerSnapshot(
     settlementId: string,
@@ -1451,10 +1620,27 @@ export class WorldModel {
       rates: Resources;
       capacity: Resources;
       buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
+      realm?: ReadonlyArray<{ settlementId: string; discs: readonly ClaimDisc[] }>;
     },
   ) {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return;
+
+    let realmChanged = false;
+    let leftRealm: string[] = [];
+    if (snapshot.realm) {
+      const signature = JSON.stringify(snapshot.realm);
+      const old = this.serverRealms.get(settlementId);
+      if (old?.signature !== signature) {
+        realmChanged = true;
+        const oldIds = old?.ids ?? [];
+        for (const id of oldIds) this.serverRealms.delete(id);
+        const ids = snapshot.realm.map((m) => m.settlementId);
+        const entry = { ids, realm: realmFromDiscs(snapshot.realm), signature };
+        for (const id of ids) this.serverRealms.set(id, entry);
+        leftRealm = oldIds.filter((id) => !ids.includes(id));
+      }
+    }
 
     const previousTowers = this.settlementTowers.get(settlementId) ?? [];
     const towers = snapshot.buildings
@@ -1473,18 +1659,12 @@ export class WorldModel {
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
-    // Re-claim whenever the centre disc grew (a longhouse level-up) or the
-    // set of Tower satellite discs changed (a new/levelled-up tower) — not
+    // Re-sync the claim (below, once the buildings are rendered) whenever the
+    // centre disc grew (a longhouse level-up) or the set of Tower satellite
+    // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    if (levelIncreased || towersChanged || ravensChanged) {
-      for (const c of this.claimedHexes(settlement)) {
-        const tile = this.getTile(c.q, c.r);
-        if (!tile.ownerId) tile.ownerId = settlementId;
-      }
-      for (const c of this.exploredHexesFor(settlement)) {
-        this.explored.add(coordKey(c));
-      }
-    }
+    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged;
+    if (claimChanged) this.exploreRealm(settlement);
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
     settlement.capacity = snapshot.capacity;
@@ -1520,6 +1700,8 @@ export class WorldModel {
       'hammerschmiede',
       'palisade',
       'palisadegate',
+      'bridge',
+      'siegeworkshop',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1559,6 +1741,16 @@ export class WorldModel {
         tile.buildingLevel = undefined;
       }
     }
+    // After the building pass: a fallen tower's own hex has to be empty before
+    // the release step may take it back.
+    if (claimChanged) {
+      this.syncClaim(settlement);
+      // Settlements that left the realm are no longer covered by `syncClaim`'s members: re-derive (release) their ground too.
+      for (const id of leftRealm) {
+        const gone = this.settlements.get(id);
+        if (gone) this.syncOwnClaim(gone);
+      }
+    }
     this.renderedBuildingCoords.set(settlementId, nowRendered);
     this.wallRevision++;
   }
@@ -1571,6 +1763,17 @@ export class WorldModel {
    */
   towerCoords(settlementId: string): AxialCoord[] {
     return (this.settlementTowers.get(settlementId) ?? []).map((t) => ({ q: t.q, r: t.r }));
+  }
+
+  /**
+   * How many towers count against this settlement's tower limit: the distinct hexes among its standing towers and
+   * `queuedHexes` (still-queued new-tower orders) that are connected to a longhouse (`realmOf`). A cut-off tower claims
+   * nothing and does not count; once reconnected it counts again, even if that puts the settlement over the limit.
+   */
+  connectedTowerCount(settlementId: string, queuedHexes: Iterable<AxialCoord> = []): number {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return 0;
+    return this.realmOf(settlement).countConnected([...this.towerCoords(settlementId), ...queuedHexes]);
   }
 
   /** Where this settlement's shrines (of any god) stand — at most one is allowed. */
@@ -1595,6 +1798,70 @@ export class WorldModel {
       if (tile.ownerId === settlementId && tile.buildingType === 'storagehouse') {
         levels.push({ q: tile.q, r: tile.r, level: tile.buildingLevel ?? 1 });
       }
+    }
+    return levels;
+  }
+
+  /** The rival walls `applyRivalWalls` last placed, by hex: who owns each (a user id, null for an anonymous settlement) and its settlement. */
+  private rivalWalls = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+
+  /**
+   * Replaces the set of other players' walls this model knows (live mode: `GET /worlds/{id}/walls`, which is fog-gated and leaves the
+   * player's own walls out). Each wall is put on its tile the way an own wall is (type, level, owning settlement), so the piece it
+   * draws, the hit-test and the route rules need nothing special. A wall of the previous call that is missing now is cleared; a hex
+   * one of the player's own settlements renders is never touched.
+   */
+  applyRivalWalls(
+    walls: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null }[],
+  ) {
+    const ownRendered = new Set<string>();
+    for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
+
+    const next = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+    for (const wall of walls) {
+      if (wall.type !== 'palisade' && wall.type !== 'palisadegate') continue;
+      const key = coordKey({ q: wall.q, r: wall.r });
+      if (ownRendered.has(key)) continue;
+      const tile = this.getTile(wall.q, wall.r);
+      tile.ownerId = wall.settlementId;
+      tile.buildingType = wall.type;
+      tile.buildingLevel = wall.level;
+      next.set(key, { settlementId: wall.settlementId, ownerUserId: wall.ownerUserId });
+    }
+
+    for (const [key, previous] of this.rivalWalls) {
+      if (next.has(key) || ownRendered.has(key)) continue;
+      const { q, r } = parseKey(key);
+      const tile = this.getTile(q, r);
+      if (tile.ownerId !== previous.settlementId) continue;
+      if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
+        tile.buildingType = undefined;
+        tile.buildingLevel = undefined;
+      }
+    }
+
+    this.rivalWalls = next;
+    this.wallRevision++;
+  }
+
+  /**
+   * Who owns the rival wall on a hex: its account's user id, `null` for an anonymous settlement, `undefined` when the hex is not
+   * a rival wall `applyRivalWalls` placed (the player's own walls, or none). What the siege action's own/friendly check reads.
+   */
+  rivalWallOwner(q: number, r: number): string | null | undefined {
+    return this.rivalWalls.get(coordKey({ q, r }))?.ownerUserId;
+  }
+
+  /**
+   * The highest level of each building type this settlement has standing (a
+   * level-0 foundation counts as 0) — what a building's `prerequisites` are
+   * judged against, like `Settlement.HighestLevelOf` on the server.
+   */
+  highestBuildingLevels(settlementId: string): Record<string, number> {
+    const levels: Record<string, number> = {};
+    for (const tile of this.storedTiles()) {
+      if (tile.ownerId !== settlementId || !tile.buildingType) continue;
+      levels[tile.buildingType] = Math.max(levels[tile.buildingType] ?? 0, tile.buildingLevel ?? 1);
     }
     return levels;
   }
@@ -1635,10 +1902,51 @@ export class WorldModel {
     const standing = new Map<string, { gate: boolean; owner: string }>();
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
-      const owner = wall.tileOwner ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner) : '';
+      // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
+      const rival = this.rivalWalls.get(key);
+      const owner = rival
+        ? (rival.ownerUserId ?? rival.settlementId)
+        : wall.tileOwner
+          ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner)
+          : '';
       standing.set(key, { gate: wall.gate, owner });
     }
+    // The jötnar's Utgard walls block under a fixed owner key that is nobody's friend (a breached level-0 hex is passable).
+    for (const [key, wall] of this.utgardWallByHex) {
+      if (wall.level < 1) continue;
+      standing.set(key, { gate: wall.isGate, owner: JOTNAR_OWNER_KEY });
+    }
     return standing;
+  }
+
+  private bridgeCache: { revision: number; bridges: StandingBridges } | null = null;
+
+  /**
+   * The standing bridges (level 1 or more; a foundation does not open the river) as the movement rules take them, each with its owner
+   * (the account that holds the settlement the hex belongs to, like `standingPalisadeWalls`). Same shape as the backend's `BridgeIndex`.
+   */
+  standingBridges(): StandingBridges {
+    if (this.bridgeCache?.revision === this.wallRevision) return this.bridgeCache.bridges;
+    const bridges = new Map<string, { level: number; owner: string }>();
+    for (const tile of this.storedTiles()) {
+      if (tile.buildingType !== 'bridge' || (tile.buildingLevel ?? 1) < 1) continue;
+      const owner = tile.ownerId ? (this.settlements.get(tile.ownerId)?.ownerId ?? tile.ownerId) : '';
+      bridges.set(coordKey(tile), { level: tile.buildingLevel ?? 1, owner });
+    }
+    this.bridgeCache = { revision: this.wallRevision, bridges };
+    return bridges;
+  }
+
+  /**
+   * Whether a bridge may stand on the river hex `at`, beyond what `riverBuildingAllowedHere` and `buildingAllowedOnHex` already say
+   * (shape and ground): the tile has to be a wide river (`isWideRiverTile`, the twin of the backend's `RiverIndex.IsWide`), since a
+   * stream is crossed anyway (`BuildRejection.BridgeNeedsWideRiver`), and the island must not be wasted.
+   */
+  bridgePlacement(at: AxialCoord): { ok: true } | { ok: false; reason: 'notWide' | 'wasted' } {
+    if (this.getTile(at.q, at.r).wasted) return { ok: false, reason: 'wasted' };
+    const river = this.getRiverTile(at.q, at.r);
+    if (!river || !isWideRiverTile(river, (c) => this.getRiverTile(c.q, c.r))) return { ok: false, reason: 'notWide' };
+    return { ok: true };
   }
 
   /**
@@ -1691,6 +1999,8 @@ export class WorldModel {
     // A wildlife camp hex is not buildable while the camp stands guarded; a cleared
     // (empty) camp is, except Fenrir's brood (matches BuildRejection.HexOccupiedByCamp).
     if (tile.camp && !campHexBuildable(tile.camp)) return false;
+    // An Utgard wall (rubble included) or a Jötun watchtower is never buildable (matches BuildRejection.HexOccupiedByEndgameSite).
+    if (tile.utgardWall || tile.jotunTower) return false;
     // Every other building needs dry land; the fishing hut, dockyard and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
@@ -1699,6 +2009,8 @@ export class WorldModel {
     // shore, and nothing stands on a lake or on bog it has no business on (matches BuildingDefinition.AllowsHex).
     if (!type || !buildingAllowedOnHex(type, tile)) return false;
     if (tile.buildingType) return false;
+    // A type switched off for placement (the Quarry) is never placed anew (matches BuildRejection.NewPlacementDisabled).
+    if (newPlacementDisabled(type)) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes (and, for the Sawmill, only some variants — see
     // ringCatalogue.ts's EXCLUDED_VARIANTS_BY_TYPE) have a matching river-
@@ -1719,7 +2031,7 @@ export class WorldModel {
     // longhouse level allows (matches BuildRejection.TowerLimitReached and
     // BuildingCatalogue.MaxTowers). Upgrading a tower never goes through
     // here, so it is never refused for this reason.
-    if (type === 'tower' && this.towerCoords(settlementId).length >= maxTowers(settlement.level)) {
+    if (type === 'tower' && this.connectedTowerCount(settlementId) >= maxTowers(settlement.level)) {
       return false;
     }
     // A settlement raises one shrine in total, of any god (matches
@@ -1736,6 +2048,8 @@ export class WorldModel {
     // A wall hex must keep every wall hex drawable (matches BuildRejection.PalisadeWouldBranch/GateNotOnStraight and the terrain
     // refusals): no branch, a gate only on a straight, no river, the sea end on exactly one land wall.
     if ((type === 'palisade' || type === 'palisadegate') && !this.palisadePlacement(at, type === 'palisadegate').ok) return false;
+    // A bridge only spans a wide river on ground that is not wasted (matches BuildRejection.BridgeNeedsWideRiver / TerrainNotAllowed).
+    if (type === 'bridge' && !this.bridgePlacement(at).ok) return false;
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;
@@ -1751,10 +2065,7 @@ export class WorldModel {
       const towers = this.settlementTowers.get(settlementId) ?? [];
       towers.push({ q: at.q, r: at.r, level: 1 });
       this.settlementTowers.set(settlementId, towers);
-      for (const c of this.claimedHexes(settlement)) {
-        const claimed = this.getTile(c.q, c.r);
-        if (!claimed.ownerId) claimed.ownerId = settlementId;
-      }
+      this.syncClaim(settlement);
     }
     return true;
   }
@@ -1763,15 +2074,16 @@ export class WorldModel {
    * Issue #16 ring menu "tear down": demo-mode only — the backend
    * (`Bjarnoy.Domain.Buildings`) has no raze endpoint yet, so live mode
    * disables this action rather than pretending to support it (see
-   * SettlementView.vue's ring-menu wiring). Clears the building but leaves
-   * the hex claimed by the settlement — claiming stays one-way here, the
-   * same as `applyServerSnapshot`'s live-mode reads, so razing a Tower never
-   * shrinks the border its satellite disc already opened up.
+   * SettlementView.vue's ring-menu wiring). Clears the building. The hex
+   * stays with the settlement while it is inside its claim; razing a Tower
+   * drops its satellite disc and the border shrinks (`syncClaim`), the same
+   * as a burnt tower on the server.
    */
   razeBuilding(settlementId: string, at: AxialCoord): boolean {
     const tile = this.getTile(at.q, at.r);
     if (tile.ownerId !== settlementId || !tile.buildingType || tile.buildingType === 'longhouse') return false;
-    if (tile.buildingType === 'tower') {
+    const wasTower = tile.buildingType === 'tower';
+    if (wasTower) {
       const towers = this.settlementTowers.get(settlementId);
       if (towers) {
         const index = towers.findIndex((t) => t.q === at.q && t.r === at.r);
@@ -1782,6 +2094,8 @@ export class WorldModel {
     if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
+    const settlement = this.settlements.get(settlementId);
+    if (settlement && wasTower) this.syncClaim(settlement);
     this.wallRevision++;
     return true;
   }
@@ -1957,6 +2271,58 @@ export class WorldModel {
         })),
       );
     }
+    // Utgard's wall rings and the Jötun watchtowers (a wasted island with Utgard only), after giants and camps — the backend's
+    // own order (`WorldGenerator.Generate`).
+    if (wasted) {
+      const sites = placeEndgame(
+        islandTiles,
+        (c) => this.terrainOf(c.q, c.r),
+        isRiver,
+        placements.map((p) => ({ anchor: p.anchor, family: p.family })),
+        new Set(campPlacements.map((p) => coordKey(p.coord))),
+        worldSeed,
+        islandIndex,
+      );
+      this.setUtgardWalls(
+        sites.walls.map((w) => ({ coord: w.coord, ring: w.ring, piece: w.piece, dir: w.dir, isGate: w.isGate, level: w.level })),
+      );
+      this.setJotunTowers(
+        sites.towers.map((coord) => ({ coord, orientation: this.getTile(coord.q, coord.r).orientation ?? 'SE', level: 2 })),
+      );
+    }
+  }
+
+  /**
+   * Tags each Utgard wall hex with `Tile.utgardWall`. Live mode feeds it the server's authoritative walls
+   * (`IslandResponse.utgardWalls`); demo mode feeds it `placeEndgame` output. Unlike `setCamps` a repeat call overwrites: a wall's
+   * level changes as it is breached. Returns whether anything changed, so a caller only forces a redraw for a real change.
+   */
+  setUtgardWalls(
+    walls: { coord: AxialCoord; ring: 'inner' | 'outer'; piece: PalisadePiece; dir: TileOrientation; isGate: boolean; level: number }[],
+  ): boolean {
+    let changed = false;
+    for (const wall of walls) {
+      const key = coordKey(wall.coord);
+      const next = { ring: wall.ring, piece: wall.piece, dir: wall.dir, isGate: wall.isGate, level: wall.level };
+      const known = this.utgardWallByHex.get(key);
+      if (known && JSON.stringify(known) === JSON.stringify(next)) continue;
+      this.getTile(wall.coord.q, wall.coord.r).utgardWall = next;
+      this.utgardWallByHex.set(key, next);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Tags each Jötun watchtower hex with `Tile.jotunTower` (live: `IslandResponse.jotunTowers`; demo: `placeEndgame`). Overwrites, like `setUtgardWalls`. */
+  setJotunTowers(towers: { coord: AxialCoord; orientation: TileOrientation; level: number }[]): boolean {
+    let changed = false;
+    for (const tower of towers) {
+      const tile = this.getTile(tower.coord.q, tower.coord.r);
+      if (tile.jotunTower?.orientation === tower.orientation && tile.jotunTower.level === tower.level) continue;
+      tile.jotunTower = { orientation: tower.orientation, level: tower.level };
+      changed = true;
+    }
+    return changed;
   }
 
   /**
@@ -1964,12 +2330,14 @@ export class WorldModel {
    * authoritative camps (`IslandResponse.camps`); demo mode feeds it
    * `placeCamps` output. Idempotent and additive, like `setGiants`: a hex that
    * already has a camp is left untouched. Strength and guard range are derived
-   * from the shared family table, so they cannot disagree with the server.
+   * from the shared family table, so they cannot disagree with the server. Returns whether any camp was added.
    */
-  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]) {
+  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]): boolean {
+    let added = false;
     for (const camp of camps) {
       const tile = this.getTile(camp.coord.q, camp.coord.r);
       if (tile.camp) continue;
+      added = true;
       const strong = isStrongCampFamily(camp.family);
       tile.camp = {
         family: camp.family,
@@ -1980,6 +2348,7 @@ export class WorldModel {
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
     }
+    return added;
   }
 
   /**
@@ -2035,9 +2404,11 @@ export class WorldModel {
     orientation: TileOrientation,
     part: GiantPart,
   ) {
+    this.overlayRevision++;
     const tile = this.getTile(coord.q, coord.r);
     if (tile.terrain === 'forest') {
       tile.terrain = 'grass';
+      delete tile.forestKind;
       // Keep the pure terrain cache (`terrainOf`/`isLand`, see its own doc
       // comment) in step with the materialised `Tile` it was sampled from —
       // both are land either way, but leaving it stale as `forest` would
@@ -2117,13 +2488,8 @@ export class WorldModel {
       return true;
     }
 
-    for (const c of this.claimedHexes(settlement)) {
-      const claimed = this.getTile(c.q, c.r);
-      if (!claimed.ownerId) claimed.ownerId = settlementId;
-    }
-    for (const c of this.exploredHexesFor(settlement)) {
-      this.explored.add(coordKey(c));
-    }
+    this.syncClaim(settlement);
+    this.exploreRealm(settlement);
     return true;
   }
 

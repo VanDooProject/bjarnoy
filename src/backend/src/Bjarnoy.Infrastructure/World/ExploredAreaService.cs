@@ -2,6 +2,7 @@ using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bjarnoy.Infrastructure.World;
@@ -134,6 +135,12 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         var sources = new List<FogVisionSource>();
         var discs = new List<ExploredDisc>();
         var ravensBySettlement = new Dictionary<Guid, int>();
+
+        // A tower that is cut off from every longhouse of the player's realm on its island (ConnectedRealm) sees nothing: only
+        // connected towers add vision and explored rings, the way only they claim ground.
+        var realms = PlayerRealms.Resolve(settlements.Select(s => new PlayerRealms.Row(
+            s.Id, s.UserId, s.OwnerId, s.IslandId, new HexCoord(s.CentreQ, s.CentreR),
+            [.. s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))])));
         foreach (var settlement in settlements)
         {
             var domain = settlement.ToDomain();
@@ -148,6 +155,11 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             foreach (var tower in settlement.Buildings.Where(b => b.Type == BuildingType.Tower))
             {
                 var towerCoord = new HexCoord(tower.Q, tower.R);
+                if (!realms[settlement.Id].IsTowerConnected(settlement.Id, towerCoord))
+                {
+                    continue;
+                }
+
                 sources.Add(FogVisionRadii.ToTowerVisionSource(towerCoord, tower.Level, ravens));
                 discs.Add(new ExploredDisc(towerCoord, FogVisionRadii.TowerExploredRadius(tower.Level) + ravens));
             }
@@ -244,6 +256,73 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         }
 
         return explored;
+    }
+
+    /// <summary>
+    /// The ids of the world's islands the owner has "seen": an island counts when the owner has explored anything in
+    /// at least one fog chunk its land touches (<see cref="IslandEntity.FogChunks"/>) — a chunk-level check, deliberately
+    /// imprecise. A chunk counts when one of the current discs reaches into it or when the owner's persisted history has
+    /// any explored texel there. <paramref name="alsoSeenIslandId"/> is counted as seen without any exploring (the island
+    /// of a pre-founding plot suggestion). The cost scales with the islands' chunk lists and the discs, never the world.
+    /// </summary>
+    public async Task<HashSet<Guid>> SeenIslandIdsAsync(
+        ExploredArea area, Guid? alsoSeenIslandId = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == area.WorldId)
+            .Select(i => new { i.Id, i.FogChunks })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var seen = new HashSet<Guid>();
+        if (alsoSeenIslandId is { } pinned)
+        {
+            seen.Add(pinned);
+        }
+
+        var discChunks = FogChunkLayout.ChunksOf(area.Discs.SelectMany(d => d.Centre.WithinRadius(d.Radius))).ToHashSet();
+        var remaining = new List<(Guid Id, List<FogChunkCoord> Chunks)>();
+        foreach (var island in islands)
+        {
+            if (seen.Contains(island.Id))
+            {
+                continue;
+            }
+
+            if (island.FogChunks.Any(discChunks.Contains))
+            {
+                seen.Add(island.Id);
+            }
+            else if (island.FogChunks.Count > 0)
+            {
+                remaining.Add((island.Id, island.FogChunks));
+            }
+        }
+
+        if (remaining.Count == 0)
+        {
+            return seen;
+        }
+
+        var rows = await LoadChunkRowsAsync(
+            area.WorldId, area.OwnerId, remaining.SelectMany(r => r.Chunks), tracked: false, cancellationToken)
+            .ConfigureAwait(false);
+        var exploredChunks = rows
+            .Where(r => r.Value.IsFull || (r.Value.Bits is not null && r.Value.Bits.Any(b => b != 0)))
+            .Select(r => r.Key)
+            .ToHashSet();
+
+        foreach (var (id, chunks) in remaining)
+        {
+            if (chunks.Any(exploredChunks.Contains))
+            {
+                seen.Add(id);
+            }
+        }
+
+        return seen;
     }
 
     /// <summary>

@@ -17,7 +17,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -759,6 +759,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("integer");
 
+                    b.Property<string>("FogChunks")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Giants")
                         .IsRequired()
                         .HasColumnType("text");
@@ -768,6 +772,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<bool>("IsWasted")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("JotunTowers")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -784,6 +792,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("TileCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("UtgardWalls")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
@@ -1155,6 +1167,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("FoundedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("HuntStarted")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("IslandId")
                         .HasColumnType("uuid");
 
@@ -1202,6 +1217,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<double>("StockWood")
                         .HasColumnType("double precision");
+
+                    b.Property<bool>("TroopsTrained")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");

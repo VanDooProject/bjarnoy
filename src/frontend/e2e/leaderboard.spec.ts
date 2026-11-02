@@ -1,7 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { loginTestUser } from './helpers';
+import { clickHudMenuEntry, loginTestUser } from './helpers';
 import { AdminTablePage, SettlementPage } from './pages';
 
 /**
@@ -110,7 +110,7 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     // needed too.
     await loginTestUser(page);
     await SettlementPage.found(page);
-    await page.getByRole('button', { name: 'Leaderboards' }).click();
+    await clickHudMenuEntry(page, 'Leaderboards');
     await page.waitForURL('**/leaderboards');
 
     // Owner decision: leaderboards opens as a modal over whatever page was

@@ -188,7 +188,13 @@ if (migrationCommand == MigrationCommandKind.None)
 
     // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
-    builder.Services.AddHostedService<WeeklyAggregationHostedService>();
+    // Tests that drive LeaderboardService by hand switch the timer off with
+    // LeaderboardAggregation:Enabled=false: a tick landing mid-test would refresh the boards from a half-seeded
+    // world and stamp the watermark, making the test's own explicit refresh a no-op (RefreshInterval).
+    if (builder.Configuration.GetValue("LeaderboardAggregation:Enabled", true))
+    {
+        builder.Services.AddHostedService<WeeklyAggregationHostedService>();
+    }
 
     // Prunes expired UserActivitySessionEntity rows on a schedule — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.

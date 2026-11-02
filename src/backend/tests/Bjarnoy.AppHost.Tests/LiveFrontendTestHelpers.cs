@@ -234,6 +234,28 @@ public static class LiveFrontendTestHelpers
     }
 
     /// <summary>
+    /// Builds <paramref name="building"/> through the open ring menu the way a player does: the Build hub, then
+    /// <paramref name="category"/>, then the building bubble. The onboarding ring is the map's own two-lane ring
+    /// (<c>useBuildRing</c>), so a building is never on the first layer. Waits for each layer swap to land, as
+    /// RingMenu ignores navigation clicks until it has.
+    /// </summary>
+    public static async Task BuildThroughRingAsync(IPage page, string category, string building)
+    {
+        var swapped = page.Locator(".ring-backdrop:not([data-swapping])");
+        var build = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Build" }).First;
+        await Assertions.Expect(build).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await build.ClickAsync();
+        await Assertions.Expect(swapped).ToHaveCountAsync(1);
+        var categoryBubble = page.Locator(".ring-bubble:not(.back):not(.child)", new PageLocatorOptions { HasText = category }).First;
+        await Assertions.Expect(categoryBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await categoryBubble.ClickAsync();
+        await Assertions.Expect(swapped).ToHaveCountAsync(1);
+        var buildingBubble = page.Locator(".ring-bubble.child", new PageLocatorOptions { HasText = building }).First;
+        await Assertions.Expect(buildingBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await buildingBubble.ClickAsync();
+    }
+
+    /// <summary>
     /// Logs in as the seeded admin account and returns an <see cref="HttpClient"/>
     /// carrying its bearer token — the "Log in as admin" dashboard-URL trick
     /// <see cref="TroopTrainingAndDispatchTests"/> and several other tests each

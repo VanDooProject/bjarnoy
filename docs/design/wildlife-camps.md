@@ -243,6 +243,11 @@ L1 1 800, L5 5 550, L10 9 020, L25 17 130, L100 45 210; weak L1 450, L5 1 390, L
 - Army wins: the camp is **cleared** (garrison 0, `ClearedAt`, `Clears + 1`), loot as above, the survivors
   walk home on the precomputed return leg. Camp wins: the army is gone, the camp keeps its survivors.
 - An empty camp (already cleared): no fight; the army picks up leftover loot (see Loot) and turns home.
+- The onboarding quest `hunt1` (economy.md section 7) rewards the first hunt: it completes when an army with
+  mission `hunt` is dispatched (`Settlement.HuntStarted`), win or lose. It only counts once troops were
+  trained (`Settlement.TroopsTrained`, latched the first time the home garrison holds 5 fighting land units, also when
+  all of them leave on this very hunt); claiming "Train 5 spearmen" is not required, and a hunt dispatched earlier is
+  not recorded.
 
 ### Regrowth, calm and respawn
 
@@ -288,12 +293,31 @@ effective level, the player's settlement and army, the winner, both powers, seed
 tower burned. `GET /settlements/{id}/camp-reports`, `GET /camp-reports/{id}`; the reports inbox shows them
 under "Camps".
 
+### World map
+
+On the world map, premium players see every standing camp of the islands they have seen part of, as a paw
+symbol (strong camps red). Other players see no camps on the world map.
+The paws are drawn under the fog like the ground they stand on, so a camp under the never-scouted mist stays
+hidden there; the camp data itself only reaches the client for seen islands (see State and API).
+
 ### State and API
 
 - `camp_states` (world, q, r): tier counts at `SnapshotAt`, `ClearedAt`, `CalmUntil`, `Clears`, `Leftover`. No row
   means a pristine camp: full garrison at its rolled level, aggressive.
-- `GET /worlds/{worldId}/camps[?islandId=]`: every camp's live state (effective level, garrison per tier,
-  cleared, calm until, clears, removed by a building).
+- `GET /worlds/{worldId}/camps[?islandId=]`: the live state (family, orientation, effective level, garrison per
+  tier, cleared, calm until, clears, removed by a building) of every camp on an island the caller has seen part
+  of. `orientation` is the camp's own tile orientation, so a client can add a camp it first learns about from this
+  poll (a newly seen island).
+- **Seen islands** (the cutoff for both camp endpoints, per player): at world generation each island stores the
+  distinct 64 x 64 fog chunks (`FogChunkLayout`) its land hexes fall in (`islands.FogChunks`,
+  `FogChunkListConverter`, `u,v` tokens). An island counts as seen when the caller has explored anything in at
+  least one of those chunks: a chunk touched by one of their current explored discs (settlement and tower rings,
+  walking armies) or with any explored texel in their stored history (`ExploredAreaService.SeenIslandIdsAsync`).
+  The check is chunk-level on purpose, so it is slightly generous at an island's edge. The island of the plot
+  suggestion pinned to a not-yet-founded visitor counts as seen, so the landing preview keeps its camps.
+  `GET /worlds/{worldId}/islands` still lists every island, but `camps` is empty for islands that are not seen, and
+  a caller who resolves to no realm sees no camps at all. Islands generated before the column existed have an
+  empty chunk list, so their camps are not sent until the world is reseeded.
 
 ## Loot (kinds only)
 
@@ -328,7 +352,7 @@ Amounts: see [Loot](#loot) under Gameplay (`CampRules.LootPool`); the docs page 
 
 - `GeneratedIsland.Camps` (`Camp`: coord, family, level, orientation; `Strong` and `GuardRange` derived),
   stored in `islands.Camps` (`CampListConverter`, `q,r,family,level,orientation` tokens; existing
-  islands have none until a reseed), sent as `IslandResponse.camps` and in the admin preview island.
+  islands have none until a reseed), sent as `IslandResponse.camps` (seen islands only, see State and API) and in the admin preview island.
 - Client: `WorldModel.setCamps` tags `Tile.camp`; demo mode places camps in `placeGiantsForIsland`; a
   camp hex is not buildable; `findLandfall` avoids strong camps.
 - Build rule, also enforced server-side: `Settlement.PlanBuild` refuses a hex that holds a camp with
@@ -343,3 +367,20 @@ Amounts: see [Loot](#loot) under Gameplay (`CampRules.LootPool`); the docs page 
   `TILE_ORIENTATIONS` order, and bearrapids picks the kept rotation with its river's channel
   (orientation index mod 3, a straight channel is symmetric).
 - Preview: `npm run worldgen-preview -- --layers terrain,camps` (markers per family, ring = guard range).
+
+## Screenshots
+
+Taken for the camp-fights PR (#363). The live ones are a real local run (API on SQLite, frontend in live
+mode) hunting a level 3 beaver lodge; the demo ones inject camp state through the demo-world hook.
+
+| | |
+|---|---|
+| Hunt from the camp's ring menu | ![ring](img/camp-fights/live_camp_ring.png) |
+| Hunt panel: beasts per tier, loot estimate, attack vs camp defense | ![hunt panel](img/camp-fights/live_hunt_panel_filled.png) |
+| Army on its way | ![sent](img/camp-fights/live_hunt_sent.png) |
+| After the hunt: camp empty, cleared once | ![cleared](img/camp-fights/live_camp_cleared.png) |
+| Reports, Camps tab | ![reports](img/camp-fights/live_reports_camps.png) |
+| Camp report | ![report](img/camp-fights/live_report_detail.png) |
+| Tower in a strong camp's range: a warning, not a lock | ![tower warning](img/camp-fights/tower_warning.png) |
+| Camp art: guarded, cleared, removed by a building | ![guarded](img/camp-fights/art_guarded.png) ![cleared](img/camp-fights/art_cleared.png) ![removed](img/camp-fights/art_removed.png) |
+| Docs page | ![docs](img/camp-fights/docs_camps_top.png) |

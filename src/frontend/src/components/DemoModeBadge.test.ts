@@ -48,9 +48,11 @@ describe('DemoModeBadge', () => {
     isHudBarMounted.value = false;
   });
 
-  it('renders without the compact bubble class on desktop', () => {
+  // A top-centre banner on desktop covered the middle resource pills: the
+  // badge is the same bottom-left tag at every width.
+  it('sits in the bottom-left corner on desktop too, not as a top banner', () => {
     const wrapper = mountBadge();
-    expect(wrapper.get('.demo-badge').classes()).not.toContain('demo-badge--compact');
+    expect(wrapper.get('.demo-badge').attributes('style')).toContain('bottom: calc(2px');
     wrapper.unmount();
   });
 
@@ -66,7 +68,6 @@ describe('DemoModeBadge', () => {
     await wrapper.vm.$nextTick();
 
     const badge = wrapper.get('.demo-badge');
-    expect(badge.classes()).toContain('demo-badge--compact');
     expect(badge.text()).toBe(enDemoModeBadge.short);
     expect(badge.attributes('title')).toBe(enDemoModeBadge.title);
     expect(badge.attributes('style')).toContain('bottom: calc(2px');

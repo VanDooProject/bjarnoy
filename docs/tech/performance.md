@@ -69,8 +69,11 @@ Showcase renders are docs art and never load in the game.
 The setting is **per device** (localStorage `bjarnoy.animations`), not per
 account: the same player may want animations on a desktop and not on a
 phone. It is in the Settings dialog on the player's own profile (Graphics →
-Map animations), next to a line saying what it currently resolves to and
-why.
+Building animations), next to a line saying what it currently resolves to and
+why. Water motion, fog drift and menu animations sit beside it (localStorage
+`bjarnoy.motion.water|fog|hud`): each is Auto/On/Off, where Auto follows the
+device's own "reduce motion" setting (shown at the top of the section) and Off
+freezes water/fog in place rather than hiding them.
 
 | Setting | Result |
 | --- | --- |
