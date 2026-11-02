@@ -314,6 +314,12 @@ export class WorldModel {
   /** Trade carts in transit — see `CartShipment`'s own doc comment. */
   private cartShipments = new Map<string, CartShipment>();
   private explored = new Set<string>();
+  /**
+   * The vision discs each settlement has ever explored from (centre key -> largest radius), the discs behind `explored`.
+   * Like `explored` itself nothing leaves it, so losing sight (a destroyed Longhouse, a cut-off tower) does not shrink the
+   * reach the renderer's terrain cull and fog ramp measure the remembered ground against. Written only by `exploredHexesFor`.
+   */
+  private exploredDiscs = new Map<string, Map<string, ClaimDisc>>();
   private lastTick = performance.now();
   /** Islands known from the backend (live mode only) — id, name, and centre, for world-map labels. */
   private islands: IslandLabel[] = [];
@@ -1421,10 +1427,34 @@ export class WorldModel {
    * discs, each grown by `FOG_SCOUT_RING`) — the tower-aware replacement for
    * looping `hexesInRadius` around the settlement's own centre alone.
    */
+  private rememberExploredDisc(settlementId: string, disc: ClaimDisc): void {
+    const discs = this.exploredDiscs.get(settlementId) ?? new Map<string, ClaimDisc>();
+    this.exploredDiscs.set(settlementId, discs);
+    const key = coordKey(disc);
+    const known = discs.get(key);
+    if (!known || known.radius < disc.radius) discs.set(key, { q: disc.q, r: disc.r, radius: disc.radius });
+  }
+
+  /**
+   * Every disc this settlement explores from or ever explored from: its current vision discs plus the remembered ones
+   * (`exploredDiscs`). The one source the fog reach (`exploredRadius`) and the ramp (`distanceBeyondExplored`) read, so
+   * ground explored earlier stays inside both after the settlement loses its sight.
+   */
+  private exploredReachDiscs(settlement: Settlement): ClaimDisc[] {
+    const merged = new Map<string, ClaimDisc>(this.exploredDiscs.get(settlement.id));
+    for (const disc of this.visionDiscsFor(settlement)) {
+      const key = coordKey(disc);
+      const known = merged.get(key);
+      if (!known || known.radius < disc.radius) merged.set(key, disc);
+    }
+    return [...merged.values()];
+  }
+
   private exploredHexesFor(settlement: Settlement): AxialCoord[] {
     const seen = new Set<string>();
     const hexes: AxialCoord[] = [];
     for (const disc of this.visionDiscsFor(settlement)) {
+      this.rememberExploredDisc(settlement.id, disc);
       for (const c of hexesInRadius({ q: disc.q, r: disc.r }, disc.radius + FOG_SCOUT_RING)) {
         const key = coordKey(c);
         if (seen.has(key)) continue;
@@ -1558,7 +1588,7 @@ export class WorldModel {
 
   /**
    * A single, generous radius around the settlement's own centre that
-   * safely bounds every vision disc's own explored ring (`visionDiscsFor`,
+   * safely bounds every explored ring (`exploredReachDiscs`: current vision discs and every disc ever explored from,
    * each grown by `FOG_SCOUT_RING`) — for callers that only want one circle
    * centred on the settlement itself rather than the disc union
    * `visibleHexes`/`exploredHexesFor` use for the actual fog shape: initial
@@ -1570,7 +1600,7 @@ export class WorldModel {
    */
   exploredRadius(settlement: Settlement): number {
     let max = 0;
-    for (const disc of this.visionDiscsFor(settlement)) {
+    for (const disc of this.exploredReachDiscs(settlement)) {
       const reach =
         hexDistance({ q: settlement.q, r: settlement.r }, { q: disc.q, r: disc.r }) + disc.radius + FOG_SCOUT_RING;
       if (reach > max) max = reach;
@@ -1594,7 +1624,7 @@ export class WorldModel {
   distanceBeyondExplored(q: number, r: number): number {
     let min = Infinity;
     for (const settlement of this.settlements.values()) {
-      for (const disc of this.visionDiscsFor(settlement)) {
+      for (const disc of this.exploredReachDiscs(settlement)) {
         const d = hexDistance({ q: disc.q, r: disc.r }, { q, r }) - (disc.radius + FOG_SCOUT_RING);
         if (d < min) min = d;
       }
