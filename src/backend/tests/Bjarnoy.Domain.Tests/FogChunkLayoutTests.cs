@@ -89,4 +89,22 @@ public class FogChunkLayoutTests
         // 126 x 252 — and a player only ever has rows for the ones they touched.
         Assert.Equal(126L * 252, chunks);
     }
+
+    [Fact]
+    public void ChunksOf_lists_each_chunk_the_hexes_fall_in_once_in_first_seen_order()
+    {
+        var hexes = HexCoord.Origin.WithinRadius(150).ToList();
+
+        var chunks = FogChunkLayout.ChunksOf(hexes);
+
+        Assert.Equal(chunks.Count, chunks.Distinct().Count());
+        Assert.Equal(hexes.Select(FogChunkLayout.ChunkOf).Distinct().ToList(), chunks);
+        Assert.True(chunks.Count > 1);
+    }
+
+    [Fact]
+    public void ChunksOf_nothing_is_empty()
+    {
+        Assert.Empty(FogChunkLayout.ChunksOf([]));
+    }
 }

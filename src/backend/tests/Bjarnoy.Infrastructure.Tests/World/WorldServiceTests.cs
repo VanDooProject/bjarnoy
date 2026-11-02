@@ -111,4 +111,24 @@ public class WorldServiceTests : IDisposable
 
         Assert.NotEmpty(await _dbContext.Islands.Where(i => i.WorldId == world.Id).ToListAsync(Ct));
     }
+
+    [Fact]
+    public async Task A_created_world_stores_each_islands_fog_chunk_footprint()
+    {
+        var service = CreateService();
+        var options = SmallWorld(1);
+        var generated = new WorldGenerator(options).Generate(Ct);
+
+        var world = await service.CreateWorldAsync("fog-chunk-world", options, maxPlayers: 10, autoSeed: false, Ct);
+
+        var stored = await _dbContext.Islands.Where(i => i.WorldId == world.Id).ToListAsync(Ct);
+        Assert.NotEmpty(stored);
+        foreach (var island in stored)
+        {
+            var tiles = generated.Islands.Single(g => g.Index == island.Index).Tiles;
+            Assert.NotEmpty(island.FogChunks);
+            Assert.Equal(FogChunkLayout.ChunksOf(tiles), island.FogChunks);
+            Assert.All(tiles, t => Assert.Contains(FogChunkLayout.ChunkOf(t), island.FogChunks));
+        }
+    }
 }

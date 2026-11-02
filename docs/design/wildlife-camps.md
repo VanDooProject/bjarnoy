@@ -235,12 +235,29 @@ effective level, the player's settlement and army, the winner, both powers, seed
 tower burned. `GET /settlements/{id}/camp-reports`, `GET /camp-reports/{id}`; the reports inbox shows them
 under "Camps".
 
+### World map
+
+On the world map, premium players see every standing camp of the islands they have seen part of, as a paw
+symbol (strong camps red). Other players see no camps on the world map.
+
 ### State and API
 
 - `camp_states` (world, q, r): tier counts at `SnapshotAt`, `ClearedAt`, `CalmUntil`, `Clears`, `Leftover`. No row
   means a pristine camp: full garrison at its rolled level, aggressive.
-- `GET /worlds/{worldId}/camps[?islandId=]`: every camp's live state (effective level, garrison per tier,
-  cleared, calm until, clears, removed by a building).
+- `GET /worlds/{worldId}/camps[?islandId=]`: the live state (family, orientation, effective level, garrison per
+  tier, cleared, calm until, clears, removed by a building) of every camp on an island the caller has seen part
+  of. `orientation` is the camp's own tile orientation, so a client can add a camp it first learns about from this
+  poll (a newly seen island).
+- **Seen islands** (the cutoff for both camp endpoints, per player): at world generation each island stores the
+  distinct 64 x 64 fog chunks (`FogChunkLayout`) its land hexes fall in (`islands.FogChunks`,
+  `FogChunkListConverter`, `u,v` tokens). An island counts as seen when the caller has explored anything in at
+  least one of those chunks: a chunk touched by one of their current explored discs (settlement and tower rings,
+  walking armies) or with any explored texel in their stored history (`ExploredAreaService.SeenIslandIdsAsync`).
+  The check is chunk-level on purpose, so it is slightly generous at an island's edge. The island of the plot
+  suggestion pinned to a not-yet-founded visitor counts as seen, so the landing preview keeps its camps.
+  `GET /worlds/{worldId}/islands` still lists every island, but `camps` is empty for islands that are not seen, and
+  a caller who resolves to no realm sees no camps at all. Islands generated before the column existed have an
+  empty chunk list, so their camps are not sent until the world is reseeded.
 
 ## Loot (kinds only)
 
@@ -274,7 +291,7 @@ Amounts: see [Loot](#loot) under Gameplay (`CampRules.LootPool`); the docs page 
 
 - `GeneratedIsland.Camps` (`Camp`: coord, family, level, orientation; `Strong` and `GuardRange` derived),
   stored in `islands.Camps` (`CampListConverter`, `q,r,family,level,orientation` tokens; existing
-  islands have none until a reseed), sent as `IslandResponse.camps` and in the admin preview island.
+  islands have none until a reseed), sent as `IslandResponse.camps` (seen islands only, see State and API) and in the admin preview island.
 - Client: `WorldModel.setCamps` tags `Tile.camp`; demo mode places camps in `placeGiantsForIsland`; a
   camp hex is not buildable; `findLandfall` avoids strong camps.
 - Build rule, also enforced server-side: `Settlement.PlanBuild` refuses a hex that holds a camp with
