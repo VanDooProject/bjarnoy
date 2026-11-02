@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BogTile, RiverTile } from '../types';
 import { SOURCE_H, SOURCE_W } from './dryMaskCore';
-import { cropAtlasCell, riverFlowOf } from './riverFlowLayer';
+import { boundsOf, cropAtlasCell, riverFlowOf } from './riverFlowLayer';
 import { dryCellWorldRect } from './waterDryMask';
 
 const river = (over: Partial<RiverTile>): RiverTile => ({ q: 0, r: 0, shape: 'straight', inDirections: ['W'], outDirection: 'E', ...over });
@@ -56,5 +56,16 @@ describe('river flow cell placement', () => {
     expect(rect.y).toBeCloseTo(584, 6);
     expect(rect.w).toBeCloseTo(168, 6);
     expect(rect.h).toBeCloseTo(168, 6);
+  });
+});
+
+describe('river flow texture rect', () => {
+  it('(f) is the bounding box of the river cells and nothing more', () => {
+    const rects = [
+      { x: 100, y: 50, w: 40, h: 30 },
+      { x: 120, y: 20, w: 40, h: 30 },
+    ];
+    expect(boundsOf(rects)).toEqual({ minX: 100, minY: 20, maxX: 160, maxY: 80 });
+    expect(boundsOf([])).toEqual({ minX: 0, minY: 0, maxX: 1, maxY: 1 });
   });
 });

@@ -64,6 +64,22 @@ export interface RiverFlowInput {
    * geodesic distance from it, so the lake stays still. Generic: "fade away from edge E". Only an intensity, not a direction.
    */
   fadeEdge?: number;
+  /**
+   * The water mask on a grid that reaches `margin` texels past the cell on every side (cell texel (x, y) is at (x + margin,
+   * y + margin)), where past an in or out edge in `edges` the mask is the union of this cell's and the neighbouring hex's
+   * (`buildBankContext`). The distance to the bank is measured on it, so a bank in the neighbour counts and both hexes of a
+   * seam read the same value there. Without it the cell sees only its own banks.
+   */
+  context?: BankContext;
+}
+
+export interface BankContext {
+  mask: Uint8Array;
+  w: number;
+  h: number;
+  margin: number;
+  /** The in/out edges that have a neighbour's mask in `mask`. */
+  edges: readonly number[];
 }
 
 /**
@@ -178,21 +194,29 @@ export const FACE_PAD_TEXELS = 7;
  * rim along the in and out edges), and which the cell covers (inside plus that rim).
  */
 function faceMasks(input: RiverFlowInput): { inside: Uint8Array; padded: Uint8Array; passable: Uint8Array; cover: Uint8Array } {
-  const { cw, ch, polygon } = input;
+  return faceMasksOn(input.cw, input.ch, input.polygon, [...input.inEdges, input.outEdge], FACE_PAD_TEXELS);
+}
+
+function faceMasksOn(
+  cw: number,
+  ch: number,
+  polygon: readonly Point[],
+  flowEdges: readonly number[],
+  pad: number,
+): { inside: Uint8Array; padded: Uint8Array; passable: Uint8Array; cover: Uint8Array } {
   const inside = new Uint8Array(cw * ch);
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
       if (pointInPolygon(x + 0.5, y + 0.5, polygon)) inside[y * cw + x] = 1;
     }
   }
-  const flowEdges = [...input.inEdges, input.outEdge];
   const cover = inside.slice();
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
       const p = y * cw + x;
       if (cover[p]) continue;
       for (const e of flowEdges) {
-        if (distToSegment(x + 0.5, y + 0.5, polygon[e]!, polygon[(e + 1) % polygon.length]!) <= FACE_PAD_TEXELS) {
+        if (distToSegment(x + 0.5, y + 0.5, polygon[e]!, polygon[(e + 1) % polygon.length]!) <= pad) {
           cover[p] = 1;
           break;
         }
@@ -385,40 +409,49 @@ export function riverPotential(input: RiverFlowInput): { phi: Float64Array; swee
  * `EDGE_RIM_TEXELS` from every in/out edge segment. 0 off water.
  */
 function distanceToBank(input: RiverFlowInput, passable: Uint8Array): Float32Array {
-  const { mask, cw, ch, polygon, inEdges, outEdge } = input;
+  const { cw, ch, polygon, inEdges, outEdge, context } = input;
+  // On the context grid (margin texels past the cell, the neighbours' water past the seams) when there is one, else on the cell.
+  const m = context?.margin ?? 0;
+  const w = context?.w ?? cw;
+  const h = context?.h ?? ch;
+  const mask = context?.mask ?? input.mask;
+  const poly = polygon.map((q) => ({ x: q.x + m, y: q.y + m }));
+  const dom = context
+    ? faceMasksOn(w, h, poly, [...inEdges, outEdge], context.margin).passable
+    : passable;
   const flowEdges = [...new Set([...inEdges, outEdge])];
-  const segments = flowEdges.map((e) => [polygon[e]!, polygon[(e + 1) % polygon.length]!] as const);
-  // Past an in or out edge lies the neighbouring river hex, whose banks this cell does not see; what the art has there is
-  // its own skirt or nothing. A dry texel past such an edge line is therefore never a bank, however far past it is, or
-  // every seam would read as a bank and B would dip along it.
-  const centroid = polygon.reduce((s, q) => ({ x: s.x + q.x / polygon.length, y: s.y + q.y / polygon.length }), { x: 0, y: 0 });
+  const segments = flowEdges.map((e) => [poly[e]!, poly[(e + 1) % poly.length]!] as const);
+  const withContext = flowEdges.map((e) => context?.edges.includes(e) ?? false);
+  // Past an in or out edge lies the neighbouring river hex. Where its water mask is part of the context its banks count. Where
+  // it is not, this cell sees only its own skirt there, and a dry texel past such an edge line is never a bank, however far past
+  // it is, or every seam would read as a bank and B would dip along it.
+  const centroid = poly.reduce((acc, q) => ({ x: acc.x + q.x / poly.length, y: acc.y + q.y / poly.length }), { x: 0, y: 0 });
   const side = ([a, b]: readonly [Point, Point], x: number, y: number) => (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
-  const pastFlowEdge = (x: number, y: number) => segments.some((seg) => side(seg, x, y) * side(seg, centroid.x, centroid.y) < 0);
-  // The art's water often stops a texel or two short of an in or out edge. That dry strip is not a bank: a dry texel within
-  // EDGE_RIM_TEXELS of such an edge with water just inward of it (along the crossing direction) counts as water. A real
-  // bank reaching the edge has no water inward of it and stays a bank, so B does not swell at every seam (it did when every
-  // dry texel near the edge was let off).
-  const inward = flowEdges.map((e) => {
-    const n = crossingDirection(polygon, e);
-    return { x: -n.x, y: -n.y };
-  });
+  const pastFlowEdge = (x: number, y: number) => segments.some((seg, i) => !withContext[i] && side(seg, x, y) * side(seg, centroid.x, centroid.y) < 0);
+  const water = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && mask[y * w + x]! >= WATER_THRESHOLD;
+  // The art's water often stops a texel or two short of an in or out edge. That dry strip is not a bank. Without the
+  // neighbour: a dry texel within EDGE_RIM_TEXELS of such an edge with water just inward of it (along the crossing direction)
+  // counts as water. With it: water on both sides along the crossing direction within EDGE_RIM_TEXELS + 1, the same test from
+  // either hex. A real bank reaching the edge has no water on its far side and stays a bank, so B does not swell at every seam.
+  const dirs = flowEdges.map((e) => crossingDirection(polygon, e));
   const shortOfEdge = (x: number, y: number) =>
     segments.some(([a, b], i) => {
       if (distToSegment(x + 0.5, y + 0.5, a, b) > EDGE_RIM_TEXELS) return false;
-      for (let step = 1; step <= EDGE_RIM_TEXELS + 1; step++) {
-        const xx = Math.round(x + inward[i]!.x * step);
-        const yy = Math.round(y + inward[i]!.y * step);
-        if (xx < 0 || yy < 0 || xx >= cw || yy >= ch) break;
-        if (mask[yy * cw + xx]! >= WATER_THRESHOLD) return true;
-      }
-      return false;
+      const n = dirs[i]!;
+      const reach = (sign: number) => {
+        for (let step = 1; step <= EDGE_RIM_TEXELS + 1; step++) {
+          if (water(Math.round(x + sign * n.x * step), Math.round(y + sign * n.y * step))) return true;
+        }
+        return false;
+      };
+      return withContext[i] ? reach(1) && reach(-1) : reach(-1);
     });
   const far = 1e6;
-  const d = new Float32Array(cw * ch);
-  for (let y = 0; y < ch; y++) {
-    for (let x = 0; x < cw; x++) {
-      const p = y * cw + x;
-      if (mask[p]! >= WATER_THRESHOLD || !passable[p]) {
+  const d = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (water(x, y) || !dom[p]) {
         d[p] = far;
       } else {
         d[p] = pastFlowEdge(x + 0.5, y + 0.5) || shortOfEdge(x, y) ? far : 0;
@@ -431,27 +464,30 @@ function distanceToBank(input: RiverFlowInput, passable: Uint8Array): Float32Arr
   const relax = (x: number, y: number, dx: number, dy: number, step: number) => {
     const xx = x + dx;
     const yy = y + dy;
-    if (xx < 0 || xx >= cw || yy < 0 || yy >= ch) return;
-    const v = d[yy * cw + xx]! + step;
-    if (v < d[y * cw + x]!) d[y * cw + x] = v;
+    if (xx < 0 || xx >= w || yy < 0 || yy >= h) return;
+    const v = d[yy * w + xx]! + step;
+    if (v < d[y * w + x]!) d[y * w + x] = v;
   };
-  for (let y = 0; y < ch; y++) {
-    for (let x = 0; x < cw; x++) {
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
       relax(x, y, -1, 0, 1);
       relax(x, y, 0, -1, DOWN);
       relax(x, y, -1, -1, DIAG);
       relax(x, y, 1, -1, DIAG);
     }
   }
-  for (let y = ch - 1; y >= 0; y--) {
-    for (let x = cw - 1; x >= 0; x--) {
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
       relax(x, y, 1, 0, 1);
       relax(x, y, 0, 1, DOWN);
       relax(x, y, 1, 1, DIAG);
       relax(x, y, -1, 1, DIAG);
     }
   }
-  return d;
+  if (!context) return d;
+  const out = new Float32Array(cw * ch);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) out[y * cw + x] = d[(y + m) * w + x + m]!;
+  return out;
 }
 
 function smoothstep(e0: number, e1: number, x: number): number {
@@ -720,4 +756,48 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
     }
   }
   return { data: out, periods, inside };
+}
+
+/** A water mask cell placed in the world: texel (0, 0) starts at (x, y), and a texel is `texelWorld` world units wide. */
+export interface PlacedMask {
+  mask: Uint8Array;
+  cw: number;
+  ch: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * The bank context of a cell (`RiverFlowInput.context`): its own water mask on a grid `margin` texels larger on every side,
+ * where within `margin` texels of an in or out edge that has a neighbour the neighbouring hex's water at the same world
+ * position is added (a union), on both sides of the edge line. The two hexes of a seam therefore see the same water around the
+ * seam and measure the same distance to the bank.
+ */
+export function buildBankContext(
+  own: PlacedMask,
+  polygon: readonly Point[],
+  neighbours: readonly { edge: number; cell: PlacedMask }[],
+  texelWorld: number,
+  margin: number = RIVER_CENTRE_TEXELS,
+): BankContext {
+  const w = own.cw + 2 * margin;
+  const h = own.ch + 2 * margin;
+  const mask = new Uint8Array(w * h);
+  for (let y = 0; y < own.ch; y++) mask.set(own.mask.subarray(y * own.cw, (y + 1) * own.cw), (y + margin) * w + margin);
+  for (const { edge, cell } of neighbours) {
+    const a = polygon[edge]!;
+    const b = polygon[(edge + 1) % polygon.length]!;
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const cx = i - margin;
+        const cy = j - margin;
+        if (distToSegment(cx + 0.5, cy + 0.5, a, b) > margin) continue;
+        const nx = Math.floor((own.x + (cx + 0.5) * texelWorld - cell.x) / texelWorld);
+        const ny = Math.floor((own.y + (cy + 0.5) * texelWorld - cell.y) / texelWorld);
+        if (nx < 0 || ny < 0 || nx >= cell.cw || ny >= cell.ch) continue;
+        if (cell.mask[ny * cell.cw + nx]! >= WATER_THRESHOLD) mask[j * w + i] = 255;
+      }
+    }
+  }
+  return { mask, w, h, margin, edges: neighbours.map((n) => n.edge) };
 }

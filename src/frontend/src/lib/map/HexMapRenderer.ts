@@ -66,7 +66,7 @@ import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { attachFramePacing } from './framePacing';
 import { splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
-import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
+import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
@@ -4239,6 +4239,8 @@ export class HexMapRenderer {
       this.waterDryEntries.push({ texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET });
     }
     this.riverFlowEntries = [];
+    const flowCoords = new Map<string, RiverFlowEntry>();
+    const entryCoords: { entry: RiverFlowEntry; coord: AxialCoord }[] = [];
     for (const { texture, coord, crop } of baseEntries.values()) {
       if (crop) continue;
       const river = worldModel.getRiverTile(coord.q, coord.r);
@@ -4246,7 +4248,21 @@ export class HexMapRenderer {
       const flow = riverFlowOf(river, worldModel.getTile(coord.q, coord.r).bog, seaDirection);
       if (!flow) continue;
       const grid = isoGridPosition(coord, TILE_W, TILE_H);
-      this.riverFlowEntries.push({ texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET, ...flow });
+      const entry = { texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET, ...flow };
+      this.riverFlowEntries.push(entry);
+      flowCoords.set(coordKey(coord), entry);
+      entryCoords.push({ entry, coord });
+    }
+    // The neighbouring river hex behind each in and out edge, so a cell can measure the distance to the bank on both sides of a seam.
+    for (const { entry, coord } of entryCoords) {
+      const around = neighbors(coord);
+      const neighbours: NonNullable<RiverFlowEntry['neighbours']> = [];
+      for (const direction of new Set([entry.outDirection, ...entry.inDirections])) {
+        const next = around[TILE_ORIENTATIONS.indexOf(direction)];
+        const other = next ? flowCoords.get(coordKey(next)) : undefined;
+        if (other) neighbours.push({ direction, name: other.texture.label ?? '', x: other.x, y: other.y });
+      }
+      entry.neighbours = neighbours;
     }
     this.refreshWaterDry();
   }

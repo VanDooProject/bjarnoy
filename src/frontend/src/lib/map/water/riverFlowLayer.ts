@@ -10,9 +10,9 @@
 import { BufferImageSource, Texture, type Renderer } from 'pixi.js';
 import type { RiverTile, BogTile, TileOrientation } from '../types';
 import { topFaceEdgeIndex } from '../riverPath';
-import type { DryMaskFrame, WaterDryMasksData } from './dryMaskCore';
+import { SOURCE_W, type DryMaskFrame, type WaterDryMasksData } from './dryMaskCore';
 import { dryCellWorldRect, MaskRenderTarget, type MaskPlacement } from './waterDryMask';
-import { computeRiverRipple, topFacePolygonTexels } from './riverFlow';
+import { buildBankContext, computeRiverRipple, topFacePolygonTexels, type PlacedMask } from './riverFlow';
 
 /** One river or bog-creek hex's base art, as drawn, and where its water goes. */
 export interface RiverFlowEntry {
@@ -27,6 +27,8 @@ export interface RiverFlowEntry {
   inDirections: readonly TileOrientation[];
   /** The side the flow fades away from, so the lake of a bog lake mouth stays still. */
   fadeDirection?: TileOrientation;
+  /** The river hex behind each in and out edge (its base art's frame name and sprite position), when there is one. */
+  neighbours?: { direction: TileOrientation; name: string; x: number; y: number }[];
 }
 
 /**
@@ -147,15 +149,33 @@ export class RiverFlowLayer {
    * version of it. Drawn in one pass, whichever hex came later overwrote up to `FACE_PAD_TEXELS` of the other's face: a
    * second, shifted seam inside the neighbour.
    */
-  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry): { face: Texture; rim: Texture } {
+  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number): { face: Texture; rim: Texture } {
     const outEdge = topFaceEdgeIndex(entry.outDirection);
     const inEdges = entry.inDirections.map(topFaceEdgeIndex).sort((a, b) => a - b);
     const fadeEdge = entry.fadeDirection ? topFaceEdgeIndex(entry.fadeDirection) : undefined;
-    const key = `${name}|${outEdge}|${inEdges.join(',')}|${fadeEdge ?? ''}`;
+    // The neighbours behind the edges (frame names; where they lie is fixed by the edge) are part of the key: the distance to
+    // the bank is measured on the water of both hexes of a seam.
+    const neighbours = (entry.neighbours ?? [])
+      .map((n) => ({ edge: topFaceEdgeIndex(n.direction), n }))
+      .filter(({ n }) => masks.data.frames[n.name])
+      .sort((a, b) => a.edge - b.edge);
+    const key = `${name}|${outEdge}|${inEdges.join(',')}|${fadeEdge ?? ''}|${neighbours.map(({ edge, n }) => `${edge}:${n.name}`).join(',')}`;
     let pair = this.cells.get(key);
     if (!pair) {
       const { mask, cw, ch } = cropAtlasCell(masks.alpha, masks.data.width, frame);
-      const flow = computeRiverRipple({ mask, cw, ch, polygon: topFacePolygonTexels(frame.sx, frame.sy), inEdges, outEdge, fadeEdge });
+      const polygon = topFacePolygonTexels(frame.sx, frame.sy);
+      const k = tileWidth / SOURCE_W;
+      const placed = (f: DryMaskFrame, o: { x: number; y: number }, m: { mask: Uint8Array; cw: number; ch: number }): PlacedMask => ({ ...m, x: o.x + f.sx * k, y: o.y + f.sy * k });
+      const context = buildBankContext(
+        placed(frame, entry, { mask, cw, ch }),
+        polygon,
+        neighbours.map(({ edge, n }) => {
+          const nf = masks.data.frames[n.name]!;
+          return { edge, cell: placed(nf, n, cropAtlasCell(masks.alpha, masks.data.width, nf)) };
+        }),
+        2 * k,
+      );
+      const flow = computeRiverRipple({ mask, cw, ch, polygon, inEdges, outEdge, fadeEdge, context });
       const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
       const texture = (data: Uint8Array) =>
         new Texture({ source: new BufferImageSource({ resource: data, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
@@ -185,7 +205,7 @@ export class RiverFlowLayer {
       const name = entry.texture.label ?? '';
       const frame = masks.data.frames[name];
       if (!frame) continue;
-      const { face, rim } = this.cellTextures(masks, name, frame, entry);
+      const { face, rim } = this.cellTextures(masks, name, frame, entry, tileWidth);
       const rect = dryCellWorldRect(entry, frame, tileWidth);
       rims.push({ texture: rim, rect, tint: 0xffffff });
       faces.push({ texture: face, rect, tint: 0xffffff });

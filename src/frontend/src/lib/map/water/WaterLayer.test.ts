@@ -309,6 +309,15 @@ describe('WaterLayer', () => {
 
     layer.setRiverFlowTexture(null);
     expect(resources.uRiverFlow).toBe(placeholder);
+
+    // (f) The shader reads the texture with its own UVs: the river cells' box, as an origin and 1 / size.
+    layer.setRiverFlowTexture(texture, { minX: 100, minY: 20, maxX: 160, maxY: 80 });
+    const rect = Array.from(uniformsOf(layer).uRiverRect as Float32Array);
+    expect(rect.slice(0, 2)).toEqual([100, 20]);
+    expect(rect[2]).toBeCloseTo(1 / 60, 6);
+    expect(rect[3]).toBeCloseTo(1 / 60, 6);
+    layer.setRiverFlowTexture(null);
+    expect(Array.from(uniformsOf(layer).uRiverRect as Float32Array)).toEqual([0, 0, 1, 1]);
   });
 
   it('maps the river flow flags and knobs onto their uniforms', () => {

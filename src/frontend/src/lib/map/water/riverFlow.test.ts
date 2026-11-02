@@ -705,3 +705,53 @@ describe.skipIf(!vendoredArt)('computeRiverRipple coverage on the real art', () 
     }
   }, 120_000);
 });
+
+describe('computeRiverRipple distance to the bank near an edge', () => {
+  const bAt = (data: Uint8Array, x: number, y: number) => data[(y * CW + x) * 4 + 2]! / 255;
+
+  it('(d) does not count the strip where the water stops short of the edge as a bank: B at the edge is about its middle value', () => {
+    // The channel (x 40..60) stops 2 texels short of the face's top and bottom sides.
+    const mask = new Uint8Array(CW * CH);
+    for (let y = 2; y < 44; y++) for (let x = 40; x < 60; x++) mask[y * CW + x] = 255;
+    const { data } = computeRiverRipple(input(mask, BOTTOM));
+    expect(Math.abs(bAt(data, 50, 3) - bAt(data, 50, 22))).toBeLessThan(0.1);
+    expect(Math.abs(bAt(data, 50, 42) - bAt(data, 50, 22))).toBeLessThan(0.1);
+  });
+
+  it('(d) keeps a real bank that reaches the edge a bank: B is 0 against it right up to the edge', () => {
+    const { data } = computeRiverRipple(input(channel(), BOTTOM));
+    // Water at x 40 is against the bank at x 39 along the whole channel, edge rows included.
+    for (const y of [1, 10, 22, 36, 45]) expect(bAt(data, 40, y), `y=${y}`).toBeLessThan(0.1);
+  });
+});
+
+describe('computeRiverRipple draws only water it has a phase for', () => {
+  it('(e) gives every drawn texel a unit (cos, sin) pair, and draws no water the distance fields do not reach', () => {
+    const { data } = computeRiverRipple(input(channel(), BOTTOM));
+    let drawn = 0;
+    for (let p = 0; p < CW * CH; p++) {
+      if (data[p * 4 + 3] === 0) continue;
+      drawn++;
+      const c = data[p * 4]! / 127.5 - 1;
+      const s = data[p * 4 + 1]! / 127.5 - 1;
+      expect(Math.hypot(c, s), `texel ${p}`).toBeGreaterThan(0.97);
+      expect(Math.hypot(c, s)).toBeLessThan(1.03);
+    }
+    expect(drawn).toBeGreaterThan(500);
+  });
+
+  it.skipIf(!vendoredArt)('(e) does so on real frames too', async () => {
+    for (const [name, inDir, outDir] of [
+      ['rivertile_bend120_island_NW_base', 'E', 'NW'],
+      ['rivertile_bend_SE_base', 'SE', 'W'],
+    ] as const) {
+      const f = await riverFrameInput(name);
+      const { data } = computeRiverRipple({ ...f, inEdges: [topFaceEdgeIndex(inDir)], outEdge: topFaceEdgeIndex(outDir) });
+      for (let p = 0; p < f.cw * f.ch; p++) {
+        if (data[p * 4 + 3] === 0) continue;
+        const m = Math.hypot(data[p * 4]! / 127.5 - 1, data[p * 4 + 1]! / 127.5 - 1);
+        expect(m, `${name} texel ${p}`).toBeGreaterThan(0.97);
+      }
+    }
+  }, 120_000);
+});
