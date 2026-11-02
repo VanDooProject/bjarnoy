@@ -962,7 +962,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         'is-waiting': entry.state === 'waiting',
         category: entry.category,
         armed: armed === entry.item.id,
-        blocked: entry.item.disabled,
+        'no-commit': entry.item.disabled,
       }"
       :style="{
         left: `${entry.x}px`,
@@ -1011,7 +1011,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         waiting: stateOf(b.building) === 'waiting',
         disabled: b.building.disabled,
         armed: armed === b.building.id,
-        blocked: b.building.disabled || !isActionable(stateOf(b.building)),
+        'no-commit': b.building.disabled || !isActionable(stateOf(b.building)),
       }"
       :style="{
         left: `${b.x}px`,
@@ -1515,9 +1515,11 @@ html[data-hud-motion='reduced'] .ring-bubble.armed {
   box-shadow: 0 0 0 4px var(--gold);
 }
 /* A blocked bubble is still armed (its card says why), but without the gold ring: a second tap would do nothing. */
-.ring-bubble.armed.blocked,
-html[data-hud-motion='reduced'] .ring-bubble.armed.blocked {
+.ring-bubble.armed.no-commit {
   animation: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+html[data-hud-motion='reduced'] .ring-bubble.armed.no-commit {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 /* The glow becomes a static gold ring. */

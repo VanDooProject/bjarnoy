@@ -681,7 +681,7 @@ describe('RingMenu', () => {
 
       await hut.trigger('touchstart');
       expect(hut.classes()).toContain('armed');
-      expect(hut.classes()).not.toContain('blocked');
+      expect(hut.classes()).not.toContain('no-commit');
       expect(hut.find('[data-testid="ring-arm-badge"]').exists()).toBe(true);
       // The badge's digit is CSS, so the bubble's label is unchanged.
       expect(hut.text()).toBe('Hut');
@@ -701,8 +701,8 @@ describe('RingMenu', () => {
       const hut = bubble(wrapper, 'Hut');
       await hut.trigger('touchstart');
       expect(hut.classes()).toContain('armed');
-      // Armed for its card, but `blocked` drops the gold ring: a second tap would do nothing here.
-      expect(hut.classes()).toContain('blocked');
+      // Armed for its card, but `no-commit` drops the gold ring: a second tap would do nothing here.
+      expect(hut.classes()).toContain('no-commit');
       // No "2" badge either.
       expect(hut.find('[data-testid="ring-arm-badge"]').exists()).toBe(false);
       expect(wrapper.find('[data-testid="ring-tap-hint"]').exists()).toBe(false);
