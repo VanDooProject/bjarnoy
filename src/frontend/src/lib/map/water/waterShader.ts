@@ -497,6 +497,13 @@ vec2 riverPhase(vec4 flow) {
 
 const float RIVER_CREST_EDGE = 0.85;
 
+// The stored phase rotated by time: (cos, sin) of theta + uRiverSpeed * uTime. Moving along the stream means moving round this
+// circle, so anything looked up with it repeats every wavelength; it is always mixed with ground noise to hide that.
+vec2 riverPhaseNow(vec2 cs) {
+  float t = uRiverSpeed * uTime;
+  return vec2(cs.x * cos(t) - cs.y * sin(t), cs.x * sin(t) + cs.y * cos(t));
+}
+
 // Style 0, ripple arcs: thin light crests where the stored phase, rotated by uTime * uRiverSpeed, is near a whole turn, less a lag
 // towards the banks (the crests bow downstream in the middle). The phase is a multiple of the potential, so the crests cross the
 // channel and slide towards the out edge (potential 0). Low-frequency noise in ground space breaks each crest into ripple
@@ -509,16 +516,11 @@ vec4 riverRipples(vec2 cs, float centre, vec2 ground) {
   float turn = uRiverSpeed * uTime - lag;
   float c = cs.x * cos(turn) - cs.y * sin(turn);
   float crest = smoothstep(RIVER_CREST_EDGE, 0.985, c);
-  float broken = smoothstep(0.25, 0.5, noise(ground * uRiverScale) * 0.7 + noise(ground * uRiverScale * 2.3 + 11.0) * 0.3);
+  // The break-up noise moves with the phase, so no stretch of the river stays empty for good.
+  vec2 p = riverPhaseNow(cs);
+  float broken = smoothstep(0.2, 0.4, noise(ground * uRiverScale + p * 1.1) * 0.7 + noise(ground * uRiverScale * 2.3 + 11.0 - p * 0.9) * 0.3);
   float alpha = crest * broken * intensity * uRiverAlpha;
   return vec4(uRiverColor * alpha, alpha);
-}
-
-// The stored phase rotated by time: (cos, sin) of theta + uRiverSpeed * uTime. Moving along the stream means moving round this
-// circle, so anything looked up with it repeats every wavelength; it is always mixed with ground noise to hide that.
-vec2 riverPhaseNow(vec2 cs) {
-  float t = uRiverSpeed * uTime;
-  return vec2(cs.x * cos(t) - cs.y * sin(t), cs.x * sin(t) + cs.y * cos(t));
 }
 
 // The ground gradient of the stored phase at this pixel (its direction is across the ripples, up the potential), from two more
@@ -544,30 +546,41 @@ vec4 riverOver(vec4 a, vec4 b) {
 vec4 riverStrands(vec2 cs, float centre, vec2 ground) {
   vec2 p = riverPhaseNow(cs);
   float k = uRiverScale;
-  // Strands: one noise cell is about 3 texels across the stream. The phase circle carries them downstream; ground noise breaks the repeat.
-  float across = centre * 11.0;
-  vec2 q = vec2(across, 0.0) + p * vec2(0.12, 0.45) + vec2(0.0, noise(ground * k * 0.6) * 3.0);
-  float v = noise(q) * 0.65 + noise(q * vec2(2.3, 0.8) + 7.0) * 0.35;
-  float light = smoothstep(0.62, 0.7, v);
-  float dark = smoothstep(0.38, 0.3, v);
+  float turn = atan(p.y, p.x);
+  // Lanes: B cut into thin strips (about 3 texels), nudged by noise so they are not exact contours. Most lanes are empty; a
+  // present lane has its own width, tone and dash pattern.
+  float laneCoord = centre * 5.5 + (noise(ground * k * 2.5) - 0.5) * 0.8;
+  float lane = floor(laneCoord);
+  float h1 = hash(vec2(lane, 3.7));
+  float h2 = hash(vec2(lane, 11.3));
+  float h3 = hash(vec2(lane, 29.1));
+  float present = step(0.5, h1);
+  float halfWidth = 0.15 + 0.35 * h2;
+  float across = abs(fract(laneCoord) - 0.5) * 2.0;
+  float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.18, across);
+  // Dashes along the stream: the phase on its circle, offset per lane, so every lane has its own run of dashes (about a third of a
+  // wavelength to most of one), and broken further by ground noise so they do not repeat each wavelength.
+  float dash = smoothstep(-0.7 + 0.6 * h3, -0.5 + 0.6 * h3, cos(turn + h1 * 40.0));
+  float broken = smoothstep(0.25, 0.45, noise(ground * k * 1.3 + lane * 7.0 + p * 0.8));
+  float strand = body * dash * broken * present;
+  float light = step(0.45, hash(vec2(lane, 51.7)));
   vec4 lightC = vec4(vec3(0.62, 0.86, 1.0) * 0.6, 0.6);
   vec4 darkC = vec4(vec3(0.02, 0.07, 0.3) * 0.7, 0.7);
-  vec4 col = riverOver(darkC * dark, lightC * light);
-  col *= smoothstep(0.0, 0.1, centre);
-  // Curly white foam: a thin ridge of a slowly moving noise field, only near the banks and islands.
-  float nearBank = 1.0 - smoothstep(0.04, 0.16, centre);
-  float f = fbm(ground * k * 7.0 + p * 0.4);
-  float squiggle = 1.0 - smoothstep(0.0, 0.05, abs(f - 0.55));
+  vec4 col = (light > 0.5 ? lightC : darkC) * strand * smoothstep(0.03, 0.12, centre);
+  // Curly white foam in a thin band at the banks and round islands, broken into short squiggles.
+  float nearBank = 1.0 - smoothstep(0.03, 0.11, centre);
+  float f = fbm(ground * k * 9.0 + p * 0.3);
+  float squiggle = (1.0 - smoothstep(0.0, 0.05, abs(f - 0.55))) * smoothstep(0.35, 0.55, noise(ground * k * 3.0 + 4.0));
   float curl = squiggle * nearBank;
-  col = riverOver(col, vec4(vec3(1.0) * 0.9, 0.9) * curl);
-  // Sparkles: sparse small dots that twinkle.
-  vec2 sp = ground * k * 34.0;
+  col = riverOver(col, vec4(vec3(0.9), 0.9) * curl);
+  // Sparkles: a few small dots that twinkle.
+  vec2 sp = ground * k * 30.0;
   vec2 cell = floor(sp);
   float h = hash(cell);
   vec2 jitter = vec2(hash(cell + 3.1), hash(cell + 7.7)) * 0.5 + 0.25;
-  float dotMask = (1.0 - smoothstep(0.08, 0.2, length(fract(sp) - jitter))) * step(0.95, h) * (0.5 + 0.5 * sin(uTime * 3.0 + h * 60.0));
+  float dotMask = (1.0 - smoothstep(0.08, 0.2, length(fract(sp) - jitter))) * step(0.975, h) * (0.5 + 0.5 * sin(uTime * 3.0 + h * 60.0));
   col = riverOver(col, vec4(vec3(1.0), 1.0) * dotMask * 0.9);
-  return col * smoothstep(0.0, 0.05, centre + 0.05) * (uRiverAlpha / 0.5);
+  return col * (uRiverAlpha / 0.5);
 }
 
 // Style 2, cartoon bands: a lighter shallow band along each bank with a wobbly inner edge, large see-through lobed patches
@@ -576,17 +589,17 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   vec2 p = riverPhaseNow(cs);
   float k = uRiverScale;
   // Bank band: its edge wobbles with noise and slowly with the phase.
-  float wobble = noise(ground * k * 5.0 + p * 0.8) - 0.5;
-  float edge = 0.3 + wobble * 0.14;
-  float band = 1.0 - smoothstep(edge - 0.03, edge + 0.03, centre);
+  float wobble = noise(ground * k * 3.0 + p * 0.5) - 0.5;
+  float edge = 0.3 + wobble * 0.08;
+  float band = 1.0 - smoothstep(edge - 0.05, edge + 0.05, centre);
   vec4 col = vec4(vec3(0.42, 0.72, 0.9) * 0.6, 0.6) * band;
   // Patches: big lobes of low-frequency noise, slid by the phase circle.
-  vec2 warp = vec2(noise(ground * k * 2.4), noise(ground * k * 2.4 + 9.0)) - 0.5;
-  float f = fbm(ground * k * 1.2 + warp * 1.4 + p * 0.25 + 5.0);
-  float patch = smoothstep(0.5, 0.64, f) * smoothstep(0.1, 0.3, centre);
-  col = riverOver(col, vec4(vec3(0.72, 0.93, 1.0) * 0.28, 0.28) * patch);
+  vec2 warp = vec2(noise(ground * k * 0.8), noise(ground * k * 0.8 + 9.0)) - 0.5;
+  float f = fbm(ground * k * 0.3 + warp * 0.7 + p * 0.12 + 5.0);
+  float patch = smoothstep(0.48, 0.6, f) * smoothstep(0.1, 0.3, centre);
+  col = riverOver(col, vec4(vec3(0.75, 0.94, 1.0) * 0.22, 0.22) * patch);
   // Glints: ellipses along the flow (the phase gradient points across it), shown while the wave passes their cell.
-  vec2 g = ground * k * 22.0;
+  vec2 g = ground * k * 14.0;
   vec2 cell = floor(g);
   float h = hash(cell);
   vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.4 + 0.3);
@@ -594,7 +607,7 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   vec2 across = phaseGrad / max(length(phaseGrad), 1e-6);
   vec2 along = vec2(-across.y, across.x);
   float e = pow(dot(o, along) / 0.34, 2.0) + pow(dot(o, across) / 0.07, 2.0);
-  float shown = smoothstep(0.55, 0.9, cos(atan(p.y, p.x) + h * 6.2831853)) * step(0.7, h);
+  float shown = smoothstep(0.55, 0.9, cos(atan(p.y, p.x) + h * 6.2831853)) * step(0.93, h);
   col = riverOver(col, vec4(vec3(1.0), 1.0) * (1.0 - smoothstep(0.7, 1.0, e)) * shown * 0.85);
   return col * smoothstep(0.0, 0.04, centre) * (uRiverAlpha / 0.5);
 }
