@@ -141,8 +141,11 @@ function placeWalls(
   const result: UtgardWallPlacement[] = [];
   const emptyWalls: WallSet = { walls: new Set(), gates: new Set() };
 
+  // The outer line keeps one clear hex from the inner one, so the two rings never touch.
+  const nearInner = new Set<string>();
   for (const kind of ['inner', 'outer'] as const) {
-    const hexes = ring(anchor, ringRadius(kind));
+    const hexes = naturalLoop(anchor, kind, terrainOf, isRiver, giantHexes, seed, kind === 'outer' ? nearInner : undefined);
+    if (kind === 'inner') for (const hex of hexes) for (const c of [hex, ...neighbors(hex)]) nearInner.add(coordKey(c));
     const eligible = hexes.map((hex) => {
       const key = coordKey(hex);
       return (
@@ -154,11 +157,151 @@ function placeWalls(
       );
     });
     const eligibleCount = eligible.filter(Boolean).length;
-    if (eligibleCount < MinRingLandShare * hexes.length) continue;
+    if (hexes.length === 0 || eligibleCount < MinRingLandShare * hexes.length) continue;
 
     result.push(...resolveRing(hexes, eligible, terrainOf, seed, kind));
   }
   return result;
+}
+
+/** Hex-distance band each ring's line may wander in: [min, max] from Utgard's anchor. One clear hex always separates the two bands. */
+export const RingBands: Record<UtgardRing, readonly [number, number]> = { inner: [3, 5], outer: [6, 9] };
+/** Control points of the ring's wobble round the full circle (more on the longer outer ring). */
+const RingNoisePoints: Record<UtgardRing, number> = { inner: 5, outer: 7 };
+/** Range the wobble's target distance is drawn from, per ring. */
+const RingTargetRange: Record<UtgardRing, readonly [number, number]> = { inner: [2.8, 5.2], outer: [6, 9.2] };
+/** Cost of a hex the line can follow without a wall (mountain, lava, sea, a giant) against a hex that needs one. */
+const BarrierStepCost = 0.35;
+const WallStepCost = 1;
+/** Cost of a sea hex: the line keeps to land where the band allows, so a small island's ring hugs its coast instead of running out to sea. */
+const SeaStepCost = 4;
+/** Cost per hex of distance between a hex and the wobble's target distance at its angle. */
+const TargetPull = 2;
+
+/**
+ * Where `c` sits round Utgard, as a fraction of the circle in [0, 1): its index in `ring(anchor, d)` over the ring's 6d hexes.
+ * Pure integer arithmetic so both sides agree bit for bit (no atan2).
+ */
+export function ringFraction(anchor: AxialCoord, c: AxialCoord): number {
+  const d = hexDistance(anchor, c);
+  if (d === 0) return 0;
+  const hexes = ring(anchor, d);
+  const i = hexes.findIndex((h) => h.q === c.q && h.r === c.r);
+  return i / (6 * d);
+}
+
+/**
+ * The closed line one ring follows round Utgard, as a cycle of hexes (each adjacent to the next, no two non-consecutive ones
+ * adjacent): the cheapest loop through the ring's band, where a hex costs more the further it is from a wobbling target distance
+ * (value noise round the circle) and much less when the terrain itself already stops an army (mountain, lava, sea, a giant), so the
+ * line bends towards those and leaves them to close the ring.
+ */
+export function naturalLoop(
+  anchor: AxialCoord,
+  kind: UtgardRing,
+  terrainOf: (c: AxialCoord) => Terrain,
+  isRiver: (c: AxialCoord) => boolean,
+  giantHexes: ReadonlySet<string>,
+  seed: number,
+  blocked: ReadonlySet<string> = new Set(),
+): AxialCoord[] {
+  const [minD, maxD] = RingBands[kind];
+  const points = RingNoisePoints[kind];
+  const [lo, hi] = RingTargetRange[kind];
+  const salt = kind === 'inner' ? 601 : 607;
+  const control = Array.from({ length: points }, (_, k) => lo + (hi - lo) * hash2(k, points, seed + salt));
+
+  // The band's hexes in a fixed order (distance, then ring order), with their angle and step cost.
+  const nodes: { hex: AxialCoord; u: number; cost: number }[] = [];
+  const index = new Map<string, number>();
+  for (let d = minD; d <= maxD; d++) {
+    const hexes = ring(anchor, d);
+    hexes.forEach((hex, i) => {
+      if (blocked.has(coordKey(hex))) return;
+      const u = i / (6 * d);
+      const x = u * points;
+      const k = Math.floor(x);
+      const f = x - k;
+      const target = control[k % points]! * (1 - f) + control[(k + 1) % points]! * f;
+      const terrain = terrainOf(hex);
+      const barrier = terrain === 'mountain' || isRiver(hex) || giantHexes.has(coordKey(hex));
+      index.set(coordKey(hex), nodes.length);
+      nodes.push({ hex, u, cost: (terrain === 'sea' ? SeaStepCost : barrier ? BarrierStepCost : WallStepCost) + TargetPull * Math.abs(d - target) });
+    });
+  }
+  const n = nodes.length;
+  const adjacency = nodes.map(({ hex }) =>
+    DIRECTIONS.map((dir) => index.get(coordKey({ q: hex.q + dir.q, r: hex.r + dir.r }))).filter((j): j is number => j !== undefined),
+  );
+  // Crossing the cut at u = 0 going round (u rising) moves a lap up; back across, a lap down.
+  const lapStep = (a: number, b: number) => (nodes[a]!.u >= 0.75 && nodes[b]!.u < 0.25 ? 1 : nodes[a]!.u < 0.25 && nodes[b]!.u >= 0.75 ? -1 : 0);
+
+  let best: { cost: number; path: number[] } | null = null;
+  for (let s = 0; s < n; s++) {
+    if (nodes[s]!.u !== 0) continue;
+    // Dijkstra over (hex, lap) from (s, 0) to (s, 1); O(V^2) with fixed tie-breaks so both sides walk the same way.
+    const dist = new Array<number>(2 * n).fill(Infinity);
+    const prev = new Array<number>(2 * n).fill(-1);
+    const done = new Array<boolean>(2 * n).fill(false);
+    dist[s] = 0;
+    const goal = n + s;
+    for (;;) {
+      let v = -1;
+      for (let i = 0; i < 2 * n; i++) if (!done[i] && dist[i]! < Infinity && (v === -1 || dist[i]! < dist[v]!)) v = i;
+      if (v === -1 || v === goal) break;
+      done[v] = true;
+      const lap = v >= n ? 1 : 0;
+      const a = v - lap * n;
+      for (const b of adjacency[a]!) {
+        const nextLap = lap + lapStep(a, b);
+        if (nextLap < 0 || nextLap > 1) continue;
+        if (nextLap === 0 && b === s) continue;
+        const w = nextLap * n + b;
+        const cost = dist[v]! + nodes[b]!.cost;
+        if (cost < dist[w]!) {
+          dist[w] = cost;
+          prev[w] = v;
+        }
+      }
+    }
+    if (dist[goal] === Infinity) continue;
+    if (best !== null && dist[goal]! >= best.cost) continue;
+    const path: number[] = [];
+    for (let v = prev[goal]!; v !== -1; v = prev[v]!) path.push(v % n);
+    path.reverse();
+    best = { cost: dist[goal]!, path };
+  }
+  if (!best) return [];
+  return withoutChords(best.path.map((i) => nodes[i]!.hex));
+}
+
+/**
+ * Cuts shortcuts out of a closed hex path until no two non-consecutive hexes are the same or adjacent: at the first such pair (lowest
+ * i, then lowest j) the shorter of the two arcs between them is dropped (the forward one on a tie). The result is a simple cycle the
+ * palisade rules can resolve into one closed wall without a branch or a 60 degree bend.
+ */
+export function withoutChords(cycle: AxialCoord[]): AxialCoord[] {
+  let c = [...cycle];
+  for (;;) {
+    const n = c.length;
+    let cut: [number, number] | null = null;
+    for (let i = 0; i < n && !cut; i++) {
+      for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        const d = hexDistance(c[i]!, c[j]!);
+        if (d <= 1) {
+          cut = [i, j];
+          break;
+        }
+      }
+    }
+    if (!cut || n <= 6) return c;
+    const [i, j] = cut;
+    const forward = j - i - 1;
+    const backward = n - (j - i) - 1 + (hexDistance(c[i]!, c[j]!) === 0 ? 1 : 0);
+    if (forward <= backward) c = [...c.slice(0, i + 1), ...c.slice(hexDistance(c[i]!, c[j]!) === 0 ? j + 1 : j)];
+    else c = c.slice(i, hexDistance(c[i]!, c[j]!) === 0 ? j : j + 1);
+  }
 }
 
 /** One qualified ring: runs, shore ends, refused runs dropped, gates, pieces. */
@@ -310,7 +453,7 @@ function placeTowers(
   seed: number,
 ): AxialCoord[] {
   const count = towerCountFor(islandTiles.length);
-  const minDistanceFromAnchor = OuterRingRadius + 1;
+  const minDistanceFromAnchor = RingBands.outer[1] + 1;
   const fp = footprint(anchor);
 
   const candidates: { coord: AxialCoord; hash: number }[] = [];
