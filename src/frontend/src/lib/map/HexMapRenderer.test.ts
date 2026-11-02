@@ -1137,7 +1137,7 @@ describe('worldCampMarkers', () => {
   });
 
   it('keeps the paw readable when zoomed far out and bounded when zoomed in', () => {
-    expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(5);
-    expect(worldPawHalfSize(100)).toBeLessThanOrEqual(11);
+    expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(8);
+    expect(worldPawHalfSize(100)).toBeLessThanOrEqual(14);
   });
 });

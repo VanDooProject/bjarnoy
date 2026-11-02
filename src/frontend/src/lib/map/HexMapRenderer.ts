@@ -1463,7 +1463,7 @@ export function worldCampMarkers(
 
 /** Half-size in screen pixels of a world-map paw at `zoom`: grows a little with the map but stays readable zoomed out. */
 export function worldPawHalfSize(zoom: number): number {
-  return Math.min(11, Math.max(5, 4 * zoom + 4));
+  return Math.min(14, Math.max(8, 6 * zoom + 7));
 }
 
 /** An army already turned around and heading home. */
@@ -2009,6 +2009,9 @@ export class HexMapRenderer {
   // so the view doesn't jump.
   private cameraAnim: { from: Camera; to: Camera; startedAt: number; durationMs: number } | null = null;
   private markerLayer = new Graphics();
+  // World mode's camp paws (drawCampPaws): above the never-scouted mist, unlike markerLayer, because a premium player
+  // sees every camp of an island they have seen part of, explored or not.
+  private campPawLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
   /**
@@ -2540,7 +2543,7 @@ export class HexMapRenderer {
     // troop/settlement labels read as veiled by it rather than floating in
     // front; whiteMistLayer (never-scouted) sits over everything, since
     // nothing should show through ground that's never been seen at all.
-    app.stage.addChild(this.world, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
+    app.stage.addChild(this.world, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh, this.campPawLayer);
 
     app.ticker.add(this.onTick);
     // See framePacing.ts: a loop whose frames outlast the vsync interval otherwise starves input and timers.
@@ -5052,6 +5055,7 @@ export class HexMapRenderer {
 
   private rebuildMarkers() {
     this.markerLayer.clear();
+    this.campPawLayer.clear();
     // markerLayer.clear() only wipes the Graphics geometry, not the pooled
     // Sprite/Text children parented to it — each pass counts what it used and
     // hides the rest, same bookkeeping labels already do (labelsUsed).
@@ -5159,7 +5163,7 @@ export class HexMapRenderer {
       label.visible = true;
     }
 
-    this.drawCampPaws(fogActive);
+    this.drawCampPaws();
 
     const now = Date.now();
 
@@ -5208,17 +5212,17 @@ export class HexMapRenderer {
   }
 
   /**
-   * World mode: a paw symbol for every standing camp (`worldCampMarkers`) on explored ground and inside the viewport,
-   * in screen pixels (markerLayer does not scale with the camera), so it stays readable zoomed out. A dark rim keeps it
+   * World mode: a paw symbol for every standing camp (`worldCampMarkers`) inside the viewport, fog or not: the model
+   * only holds the camps of islands the player has seen part of (the server's cutoff), and all of those show. Drawn in
+   * screen pixels (campPawLayer, like markerLayer, does not scale with the camera; it sits above the mist), so it stays readable zoomed out; a dark rim keeps it
    * legible over any terrain.
    */
-  private drawCampPaws(fogActive: boolean) {
+  private drawCampPaws() {
     if (!this.options.showCampMarkers) return;
     const { worldModel } = this.options;
     const half = worldPawHalfSize(this.camera.zoom);
     const markers = worldCampMarkers(worldModel.camps(), true);
     for (const marker of markers) {
-      if (fogActive && !worldModel.isExplored(marker.q, marker.r)) continue;
       const grid = isoGridPosition({ q: marker.q, r: marker.r }, TILE_W, TILE_H);
       const centre = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       if (!isIslandNearViewport(centre, this.viewport, half * 2)) continue;
@@ -5237,7 +5241,7 @@ export class HexMapRenderer {
       { x: x + half * 0.26, y: y - half * 0.62 },
       { x: x + half * 0.7, y: y - half * 0.12 },
     ];
-    const g = this.markerLayer;
+    const g = this.campPawLayer;
     g.ellipse(pad.x, pad.y, pad.rx + rim, pad.ry + rim).fill({ color: 0x0b1116, alpha: 0.85 });
     for (const toe of toes) g.circle(toe.x, toe.y, toeR + rim).fill({ color: 0x0b1116, alpha: 0.85 });
     g.ellipse(pad.x, pad.y, pad.rx, pad.ry).fill({ color });
