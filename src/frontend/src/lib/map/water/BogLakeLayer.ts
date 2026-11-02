@@ -13,8 +13,8 @@ function bogLakeGlProgram(): GlProgram {
 }
 
 /** Blur strength (px, in the mask's 1 px per world unit) that turns the lake mask into the shore band's distance-like field. */
-export const SHORE_BLUR_STRENGTH = 8;
-const SHORE_BLUR_QUALITY = 4;
+export const SHORE_BLUR_STRENGTH = 3;
+const SHORE_BLUR_QUALITY = 3;
 
 export class BogLakeLayer {
   readonly mesh: Mesh<MeshGeometry, Shader>;
@@ -24,6 +24,7 @@ export class BogLakeLayer {
   private shoreTarget: RenderTexture | null = null;
   private readonly shoreContainer = new Container();
   private readonly shoreSprite = new Sprite();
+  private readonly mouthWaterSprite = new Sprite();
   private hasLake = false;
   private suppressed = false;
   // "Lake motion" off (the player's setting, or the device's reduced-motion setting under 'auto'): the whole layer (gusts, blops) is hidden, not frozen. A frozen gust is a band of foam and dark patches standing still on the lake, which reads as a rendering
@@ -68,8 +69,8 @@ export class BogLakeLayer {
         },
       }),
     });
-    this.shoreSprite.filters = [new BlurFilter({ strength: SHORE_BLUR_STRENGTH, quality: SHORE_BLUR_QUALITY })];
-    this.shoreContainer.addChild(this.shoreSprite);
+    this.shoreContainer.filters = [new BlurFilter({ strength: SHORE_BLUR_STRENGTH, quality: SHORE_BLUR_QUALITY })];
+    this.shoreContainer.addChild(this.mouthWaterSprite, this.shoreSprite);
     this.mesh.eventMode = 'none';
     this.mesh.visible = false;
   }
@@ -77,12 +78,18 @@ export class BogLakeLayer {
   /**
    * Binds the lake mask render texture (`WaterDryLayer('lake').texture`) and moves the quad onto the world `rect` it was drawn over. `null`
    * (no lakes in view) hides the layer. The texture is owned by the caller. `renderer` draws the blurred copy of the mask that gives the
-   * shader its shore distance; it is only used (and may be null) when a texture is given.
+   * shader its shore distance; it is only used (and may be null) when a texture is given. `mouthWater` (same rect and size as `texture`)
+   * is the lake mouths' creek water: blurred in with the lake, so the line where the creek water meets the lake is no shore.
    */
-  setLake(renderer: Renderer | null, texture: Texture | null, rect: { minX: number; minY: number; maxX: number; maxY: number } | null): void {
+  setLake(
+    renderer: Renderer | null,
+    texture: Texture | null,
+    rect: { minX: number; minY: number; maxX: number; maxY: number } | null,
+    mouthWater: Texture | null = null,
+  ): void {
     this.hasLake = texture !== null && rect !== null;
     this.mesh.shader!.resources.uLakeMask = (texture ?? placeholderDryTexture()).source;
-    const shore = texture && renderer ? this.drawShore(renderer, texture) : null;
+    const shore = texture && renderer ? this.drawShore(renderer, texture, mouthWater) : null;
     this.mesh.shader!.resources.uShoreMask = (shore ?? placeholderDryTexture()).source;
     if (!rect) return;
     const { minX, minY, maxX, maxY } = rect;
@@ -95,8 +102,8 @@ export class BogLakeLayer {
     positions.update();
   }
 
-  /** Blurs the lake mask into the shore render texture (same size, resized in place). Runs when the mask is redrawn. */
-  private drawShore(renderer: Renderer, mask: Texture): Texture {
+  /** Blurs the lake mask (with the mouths' creek water) into the shore render texture (same size, resized in place). Runs when the mask is redrawn. */
+  private drawShore(renderer: Renderer, mask: Texture, mouthWater: Texture | null): Texture {
     const { width, height } = mask;
     if (!this.shoreTarget) {
       this.shoreTarget = RenderTexture.create({ width, height, resolution: 1, scaleMode: 'linear' });
@@ -107,6 +114,12 @@ export class BogLakeLayer {
     this.shoreSprite.position.set(0, 0);
     this.shoreSprite.width = width;
     this.shoreSprite.height = height;
+    this.mouthWaterSprite.visible = mouthWater !== null;
+    if (mouthWater) {
+      this.mouthWaterSprite.texture = mouthWater;
+      this.mouthWaterSprite.width = width;
+      this.mouthWaterSprite.height = height;
+    }
     renderer.render({ container: this.shoreContainer, target: this.shoreTarget, clear: true, clearColor: [0, 0, 0, 0] });
     return this.shoreTarget;
   }

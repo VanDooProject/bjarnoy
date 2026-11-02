@@ -236,8 +236,8 @@ float shoreBand(vec2 w, float t) {
   float wobble = (vnoise(w * 0.07 + vec2(t * 0.22, -t * 0.15)) - 0.5) * 0.12 * uShoreWobble;
   float breath = 0.02 * uShoreWobble * sin(t * 0.7 + vnoise(w * 0.02) * 6.2832);
   float edge = uShoreEdge + wobble + breath;
-  float band = 1.0 - smoothstep(edge - 0.04, edge + 0.04, s);
-  return band * 0.6;
+  float band = 1.0 - smoothstep(edge - 0.02, edge + 0.02, s);
+  return band * 0.75;
 }
 
 // Premultiplied colour c at alpha a.

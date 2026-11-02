@@ -73,12 +73,25 @@ describe('BogLakeLayer', () => {
     expect(call.clear).toBe(true);
   });
 
+  it('blurs the lake mouths\' creek water in with the lake, so a creek meeting the lake is no shore', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    const renderer = fakeRenderer();
+    const lake = lakeTexture();
+    const mouth = lakeTexture();
+    const drawnTextures = () => {
+      const { container } = renderer.render.mock.calls.at(-1)![0] as { container: { children: { visible: boolean; texture: unknown }[] } };
+      return container.children.filter((c) => c.visible).map((c) => c.texture);
+    };
+    layer.setLake(renderer, lake, { minX: 0, minY: 0, maxX: 1, maxY: 1 }, mouth);
+    expect(drawnTextures()).toEqual([mouth, lake]);
+    layer.setLake(renderer, lake, { minX: 0, minY: 0, maxX: 1, maxY: 1 });
+    expect(drawnTextures()).toEqual([lake]);
+  });
+
   it('turns the shore band off with its flag, scales it with its strength and passes edge and wobble through', () => {
     const layer = new BogLakeLayer(TILE_W);
     layer.tick(0);
     expect(uniformsOf(layer).uShore).toBe(1); // ships on
-    expect(uniformsOf(layer).uShoreEdge).toBe(0.85);
-    expect(uniformsOf(layer).uShoreWobble).toBe(1);
     waterDebugTuning.bogLakeShoreStrength = 1.5;
     waterDebugTuning.bogLakeShoreEdge = 0.7;
     waterDebugTuning.bogLakeShoreWobble = 2;

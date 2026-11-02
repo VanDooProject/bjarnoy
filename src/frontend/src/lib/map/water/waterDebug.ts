@@ -279,7 +279,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeBlopDensity: 0.5,
   bogLakeBlopSize: 1,
   bogLakeShoreStrength: 1,
-  bogLakeShoreEdge: 0.85,
+  bogLakeShoreEdge: 0.8,
   bogLakeShoreWobble: 1,
   bogLakeFoamWidth: 0.04,
   bogLakeFoamSpacing: 15,
