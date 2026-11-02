@@ -9,7 +9,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HudNav from './HudNav.vue';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
-import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
+import { HUD_COMPACT_QUERY, HUD_NAV_ROOMY_QUERY } from '../../lib/breakpoints';
 import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
 import { useReportsStore } from '../../stores/reports';
@@ -414,7 +414,8 @@ describe('HudNav unclaimed-realm trigger label', () => {
 
 // The secondary destinations (Leaderboards, Messages, Reports, Alliance, Docs)
 // have no room inline next to the resource pills: they live in the avatar
-// menu at every desktop width, and only Settlement stays inline.
+// menu, and only Settlement stays inline (plus Docs on a wide bar — see the
+// placement tests at the end of this file).
 describe('HudNav secondary entries in the avatar menu', () => {
   const secondaryIds = ['leaderboards', 'messages', 'reports', 'guild', 'docs'];
 
@@ -505,5 +506,69 @@ describe('HudNav secondary entries in the avatar menu', () => {
     reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z' }] as never;
     await flushPromises();
     expect(wrapper.find('[data-testid="returning-player-trigger"] .badge').text()).toBe('1');
+  });
+});
+
+// Docs sits inline next to Settlement once the bar has room for it
+// (HUD_NAV_ROOMY_QUERY) and moves back into the avatar menu below that; the
+// language switcher lives in the dropdown menus, not in the bar.
+describe('HudNav Docs placement and language switcher', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubWide(wide: boolean) {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: wide && query === HUD_NAV_ROOMY_QUERY,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })),
+    );
+  }
+
+  async function mountLoggedIn() {
+    authenticate(useAuthStore());
+    usePlayerStore().hasFoundedSettlement = true;
+    const wrapper = await mountHudNav('/settlement');
+    await flushPromises();
+    return wrapper;
+  }
+
+  it('wide bar: Docs is an inline link next to Settlement and not a menu row', async () => {
+    stubWide(true);
+    const wrapper = await mountLoggedIn();
+    expect(wrapper.findAll('.hud-nav > .link').map((b) => b.text())).toEqual(['Settlement', 'Docs']);
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    expect(wrapper.find('[data-testid="menu-entry-docs"]').exists()).toBe(false);
+  });
+
+  it('narrower bar: Docs moves back into the avatar menu', async () => {
+    stubWide(false);
+    const wrapper = await mountLoggedIn();
+    expect(wrapper.findAll('.hud-nav > .link').map((b) => b.text())).toEqual(['Settlement']);
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    expect(wrapper.find('[data-testid="menu-entry-docs"]').exists()).toBe(true);
+  });
+
+  it('logged in: the language switcher is in the account menu, above Profile, and not in the bar', async () => {
+    const wrapper = await mountLoggedIn();
+    expect(wrapper.find('.hud-nav > .locale-switcher').exists()).toBe(false);
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    const menu = wrapper.get('[data-testid="account-menu"]');
+    expect(menu.find('[data-testid="menu-locale-row"] .locale-switcher').exists()).toBe(true);
+    const html = menu.html();
+    expect(html.indexOf('menu-locale-row')).toBeLessThan(html.indexOf('account-menu-profile'));
+  });
+
+  it('anonymous: the language switcher is in the returning-player menu', async () => {
+    const wrapper = await mountHudNav('/docs');
+    expect(wrapper.find('.hud-nav > .locale-switcher').exists()).toBe(false);
+    await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+    expect(wrapper.find('[data-testid="returning-player-menu"] [data-testid="menu-locale-row"]').exists()).toBe(true);
   });
 });

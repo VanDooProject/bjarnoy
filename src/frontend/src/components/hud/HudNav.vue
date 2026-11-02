@@ -18,7 +18,7 @@ import { useIsMobile } from '../../composables/useIsMobile';
 import { fadeChip } from '../../lib/hud/chipMotion';
 import { profileLocation } from '../../lib/profileRoute';
 import { DEMO_MODE } from '../../config';
-import LocaleSwitcher from '../LocaleSwitcher.vue';
+import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
 import ReturningPlayerMenu from './ReturningPlayerMenu.vue';
 import HudNavLink from './HudNavLink.vue';
@@ -201,7 +201,6 @@ watch(() => route.fullPath, closeAccountMenu);
     >
       {{ t(entry.labelKey) }}
     </HudNavLink>
-    <LocaleSwitcher />
     <!-- Logged in, the avatar opens a small account dropdown — Profile
          (issue #42) or Log out (player logout/login gate: `useLogout`
          clears the local identity and drops back to a full page reload).
@@ -243,6 +242,7 @@ watch(() => route.fullPath, closeAccountMenu);
           </HudNavLink>
           <div class="divider" role="separator" />
         </div>
+        <HudMenuLocaleRow />
         <HudNavLink :href="profileHref" role="menuitem" class="row" data-testid="account-menu-profile" @navigate="goToProfile">
           {{ t('hud.accountMenu.profile') }}
         </HudNavLink>

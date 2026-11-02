@@ -90,13 +90,13 @@ describe('useHudNavEntries', () => {
     });
   });
 
-  it('marks Settlement active on /settlement but not in world mode (/settlement#world)', async () => {
+  it('keeps Settlement active in world mode (/settlement#world) too', async () => {
     const { api, router } = await setup('/settlement');
     usePlayerStore().hasFoundedSettlement = true;
     login();
     expect(api.entries.value.find((e) => e.id === 'settlement')?.active).toBe(true);
     await router.push('/settlement#world');
-    expect(api.entries.value.find((e) => e.id === 'settlement')?.active).toBe(false);
+    expect(api.entries.value.find((e) => e.id === 'settlement')?.active).toBe(true);
   });
 
   it('marks the entry of the current route active', async () => {

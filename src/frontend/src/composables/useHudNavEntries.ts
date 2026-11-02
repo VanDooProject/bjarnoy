@@ -10,6 +10,8 @@ import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
 import { modalLocation } from '../lib/modalRoute';
 import { showsLandingLink } from './useLandingLink';
+import { useMediaQuery } from './useMediaQuery';
+import { HUD_NAV_ROOMY_QUERY } from '../lib/breakpoints';
 
 export type HudNavEntryId =
   | 'settlement'
@@ -36,6 +38,8 @@ export interface HudNavEntry {
 
 /** Entries that stay inline in the desktop bar; every other visible entry lives in the avatar menu. */
 export const HUD_NAV_PRIMARY_IDS: readonly HudNavEntryId[] = ['settlement'];
+/** Entries that also stay inline once the bar is wide enough (`HUD_NAV_ROOMY_QUERY`). */
+export const HUD_NAV_ROOMY_PRIMARY_IDS: readonly HudNavEntryId[] = [...HUD_NAV_PRIMARY_IDS, 'docs'];
 
 export function useHudNavEntries(): {
   /** Every entry the player may see right now, in display order. */
@@ -60,9 +64,9 @@ export function useHudNavEntries(): {
         id: 'settlement',
         labelKey: 'hud.nav.settlement',
         visible: player.hasFoundedSettlement,
-        // World mode is the same route with a `#world` hash (MapView.vue):
-        // the link brings the map back to the settlement.
-        active: route.name === 'settlement' && route.hash !== '#world',
+        // World mode is the same route with a `#world` hash (MapView.vue), so
+        // this stays active there too; the link zooms back to the settlement.
+        active: route.name === 'settlement',
         badge: 0,
         href: href('/settlement'),
         go: () => void router.push('/settlement'),
@@ -128,8 +132,10 @@ export function useHudNavEntries(): {
     return all.filter((e) => e.visible).map(({ visible: _visible, ...entry }) => entry);
   });
 
-  const primary = computed(() => entries.value.filter((e) => HUD_NAV_PRIMARY_IDS.includes(e.id)));
-  const secondary = computed(() => entries.value.filter((e) => !HUD_NAV_PRIMARY_IDS.includes(e.id)));
+  const roomy = useMediaQuery(HUD_NAV_ROOMY_QUERY);
+  const primaryIds = computed(() => (roomy.value ? HUD_NAV_ROOMY_PRIMARY_IDS : HUD_NAV_PRIMARY_IDS));
+  const primary = computed(() => entries.value.filter((e) => primaryIds.value.includes(e.id)));
+  const secondary = computed(() => entries.value.filter((e) => !primaryIds.value.includes(e.id)));
 
   return { entries, primary, secondary };
 }
