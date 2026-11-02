@@ -297,7 +297,7 @@ describe('ProfileView', () => {
         'Bar position',
         'Building animations',
         'Water motion',
-        'Wind on lakes',
+        'Lake motion',
         'Fog drift',
         'Menu animations',
         'Smooth edges',
@@ -422,7 +422,7 @@ describe('ProfileView', () => {
 
     it.each([
       ['water', 'Water motion', 'bjarnoy.motion.water'],
-      ['lakes', 'Wind on lakes', 'bjarnoy.motion.lakes'],
+      ['lakes', 'Lake motion', 'bjarnoy.motion.lakes'],
       ['fog', 'Fog drift', 'bjarnoy.motion.fog'],
       ['menus', 'Menu animations', 'bjarnoy.motion.hud'],
     ] as const)('the %s row persists its own setting and leaves the others alone', async (row, _label, key) => {

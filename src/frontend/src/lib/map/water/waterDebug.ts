@@ -87,6 +87,8 @@ export interface WaterDebugFlags {
   bogLakeSheen: boolean;
   /** Bog lakes: cat's paws, darker matte patches where the gust roughens the water. */
   bogLakeCatsPaws: boolean;
+  /** Bog lakes: small crescent ripples that pop up at random spots on the lake and fade again. Independent of the wind. */
+  bogLakeBlops: boolean;
 }
 
 export const waterDebugFlags: WaterDebugFlags = {
@@ -101,9 +103,10 @@ export const waterDebugFlags: WaterDebugFlags = {
   legacyWaveSquiggles: true,
   showWaterMask: false,
   legacyTileSplit: true,
-  bogLakeFoam: true,
-  bogLakeSheen: true,
-  bogLakeCatsPaws: true,
+  bogLakeFoam: false,
+  bogLakeSheen: false,
+  bogLakeCatsPaws: false,
+  bogLakeBlops: true,
 };
 
 /**
@@ -190,6 +193,12 @@ export interface WaterDebugTuning {
   bogLakeFoamStrength: number;
   bogLakeSheenStrength: number;
   bogLakeCatsPawsStrength: number;
+  /** Multiplier on the blops (1 is what ships). Only used while the flag is on. */
+  bogLakeBlopsStrength: number;
+  /** Chance (0..1) that a cell's cycle shows its blop: 1 is about one curl per hex at a time; 0.5 ships. */
+  bogLakeBlopDensity: number;
+  /** Size multiplier of the blop curls (1 = ring radius 9 world units). */
+  bogLakeBlopSize: number;
   /** Half-width of a foam line, as a share of the line spacing. */
   bogLakeFoamWidth: number;
   /** Distance between foam lines, in world units. */
@@ -225,6 +234,9 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeFoamStrength: 1,
   bogLakeSheenStrength: 1,
   bogLakeCatsPawsStrength: 1,
+  bogLakeBlopsStrength: 1,
+  bogLakeBlopDensity: 0.5,
+  bogLakeBlopSize: 1,
   bogLakeFoamWidth: 0.04,
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,

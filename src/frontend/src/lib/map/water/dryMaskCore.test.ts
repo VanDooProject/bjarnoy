@@ -239,6 +239,18 @@ describe('lakeWetMaskHalf', () => {
     expect(maskAt(mask, 20, 205)).toBe(255);
   });
 
+  it('is not wet under the frame\'s top layer (a lily pad or reed island drawn over the water), with a pixel of margin', () => {
+    const top = new Uint8Array(SOURCE_W * SOURCE_H * 4);
+    paint(top, { x: 60, y: 180, w: 30, h: 20 }, [70, 120, 60]);
+    const mask = lakeWetMaskHalf(lakeTile(), lakeTile(), top);
+    expect(maskAt(mask, 74, 190)).toBe(0);
+    // Grown by one source pixel around the pad, then the usual erosion: the next few pixels out are not fully wet yet.
+    expect(maskAt(mask, 90, 190)).toBeLessThan(255);
+    expect(maskAt(mask, 110, 190)).toBe(255);
+    // Without the top layer the same spot is water.
+    expect(maskAt(lakeWetMaskHalf(lakeTile(), lakeTile()), 74, 190)).toBe(255);
+  });
+
   it('keeps a pixel of margin off the bank: eroded, not grown', () => {
     const art = lakeTile();
     paint(art, { x: 100, y: 150, w: 100, h: 100 }, [60, 120, 50]);
