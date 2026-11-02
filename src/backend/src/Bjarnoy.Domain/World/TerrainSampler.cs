@@ -1067,7 +1067,7 @@ public sealed class TerrainSampler
     /// 2 driftwood, 3 boulders, 4 wreck, 5 whale bones, 6 upturned boat and cairn, 7 sand castle, 8 driftwood pile —
     /// mirrors the frontend's <c>SAND_VARIANT_WEIGHTS</c>.
     /// </summary>
-    public static readonly double[] SandVariantWeights = { 0.45, 0.11, 0.11, 0.11, 0.02, 0.02, 0.06, 0.01, 0.11 };
+    public static readonly double[] SandVariantWeights = { 0.62, 0.12, 0.08, 0.08, 0.01, 0.01, 0.02, 0.01, 0.05 };
 
     /// <summary>
     /// Weights of the living mountain's four shapes, by <see cref="MountainShape"/> index: Cone, Table, Saddleback, Corrie. The

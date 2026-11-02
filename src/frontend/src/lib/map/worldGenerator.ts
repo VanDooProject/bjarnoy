@@ -1118,7 +1118,7 @@ export const FOREST_VARIANT_WEIGHTS = [0.04, 0.84, 0.06, 0.06];
  * common one, the wreck, whale bones and sand castle are rare accents. A variant whose art is not packed yet falls back
  * to the plain frame (textures.ts `pickIndexedEntry`). Mirrors `TerrainSampler.SandVariantWeights`.
  */
-export const SAND_VARIANT_WEIGHTS = [0.45, 0.11, 0.11, 0.11, 0.02, 0.02, 0.06, 0.01, 0.11];
+export const SAND_VARIANT_WEIGHTS = [0.62, 0.12, 0.08, 0.08, 0.01, 0.01, 0.02, 0.01, 0.05];
 
 /** Wavelength (hexes) of the taiga/birch biome noise — mirrors `TerrainSampler.ForestBiomeScale`. */
 export const FOREST_BIOME_SCALE = 14;
