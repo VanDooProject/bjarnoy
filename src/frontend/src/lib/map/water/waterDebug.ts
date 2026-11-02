@@ -104,6 +104,8 @@ export interface WaterDebugFlags {
   bogLakeCatsPaws: boolean;
   /** Bog lakes: small crescent ripples that pop up at random spots on the lake and fade again. Independent of the wind. */
   bogLakeBlops: boolean;
+  /** Bog lakes: a near-white band along the lake's shore, its inner edge wobbled by slowly drifting noise so the band moves a little. Independent of the wind. */
+  bogLakeShore: boolean;
 }
 
 /** The on/off switches among the flags (the panel draws a checkbox for each). */
@@ -128,6 +130,7 @@ export const waterDebugFlags: WaterDebugFlags = {
   bogLakeSheen: false,
   bogLakeCatsPaws: false,
   bogLakeBlops: true,
+  bogLakeShore: true,
 };
 
 /**
@@ -227,6 +230,12 @@ export interface WaterDebugTuning {
   bogLakeBlopDensity: number;
   /** Size multiplier of the blop curls (1 = ring radius 9 world units). */
   bogLakeBlopSize: number;
+  /** Multiplier on the shore band (1 is what ships). Only used while the flag is on. */
+  bogLakeShoreStrength: number;
+  /** Level of the blurred lake mask (0..1) at the band's inner edge: higher puts the edge nearer the shore, lower pushes the band into the water. */
+  bogLakeShoreEdge: number;
+  /** Multiplier on how far the shore band's inner edge wobbles and breathes (0 = a steady edge). */
+  bogLakeShoreWobble: number;
   /** Half-width of a foam line, as a share of the line spacing. */
   bogLakeFoamWidth: number;
   /** Distance between foam lines, in world units. */
@@ -269,6 +278,9 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeBlopsStrength: 1,
   bogLakeBlopDensity: 0.5,
   bogLakeBlopSize: 1,
+  bogLakeShoreStrength: 1,
+  bogLakeShoreEdge: 0.8,
+  bogLakeShoreWobble: 1,
   bogLakeFoamWidth: 0.04,
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,

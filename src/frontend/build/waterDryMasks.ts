@@ -164,6 +164,7 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
 
   const seaCells: MaskCell[] = [];
   const lakeCells: MaskCell[] = [];
+  const lakeShoreCells: MaskCell[] = [];
   for (const [name, { canvas, trim }] of bases) {
     // A lake top layer only feeds its base frame's wet mask; it is no frame of its own.
     if (LAKE_TOP_FRAME_RE.test(name)) continue;
@@ -175,6 +176,8 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
       const rect = cellSourceRect(trim);
       const top = bases.get(name.replace(/_base$/, ''))?.canvas;
       lakeCells.push({ name, rect, mask: cropHalf(lakeWetMaskHalf(canvas, reference, top), rect) });
+      // The same without the top layer cut out: the shore band's water, whose only edge is the land shore (no rims round lily pads or reed islands).
+      lakeShoreCells.push({ name, rect, mask: cropHalf(lakeWetMaskHalf(canvas, reference), rect) });
       continue;
     }
     if (REFERENCE_FRAME_RE.test(name)) continue;
@@ -186,8 +189,8 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
     seaCells.push({ name, rect, mask: cropHalf(dryMaskHalf(canvas, references[best.index]), rect) });
   }
 
-  const [sea, lake] = await Promise.all([packMaskAtlas(seaCells), packMaskAtlas(lakeCells)]);
-  return { ...sea, lake };
+  const [sea, lake, lakeShore] = await Promise.all([packMaskAtlas(seaCells), packMaskAtlas(lakeCells), packMaskAtlas(lakeShoreCells)]);
+  return { ...sea, lake, lakeShore };
 }
 
 /** Computes every river water mask (river, bog creek and river building frames with painted river water) and packs them into one PNG. */

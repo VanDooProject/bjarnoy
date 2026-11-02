@@ -1888,6 +1888,10 @@ export class HexMapRenderer {
   // Bog lakes' gust (settlement mode only): the lake wet masks drawn over the lakes' bounding rect, and the mesh that shades them.
   private bogLakeLayer: BogLakeLayer;
   private bogLakeMask = new WaterDryLayer('lake');
+  // The shore band's water (bogLakeShader.ts): the lakes without their lily pads and reed islands cut out, so only the land shore gets the
+  // band, and the lake mouths' creek water (river masks; plain lake frames have none), so the line where a creek meets the lake is no shore.
+  private bogLakeShoreWater = new WaterDryLayer('lakeShore');
+  private bogLakeMouthWater = new WaterDryLayer('river');
   private bogLakeEntries: DryEntry[] = [];
   private bogLakeLoadStarted = false;
   // The world rect the current water mask was baked over — `null` until the
@@ -4093,20 +4097,22 @@ export class HexMapRenderer {
     if (this.options.mode !== 'settlement' || !renderer) return;
     const bounds = entriesWorldBounds(this.bogLakeEntries, TILE_W);
     if (!bounds) {
-      this.bogLakeLayer.setLake(null, null);
+      this.bogLakeLayer.setLake(null, null, null);
       return;
     }
-    if (!this.bogLakeMask.ready) {
+    if (!this.bogLakeMask.ready || !this.bogLakeShoreWater.ready || !this.bogLakeMouthWater.ready) {
       if (!this.bogLakeLoadStarted) {
         this.bogLakeLoadStarted = true;
-        this.bogLakeMask.load().then(
+        Promise.all([this.bogLakeMask.load(), this.bogLakeShoreWater.load(), this.bogLakeMouthWater.load()]).then(
           () => this.refreshBogLake(),
           (err) => console.warn('HexMapRenderer: bog lake masks failed to load', err),
         );
       }
       return;
     }
-    this.bogLakeLayer.setLake(this.bogLakeMask.draw(renderer, bounds, this.bogLakeEntries, TILE_W), bounds);
+    const lake = this.bogLakeMask.draw(renderer, bounds, this.bogLakeEntries, TILE_W);
+    const shoreWater = [this.bogLakeShoreWater, this.bogLakeMouthWater].map((layer) => layer.draw(renderer, bounds, this.bogLakeEntries, TILE_W));
+    this.bogLakeLayer.setLake(renderer, lake, bounds, shoreWater.filter((t) => t !== null));
   }
 
   /**
@@ -6390,7 +6396,7 @@ export class HexMapRenderer {
     this.riverFlowEntries = [];
     if (mode === 'world') {
       this.waterLayer.setDryTexture(null);
-      this.bogLakeLayer.setLake(null, null);
+      this.bogLakeLayer.setLake(null, null, null);
       this.waterLayer.setRiverFlowTexture(null);
     }
     // Reinsert every layer in the new mode's order — addChild only moves a
@@ -6442,6 +6448,8 @@ export class HexMapRenderer {
     this.waterDry.destroy();
     this.riverFlow.destroy();
     this.bogLakeMask.destroy();
+    this.bogLakeShoreWater.destroy();
+    this.bogLakeMouthWater.destroy();
     this.bogLakeLayer.destroy();
     // The cached bog edge contexts are only borrowed by the pooled Graphics, so the stage teardown below won't free them.
     this.clearBogEdgeCache();

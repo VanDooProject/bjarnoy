@@ -252,6 +252,8 @@ export interface MaskAtlasData {
  */
 export interface WaterDryMasksData extends MaskAtlasData {
   lake: MaskAtlasData;
+  /** The lake wet masks without the top layer (lily pads, reed islands) cut out: the shore band's water (bogLakeShader.ts). */
+  lakeShore: MaskAtlasData;
 }
 
 /** A frame's trim rect on the source canvas (the atlas's `spriteSourceSize`). */
