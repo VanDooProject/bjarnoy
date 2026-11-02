@@ -1,39 +1,39 @@
 <script setup lang="ts">
 // The Land movement docs page's example map: a small hand-placed island with a dummy army's route over it, drawn by the game's own
-// HexMapRenderer through a StaticWorldModel (like BogIsland.vue and WallExample.vue). The route is the one the real pathfinder finds
+// HexMapRenderer through a StaticWorldModel (like BogIsland.vue and WallExample.vue), with the realm claimed by the model itself. The route is the one the real pathfinder finds
 // (lib/docs/landMovementExample.ts) and is drawn by the renderer's army overlay, the same line and flag a marching army gets on the
 // map. Hovering a hex names it. Below the map every step of the route is listed with the time a Spearman needs for it.
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
-import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import { coordKey } from '../../lib/hex/coords';
 import {
-  LAND_EXAMPLE_RIVERS,
+  LAND_EXAMPLE_PLAYER,
   LAND_EXAMPLE_START,
   buildLandExampleTiles,
   landExampleContext,
   landExampleKindOf,
   landExampleRoute,
+  landExampleWorld,
   type LandExampleKind,
 } from '../../lib/docs/landMovementExample';
 import { formatMinutes, minutesPerHex } from '../../lib/docs/landMovementDocs';
-import { terrainName, unitName } from '../../i18n/catalogueNames';
+import { buildingName, terrainName, unitName } from '../../i18n/catalogueNames';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const units = useUnitCatalogueStore();
 
-const tiles = buildLandExampleTiles();
-const world = new StaticWorldModel(tiles);
-world.setRivers(LAND_EXAMPLE_RIVERS);
+const world = landExampleWorld();
+const tiles = buildLandExampleTiles(world);
 const ctx = landExampleContext(tiles);
-const route = landExampleRoute();
+const route = landExampleRoute(tiles);
 
 const TERRAINS = new Set(['grass', 'forest', 'bog', 'mountain', 'sand']);
 function kindName(kind: LandExampleKind): string {
+  if (kind === 'tower') return buildingName('tower');
   return TERRAINS.has(kind) ? terrainName(kind) : t(`docs.landMovement.example.names.${kind}`);
 }
 
@@ -43,6 +43,7 @@ const canvas = ref<HTMLCanvasElement | null>(null);
 
 const { renderer } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
+  playerId: LAND_EXAMPLE_PLAYER,
   previewCenter: { q: 2, r: 0 },
   onHoverChange: (info: HoverInfo | null) => {
     hovered.value = info;
