@@ -351,8 +351,15 @@ export interface UnitStackResponse {
 export interface TrainingOrderResponse {
   id: string;
   unit: string;
+  /** The building hex that trains this part; one building trains one part at a time, the rest wait behind it. */
+  q: number;
+  r: number;
   count: number;
   completedCount: number;
+  /** Game instant the part starts training — in the past (and `startsInSeconds` 0) once it runs. */
+  startsAtGameTime: string;
+  /** Seconds until the part starts: 0 once started, null while the world clock is frozen. */
+  startsInSeconds: number | null;
   completesAtGameTime: string;
   completesInSeconds: number | null;
   /** The batch's full duration, poll-invariant — see issue #99. */
@@ -630,6 +637,15 @@ export interface GrantRuneRequest {
 export interface TrainUnitsRequest {
   unit: string;
   count: number;
+  /** The building hex that trains (or the one the split starts from). */
+  q: number;
+  r: number;
+  /** `here`: all in this building; `evenly`/`fastest`: spread over every building of its type ('fastest' is premium-only). */
+  split: 'here' | 'evenly' | 'fastest';
+}
+
+export interface TrainUnitsResponse {
+  orders: TrainingOrderResponse[];
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AuthContracts.cs.

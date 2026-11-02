@@ -89,8 +89,8 @@ import type {
   TradeAcceptResponse,
   TradeOfferResponse,
   TradeReportResponse,
-  TrainingOrderResponse,
   TrainUnitsRequest,
+  TrainUnitsResponse,
   UnitDefinitionResponse,
   UpdateAdminUserRequest,
   UpdateBioRequest,
@@ -376,7 +376,7 @@ export const api = {
       headers: ownerHeader(ownerId),
     }),
   trainUnits: (settlementId: string, body: TrainUnitsRequest, ownerId?: string) =>
-    request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
+    request<TrainUnitsResponse>(`/settlements/${settlementId}/units`, {
       method: 'POST',
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),

@@ -161,7 +161,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'bridge':
       return 4;
     case 'siegeworkshop':
-      return 5;
+      return 20;
     default:
       return 0;
   }

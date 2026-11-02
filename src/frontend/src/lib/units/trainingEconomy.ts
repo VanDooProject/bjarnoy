@@ -1,8 +1,9 @@
 // Shared by TrainingModal.vue (and its own tests) so the cost×count,
 // availability and affordability logic is unit-testable without mounting
 // the component/Pinia stores — same reasoning as lib/map/buildingEconomy.ts.
-import type { ResourceLine, UnitDefinitionResponse } from '../../api/types';
+import type { PlacedBuildingResponse, ResourceLine, TrainUnitsRequest, UnitDefinitionResponse } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
+import { isOutsideRealm } from '../map/realmDecay';
 
 const RESOURCE_KEYS: (keyof ResourceLine)[] = ['wood', 'stone', 'food', 'iron'];
 
@@ -48,6 +49,57 @@ export function isUnitAvailable(
   return (
     !definition.requiredUnitType || isUnitAvailable(definition.requiredUnitType, longhouseLevel, byType, buildingLevelOf)
   );
+}
+
+/** Share of the per-unit training time a building takes off per level (docs/design: -1% per level, -20% at level 20). */
+export const TRAINING_TIME_REDUCTION_PER_LEVEL = 0.01;
+
+/** Mirrors the backend's cap on the parts one building trains at a time (the running one plus those waiting). */
+export const MAX_TRAINING_PARTS_PER_BUILDING = 5;
+
+/** Where a training order goes: one building, or spread over all of the type — evenly by count or by time. */
+export type TrainingSplit = TrainUnitsRequest['split'];
+
+/** The factor a building at `level` scales a unit's training time by: `1 - 0.01 * level`. */
+export function trainingTimeFactor(level: number): number {
+  return 1 - TRAINING_TIME_REDUCTION_PER_LEVEL * Math.max(0, level);
+}
+
+/** The training bonus of a building at `level` in whole percent (7 at level 7) - the inverse of the factor. */
+export function trainingBonusPercent(level: number): number {
+  return Math.round((1 - trainingTimeFactor(level)) * 100);
+}
+
+/** One unit's training time in seconds in a building of `level`. */
+export function unitTrainingSeconds(definition: Pick<UnitDefinitionResponse, 'trainingSeconds'>, level: number): number {
+  return definition.trainingSeconds * trainingTimeFactor(level);
+}
+
+/**
+ * How long `count` units take when spread over buildings of the given `levels`, as an estimate that ignores what each building
+ * already has queued: `evenly` hands each building the same share (the first ones get the remainder), `fastest` splits by speed so
+ * all parts finish together. Used for the duration the training window shows in "Distribute" mode.
+ */
+export function distributedTrainingSeconds(
+  definition: Pick<UnitDefinitionResponse, 'trainingSeconds'>,
+  count: number,
+  levels: number[],
+  split: Exclude<TrainingSplit, 'here'>,
+): number {
+  if (levels.length === 0 || count <= 0) return 0;
+  const perUnit = levels.map((level) => unitTrainingSeconds(definition, level));
+  if (split === 'fastest') {
+    const rate = perUnit.reduce((sum, seconds) => sum + 1 / seconds, 0);
+    return count / rate;
+  }
+  const base = Math.floor(count / levels.length);
+  const extra = count % levels.length;
+  return Math.max(...perUnit.map((seconds, i) => (base + (i < extra ? 1 : 0)) * seconds));
+}
+
+/** The settlement's buildings of `type` that can train: standing (level 1+) and inside the realm (a building outside it has no function). */
+export function trainingBuildingsOfType(buildings: PlacedBuildingResponse[], type: string): PlacedBuildingResponse[] {
+  return buildings.filter((b) => b.type === type && b.level >= 1 && !isOutsideRealm(b));
 }
 
 /** `count` batches of `seconds` each, formatted as `Hh Mm`/`Mm Ss`/`Ss`. */

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-// Issue #40 phase 1: "build units in longhouse" — opened from SettlementView
-// the same way BuildingModal is (a ring action), but as its own modal since
-// training isn't a per-hex build/upgrade action: it lists the whole unit
-// roster at once with a quantity picker, rather than BuildingModal's
-// single-target cost/duration/action layout.
+// A building's training window, opened from the building's ring ('train'
+// action) the same way BuildingModal is: training belongs to a building (it
+// trains one part at a time, the rest wait behind it), so this lists only the
+// units that building type trains, with a quantity picker per unit, rather
+// than BuildingModal's single-target cost/duration/action layout. With several
+// buildings of the type the order can also be distributed over all of them.
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
@@ -11,19 +12,29 @@ import { buildingName, unitName } from '../../i18n/catalogueNames';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import {
+  MAX_TRAINING_PARTS_PER_BUILDING,
   canAfford,
+  distributedTrainingSeconds,
   formatCostLine,
   formatTrainingDuration,
   isUnitAvailable,
   totalTrainingCost,
+  trainingBonusPercent,
+  trainingBuildingsOfType,
+  unitTrainingSeconds,
+  type TrainingSplit,
 } from '../../lib/units/trainingEconomy';
 import { hasShorelineInTerritory } from '../../lib/map/shoreline';
 
+/** The building whose window this is: its type picks the units, its hex is where the order goes. */
+const props = defineProps<{ building: { type: string; q: number; r: number; level: number } }>();
 const emit = defineEmits<{ close: []; trained: [] }>();
 
 const world = useWorldStore();
+const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -43,6 +54,22 @@ function setQuantity(type: string, value: string) {
 }
 
 const longhouseLevel = computed(() => world.hud.level);
+
+// The settlement's functioning buildings of this type (standing, inside the realm) — what "Distribute" spreads an order over.
+const siblings = computed(() => trainingBuildingsOfType(world.hud.buildings, props.building.type));
+// With only one such building there is nothing to choose, so no selector is shown.
+const canDistribute = computed(() => siblings.value.length > 1);
+const mode = ref<'here' | 'distribute'>('here');
+const distributeSplit = ref<'evenly' | 'fastest'>('evenly');
+const split = computed<TrainingSplit>(() => (canDistribute.value && mode.value === 'distribute' ? distributeSplit.value : 'here'));
+// Fastest splits by time — premium only; shown locked for everyone else (docs/design/premium-gating-ux.md).
+const fastestLocked = computed(() => !auth.isPremium);
+
+// How many parts this building already holds (the running one plus those waiting), against its cap.
+const partsHere = computed(
+  () => world.hud.trainingQueue.filter((o) => o.q === props.building.q && o.r === props.building.r).length,
+);
+const fullHere = computed(() => split.value === 'here' && partsHere.value >= MAX_TRAINING_PARTS_PER_BUILDING);
 
 // Issue #40 phase 6 §4: whether this settlement's own claimed territory
 // touches the sea — Ship-class units (Karve, Longship) need it, mirroring
@@ -85,11 +112,10 @@ function buildingLevelOf(buildingType: string): number {
 }
 
 const rows = computed(() =>
-  catalogue.definitions.map((definition) => {
+  catalogue.definitions.filter((d) => d.requiredBuildingType === props.building.type).map((definition) => {
     const count = quantityFor(definition.type);
     const cost = totalTrainingCost(definition, count);
     const meetsLevel = longhouseLevel.value >= definition.requiredLonghouseLevel;
-    const hasBuilding = buildingLevelOf(definition.requiredBuildingType) >= 1;
     const meetsPrerequisites = isUnitAvailable(definition.type, longhouseLevel.value, catalogue.byType, buildingLevelOf);
     const needsCoast = definition.class === 'ship';
     const coastal = isCoastal.value !== false; // unknown (null) treated as coastal, see isCoastal's comment
@@ -105,21 +131,22 @@ const rows = computed(() =>
       count,
       cost,
       costText: formatCostLine(cost),
-      durationText: formatTrainingDuration(definition.trainingSeconds, count),
+      durationText: formatTrainingDuration(
+        split.value === 'here'
+          ? unitTrainingSeconds(definition, props.building.level) * count
+          : distributedTrainingSeconds(definition, count, siblings.value.map((b) => b.level), split.value),
+        1,
+      ),
       available,
       meetsLevel,
-      // Only true once the longhouse level itself is already met — a
-      // missing training building is a more specific, more actionable hint
-      // than "and requires X level" when both happen to be true at once.
-      needsBuildingReason: meetsLevel && !hasBuilding,
       // Only true once the *other* requirements are already met — no point
       // telling the player "also, no shoreline" on a unit whose longhouse
-      // level or training building they haven't reached yet either.
-      needsCoastReason: meetsLevel && hasBuilding && needsCoast && !coastal,
+      // level they haven't reached yet either.
+      needsCoastReason: meetsLevel && needsCoast && !coastal,
       affordable,
       // Training only works against the live backend; demo mode has no
       // TrainingOrder/garrison concept in the local WorldModel yet.
-      trainable: available && affordable && !DEMO_MODE,
+      trainable: available && affordable && !DEMO_MODE && !fullHere.value,
     };
   }),
 );
@@ -139,7 +166,7 @@ async function train(type: string, count: number) {
   errorText.value = null;
   training.value = type;
   try {
-    await world.trainUnitsLive(type, count);
+    await world.trainUnitsLive(type, count, props.building, split.value);
     emit('trained');
   } catch (err) {
     errorText.value = apiErrorMessage(err, t('hud.trainingModal.trainingFailed'));
@@ -154,8 +181,10 @@ async function train(type: string, count: number) {
     <div class="modal panel">
       <div class="head">
         <div>
-          <div class="name">{{ t('hud.trainingModal.title') }}</div>
-          <div class="sub">{{ t('hud.trainingModal.subtitle', { level: longhouseLevel }) }}</div>
+          <div class="name">{{ buildingName(building.type) }}</div>
+          <div class="sub">
+            {{ t('hud.trainingModal.subtitle', { level: building.level, percent: trainingBonusPercent(building.level) }) }}
+          </div>
         </div>
         <button class="close" @click="emit('close')">{{ t('hud.trainingModal.close') }}</button>
       </div>
@@ -166,6 +195,63 @@ async function train(type: string, count: number) {
       <p v-if="errorText" class="desc error-note">{{ errorText }}</p>
       <p v-if="reservedTotal > 0" class="desc reserved-note">
         {{ t('hud.trainingModal.reservedNote', { amount: reservedTotal.toFixed(0) }) }}
+      </p>
+
+      <div v-if="canDistribute" class="selectors">
+        <div class="selector" role="group" :aria-label="t('hud.trainingModal.trainIn')">
+          <span class="selector-label">{{ t('hud.trainingModal.trainIn') }}</span>
+          <button
+            type="button"
+            class="seg"
+            :class="{ active: mode === 'here' }"
+            :aria-pressed="mode === 'here'"
+            @click="mode = 'here'"
+          >
+            {{ t('hud.trainingModal.thisBuilding') }}
+          </button>
+          <button
+            type="button"
+            class="seg"
+            :class="{ active: mode === 'distribute' }"
+            :aria-pressed="mode === 'distribute'"
+            @click="mode = 'distribute'"
+          >
+            {{ t('hud.trainingModal.distribute', { count: siblings.length }) }}
+          </button>
+        </div>
+        <div v-if="mode === 'distribute'" class="selector" role="group" :aria-label="t('hud.trainingModal.splitLabel')">
+          <span class="selector-label">{{ t('hud.trainingModal.splitLabel') }}</span>
+          <button
+            type="button"
+            class="seg"
+            :class="{ active: distributeSplit === 'evenly' }"
+            :aria-pressed="distributeSplit === 'evenly'"
+            @click="distributeSplit = 'evenly'"
+          >
+            {{ t('hud.trainingModal.evenly') }}
+          </button>
+          <button
+            type="button"
+            class="seg fastest"
+            :class="{ active: distributeSplit === 'fastest' }"
+            :aria-pressed="distributeSplit === 'fastest'"
+            :disabled="fastestLocked"
+            @click="distributeSplit = 'fastest'"
+          >
+            <span v-if="fastestLocked" aria-hidden="true">🔒 </span>{{ t('hud.trainingModal.fastest') }}
+          </button>
+        </div>
+        <i18n-t
+          v-if="mode === 'distribute' && fastestLocked"
+          keypath="hud.trainingModal.fastestPremium"
+          tag="p"
+          class="desc premium-note"
+        >
+          <template #premium><strong>{{ t('hud.trainingModal.premium') }}</strong></template>
+        </i18n-t>
+      </div>
+      <p v-if="fullHere" class="desc error-note">
+        {{ t('hud.trainingModal.full', { used: partsHere, max: MAX_TRAINING_PARTS_PER_BUILDING }) }}
       </p>
 
       <div class="roster">
@@ -180,7 +266,6 @@ async function train(type: string, count: number) {
             <div class="unit-stats">
               {{ t('hud.trainingModal.attackDefense', { attack: row.definition.attack, defense: row.definition.defense }) }}
               <span v-if="row.needsCoastReason"> · {{ t('hud.trainingModal.requiresCoastal') }}</span>
-              <span v-else-if="row.needsBuildingReason"> · {{ t('hud.trainingModal.requiresBuilding', { building: buildingName(row.definition.requiredBuildingType) }) }}</span>
               <span v-else-if="!row.meetsLevel"> · {{ t('hud.trainingModal.requiresLonghouse', { level: row.definition.requiredLonghouseLevel }) }}<template v-if="row.definition.requiredUnitType"> {{ t('hud.trainingModal.requiresUnit', { unit: unitName(row.definition.requiredUnitType) }) }}</template></span>
             </div>
             <div class="unit-cost" :class="{ unaffordable: row.available && !row.affordable }">
@@ -287,6 +372,47 @@ async function train(type: string, count: number) {
   color: #e08a8a;
 }
 .reserved-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.selectors {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.selector {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.selector-label {
+  flex: none;
+  min-width: 64px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.seg {
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.seg.active {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.seg:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.premium-note {
+  margin: 0;
   color: var(--muted);
   font-size: 12px;
 }

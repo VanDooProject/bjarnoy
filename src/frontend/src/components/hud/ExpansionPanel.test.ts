@@ -28,6 +28,7 @@ const api = vi.hoisted(() => ({
   listMySettlements: vi.fn(),
   getUnitCatalogue: vi.fn(),
   dispatchArmy: vi.fn(),
+  trainUnits: vi.fn(),
 }));
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
@@ -59,6 +60,7 @@ describe('ExpansionPanel provisions', () => {
     api.getSettlementArmies.mockResolvedValue([]);
     api.listMySettlements.mockResolvedValue([]);
     api.dispatchArmy.mockResolvedValue({});
+    api.trainUnits.mockResolvedValue({ orders: [] });
   });
 
   it('defaults to the five settlers combined carry capacity and shows it as the max', async () => {
@@ -82,5 +84,18 @@ describe('ExpansionPanel provisions', () => {
       's1',
       expect.objectContaining({ provisions: settlerCarry * 5, mission: 'found' }),
     );
+  });
+
+  it('trains the five settlers in a cart workshop, and cannot without one', async () => {
+    const wrapper = await mountPanel();
+    const trainButton = () => wrapper.findAll('button.expansion-button').find((b) => b.text().includes('settlers'))!;
+    expect(trainButton().attributes('disabled')).toBeDefined();
+
+    useWorldStore().hud.buildings = [{ type: 'cartworkshop', q: 4, r: -1, level: 2 }];
+    await wrapper.vm.$nextTick();
+    expect(trainButton().attributes('disabled')).toBeUndefined();
+    await trainButton().trigger('click');
+    await flushPromises();
+    expect(api.trainUnits).toHaveBeenCalledWith('s1', { unit: 'settler', count: 5, q: 4, r: -1, split: 'evenly' });
   });
 });

@@ -22,6 +22,7 @@ import type {
   WorldMovementResponse,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
+import type { TrainingSplit } from '../lib/units/trainingEconomy';
 import { useAuthStore } from './auth';
 import { usePlayerStore } from './player';
 import type { AxialCoord } from '../lib/hex/coords';
@@ -881,13 +882,14 @@ export const useWorldStore = defineStore('world', {
     /**
      * Live mode: queues a training batch against the backend, charging its
      * cost immediately — mirrors `queueBuildLive` above, including the
-     * ownership header. Throws `ApiError` on rejection (e.g. not enough
-     * resources, longhouse too low, training queue full); callers decide how
-     * to surface that.
+     * ownership header. The building at `at` trains it (`split: 'here'`) or the
+     * order is spread over every building of its type. Throws `ApiError` on
+     * rejection (e.g. not enough resources, that building's parts full,
+     * `fastest` without premium); callers decide how to surface that.
      */
-    async trainUnitsLive(unit: string, count: number) {
+    async trainUnitsLive(unit: string, count: number, at: { q: number; r: number }, split: TrainingSplit) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      await api.trainUnits(this.selectedSettlementId, { unit, count }, this.ownerId ?? undefined);
+      await api.trainUnits(this.selectedSettlementId, { unit, count, q: at.q, r: at.r, split }, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
     },
     /**

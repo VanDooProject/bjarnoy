@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { UnitDefinitionResponse } from '../../api/types';
 import {
   canAfford,
+  distributedTrainingSeconds,
   formatCostLine,
   formatTrainingDuration,
   isUnitAvailable,
   totalTrainingCost,
+  trainingBonusPercent,
+  trainingTimeFactor,
+  unitTrainingSeconds,
 } from './trainingEconomy';
 
 function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): UnitDefinitionResponse {
@@ -128,5 +132,44 @@ describe('formatCostLine', () => {
 
   it('returns an empty string when every resource is zero', () => {
     expect(formatCostLine({ wood: 0, stone: 0, food: 0, iron: 0 })).toBe('');
+  });
+});
+
+describe('trainingTimeFactor', () => {
+  it('takes 1% off per building level, 20% at level 20', () => {
+    expect(trainingTimeFactor(0)).toBe(1);
+    expect(trainingTimeFactor(1)).toBeCloseTo(0.99);
+    expect(trainingTimeFactor(7)).toBeCloseTo(0.93);
+    expect(trainingTimeFactor(20)).toBeCloseTo(0.8);
+  });
+
+  it('reads as whole percent for the building header', () => {
+    expect(trainingBonusPercent(0)).toBe(0);
+    expect(trainingBonusPercent(7)).toBe(7);
+    expect(trainingBonusPercent(20)).toBe(20);
+  });
+
+  it('scales a unit\'s catalogue time by the building level', () => {
+    expect(unitTrainingSeconds(unit({ type: 'thrall', trainingSeconds: 100 }), 10)).toBeCloseTo(90);
+  });
+});
+
+describe('distributedTrainingSeconds', () => {
+  const thrall = unit({ type: 'thrall', trainingSeconds: 100 });
+
+  it('evenly: the building with the larger share and the lower level finishes last', () => {
+    // 5 units over levels 0 and 20: shares 3 and 2 -> max(3 * 100, 2 * 80)
+    expect(distributedTrainingSeconds(thrall, 5, [0, 20], 'evenly')).toBeCloseTo(300);
+  });
+
+  it('fastest: parts finish together, faster buildings take more', () => {
+    // rates 1/100 + 1/80 per second -> 10 units take 10 / 0.0225
+    expect(distributedTrainingSeconds(thrall, 10, [0, 20], 'fastest')).toBeCloseTo(10 / (1 / 100 + 1 / 80));
+  });
+
+  it('fastest is never slower than evenly', () => {
+    expect(distributedTrainingSeconds(thrall, 7, [0, 20], 'fastest')).toBeLessThanOrEqual(
+      distributedTrainingSeconds(thrall, 7, [0, 20], 'evenly'),
+    );
   });
 });

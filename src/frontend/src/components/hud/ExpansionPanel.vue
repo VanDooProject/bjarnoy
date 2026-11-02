@@ -25,6 +25,7 @@ import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { SETTLERS_PER_FOUNDING } from '../../lib/founding';
+import { trainingBuildingsOfType } from '../../lib/units/trainingEconomy';
 import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
 
 const world = useWorldStore();
@@ -96,12 +97,25 @@ onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
 
+// Settlers are trained in a building now (the settler's `requiredBuildingType`); the button spreads the five over every
+// functioning one of that type, starting from the first.
+const settlerBuildings = computed(() =>
+  trainingBuildingsOfType(world.hud.buildings, unitCatalogue.byType['settler']?.requiredBuildingType ?? ''),
+);
+
 async function trainSettlers() {
-  if (!world.selectedSettlementId) return;
+  const site = settlerBuildings.value[0];
+  if (!world.selectedSettlementId || !site) return;
   busy.value = true;
   error.value = null;
   try {
-    await api.trainUnits(world.selectedSettlementId, { unit: 'settler', count: SETTLERS_PER_FOUNDING });
+    await api.trainUnits(world.selectedSettlementId, {
+      unit: 'settler',
+      count: SETTLERS_PER_FOUNDING,
+      q: site.q,
+      r: site.r,
+      split: 'evenly',
+    });
     await refresh();
   } catch (e) {
     error.value = apiErrorMessage(e, t('hud.expansionPanel.trainingFailed'));
@@ -211,7 +225,7 @@ watch(visible, (isVisible) => {
       <span>{{ t('hud.expansionPanel.settlersInGarrison') }}</span>
       <strong>{{ settlerCount }}</strong>
     </div>
-    <button type="button" class="expansion-button" :disabled="busy" @click="trainSettlers">
+    <button type="button" class="expansion-button" :disabled="busy || settlerBuildings.length === 0" @click="trainSettlers">
       {{ t('hud.expansionPanel.trainSettlers') }}
     </button>
 
