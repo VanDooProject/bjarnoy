@@ -7,11 +7,13 @@ import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './lib/map/wat
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
 import { installHudMotionAttribute } from './lib/perf/hudMotionAttribute';
 import { zoomTransitionTuning } from './lib/map/zoomTransition';
+import { installChunkErrorHandling } from './lib/appUpdate';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
 import './style.css';
 
 initLocale();
+installChunkErrorHandling(router);
 installHudMotionAttribute();
 
 const app = createApp(App);
