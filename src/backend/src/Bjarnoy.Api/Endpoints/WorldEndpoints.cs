@@ -509,6 +509,7 @@ public static class WorldEndpoints
         PlotReservationService reservations,
         SettlementService settlements,
         RealmDirectory realms,
+        GameDbContext db,
         CancellationToken cancellationToken)
     {
         var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
@@ -574,11 +575,13 @@ public static class WorldEndpoints
         var callerUserId = Guid.TryParse(callerIdClaim, out var parsedCallerId) ? parsedCallerId : (Guid?)null;
 
         var islandSettlementEntities = await settlements.GetForIslandAsync(suggestion.IslandId, cancellationToken);
+        var labels = await LinkedRealmNames.ForAsync(db, worldId, islandSettlementEntities, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
             .. islandSettlementEntities.Select(s => SettlementSummary.From(
                 s,
-                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId))),
+                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId),
+                labels[s.Id])),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(

@@ -90,7 +90,7 @@
     "towerLevel0": "Taken"
   },
   "ringMenu": {
-    "shrineLimitLock": "This settlement already has a shrine",
+    "shrineLimitLock": "Your realm already has a shrine",
     "storageHouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
     "palisadeLock": {
       "branch": "A wall never branches: this hex would get three wall neighbours",

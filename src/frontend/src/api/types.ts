@@ -300,6 +300,10 @@ export interface ConstructionResponse {
   maxWaitingOrders: number;
   waitingOrders: number;
   maxOrdersPerHex: number;
+  /** How many towers the realm may hold: the settlement's limit, or a linked realm's members' limits added up. */
+  towerLimit: number;
+  /** The towers counting against `towerLimit` (connected standing plus queued, the whole linked realm's) — what a new tower is checked against. */
+  towersHeld: number;
 }
 
 export interface PlacedBuildingResponse {
@@ -420,6 +424,10 @@ export interface RealmMemberResponse {
 
 export interface SettlementResponse {
   id: string;
+  /** The oldest member of the linked realm this settlement belongs to; equals `id` when it is the oldest or unlinked. */
+  realmId: string;
+  /** Every member of the linked realm, oldest first, including this settlement. */
+  linkedMemberIds: string[];
   worldId: string;
   islandId: string;
   name: string;
@@ -449,6 +457,8 @@ export interface SettlementResponse {
 
 export interface SettlementSummary {
   id: string;
+  /** The oldest member of the linked realm; `name` is that member's (the realm's) name. */
+  realmId: string;
   name: string;
   ownerName: string;
   q: number;

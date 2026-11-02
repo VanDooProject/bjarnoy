@@ -66,18 +66,18 @@ describe('storageHouseLock', () => {
 });
 
 describe('towerLimitLock', () => {
-  it('explains the limit once the settlement holds as many towers as its longhouse level allows', () => {
-    expect(towerLimitLock(1, 3)).toBe('Tower limit reached (1/1) — level up the longhouse for more');
-    expect(towerLimitLock(2, 8)).toBe('Tower limit reached (2/2) — level up the longhouse for more');
+  it('explains the limit once the realm holds as many towers as the limit allows', () => {
+    expect(towerLimitLock(1, 1)).toBe('Tower limit reached (1/1) — level up the longhouse for more');
+    expect(towerLimitLock(2, 2)).toBe('Tower limit reached (2/2) — level up the longhouse for more');
   });
 
   it('stays open while there is room', () => {
-    expect(towerLimitLock(0, 3)).toBeUndefined();
-    expect(towerLimitLock(1, 7)).toBeUndefined();
+    expect(towerLimitLock(0, 1)).toBeUndefined();
+    expect(towerLimitLock(1, 2)).toBeUndefined();
   });
 
   it('leaves the "longhouse too low" case to longhouseLock', () => {
-    expect(towerLimitLock(0, 2)).toBeUndefined();
+    expect(towerLimitLock(0, 0)).toBeUndefined();
   });
 });
 
@@ -211,8 +211,8 @@ describe('tileIsBuildable on a wildlife camp hex', () => {
 
 describe('shrineLimitLock', () => {
   it('locks every shrine once the settlement holds one, whichever god', () => {
-    expect(shrineLimitLock(1)).toBe('This settlement already has a shrine');
-    expect(shrineLimitLock(2)).toBe('This settlement already has a shrine');
+    expect(shrineLimitLock(1)).toBe('Your realm already has a shrine');
+    expect(shrineLimitLock(2)).toBe('Your realm already has a shrine');
   });
 
   it('never locks the first shrine', () => {

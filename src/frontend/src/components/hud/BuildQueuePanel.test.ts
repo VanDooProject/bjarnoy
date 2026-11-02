@@ -122,7 +122,7 @@ describe('BuildQueuePanel', () => {
   it('renders a waiting order dim with no progress bar, and shows the real slot count', async () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
-    world.hud.construction = { slots: 2, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 1, maxOrdersPerHex: 1 };
+    world.hud.construction = { slots: 2, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 1, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 };
     world.hud.queue = [
       order({ id: 'active-1', state: 'building', q: 1, r: 0 }),
       order({

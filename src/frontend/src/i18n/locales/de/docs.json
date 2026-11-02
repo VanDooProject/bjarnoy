@@ -1094,6 +1094,10 @@
     "giants": {
       "heading": "Riesen",
       "body": "Ein Riese füllt sieben Felder. Du nimmst ihn nur in dein Gebiet auf, wenn dein Anspruch alle sieben abdeckt. Reicht er nur über einen Teil, bekommst du keines davon."
+    },
+    "linked": {
+      "heading": "Verbundene Gebiete",
+      "body": "Berühren sich die Gebiete zweier deiner Siedlungen auf einer Insel, verbinden sie sich zu einem Gebiet. Es trägt den Namen deiner ältesten Siedlung darin und hat einen gemeinsamen Vorrat: Alles, was du produzierst, fließt hinein, und alles, was du dort baust, ausbildest oder handelst, bezahlst du daraus. Seine Lagerkapazität ist die aller Siedlungen zusammen, ebenso seine Bauplätze, die sich alle Bauaufträge teilen. Du verwaltest das Gebiet von deiner ältesten Siedlung aus und kannst von dort auf jedem seiner Felder bauen. Deine übrigen Siedlungen darin tauchen in keiner Liste mehr auf, und Rivalen sehen auf jedem Langhaus den Namen der ältesten. Ein Überfall auf eines seiner Langhäuser kann den ganzen Vorrat plündern. Reißt die Verbindung ab, behält jede Siedlung ihren Anteil am Vorrat – im Verhältnis zu ihrer Lagerkapazität."
     }
   },
   "landMovement": {

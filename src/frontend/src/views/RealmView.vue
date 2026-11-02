@@ -106,6 +106,11 @@ const tocLinks = computed(() =>
       <h2>{{ $t('docs.realm.giants.heading') }}</h2>
       <p class="text">{{ $t('docs.realm.giants.body') }}</p>
     </section>
+
+    <section id="linked" class="block">
+      <h2>{{ $t('docs.realm.linked.heading') }}</h2>
+      <p class="text">{{ $t('docs.realm.linked.body') }}</p>
+    </section>
   </DocsPageLayout>
 </template>
 

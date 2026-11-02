@@ -20,7 +20,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
       hud: {
         queueFetchedAt: number;
         queue: unknown[];
-        construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number };
+        construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number; towerLimit: number; towersHeld: number };
         trainingQueueFetchedAt: number;
         trainingQueue: unknown[];
         garrison: { unit: string; count: number }[];
@@ -67,7 +67,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
           totalSeconds: 50,
         },
       ];
-      world.hud.construction = { slots: 3, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1 };
+      world.hud.construction = { slots: 3, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 };
 
       world.hud.trainingQueueFetchedAt = Date.now();
       world.hud.trainingQueue = [

@@ -556,7 +556,7 @@ const actionError = ref<string | null>(null);
 const trainModalOpen = ref(false);
 
 const modalMine = computed(
-  () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
+  () => !!selectedTile.value && world.isRealmSettlement(selectedTile.value.ownerId),
 );
 const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.value.ownerId);
 const modalOwnerLabel = computed(() => {
@@ -723,10 +723,10 @@ const {
 const ringCategories = computed<RingCategory[]>(() => (mode.value === 'world' ? [] : buildCategories.value));
 
 const isEnemyTile = computed(
-  () => !!selectedTile.value?.ownerId && selectedTile.value.ownerId !== world.selectedSettlementId,
+  () => !!selectedTile.value?.ownerId && !world.isRealmSettlement(selectedTile.value.ownerId),
 );
 const isMineTile = computed(
-  () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
+  () => !!selectedTile.value && world.isRealmSettlement(selectedTile.value.ownerId),
 );
 
 // Issue: mobile army dispatch. Every tile's ring gets a "send army" bubble —
@@ -748,7 +748,7 @@ function sendArmyAction(tile: Tile): RingAction {
   if (ownerSettlementId && !ownerIsSelf) {
     id = 'attack';
     label = t('hud.ringMenu.actions.attack');
-  } else if (ownerSettlementId && ownerSettlementId !== world.selectedSettlementId) {
+  } else if (ownerSettlementId && !world.isRealmSettlement(ownerSettlementId)) {
     id = 'support';
     label = t('hud.ringMenu.actions.support');
   }

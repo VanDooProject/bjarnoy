@@ -95,9 +95,7 @@ public sealed class LeaderboardService(
 
         var scored = await LoadScoredSettlementsAsync(worldId, cancellationToken).ConfigureAwait(false);
 
-        var settlementBoard = scored
-            .Select(x => (SubjectId: x.Settlement.Id, SubjectName: x.Settlement.Name, x.Score))
-            .ToList();
+        var settlementBoard = await RealmBoardAsync(worldId, scored, cancellationToken).ConfigureAwait(false);
         await RefreshBoardAsync(
             worldId, LeaderboardScope.Settlement, LeaderboardCategory.BiggestSettlement,
             settlementBoard, now, cancellationToken).ConfigureAwait(false);
@@ -128,6 +126,27 @@ public sealed class LeaderboardService(
         _logger.LogInformation(
             "World {WorldId} leaderboard boards refreshed: {Settlements} settlements, {Users} users.",
             worldId, settlementBoard.Count, userBoard.Count);
+    }
+
+    /// <summary>
+    /// The settlement board: one entry per linked realm under the oldest member's name, the members' scores added up
+    /// (<c>docs/design/economy.md</c> section 5, "Leaderboards show a linked realm once").
+    /// </summary>
+    private async Task<List<(Guid SubjectId, string SubjectName, double Score)>> RealmBoardAsync(
+        Guid worldId, List<(SettlementEntity Settlement, double Score)> scored, CancellationToken cancellationToken)
+    {
+        var labels = await LinkedRealmNames.ForAsync(
+            _dbContext, worldId, [.. scored.Select(x => x.Settlement)], cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. scored
+                .GroupBy(x => labels[x.Settlement.Id].RealmId)
+                .Select(g => (
+                    SubjectId: g.Key,
+                    SubjectName: labels[g.First().Settlement.Id].Name,
+                    Score: g.Sum(x => x.Score))),
+        ];
     }
 
     /// <summary>
@@ -393,9 +412,7 @@ public sealed class LeaderboardService(
         var now = _timeProvider.GetUtcNow();
         var scored = await LoadScoredSettlementsAsync(worldId, cancellationToken).ConfigureAwait(false);
 
-        var settlementBoard = scored
-            .Select(x => (SubjectId: x.Settlement.Id, SubjectName: x.Settlement.Name, x.Score))
-            .ToList();
+        var settlementBoard = await RealmBoardAsync(worldId, scored, cancellationToken).ConfigureAwait(false);
         var userBoard = scored
             .GroupBy(x => x.Settlement.UserId)
             .Select(g => (

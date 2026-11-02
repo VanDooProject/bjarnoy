@@ -53,7 +53,7 @@ import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
 import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
-import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
+import type { CartShipment, ResourceKind, Resources, Settlement, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
 
@@ -155,6 +155,8 @@ export const useWorldStore = defineStore('world', {
   state: () => ({
     model: markRaw(buildDemoModel()),
     selectedSettlementId: null as string | null,
+    /** Live mode: every member of the selected settlement's linked realm (oldest first, incl. itself); empty until the first read. */
+    linkedMemberIds: [] as string[],
     /** Demo mode only: bitmask of the onboarding quests already claimed (the server keeps this in live mode). */
     demoClaimedQuests: 0,
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
@@ -192,9 +194,11 @@ export const useWorldStore = defineStore('world', {
       // and BuildingModal's affordability/queue-state copy.
       // `maxWaitingOrders === 0` doubles as "not premium" — no separate
       // premium flag needed. Demo mode reports a fixed 2-slot, no-waiting
+      // `towerLimit`/`towersHeld` are the server's realm numbers for the tower
+      // lock; demo mode reads its local model instead.
       // settlement (longhouse level 1, non-premium) since the local
       // WorldModel places buildings instantly and has no queue at all.
-      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
+      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
       settlementName: '',
       level: 1,
       // Issue #16: population, wired the same way as the other resources —
@@ -446,6 +450,14 @@ export const useWorldStore = defineStore('world', {
       riverCrossingCost: 8.0,
     } as WorldMovementResponse,
   }),
+  getters: {
+    /**
+     * Whether `settlementId` is the selected settlement or a member of its linked realm. The one ownership check for "is this
+     * ground mine": the ring/build menu works on every hex of the linked realm and those hexes never count as rival ground.
+     */
+    isRealmSettlement: (state) => (settlementId: string | null | undefined): boolean =>
+      !!settlementId && (settlementId === state.selectedSettlementId || state.linkedMemberIds.includes(settlementId)),
+  },
   actions: {
     /**
      * Demo mode's `window.__demoWorld().revealWastedIslands()` debug hook
@@ -773,10 +785,12 @@ export const useWorldStore = defineStore('world', {
           resources: { ...response.resources.stock },
           rates: { ...response.resources.ratePerHour },
           foundedAt: Date.now(),
+          realmId: response.realmId,
           islandId: response.islandId,
         });
         this.model.claimTerritory(settlement.id);
         this.selectedSettlementId = settlement.id;
+        this.linkedMemberIds = [...response.linkedMemberIds];
         this.plotSuggestion = null;
         this.syncHud();
         void this.refreshTradeAsync();
@@ -797,7 +811,10 @@ export const useWorldStore = defineStore('world', {
         // it was this call, above, that set it) so that recovery's own
         // `restoreLiveSettlement` doesn't see it already matching and skip
         // the resync it exists to do.
-        if (this.selectedSettlementId === response.id) this.selectedSettlementId = null;
+        if (this.selectedSettlementId === response.id) {
+          this.selectedSettlementId = null;
+          this.linkedMemberIds = [];
+        }
         console.error('Founding succeeded server-side but local reconciliation failed', err);
         throw new AlreadyFoundedError(response.id);
       }
@@ -966,6 +983,12 @@ export const useWorldStore = defineStore('world', {
         }
         throw err;
       }
+      if (response.realmId !== response.id) {
+        // A newer member of a linked realm: the realm is run from its oldest member.
+        await this.switchToSettlement(response.realmId);
+        return;
+      }
+      this.linkedMemberIds = [...response.linkedMemberIds];
       this.model.applyServerSnapshot(response.id, {
         level: response.longhouseLevel,
         resources: { ...response.resources.stock },
@@ -1102,6 +1125,16 @@ export const useWorldStore = defineStore('world', {
       );
     },
     /**
+     * The one settlement switch: the switcher in `ExpansionPanel.vue` and the redirect from a newer member of a linked realm to
+     * its oldest member both go through it. Points the persisted "current settlement" at `settlementId` and reloads the model.
+     */
+    async switchToSettlement(settlementId: string) {
+      if (settlementId === this.selectedSettlementId) return;
+      const player = usePlayerStore();
+      player.switchSettlement(settlementId);
+      await this.restoreLiveSettlement(player.id, settlementId);
+    },
+    /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page
      * reload, using the settlement id `stores/player.ts` persisted. Without
      * this, `hasFoundedSettlement` (and thus the router's `/settlement`
@@ -1128,6 +1161,11 @@ export const useWorldStore = defineStore('world', {
         }
         throw err;
       }
+      if (response.realmId !== response.id) {
+        // A newer member of a linked realm: the realm is run from its oldest member.
+        await this.switchToSettlement(response.realmId);
+        return;
+      }
       this.model.registerSettlement({
         id: response.id,
         ownerId,
@@ -1139,10 +1177,12 @@ export const useWorldStore = defineStore('world', {
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
         foundedAt: Date.now(),
+        realmId: response.realmId,
         islandId: response.islandId,
       });
       this.model.claimTerritory(response.id);
       this.selectedSettlementId = response.id;
+      this.linkedMemberIds = [...response.linkedMemberIds];
       this.syncHud();
       void this.refreshTradeAsync();
     },
@@ -1192,6 +1232,7 @@ export const useWorldStore = defineStore('world', {
     resetPerWorldCaches() {
       this.liveReady = false;
       this.selectedSettlementId = null;
+      this.linkedMemberIds = [];
       this.plotSuggestion = null;
       this.islands = [];
       this.armies = [];
@@ -1258,6 +1299,7 @@ export const useWorldStore = defineStore('world', {
     recoverFromMissingSettlement() {
       if (DEMO_MODE) return;
       this.selectedSettlementId = null;
+      this.linkedMemberIds = [];
       if (this.worldId) usePlayerStore().enterWorld(this.worldId, null);
     },
     /**
@@ -1286,6 +1328,7 @@ export const useWorldStore = defineStore('world', {
           resources: emptyResources(),
           rates: emptyResources(),
           foundedAt: Date.now(),
+          realmId: summary.realmId,
           islandId: summary.islandId,
         });
       }
@@ -1658,10 +1701,14 @@ export const useWorldStore = defineStore('world', {
      * accepts for reading the model directly.
      */
     listAttackableSettlements() {
-      return this.model
-        .listSettlements()
-        .filter((s) => s.id !== this.selectedSettlementId)
-        .map((s) => ({ id: s.id, name: s.name, ownerName: s.ownerName, q: s.q, r: s.r }));
+      // One entry per linked realm (keyed by `realmId`): the oldest member, whose name is the realm's, wins over a newer one.
+      const byRealm = new Map<string, Settlement>();
+      for (const s of this.model.listSettlements()) {
+        if (this.isRealmSettlement(s.id) || this.isRealmSettlement(s.realmId)) continue;
+        const key = s.realmId ?? s.id;
+        if (!byRealm.has(key) || s.id === key) byRealm.set(key, s);
+      }
+      return [...byRealm.values()].map((s) => ({ id: s.id, name: s.name, ownerName: s.ownerName, q: s.q, r: s.r }));
     },
     setDispatchUnitCount(unit: string, count: number) {
       if (!this.dispatchDraft) return;

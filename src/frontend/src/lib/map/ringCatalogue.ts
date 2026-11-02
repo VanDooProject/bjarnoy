@@ -6,7 +6,7 @@
 import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
 import { i18n } from '../../i18n';
-import { additionalStorageHouseRequirement, maxTowers } from './buildingEconomy';
+import { additionalStorageHouseRequirement } from './buildingEconomy';
 import { campHexBuildable } from './campRules';
 import type { BogTileKind } from './types';
 import type { RiverVariant } from './worldGenerator';
@@ -40,15 +40,15 @@ export function longhouseLock(requiredLevel: number | undefined, currentLevel: n
 
 /**
  * The reason a *new* tower can't be placed: the settlement already holds
- * (standing plus queued) as many as its Longhouse level allows — mirrors
- * `Settlement.PlanBuild`'s `BuildRejection.TowerLimitReached` and
- * `buildingEconomy.maxTowers`. Undefined while there is room (or while the
+ * (standing plus queued) as many as `allowed` — mirrors
+ * `Settlement.PlanBuild`'s `BuildRejection.TowerLimitReached`. `allowed` is the
+ * server's `construction.towerLimit` (a linked realm: the members' limits added
+ * up) in live mode, `buildingEconomy.maxTowers` in demo mode. Undefined while there is room (or while the
  * longhouse itself is still too low, which `longhouseLock` already explains).
  * Like `longhouseLock` this is a progression gate the player can work
  * towards, so it is shown as an explained, disabled bubble.
  */
-export function towerLimitLock(towersHeld: number, longhouseLevel: number): string | undefined {
-  const allowed = maxTowers(longhouseLevel);
+export function towerLimitLock(towersHeld: number, allowed: number): string | undefined {
   if (allowed === 0 || towersHeld < allowed) return undefined;
   return `Tower limit reached (${towersHeld}/${allowed}) — level up the longhouse for more`;
 }

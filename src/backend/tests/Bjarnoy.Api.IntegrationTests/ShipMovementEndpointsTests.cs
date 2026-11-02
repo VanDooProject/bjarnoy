@@ -96,7 +96,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         return (world.Id, island.Id);
     }
 
-    private static SettlementEntity MakeSettlement(
+    private SettlementEntity MakeSettlement(
         Guid worldId, Guid islandId, Guid userId, string ownerId, int centreQ, int centreR, bool withDockyard = false)
     {
         var settlement = new SettlementEntity
@@ -109,6 +109,10 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             UserId = userId,
             CentreQ = centreQ,
             CentreR = centreR,
+            // A real settlement always holds stock to eat from, as of a recent settle: without any, the garrison it is given starves.
+            SettledAt = _factory.Time.GetUtcNow(),
+            StockFood = 500,
+            CapacityFood = 1000,
         };
         if (withDockyard)
         {

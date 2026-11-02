@@ -199,15 +199,13 @@ public static class SettlementEndpoints
         TimeProvider time,
         CancellationToken cancellationToken)
     {
-        var found = await settlements.GetAsync(settlementId, cancellationToken);
-        if (found is null)
+        var session = await settlements.GetGroupAsync(settlementId, cancellationToken);
+        if (session is null)
         {
             return TypedResults.NotFound(SettlementNotFoundProblem());
         }
 
-        var (entity, clock) = found.Value;
-        return TypedResults.Ok(
-            await SettlementResponse.ForOwnerAsync(db, entity, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
+        return TypedResults.Ok(SettlementResponse.Build(session, settlementId, session.Clock, session.Clock.ToGameTime(time.GetUtcNow())));
     }
 
     /// <summary>
@@ -227,6 +225,7 @@ public static class SettlementEndpoints
         SettlementService settlements,
         ExploredAreaService exploredArea,
         RealmDirectory realms,
+        GameDbContext db,
         CancellationToken cancellationToken)
     {
         var found = await settlements.GetAsync(settlementId, cancellationToken);
@@ -276,9 +275,11 @@ public static class SettlementEndpoints
                 .Select(b => PlacedBuildingResponse.From(b.ToPlacedBuilding())),
         ];
 
+        var realmLabel = await LinkedRealmNames.ForSettlementAsync(db, entity, cancellationToken);
+
         return TypedResults.Ok(new SettlementViewResponse(
             entity.Id,
-            entity.Name,
+            realmLabel.Name,
             entity.OwnerName,
             entity.CentreQ,
             entity.CentreR,
@@ -306,6 +307,7 @@ public static class SettlementEndpoints
         SettlementService settlements,
         ExploredAreaService exploredArea,
         RealmDirectory realms,
+        GameDbContext db,
         CancellationToken cancellationToken)
     {
         var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
@@ -340,11 +342,14 @@ public static class SettlementEndpoints
                 .Select(s => new HexCoord(s.CentreQ, s.CentreR)),
             cancellationToken);
 
+        // Every longhouse stays (the map draws them), each under its linked realm's name.
+        var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
+
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
                 .Where(s => IsMine(s) || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
-                .Select(s => SettlementSummary.From(s, IsMine(s))),
+                .Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id])),
         ];
 
         return TypedResults.Ok(response);

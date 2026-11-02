@@ -83,6 +83,8 @@ function summary(overrides: Partial<AdminSettlementSummary> = {}): AdminSettleme
 function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse {
   return {
     id: 'settlement-1',
+    realmId: 'settlement-1',
+    linkedMemberIds: ['settlement-1'],
     worldId: 'world-1',
     islandId: 'island-1',
     name: 'Bjornstad',
@@ -98,7 +100,7 @@ function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse
       reserved: { wood: 0, stone: 0, food: 0, iron: 0 },
       available: { wood: 300, stone: 200, food: 150, iron: 50 },
     },
-    construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
+    construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
     buildings: [{ q: 0, r: 0, type: 'longhouse', level: 1 }],
     queue: [],
     garrison: [],
