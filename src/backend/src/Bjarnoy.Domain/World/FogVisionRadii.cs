@@ -52,16 +52,19 @@ public static class FogVisionRadii
     public static int ExploredRadius(int longhouseLevel) => BorderRadius(longhouseLevel) + ScoutRingHexes;
 
     /// <summary>
-    /// Builds the <see cref="FogVisionSource"/> a settlement contributes to the
-    /// mask. <paramref name="bonusRings"/> is Odin's Ravens
-    /// (<see cref="Buildings.Settlement.VisionBonusRings"/>): extra rings on
-    /// both the explored and the visible radius.
+    /// Builds the <see cref="FogVisionSource"/> a settlement's centre contributes to the
+    /// mask, or <see langword="null"/> when it has none: a settlement whose Longhouse is destroyed (level 0) sees nothing
+    /// around its centre. That is decided by the same <see cref="Buildings.Settlement.LonghouseDisc"/> that decides whether
+    /// it has a claim, so sight and claim cannot drift apart. <paramref name="bonusRings"/> is Odin's Ravens
+    /// (<see cref="Buildings.Settlement.VisionBonusRings"/>): extra rings on both the explored and the visible radius.
     /// </summary>
-    public static FogVisionSource ToVisionSource(HexCoord coord, int longhouseLevel, int bonusRings = 0) =>
-        new(
-            coord,
-            ExploredRadius(longhouseLevel) + Math.Max(0, bonusRings),
-            VisibleRadius(longhouseLevel) + Math.Max(0, bonusRings));
+    public static FogVisionSource? ToVisionSource(HexCoord coord, int longhouseLevel, int bonusRings = 0) =>
+        Buildings.Settlement.LonghouseDisc(coord, longhouseLevel) is null
+            ? null
+            : new FogVisionSource(
+                coord,
+                ExploredRadius(longhouseLevel) + Math.Max(0, bonusRings),
+                VisibleRadius(longhouseLevel) + Math.Max(0, bonusRings));
 
     /// <summary>
     /// A single standing <see cref="Buildings.BuildingType.Tower"/>'s own

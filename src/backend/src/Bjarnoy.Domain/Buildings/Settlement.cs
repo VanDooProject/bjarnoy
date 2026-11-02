@@ -199,27 +199,32 @@ public sealed record Settlement
     /// the union of this and every placed Tower's own satellite disc; see
     /// <see cref="Claims"/> and <see cref="ClaimDiscs"/>. Backed by
     /// <see cref="BuildingDefinition.ClaimRadius"/> so the number lives in
-    /// one place, alongside every other Longhouse stat.
+    /// one place, alongside every other Longhouse stat. 0 when the Longhouse is destroyed (see <see cref="LonghouseDisc"/>).
     /// </summary>
     public int ClaimRadius => ClaimRadiusForLonghouseLevel(LonghouseLevel);
 
     /// <summary>
-    /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, clamped to
-    /// <c>[1, MaxLevelFor(Longhouse)]</c> — a settlement with no standing
-    /// Longhouse (level 0, e.g. mid-founding) still gets the level-1 radius
-    /// (2, not this property's old level-0 floor of 1: the floor itself grew
-    /// by the same one hex as every other level when the formula changed)
-    /// rather than a lookup failure, and a corrupted/out-of-range level above
-    /// <see cref="BuildingCatalogue.MaxLevelFor"/> is clamped down to it instead
-    /// of throwing — the same defensive clamp <c>SettlementEntity.ToDomain</c>
-    /// already applies for exactly this "a raw DB row could carry a bad
-    /// level" reason. Public so callers with only a raw longhouse level on
-    /// hand (a lightweight DB projection, e.g. <c>SettlementService.GetClaimedSettlementsAsync</c>
-    /// or <c>ArmyService</c>'s siege-arrival check) can compute the same
-    /// number without a full <see cref="Settlement"/> instance.
+    /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, capped at
+    /// <see cref="BuildingCatalogue.MaxLevelFor"/> (a corrupted/out-of-range level is clamped down instead of throwing — the
+    /// same defensive clamp <c>SettlementEntity.ToDomain</c> applies). Level 0 is a settlement whose Longhouse was destroyed
+    /// (every settlement is founded with a level-1 Longhouse, so there is no other level-0 state): it has no claim, so this
+    /// reads 0. A radius of 0 is <em>not</em> a disc — <see cref="LonghouseDisc"/> is the one place that decides whether
+    /// there is a centre disc at all; this number is for callers that only measure distance from the centre (founding's
+    /// spacing, <c>SettlementService.GetClaimedSettlementsAsync</c>). Public so callers with only a raw longhouse level on
+    /// hand (a lightweight DB projection) can compute the same number without a full <see cref="Settlement"/>.
     /// </summary>
     public static int ClaimRadiusForLonghouseLevel(int longhouseLevel) =>
-        BuildingCatalogue.Get(BuildingType.Longhouse, Math.Clamp(longhouseLevel, 1, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse))).ClaimRadius;
+        longhouseLevel <= 0
+            ? 0
+            : BuildingCatalogue.Get(BuildingType.Longhouse, Math.Min(longhouseLevel, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse))).ClaimRadius;
+
+    /// <summary>
+    /// The settlement's Longhouse (centre) claim disc, or <see langword="null"/> when it has none: a settlement whose
+    /// Longhouse is destroyed (level 0) has no claim at all, not even its centre hex. The one place that decides this —
+    /// <see cref="ConnectedRealm"/> and <see cref="Combat.FieldBattleResolver.ClaimAt"/> both read it.
+    /// </summary>
+    public static (HexCoord Centre, int Radius)? LonghouseDisc(HexCoord centre, int longhouseLevel) =>
+        longhouseLevel <= 0 ? null : (centre, ClaimRadiusForLonghouseLevel(longhouseLevel));
 
     /// <summary>
     /// How many towers the whole (linked) realm may hold: this settlement's limit (<see cref="BuildingCatalogue.MaxTowers"/>) plus
