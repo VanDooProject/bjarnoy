@@ -26,7 +26,6 @@
     "endboss": "Endboss",
     "frozenIsles": "Frozen isles",
     "hidden": "Hidden",
-    "hiddenFromJoin": "Hidden from join",
     "seed": "Seed"
   },
   "joins": {
@@ -51,7 +50,6 @@
     "closedToNewPlayers": "Closed to new players",
     "frozenIslesEnabled": "Frozen isles enabled",
     "hidden": "Hidden from players",
-    "hiddenFromJoin": "Hidden from join list",
     "endbossAt": "Endboss at"
   },
   "speedFactorTooLow": "Speed factor must be greater than 0.",

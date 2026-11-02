@@ -26,7 +26,6 @@
     "endboss": "Endboss",
     "frozenIsles": "Eisinseln",
     "hidden": "Ausgeblendet",
-    "hiddenFromJoin": "Beitritt ausgeblendet",
     "seed": "Seed"
   },
   "joins": {
@@ -51,7 +50,6 @@
     "closedToNewPlayers": "Für neue Spieler geschlossen",
     "frozenIslesEnabled": "Eisinseln aktiv",
     "hidden": "Für Spieler ausgeblendet",
-    "hiddenFromJoin": "In der Beitrittsliste ausgeblendet",
     "endbossAt": "Endboss am"
   },
   "dateInvalid": "Bitte im Format {pattern} eingeben.",

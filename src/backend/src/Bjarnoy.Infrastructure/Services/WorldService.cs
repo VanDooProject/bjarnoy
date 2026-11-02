@@ -754,7 +754,6 @@ public sealed class WorldService(
         DateTimeOffset? endbossAt,
         string? name = null,
         bool? hidden = null,
-        bool? hiddenFromJoin = null,
         CancellationToken cancellationToken = default)
     {
         var world = await _dbContext.Worlds
@@ -779,11 +778,6 @@ public sealed class WorldService(
         if (hidden is { } isHidden)
         {
             world.Hidden = isHidden;
-        }
-
-        if (hiddenFromJoin is { } isHiddenFromJoin)
-        {
-            world.HiddenFromJoin = isHiddenFromJoin;
         }
 
         if (speedFactor is { } factor)

@@ -19,7 +19,6 @@ public sealed record AdminWorldResponse(
     bool JoinsClosed,
     bool FrozenIslesEnabled,
     bool Hidden,
-    bool HiddenFromJoin,
     DateTimeOffset? EndbossAt,
     DateTimeOffset? EndbossTriggeredAt,
     string RunState,
@@ -45,7 +44,6 @@ public sealed record AdminWorldResponse(
             world.JoinsClosed,
             world.FrozenIslesEnabled,
             world.Hidden,
-            world.HiddenFromJoin,
             world.EndbossAt,
             world.EndbossTriggeredAt,
             world.RunState.ToString().ToLowerInvariant(),
@@ -188,9 +186,6 @@ public sealed record UpdateWorldSettingsRequest
 
     /// <summary>Omit to leave unchanged. See <see cref="WorldEntity.Hidden"/>.</summary>
     public bool? Hidden { get; init; }
-
-    /// <summary>Omit to leave unchanged. See <see cref="WorldEntity.HiddenFromJoin"/>.</summary>
-    public bool? HiddenFromJoin { get; init; }
 
     /// <summary>
     /// Omit to leave unchanged; send explicit <c>null</c> to cancel a scheduled

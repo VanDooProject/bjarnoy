@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace Bjarnoy.Migrations.PostgreSql.Migrations
+namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     /// <inheritdoc />
     public partial class AddWorldHidden : Migration
@@ -13,14 +13,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             migrationBuilder.AddColumn<bool>(
                 name: "Hidden",
                 table: "worlds",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
-
-            migrationBuilder.AddColumn<bool>(
-                name: "HiddenFromJoin",
-                table: "worlds",
-                type: "boolean",
+                type: "INTEGER",
                 nullable: false,
                 defaultValue: false);
         }
@@ -30,10 +23,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "Hidden",
-                table: "worlds");
-
-            migrationBuilder.DropColumn(
-                name: "HiddenFromJoin",
                 table: "worlds");
         }
     }

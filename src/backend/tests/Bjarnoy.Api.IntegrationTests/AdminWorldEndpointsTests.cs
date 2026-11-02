@@ -331,24 +331,24 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
-    public async Task A_world_hidden_from_join_is_missing_only_from_the_joinable_list_for_players()
+    public async Task A_world_closed_to_new_players_is_missing_only_from_the_joinable_list_for_players()
     {
         using var client = _fixture.CreateClient();
         var visible = await CreateWorldAsync(client);
-        var noJoin = await CreateWorldAsync(client);
+        var closed = await CreateWorldAsync(client);
         Authorize(client, await CreateAdminTokenAsync(client));
 
         var patch = await client.PatchJsonAsync(
-            $"/api/v1/admin/worlds/{noJoin.Id}/settings", new UpdateWorldSettingsRequest { HiddenFromJoin = true }, Ct);
+            $"/api/v1/admin/worlds/{closed.Id}/settings", new UpdateWorldSettingsRequest { JoinsClosed = true }, Ct);
         Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
         var updated = await patch.ReadStrictAsync<AdminWorldResponse>(Ct);
-        Assert.True(updated.HiddenFromJoin);
+        Assert.True(updated.JoinsClosed);
         Assert.False(updated.Hidden);
 
-        Assert.Contains(await ListJoinableAsync(client), w => w.Id == noJoin.Id);
+        Assert.Contains(await ListJoinableAsync(client), w => w.Id == closed.Id);
 
         client.DefaultRequestHeaders.Authorization = null;
-        await AssertHiddenFromPlayersAsync(client, noJoin.Id, visible.Id, hiddenFromWorlds: false);
+        await AssertHiddenFromPlayersAsync(client, closed.Id, visible.Id, hiddenFromWorlds: false);
     }
 
     private async Task AssertHiddenFromPlayersAsync(HttpClient client, Guid hiddenId, Guid visibleId, bool hiddenFromWorlds)

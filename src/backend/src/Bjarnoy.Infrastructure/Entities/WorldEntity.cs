@@ -134,7 +134,10 @@ public class WorldEntity
     /// <summary>World not joinable before this instant. Null means open immediately.</summary>
     public DateTimeOffset? StartsAt { get; set; }
 
-    /// <summary>Admin stop-join toggle. Existing players are unaffected.</summary>
+    /// <summary>
+    /// Admin stop-join toggle: the world is left out of <c>GET /worlds/joinable</c>
+    /// for non-admins and refuses new players. Existing players are unaffected.
+    /// </summary>
     public bool JoinsClosed { get; set; }
 
     /// <summary>
@@ -152,12 +155,6 @@ public class WorldEntity
     /// every world.
     /// </summary>
     public bool Hidden { get; set; }
-
-    /// <summary>
-    /// The world is left out of <c>GET /worlds/joinable</c> for non-admins only;
-    /// <c>GET /worlds</c> still lists it. Admins always see every world.
-    /// </summary>
-    public bool HiddenFromJoin { get; set; }
 
     /// <summary>Joins remain allowed; the endboss fires at this instant. Null means none scheduled.</summary>
     public DateTimeOffset? EndbossAt { get; set; }

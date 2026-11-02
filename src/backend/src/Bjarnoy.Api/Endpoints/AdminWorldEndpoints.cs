@@ -199,7 +199,6 @@ public static class AdminWorldEndpoints
                 request.EndbossAt.Value,
                 newName,
                 request.Hidden,
-                request.HiddenFromJoin,
                 cancellationToken);
         }
         catch (WorldCreationException ex)

@@ -130,7 +130,7 @@ public static class WorldEndpoints
     {
         var isAdmin = user.IsInRole(nameof(UserRole.Admin));
         var entities = (await worlds.GetWorldsAsync(cancellationToken))
-            .Where(w => isAdmin || (!w.Hidden && !w.HiddenFromJoin))
+            .Where(w => isAdmin || (!w.Hidden && !w.JoinsClosed))
             .ToList();
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();

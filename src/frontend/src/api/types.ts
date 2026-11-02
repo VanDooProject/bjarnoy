@@ -680,8 +680,6 @@ export interface AdminWorldResponse {
   frozenIslesEnabled: boolean;
   /** Left out of every public world list for non-admins. */
   hidden: boolean;
-  /** Left out of the public join list for non-admins. */
-  hiddenFromJoin: boolean;
   endbossAt: string | null;
   endbossTriggeredAt: string | null;
   runState: string;
@@ -768,7 +766,6 @@ export interface UpdateWorldSettingsRequest {
   joinsClosed?: boolean;
   frozenIslesEnabled?: boolean;
   hidden?: boolean;
-  hiddenFromJoin?: boolean;
   endbossAt?: string | null;
 }
 

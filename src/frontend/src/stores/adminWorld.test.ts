@@ -28,7 +28,6 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     joinsClosed: false,
     frozenIslesEnabled: false,
     hidden: false,
-    hiddenFromJoin: false,
     endbossAt: null,
     endbossTriggeredAt: null,
     runState: 'running',
