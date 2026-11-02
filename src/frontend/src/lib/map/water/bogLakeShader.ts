@@ -44,9 +44,11 @@ uniform float uFoamStyle;
 // The world rect the lake mask covers: its top-left corner and its size (vUV 0..1 maps linearly onto it).
 uniform vec2 uLakeOrigin;
 uniform vec2 uLakeSize;
-// Blops (not gust-gated, ignore the wind): strength, 0 = off; density multiplier.
+// Blops (not gust-gated, ignore the wind): strength, 0 = off; density = chance a cell's cycle shows its curl.
 uniform float uBlops;
 uniform float uBlopDensity;
+// Blop curl size multiplier (1 = ring radius 9 world units).
+uniform float uBlopSize;
 
 // bogLakeGust.ts gustPhase, with the time term already in uGustTime: the same wave the forest sway frames are drawn in.
 const float GUST_WAVELENGTH = ${glFloat(GUST_WAVELENGTH)};
@@ -83,6 +85,16 @@ float gustEnvelope(vec2 w) {
   d -= floor(d + 0.5);
   float e = 1.0 - smoothstep(0.0, max(uBandHalf, 0.001), abs(d));
   return e * e * (3.0 - 2.0 * e);
+}
+
+// The micro curl: a thin crescent ")" opening toward -x, p relative to its centre in world units, ring radius rad, the line fading
+// out between lineIn and lineOut world units from the ring. Squashed in y like the ground. Shared by the micro curls foam style and
+// the blops, so both draw the same mark.
+float curlShape(vec2 p, float rad, float lineIn, float lineOut) {
+  p *= vec2(1.0, 0.6);
+  float ring = abs(length(p) - rad);
+  float arc = 1.0 - smoothstep(0.4, 1.6, abs(atan(p.y, p.x)));
+  return (1.0 - smoothstep(lineIn, lineOut, ring)) * arc;
 }
 
 // Distance to the nearest crest line across the wind, in world units, and the line's index: the crests are wiggly lines roughly
@@ -128,12 +140,8 @@ vec2 foamLook(vec2 w, float t) {
     float h = hash21(id + 0.7);
     if (h < 0.4) return vec2(0.0);
     vec2 centre = (id + 0.25 + 0.5 * vec2(hash21(id + 1.3), hash21(id + 2.9))) * cell;
-    vec2 p = (q - centre) * vec2(1.0, 0.6);
     float rad = cell * (0.22 + 0.12 * hash21(id + 4.1));
-    float ring = abs(length(p) - rad);
-    float ang = atan(p.y, p.x);
-    float arc = 1.0 - smoothstep(0.4, 1.6, abs(ang));
-    float curl = (1.0 - smoothstep(halfW * 0.25, halfW * 0.7, ring)) * arc;
+    float curl = curlShape(q - centre, rad, halfW * 0.25, halfW * 0.7);
     float beat = smoothstep(0.25, 0.85, 0.5 + 0.5 * sin(t * (1.2 + 1.5 * h) + h * 30.0));
     return vec2(curl * beat * 0.9, 0.0);
   }
@@ -171,46 +179,37 @@ float maskAt(vec2 w, vec2 off) {
   return texture(uLakeMask, (w + off - uLakeOrigin) / uLakeSize).a;
 }
 
-// One blop's alpha: 1-2 concentric crescents opening at a random angle, growing and fading over the life 0..1.
-float blopRipple(vec2 p, float rot, float age) {
-  float fadeIn = smoothstep(0.0, 0.12, age);
-  float fadeOut = 1.0 - smoothstep(0.35, 1.0, age);
-  float life = fadeIn * fadeOut;
-  vec2 q = vec2(cos(rot) * p.x + sin(rot) * p.y, -sin(rot) * p.x + cos(rot) * p.y);
-  q.y *= 1.5;
-  float len = length(q);
-  float ang = atan(q.y, q.x);
-  float arc = 1.0 - smoothstep(0.9, 1.9, abs(ang));
-  float r1 = mix(3.0, 9.0, age);
-  float r2 = r1 * 0.58;
-  float l1 = 1.0 - smoothstep(0.3, 1.5, abs(len - r1));
-  float l2 = (1.0 - smoothstep(0.3, 1.4, abs(len - r2))) * 0.8 * smoothstep(0.1, 0.35, age);
-  return max(l1, l2) * arc * life;
-}
-
-// Blops: a jittered grid, each cell with its own cycle (period, phase) and a fresh random spot per cycle. The spot must sit well inside the
-// water, else that cycle shows nothing. Cells are big enough (and the spot inset) that a blop never reaches the next cell.
+// Blops: micro curls (curlShape) that appear at random spots, all facing the same way, and fade again — about one per hex at a time.
+// A jittered grid of hex-sized cells, each with its own cycle (period, phase) and a fresh random spot per cycle; a cycle shows its curl
+// with probability uBlopDensity. The spot must sit well inside the water, else that cycle shows nothing, and the spot is inset so a curl
+// never reaches the next cell.
 float blops(vec2 w, float t) {
-  float cell = uTileW * 0.55;
+  // Cells smaller than a hex (TILE_W 168 -> ~77 world units square): spots near the bank fail the water check, so this lands at about one
+  // curl per hex of lake on average.
+  float cell = uTileW * 0.46;
   vec2 id = floor(w / cell);
   float h = hash21(id + 3.3);
-  float period = 3.0 + 3.0 * h;
+  float period = 2.8 + 0.8 * h;
   float tt = t + hash21(id + 8.8) * period;
   float cycle = floor(tt / period);
   float local = fract(tt / period) * period;
-  float lifeSec = 1.2 + 0.6 * hash21(id + cycle * 1.7);
+  float lifeSec = 2.0 + 0.6 * hash21(id + cycle * 1.7);
   if (local > lifeSec) return 0.0;
-  if (hash21(id * 1.3 + cycle * 7.1 + 0.4) > uBlopDensity * 0.9) return 0.0;
-  vec2 centre = (id + 0.12 + 0.76 * vec2(hash21(id + cycle * 2.3 + 1.1), hash21(id + cycle * 3.9 + 5.7))) * cell;
+  if (hash21(id * 1.3 + cycle * 7.1 + 0.4) > uBlopDensity) return 0.0;
+  float rad = 9.0 * uBlopSize * (0.85 + 0.3 * hash21(id + cycle * 5.3));
+  // The curl reaches rad across and rad / 0.6 up and down (squashed in y), plus its line and a margin.
+  vec2 reach2 = vec2(rad + 4.0, rad / 0.6 + 4.0);
+  float reach = reach2.y;
+  float inset = min(0.45, reach / cell);
+  vec2 centre = (id + inset + (1.0 - 2.0 * inset) * vec2(hash21(id + cycle * 2.3 + 1.1), hash21(id + cycle * 3.9 + 5.7))) * cell;
   vec2 p = w - centre;
-  if (dot(p, p) > 14.0 * 14.0) return 0.0;
+  if (dot(p, p) > reach * reach) return 0.0;
   if (maskAt(centre, vec2(0.0)) < 0.9) return 0.0;
-  for (int i = 0; i < 4; i++) {
-    float a = float(i) * 1.570796 + 0.5;
-    if (maskAt(centre, vec2(cos(a), sin(a)) * 11.0) < 0.9) return 0.0;
-  }
-  float rot = 6.2832 * hash21(id + cycle * 4.1 + 2.2);
-  return blopRipple(p, rot, local / lifeSec) * 0.8;
+  if (maskAt(centre, vec2(reach2.x, 0.0)) < 0.9 || maskAt(centre, vec2(-reach2.x, 0.0)) < 0.9) return 0.0;
+  if (maskAt(centre, vec2(0.0, reach2.y)) < 0.9 || maskAt(centre, vec2(0.0, -reach2.y)) < 0.9) return 0.0;
+  float age = local / lifeSec;
+  float life = smoothstep(0.0, 0.15, age) * (1.0 - smoothstep(0.55, 1.0, age));
+  return curlShape(p, rad, 0.6, 1.5) * life * 0.85;
 }
 
 // Premultiplied colour c at alpha a.

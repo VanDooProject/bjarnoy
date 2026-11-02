@@ -195,8 +195,10 @@ export interface WaterDebugTuning {
   bogLakeCatsPawsStrength: number;
   /** Multiplier on the blops (1 is what ships). Only used while the flag is on. */
   bogLakeBlopsStrength: number;
-  /** Blops per lake area: scales the share of cell cycles that show one (1 is what ships). */
+  /** Chance (0..1) that a hex-sized cell's cycle shows its blop; 1 ships, about one curl per hex at a time. */
   bogLakeBlopDensity: number;
+  /** Size multiplier of the blop curls (1 = ring radius 9 world units). */
+  bogLakeBlopSize: number;
   /** Half-width of a foam line, as a share of the line spacing. */
   bogLakeFoamWidth: number;
   /** Distance between foam lines, in world units. */
@@ -234,6 +236,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeCatsPawsStrength: 1,
   bogLakeBlopsStrength: 1,
   bogLakeBlopDensity: 1,
+  bogLakeBlopSize: 1,
   bogLakeFoamWidth: 0.04,
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,

@@ -39,6 +39,7 @@ export class BogLakeLayer {
       uLakeSize: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
       uBlops: { value: 0, type: 'f32' },
       uBlopDensity: { value: 1, type: 'f32' },
+      uBlopSize: { value: 1, type: 'f32' },
     });
     this.geometry = new MeshGeometry({
       positions: new Float32Array(8),
@@ -97,6 +98,7 @@ export class BogLakeLayer {
     u.uCatsPaws = waterDebugFlags.bogLakeCatsPaws ? waterDebugTuning.bogLakeCatsPawsStrength : 0;
     u.uBlops = waterDebugFlags.bogLakeBlops ? waterDebugTuning.bogLakeBlopsStrength : 0;
     u.uBlopDensity = waterDebugTuning.bogLakeBlopDensity;
+    u.uBlopSize = waterDebugTuning.bogLakeBlopSize;
     u.uFoamWidth = waterDebugTuning.bogLakeFoamWidth;
     u.uFoamSpacing = waterDebugTuning.bogLakeFoamSpacing;
     u.uFoamStyle = waterDebugTuning.bogLakeFoamStyle;

@@ -99,10 +99,12 @@ describe('BogLakeLayer', () => {
     expect(uniformsOf(layer).uBlops).toBe(1);
     expect(uniformsOf(layer).uBlopDensity).toBe(1);
     waterDebugTuning.bogLakeBlopsStrength = 1.5;
-    waterDebugTuning.bogLakeBlopDensity = 2;
+    waterDebugTuning.bogLakeBlopDensity = 0.5;
+    waterDebugTuning.bogLakeBlopSize = 1.4;
     layer.tick(0);
     expect(uniformsOf(layer).uBlops).toBe(1.5);
-    expect(uniformsOf(layer).uBlopDensity).toBe(2);
+    expect(uniformsOf(layer).uBlopDensity).toBe(0.5);
+    expect(uniformsOf(layer).uBlopSize).toBe(1.4);
     waterDebugFlags.bogLakeBlops = false;
     layer.tick(0);
     expect(uniformsOf(layer).uBlops).toBe(0);

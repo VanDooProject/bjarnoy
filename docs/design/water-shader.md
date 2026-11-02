@@ -1057,16 +1057,17 @@ checks.
 | `float uFoam`, `uSheen`, `uCatsPaws` | 0 turns the look off, else its strength |
 | `float uFoamWidth`, `uFoamSpacing` | foam line half-width as a share of the spacing (0.04), spacing in world units (15) |
 | `vec2 uLakeOrigin`, `uLakeSize` | the world rect the lake mask covers (min corner, size): maps a world point onto the mask for point samples |
-| `float uBlops`, `uBlopDensity` | blops strength (0 = off) and density multiplier (1) |
+| `float uBlops`, `uBlopDensity`, `uBlopSize` | blops strength (0 = off), chance a cell's cycle shows its curl (1), curl size multiplier (1) |
 
-**Blops.** Independent of the wind (not gated by the gust band): small crescent ripples, like micro curls, that pop up at random spots on the
-lake and fade again, like a drip or a fish rising. Each is one or two concentric ring arcs, opening at a random angle, that appear, grow from
-about 3 to 9 world units radius and fade out over 1.2-1.8 s; lines about 1-1.5 units thin, near-white, alpha up to 0.8. The shader runs a
-jittered grid of cells (`0.55 * TILE_W`); each cell has its own cycle (random period 3-6 s, random phase) and, per cycle, a fresh random
-spot (hashed from the cycle index), shown for the first part of the cycle only. The density is therefore constant per water area: bigger
-lakes show more blops, and `bogLakeBlopDensity` scales the share of cycles that show one. A blop's spot is checked against `uLakeMask` (the
-centre must read above 0.9, and so must four points 11 units around it) and skipped otherwise, so rings never cut at the bank. The demo lake
-(6-9 water hexes) shows about 2-3 at a time. Flag `bogLakeBlops`, tuning `bogLakeBlopsStrength`, `bogLakeBlopDensity` (both 1).
+**Blops.** Independent of the wind (not gated by the gust band): micro curls that appear at random spots on the lake and fade again.
+Each blop is one thin crescent ")" drawn by `curlShape`, the same mark as the micro curls foam style, and every blop faces the same way.
+Ring radius 9 world units (squashed in y like the ground, about 30 units tall), line about 1 unit, near-white, alpha up to 0.85; it fades
+in over the first 15 % of its life and out over the last 45 %, life 2.0-2.6 s. The shader runs a jittered grid of cells `0.46 * TILE_W`
+(about 77 world units) square; each cell has its own cycle (period 2.8-3.6 s, random phase) and, per cycle, a fresh random spot (hashed
+from the cycle index). A spot is checked against `uLakeMask` (the centre and four points just past the curl's reach must read above 0.9)
+and skipped otherwise, so a curl never touches the bank; the cells are smaller than a hex to make up for those near the bank, and the demo
+lake (about 10 hexes) shows 7-10 curls at a time, about one per hex. Bigger lakes show more. `bogLakeBlopDensity` is the chance (0..1) a
+cycle shows its curl. Flag `bogLakeBlops`, tuning `bogLakeBlopsStrength`, `bogLakeBlopDensity`, `bogLakeBlopSize` (all 1).
 
 ### 4.4 Uniforms
 
@@ -1148,7 +1149,7 @@ export interface WaterDebugFlags {
   bogLakeFoam: boolean;         // default true
   bogLakeSheen: boolean;        // default true
   bogLakeCatsPaws: boolean;     // default true
-  bogLakeBlops: boolean;        // default true — small crescent ripples popping up on the lake, independent of the wind
+  bogLakeBlops: boolean;        // default true — micro curls appearing at random on the lake, independent of the wind
 }
 export interface WaterDebugTuning {
   foamWidthHexes: number;  // 0.3 — the band is in world units, so this is sized
@@ -1162,7 +1163,8 @@ export interface WaterDebugTuning {
   bogLakeSheenStrength: number;    // 1
   bogLakeCatsPawsStrength: number; // 1
   bogLakeBlopsStrength: number;    // 1
-  bogLakeBlopDensity: number;      // 1 — scales the share of cell cycles that show a blop
+  bogLakeBlopDensity: number;      // 1 — chance a hex-sized cell's cycle shows its curl
+  bogLakeBlopSize: number;         // 1 — curl size multiplier (ring radius 9 world units)
   bogLakeFoamWidth: number;        // 0.04 — foam line half-width, share of the spacing
   bogLakeFoamSpacing: number;      // 15 — world units between foam lines
   bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods
