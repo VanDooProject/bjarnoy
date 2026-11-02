@@ -153,7 +153,7 @@ export const router = createRouter({
       beforeEnter: () => startAtlasManifestLoad(),
     },
     {
-      path: '/tech-tree',
+      path: '/docs/tech-tree',
       name: 'tech-tree',
       component: () => import('../views/TechTreeView.vue'),
       // Computes its art synchronously at setup — see atlasGuard.ts.
@@ -205,6 +205,13 @@ export const router = createRouter({
       path: '/docs/founding',
       name: 'founding-docs',
       component: () => import('../views/FoundingView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/realm',
+      name: 'realm-docs',
+      component: () => import('../views/RealmView.vue'),
       // Computes its art synchronously at setup — see atlasGuard.ts.
       beforeEnter: () => awaitShowcaseManifests(),
     },

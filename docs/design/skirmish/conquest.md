@@ -5,6 +5,8 @@ in [Taking over a realm](realm-takeover.md).
 
 ## Ships
 - Ships can attack the buildings that stand on a target's shore without reaching its Longhouse.
+  A fleet is sent at one such building, fights there and damages only that building (rules and numbers:
+  [economy.md](../economy.md), "Fleets" under the siege section).
 - Land troops ride on ships with a per-ship capacity, the same way settlers do.
 
 ## Support from allies

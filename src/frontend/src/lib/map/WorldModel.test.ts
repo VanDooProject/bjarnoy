@@ -779,7 +779,7 @@ describe('WorldModel.riverMouthHexKeys / riverRevision', () => {
       riverTile({ q: 5, r: 6 }, 'straight'),
       riverTile({ q: 7, r: 8 }, 'bend'),
     ]);
-    // Same packing as buildingHexKeys (and the bake worker's hexKey).
+    // Same packing as the bake worker's hexKey.
     const key = (q: number, r: number) => ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
     expect(model.riverMouthHexKeys().sort()).toEqual([key(1, 2), key(3, 4)].sort());
   });
@@ -1595,6 +1595,7 @@ describe('WorldModel wildlife camps', () => {
       q,
       r,
       family: 'wolfden',
+      orientation: 'SE',
       level: 2,
       effectiveLevel: 3,
       strong: true,
@@ -1791,6 +1792,19 @@ describe('WorldModel wasted-island reveal', () => {
     model.setWastedRevealed(false);
     expect(model.terrainOf(wastedForest.q, wastedForest.r)).toBe('sea');
     expect(model.getTile(wastedForest.q, wastedForest.r).terrain).toBe('sea');
+  });
+
+  it('answers isWastedLandAt from the current reveal state after a flip', () => {
+    const model = new WorldModel(WASTED_SEED);
+    model.setWastedRevealed(true);
+    expect(model.isWastedLandAt(wastedForest.q, wastedForest.r)).toBe(true);
+    expect(model.isWastedLandAt(0, 0)).toBe(false);
+
+    model.setWastedRevealed(false);
+    expect(model.isWastedLandAt(wastedForest.q, wastedForest.r)).toBe(false);
+
+    model.setWastedRevealed(true);
+    expect(model.isWastedLandAt(wastedForest.q, wastedForest.r)).toBe(true);
   });
 
   it('never wipes green-island state (buildings, ownership, giant tags) on reveal', () => {
@@ -2047,11 +2061,20 @@ describe('WorldModel bog buildings', () => {
 
   it('refuses every grass building on bog ground (the PR3 open point)', () => {
     const { model, settlement, hex } = bogSettlement();
-    for (const type of ['farm', 'tower', 'storagehouse', 'townsquare', 'meadery', 'barracks', 'smithy', 'lumberjack', 'quarry'] as const) {
+    for (const type of ['farm', 'storagehouse', 'townsquare', 'meadery', 'barracks', 'smithy', 'lumberjack', 'quarry'] as const) {
       for (const i of [0, 1, 2, 3, 4, 5, 6]) {
         expect(model.placeBuilding(settlement.id, hex(i), type), `${type} on hex ${i}`).toBe(false);
       }
     }
+  });
+
+  it('places a tower on plain moss but on no other bog hex', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const i of [1, 2, 3, 4, 5, 6, 7]) {
+      expect(model.placeBuilding(settlement.id, hex(i), 'tower'), `tower on bog hex ${i}`).toBe(false);
+    }
+    expect(model.placeBuilding(settlement.id, hex(0), 'tower')).toBe(true);
+    expect(model.getTile(hex(0).q, hex(0).r).buildingType).toBe('tower');
   });
 
   it('refuses a new quarry even on a mountain hex inside the realm (new placement is switched off)', () => {
@@ -2718,5 +2741,84 @@ describe('WorldModel chained towers', () => {
       (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
     )!;
     expect(model.placeBuilding(settlement.id, another, 'tower')).toBe(false);
+  });
+});
+
+// Live mode: the server sends the realm it resolved (SettlementResponse.realm); the model uses it instead of resolving locally.
+describe('WorldModel server-resolved realm', () => {
+  const setup = () => {
+    const model = new WorldModel(20260825);
+    const { settlement: a, at } = foundLandedSettlement(model);
+    a.level = 2;
+    const along = (k: number) => ({ q: at.q + k, r: at.r });
+    // A different ownerId: local grouping can never link B to A, only the server's realm does.
+    const b = model.registerSettlement({
+      id: 'b',
+      ownerId: 'other-owner-id',
+      ownerName: a.ownerName,
+      name: 'B',
+      q: along(9).q,
+      r: along(9).r,
+      level: 2,
+      resources: a.resources,
+      rates: a.rates,
+      foundedAt: 0,
+    });
+    const snap = (
+      target: typeof a,
+      towers: { q: number; r: number }[],
+      realm?: { settlementId: string; discs: { q: number; r: number; radius: number }[] }[],
+    ) =>
+      model.applyServerSnapshot(target.id, {
+        level: target.level,
+        resources: target.resources,
+        rates: target.rates,
+        capacity: { wood: 0, stone: 0, food: 0, iron: 0 },
+        buildings: towers.map((t) => ({ q: t.q, r: t.r, type: 'tower', level: 2 })),
+        realm,
+      });
+    const owner = (c: { q: number; r: number }) => model.getTile(c.q, c.r).ownerId;
+    // A land hex inside the disc of radius `radius` around `centre` but outside every other given disc.
+    const landOnlyIn = (centre: { q: number; r: number }, radius: number, others: { q: number; r: number; radius: number }[]) =>
+      hexesInRadius(centre, radius).find(
+        (c) => model.isLand(c.q, c.r) && others.every((o) => hexDistance(o, c) > o.radius) && !model.getTile(c.q, c.r).buildingType,
+      )!;
+    return { model, a, b, at, along, snap, owner, landOnlyIn };
+  };
+
+  it("claims a tower's ground for A when the server lists the tower's disc, and releases it once the realm drops it", () => {
+    const { a, at, along, snap, owner, landOnlyIn } = setup();
+    const home = { ...at, radius: 3 };
+    const tower = { ...along(5), radius: 2 };
+    const probe = landOnlyIn(tower, 2, [home]);
+    snap(a, [along(5)]);
+    expect(owner(probe)).toBeUndefined(); // locally the tower is cut off
+
+    snap(a, [along(5)], [{ settlementId: a.id, discs: [home, tower] }]);
+    expect(owner(probe)).toBe(a.id);
+
+    snap(a, [along(5)], [{ settlementId: a.id, discs: [home] }]);
+    expect(owner(probe)).toBeUndefined();
+  });
+
+  it("claims B's server-given connected disc for B, and releases it when B leaves the realm", () => {
+    const { model, a, b, at, along, snap, owner, landOnlyIn } = setup();
+    const aDisc = { ...at, radius: 3 };
+    const bHome = { ...along(9), radius: 3 };
+    // The disc geometry need not be a real chain: any land outside both longhouse discs works as B's connected tower.
+    const towerHex = hexesInRadius(at, 12).find((c) => model.isLand(c.q, c.r) && hexDistance(c, at) > 3 && hexDistance(c, along(9)) > 3)!;
+    const bTower = { ...towerHex, radius: 0 };
+    const probe = landOnlyIn(bTower, 0, [aDisc, bHome]);
+
+    snap(a, [], [
+      { settlementId: a.id, discs: [aDisc] },
+      { settlementId: b.id, discs: [bHome, bTower] },
+    ]);
+    expect(owner(probe)).toBe(b.id);
+    expect(model.claimDiscsOf(b.id)).toEqual([bHome, bTower]);
+
+    snap(a, [], [{ settlementId: a.id, discs: [aDisc] }]);
+    expect(owner(probe)).toBeUndefined();
+    expect(model.claimDiscsOf(b.id)).toEqual([{ ...bHome }]);
   });
 });

@@ -2,7 +2,7 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { buildThroughOpenRing, enterSettlementAfterOnboarding, waitForMapReady } from './helpers';
+import { buildThroughOpenRing, enterSettlementAfterOnboarding, openHudDrawer, waitForMapReady } from './helpers';
 
 /**
  * The full onboarding happy path, driven through the real UI end to end:
@@ -138,10 +138,9 @@ const SCREEN_SIZES: ScreenSize[] = [
 
 /** The account/registration entry points, wherever this screen size puts them. */
 function accountHud(page: Page, phone: boolean) {
-  const grip = page.locator('.hud-grip');
   const scope = phone ? page.locator('.hud-drawer') : page;
   async function reveal() {
-    if (phone && (await grip.getAttribute('aria-expanded')) !== 'true') await grip.click();
+    if (phone) await openHudDrawer(page);
   }
   return {
     /** Opens the phone drawer if it isn't already; a no-op on desktop. */

@@ -759,6 +759,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("integer");
 
+                    b.Property<string>("FogChunks")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Giants")
                         .IsRequired()
                         .HasColumnType("text");

@@ -427,6 +427,7 @@ public sealed class WorldService(
         CentreR = island.Centre.R,
         TileCount = island.TileCount,
         StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
+        FogChunks = FogChunkLayout.ChunksOf(island.Tiles),
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
         BogTiles = [.. island.BogTiles.Select(ToBogTileRecord)],
         Giants = [.. island.Giants.Select(ToGiantRecord)],

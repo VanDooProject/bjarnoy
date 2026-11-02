@@ -7,9 +7,12 @@
 // together, so a chain reached by a longhouse from either end stays connected
 // when a tower in the middle falls.
 //
-// Pure and unit-testable with plain data (`realmChain.test.ts`); `WorldModel`
-// feeds it the settlements it knows and every consumer of a claim or of a
-// tower's vision reads the answer from here.
+// Pure and unit-testable with plain data (`realmChain.test.ts`); every
+// consumer of a claim or of a tower's vision reads the answer from here.
+// Live mode takes the realm the server resolved (`realmFromDiscs`, the discs
+// of `SettlementResponse.realm`: the client only knows the selected
+// settlement's towers, so it cannot rebuild the realm itself); demo mode
+// resolves it locally from the settlements the model knows (`resolveRealm`).
 import { hexDistance, type AxialCoord } from '../hex/coords';
 import { claimRadiusForLevel, towerClaimRadiusForLevel, type ClaimDisc } from './shoreline';
 
@@ -83,10 +86,37 @@ export function resolveRealm(settlements: readonly RealmSettlementInput[]): Conn
     }
   }
 
+  return buildRealm(reached, discsBySettlement, (id, at) => connected.has(towerKey(id, at.q, at.r)));
+}
+
+/**
+ * The realm the server resolved: each member's connected discs, longhouse disc first, then one per connected tower. A tower is
+ * connected when a disc of its settlement other than the first is centred on its hex.
+ */
+export function realmFromDiscs(
+  members: ReadonlyArray<{ settlementId: string; discs: readonly ClaimDisc[] }>,
+): ConnectedRealm {
+  const discsBySettlement = new Map<string, ClaimDisc[]>();
+  const reached: ClaimDisc[] = [];
+  for (const m of members) {
+    discsBySettlement.set(m.settlementId, m.discs.map((d) => ({ q: d.q, r: d.r, radius: d.radius })));
+    reached.push(...(discsBySettlement.get(m.settlementId) ?? []));
+  }
+  return buildRealm(reached, discsBySettlement, (id, at) =>
+    (discsBySettlement.get(id) ?? []).some((d, i) => i > 0 && d.q === at.q && d.r === at.r),
+  );
+}
+
+/** The `ConnectedRealm` over resolved discs — the one place `covers`, `countConnected` and `discsOf` are built. */
+function buildRealm(
+  reached: ClaimDisc[],
+  discsBySettlement: ReadonlyMap<string, ClaimDisc[]>,
+  isTowerConnected: (settlementId: string, at: AxialCoord) => boolean,
+): ConnectedRealm {
   return {
     allDiscs: reached,
     discsOf: (id) => discsBySettlement.get(id) ?? [],
-    isTowerConnected: (id, at) => connected.has(towerKey(id, at.q, at.r)),
+    isTowerConnected,
     covers: (at) => coveredBy(reached, at),
     countConnected(towerHexes) {
       const seen = new Set<string>();

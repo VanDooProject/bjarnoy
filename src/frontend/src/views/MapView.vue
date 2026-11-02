@@ -31,6 +31,7 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
+import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
 import { useGuildStore } from '../stores/guild';
@@ -68,6 +69,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const auth = useAuthStore();
 const hudPrefs = useHudPrefsStore();
 
 // Mobile-only HUD bar: whether the collapsed bar (and its pull-down drawer)
@@ -282,6 +284,14 @@ watch(
   ([renderer, bitmap, bounds]) => {
     if (renderer && bitmap && bounds) renderer.setFogMask(bounds, bitmap);
   },
+);
+
+// Premium players see every standing camp as a paw symbol on the world map; the renderer never reads the auth store
+// itself, so the host hands it the flag (and updates it when the player's premium status changes).
+watch(
+  [() => canvasRef.value?.renderer, () => auth.isPremium],
+  ([renderer, premium]) => renderer?.setShowCampMarkers(premium),
+  { immediate: true },
 );
 
 // Fog chunks are fetched for the ground the camera actually sees (§3): the

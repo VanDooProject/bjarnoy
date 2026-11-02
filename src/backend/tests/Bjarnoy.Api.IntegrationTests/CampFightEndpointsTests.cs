@@ -135,7 +135,9 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
         // The island filter narrows to that island's camps; another island id matches nothing.
         var onIsland = (await CampsAsync(client, worldId, $"?islandId={islandId}"))!;
         Assert.Contains(onIsland, c => (c.Q, c.R) == (campHex.Q, campHex.R));
-        Assert.True(onIsland.Count < (await CampsAsync(client, worldId))!.Count);
+        // Only islands the caller has seen part of ship camp states, so the planted camp may be all there is.
+        Assert.Single(onIsland);
+        Assert.Contains((await CampsAsync(client, worldId))!, c => (c.Q, c.R) == (campHex.Q, campHex.R));
         Assert.Empty((await CampsAsync(client, worldId, $"?islandId={Guid.NewGuid()}"))!);
     }
 

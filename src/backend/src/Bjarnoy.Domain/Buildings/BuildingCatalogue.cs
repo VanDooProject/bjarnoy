@@ -760,7 +760,9 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(8, level),
-        AllowedTerrain = SandOrGrass,
+        // Stands on grass, sand, forest or plain bog moss (the palisade's rule); the tower replaces the tile under it.
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand, Terrain.Forest },
+        AlsoOnBogKinds = PlainBogOnly,
         // Unlocks at LH 3, later than the first producers on purpose: a tower
         // extends the realm, so opening it at the very first longhouse level
         // made expansion the obvious first move rather than a decision. It is
@@ -935,8 +937,8 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the battering ram (<see cref="Units.UnitDefinition.RequiredBuildingType"/>), the only siege engine that breaches walls
-    /// (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
+    /// Trains the siege engines, catapult and battering ram (<see cref="Units.UnitDefinition.RequiredBuildingType"/>); the ram is the only engine that
+    /// breaches walls (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
     /// mirror <see cref="ArcheryRange"/> one tier up: wood and stone costs about 1.6 times higher (buildings cost no iron), a slightly longer build.
     /// </summary>
     private static BuildingDefinition SiegeWorkshop(int level) => new()
@@ -945,7 +947,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 220, Stone: 160, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(10, level),
-        AllowedTerrain = SandOrGrass,
+        AllowedTerrain = Grass,
     };
 
     // Same shape as FishingHut: RequiresCoastalWater rather than

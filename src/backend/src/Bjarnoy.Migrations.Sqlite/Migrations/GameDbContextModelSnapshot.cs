@@ -754,6 +754,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("FogChunks")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Giants")
                         .IsRequired()
                         .HasColumnType("TEXT");
