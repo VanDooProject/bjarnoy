@@ -443,7 +443,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
 
     // The example island is drawn, and the page links back to the docs hub.
     await expect(page.locator("#example-map canvas")).toBeVisible();
-    await page.getByRole("link", { name: "Docs", exact: true }).click();
+    await page.getByTestId("docs-breadcrumb").getByRole("link", { name: "Docs", exact: true }).click();
     await expect(page).toHaveURL(/\/docs$/);
   });
 
