@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import DateTimeField from '../../components/admin/DateTimeField.vue';
@@ -50,6 +50,17 @@ function draftFor(world: AdminWorldResponse): Draft {
     error: null,
   };
 }
+
+// The date fields hold text in the UI language's layout; when the language
+// changes, re-write what is typed into the new layout so it still parses.
+watch(locale, (next, prev) => {
+  for (const draft of Object.values(drafts)) {
+    for (const key of ['startsAt', 'endbossAt'] as const) {
+      const parsed = parseDateTime(draft[key], prev);
+      if (parsed.ok) draft[key] = formatDateTime(parsed.iso, next);
+    }
+  }
+});
 
 // Creating a world (issue #105). Its own draft, separate from the per-world
 // settings drafts above — this one has no world to key off yet.

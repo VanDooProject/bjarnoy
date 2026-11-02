@@ -267,6 +267,23 @@ describe('AdminWorldsView', () => {
     );
   });
 
+  it('rewrites typed dates into the new layout when the UI language changes', async () => {
+    adminListWorlds.mockResolvedValue([world({ startsAt: new Date(2026, 2, 5, 19, 30).toISOString() })]);
+    const i18n = createTestI18n({ adminWorlds });
+    i18n.global.setLocaleMessage('de', i18n.global.getLocaleMessage('en'));
+    const wrapper = mount(AdminWorldsView, {
+      global: { stubs: { RouterLink: RouterLinkStub }, plugins: [i18n] },
+    });
+    await flushPromises();
+    await wrapper.find('input#endboss-world-1').setValue('2026-04-01 08:15');
+
+    i18n.global.locale.value = 'de';
+    await flushPromises();
+
+    expect((wrapper.find('input#starts-world-1').element as HTMLInputElement).value).toBe('05.03.2026 19:30');
+    expect((wrapper.find('input#endboss-world-1').element as HTMLInputElement).value).toBe('01.04.2026 08:15');
+  });
+
   it('clears a date when its field is emptied', async () => {
     const wrapper = await mountView([world({ startsAt: new Date(2026, 2, 5, 19, 30).toISOString() })]);
     adminUpdateWorldSettings.mockResolvedValue(world());
