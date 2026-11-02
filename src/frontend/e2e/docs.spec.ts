@@ -984,8 +984,8 @@ test.describe(
         island: ".bog-island",
         caption: "bog-island-caption",
         probes: [
-          { fx: 0.2, fy: 0.4, name: "River" },
-          { fx: 0.75, fy: 0.5, name: "Grass" },
+          { fx: 0.44, fy: 0.41, name: "River" },
+          { fx: 0.65, fy: 0.6, name: "Grass" },
         ],
       },
     ];
