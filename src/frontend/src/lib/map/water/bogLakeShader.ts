@@ -184,35 +184,41 @@ float maskAt(vec2 w, vec2 off) {
 // with probability uBlopDensity. The spot must sit well inside the water, else that cycle shows nothing, and the spot is inset so a curl
 // never reaches the next cell.
 float blops(vec2 w, float t) {
-  // Cells smaller than a hex (TILE_W 168 -> ~77 world units square): spots near the bank fail the water check, so this lands at about one
-  // curl per hex of lake on average.
+  // Cells smaller than a hex (TILE_W 168 -> ~67 world units square): spots near the bank or an island fail the water check, so at density
+  // 1 this lands at about one curl per hex of lake; the shipped density (0.5) shows about half that.
   float cell = uTileW * 0.4;
   vec2 id = floor(w / cell);
   float h = hash21(id + 3.3);
-  float period = 2.8 + 0.8 * h;
+  float period = 3.2 + 1.0 * h;
   float tt = t + hash21(id + 8.8) * period;
   float cycle = floor(tt / period);
   float local = fract(tt / period) * period;
-  float lifeSec = 2.0 + 0.6 * hash21(id + cycle * 1.7);
+  float lifeSec = 2.4 + 0.8 * hash21(id + cycle * 1.7);
   if (local > lifeSec) return 0.0;
   if (hash21(id * 1.3 + cycle * 7.1 + 0.4) > uBlopDensity) return 0.0;
-  float rad = 9.0 * uBlopSize * (0.85 + 0.3 * hash21(id + cycle * 5.3));
-  // The curl reaches rad across and rad / 0.6 up and down (squashed in y), plus its line and a margin.
-  vec2 reach2 = vec2(rad + 4.0, rad / 0.6 + 4.0);
-  float reach = reach2.y;
+  // Size varies per blop; over its life the curl grows from 55 % to 130 % of it and drifts toward its bulge (+x) by 1.6 times it.
+  float size = 9.0 * uBlopSize * (0.6 + 0.8 * hash21(id + cycle * 5.3));
+  float rMax = size * 1.3;
+  float driftMax = size * 1.6;
+  // The curl's whole path: up to rMax across (plus the drift) and rMax / 0.6 up and down (squashed in y), plus its line and a margin.
+  vec2 reach2 = vec2(rMax + 4.0, rMax / 0.6 + 4.0);
+  float reach = reach2.y + driftMax;
   float inset = min(0.45, reach / cell);
-  vec2 centre = (id + inset + (1.0 - 2.0 * inset) * vec2(hash21(id + cycle * 2.3 + 1.1), hash21(id + cycle * 3.9 + 5.7))) * cell;
-  vec2 p = w - centre;
-  if (dot(p, p) > reach * reach) return 0.0;
-  if (maskAt(centre, vec2(0.0)) < 0.9) return 0.0;
-  // The water around it, a little inside the curl's reach: the lake mask has the banks and the art on the water (lily pads, reed
-  // islands) cut out, so a curl neither touches a bank nor sits half under an island.
+  vec2 start = (id + inset + (1.0 - 2.0 * inset) * vec2(hash21(id + cycle * 2.3 + 1.1), hash21(id + cycle * 3.9 + 5.7))) * cell;
+  vec2 mid = start + vec2(driftMax * 0.5, 0.0);
+  if (dot(w - mid, w - mid) > reach * reach) return 0.0;
+  // The water along the path, a little inside the curl's reach: the lake mask has the banks and the art on the water (lily pads, reed
+  // islands) cut out, so a curl neither touches a bank nor slides under an island.
   vec2 probe = reach2 * 0.75;
-  if (maskAt(centre, vec2(probe.x, 0.0)) < 0.9 || maskAt(centre, vec2(-probe.x, 0.0)) < 0.9) return 0.0;
-  if (maskAt(centre, vec2(0.0, probe.y)) < 0.9 || maskAt(centre, vec2(0.0, -probe.y)) < 0.9) return 0.0;
+  vec2 end = start + vec2(driftMax, 0.0);
+  if (maskAt(start, vec2(0.0)) < 0.9 || maskAt(end, vec2(0.0)) < 0.9) return 0.0;
+  if (maskAt(start, vec2(-probe.x, 0.0)) < 0.9 || maskAt(end, vec2(probe.x, 0.0)) < 0.9) return 0.0;
+  if (maskAt(mid, vec2(0.0, probe.y)) < 0.9 || maskAt(mid, vec2(0.0, -probe.y)) < 0.9) return 0.0;
   float age = local / lifeSec;
-  float life = smoothstep(0.0, 0.15, age) * (1.0 - smoothstep(0.55, 1.0, age));
-  return curlShape(p, rad, 0.6, 1.5) * life * 0.85;
+  float rad = size * mix(0.55, 1.3, age);
+  vec2 centre = start + vec2(driftMax * age, 0.0);
+  float life = smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.45, 1.0, age));
+  return curlShape(w - centre, rad, 0.6, 1.5) * life * 0.85;
 }
 
 // Premultiplied colour c at alpha a.

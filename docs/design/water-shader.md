@@ -990,7 +990,7 @@ distance also reads this:
 
 Settlement view only. The lake water of the bog (terrain `lake` and the `boglake`, `boglake_inlet`, `boglake_shore`, `boglake_half`,
 `boglake_mouth` families) gets a second shader, `bogLakeShader.ts`, drawn by `BogLakeLayer.ts`: a wind gust that travels over the lake in
-exactly the phase of the forest sway clips next to it. Three looks, each behind its own flag, all on by default (the lake's base colour is
+exactly the phase of the forest sway clips next to it. Three looks, each behind its own flag, all **off** by default (the lakes ship with the blops only) (the lake's base colour is
 dark navy, about rgb(16-24, 32-40, 56-72)). Between gusts the water is left calm. From bottom to top:
 
 - **Cat's paws**: darker matte patches where the gust roughens the surface, with a fine grain inside, drifting downwind.
@@ -1060,16 +1060,17 @@ checks.
 | `vec2 uLakeOrigin`, `uLakeSize` | the world rect the lake mask covers (min corner, size): maps a world point onto the mask for point samples |
 | `float uBlops`, `uBlopDensity`, `uBlopSize` | blops strength (0 = off), chance a cell's cycle shows its curl (1), curl size multiplier (1) |
 
-**Blops.** Independent of the wind (not gated by the gust band): micro curls that appear at random spots on the lake and fade again.
-Each blop is one thin crescent ")" drawn by `curlShape`, the same mark as the micro curls foam style, and every blop faces the same way.
-Ring radius 9 world units (squashed in y like the ground, about 30 units tall), line about 1 unit, near-white, alpha up to 0.85; it fades
-in over the first 15 % of its life and out over the last 45 %, life 2.0-2.6 s. The shader runs a jittered grid of cells `0.4 * TILE_W`
-(about 67 world units) square; each cell has its own cycle (period 2.8-3.6 s, random phase) and, per cycle, a fresh random spot (hashed
-from the cycle index). A spot is checked against `uLakeMask` (the centre and four points at 75 % of the curl's reach must read above 0.9) and
-skipped otherwise, so a curl neither touches the bank nor sits half under a reed island or lily pad (the lake mask has those cut out, see
-below); the cells are smaller than a hex to make up for the rejected spots, and the demo lake (about 10 hexes) shows 7-9 curls at a time,
-about one per hex. Bigger lakes show more. `bogLakeBlopDensity` is the chance (0..1) a
-cycle shows its curl. Flag `bogLakeBlops`, tuning `bogLakeBlopsStrength`, `bogLakeBlopDensity`, `bogLakeBlopSize` (all 1).
+**Blops.** Independent of the wind (not gated by the gust band): micro curls that appear at random spots on the lake, grow and drift,
+then fade. Each blop is one thin crescent ")" drawn by `curlShape`, the same mark as the micro curls foam style, and every blop faces the
+same way. Its size varies per blop (9 world units ring radius times 0.6-1.4, times `bogLakeBlopSize`); over its life (2.4-3.2 s) the
+ring grows from 55 % to 130 % of that size while the curl drifts toward its bulge (+x) by 1.6 times the size, fading in over the first
+12 % and out over the last 55 %. Line about 1 unit, near-white, alpha up to 0.85. The shader runs a jittered grid of cells `0.4 * TILE_W`
+(about 67 world units) square; each cell has its own cycle (period 3.2-4.2 s, random phase) and, per cycle, a fresh random start spot
+(hashed from the cycle index). The whole path is checked against `uLakeMask` (start and end centres, the far ends, and above and below the
+middle, at 75 % of the curl's reach, must read above 0.9) and the blop skipped otherwise, so a curl neither touches the bank nor slides
+under a reed island or lily pad (the lake mask has those cut out, see below). `bogLakeBlopDensity` is the chance (0..1) a cycle shows its
+curl: 1 is about one curl per hex of lake, the shipped 0.5 about one per two hexes (about 4 on the 10-hex demo lake). Flag `bogLakeBlops`,
+tuning `bogLakeBlopsStrength` (1), `bogLakeBlopDensity` (0.5), `bogLakeBlopSize` (1).
 
 ### 4.4 Uniforms
 
@@ -1148,9 +1149,9 @@ export interface WaterDebugFlags {
   /** §3.3's code-side split of the unsplit tall art. Off reproduces the artifact it fixes. */
   legacyTileSplit: boolean;     // default true
   /** Bog lakes, inside the forest wind gust (§4.4d): white foam lines, a soft sheen, cat's paws. */
-  bogLakeFoam: boolean;         // default true
-  bogLakeSheen: boolean;        // default true
-  bogLakeCatsPaws: boolean;     // default true
+  bogLakeFoam: boolean;         // default false
+  bogLakeSheen: boolean;        // default false
+  bogLakeCatsPaws: boolean;     // default false
   bogLakeBlops: boolean;        // default true — micro curls appearing at random on the lake, independent of the wind
 }
 export interface WaterDebugTuning {
@@ -1165,7 +1166,7 @@ export interface WaterDebugTuning {
   bogLakeSheenStrength: number;    // 1
   bogLakeCatsPawsStrength: number; // 1
   bogLakeBlopsStrength: number;    // 1
-  bogLakeBlopDensity: number;      // 1 — chance a hex-sized cell's cycle shows its curl
+  bogLakeBlopDensity: number;      // 0.5 — chance a cell's cycle shows its curl (1 = about one per hex)
   bogLakeBlopSize: number;         // 1 — curl size multiplier (ring radius 9 world units)
   bogLakeFoamWidth: number;        // 0.04 — foam line half-width, share of the spacing
   bogLakeFoamSpacing: number;      // 15 — world units between foam lines

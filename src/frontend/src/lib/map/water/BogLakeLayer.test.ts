@@ -73,6 +73,15 @@ describe('BogLakeLayer', () => {
 
   it('turns each look off with its own flag and scales it with its strength', () => {
     const layer = new BogLakeLayer(TILE_W);
+    // The gust looks ship off: only the blops show by default.
+    layer.tick(0);
+    expect(uniformsOf(layer).uFoam).toBe(0);
+    expect(uniformsOf(layer).uSheen).toBe(0);
+    expect(uniformsOf(layer).uCatsPaws).toBe(0);
+
+    waterDebugFlags.bogLakeFoam = true;
+    waterDebugFlags.bogLakeSheen = true;
+    waterDebugFlags.bogLakeCatsPaws = true;
     layer.tick(0);
     expect(uniformsOf(layer).uFoam).toBe(1);
     expect(uniformsOf(layer).uSheen).toBe(1);
@@ -97,7 +106,7 @@ describe('BogLakeLayer', () => {
     const layer = new BogLakeLayer(TILE_W);
     layer.tick(0);
     expect(uniformsOf(layer).uBlops).toBe(1);
-    expect(uniformsOf(layer).uBlopDensity).toBe(1);
+    expect(uniformsOf(layer).uBlopDensity).toBe(0.5);
     waterDebugTuning.bogLakeBlopsStrength = 1.5;
     waterDebugTuning.bogLakeBlopDensity = 0.5;
     waterDebugTuning.bogLakeBlopSize = 1.4;

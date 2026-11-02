@@ -103,9 +103,9 @@ export const waterDebugFlags: WaterDebugFlags = {
   legacyWaveSquiggles: true,
   showWaterMask: false,
   legacyTileSplit: true,
-  bogLakeFoam: true,
-  bogLakeSheen: true,
-  bogLakeCatsPaws: true,
+  bogLakeFoam: false,
+  bogLakeSheen: false,
+  bogLakeCatsPaws: false,
   bogLakeBlops: true,
 };
 
@@ -195,7 +195,7 @@ export interface WaterDebugTuning {
   bogLakeCatsPawsStrength: number;
   /** Multiplier on the blops (1 is what ships). Only used while the flag is on. */
   bogLakeBlopsStrength: number;
-  /** Chance (0..1) that a hex-sized cell's cycle shows its blop; 1 ships, about one curl per hex at a time. */
+  /** Chance (0..1) that a cell's cycle shows its blop: 1 is about one curl per hex at a time; 0.5 ships. */
   bogLakeBlopDensity: number;
   /** Size multiplier of the blop curls (1 = ring radius 9 world units). */
   bogLakeBlopSize: number;
@@ -235,7 +235,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeSheenStrength: 1,
   bogLakeCatsPawsStrength: 1,
   bogLakeBlopsStrength: 1,
-  bogLakeBlopDensity: 1,
+  bogLakeBlopDensity: 0.5,
   bogLakeBlopSize: 1,
   bogLakeFoamWidth: 0.04,
   bogLakeFoamSpacing: 15,
