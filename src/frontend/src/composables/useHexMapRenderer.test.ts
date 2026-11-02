@@ -12,6 +12,7 @@ const instances: Array<{
   destroy: ReturnType<typeof vi.fn>;
   setWaterMotion: ReturnType<typeof vi.fn>;
   setFogMotion: ReturnType<typeof vi.fn>;
+  setLakeMotion: ReturnType<typeof vi.fn>;
 }> = [];
 
 vi.mock("../lib/map/HexMapRenderer", () => ({
@@ -26,6 +27,7 @@ vi.mock("../lib/map/HexMapRenderer", () => ({
     setAnimationsEnabled = vi.fn();
     setWaterMotion = vi.fn();
     setFogMotion = vi.fn();
+    setLakeMotion = vi.fn();
     constructor() {
       instances.push(this);
     }
@@ -111,22 +113,27 @@ describe("useHexMapRenderer mount failure + retry", () => {
     wrapper.unmount();
   });
 
-  it("wires the water and fog motion settings onto the renderer and follows later changes", async () => {
+  it("wires the water, lake wind and fog motion settings onto the renderer and follows later changes", async () => {
     motionPreferences.water = "on";
+    motionPreferences.lakes = "off";
     motionPreferences.fog = "off";
     const { wrapper } = mountHost();
     await flush();
 
     expect(instances[0]!.setWaterMotion).toHaveBeenLastCalledWith(true);
+    expect(instances[0]!.setLakeMotion).toHaveBeenLastCalledWith(false);
     expect(instances[0]!.setFogMotion).toHaveBeenLastCalledWith(false);
 
     motionPreferences.water = "off";
+    motionPreferences.lakes = "on";
     motionPreferences.fog = "on";
     await flush();
     expect(instances[0]!.setWaterMotion).toHaveBeenLastCalledWith(false);
+    expect(instances[0]!.setLakeMotion).toHaveBeenLastCalledWith(true);
     expect(instances[0]!.setFogMotion).toHaveBeenLastCalledWith(true);
 
     motionPreferences.water = "auto";
+    motionPreferences.lakes = "auto";
     motionPreferences.fog = "auto";
     wrapper.unmount();
   });

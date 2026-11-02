@@ -51,12 +51,14 @@ describe('motionPreferences', () => {
     expect(motionPreferences.water).toBe('auto');
     expect(motionPreferences.waterEnabled).toBe(false);
     expect(motionPreferences.fogEnabled).toBe(false);
+    expect(motionPreferences.lakesEnabled).toBe(false);
     expect(motionPreferences.hudEnabled).toBe(false);
   });
 
   it('animates under auto when the device does not ask for reduced motion', async () => {
     const { motionPreferences } = await load({}, false);
     expect(motionPreferences.waterEnabled).toBe(true);
+    expect(motionPreferences.lakesEnabled).toBe(true);
     expect(motionPreferences.hudEnabled).toBe(true);
   });
 
@@ -64,13 +66,16 @@ describe('motionPreferences', () => {
     const first = await load({}, true);
     first.motionPreferences.water = 'on';
     first.motionPreferences.fog = 'off';
+    first.motionPreferences.lakes = 'on';
     first.motionPreferences.hud = 'on';
     expect(first.store.get('bjarnoy.motion.water')).toBe('on');
     expect(first.store.get('bjarnoy.motion.fog')).toBe('off');
+    expect(first.store.get('bjarnoy.motion.lakes')).toBe('on');
     expect(first.store.get('bjarnoy.motion.hud')).toBe('on');
     const second = await load(Object.fromEntries(first.store), true);
     expect(second.motionPreferences.waterEnabled).toBe(true);
     expect(second.motionPreferences.fogEnabled).toBe(false);
+    expect(second.motionPreferences.lakesEnabled).toBe(true);
     expect(second.motionPreferences.hudEnabled).toBe(true);
   });
 
@@ -79,12 +84,13 @@ describe('motionPreferences', () => {
     expect(motionPreferences.water).toBe('auto');
   });
 
-  it('turnAllOn sets all four settings and records the answer', async () => {
+  it('turnAllOn sets every setting and records the answer', async () => {
     const { motionPreferences, animationPreference, store } = await load({}, true);
     motionPreferences.turnAllOn();
     expect(animationPreference.setting).toBe('on');
     expect(motionPreferences.water).toBe('on');
     expect(motionPreferences.fog).toBe('on');
+    expect(motionPreferences.lakes).toBe('on');
     expect(motionPreferences.hud).toBe('on');
     expect(store.get('bjarnoy.animations')).toBe('on');
     expect(store.get('bjarnoy.motionPrompt')).toBe('on');
@@ -113,6 +119,7 @@ describe('motionPreferences', () => {
       ['bjarnoy.animations', 'off'],
       ['bjarnoy.motion.water', 'off'],
       ['bjarnoy.motion.fog', 'on'],
+      ['bjarnoy.motion.lakes', 'off'],
       ['bjarnoy.motion.hud', 'on'],
     ])('hidden once %s was set to %s', async (key, value) => {
       const { motionPreferences } = await load({ [key]: value }, true);

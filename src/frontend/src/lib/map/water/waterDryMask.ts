@@ -6,8 +6,11 @@
 // masks, placed where the tile art is drawn, into one render texture covering
 // the water mask's world rect. The water shader samples it with the same UVs as
 // the water mask and keeps caustics and foam off whatever is dry.
+//
+// The bog lake layer (bogLakeShader.ts) reuses all of it: the same class draws the lake *wet* masks (`virtual:water-dry-masks`' `lake` atlas)
+// of the lake hexes into a render texture of its own, over the lakes' bounding rect (`entriesWorldBounds`).
 import { Container, ImageSource, Matrix, Rectangle, RenderTexture, Sprite, Texture, type Renderer } from 'pixi.js';
-import { REFERENCE_FRAME_RE, SOURCE_H, SOURCE_W, type DryMaskFrame, type WaterDryMasksData } from './dryMaskCore';
+import { REFERENCE_FRAME_RE, SOURCE_H, SOURCE_W, type DryMaskFrame, type MaskAtlasData } from './dryMaskCore';
 
 /** Render-texture pixels per world unit: one, finer than a mask cell texel (2 source px = ~1.7 units), so the RT adds no blockiness of its own at close zoom. */
 export const DRY_RT_PIXELS_PER_UNIT = 1;
@@ -52,45 +55,50 @@ export interface DryEntry {
 }
 
 /**
- * The dry layer's entries from the terrain rebuild's base entries: every sea hex's base art, at the sprite's top-left
- * (`origin`). Skips a hex without art — the sprite layer draws nothing there either, e.g. a revealed wasted coast while
- * its atlas pack is still loading (or failed to) — and legacy-split crops, which are land.
+ * A mask layer's entries from the terrain rebuild's base entries: the base art of every hex `include` picks (the sea hexes for the
+ * dry layer, the lake-water frames for the bog lake layer), at the sprite's top-left (`origin`). Skips a hex without art — the sprite
+ * layer draws nothing there either, e.g. a revealed wasted coast while its atlas pack is still loading (or failed to) — and
+ * legacy-split crops, which are land.
  */
-export function seaDryEntries<C>(
+export function maskEntries<C>(
   entries: Iterable<{ texture: Texture | undefined; coord: C; crop?: unknown }>,
-  isSea: (coord: C) => boolean,
+  include: (coord: C, texture: Texture) => boolean,
   origin: (coord: C) => { x: number; y: number },
 ): DryEntry[] {
   const out: DryEntry[] = [];
   for (const { texture, coord, crop } of entries) {
-    if (!texture || crop || !isSea(coord)) continue;
+    if (!texture || crop || !include(coord, texture)) continue;
     out.push({ texture, ...origin(coord) });
   }
   return out;
 }
 
+/** Which mask atlas a layer draws: the sea hexes' dry masks or the bog lakes' wet masks. */
+export type MaskKind = 'dry' | 'lake';
+
 interface LoadedMasks {
-  data: WaterDryMasksData;
+  data: MaskAtlasData;
   atlas: Texture;
   cells: Map<string, Texture>;
 }
 
-let masksPromise: Promise<LoadedMasks> | null = null;
+const masksPromises: Partial<Record<MaskKind, Promise<LoadedMasks>>> = {};
 
-/** Decodes the build-time mask atlas once, lazily — it is not needed until a settlement view draws sea. */
-function loadMasks(): Promise<LoadedMasks> {
-  masksPromise ??= (async () => {
-    const { default: data } = await import('virtual:water-dry-masks');
+/** Decodes a build-time mask atlas once, lazily — it is not needed until a settlement view draws sea (or lakes). */
+function loadMasks(kind: MaskKind): Promise<LoadedMasks> {
+  masksPromises[kind] ??= (async () => {
+    const { default: all } = await import('virtual:water-dry-masks');
+    const data = kind === 'lake' ? all.lake : all;
     const blob = await (await fetch(data.url)).blob();
     // 'none': keep the PNG's values as they are; Pixi premultiplies on upload, so the mask lands in the alpha channel (and rgb).
     const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
     const atlas = new Texture({ source: new ImageSource({ resource: bitmap, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
     return { data, atlas, cells: new Map() };
   })();
-  masksPromise.catch(() => {
-    masksPromise = null;
+  masksPromises[kind]!.catch(() => {
+    delete masksPromises[kind];
   });
-  return masksPromise;
+  return masksPromises[kind]!;
 }
 
 function cellTexture(masks: LoadedMasks, name: string, frame: DryMaskFrame): Texture {
@@ -102,8 +110,26 @@ function cellTexture(masks: LoadedMasks, name: string, frame: DryMaskFrame): Tex
   return texture;
 }
 
+/** The world rect (min/max) covering the art canvases of `entries`, or null for none — the lake layer's render-texture rect. */
+export function entriesWorldBounds(entries: readonly DryEntry[], tileWidth: number): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  if (entries.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const entry of entries) {
+    const r = artCanvasWorldRect(entry, tileWidth);
+    minX = Math.min(minX, r.x);
+    minY = Math.min(minY, r.y);
+    maxX = Math.max(maxX, r.x + r.w);
+    maxY = Math.max(maxY, r.y + r.h);
+  }
+  return { minX, minY, maxX, maxY };
+}
+
 /**
- * Owns the dry-mask render texture and the sprites drawn into it.
+ * Owns a mask render texture and the sprites drawn into it: the sea hexes' dry mask (`kind` 'dry', the default) or the bog lakes' wet
+ * mask (`kind` 'lake').
  *
  * `draw` runs when the water mask is applied or the terrain base entries
  * change, never per frame.
@@ -114,9 +140,15 @@ export class WaterDryLayer {
   private target: RenderTexture | null = null;
   private masks: LoadedMasks | null = null;
 
+  private readonly kind: MaskKind;
+
+  constructor(kind: MaskKind = 'dry') {
+    this.kind = kind;
+  }
+
   /** The masks are lazily decoded; resolves when `draw` can use them. */
   async load(): Promise<void> {
-    this.masks = await loadMasks();
+    this.masks = await loadMasks(this.kind);
   }
 
   get ready(): boolean {
@@ -129,8 +161,8 @@ export class WaterDryLayer {
   }
 
   /**
-   * Rebuilds the render texture over `rect` (the water mask's world rect) from
-   * `entries`, the base art of every sea hex. Returns the (possibly new)
+   * Rebuilds the render texture over `rect` (the water mask's world rect; the lakes' bounds for a lake layer) from
+   * `entries`, the base art of every sea (lake) hex. Returns the (possibly new)
    * texture to bind.
    */
   draw(renderer: Renderer, rect: { minX: number; minY: number; maxX: number; maxY: number }, entries: readonly DryEntry[], tileWidth: number): Texture | null {
@@ -157,11 +189,12 @@ export class WaterDryLayer {
     };
     for (const entry of entries) {
       const name = entry.texture.label ?? '';
-      if (REFERENCE_FRAME_RE.test(name)) continue;
+      if (this.kind === 'dry' && REFERENCE_FRAME_RE.test(name)) continue;
       const frame = masks.data.frames[name];
       if (frame) place(cellTexture(masks, name, frame), dryCellWorldRect(entry, frame, tileWidth), 0xffffff);
       // Sea-hex art that is not plain water and has no mask: all of it is dry. Black tint keeps rgb 0 and the art's own alpha, which is what the shader reads.
-      else place(entry.texture, artCanvasWorldRect(entry, tileWidth), 0x000000);
+      // (A lake frame without a mask has no lake water to show: it draws nothing.)
+      else if (this.kind === 'dry') place(entry.texture, artCanvasWorldRect(entry, tileWidth), 0x000000);
     }
     for (let i = used; i < this.pool.length; i++) {
       if (this.pool[i].parent) this.container.removeChild(this.pool[i]);
