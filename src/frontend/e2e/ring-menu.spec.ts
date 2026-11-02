@@ -158,7 +158,7 @@ test.describe('ring menu drill-down', () => {
     await settlement.setSettlementLevel(3);
 
     // Ask the model for a real empty, owned, grass hex (grass is what carries
-    // the Military category — see BUILD_CATEGORIES) rather than guessing a
+    // the Military and Defence categories — see BUILD_CATEGORIES) rather than guessing a
     // pixel offset that only lands on one at a particular camera framing.
     const target = await settlement.findHex({ terrain: 'grass' });
 
@@ -224,6 +224,8 @@ test.describe('ring menu drill-down', () => {
     });
     expect(underCard).not.toContain('ring-card');
 
+    // The Watchtower is a defence building: switch from Military to Defence.
+    await settlement.ring.openCategory('Defence');
     const watchtower = settlement.ring.child('Watchtower').first();
     await settlement.ring.hover(watchtower);
     await settlement.ring.press();
