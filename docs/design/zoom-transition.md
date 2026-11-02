@@ -347,3 +347,15 @@ does.
   this repo's Node-environment Vitest setup (no DOM/Pixi), so it's covered
   by `e2e/pinch-zoom.spec.ts` instead, driving real two-finger touch via
   CDP's `Input.dispatchTouchEvent`.
+
+### 9.3 One route, zoom is the only switch
+
+The `/world` route and the HUD's "World map" link are gone: zooming
+(wheel or pinch) is the only way between the two modes. Both modes live on
+`/settlement`; world mode adds a `#world` hash (`lib/mapModeRoute.ts`'s
+`WORLD_HASH`), which `MapView.vue` derives `mode` from and the zoom crossing
+pushes, so back/forward, a reload and the e2e suite still see which mode is
+showing. The HUD's "Settlement" link brings world mode back to the
+settlement. e2e specs reach world mode by setting the hash
+(`helpers.ts`'s `gotoWorldMap`) instead of replaying a zoom gesture;
+`zoom-transition.spec.ts` and `pinch-zoom.spec.ts` cover the gesture itself.

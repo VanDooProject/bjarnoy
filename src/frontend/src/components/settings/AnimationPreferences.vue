@@ -40,7 +40,7 @@ const deviceReduced = computed(() => animationPreference.reducedMotion);
 const osHint = computed(() => t(`profile.graphics.device.hint.${currentDeviceOs()}`));
 
 interface MotionRow {
-  id: 'buildings' | 'water' | 'fog' | 'menus';
+  id: 'buildings' | 'water' | 'lakes' | 'fog' | 'menus';
   group: 'map' | 'hud';
   current: () => MotionSetting;
   set: (value: MotionSetting) => void;
@@ -49,6 +49,7 @@ interface MotionRow {
 const ROWS: MotionRow[] = [
   { id: 'buildings', group: 'map', current: () => animationPreference.setting, set: (v) => (animationPreference.setting = v) },
   { id: 'water', group: 'map', current: () => motionPreferences.water, set: (v) => (motionPreferences.water = v) },
+  { id: 'lakes', group: 'map', current: () => motionPreferences.lakes, set: (v) => (motionPreferences.lakes = v) },
   { id: 'fog', group: 'map', current: () => motionPreferences.fog, set: (v) => (motionPreferences.fog = v) },
   { id: 'menus', group: 'hud', current: () => motionPreferences.hud, set: (v) => (motionPreferences.hud = v) },
 ];

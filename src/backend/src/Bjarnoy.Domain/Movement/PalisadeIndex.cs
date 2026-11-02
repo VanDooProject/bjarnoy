@@ -4,7 +4,8 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Movement;
 
 /// <summary>One standing wall hex of the world: where, whether it is a gate, and whose (an opaque key two armies of one owner share: the account, or the settlement itself for an anonymous one).</summary>
-public readonly record struct StandingWall(HexCoord Coord, bool IsGate, Guid OwnerKey);
+/// <remarks>A gate whose hex lies outside its owner's realm (<paramref name="OutsideRealm"/>) has no function and is open to every army.</remarks>
+public readonly record struct StandingWall(HexCoord Coord, bool IsGate, Guid OwnerKey, bool OutsideRealm = false);
 
 /// <summary>
 /// What a land army's pathfinding takes from the world's palisades (<see cref="HexPathfinder.FindPath"/>'s <c>blocked</c>,
@@ -85,6 +86,6 @@ public sealed class PalisadeIndex
         ? null
         : new WallRules(
             IsWall,
-            hex => _walls.TryGetValue(hex, out var wall) && wall.IsGate && (wall.OwnerKey == ownerKey || _areFriends(wall.OwnerKey, ownerKey)),
+            hex => _walls.TryGetValue(hex, out var wall) && wall.IsGate && (wall.OutsideRealm || wall.OwnerKey == ownerKey || _areFriends(wall.OwnerKey, ownerKey)),
             IsHalfOpen);
 }

@@ -68,7 +68,8 @@ describe('river-generation golden fixture (river generation parity)', () => {
     );
 
     expect(actual).toEqual(scenario.rivers);
-  });
+    // The valley-stream island has 21k tiles and 16 bog sites with the gap fill: generating it takes about 7 s, over the 5 s default.
+  }, 30_000);
 
   it.each(fixture.scenarios.filter((s) => !s.wasted))(
     '$name: every sea mouth is a river-width delta with the sea straight ahead of its single inflow',

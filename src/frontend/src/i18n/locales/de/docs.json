@@ -51,7 +51,12 @@
       "founding": {
         "landMovement": "Wie schnell Siedler jedes Feld überqueren.",
         "wildlifeCamps": "Starke Lager können Siedler unterwegs überfallen.",
-        "bogLands": "Landeplätze brauchen Moor in Reichweite für Lehm und Eisen."
+        "realm": "Eine neue Siedlung hält Abstand zu deinem Gebiet, Wachtürme eingerechnet."
+      },
+      "realm": {
+        "founding": "Wo eine neue Siedlung landen darf, wird von jeder Gebietsgrenze aus gemessen, Wachtürme eingerechnet.",
+        "walls": "Auch Mauern stehen innerhalb deines Gebiets und brauchen einen Wachturm der Stufe 5.",
+        "wildlifeCamps": "Starke Lager greifen Wachtürme an."
       },
       "landMovement": {
         "walls": "Ein Mauerfeld hält jede Landarmee auf.",
@@ -126,6 +131,10 @@
       "founding": {
         "title": "Siedlungen gründen",
         "description": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann."
+      },
+      "realm": {
+        "title": "Das Gebiet erweitern",
+        "description": "Wie weit dein Anspruch reicht, wie Wachtürme die Grenze hinausschieben und wie viele du bauen darfst."
       },
       "landMovement": {
         "title": "Bewegung an Land",
@@ -224,7 +233,7 @@
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
       "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte. Erreicht ein Rohstoff das Lagerlimit, stoppt seine Produktion – ein volles Lager verschenkt also Ertrag.",
-      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit.",
+      "tower": "Ein Wachturm an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit. Du baust ihn auf Gras, Sand, Wald oder schlichtem Moorboden. Gebäude, die dein Reich nicht mehr erreicht, arbeiten nicht mehr und verlieren mit der Zeit Stufen, bis dein Reich sie wieder erreicht. Auf Stufe 0 sind sie weg.",
       "fishinghut": "Ein Steg über flachem Wasser, von dem aus du Untiefen befischst, die ein Bauernhof nie erreichen könnte. Die Hütte steht auch auf Pfählen am Halbufer eines Moorsees.",
       "pumpkinfarm": "Eine zweite Ernte für Gras: Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Sie lässt sich nur auf einer Insel mit Kürbisboden bauen (den Boden jeder Insel bestimmt das Spiel, nicht du). Das ist der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
       "shrineofthor": "Für Thor auf Gras errichtet, hinter einer Waffenschmiede der Stufe 5. Die Gunst des Kriegsgottes stärkt den Angriff deiner Landeinheiten (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
@@ -572,7 +581,8 @@
       "mountain": "Berg",
       "wasteland": "Ödland",
       "bog": "Moor",
-      "riverStraight": "Fluss"
+      "riverStraight": "Fluss",
+      "sea": "Offenes Meer"
     },
     "list": {
       "wolfden": {
@@ -627,6 +637,10 @@
       "otterslide": {
         "name": "Otterrutsche",
         "guards": "Ein Otter schwimmt, einer liegt mit einem Fisch auf dem Treibholz, einer läuft am Ufer und einer wartet am Bau."
+      },
+      "whaleroad": {
+        "name": "Walweg",
+        "guards": "Eine Buckelwalkuh und ihr Kalb tauchen auf offener See auf, Möwen kreisen darüber. Er liegt weit vor der Küste, nur Flotten begegnen ihm, und er liefert Nahrung."
       }
     },
     "beasts": {
@@ -832,7 +846,7 @@
       "body": "Mauern wirken nur auf Landarmeen. Flotten sind nicht betroffen.",
       "rules": {
         "block": "Ein Mauerfeld sperrt jede Landarmee, auch deine eigene. Es zählen nur fertige Felder: Eine Baustelle sperrt nicht.",
-        "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten.",
+        "gate": "Ein Tor lässt die Armeen seines Besitzers durch, ebenso die seiner Gilde und die von Gilden, die mit ihr im Frieden sind, und zwar so schnell wie den Boden darunter. Alle anderen werden aufgehalten. Liegt ein Tor außerhalb des Reichs seines Besitzers, hat es keine Wirkung und lässt jede Armee durch.",
         "end": "Ein Landende ist halb offen: Jede Armee kann es überqueren, doch der Schritt kostet 3 mehr als der Boden darunter. Armeen nehmen es also nur, wenn es keinen offenen Weg außen herum gibt. Berührt es einen Berg oder einen breiten Fluss, ist es ein verschlossenes Ende und sperrt wie jedes andere Mauerfeld.",
         "sea": "Eine Mauer, die in einem Seeende ausläuft, schließt an der Küste ab. Hört eine Mauer an Land neben offenem Meer einfach auf, ist das anders: Ihr halb offenes Ende ist dann der Weg hindurch.",
         "natural": "Berge können Landarmeen gar nicht überqueren, breite Flüsse nur über eine Brücke. Reicht eine Mauer bis an einen von beiden heran, ist sie dort verschlossen, mit oder ohne Brücke.",
@@ -905,7 +919,7 @@
         "standsOn": "Steht auf",
         "unlock": "Freigeschaltet ab"
       },
-      "perHour": "Alle Angaben gelten pro Stunde und ohne Bonus von Nachbarfeldern, Mühlen oder Schreinen.",
+      "perHour": "Alle Angaben gelten pro Stunde und ohne Bonus von Nachbarfeldern, Mühlen oder Schreinen. Nur Gebäude in deinem Reich liefern etwas: Eines außerhalb steht still und verliert Stufen, bis dein Reich es wieder erreicht.",
       "longhouseUnlock": "Von Anfang an",
       "notes": {
         "pumpkinfarm": "Nur auf einer Insel mit Kürbisboden",
@@ -1032,6 +1046,56 @@
       "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },
+  "realm": {
+    "title": "Das Gebiet erweitern",
+    "intro": "Das Land, das du hältst, ist dein Gebiet; auf der Karte zieht sich eine goldene Grenze darum. Das Langhaus beansprucht die ersten Ringe um sich herum. Darüber hinaus wächst dein Gebiet nur durch Wachtürme an seiner Grenze.",
+    "claim": {
+      "heading": "Der Anspruch deines Langhauses",
+      "body": "Dein {longhouse} beansprucht auf Stufe 1 alle Felder im Umkreis von {level1}, ab Stufe 2 im Umkreis von {level2}. Weiter reicht es nie: Höhere Langhaus-Stufen schieben die Grenze nicht weiter hinaus."
+    },
+    "towers": {
+      "heading": "Wachtürme schieben die Grenze hinaus",
+      "body": "Ab Langhaus-Stufe {level} kannst du einen {tower} bauen. Er beansprucht die Felder rund um sich selbst, so viele Ringe wie seine Stufe: Stufe 1 seine Nachbarfelder, Stufe 2 zwei Ringe und so weiter.",
+      "rules": {
+        "inside": "Ein Wachturm muss innerhalb deines Gebiets stehen. Baust du ihn an der Grenze, rückt die Grenze rund um ihn nach außen.",
+        "chain": "Er darf auch auf Boden stehen, den erst ein anderer Wachturm beansprucht. Seine Ringe reichen dann noch weiter, und dein Gebiet wächst Turm für Turm über die Insel.",
+      "cut": "Ein Wachturm beansprucht nur Land, solange er über eine Kette von Türmen mit einem deiner Langhäuser verbunden ist. Fällt ein Turm in der Kette, beanspruchen und sehen die Türme dahinter nichts mehr, bis du die Lücke schließt – es sei denn, ein anderes deiner Langhäuser auf der Insel erreicht sie noch. Ein abgeschnittener Turm zählt nicht zu deinem Turmlimit.",
+        "built": "Land beansprucht ein Wachturm erst, wenn er steht. Eine Baustelle bringt noch nichts."
+      }
+    },
+    "example": {
+      "heading": "Ein Beispiel",
+      "alt": "Eine Beispielinsel mit dem Langhaus nahe der Mitte, der goldenen Grenze um das beanspruchte Land und den Wachtürmen, die die Grenze hinausschieben.",
+      "step": "Schritt",
+      "steps": {
+        "1": "Schritt 1: ein Langhaus der Stufe 2 allein. Sein Anspruch reicht 3 Felder weit, dort endet die Grenze.",
+        "2": "Schritt 2: ein Wachturm der Stufe 2 auf einem Waldfeld am Rand des Gebiets. Er beansprucht zwei Ringe um sich, die Grenze wächst um ihn herum.",
+        "3": "Schritt 3: ein Wachturm der Stufe 1 auf schlichtem Moorboden, im Land des ersten Turms. Er beansprucht einen Ring mehr, und die Grenze rückt weiter hinaus."
+      }
+    },
+    "count": {
+      "heading": "Wie viele Wachtürme",
+      "body": "Die Stufe deines Langhauses bestimmt, wie viele Wachtürme du haben darfst: einen ab Stufe {level}, danach einen weiteren für jede zweite Stufe nach Stufe 5.",
+      "levels": "Langhaus-Stufe",
+      "towers": "Wachtürme",
+      "range": "{from}–{to}"
+    },
+    "where": {
+      "heading": "Wo ein Wachturm steht",
+      "body": "Ein Wachturm steht auf Gras, Sand, Wald oder schlichtem Moorboden, innerhalb deines Gebiets. Auf Flüssen, Bergen und Wasser kannst du keinen bauen, ebenso wenig auf Moorufer, Moorbach, Moorquelle oder Moorsee. Der Wachturm ersetzt das Feld, auf dem er steht, und behält den Boden um sich: Jeder Boden hat deshalb seinen eigenen Turm.",
+      "alt": "Ein Wachturm auf {ground}.",
+      "grounds": {
+        "grass": "Gras",
+        "sand": "Sand",
+        "forest": "Wald",
+        "bog": "Moorboden"
+      }
+    },
+    "giants": {
+      "heading": "Riesen",
+      "body": "Ein Riese füllt sieben Felder. Du nimmst ihn nur in dein Gebiet auf, wenn dein Anspruch alle sieben abdeckt. Reicht er nur über einen Teil, bekommst du keines davon."
+    }
+  },
   "landMovement": {
     "title": "Bewegung an Land",
     "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
@@ -1133,7 +1197,7 @@
       "rules": {
         "where": "Eine Brücke passt auf ein gerades oder gebogenes Feld eines breiten Flusses, egal welches Gelände darunter liegt. Auf einer Quelle, einer Gabelung oder einer Mündung kannst du keine bauen, auf einem Bach auch nicht (den durchwaten Armeen ohnehin), und auf einer öden Insel ebenso wenig.",
         "site": "Eine Baustelle öffnet den Fluss nicht. Erst eine fertige Brücke ab Stufe 1 zählt. Mit jeder Stufe geht die Überquerung schneller, bis die Armeen bei der Königsbrücke so schnell hinüberkommen wie über das Gelände selbst.",
-        "guarded": "Die Wehrbrücke verhält sich wie ein Mauertor: Sie lässt die Armeen ihres Besitzers und seiner Freunde durch und hält alle anderen auf.",
+        "guarded": "Die Wehrbrücke verhält sich wie ein Mauertor: Sie lässt die Armeen ihres Besitzers und seiner Freunde durch und hält alle anderen auf. Liegt sie außerhalb des Reichs ihres Besitzers, hat sie keine Wirkung und steht jeder Armee offen.",
         "siege": "Katapulte (Rammböcke nicht) können eine Brücke niederbrennen, und zwar eine Stufe pro gewonnener Belagerung, egal wie viele Katapulte überleben. Eine Wehrbrücke fällt dabei zuerst zur Königsbrücke zurück und steht danach allen offen, auch den Angreifern. Ein Damm, der einmal niedergebrannt ist, ist weg, und der Fluss ist wieder dicht.",
         "walls": "Brücken ändern nichts an Mauern: Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, ob mit oder ohne Brücke. Mehr dazu unter {walls}.",
         "fleets": "Brücken betreffen nur Landarmeen. Schiffe bleiben unberührt."

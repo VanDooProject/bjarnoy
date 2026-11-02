@@ -1501,6 +1501,34 @@ describe('wildlife camps', () => {
     expect(drawnCampOf({ ...tile, buildingType: 'farm', buildingLevel: 1 })).toBeUndefined();
   });
 
+  // The whale road (first water camp) stands on an open-sea hex: gulls (level000, all six rotations) or whales
+  // (level001, kept SE and NE), drawn like any camp over the sea tile's own base.
+  it('the whale road is a camp family with art on an open-sea tile: whales when guarded, gulls once cleared', () => {
+    expect(KEY_FAMILY.whaleroad).toBe('whaleroad');
+    const textures = emptyTileTextures();
+    withCamp(textures, 'whaleroad', ['SE', 'NE']);
+    const tile = campTile('whaleroad', 'SE', 'sea');
+    tile.camp = { ...tile.camp!, guardRange: 0 };
+    expect(topTextureFor(textures, tile)).toBe('whaleroad-SE-guarded');
+    expect(topAnimFor(textures, tile)).toEqual({ textures: ['whaleroad-SE-f0'], fps: 6, playback: 'loop' });
+    const cleared = { ...tile, camp: { ...tile.camp!, empty: true } };
+    expect(topTextureFor(textures, cleared)).toBe('whaleroad-SE-cleared');
+    expect(topAnimFor(textures, cleared)).toBeUndefined();
+  });
+
+  it('the whale road maps every tile orientation onto its kept rotations NE and SE (guarded), any rotation when cleared', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'whaleroad', ['SE', 'NE']);
+    // kept in TILE_ORIENTATIONS order: [NE, SE]; index % 2 picks NE for E/NW/SW, SE for NE/W/SE.
+    const mapped = ORIENTATIONS.map((o) => campArtFor(textures, campTile('whaleroad', o, 'sea'), undefined)?.orientation);
+    expect(mapped).toEqual(['NE', 'SE', 'NE', 'SE', 'NE', 'SE']);
+    for (const o of ORIENTATIONS) {
+      const tile = campTile('whaleroad', o, 'sea');
+      tile.camp = { ...tile.camp!, empty: true };
+      expect(campArtFor(textures, tile, undefined)?.orientation).toBe(o);
+    }
+  });
+
   it('a tile without a camp is untouched by the camp lookup', () => {
     const textures = emptyTileTextures();
     withCamp(textures, 'wolfden', ['SE']);
@@ -1782,6 +1810,20 @@ describe('bog buildings and lake decorations', () => {
     expect(KEY_FAMILY.hammerschmiedebend).toBe('hammerschmiede_bend');
     expect(KEY_FAMILY.fisherhutlake).toBe('fisherhut_lake');
     expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
+  });
+
+  it('draws a tower with the art of the ground it replaces', () => {
+    expect(KEY_FAMILY.tower).toBe('stavetower');
+    expect(KEY_FAMILY.towersand).toBe('stavetower_sand');
+    expect(KEY_FAMILY.towerforest).toBe('stavetower_forest');
+    expect(KEY_FAMILY.towerbog).toBe('stavetower_bog');
+    const tower = (tile: Partial<Tile>): Tile => ({ q: 0, r: 0, terrain: 'grass', buildingType: 'tower', buildingLevel: 1, ...tile });
+
+    expect(textureKeyFor(tower({}))).toBe('tower');
+    expect(textureKeyFor(tower({ terrain: 'sand' }))).toBe('towersand');
+    expect(textureKeyFor(tower({ terrain: 'forest' }))).toBe('towerforest');
+    expect(textureKeyFor(tower({ terrain: 'forest', forestKind: 'taiga' }))).toBe('towerforest');
+    expect(textureKeyFor(tower({ terrain: 'bog', bog: bog('bog', [], null) }))).toBe('towerbog');
   });
 
   it('draws a Fishing Hut on a half shore with the lake art, and one on the coast with the coastal art', () => {

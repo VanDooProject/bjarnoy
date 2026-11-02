@@ -8,7 +8,7 @@ import { waitForMapReady } from './helpers';
 // stops the fixtures from pre-answering it.
 test.use({ motionPrompt: 'unset' });
 
-const KEYS = ['bjarnoy.animations', 'bjarnoy.motion.water', 'bjarnoy.motion.fog', 'bjarnoy.motion.hud'];
+const KEYS = ['bjarnoy.animations', 'bjarnoy.motion.water', 'bjarnoy.motion.lakes', 'bjarnoy.motion.fog', 'bjarnoy.motion.hud'];
 
 async function openLanding(page: import('@playwright/test').Page) {
   await page.goto('/');
@@ -35,7 +35,7 @@ test.describe('landing motion prompt', { tag: '@g3' }, () => {
     expect(await hudMotion(page)).toBe('full');
 
     const stored = await page.evaluate((keys) => keys.map((k) => localStorage.getItem(k)), KEYS);
-    expect(stored).toEqual(['on', 'on', 'on', 'on']);
+    expect(stored).toEqual(['on', 'on', 'on', 'on', 'on']);
     expect(await page.evaluate(() => localStorage.getItem('bjarnoy.motionPrompt'))).toBe('on');
 
     await page.reload();
@@ -49,7 +49,7 @@ test.describe('landing motion prompt', { tag: '@g3' }, () => {
     await page.getByTestId('motion-prompt-dismiss').click();
     await expect(page.getByTestId('motion-prompt')).toHaveCount(0);
     expect(await hudMotion(page)).toBe('reduced');
-    expect(await page.evaluate((keys) => keys.map((k) => localStorage.getItem(k)), KEYS)).toEqual([null, null, null, null]);
+    expect(await page.evaluate((keys) => keys.map((k) => localStorage.getItem(k)), KEYS)).toEqual([null, null, null, null, null]);
 
     await page.reload();
     await waitForMapReady(page);

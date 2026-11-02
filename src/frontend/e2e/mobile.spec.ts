@@ -406,7 +406,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await SettlementPage.found(page);
 
     await openHudDrawer(page);
-    await page.getByRole('button', { name: 'Leaderboards' }).click();
+    await page.getByRole('link', { name: 'Leaderboards' }).click();
     await expect(page).toHaveURL(/\/leaderboards$/);
 
     const dialog = page.getByRole('dialog');
@@ -425,7 +425,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await SettlementPage.found(page);
 
     await openHudDrawer(page);
-    await page.getByRole('button', { name: 'Alliance' }).click();
+    await page.getByRole('link', { name: 'Alliance' }).click();
     await expect(page).toHaveURL(/\/guild$/);
 
     const dialog = page.getByRole('dialog');

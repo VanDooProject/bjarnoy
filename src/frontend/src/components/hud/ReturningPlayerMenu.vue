@@ -22,6 +22,7 @@ import { useI18n } from 'vue-i18n';
 import WorldList from './WorldList.vue';
 import { useWorldStore } from '../../stores/world';
 import type { MessageSchema } from '../../i18n/schema';
+import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
 
 // `unclaimedRealm`: the player already founded a realm but hasn't named a
 // jarl (registered) yet — for them "I already have a realm" as the headline
@@ -163,6 +164,7 @@ watch(() => route.fullPath, close);
            stay first: they are what this menu is for. -->
       <slot name="entries" :close="close" />
       <div class="divider" role="separator" />
+      <HudMenuLocaleRow />
       <WorldList compact />
     </div>
     <slot name="nudge" />

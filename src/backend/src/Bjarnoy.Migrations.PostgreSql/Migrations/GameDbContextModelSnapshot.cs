@@ -961,6 +961,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Level")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Q")
                         .HasColumnType("integer");
 

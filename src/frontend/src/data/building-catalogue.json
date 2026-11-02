@@ -4322,6 +4322,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4356,6 +4357,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4390,6 +4392,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4424,6 +4427,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4458,6 +4462,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4492,6 +4497,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4526,6 +4532,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4560,6 +4567,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4594,6 +4602,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
@@ -4628,6 +4637,7 @@
         "iron": 0
       },
       "allowedTerrain": [
+        "forest",
         "grass",
         "sand"
       ],
