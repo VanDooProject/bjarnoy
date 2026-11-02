@@ -8,9 +8,7 @@ import {
   bestReference,
   cellSourceRect,
   cropHalf,
-  artMasksHalf,
-  SHADOW_FULL_DARKENING,
-  TOP_FACE_Y,
+  dryMaskHalf,
   matchRatio,
   orientationOf,
   REFERENCE_FRAME_RE,
@@ -45,21 +43,21 @@ function maskAt(mask: Uint8Array, x: number, y: number): number {
 
 const WATER: [number, number, number] = [30, 90, 140];
 
-describe('artMasksHalf (dry)', () => {
+describe('dryMaskHalf', () => {
   it('marks nothing dry for art identical to the reference water', () => {
-    const mask = artMasksHalf(canvas(WATER), canvas(WATER)).dry;
+    const mask = dryMaskHalf(canvas(WATER), canvas(WATER));
     expect(mask.every((v) => v === 0)).toBe(true);
   });
 
   it('absorbs differences within the epsilon', () => {
     const art = canvas([WATER[0] + SAME_PIXEL_EPS, WATER[1] - SAME_PIXEL_EPS, WATER[2]]);
-    expect(artMasksHalf(art, canvas(WATER)).dry.every((v) => v === 0)).toBe(true);
+    expect(dryMaskHalf(art, canvas(WATER)).every((v) => v === 0)).toBe(true);
   });
 
   it('marks a grey rock patch dry, and only around the patch', () => {
     const art = canvas(WATER);
     paint(art, { x: 60, y: 200, w: 40, h: 40 }, [120, 120, 120]);
-    const mask = artMasksHalf(art, canvas(WATER)).dry;
+    const mask = dryMaskHalf(art, canvas(WATER));
     expect(maskAt(mask, 80, 220)).toBe(255);
     expect(maskAt(mask, 10, 170)).toBe(0);
     expect(maskAt(mask, 150, 280)).toBe(0);
@@ -69,7 +67,7 @@ describe('artMasksHalf (dry)', () => {
     // A blue sail on a blue sea: dry because it is not the reference pixel, not because of hue.
     const art = canvas(WATER);
     paint(art, { x: 40, y: 180, w: 20, h: 40 }, [WATER[0], WATER[1], WATER[2] + 40]);
-    const mask = artMasksHalf(art, canvas(WATER)).dry;
+    const mask = dryMaskHalf(art, canvas(WATER));
     expect(maskAt(mask, 50, 200)).toBe(255);
   });
 
@@ -78,14 +76,14 @@ describe('artMasksHalf (dry)', () => {
     const reference = canvas(WATER);
     const art = canvas(WATER);
     paint(art, { x: 90, y: 120, w: 20, h: 30 }, [150, 110, 70]);
-    const mask = artMasksHalf(art, reference).dry;
+    const mask = dryMaskHalf(art, reference);
     expect(maskAt(mask, 100, 130)).toBe(255);
   });
 
   it('leaves transparent art pixels alone even where the reference is opaque', () => {
     const art = canvas(WATER);
     paint(art, { x: 60, y: 200, w: 10, h: 10 }, [0, 0, 0], 0);
-    const mask = artMasksHalf(art, canvas(WATER)).dry;
+    const mask = dryMaskHalf(art, canvas(WATER));
     expect(maskAt(mask, 65, 205)).toBe(0);
   });
 
@@ -93,7 +91,7 @@ describe('artMasksHalf (dry)', () => {
     // Darker water around a rock, but within DRY_PIXEL_EPS: foam and caustics keep running over it.
     const art = canvas(WATER);
     paint(art, { x: 40, y: 180, w: 60, h: 60 }, [WATER[0] - DRY_PIXEL_EPS, WATER[1] - DRY_PIXEL_EPS, WATER[2] - DRY_PIXEL_EPS]);
-    expect(artMasksHalf(art, canvas(WATER)).dry.every((v) => v === 0)).toBe(true);
+    expect(dryMaskHalf(art, canvas(WATER)).every((v) => v === 0)).toBe(true);
   });
 
   it('fills a one-pixel hole inside an object', () => {
@@ -101,7 +99,7 @@ describe('artMasksHalf (dry)', () => {
     const art = canvas(WATER);
     paint(art, { x: 60, y: 200, w: 40, h: 40 }, [120, 120, 120]);
     paint(art, { x: 80, y: 220, w: 1, h: 1 }, WATER);
-    const mask = artMasksHalf(art, canvas(WATER)).dry;
+    const mask = dryMaskHalf(art, canvas(WATER));
     expect(maskAt(mask, 80, 220)).toBe(255);
   });
 
@@ -109,7 +107,7 @@ describe('artMasksHalf (dry)', () => {
     const art = canvas(WATER);
     // One differing source pixel at (100, 200): dilated to 3x3 -> covers texel (50,100) with 1 px of 4... 
     paint(art, { x: 100, y: 200, w: 1, h: 1 }, [255, 0, 0]);
-    const mask = artMasksHalf(art, canvas(WATER)).dry;
+    const mask = dryMaskHalf(art, canvas(WATER));
     // 3x3 around (100,200) spans x 99..101, y 199..201: texel (50, 100) = px (100..101, 200..201) is fully inside (4/4),
     // texel (49, 100) = px (98..99, 200..201) holds x=99 (2/4), texel (50, 99) holds y=199 (2/4).
     expect(mask[100 * HALF_W + 50]).toBe(255);
@@ -126,69 +124,9 @@ describe('front-edge clip', () => {
     const art = canvas(WATER, tall);
     paint(art, { x: 80, y: 256, w: 20, h: 8 }, [120, 120, 120]);
     paint(art, { x: 80, y: 116, w: 20, h: 8 }, [120, 120, 120]);
-    const { dry } = artMasksHalf(art, canvas(WATER, tall));
+    const dry = dryMaskHalf(art, canvas(WATER, tall));
     expect(maskAt(dry, 90, 260)).toBe(0);
     expect(maskAt(dry, 90, 120)).toBe(255);
-  });
-
-  it('clears shadow in the skirt too, and keeps it on the face', () => {
-    const art = canvas(WATER, tall);
-    const dark: [number, number, number] = [WATER[0] * 0.9, WATER[1] * 0.9, WATER[2] * 0.9];
-    paint(art, { x: 70, y: 252, w: 60, h: 16 }, dark);
-    paint(art, { x: 70, y: 160, w: 60, h: 16 }, dark);
-    const { shadow } = artMasksHalf(art, canvas(WATER, tall));
-    expect(maskAt(shadow, 100, 260)).toBe(0);
-    expect(maskAt(shadow, 100, 168)).toBeGreaterThan(0);
-  });
-});
-
-describe('artMasksHalf (shadow)', () => {
-  // A big patch on the top face, so the blur leaves its middle untouched.
-  const patch = { x: 60, y: TOP_FACE_Y + 20, w: 80, h: 40 };
-  const centre = { x: 100, y: TOP_FACE_Y + 40 };
-  const shadowOf = (colour: [number, number, number]) => {
-    const art = canvas(WATER);
-    paint(art, patch, colour);
-    return maskAt(artMasksHalf(art, canvas(WATER)).shadow, centre.x, centre.y);
-  };
-
-  it('is 0 for art identical to the water', () => {
-    expect(artMasksHalf(canvas(WATER), canvas(WATER)).shadow.every((v) => v === 0)).toBe(true);
-  });
-
-  it('is positive for a darker patch within the dry epsilon, and proportional to the darkening', () => {
-    const slight = shadowOf([WATER[0] - 6, WATER[1] - 6, WATER[2] - 6]);
-    const more = shadowOf([WATER[0] - 12, WATER[1] - 12, WATER[2] - 12]);
-    expect(slight).toBeGreaterThan(0);
-    expect(more).toBeGreaterThan(slight);
-    expect(more).toBeLessThan(255);
-  });
-
-  it('is full at SHADOW_FULL_DARKENING darker or more', () => {
-    // A dark sea (luma 60) lets a patch be 25%+ darker and still within DRY_PIXEL_EPS: 19 levels is 31.7% darker.
-    const sea: [number, number, number] = [60, 60, 60];
-    const level = 60 - DRY_PIXEL_EPS + 1;
-    expect((DRY_PIXEL_EPS - 1) / 60).toBeGreaterThanOrEqual(SHADOW_FULL_DARKENING);
-    const art = canvas(sea);
-    paint(art, patch, [level, level, level]);
-    const { dry, shadow } = artMasksHalf(art, canvas(sea));
-    expect(maskAt(dry, centre.x, centre.y)).toBe(0);
-    expect(maskAt(shadow, centre.x, centre.y)).toBe(255);
-  });
-
-  it('is 0 for brighter pixels', () => {
-    expect(shadowOf([WATER[0] + 10, WATER[1] + 10, WATER[2] + 10])).toBe(0);
-  });
-
-  it('is 0 on dry pixels', () => {
-    expect(shadowOf([10, 10, 10])).toBe(0);
-    expect(maskAt(artMasksHalf(canvas(WATER), canvas(WATER)).dry, centre.x, centre.y)).toBe(0);
-  });
-
-  it('is 0 where the art is transparent', () => {
-    const art = canvas(WATER);
-    paint(art, patch, [0, 0, 0], 0);
-    expect(maskAt(artMasksHalf(art, canvas(WATER)).shadow, centre.x, centre.y)).toBe(0);
   });
 });
 
@@ -251,7 +189,7 @@ describe('cell rect', () => {
   it('crops the half mask to the cell', () => {
     const art = canvas(WATER);
     paint(art, { x: 60, y: 200, w: 40, h: 40 }, [120, 120, 120]);
-    const half = artMasksHalf(art, canvas(WATER)).dry;
+    const half = dryMaskHalf(art, canvas(WATER));
     const rect = cellSourceRect({ x: 0, y: 150, w: SOURCE_W, h: 150 });
     const cell = cropHalf(half, rect);
     expect(cell).toHaveLength((rect.sw / 2) * (rect.sh / 2));
