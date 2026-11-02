@@ -1052,7 +1052,7 @@
     "claim": {
       "heading": "Der Anspruch deines Langhauses",
       "body": "Dein {longhouse} beansprucht auf Stufe 1 alle Felder im Umkreis von {level1}, ab Stufe 2 im Umkreis von {level2}. Weiter reicht es nie: Höhere Langhaus-Stufen schieben die Grenze nicht weiter hinaus.",
-      "destroyed": "Wird das Langhaus einer Siedlung zerstört, beansprucht diese Siedlung gar kein Land mehr. Ihre Wachtürme behalten ihren Anspruch nur, wenn sie im Gebiet eines anderen deiner Langhäuser stehen."
+      "destroyed": "Wird das Langhaus einer Siedlung zerstört, beansprucht diese Siedlung gar kein Land mehr. Ihre Wachtürme behalten ihren Anspruch nur, wenn sie im Gebiet eines anderen deiner Langhäuser stehen. Auch die Sicht ist weg: Rund um den Siedlungsmittelpunkt siehst du nichts mehr. Wachtürme im Gebiet eines anderen deiner Langhäuser behalten ihre Sicht."
     },
     "towers": {
       "heading": "Wachtürme schieben die Grenze hinaus",
