@@ -27,6 +27,7 @@ import {
   rotateOrientation,
 } from './wastedIsland';
 import { wastedVariantAt } from '../map/worldGenerator';
+import type { Terrain } from '../map/types';
 import { coordKey, hexDistance, neighbors } from '../hex/coords';
 import { TILE_ORIENTATIONS } from '../map/types';
 import { giantCoverage } from '../map/giantTiles';
@@ -431,7 +432,7 @@ describe('the wasted looks', () => {
     const land = islandHexRecordsForTests().filter((r) => r.kind === 'grass' || r.kind === 'forest' || r.kind === 'sand');
     expect(land.length).toBeGreaterThan(10);
     for (const r of land) {
-      expect(r.wastedVariantIndex, `${r.kind} (${r.q},${r.r})`).toBe(wastedVariantAt(r.q, r.r, WASTED_ISLAND_WORLD, r.kind));
+      expect(r.wastedVariantIndex, `${r.kind} (${r.q},${r.r})`).toBe(wastedVariantAt(r.q, r.r, WASTED_ISLAND_WORLD, r.kind as Terrain));
     }
   });
 
