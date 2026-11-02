@@ -337,6 +337,7 @@ function defensePower(garrison: readonly number[]): number {
       <h2>{{ $t("docs.wastedLands.defences.heading") }}</h2>
       <p>{{ $t("docs.wastedLands.defences.body") }}</p>
       <UtgardExample />
+      <DocsAdminNote>{{ $t("docs.wastedLands.defences.wallsTechNote") }}</DocsAdminNote>
       <div class="giants-section">
         <div class="giant-card">
           <h3>{{ $t("docs.wastedLands.defences.watchtower.heading") }}</h3>

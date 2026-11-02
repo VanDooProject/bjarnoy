@@ -12,10 +12,6 @@ import { canPlacePalisade, isRefusal, tileOfWallHex, type PalisadePiece, type Wa
 import { UtgardFamily } from './giantPlacement';
 import type { Terrain, TileOrientation } from './types';
 
-/** Hex distance of the inner ring from Utgard's anchor (two hexes clear of the 7-hex fortress). */
-export const InnerRingRadius = 3;
-/** Hex distance of the outer ring from Utgard's anchor. */
-export const OuterRingRadius = 6;
 /** A ring is built only when at least this share of its hexes can take a wall. */
 export const MinRingLandShare = 0.6;
 /** Gates per ring, on straight pieces as far apart as the ring allows. */
@@ -48,10 +44,6 @@ export interface EndgameSites {
   walls: UtgardWallPlacement[];
   /** Tower hexes in placement order (orientation is the tile's own, attached by the caller). */
   towers: AxialCoord[];
-}
-
-export function ringRadius(ring: UtgardRing): number {
-  return ring === 'inner' ? InnerRingRadius : OuterRingRadius;
 }
 
 export function ringLevel(ring: UtgardRing): number {
@@ -180,18 +172,6 @@ const WallStepCost = 1;
 const SeaStepCost = 15;
 /** Cost per hex of distance between a hex and the wobble's target distance at its angle. */
 const TargetPull = 3;
-
-/**
- * Where `c` sits round Utgard, as a fraction of the circle in [0, 1): its index in `ring(anchor, d)` over the ring's 6d hexes.
- * Pure integer arithmetic so both sides agree bit for bit (no atan2).
- */
-export function ringFraction(anchor: AxialCoord, c: AxialCoord): number {
-  const d = hexDistance(anchor, c);
-  if (d === 0) return 0;
-  const hexes = ring(anchor, d);
-  const i = hexes.findIndex((h) => h.q === c.q && h.r === c.r);
-  return i / (6 * d);
-}
 
 /**
  * The closed line one ring follows round Utgard, as a cycle of hexes (each adjacent to the next, no two non-consecutive ones

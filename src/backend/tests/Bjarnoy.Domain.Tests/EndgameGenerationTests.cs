@@ -39,15 +39,33 @@ public class EndgameGenerationTests
     }
 
     [Fact]
-    public void Rings_are_at_their_radius_and_carry_the_ring_level()
+    public void Ring_walls_stay_in_their_band_and_carry_the_ring_level()
     {
         foreach (var (_, island) in All)
         {
             var anchor = AnchorOf(island);
             foreach (var wall in island.UtgardWalls)
             {
-                Assert.Equal(EndgameRules.RingRadius(wall.Ring), wall.Coord.DistanceTo(anchor));
+                var (min, max) = EndgameRules.RingBand(wall.Ring);
+                Assert.InRange(wall.Coord.DistanceTo(anchor), min, max);
                 Assert.Equal(wall.Ring == UtgardRing.Inner ? 2 : 1, wall.Level);
+            }
+        }
+    }
+
+    [Fact]
+    public void Inner_and_outer_walls_never_touch_and_no_wall_branches()
+    {
+        foreach (var (_, island) in All)
+        {
+            var inner = island.UtgardWalls.Where(w => w.Ring == UtgardRing.Inner).Select(w => w.Coord).ToList();
+            var outer = island.UtgardWalls.Where(w => w.Ring == UtgardRing.Outer).Select(w => w.Coord).ToList();
+            Assert.DoesNotContain(outer, o => inner.Any(i => i.DistanceTo(o) <= 1));
+
+            foreach (var ring in new[] { inner, outer })
+            {
+                var set = ring.ToHashSet();
+                Assert.All(ring, h => Assert.InRange(PalisadeRules.WallNeighbourCount(h, set), 0, 2));
             }
         }
     }
@@ -67,15 +85,16 @@ public class EndgameGenerationTests
         foreach (var (seed, island) in All)
         {
             var sampler = new TerrainSampler(TestWorlds.Options(seed));
+            var land = island.Tiles.ToDictionary(t => t, sampler.WastedTerrainAt);
             var giantHexes = island.Giants.SelectMany(g => Giant.Footprint(g.Anchor)).ToHashSet();
-            var camps = island.Camps.Select(c => c.Coord).ToHashSet();
             var rivers = island.RiverTiles.Select(r => r.Coord).ToHashSet();
+            var loops = Loops(AnchorOf(island), land, rivers, giantHexes, seed + (island.Index * 400_009));
             foreach (var ring in island.UtgardWalls.Select(w => w.Ring).Distinct())
             {
-                var hexes = EndgameGenerator.Ring(AnchorOf(island), EndgameRules.RingRadius(ring));
+                var hexes = loops[ring];
                 var eligible = hexes.Count(h =>
-                    sampler.WastedTerrainAt(h) is Terrain.Grass or Terrain.Forest or Terrain.Sand
-                    && island.Tiles.Contains(h) && !giantHexes.Contains(h) && !camps.Contains(h) && !rivers.Contains(h));
+                    land.TryGetValue(h, out var t) && t is Terrain.Grass or Terrain.Forest or Terrain.Sand
+                    && !giantHexes.Contains(h) && !rivers.Contains(h));
                 Assert.True(eligible >= EndgameRules.MinRingLandShare * hexes.Count, $"seed {seed} island {island.Index} ring {ring}");
             }
         }
@@ -160,11 +179,19 @@ public class EndgameGenerationTests
     [Fact]
     public void Gates_are_as_far_apart_along_the_ring_as_the_straights_allow()
     {
-        foreach (var (_, island) in All)
+        foreach (var (seed, island) in All)
         {
+            var sampler = new TerrainSampler(TestWorlds.Options(seed));
+            var land = island.Tiles.ToDictionary(t => t, sampler.WastedTerrainAt);
+            var loops = Loops(
+                AnchorOf(island),
+                land,
+                island.RiverTiles.Select(r => r.Coord).ToHashSet(),
+                island.Giants.SelectMany(g => Giant.Footprint(g.Anchor)).ToHashSet(),
+                seed + (island.Index * 400_009));
             foreach (var ring in island.UtgardWalls.GroupBy(w => w.Ring))
             {
-                var order = EndgameGenerator.Ring(AnchorOf(island), EndgameRules.RingRadius(ring.Key));
+                var order = loops[ring.Key];
                 var n = order.Count;
                 var index = ring.Select(w => (Wall: w, Index: order.IndexOf(w.Coord))).ToList();
                 var gates = index.Where(x => x.Wall.IsGate).ToList();
@@ -219,7 +246,7 @@ public class EndgameGenerationTests
                 Assert.DoesNotContain(tower.Coord, camps);
                 Assert.DoesNotContain(tower.Coord, rivers);
                 Assert.DoesNotContain(tower.Coord, walls);
-                Assert.True(tower.Coord.DistanceTo(anchor) > EndgameRules.OuterRingRadius + 1);
+                Assert.True(tower.Coord.DistanceTo(anchor) > EndgameRules.RingBand(UtgardRing.Outer).Max + 1);
                 Assert.Equal(sampler.OrientationAt(tower.Coord), tower.Orientation);
             }
 
@@ -265,5 +292,156 @@ public class EndgameGenerationTests
 
         Assert.Empty(sites.Walls);
         Assert.Empty(sites.Towers);
+    }
+
+    /// <summary>The two ring loops exactly as <c>PlaceWalls</c> computes them (the outer one keeps clear of the inner one).</summary>
+    private static Dictionary<UtgardRing, List<HexCoord>> Loops(
+        HexCoord anchor, IReadOnlyDictionary<HexCoord, Terrain> land, IReadOnlySet<HexCoord> rivers, IReadOnlySet<HexCoord> giantHexes, int seed)
+    {
+        var inner = EndgameGenerator.NaturalLoop(anchor, UtgardRing.Inner, land, rivers, giantHexes, seed, new HashSet<HexCoord>());
+        var near = inner.SelectMany(h => h.Neighbours().Append(h)).ToHashSet();
+        var outer = EndgameGenerator.NaturalLoop(anchor, UtgardRing.Outer, land, rivers, giantHexes, seed, near);
+        return new() { [UtgardRing.Inner] = inner, [UtgardRing.Outer] = outer };
+    }
+
+    private static readonly HexCoord Origin = new(0, 0);
+
+    private static Dictionary<HexCoord, Terrain> Disc(int radius, Terrain terrain = Terrain.Grass) =>
+        Origin.WithinRadius(radius).ToDictionary(h => h, _ => terrain);
+
+    private static EndgameGenerator.Sites Place(IReadOnlyDictionary<HexCoord, Terrain> land, int seed = 11, IReadOnlySet<HexCoord>? rivers = null)
+    {
+        var tiles = land.Where(kv => kv.Value != Terrain.Sea).Select(kv => kv.Key).ToList();
+        return EndgameGenerator.PlaceCore(
+            tiles, land, rivers ?? new HashSet<HexCoord>(), [new GiantGenerator.Placement(Origin, GiantGenerator.UtgardFamily)],
+            new HashSet<HexCoord>(), seed, 0);
+    }
+
+    /// <summary>True when the hexes form one simple cycle: each adjacent to the next (cyclically), no two others adjacent or equal.</summary>
+    private static bool IsSimpleCycle(IReadOnlyList<HexCoord> c)
+    {
+        var n = c.Count;
+        for (var i = 0; i < n; i++)
+        {
+            for (var j = i + 1; j < n; j++)
+            {
+                var consecutive = j == i + 1 || (i == 0 && j == n - 1);
+                var d = c[i].DistanceTo(c[j]);
+                if (consecutive ? d != 1 : d <= 1)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    [Fact]
+    public void On_open_flat_ground_both_rings_close_with_two_gates_and_stay_apart()
+    {
+        foreach (var seed in new[] { 1, 11, 23 })
+        {
+            var land = Disc(16);
+            var sites = Place(land, seed);
+            var loops = Loops(Origin, land, new HashSet<HexCoord>(), Giant.Footprint(Origin).ToHashSet(), seed);
+            foreach (var ring in new[] { UtgardRing.Inner, UtgardRing.Outer })
+            {
+                var walls = sites.Walls.Where(w => w.Ring == ring).ToList();
+                var loop = loops[ring];
+                Assert.True(IsSimpleCycle(loop), $"{ring} loop is a simple cycle");
+                Assert.Equal(loop.Count, walls.Count);
+                Assert.Equal(loop.ToHashSet(), walls.Select(w => w.Coord).ToHashSet());
+                Assert.Equal(2, walls.Count(w => w.IsGate));
+                Assert.DoesNotContain(walls, w => w.Piece is PalisadePiece.End or PalisadePiece.EndCoast);
+            }
+
+            var inner = sites.Walls.Where(w => w.Ring == UtgardRing.Inner).Select(w => w.Coord).ToList();
+            Assert.DoesNotContain(sites.Walls.Where(w => w.Ring == UtgardRing.Outer), o => inner.Any(i => i.DistanceTo(o.Coord) <= 1));
+        }
+    }
+
+    [Fact]
+    public void A_mountain_cluster_in_the_band_is_part_of_the_line_and_gets_no_walls()
+    {
+        var plain = Disc(16);
+        var baseline = EndgameGenerator.NaturalLoop(
+            Origin, UtgardRing.Inner, plain, new HashSet<HexCoord>(), Giant.Footprint(Origin).ToHashSet(), 11, new HashSet<HexCoord>());
+        var centre = baseline[baseline.Count / 3];
+
+        var land = Disc(16);
+        var cluster = centre.WithinRadius(1).ToHashSet();
+        foreach (var h in cluster)
+        {
+            land[h] = Terrain.Mountain;
+        }
+
+        var loop = EndgameGenerator.NaturalLoop(
+            Origin, UtgardRing.Inner, land, new HashSet<HexCoord>(), Giant.Footprint(Origin).ToHashSet(), 11, new HashSet<HexCoord>());
+        Assert.True(loop.Count(cluster.Contains) >= 3, "the line runs through the mountains");
+
+        var sites = Place(land);
+        Assert.DoesNotContain(sites.Walls, w => land[w.Coord] == Terrain.Mountain);
+        Assert.Contains(sites.Walls, w => w.Ring == UtgardRing.Inner);
+    }
+
+    [Fact]
+    public void A_small_island_whose_band_is_mostly_sea_still_gets_its_ring_along_the_coast()
+    {
+        var land = Disc(5);
+        var sites = Place(land);
+
+        var inner = sites.Walls.Where(w => w.Ring == UtgardRing.Inner).ToList();
+        Assert.NotEmpty(inner);
+        Assert.All(inner, w => Assert.True(land.ContainsKey(w.Coord) || w.Piece == PalisadePiece.EndCoast));
+        Assert.True(inner.Count(w => land.ContainsKey(w.Coord)) >= 12);
+        Assert.DoesNotContain(sites.Walls, w => w.Ring == UtgardRing.Outer);
+    }
+
+    [Fact]
+    public void Towers_keep_beyond_the_outer_band_from_utgard()
+    {
+        var sites = Place(Disc(24));
+        Assert.NotEmpty(sites.Towers);
+        Assert.All(sites.Towers, t => Assert.True(t.DistanceTo(Origin) > EndgameRules.RingBand(UtgardRing.Outer).Max + 1));
+    }
+
+    private static HexCoord H(int q, int r) => new(q, r);
+
+    [Fact]
+    public void WithoutChords_leaves_a_simple_cycle_untouched()
+    {
+        var ring = EndgameGenerator.Ring(Origin, 3);
+        Assert.Equal(ring, EndgameGenerator.WithoutChords(ring));
+    }
+
+    [Fact]
+    public void WithoutChords_cuts_a_bump_that_touches_the_line_again()
+    {
+        var ring = EndgameGenerator.Ring(Origin, 3);
+        // Two extra hexes outside the ring between hexes 4 and 5; the first is adjacent to both, so it is a chord.
+        var outward = ring[4].Neighbours().Where(h => h.DistanceTo(Origin) == 4 && h.DistanceTo(ring[5]) == 1).ToList();
+        Assert.NotEmpty(outward);
+        List<HexCoord> bumped = [.. ring.Take(5), outward[0], .. ring.Skip(5)];
+
+        var result = EndgameGenerator.WithoutChords(bumped);
+
+        Assert.True(IsSimpleCycle(result));
+        Assert.True(result.Count < bumped.Count);
+        Assert.All(result, h => Assert.Contains(h, bumped));
+    }
+
+    [Fact]
+    public void WithoutChords_removes_a_spur_that_walks_out_and_back()
+    {
+        var ring = EndgameGenerator.Ring(Origin, 3);
+        var spur = ring[5].Neighbours().First(h => h.DistanceTo(Origin) == 4);
+        List<HexCoord> cycle = [.. ring.Take(6), spur, ring[5], .. ring.Skip(6)];
+
+        var result = EndgameGenerator.WithoutChords(cycle);
+
+        Assert.True(IsSimpleCycle(result));
+        Assert.Equal(ring.Count, result.Count);
+        Assert.Equal(ring.ToHashSet(), result.ToHashSet());
     }
 }

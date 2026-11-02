@@ -2,10 +2,10 @@
 // here at all: `placeEndgame` (lib/map/endgamePlacement.ts, the golden-tested port of the backend's EndgameGenerator) decides the Utgard
 // wall rings, their gates and the Jötun watchtowers, and they are tagged on the tiles exactly as the world model tags them
 // (`Tile.utgardWall` / `Tile.jotunTower`, see `WorldModel.setUtgardWalls`), so the game's own renderer draws them the way it does on a
-// real wasted island. Only the island itself (land out to radius 9 round Utgard's anchor, a bay cutting into the east side to the outer
+// real wasted island. Only the island itself (land out to radius 14 round Utgard's anchor, a bay cutting into the east side across the outer
 // ring so a wall run ends at the shore) is laid out by hand.
 import { coordKey, neighbors, type AxialCoord } from '../hex/coords';
-import { InnerRingLevel, InnerRingRadius, OuterRingLevel, OuterRingRadius, placeEndgame } from '../map/endgamePlacement';
+import { InnerRingLevel, OuterRingLevel, RingBands, placeEndgame } from '../map/endgamePlacement';
 import { giantCoverage } from '../map/giantTiles';
 import { UtgardFamily } from '../map/giantPlacement';
 import type { Terrain, Tile } from '../map/types';
@@ -16,23 +16,17 @@ const EXAMPLE_WORLD: WorldSeed = { seed: 5, generation: DEFAULT_GENERATION };
 /** Utgard's anchor: the centre hex of its seven. */
 export const UTGARD_CENTRE: AxialCoord = { q: 0, r: 0 };
 
-/** The two rings the endgame generator builds: radius from the anchor and the wall level they stand at. */
+/** The two rings the endgame generator builds: the band of distances from the anchor their wall may wander in, and the wall level they stand at. */
 export const UTGARD_RINGS = [
-  { id: 'inner', radius: InnerRingRadius, level: InnerRingLevel },
-  { id: 'outer', radius: OuterRingRadius, level: OuterRingLevel },
+  { id: 'inner', band: RingBands.inner, level: InnerRingLevel },
+  { id: 'outer', band: RingBands.outer, level: OuterRingLevel },
 ] as const;
 
 /** Land reaches this far from Utgard's anchor; one more ring of coastal water goes round it. */
-const LAND_RADIUS = 9;
+const LAND_RADIUS = 14;
 
 /** The bay that cuts into the island's east side and reaches the outer ring, so a wall run ends in a shore piece. */
-const BAY: readonly AxialCoord[] = [
-  { q: 5, r: 1 },
-  { q: 6, r: 0 },
-  { q: 4, r: 2 },
-  { q: 6, r: 1 },
-  { q: 5, r: 2 },
-];
+const BAY: readonly AxialCoord[] = [0, 1, 2].flatMap((r) => Array.from({ length: 9 }, (_, i) => ({ q: 6 + i, r })));
 const BAY_KEYS = new Set(BAY.map(coordKey));
 
 /** The island's terrain by hex: land out to `LAND_RADIUS`, the bay as sea. */

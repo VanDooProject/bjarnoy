@@ -31,18 +31,30 @@ Existing worlds get them on their next reseed.
 
 ### Wall rings
 
-- Two candidate rings around Utgard's anchor: **inner** at hex distance `InnerRingRadius` = 3 (two hexes clear of
-  the 7-hex fortress), **outer** at `OuterRingRadius` = 6.
-- A ring hex takes a wall when its terrain could take a palisade (wasteland, dead forest, black sand; not a
+- Two candidate rings around Utgard's anchor, each a **natural loop**, not a fixed hex ring: the **inner** loop
+  wanders in the hex-distance band `RingBands.inner` = 3 to 6 from the anchor, the **outer** one in
+  `RingBands.outer` = 7 to 11. One clear hex always separates the two bands.
+- **How a loop is found** (`EndgameGenerator.NaturalLoop`, mirrored step for step by `naturalLoop` in TS): the cheapest
+  closed path round the anchor through the band's hexes. Each hex costs a base plus a pull towards a **wobbling
+  target distance** at its angle: value noise round the circle, `RingNoisePoints` = 5 (inner) / 8 (outer) control
+  points drawn from `RingTargetRange` = 2.6 to 6.4 / 6.6 to 11.4, plus a finer octave of `RingDetailPoints` = 11 / 17
+  points, amplitude `RingDetailAmplitude` = 0.9. The pull is `TargetPull` = 3 per hex between the hex's Euclidean
+  distance from the anchor and that target. Base cost: `WallStepCost` = 1 for a hex that needs a wall,
+  `BarrierStepCost` = 0.35 for a mountain, river or giant hex (the terrain already stops an army, so the line is
+  drawn towards it and leaves it to close the ring), `SeaStepCost` = 15 for sea (the line keeps to land, so a small
+  island's ring hugs its coast). Shortest path over (hex, lap) with fixed tie-breaks, cut at the angle 0, then
+  shortcuts are removed so the loop is a simple cycle (`withoutChords`: no two non-consecutive hexes adjacent, so no
+  branch and no 60 degree bend). The outer loop may not use a hex within 1 of the inner loop, so the rings never touch.
+- A loop hex takes a wall when its terrain could take a palisade (wasteland, dead forest, black sand; not a
   river, lava, mountain or a giant footprint). Where a ring reaches the sea, the last land wall ends as an
   `end_coast` piece on the shore, like a palisade's sea end; mountains and wide rivers close a ring by
   themselves (they already stop land armies).
-- **One or two rings, depending on space**: the inner ring is always built if at least `MinRingLandShare` = 60%
-  of its hexes can take a wall; the outer ring only if that is also true for it. A small island gets one ring
-  (or none, in which case Utgard stands open).
+- **One or two rings, depending on space**: a ring is built only if at least `MinRingLandShare` = 60%
+  of its loop's hexes can take a wall (and the loop exists); the inner and the outer ring are judged separately.
+  A small island gets one ring (or none, in which case Utgard stands open).
 - **Levels**: inner ring walls stand at **level 2**, outer ring walls at **level 1** (`utgardwall_*_level002` /
   `_level001` art; `level000` is the breached rubble).
-- **Gates**: `GatesPerRing` = 2 per ring, on straight pieces as far apart as the ring allows. Jötnar gates
+- **Gates**: `GatesPerRing` = 2 per ring, on straight pieces as far apart along the loop as it allows. Jötnar gates
   are never friendly to players; for players a gate is a wall like any other (it can be breached).
 - Pieces and rotations come from the palisade rules (`PalisadeRules.TileFor`, same six pieces as `utgardwall_*`),
   so one code path picks pieces for both.
@@ -52,7 +64,7 @@ Existing worlds get them on their next reseed.
 - Count per island: `clamp(round(land / TilesPerTower), MinTowers, MaxTowers)` with `TilesPerTower` = 120,
   3 to 6.
 - **Spread over the island, not a ring**: farthest-point sampling (like camp placement) over land hexes that
-  could take a building, outside the outer ring's interior, at least `MinTowerSpacing` = 5 from each other and
+  could take a building, more than `RingBands.outer` max + 1 = 12 hexes from Utgard's anchor, at least `MinTowerSpacing` = 5 from each other and
   from Utgard's footprint, not on a camp or giant hex.
 - Art: `jotunwatchtower_*` (three stages: `level002` garrisoned, `level001` damaged, `level000` taken/empty).
 

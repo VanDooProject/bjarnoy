@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { coordKey, hexDistance, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import {
   GatesPerRing,
-  InnerRingRadius,
   MaxTowers,
   MinTowerSpacing,
   MinTowers,
-  OuterRingRadius,
+  RingBands,
+  naturalLoop,
+  withoutChords,
   placeEndgame,
   ring,
   towerCountFor,
@@ -28,7 +29,7 @@ function disc(radius: number, override: Record<string, Terrain> = {}) {
   return { tiles, terrainOf: (c: AxialCoord): Terrain => terrain.get(coordKey(c)) ?? 'sea' };
 }
 
-const UTGARD = [{ anchor: { q: 0, r: 0 }, family: 'giantutgard' }];
+const UTGARD = [{ anchor: { q: 0, r: 0 }, family: "giantutgard" }];
 const none = () => false;
 
 describe('towerCountFor', () => {
@@ -42,8 +43,32 @@ describe('towerCountFor', () => {
   });
 });
 
+const ORIGIN = { q: 0, r: 0 };
+const footprintKeys: ReadonlySet<string> = new Set([ORIGIN, ...neighbors(ORIGIN)].map(coordKey));
+
+/** True when the hexes form one simple cycle: each adjacent to the next (cyclically), no two others adjacent or equal. */
+function isSimpleCycle(c: AxialCoord[]): boolean {
+  const n = c.length;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const consecutive = j === i + 1 || (i === 0 && j === n - 1);
+      const d = hexDistance(c[i]!, c[j]!);
+      if (consecutive ? d !== 1 : d <= 1) return false;
+    }
+  }
+  return true;
+}
+
+/** Both loops the way `placeWalls` computes them: the outer one keeps clear of the inner one. */
+function loops(terrainOf: (c: AxialCoord) => Terrain, seed: number) {
+  const inner = naturalLoop(ORIGIN, 'inner', terrainOf, none, footprintKeys, seed);
+  const near = new Set(inner.flatMap((h) => [h, ...neighbors(h)]).map(coordKey));
+  const outer = naturalLoop(ORIGIN, 'outer', terrainOf, none, footprintKeys, seed, near);
+  return { inner, outer };
+}
+
 describe('ring', () => {
-  it.each([InnerRingRadius, OuterRingRadius])('radius %i is a closed cycle of 6r hexes, each adjacent to the next', (radius) => {
+  it.each([3, 6])('radius %i is a closed cycle of 6r hexes, each adjacent to the next', (radius) => {
     const hexes = ring({ q: 2, r: -1 }, radius);
     expect(hexes).toHaveLength(6 * radius);
     expect(new Set(hexes.map(coordKey)).size).toBe(6 * radius);
@@ -54,63 +79,171 @@ describe('ring', () => {
   });
 });
 
+describe('withoutChords', () => {
+  it('leaves a simple cycle untouched', () => {
+    const hexes = ring(ORIGIN, 3);
+    expect(withoutChords(hexes)).toEqual(hexes);
+  });
+
+  it('cuts a bump whose extra hex touches the line again', () => {
+    const hexes = ring(ORIGIN, 3);
+    const bump = neighbors(hexes[4]!).find((h) => hexDistance(h, ORIGIN) === 4 && hexDistance(h, hexes[5]!) === 1)!;
+    const bumped = [...hexes.slice(0, 5), bump, ...hexes.slice(5)];
+
+    const result = withoutChords(bumped);
+
+    expect(isSimpleCycle(result)).toBe(true);
+    expect(result.length).toBeLessThan(bumped.length);
+    for (const h of result) expect(bumped.map(coordKey)).toContain(coordKey(h));
+  });
+
+  it('removes a spur that walks out and back over the same hex', () => {
+    const hexes = ring(ORIGIN, 3);
+    const spur = neighbors(hexes[5]!).find((h) => hexDistance(h, ORIGIN) === 4)!;
+    const result = withoutChords([...hexes.slice(0, 6), spur, hexes[5]!, ...hexes.slice(6)]);
+
+    expect(isSimpleCycle(result)).toBe(true);
+    expect(result.map(coordKey).sort()).toEqual(hexes.map(coordKey).sort());
+  });
+});
+
+describe('naturalLoop', () => {
+  it('is a simple cycle inside its band, and the outer one never comes within a hex of the inner one', () => {
+    for (const seed of [1, 7, 23]) {
+      const { terrainOf } = disc(16);
+      const { inner, outer } = loops(terrainOf, seed);
+      expect(inner.length).toBeGreaterThan(0);
+      expect(outer.length).toBeGreaterThan(0);
+      expect(isSimpleCycle(inner)).toBe(true);
+      expect(isSimpleCycle(outer)).toBe(true);
+      for (const h of inner) expect(hexDistance(h, ORIGIN)).toBeGreaterThanOrEqual(RingBands.inner[0]);
+      for (const h of inner) expect(hexDistance(h, ORIGIN)).toBeLessThanOrEqual(RingBands.inner[1]);
+      for (const h of outer) {
+        expect(hexDistance(h, ORIGIN)).toBeGreaterThanOrEqual(RingBands.outer[0]);
+        expect(hexDistance(h, ORIGIN)).toBeLessThanOrEqual(RingBands.outer[1]);
+        for (const i of inner) expect(hexDistance(h, i)).toBeGreaterThan(1);
+      }
+    }
+  });
+
+  it('runs through a mountain cluster in the band instead of round it', () => {
+    const flat = naturalLoop(ORIGIN, 'inner', disc(16).terrainOf, none, footprintKeys, 11);
+    const centre = flat[Math.floor(flat.length / 3)]!;
+    const cluster = [centre, ...neighbors(centre)];
+    const { terrainOf } = disc(16, Object.fromEntries(cluster.map((h) => [coordKey(h), 'mountain' as Terrain])));
+
+    const loop = naturalLoop(ORIGIN, 'inner', terrainOf, none, footprintKeys, 11);
+
+    const keys = new Set(cluster.map(coordKey));
+    expect(loop.filter((h) => keys.has(coordKey(h))).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('hugs the coast of an island that is mostly sea in its band', () => {
+    const { terrainOf } = disc(5);
+    const loop = naturalLoop(ORIGIN, 'inner', terrainOf, none, footprintKeys, 3);
+    expect(loop.length).toBeGreaterThan(0);
+    expect(loop.filter((h) => terrainOf(h) !== 'sea').length).toBeGreaterThanOrEqual(12);
+  });
+
+  it('is deterministic', () => {
+    const { terrainOf } = disc(16);
+    expect(loops(terrainOf, 5)).toEqual(loops(terrainOf, 5));
+  });
+});
+
 describe('placeEndgame', () => {
   it('builds nothing for an island without Utgard', () => {
     const { tiles, terrainOf } = disc(12);
-    const sites = placeEndgame(tiles, terrainOf, none, [{ anchor: { q: 0, r: 0 }, family: 'giantvolcano' }], new Set(), 1, 1);
+    const sites = placeEndgame(tiles, terrainOf, none, [{ anchor: ORIGIN, family: 'giantvolcano' }], new Set(), 1, 1);
     expect(sites).toEqual({ walls: [], towers: [] });
   });
 
   it('closes both rings all the way round on open ground: inner level 2, outer level 1, two gates each on straights', () => {
-    const { tiles, terrainOf } = disc(12);
-    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 7, 3);
+    for (const seed of [7, 11, 23]) {
+      const { tiles, terrainOf } = disc(16);
+      const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), seed, 3);
+      const { inner, outer } = loops(terrainOf, seed + 3 * 400_009);
 
-    expect(walls.filter((w) => w.ring === 'inner')).toHaveLength(6 * InnerRingRadius);
-    expect(walls.filter((w) => w.ring === 'outer')).toHaveLength(6 * OuterRingRadius);
-    expect(walls.filter((w) => w.ring === 'inner').every((w) => w.level === 2)).toBe(true);
-    expect(walls.filter((w) => w.ring === 'outer').every((w) => w.level === 1)).toBe(true);
-    for (const kind of ['inner', 'outer'] as const) {
-      const gates = walls.filter((w) => w.ring === kind && w.isGate);
-      expect(gates).toHaveLength(GatesPerRing);
-      expect(gates.every((g) => g.piece === 'gate180')).toBe(true);
+      const innerWalls = walls.filter((w) => w.ring === 'inner');
+      const outerWalls = walls.filter((w) => w.ring === 'outer');
+      expect(innerWalls.map((w) => coordKey(w.coord)).sort()).toEqual(inner.map(coordKey).sort());
+      expect(outerWalls.map((w) => coordKey(w.coord)).sort()).toEqual(outer.map(coordKey).sort());
+      expect(innerWalls.every((w) => w.level === 2)).toBe(true);
+      expect(outerWalls.every((w) => w.level === 1)).toBe(true);
+      for (const kind of ['inner', 'outer'] as const) {
+        const gates = walls.filter((w) => w.ring === kind && w.isGate);
+        expect(gates).toHaveLength(GatesPerRing);
+        expect(gates.every((g) => g.piece === 'gate180')).toBe(true);
+      }
+      // A closed ring has no ends.
+      expect(walls.some((w) => w.piece === 'end' || w.piece === 'end_coast')).toBe(false);
+      // The two rings never touch.
+      for (const o of outerWalls) for (const i of innerWalls) expect(hexDistance(o.coord, i.coord)).toBeGreaterThan(1);
     }
-    // A closed ring has no ends.
-    expect(walls.some((w) => w.piece === 'end' || w.piece === 'end_coast')).toBe(false);
   });
 
-  it('puts the two gates of a ring as far apart as the ring allows (opposite sides of a closed ring)', () => {
-    const { tiles, terrainOf } = disc(12);
+  it('puts the two gates of a ring as far apart along the loop as its straights allow', () => {
+    const { tiles, terrainOf } = disc(16);
     const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 11, 5);
+    const order = loops(terrainOf, 11 + 5 * 400_009);
     for (const kind of ['inner', 'outer'] as const) {
-      const order = ring({ q: 0, r: 0 }, kind === 'inner' ? InnerRingRadius : OuterRingRadius);
-      const [a, b] = walls.filter((w) => w.ring === kind && w.isGate).map((g) => order.findIndex((h) => h.q === g.coord.q && h.r === g.coord.r));
-      const cyclic = Math.min(Math.abs(a! - b!), order.length - Math.abs(a! - b!));
-      // Straights are the ring's sides between its six corners: the best pair is a diameter, or one hex off it.
-      expect(cyclic).toBeGreaterThanOrEqual(order.length / 2 - 1);
+      const hexes = order[kind];
+      const n = hexes.length;
+      const at = (c: AxialCoord) => hexes.findIndex((h) => h.q === c.q && h.r === c.r);
+      const cyclic = (a: number, b: number) => Math.min(Math.abs(a - b), n - Math.abs(a - b));
+      const [a, b] = walls.filter((w) => w.ring === kind && w.isGate).map((g) => at(g.coord));
+      const straights = walls.filter((w) => w.ring === kind && (w.isGate || w.piece === 'straight180')).map((w) => at(w.coord));
+      let best = 0;
+      for (const x of straights) for (const y of straights) best = Math.max(best, cyclic(x, y));
+      expect(cyclic(a!, b!)).toBe(best);
     }
   });
 
   it('skips a ring that has less than 60% wall-capable hexes, and builds the other', () => {
-    // Everything from distance 4 out is mountain except the outer ring's own band: the inner ring stays, the outer is blocked.
+    // Sea over the whole outer band: only the inner ring has land to stand on.
     const override: Record<string, Terrain> = {};
-    for (const h of ring({ q: 0, r: 0 }, OuterRingRadius).slice(0, 20)) override[coordKey(h)] = 'mountain';
-    const { tiles, terrainOf } = disc(12, override);
+    for (let d = RingBands.outer[0]; d <= RingBands.outer[1]; d++) for (const h of ring(ORIGIN, d)) override[coordKey(h)] = 'sea';
+    const { tiles, terrainOf } = disc(14, override);
     const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 2, 2);
 
     expect(new Set(walls.map((w) => w.ring))).toEqual(new Set(['inner']));
   });
 
-  it('keeps walls off rivers, camps and giant footprints, and ends a run on the shore with a sea end', () => {
-    const { tiles, terrainOf } = disc(5); // the outer ring (6) is entirely sea; the inner ring lies on land
-    const sites = placeEndgame(tiles, terrainOf, (c) => c.q === 3 && c.r === 0, UTGARD, new Set([coordKey({ q: -3, r: 3 })]), 4, 4);
-    expect(sites.walls.every((w) => w.ring === 'inner')).toBe(true);
+  it('still builds a ring along the coast of a small island whose band is mostly sea', () => {
+    const { tiles, terrainOf } = disc(5);
+    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 4, 4);
+    const inner = walls.filter((w) => w.ring === 'inner');
+
+    expect(inner.length).toBeGreaterThan(0);
+    expect(inner.filter((w) => terrainOf(w.coord) !== 'sea').length).toBeGreaterThanOrEqual(12);
+    expect(walls.every((w) => w.ring === 'inner')).toBe(true);
+  });
+
+  it('uses a mountain cluster in the band as part of the line: no walls on it, the ring still stands', () => {
+    const flat = naturalLoop(ORIGIN, 'inner', disc(16).terrainOf, none, footprintKeys, 11);
+    const centre = flat[Math.floor(flat.length / 3)]!;
+    const cluster = [centre, ...neighbors(centre)];
+    const { tiles, terrainOf } = disc(16, Object.fromEntries(cluster.map((h) => [coordKey(h), 'mountain' as Terrain])));
+    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 11, 0);
+
+    expect(walls.some((w) => w.ring === 'inner')).toBe(true);
+    expect(walls.some((w) => terrainOf(w.coord) === 'mountain')).toBe(false);
+  });
+
+  it('keeps walls off rivers, camps and giant footprints', () => {
+    const { tiles, terrainOf } = disc(16);
+    const { inner } = loops(terrainOf, 4 + 4 * 400_009);
+    const river = inner[3]!;
+    const camp = inner[10]!;
+    const sites = placeEndgame(tiles, terrainOf, (c) => c.q === river.q && c.r === river.r, UTGARD, new Set([coordKey(camp)]), 4, 4);
     const keys = new Set(sites.walls.map((w) => coordKey(w.coord)));
-    expect(keys.has('3,0')).toBe(false);
-    expect(keys.has(coordKey({ q: -3, r: 3 }))).toBe(false);
+    expect(keys.has(coordKey(river))).toBe(false);
+    expect(keys.has(coordKey(camp))).toBe(false);
+    for (const k of footprintKeys) expect(keys.has(k)).toBe(false);
   });
 
   it('resolves every piece through the palisade rules on the final wall', () => {
-    const { tiles, terrainOf } = disc(9, { '6,-3': 'mountain', '-3,0': 'mountain' });
+    const { tiles, terrainOf } = disc(14, { '6,-3': 'mountain', '-3,0': 'mountain' });
     const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 9, 9);
     const set = { walls: new Set(walls.map((w) => coordKey(w.coord))), gates: new Set(walls.filter((w) => w.isGate).map((w) => coordKey(w.coord))) };
 
@@ -121,16 +254,22 @@ describe('placeEndgame', () => {
     }
   });
 
-  it('spreads the towers over land past the outer ring, MinTowerSpacing apart, off camps, and deterministically', () => {
-    const { tiles, terrainOf } = disc(20);
-    const camp = coordKey({ q: 12, r: -4 });
+  it('is deterministic', () => {
+    const { tiles, terrainOf } = disc(16);
+    const a = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8);
+    expect(placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8)).toEqual(a);
+  });
+
+  it('spreads the towers over land past the outer band, MinTowerSpacing apart, off camps, and deterministically', () => {
+    const { tiles, terrainOf } = disc(24);
+    const camp = coordKey({ q: 16, r: -4 });
     const a = placeEndgame(tiles, terrainOf, none, UTGARD, new Set([camp]), 5, 8);
     const b = placeEndgame(tiles, terrainOf, none, UTGARD, new Set([camp]), 5, 8);
 
     expect(a).toEqual(b);
     expect(a.towers).toHaveLength(towerCountFor(tiles.length));
     for (const t of a.towers) {
-      expect(hexDistance(t, { q: 0, r: 0 })).toBeGreaterThan(OuterRingRadius + 1);
+      expect(hexDistance(t, ORIGIN)).toBeGreaterThan(RingBands.outer[1] + 1);
       expect(coordKey(t)).not.toBe(camp);
     }
     for (let i = 0; i < a.towers.length; i++) {
@@ -138,10 +277,8 @@ describe('placeEndgame', () => {
     }
   });
 
-  it('places fewer towers when the island has no room for more', () => {
-    const { tiles, terrainOf } = disc(9); // only a thin band lies past the outer ring + 1
-    const { towers } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8);
-    expect(towers.length).toBeLessThan(MinTowers + 1);
-    for (const t of towers) expect(hexDistance(t, { q: 0, r: 0 })).toBeGreaterThan(OuterRingRadius + 1);
+  it('places no tower when the island ends inside the tower distance', () => {
+    const { tiles, terrainOf } = disc(RingBands.outer[1] + 1);
+    expect(placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8).towers).toEqual([]);
   });
 });

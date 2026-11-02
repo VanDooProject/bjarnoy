@@ -1,7 +1,7 @@
 // The Utgard example is the endgame generator's own output (`placeEndgame`, golden-tested in endgamePlacement.golden.test.ts) tagged on
 // a hand-built island the way the world model tags it. These tests check the island shows what the Wasted Lands page says about it:
-// two rings round the anchor (radius 3 at wall level 2, radius 6 at level 1), a shore end where a run reaches the sea, up to two gates
-// per ring on straights, and clamp(floor(land / 120 + 0.5), 3, 6) watchtowers outside the outer ring, at least 5 hexes from each other
+// two wall lines round the anchor (wandering in the distance band 3 to 6 at wall level 2, and 7 to 11 at level 1), a shore end where a run reaches the sea, up to two gates
+// per ring on straights, and clamp(floor(land / 120 + 0.5), 3, 6) watchtowers beyond the outer band, at least 5 hexes from each other
 // and from Utgard. The rules themselves are not re-tested here.
 import { describe, expect, it } from 'vitest';
 import { coordKey, hexDistance, type AxialCoord } from '../hex/coords';
@@ -25,26 +25,28 @@ describe('the Utgard example island', () => {
     expect(utgardExampleKindOf(byKey.get(coordKey(UTGARD_CENTRE))!)).toBe('utgard');
   });
 
-  it('has the inner ring at radius 3 as level 2 and the outer one at radius 6 as level 1', () => {
-    expect(UTGARD_RINGS.map((r) => [r.radius, r.level])).toEqual([
-      [3, 2],
-      [6, 1],
+  it('keeps the inner wall in its band as level 2 and the outer one in its band as level 1', () => {
+    expect(UTGARD_RINGS.map((r) => [...r.band, r.level])).toEqual([
+      [3, 6, 2],
+      [7, 11, 1],
     ]);
     for (const ring of UTGARD_RINGS) {
       const hexes = walls.filter((t) => t.utgardWall!.ring === ring.id);
       expect(hexes.length).toBeGreaterThan(0);
       for (const t of hexes) {
-        expect(dist(t)).toBe(ring.radius);
+        // A shore end is a sea hex, the rest stand inside the band.
+        expect(dist(t)).toBeGreaterThanOrEqual(ring.band[0]);
+        expect(dist(t)).toBeLessThanOrEqual(ring.band[1]);
         expect(t.utgardWall!.level).toBe(ring.level);
       }
     }
     expect(walls.every((t) => t.wasted)).toBe(true);
   });
 
-  it('closes the inner ring and lets the outer one reach the coast with a shore end on each side', () => {
-    expect(walls.filter((t) => t.utgardWall!.ring === 'inner')).toHaveLength(18);
+  it('keeps the two walls apart and lets the outer one reach the bay with a shore end on each side', () => {
+    const inner = walls.filter((t) => t.utgardWall!.ring === 'inner');
     const outer = walls.filter((t) => t.utgardWall!.ring === 'outer');
-    expect(outer.length).toBeLessThan(36);
+    for (const o of outer) for (const i of inner) expect(hexDistance(o, i)).toBeGreaterThan(1);
     const ends = outer.filter((t) => t.utgardWall!.piece === 'end_coast');
     expect(ends).toHaveLength(2);
     for (const t of ends) expect(t).toMatchObject({ terrain: 'sea', isCoastalWater: true });
@@ -77,14 +79,14 @@ describe('the Utgard example island', () => {
     expect(findPath(towers[0]!, { q: 0, r: 2 }, ctx)).toBeNull();
   });
 
-  it('has clamp(floor(land / 120 + 0.5), 3, 6) watchtowers, all outside the outer ring, 5 or more apart and from Utgard', () => {
+  it('has clamp(floor(land / 120 + 0.5), 3, 6) watchtowers, all beyond the outer band, 5 or more apart and from Utgard', () => {
     expect(towers.length).toBeGreaterThanOrEqual(3);
     expect(towers).toHaveLength(towerCountFor(utgardLandHexes(tiles)));
     const flower = new Set(giantCoverage(UTGARD_CENTRE).map((g) => coordKey(g.coord)));
     for (const tile of towers) {
       expect(tile).toMatchObject({ terrain: 'grass', wasted: true });
       expect(utgardExampleKindOf(tile)).toBe('tower');
-      expect(dist(tile)).toBeGreaterThan(UTGARD_RINGS[1].radius);
+      expect(dist(tile)).toBeGreaterThan(UTGARD_RINGS[1].band[1] + 1);
       expect(dist(tile)).toBeGreaterThanOrEqual(MinTowerSpacing);
       expect(flower.has(coordKey(tile))).toBe(false);
       expect(tile.utgardWall).toBeUndefined();
