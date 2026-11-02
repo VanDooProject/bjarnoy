@@ -76,7 +76,7 @@ import { WaterLayer } from './water/WaterLayer';
 import { WaterDryLayer, entriesWorldBounds, type DryEntry } from './water/waterDryMask';
 import { BogLakeLayer } from './water/BogLakeLayer';
 import { LAKE_FRAME_RE } from './water/dryMaskCore';
-import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
+import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './water/waterDebug';
 import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
@@ -2522,7 +2522,8 @@ export class HexMapRenderer {
   private onTick = () => {
     this.frames++;
     this.options.worldModel.tick();
-    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    // waterDebugTuning.tileAnimationSpeed: debug playback speed of the shared clock (1 ships), so sway and lake gust slow down together.
+    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS) * waterDebugTuning.tileAnimationSpeed);
     this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
     // Feeds the 'auto' animation governor (animationPreference.ts) — in both
     // modes, not just settlement: the governor is measuring this device's

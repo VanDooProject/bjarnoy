@@ -192,6 +192,11 @@ export interface WaterDebugTuning {
   bogLakeFoamSpacing: number;
   /** Half-width of the gust band, in gust periods (0.16 is about 0.9 hex). */
   bogLakeBandHalf: number;
+  /**
+   * Debug playback speed of the shared tile animation clock (`animClockMs`): the forest sway, every other tile clip and the bog lake gust
+   * slow down together, so they stay in step. 1 is what ships; 0 pauses them.
+   */
+  tileAnimationSpeed: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -214,6 +219,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeFoamWidth: 0.04,
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,
+  tileAnimationSpeed: 1,
 };
 
 /**

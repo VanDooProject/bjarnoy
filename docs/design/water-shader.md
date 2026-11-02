@@ -1134,6 +1134,7 @@ export interface WaterDebugTuning {
   bogLakeFoamWidth: number;        // 0.04 — foam line half-width, share of the spacing
   bogLakeFoamSpacing: number;      // 15 — world units between foam lines
   bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods
+  tileAnimationSpeed: number;      // 1 — debug playback speed of the shared tile clip clock: forest sway and lake gust together
   causticCullHexes: number; // 0.25 — the *closest* a ribbon may come to shore;
                             //        each one takes its own distance from here
                             //        up to + CAUSTIC_CULL_SPREAD_TILES
