@@ -112,13 +112,13 @@ describe('BogLakeLayer', () => {
     expect(uniformsOf(layer).uGustPeak).toBe(GUST_PEAK_PHASE);
   });
 
-  it('is hidden, not frozen, while water motion is off', () => {
+  it('is hidden, not frozen, while lake wind motion is off', () => {
     const layer = new BogLakeLayer(TILE_W);
     layer.setLake(lakeTexture(), { minX: 0, minY: 0, maxX: 10, maxY: 10 });
-    layer.setFrozen(true);
+    layer.setMotion(false);
     layer.tick(9000);
     expect(layer.mesh.visible).toBe(false);
-    layer.setFrozen(false);
+    layer.setMotion(true);
     layer.tick(9500);
     expect(layer.mesh.visible).toBe(true);
     expect(uniformsOf(layer).uTime).toBeCloseTo(9.5, 9);

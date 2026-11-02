@@ -3621,7 +3621,11 @@ export class HexMapRenderer {
   setWaterMotion(enabled: boolean) {
     this.waterMotion = enabled;
     this.waterLayer.setFrozen(!enabled);
-    this.bogLakeLayer.setFrozen(!enabled);
+  }
+
+  /** Shows (true) or hides (false) the wind gust on the bog lakes: the player's "Wind on lakes" motion setting. */
+  setLakeMotion(enabled: boolean) {
+    this.bogLakeLayer.setMotion(enabled);
   }
 
   /** Freezes (false) or resumes (true) the drift of the fog and mist layers. */

@@ -18,7 +18,7 @@ export class BogLakeLayer {
   private readonly geometry: MeshGeometry;
   private hasLake = false;
   private suppressed = false;
-  // Water motion off (the player's setting, or the device's reduced-motion setting under 'auto'): the gust is hidden, not frozen. A
+  // "Wind on lakes" off (the player's setting, or the device's reduced-motion setting under 'auto'): the gust is hidden, not frozen. A
   // frozen gust is a band of foam and dark patches standing still on the lake, which reads as a rendering fault rather than calm water.
   private motionOff = false;
 
@@ -73,9 +73,9 @@ export class BogLakeLayer {
     this.suppressed = suppressed;
   }
 
-  /** Water motion off (`HexMapRenderer.setWaterMotion(false)`): hides the gust until motion is back on. */
-  setFrozen(frozen: boolean): void {
-    this.motionOff = frozen;
+  /** The "Wind on lakes" motion setting (`HexMapRenderer.setLakeMotion`): off hides the gust until it is back on. */
+  setMotion(enabled: boolean): void {
+    this.motionOff = !enabled;
   }
 
   /** Syncs the debug flags onto uniforms and takes the forests' animation clock (`animClockMs`, so the gust shares their phase). Once a frame. */
