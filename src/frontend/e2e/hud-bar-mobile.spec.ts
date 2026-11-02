@@ -702,7 +702,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
 
     // Finding #8: MobileHudDrawer gained the Home/Landing link that was
     // previously missing entirely — tapping it must actually navigate.
-    await page.getByRole('button', { name: 'Landing' }).tap();
+    await page.getByRole('link', { name: 'Landing' }).tap();
     await expect(page).toHaveURL('/');
   });
 
@@ -795,7 +795,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
       expect(openBox.height).toBeGreaterThan(100);
     }).toPass();
 
-    await page.getByRole('button', { name: /Reports/ }).first().click();
+    await page.getByRole('link', { name: /Reports/ }).first().click();
     await expect(page).toHaveURL(/\/reports/);
   });
 });

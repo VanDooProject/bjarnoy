@@ -122,7 +122,7 @@ test.describe('mobile HUD drawer, touch', () => {
     await touchDrag(page, bar.x + bar.width / 2, bar.y + bar.height / 2, bar.y + bar.height + 260);
     await expectDrawerOpen(page);
     await page
-      .getByRole('button', { name: /Reports/ })
+      .getByRole('link', { name: /Reports/ })
       .first()
       .tap();
     await expect(page).toHaveURL(/\/reports/);
@@ -142,7 +142,7 @@ test.describe('mobile HUD drawer, touch', () => {
     // has to round-trip to the page between the flick and the tap.
     await page.locator('.hud-grip').tap();
     await expectDrawerOpen(page);
-    const link = (await page.getByRole('button', { name: /Reports/ }).first().boundingBox())!;
+    const link = (await page.getByRole('link', { name: /Reports/ }).first().boundingBox())!;
     await page.locator('.hud-grip').tap();
     await expectDrawerClosed(page);
 

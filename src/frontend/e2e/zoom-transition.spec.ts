@@ -83,7 +83,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     // reload) — a hard `page.goto('...?debug=1')` would reload and lose the
     // founded-settlement state, same reason gotoWorldMap avoids it.
     await page.evaluate(() => {
-      history.replaceState(history.state, '', location.pathname + '?debug=1');
+      history.replaceState(history.state, '', location.pathname + '?debug=1' + location.hash);
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     await world.moveTo(await world.centre());
@@ -124,7 +124,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     // (enabled) transition would react to...
     expect(await cameraZoom(page)).toBeGreaterThan(DEFAULT_ENTER_SETTLEMENT_ZOOM);
     // ...and yet, with the panel's checkbox unchecked, no transition fired.
-    await expect(page).toHaveURL(/\/settlement#world$/);
+    await expect(page).toHaveURL(/\/settlement\?debug=1#world$/);
   });
 
   test('leaving both map routes tears down the renderer instead of leaking a second canvas', async ({ page }) => {
