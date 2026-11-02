@@ -17,10 +17,13 @@ const loadError = ref<string | null>(null);
 // Per-world draft form state, keyed by world id — lets each panel be edited
 // independently without clobbering the others.
 interface Draft {
+  name: string;
   speedFactor: string;
   startsAt: string;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  hidden: boolean;
+  hiddenFromJoin: boolean;
   endbossAt: string;
   /** The run state picked in the dropdown; only applied with the Apply button. */
   runState: string;
@@ -33,10 +36,13 @@ const drafts = reactive<Record<string, Draft>>({});
 
 function draftFor(world: AdminWorldResponse): Draft {
   return {
+    name: world.name,
     speedFactor: String(world.speedFactor),
     startsAt: formatDateTime(world.startsAt, locale.value),
     joinsClosed: world.joinsClosed,
     frozenIslesEnabled: world.frozenIslesEnabled,
+    hidden: world.hidden,
+    hiddenFromJoin: world.hiddenFromJoin,
     endbossAt: formatDateTime(world.endbossAt, locale.value),
     runState: world.runState,
     graceMinutes: '0',
@@ -114,6 +120,12 @@ async function saveSettings(world: AdminWorldResponse) {
   const draft = drafts[world.id];
   if (!draft || draft.saving) return;
 
+  const name = draft.name.trim();
+  if (name.length < 3) {
+    draft.error = t('adminWorlds.create.nameTooShort');
+    return;
+  }
+
   const speedFactor = Number(draft.speedFactor);
   if (!Number.isFinite(speedFactor) || speedFactor <= 0) {
     draft.error = t('adminWorlds.speedFactorTooLow');
@@ -131,10 +143,13 @@ async function saveSettings(world: AdminWorldResponse) {
   draft.error = null;
   try {
     const updated = await api.adminUpdateWorldSettings(world.id, {
+      name,
       speedFactor,
       startsAt: startsAt.iso,
       joinsClosed: draft.joinsClosed,
       frozenIslesEnabled: draft.frozenIslesEnabled,
+      hidden: draft.hidden,
+      hiddenFromJoin: draft.hiddenFromJoin,
       endbossAt: endbossAt.iso,
     });
     // Saving the settings must not throw away a run state that was picked
@@ -251,6 +266,8 @@ async function applyRunState(world: AdminWorldResponse) {
           <th>{{ $t('adminWorlds.columns.joinable') }}</th>
           <th>{{ $t('adminWorlds.columns.endboss') }}</th>
           <th>{{ $t('adminWorlds.columns.frozenIsles') }}</th>
+          <th>{{ $t('adminWorlds.columns.hidden') }}</th>
+          <th>{{ $t('adminWorlds.columns.hiddenFromJoin') }}</th>
           <th>{{ $t('adminWorlds.columns.seed') }}</th>
         </tr>
       </thead>
@@ -264,6 +281,8 @@ async function applyRunState(world: AdminWorldResponse) {
           <td>{{ world.joinsClosed ? $t('adminWorlds.joins.closed') : $t('adminWorlds.joins.open') }}</td>
           <td>{{ world.endbossTriggeredAt ? $t('adminWorlds.endbossStatus.triggered') : world.endbossAt ? $t('adminWorlds.endbossStatus.scheduled') : $t('adminWorlds.endbossStatus.none') }}</td>
           <td>{{ world.frozenIslesEnabled ? $t('adminWorlds.frozenIsles.enabled') : $t('adminWorlds.frozenIsles.disabled') }}</td>
+          <td>{{ world.hidden ? $t('adminWorlds.yes') : $t('adminWorlds.no') }}</td>
+          <td>{{ world.hiddenFromJoin ? $t('adminWorlds.yes') : $t('adminWorlds.no') }}</td>
           <td>{{ world.seed }}</td>
         </tr>
       </tbody>
@@ -273,6 +292,9 @@ async function applyRunState(world: AdminWorldResponse) {
       <h2>{{ world.name }}</h2>
 
       <div class="fields">
+        <label :for="`name-${world.id}`">{{ $t('adminWorlds.fields.name') }}</label>
+        <input :id="`name-${world.id}`" v-model="drafts[world.id].name" type="text" />
+
         <label :for="`speed-${world.id}`">{{ $t('adminWorlds.fields.speedFactor') }}</label>
         <input
           :id="`speed-${world.id}`"
@@ -290,6 +312,12 @@ async function applyRunState(world: AdminWorldResponse) {
 
         <label :for="`frozen-${world.id}`">{{ $t('adminWorlds.fields.frozenIslesEnabled') }}</label>
         <input :id="`frozen-${world.id}`" v-model="drafts[world.id].frozenIslesEnabled" type="checkbox" />
+
+        <label :for="`hidden-${world.id}`">{{ $t('adminWorlds.fields.hidden') }}</label>
+        <input :id="`hidden-${world.id}`" v-model="drafts[world.id].hidden" type="checkbox" />
+
+        <label :for="`hidden-join-${world.id}`">{{ $t('adminWorlds.fields.hiddenFromJoin') }}</label>
+        <input :id="`hidden-join-${world.id}`" v-model="drafts[world.id].hiddenFromJoin" type="checkbox" />
 
         <label :for="`endboss-${world.id}`">{{ $t('adminWorlds.fields.endbossAt') }}</label>
         <DateTimeField :id="`endboss-${world.id}`" v-model="drafts[world.id].endbossAt" />

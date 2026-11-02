@@ -678,6 +678,10 @@ export interface AdminWorldResponse {
   startsAt: string | null;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  /** Left out of every public world list for non-admins. */
+  hidden: boolean;
+  /** Left out of the public join list for non-admins. */
+  hiddenFromJoin: boolean;
   endbossAt: string | null;
   endbossTriggeredAt: string | null;
   runState: string;
@@ -758,10 +762,13 @@ export interface WorldGenerationSettingsOverrides {
  * `Optional<T>` PATCH semantics (see `Bjarnoy.Api.Json.Optional`).
  */
 export interface UpdateWorldSettingsRequest {
+  name?: string;
   speedFactor?: number;
   startsAt?: string | null;
   joinsClosed?: boolean;
   frozenIslesEnabled?: boolean;
+  hidden?: boolean;
+  hiddenFromJoin?: boolean;
   endbossAt?: string | null;
 }
 

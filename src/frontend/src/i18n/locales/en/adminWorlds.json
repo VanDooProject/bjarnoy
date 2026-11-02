@@ -25,6 +25,8 @@
     "joinable": "Joinable",
     "endboss": "Endboss",
     "frozenIsles": "Frozen isles",
+    "hidden": "Hidden",
+    "hiddenFromJoin": "Hidden from join",
     "seed": "Seed"
   },
   "joins": {
@@ -40,11 +42,16 @@
     "enabled": "Enabled",
     "disabled": "Disabled"
   },
+  "yes": "Yes",
+  "no": "No",
   "fields": {
+    "name": "Name",
     "speedFactor": "Speed factor",
     "startsAt": "Starts at",
     "closedToNewPlayers": "Closed to new players",
     "frozenIslesEnabled": "Frozen isles enabled",
+    "hidden": "Hidden from players",
+    "hiddenFromJoin": "Hidden from join list",
     "endbossAt": "Endboss at"
   },
   "speedFactorTooLow": "Speed factor must be greater than 0.",

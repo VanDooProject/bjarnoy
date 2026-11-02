@@ -38,6 +38,8 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     startsAt: null,
     joinsClosed: false,
     frozenIslesEnabled: false,
+    hidden: false,
+    hiddenFromJoin: false,
     endbossAt: null,
     endbossTriggeredAt: null,
     runState: 'running',
@@ -287,6 +289,55 @@ describe('AdminWorldsView', () => {
 
     expect(adminUpdateWorldSettings).not.toHaveBeenCalled();
     expect(wrapper.find('.panel .error').exists()).toBe(true);
+  });
+
+  it('edits the world name and both visibility flags alongside the other settings', async () => {
+    const wrapper = await mountView();
+    adminUpdateWorldSettings.mockResolvedValue(world({ name: 'Asgard', hidden: true, hiddenFromJoin: true }));
+
+    // The name is the first field of the panel.
+    expect(wrapper.find('.panel .fields input').attributes('id')).toBe('name-world-1');
+    const name = wrapper.find('input#name-world-1');
+    expect((name.element as HTMLInputElement).value).toBe('Midgard');
+    await name.setValue('  Asgard  ');
+    await wrapper.find('input#hidden-world-1').setValue(true);
+    await wrapper.find('input#hidden-join-world-1').setValue(true);
+
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).toHaveBeenCalledWith(
+      'world-1',
+      expect.objectContaining({ name: 'Asgard', hidden: true, hiddenFromJoin: true }),
+    );
+  });
+
+  it('refuses a panel name shorter than three characters without calling the API', async () => {
+    const wrapper = await mountView();
+
+    await wrapper.find('input#name-world-1').setValue(' ab ');
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).not.toHaveBeenCalled();
+    expect(wrapper.find('.panel .error').text()).toContain('at least three characters');
+  });
+
+  it('shows the hidden flags as columns of the overview table', async () => {
+    const wrapper = await mountView([
+      world(),
+      world({ id: 'world-2', name: 'Utgard', hidden: true, hiddenFromJoin: true }),
+    ]);
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text());
+    const hiddenCol = headers.indexOf('Hidden');
+    const joinCol = headers.indexOf('Hidden from join');
+    expect(hiddenCol).toBeGreaterThan(-1);
+    expect(joinCol).toBeGreaterThan(-1);
+
+    const [visible, hidden] = wrapper.findAll('tbody tr').map((tr) => tr.findAll('td').map((td) => td.text()));
+    expect([visible[hiddenCol], visible[joinCol]]).toEqual(['No', 'No']);
+    expect([hidden[hiddenCol], hidden[joinCol]]).toEqual(['Yes', 'Yes']);
   });
 
   it('refuses a name too short to be a world name without calling the API', async () => {
