@@ -191,7 +191,7 @@ float blopRipple(vec2 p, float rot, float age) {
 // Blops: a jittered grid, each cell with its own cycle (period, phase) and a fresh random spot per cycle. The spot must sit well inside the
 // water, else that cycle shows nothing. Cells are big enough (and the spot inset) that a blop never reaches the next cell.
 float blops(vec2 w, float t) {
-  float cell = uTileW * 1.75;
+  float cell = uTileW * 0.55;
   vec2 id = floor(w / cell);
   float h = hash21(id + 3.3);
   float period = 3.0 + 3.0 * h;
@@ -200,8 +200,8 @@ float blops(vec2 w, float t) {
   float local = fract(tt / period) * period;
   float lifeSec = 1.2 + 0.6 * hash21(id + cycle * 1.7);
   if (local > lifeSec) return 0.0;
-  if (hash21(id * 1.3 + cycle * 7.1 + 0.4) > uBlopDensity * 0.55) return 0.0;
-  vec2 centre = (id + 0.06 + 0.88 * vec2(hash21(id + cycle * 2.3 + 1.1), hash21(id + cycle * 3.9 + 5.7))) * cell;
+  if (hash21(id * 1.3 + cycle * 7.1 + 0.4) > uBlopDensity * 0.9) return 0.0;
+  vec2 centre = (id + 0.12 + 0.76 * vec2(hash21(id + cycle * 2.3 + 1.1), hash21(id + cycle * 3.9 + 5.7))) * cell;
   vec2 p = w - centre;
   if (dot(p, p) > 14.0 * 14.0) return 0.0;
   if (maskAt(centre, vec2(0.0)) < 0.9) return 0.0;

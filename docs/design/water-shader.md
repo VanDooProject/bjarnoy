@@ -1062,7 +1062,7 @@ checks.
 **Blops.** Independent of the wind (not gated by the gust band): small crescent ripples, like micro curls, that pop up at random spots on the
 lake and fade again, like a drip or a fish rising. Each is one or two concentric ring arcs, opening at a random angle, that appear, grow from
 about 3 to 9 world units radius and fade out over 1.2-1.8 s; lines about 1-1.5 units thin, near-white, alpha up to 0.8. The shader runs a
-jittered grid of cells (`1.75 * TILE_W`); each cell has its own cycle (random period 3-6 s, random phase) and, per cycle, a fresh random
+jittered grid of cells (`0.55 * TILE_W`); each cell has its own cycle (random period 3-6 s, random phase) and, per cycle, a fresh random
 spot (hashed from the cycle index), shown for the first part of the cycle only. The density is therefore constant per water area: bigger
 lakes show more blops, and `bogLakeBlopDensity` scales the share of cycles that show one. A blop's spot is checked against `uLakeMask` (the
 centre must read above 0.9, and so must four points 11 units around it) and skipped otherwise, so rings never cut at the bank. The demo lake
