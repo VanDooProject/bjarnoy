@@ -318,6 +318,13 @@ describe('WaterLayer', () => {
     expect(rect[3]).toBeCloseTo(1 / 60, 6);
     layer.setRiverFlowTexture(null);
     expect(Array.from(uniformsOf(layer).uRiverRect as Float32Array)).toEqual([0, 0, 1, 1]);
+
+    // The slow phase is bound with the texture, and falls back to the placeholder without it.
+    const slow = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 }, slow);
+    expect(resources.uRiverSlow).toBe(slow.source);
+    layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 });
+    expect(resources.uRiverSlow).toBe(placeholder);
   });
 
   it('maps the river flow flags and knobs onto their uniforms', () => {
@@ -342,6 +349,9 @@ describe('WaterLayer', () => {
     waterDebugFlags.riverStyle = 2;
     layer.tick(32);
     expect(u.uRiverStyle).toBe(2);
+    waterDebugFlags.riverStyle = 3;
+    layer.tick(48);
+    expect(u.uRiverStyle).toBe(3);
     waterDebugFlags.riverStyle = 0;
     expect(u.uRiverAlpha).toBeCloseTo(alpha * 2, 9);
     expect(u.uRiverSpeed).toBeCloseTo(speed * 0.5, 9);

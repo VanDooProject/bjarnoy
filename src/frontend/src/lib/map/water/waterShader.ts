@@ -68,6 +68,7 @@ uniform sampler2D uWaterTaint;
 uniform sampler2D uWaterNoFoam;
 uniform sampler2D uWaterDry;
 uniform sampler2D uRiverFlow;
+uniform sampler2D uRiverSlow;
 
 uniform float uTime;
 uniform float uWaveTime;
@@ -651,8 +652,63 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   return col * smoothstep(0.0, 0.04, centre) * (uRiverAlpha / 0.5);
 }
 
+// The slow phase (RiverFlowLayer's second texture, same UVs): (cos, sin) of a phase about four ripples long per period.
+vec2 riverSlowPhase() {
+  vec4 f = texture(uRiverSlow, riverUV());
+  vec2 cs = f.a > 0.01 ? (f.rg / f.a) * 2.0 - 1.0 : vec2(1.0, 0.0);
+  return cs / max(length(cs), 1e-3);
+}
+
+// Style 3, flow streaks: many long thin white streaks along the flow on the bare painted water, and a few small white ovals drifting
+// downstream; denser near the banks and round islands. A streak is a lane of B (about a texel wide, so 1 to 2 px at zoom 1) with
+// its own width and a run of dashes along the slow phase, several ripples long.
+vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
+  vec2 ps = riverSlowPhase();
+  float turn = atan(ps.y, ps.x) - uRiverSpeed * uTime * 0.25;
+  float k = uRiverScale;
+  float nearBank = 1.0 - smoothstep(0.0, 0.35, centre);
+  // Lanes of B mirror across the channel's middle; the region number breaks that (and the lanes' rows) up.
+  float region = floor(noise(ground * k * 0.7) * 4.0);
+  float laneCoord = centre * 16.0 + (noise(ground * k * 2.5) - 0.5) * 1.2;
+  float lane = floor(laneCoord);
+  float h1 = hash(vec2(lane, 3.7 + region * 13.1));
+  float h2 = hash(vec2(lane, 11.3 + region * 7.9));
+  float h3 = hash(vec2(lane, 29.1 + region * 3.3));
+  float present = step(mix(0.58, 0.28, nearBank), h1);
+  float halfWidth = 0.45 + 0.45 * h2;
+  float across = abs(fract(laneCoord) - 0.5) * 2.0;
+  float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.15, across);
+  float dash = smoothstep(mix(-0.3, 0.7, h3), mix(-0.3, 0.7, h3) + 0.12, cos(turn + h1 * 40.0));
+  float broken = smoothstep(0.2, 0.4, noise(ground * k * 1.1 + lane * 5.3 + ps * 0.8));
+  float alpha = mix(0.75, 0.35, smoothstep(0.55, 0.9, halfWidth));
+  float streak = body * dash * broken * present * smoothstep(0.02, 0.1, centre);
+  vec4 col = vec4(vec3(1.0), 1.0) * alpha * streak;
+  // Specks: small ovals along the flow, two cell grids carried downstream and cross-faded, a few more near the banks.
+  vec2 down = -riverPhaseGradient(cs);
+  down /= max(length(down), 1e-6);
+  vec2 side = vec2(-down.y, down.x);
+  float cyc = uTime * 0.5;
+  float c0 = fract(cyc);
+  float c1 = fract(cyc + 0.5);
+  float speckThreshold = 0.93 - 0.04 * nearBank;
+  float specks = 0.0;
+  for (int i = 0; i < 2; i++) {
+    float c = i == 0 ? c0 : c1;
+    float w = i == 0 ? abs(1.0 - 2.0 * c0) : abs(1.0 - 2.0 * c1);
+    vec2 g = ground * k * 5.0 - down * c * 4.0 + (i == 0 ? 0.0 : 31.0);
+    vec2 cell = mod(floor(g), 289.0);
+    float h = hash(cell);
+    vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.4 + 0.3);
+    float e = pow(dot(o, down) / 0.34, 2.0) + pow(dot(o, side) / 0.13, 2.0);
+    specks += (1.0 - smoothstep(0.6, 1.0, e)) * step(speckThreshold, h) * w;
+  }
+  col = riverOver(col, vec4(vec3(1.0), 1.0) * min(specks, 1.0) * 0.85 * smoothstep(0.02, 0.1, centre));
+  return col * (uRiverAlpha / 0.5);
+}
+
 // The river overlay of the chosen look (uRiverStyle, §4.4d "Styles"): 0 ripple arcs, 1 toon strands, 2 cartoon bands.
 vec4 riverOverlay(vec2 cs, float centre, vec2 ground) {
+  if (uRiverStyle > 2.5) return riverStreaks(cs, centre, ground);
   if (uRiverStyle > 1.5) return riverBands(cs, centre, ground);
   if (uRiverStyle > 0.5) return riverStrands(cs, centre, ground);
   return riverRipples(cs, centre, ground);

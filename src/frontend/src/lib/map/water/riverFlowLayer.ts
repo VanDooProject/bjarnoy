@@ -124,8 +124,10 @@ export function boundsOf(rects: readonly { x: number; y: number; w: number; h: n
  */
 export class RiverFlowLayer {
   private readonly target = new MaskRenderTarget();
+  /** The same cells' slow phase (`computeRiverRipple`'s `slow`), over the same rect, so it is read with the same UVs. */
+  private readonly slowTarget = new MaskRenderTarget();
   private masks: LoadedRiverMasks | null = null;
-  private readonly cells = new Map<string, { face: Texture; rim: Texture }>();
+  private readonly cells = new Map<string, { face: Texture; rim: Texture; slowFace: Texture; slowRim: Texture }>();
   private drawnRect: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
 
   /** The masks are lazily decoded; resolves when `draw` can use them. */
@@ -142,6 +144,11 @@ export class RiverFlowLayer {
     return this.target.texture;
   }
 
+  /** The slow phase's render texture (same rect and UVs as `texture`), or null before the first `draw`. */
+  get slowTexture(): Texture | null {
+    return this.slowTarget.texture;
+  }
+
   /**
    * The cell of one frame / edge combination as two textures: its own top face, and the rim past its in and out edges. The
    * layer draws every rim first and every face over them, so a rim only fills the strip where the neighbouring hex's own
@@ -149,7 +156,7 @@ export class RiverFlowLayer {
    * version of it. Drawn in one pass, whichever hex came later overwrote up to `FACE_PAD_TEXELS` of the other's face: a
    * second, shifted seam inside the neighbour.
    */
-  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number): { face: Texture; rim: Texture } {
+  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number): { face: Texture; rim: Texture; slowFace: Texture; slowRim: Texture } {
     const outEdge = topFaceEdgeIndex(entry.outDirection);
     const inEdges = entry.inDirections.map(topFaceEdgeIndex).sort((a, b) => a - b);
     const fadeEdge = entry.fadeDirection ? topFaceEdgeIndex(entry.fadeDirection) : undefined;
@@ -177,9 +184,10 @@ export class RiverFlowLayer {
       );
       const flow = computeRiverRipple({ mask, cw, ch, polygon, inEdges, outEdge, fadeEdge, context });
       const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
+      const slow = splitFaceAndRim(flow.slow, flow.inside);
       const texture = (data: Uint8Array) =>
         new Texture({ source: new BufferImageSource({ resource: data, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
-      pair = { face: texture(face), rim: texture(rim) };
+      pair = { face: texture(face), rim: texture(rim), slowFace: texture(slow.face), slowRim: texture(slow.rim) };
       this.cells.set(key, pair);
     }
     return pair;
@@ -201,24 +209,32 @@ export class RiverFlowLayer {
     if (!masks) return this.target.texture;
     const rims: MaskPlacement[] = [];
     const faces: MaskPlacement[] = [];
+    const slowRims: MaskPlacement[] = [];
+    const slowFaces: MaskPlacement[] = [];
     for (const entry of entries) {
       const name = entry.texture.label ?? '';
       const frame = masks.data.frames[name];
       if (!frame) continue;
-      const { face, rim } = this.cellTextures(masks, name, frame, entry, tileWidth);
+      const { face, rim, slowFace, slowRim } = this.cellTextures(masks, name, frame, entry, tileWidth);
       const rect = dryCellWorldRect(entry, frame, tileWidth);
       rims.push({ texture: rim, rect, tint: 0xffffff });
       faces.push({ texture: face, rect, tint: 0xffffff });
+      slowRims.push({ texture: slowRim, rect, tint: 0xffffff });
+      slowFaces.push({ texture: slowFace, rect, tint: 0xffffff });
     }
     this.drawnRect = boundsOf(faces.map((p) => p.rect));
+    this.slowTarget.render(renderer, this.drawnRect, [...slowRims, ...slowFaces]);
     return this.target.render(renderer, this.drawnRect, [...rims, ...faces]);
   }
 
   destroy(): void {
     this.target.destroy();
-    for (const { face, rim } of this.cells.values()) {
+    this.slowTarget.destroy();
+    for (const { face, rim, slowFace, slowRim } of this.cells.values()) {
       face.destroy(true);
       rim.destroy(true);
+      slowFace.destroy(true);
+      slowRim.destroy(true);
     }
     this.cells.clear();
   }

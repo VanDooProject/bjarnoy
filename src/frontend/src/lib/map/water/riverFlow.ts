@@ -693,7 +693,13 @@ function minDistance(fields: Float64Array[]): Float64Array {
   return out;
 }
 
-export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; periods: number; inside: Uint8Array } {
+/**
+ * A second, slower phase for long streaks (`computeRiverRipple`'s `slow`): the ripple wavelength times this many, so a dash drawn
+ * on it can be several ripples long.
+ */
+export const SLOW_PHASE_FACTOR = 4;
+
+export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; slow: Uint8Array; periods: number; slowPeriods: number; inside: Uint8Array } {
   const { mask, cw, ch, outEdge } = input;
   const { inside, passable, cover, isWater, phi, seedEdge, intensityAt, rimShowsWater } = solveRiver(input);
   const hasIn = input.inEdges.some((e) => e !== outEdge);
@@ -715,6 +721,10 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
   const channelLength = hasIn && count > 0 ? length / count : maxDist;
   const periods = Math.max(1, Math.round(channelLength / RIPPLE_WAVELENGTH_TEXELS));
   const rate = channelLength > 0 ? (2 * Math.PI * periods) / channelLength : 0;
+  // The slow phase: its own whole number of periods per cell (the same guarantees: 0 mod 2 pi on every in and out edge line, the
+  // same run-on through the bands, the same band shifts), about SLOW_PHASE_FACTOR times as long per period.
+  const slowPeriods = Math.max(1, Math.round(channelLength / (RIPPLE_WAVELENGTH_TEXELS * SLOW_PHASE_FACTOR)));
+  const slowRate = channelLength > 0 ? (2 * Math.PI * slowPeriods) / channelLength : 0;
   const normals = input.polygon.map((_, e) => crossingDirection(input.polygon, e));
 
   // How far past its edge line (into the face) each edge's seed band reaches: the potential starts there, not on the line.
@@ -755,6 +765,7 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
   const outDepth = bandDepth[outEdge]!;
 
   const out = new Uint8Array(cw * ch * 4);
+  const slowOut = new Uint8Array(cw * ch * 4);
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
       const p = y * cw + x;
@@ -767,22 +778,30 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
       // (linearly in the potential), which keeps the phase continuous where band and interior meet.
       const edge = seedEdge[p]! >= 0 ? seedEdge[p]! : inside[p] ? -1 : nearestFlowEdge(input, x + 0.5, y + 0.5);
       let theta: number;
+      let slowTheta: number;
       if (edge >= 0) {
-        theta = (edge === outEdge ? 1 : -1) * rate * depthOf(edge, x, y);
+        const sign = edge === outEdge ? 1 : -1;
+        theta = sign * rate * depthOf(edge, x, y);
+        slowTheta = sign * slowRate * depthOf(edge, x, y);
       } else {
         const phase = along(p);
         if (Number.isNaN(phase)) continue;
         const inDepth = inEdges.length > 0 ? bandDepth[nearestIn(p)]! : 0;
         theta = 2 * Math.PI * periods * phase + (1 - phase) * rate * outDepth - phase * rate * inDepth;
+        slowTheta = 2 * Math.PI * slowPeriods * phase + (1 - phase) * slowRate * outDepth - phase * slowRate * inDepth;
       }
       const o = p * 4;
       out[o] = Math.round((Math.cos(theta) * 0.5 + 0.5) * 255);
       out[o + 1] = Math.round((Math.sin(theta) * 0.5 + 0.5) * 255);
       out[o + 2] = Math.round(intensityAt(p, RIVER_CENTRE_TEXELS) * 255);
       out[o + 3] = 255;
+      slowOut[o] = Math.round((Math.cos(slowTheta) * 0.5 + 0.5) * 255);
+      slowOut[o + 1] = Math.round((Math.sin(slowTheta) * 0.5 + 0.5) * 255);
+      slowOut[o + 2] = out[o + 2]!;
+      slowOut[o + 3] = 255;
     }
   }
-  return { data: out, periods, inside };
+  return { data: out, slow: slowOut, periods, slowPeriods, inside };
 }
 
 /** A water mask cell placed in the world: texel (0, 0) starts at (x, y), and a texel is `texelWorld` world units wide. */

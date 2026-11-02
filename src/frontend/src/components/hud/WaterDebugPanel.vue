@@ -28,7 +28,7 @@ const flags = reactive(waterDebugFlags);
 const tuning = reactive(waterDebugTuning);
 
 /** The looks of the river overlay, by `riverStyle`. */
-const RIVER_STYLES = ['Ripple arcs', 'Toon strands', 'Cartoon bands'];
+const RIVER_STYLES = ['Ripple arcs', 'Toon strands', 'Cartoon bands', 'Flow streaks'];
 
 const LABELS: Record<WaterDebugToggle, string> = {
   water: 'Water layer enabled',

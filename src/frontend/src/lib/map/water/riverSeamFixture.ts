@@ -63,6 +63,9 @@ export interface ComposedCell {
   seamEdge: number;
   face: Uint8Array;
   rim: Uint8Array;
+  /** The slow phase's face and rim (`computeRiverRipple`'s `slow`). */
+  slowFace: Uint8Array;
+  slowRim: Uint8Array;
 }
 
 /** Computes both cells of a pair (with the neighbour's water as bank context unless `withContext` is false). */
@@ -84,19 +87,20 @@ export async function composePair(pair: readonly [SeamCell, SeamCell], withConte
       : undefined;
     const flow = computeRiverRipple({ ...frame, inEdges: cell.ins.map(topFaceEdgeIndex), outEdge: topFaceEdgeIndex(cell.out), context });
     const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
-    return { cell, frame, x: placed[i]!.x, y: placed[i]!.y, seamEdge: edges[i]!, face, rim };
+    const slow = splitFaceAndRim(flow.slow, flow.inside);
+    return { cell, frame, x: placed[i]!.x, y: placed[i]!.y, seamEdge: edges[i]!, face, rim, slowFace: slow.face, slowRim: slow.rim };
   });
 }
 
 /** What the composite shows at a world point: rims first, then faces over them (later cells over earlier ones). */
-export function sampleComposite(cells: readonly ComposedCell[], wx: number, wy: number): { b: number; theta: number; who: number; pass: 'face' | 'rim'; cos: number; sin: number } | null {
+export function sampleComposite(cells: readonly ComposedCell[], wx: number, wy: number, slow = false): { b: number; theta: number; who: number; pass: 'face' | 'rim'; cos: number; sin: number } | null {
   let res: ReturnType<typeof sampleComposite> = null;
   for (const pass of ['rim', 'face'] as const) {
     cells.forEach((c, who) => {
       const tx = Math.floor((wx - c.x) / TEXEL_WORLD);
       const ty = Math.floor((wy - c.y) / TEXEL_WORLD);
       if (tx < 0 || ty < 0 || tx >= c.frame.cw || ty >= c.frame.ch) return;
-      const d = c[pass];
+      const d = slow ? (pass === 'face' ? c.slowFace : c.slowRim) : c[pass];
       const o = (ty * c.frame.cw + tx) * 4;
       if (d[o + 3] === 0) return;
       const cos = d[o]! / 127.5 - 1;
