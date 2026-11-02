@@ -79,7 +79,7 @@ const tocLinks = computed(() =>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.from" :data-from="row.from">
-              <th scope="row" class="name">{{ $t('docs.realm.count.range', { from: row.from, to: row.to }) }}</th>
+              <th scope="row" class="name">{{ row.from }}</th>
               <td class="value">{{ row.towers }}</td>
             </tr>
           </tbody>
