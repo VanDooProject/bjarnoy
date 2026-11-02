@@ -81,7 +81,7 @@ export interface BuildCategory {
 }
 // Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
 // Shrine is Grass-only, Lumberjack is Forest-only, Quarry is
-// Mountain-only, and Tower/ArcheryRange are SandOrGrass. Offering a building
+// Mountain-only, and ArcheryRange is SandOrGrass. The Tower stands on grass, sand, forest and plain bog moss. Offering a building
 // the backend's own AllowedTerrain would reject is what "messed up
 // categories" on a shore (sand) tile meant — sand used to fall into the same
 // flat bucket as forest/mountain and offer Farm/Lumberjack/Quarry, none of
@@ -119,11 +119,15 @@ const DEFENSE_CATEGORY: BuildCategory = {
 };
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
-// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
+// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks, the bog-ore works and the Tower, a creek the
 // Hammer Forge (with the river hammer-mill art for now: TODO(art) bog-creek Hammer Forge) and a lake's half shore the
 // Fishing Hut with its lake art. Shores, mouths and springs take nothing.
 const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
-  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }, DEFENSE_CATEGORY],
+  bog: [
+    { id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] },
+    { id: 'military', buildings: [{ type: 'tower' }] },
+    DEFENSE_CATEGORY,
+  ],
   creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
   half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
 };
@@ -170,7 +174,11 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
     SHRINE_CATEGORY,
   ],
   sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
-  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_CATEGORY],
+  forest: [
+    { id: 'resource', buildings: [{ type: 'lumberjack' }] },
+    { id: 'military', buildings: [{ type: 'tower' }] },
+    DEFENSE_CATEGORY,
+  ],
   // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
   mountain: [],
 };

@@ -51,7 +51,12 @@
       "founding": {
         "landMovement": "Wie schnell Siedler jedes Feld überqueren.",
         "wildlifeCamps": "Starke Lager können Siedler unterwegs überfallen.",
-        "bogLands": "Landeplätze brauchen Moor in Reichweite für Lehm und Eisen."
+        "realm": "Eine neue Siedlung hält Abstand zu deinem Gebiet, Wachtürme eingerechnet."
+      },
+      "realm": {
+        "founding": "Wo eine neue Siedlung landen darf, wird von jeder Gebietsgrenze aus gemessen, Wachtürme eingerechnet.",
+        "walls": "Auch Mauern stehen innerhalb deines Gebiets und brauchen einen Wachturm der Stufe 5.",
+        "wildlifeCamps": "Starke Lager greifen Wachtürme an."
       },
       "landMovement": {
         "walls": "Ein Mauerfeld hält jede Landarmee auf.",
@@ -126,6 +131,10 @@
       "founding": {
         "title": "Siedlungen gründen",
         "description": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann."
+      },
+      "realm": {
+        "title": "Das Gebiet erweitern",
+        "description": "Wie weit dein Anspruch reicht, wie Wachtürme die Grenze hinausschieben und wie viele du bauen darfst."
       },
       "landMovement": {
         "title": "Bewegung an Land",
@@ -223,7 +232,7 @@
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
       "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte. Erreicht ein Rohstoff das Lagerlimit, stoppt seine Produktion – ein volles Lager verschenkt also Ertrag.",
-      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit.",
+      "tower": "Ein Wachturm an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit. Du baust ihn auf Gras, Sand, Wald oder schlichtem Moorboden.",
       "fishinghut": "Ein Steg über flachem Wasser, von dem aus du Untiefen befischst, die ein Bauernhof nie erreichen könnte. Die Hütte steht auch auf Pfählen am Halbufer eines Moorsees.",
       "pumpkinfarm": "Eine zweite Ernte für Gras: Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Sie lässt sich nur auf einer Insel mit Kürbisboden bauen (den Boden jeder Insel bestimmt das Spiel, nicht du). Das ist der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
       "shrineofthor": "Für Thor auf Gras errichtet, hinter einer Waffenschmiede der Stufe 5. Die Gunst des Kriegsgottes stärkt den Angriff deiner Landeinheiten (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
@@ -1029,6 +1038,56 @@
     },
     "adminNote": {
       "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
+    }
+  },
+  "realm": {
+    "title": "Das Gebiet erweitern",
+    "intro": "Das Land, das du hältst, ist dein Gebiet; auf der Karte zieht sich eine goldene Grenze darum. Das Langhaus beansprucht die ersten Ringe um sich herum. Darüber hinaus wächst dein Gebiet nur durch Wachtürme an seiner Grenze.",
+    "claim": {
+      "heading": "Der Anspruch deines Langhauses",
+      "body": "Dein {longhouse} beansprucht auf Stufe 1 alle Felder im Umkreis von {level1}, ab Stufe 2 im Umkreis von {level2}. Weiter reicht es nie: Höhere Langhaus-Stufen schieben die Grenze nicht weiter hinaus."
+    },
+    "towers": {
+      "heading": "Wachtürme schieben die Grenze hinaus",
+      "body": "Ab Langhaus-Stufe {level} kannst du einen {tower} bauen. Er beansprucht die Felder rund um sich selbst, so viele Ringe wie seine Stufe: Stufe 1 seine Nachbarfelder, Stufe 2 zwei Ringe und so weiter.",
+      "rules": {
+        "inside": "Ein Wachturm muss innerhalb deines Gebiets stehen. Baust du ihn an der Grenze, rückt die Grenze rund um ihn nach außen.",
+        "chain": "Er darf auch auf Boden stehen, den erst ein anderer Wachturm beansprucht. Seine Ringe reichen dann noch weiter, und dein Gebiet wächst Turm für Turm über die Insel.",
+      "cut": "Ein Wachturm beansprucht nur Land, solange er über eine Kette von Türmen mit einem deiner Langhäuser verbunden ist. Fällt ein Turm in der Kette, beanspruchen und sehen die Türme dahinter nichts mehr, bis du die Lücke schließt – es sei denn, ein anderes deiner Langhäuser auf der Insel erreicht sie noch. Ein abgeschnittener Turm zählt nicht zu deinem Turmlimit.",
+        "built": "Land beansprucht ein Wachturm erst, wenn er steht. Eine Baustelle bringt noch nichts."
+      }
+    },
+    "example": {
+      "heading": "Ein Beispiel",
+      "alt": "Eine Beispielinsel mit dem Langhaus nahe der Mitte, der goldenen Grenze um das beanspruchte Land und den Wachtürmen, die die Grenze hinausschieben.",
+      "step": "Schritt",
+      "steps": {
+        "1": "Schritt 1: ein Langhaus der Stufe 2 allein. Sein Anspruch reicht 3 Felder weit, dort endet die Grenze.",
+        "2": "Schritt 2: ein Wachturm der Stufe 2 auf einem Waldfeld am Rand des Gebiets. Er beansprucht zwei Ringe um sich, die Grenze wächst um ihn herum.",
+        "3": "Schritt 3: ein Wachturm der Stufe 1 auf schlichtem Moorboden, im Land des ersten Turms. Er beansprucht einen Ring mehr, und die Grenze rückt weiter hinaus."
+      }
+    },
+    "count": {
+      "heading": "Wie viele Wachtürme",
+      "body": "Die Stufe deines Langhauses bestimmt, wie viele Wachtürme du haben darfst: einen ab Stufe {level}, danach einen weiteren für jede zweite Stufe nach Stufe 5.",
+      "levels": "Langhaus-Stufe",
+      "towers": "Wachtürme",
+      "range": "{from}–{to}"
+    },
+    "where": {
+      "heading": "Wo ein Wachturm steht",
+      "body": "Ein Wachturm steht auf Gras, Sand, Wald oder schlichtem Moorboden, innerhalb deines Gebiets. Auf Flüssen, Bergen und Wasser kannst du keinen bauen, ebenso wenig auf Moorufer, Moorbach, Moorquelle oder Moorsee. Der Wachturm ersetzt das Feld, auf dem er steht, und behält den Boden um sich: Jeder Boden hat deshalb seinen eigenen Turm.",
+      "alt": "Ein Wachturm auf {ground}.",
+      "grounds": {
+        "grass": "Gras",
+        "sand": "Sand",
+        "forest": "Wald",
+        "bog": "Moorboden"
+      }
+    },
+    "giants": {
+      "heading": "Riesen",
+      "body": "Ein Riese füllt sieben Felder. Du nimmst ihn nur in dein Gebiet auf, wenn dein Anspruch alle sieben abdeckt. Reicht er nur über einen Teil, bekommst du keines davon."
     }
   },
   "landMovement": {

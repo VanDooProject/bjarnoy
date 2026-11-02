@@ -197,6 +197,10 @@ play.
   So LH 3–6 allow 1, LH 7 allows 2, LH 9 allows 3, …, and LH 29–30 allow 13.
   The tech tree shows only the first unlock (LH 3); the rule is shown where
   a tower is placed, not as extra tech-tree cards.
+- **Where a tower stands:** on grass, sand, forest or plain bog moss (not a
+  bog shore, creek, spring or lake). It replaces the tile it stands on; its
+  art keeps that ground round it, so each ground has its own version of the
+  tower.
 - **Towers have to be chained to a longhouse.** A tower claims its ground only
   while it is connected: it stands on ground claimed by one of your
   longhouses, or by a tower that is itself connected. All of your longhouses
@@ -206,6 +210,15 @@ play.
   does not count against the tower limit while cut off; once it is connected
   again it counts, even if that puts you over the limit (you then can't build
   more towers).
+- **How a tower claims:** a tower claims every hex within its level of
+  itself (level 1 its neighbours, level 2 two rings, …), centred on the
+  tower. It has to be built inside the realm, which includes ground another
+  tower claimed, so towers can chain out across an island. A tower claims
+  nothing while it is under construction (a level-0 stub claims only its own
+  hex, which is already inside the realm); its ground joins the realm when
+  level 1 finishes.
+- **Giants are claimed whole:** a giant's seven hexes join the realm only when
+  the claim covers all seven; a claim that reaches some of them takes none.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't

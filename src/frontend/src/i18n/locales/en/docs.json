@@ -51,7 +51,12 @@
       "founding": {
         "landMovement": "How fast settlers cross each ground.",
         "wildlifeCamps": "Strong camps can ambush settlers on the way.",
-        "bogLands": "Landing spots need bog within reach for clay and iron."
+        "realm": "A new settlement keeps its distance from your claim, towers included."
+      },
+      "realm": {
+        "founding": "Where a new settlement may land is measured from every claim border, towers included.",
+        "walls": "Walls stand inside your realm too, and need a level-5 Tower.",
+        "wildlifeCamps": "Strong camps attack towers."
       },
       "landMovement": {
         "walls": "A wall hex stops every land army.",
@@ -126,6 +131,10 @@
       "founding": {
         "title": "Founding settlements",
         "description": "Settler troops from the cart workshop, and where a new settlement can land."
+      },
+      "realm": {
+        "title": "Extending the realm",
+        "description": "How far your claim reaches, how towers push the border out and how many you may build."
       },
       "landMovement": {
         "title": "Land movement",
@@ -225,7 +234,7 @@
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest, on grass. A resource stops being produced once it reaches the storage limit, so a full store wastes output.",
-      "tower": "A watch built on grass or sand at the border, pushing the claimed ground further out. A tower only claims ground, and only sees, while it is chained to one of your longhouses: it has to stand on ground that a longhouse or another connected tower claims. If a tower in the chain falls, every tower beyond it is cut off and claims nothing until the link is rebuilt. Cut-off towers do not count against your tower limit.",
+      "tower": "A watch built on grass, sand, forest or plain bog moss at the border, pushing the claimed ground further out. A tower only claims ground, and only sees, while it is chained to one of your longhouses: it has to stand on ground that a longhouse or another connected tower claims. If a tower in the chain falls, every tower beyond it is cut off and claims nothing until the link is rebuilt. Cut-off towers do not count against your tower limit.",
       "fishinghut": "A dock over shallow water, fishing the shallows a farm never could. It also stands on stilts on the half shore of a bog lake.",
       "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player) — the bonus crop a \"more fertile\" island unlocks.",
       "shrineofthor": "Raised to Thor on grass, behind a level-5 Smithy — the war god's favour raises the attack of your land units (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
@@ -1029,6 +1038,56 @@
     },
     "adminNote": {
       "sea": "Founding by sea exists in the rules but has no interface yet (issue #447)."
+    }
+  },
+  "realm": {
+    "title": "Extending the realm",
+    "intro": "The ground you hold is your realm, drawn on the map with a gold border. The longhouse claims the first rings round itself; beyond them your realm only grows through towers at its border.",
+    "claim": {
+      "heading": "Your longhouse's claim",
+      "body": "The {longhouse} claims every hex up to {level1} hexes away from it at level 1, and up to {level2} hexes from level 2 on. That is as far as it reaches: higher longhouse levels do not move the border any further."
+    },
+    "towers": {
+      "heading": "Towers push the border out",
+      "body": "From Longhouse level {level} you can build a {tower}. It claims the hexes around itself, as many rings as its level: level 1 claims its neighbours, level 2 two rings, and so on.",
+      "rules": {
+        "inside": "A tower has to stand inside your realm. Build one at the border and the border moves out round it.",
+        "chain": "A tower may also stand on ground only another tower has claimed. Its rings then reach further still, so a realm grows tower by tower across an island.",
+      "cut": "A tower only claims while it is chained to one of your longhouses through towers that are themselves chained. If a tower in the chain falls, the towers beyond it claim and see nothing until the link is rebuilt, unless another of your longhouses on the island still reaches them. A cut-off tower does not count against your tower limit.",
+        "built": "A tower claims land once it stands. A tower still under construction adds nothing."
+      }
+    },
+    "example": {
+      "heading": "An example",
+      "alt": "An example island with the longhouse near its middle, the gold border round the ground it claims, and the towers that push the border out.",
+      "step": "Step",
+      "steps": {
+        "1": "Step 1: a level-2 longhouse on its own. Its claim reaches 3 hexes out, and that is where the border stops.",
+        "2": "Step 2: a level-2 tower on a forest hex at the edge of the realm. It claims two rings round itself, so the border grows round it.",
+        "3": "Step 3: a level-1 tower on plain bog moss, inside the ground the first tower claimed. It claims one ring more, and the border moves out again."
+      }
+    },
+    "count": {
+      "heading": "How many towers",
+      "body": "Your longhouse level sets how many towers you may have: one from level {level}, then one more for every second level after level 5.",
+      "levels": "Longhouse level",
+      "towers": "Towers",
+      "range": "{from}–{to}"
+    },
+    "where": {
+      "heading": "Where a tower stands",
+      "body": "A tower stands on grass, sand, forest or plain bog moss, inside your realm. It cannot stand on a river, a mountain or water, nor on a bog shore, creek, spring or lake. The tower replaces the tile it stands on and keeps that ground round it, so each ground has its own tower.",
+      "alt": "A tower on {ground}.",
+      "grounds": {
+        "grass": "Grass",
+        "sand": "Sand",
+        "forest": "Forest",
+        "bog": "Bog moss"
+      }
+    },
+    "giants": {
+      "heading": "Giants",
+      "body": "A giant fills seven hexes. You only take it into your realm when your claim covers all seven. A claim that reaches just some of them takes none."
     }
   },
   "landMovement": {

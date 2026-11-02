@@ -38,7 +38,7 @@ describe('docsPages', () => {
   it('keeps the hub order: island, building, move, beyond', () => {
     expect(DOCS_GROUPS.map((g) => g.id)).toEqual(['island', 'building', 'move', 'beyond']);
     expect(DOCS_PAGES.map((p) => p.id)).toEqual([
-      'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'founding', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
+      'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'founding', 'realm', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
     ]);
   });
 
@@ -73,7 +73,7 @@ describe('docsPages', () => {
     const modes = Object.fromEntries(DOCS_PAGES.map((p) => [p.id, p.headerArt]));
     expect(modes).toEqual({
       tiles: 'icon', bogLands: 'icon', walls: 'icon', shrines: 'icon', production: 'icon', wildlifeCamps: 'icon',
-      techTree: 'backdrop', founding: 'backdrop', landMovement: 'backdrop', ships: 'backdrop', wastedLands: 'backdrop',
+      techTree: 'backdrop', founding: 'backdrop', realm: 'backdrop', landMovement: 'backdrop', ships: 'backdrop', wastedLands: 'backdrop',
     });
   });
 
